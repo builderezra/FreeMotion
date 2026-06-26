@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=91">
+<link rel="stylesheet" href="styles.css?v=92">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver">v1.36 · AI Director</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver">v1.37 · AM layout</span></div>
       <div class="top-actions">
         <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
         <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
@@ -39,6 +39,14 @@
         <button id="btn-save-proj" class="icon-btn" title="Save project file (.fmotion.json)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5zM8 3v6h7V3M8 21v-7h8v7"/></svg></button>
         <button id="btn-export" class="btn btn-accent"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Export</button>
       </div>
+    </header>
+
+    <!-- Mobile-only AM-style top bar (phone): back · project name · settings · green export -->
+    <header id="topbar-m">
+      <button id="m-back" class="m-tbtn" aria-label="Projects / file"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <input id="proj-name-m" class="m-projname" type="text" value="Untitled" spellcheck="false" aria-label="Project name">
+      <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button id="m-export" class="m-export" aria-label="Export"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M6 20h12"/></svg></button>
     </header>
 
     <div id="main">
@@ -93,6 +101,14 @@
 
   <div id="toast" class="hidden"></div>
   <button id="insp-toggle" title="Inspector">✎</button>
+
+  <!-- Mobile-only: AM-style green + FAB (add) + the Add bottom-sheet (contents built by mobile.js) -->
+  <button id="add-fab" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  <div id="add-sheet">
+    <button id="add-grab" class="sheet-grab" type="button" aria-label="Close"><span class="grab-bar"></span></button>
+    <div class="sheet-title">Add</div>
+    <div id="add-grid" class="add-grid"></div>
+  </div>
 
   <input type="file" id="file-input" accept="video/*,image/*" multiple hidden>
 
@@ -194,7 +210,7 @@
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
   <script src="js/app.js?v=88"></script>
-  <script src="js/mobile.js?v=2"></script>
+  <script src="js/mobile.js?v=3"></script>
   <script src="js/ai-manifest.js?v=1"></script>
   <script src="js/ai-ops.js?v=2"></script>
   <script src="js/ai-key.js?v=1"></script>
