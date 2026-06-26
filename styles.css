@@ -701,6 +701,9 @@ input[type=range]::-webkit-slider-thumb {
 .ai-foot { font-size: 11px; color: var(--text-faint); line-height: 1.5; padding: 10px 4px 4px; border-top: 1px solid var(--line-soft); margin-top: 6px; }
 .ai-donebar { display: flex; flex-direction: column; gap: 10px; }
 .ai-summary { font-size: 13px; font-weight: 600; color: var(--good); }
+.ai-refine { display: flex; gap: 8px; }
+.ai-refine .ai-refine-input { flex: 1; min-width: 0; font-family: inherit; }
+.ai-refine .ai-btn { flex: 0 0 auto; }
 .ai-doneactions { display: flex; gap: 8px; }
 .ai-doneactions .ai-btn { flex: 1; }
 .ai-cancel { color: var(--text-dim); }

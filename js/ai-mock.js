@@ -88,10 +88,25 @@ window.FM = window.FM || {};
         case 'emit_intent': return intent(ctx);
         case 'emit_plan': return plan(ctx);
         case 'emit_ops': return builderOps(ctx.taskId, ctx.nonce);
-        case 'emit_critique':
-          // first pass: one tasteful nudge; later passes: clean (stops the loop).
+        case 'emit_critique': {
+          // refine: turn the user's instruction into targeted fix-ops on the hero title
+          if (ctx.refine) {
+            var ins = (ctx.instruction || '').toLowerCase(), ops = [];
+            if (/gold|yellow/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'color', value: '#ffce4a' });
+            else if (/red|crimson/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'color', value: '#df5b5b' });
+            else if (/blue/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'color', value: '#4d8bf0' });
+            else if (/green|teal/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'color', value: '#29d9bb' });
+            if (/big|large|huge|bigger/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'fontSize', value: 190 });
+            if (/small|smaller/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'fontSize', value: 110 });
+            if (/bold|strong/.test(ins)) ops.push({ op: 'setProp', ref: 'title', path: 'bold', value: true });
+            if (/glow|shadow/.test(ins)) ops.push({ op: 'setShadow', ref: 'title', enabled: true, blur: 40, dy: 14, color: '#000000' });
+            if (!ops.length) ops.push({ op: 'setShadow', ref: 'title', enabled: true, blur: 36, dy: 14, color: '#000000' });
+            return { assessment: 'applied: ' + (ctx.instruction || ''), ops: ops };
+          }
+          // build-time critic: first pass nudges, later passes are clean (stops the loop)
           if (ctx.pass === 0) return { assessment: 'title a touch large for safe margins', ops: [{ op: 'setProp', ref: 'title', path: 'fontSize', value: 132 }] };
           return { assessment: 'looks good', ops: [] };
+        }
         default: return { ops: [] };
       }
     },

@@ -94,6 +94,18 @@
         check('redo restores the build', FM.scene.layers.length === after);
         check('intent survives undo/redo', !!FM.scene.project.aiIntent);
 
+        // 6b) refine an existing scene from a plain-language tweak (its own undo step)
+        var beforeRefine = FM.scene.layers.length;
+        await FM.ai.refine('make the title gold and bigger');
+        var t1 = FM.scene.layers.find(function (l) { return l.type === 'text' && l.name !== 'Captions'; });
+        check('refine recoloured the title (gold)', t1 && t1.color === '#ffce4a');
+        check('refine resized the title', t1 && t1.fontSize === 190);
+        check('refine kept the layer count stable', FM.scene.layers.length === beforeRefine);
+        FM.history.undo();
+        var t2 = FM.scene.layers.find(function (l) { return l.type === 'text' && l.name !== 'Captions'; });
+        check('refine is its own single undo step', t2 && t2.color !== '#ffce4a');
+        FM.history.redo();
+
         // 7) BYOK key never serialized into the scene/export
         FM.aiKey.set('sk-ant-LEAKTEST-shouldnever-appear-000', false);
         var ser = JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId });

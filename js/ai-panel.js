@@ -243,6 +243,21 @@ window.FM = window.FM || {};
     var msg = info && info.cancelled ? 'Stopped — kept what was built.' : (info && info.template ? 'Template ready — edit anything.' : 'Done! ' + ((info && info.layersAdded) || 0) + ' layers — all editable.');
     var summary = el('div', 'ai-summary', msg);
     doneBar.appendChild(summary);
+
+    // refine — tweak the finished scene in plain language (a scoped vision-critic pass)
+    var refineWrap = el('div', 'ai-refine');
+    var ri = el('input', 'ai-input ai-refine-input'); ri.type = 'text'; ri.placeholder = 'Refine — e.g. “make the title gold”'; ri.spellcheck = false;
+    var rb = el('button', 'ai-btn', 'Refine');
+    var go = function () {
+      var v = ri.value.trim(); if (!v) return;
+      rb.disabled = true; rb.textContent = '…';
+      Promise.resolve(FM.ai.refine(v)).then(function () { rb.disabled = false; rb.textContent = 'Refine'; ri.value = ''; });
+    };
+    rb.addEventListener('click', go);
+    ri.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    refineWrap.appendChild(ri); refineWrap.appendChild(rb);
+    doneBar.appendChild(refineWrap);
+
     var actions = el('div', 'ai-doneactions');
     var newBtn = el('button', 'ai-btn', '✨ New scene'); newBtn.addEventListener('click', function () { setMode('compose'); });
     var editBtn = el('button', 'ai-btn ai-btn-accent', 'Edit it'); editBtn.addEventListener('click', hide);

@@ -256,11 +256,49 @@ window.FM = window.FM || {};
     }
   }
 
+  // Refine an EXISTING scene from a plain-language tweak: the vision critic sees the current frame
+  // + the user's instruction and returns targeted fix-ops (own undo step). Works on any scene —
+  // ops can target AI refs (via _lastBuild.refMap) or existing layers by their real id.
+  async function refine(instruction) {
+    if (state.running || !instruction || !instruction.trim()) return;
+    var lb = FM.ai._lastBuild;
+    var dry = !!(FM.ai.DRY_RUN || (lb && lb.dry));
+    var P = panel();
+    if (!dry && !FM.aiKey.has()) { P.error && P.error('Add an API key to refine a scene.'); return; }
+    if (!FM.scene.layers.length) return;
+    state.running = true; state.dry = dry;
+    var M = FM.aiManifest;
+    var refMap = (lb && lb.refMap) || {};
+    var intent = (lb && lb.intent) || {};
+    try {
+      P.row('refine', 'Refining: ' + instruction.trim().slice(0, 36), 'active', null, 'Critic · Opus');
+      var beat = Math.max(0.01, Math.min((FM.scene.project.duration || 6) * 0.45, (FM.scene.project.duration || 6) - 0.01));
+      var png = renderToBase64(FM.scene, beat);
+      var sys = M.systemPrompts.critic + '\n\nThe user has asked for a SPECIFIC change. Prioritise their request over your own taste; return fix-ops that achieve it. You may target existing layers by their id (shown in LAYERS) as the op ref.';
+      var crit = (await call(MODELS.critic, sys, [{
+        role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png } },
+          { type: 'text', text: 'USER REQUEST: "' + instruction.trim() + '"\nINTENT: ' + JSON.stringify(intent) + '\nLAYERS (id, type, name): ' + JSON.stringify(layerSummary(FM.scene)) + '\nApply the user request via emit_critique fix-ops (target a layer by its id as the ref).' },
+        ],
+      }], M.tools.critique, { maxTokens: 1500, mock: { refine: true, instruction: instruction.trim() } })).out;
+      var ops = (crit && Array.isArray(crit.ops)) ? crit.ops.slice(0, 8) : [];
+      var log = FM.aiOps.applyOps(ops, refMap);
+      FM.refreshAll(); if (FM.history) FM.history.commit();
+      P.row('refine', log.appliedCount ? 'Refined your scene' : 'No change needed', 'done', log.appliedCount, 'Critic · Opus');
+    } catch (e) {
+      FM.refreshAll();
+      P.row('refine', 'Refine failed — scene unchanged', 'done', null, (e && e.message) || 'error');
+    } finally {
+      state.running = false; state.dry = false;
+    }
+  }
+
   FM.ai = {
     DRY_RUN: false,
     MODELS: MODELS,
     generateScene: generateScene,
     rerollTask: rerollTask,
+    refine: refine,
     cancel: function () { state.abort = true; },
     isRunning: function () { return state.running; },
     _lastBuild: null,
