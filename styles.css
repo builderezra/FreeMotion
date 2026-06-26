@@ -777,8 +777,8 @@ input[type=range]::-webkit-slider-thumb {
   #add-fab svg { width: 26px; height: 26px; }
   #add-fab:active { filter: brightness(.92); transform: translateY(1px); }
 
-  /* the inspector ✎ FAB tucks ABOVE the add FAB (smaller, secondary) so they never overlap */
-  #insp-toggle { right: 20px; bottom: 274px; width: 44px; height: 44px; font-size: 18px; }
+  /* AM has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */
+  #insp-toggle { display: none; }
 
   /* Add bottom sheet (opened by the + FAB) */
   #add-sheet {
@@ -807,7 +807,8 @@ input[type=range]::-webkit-slider-thumb {
   .add-card .add-ic { color: var(--accent); display: flex; }
   .add-card .add-ic svg { width: 26px; height: 26px; }
 
-  /* while the Add sheet is up, the floating buttons hide (no overlap) */
-  body.add-open #add-fab, body.add-open #insp-toggle { display: none; }
+  /* while a bottom sheet is up (Add or the property menu), the + FAB hides (no overlap) */
+  body.add-open #add-fab, body.add-open #insp-toggle,
+  body.insp-open #add-fab { display: none; }
 }
 

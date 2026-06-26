@@ -20,8 +20,8 @@ window.FM = window.FM || {};
     grab.innerHTML = '<span class="grab-bar"></span>';
     insp.insertBefore(grab, insp.firstChild);
 
-    function open() { insp.classList.add('open'); btn.classList.add('on'); }
-    function close() { insp.classList.remove('open'); btn.classList.remove('on'); }
+    function open() { insp.classList.add('open'); btn.classList.add('on'); document.body.classList.add('insp-open'); }
+    function close() { insp.classList.remove('open'); btn.classList.remove('on'); document.body.classList.remove('insp-open'); }
     function toggle() { insp.classList.contains('open') ? close() : open(); }
 
     btn.addEventListener('click', toggle);
