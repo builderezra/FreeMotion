@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=85">
+<link rel="stylesheet" href="styles.css?v=90">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,11 +17,12 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver">v1.33 · installable</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver">v1.35 · AI Director</span></div>
       <div class="top-actions">
         <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
         <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
         <span class="tb-divider"></span>
+        <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
         <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
         <button id="btn-add-text" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg>Text</button>
         <button id="btn-add-layer" class="btn" title="Add a shape, camera, adjustment, or null layer"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
@@ -193,7 +194,15 @@
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
   <script src="js/app.js?v=88"></script>
-  <script src="js/mobile.js?v=1"></script>
+  <script src="js/mobile.js?v=2"></script>
+  <script src="js/ai-manifest.js?v=1"></script>
+  <script src="js/ai-ops.js?v=2"></script>
+  <script src="js/ai-key.js?v=1"></script>
+  <script src="js/ai-budget.js?v=1"></script>
+  <script src="js/ai-mock.js?v=2"></script>
+  <script src="js/ai-templates.js?v=2"></script>
+  <script src="js/ai.js?v=3"></script>
+  <script src="js/ai-panel.js?v=2"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

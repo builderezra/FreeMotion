@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreeMotion — AI Director tests</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 18px; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .sub { color: #8a93a6; font-size: 12px; margin-bottom: 14px; }
+  #sum { font-size: 15px; font-weight: 700; margin: 10px 0 14px; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 12px; margin-right: 8px; }
+  .green { background: #10331f; color: #57d98a; } .red { background: #3a1518; color: #ff7a85; }
+  .row { padding: 7px 11px; border-radius: 7px; margin: 4px 0; display: flex; gap: 10px; align-items: baseline; }
+  .row.ok { background: #11251a; } .row.fail { background: #2a1416; }
+  .tag { font-weight: 700; flex: 0 0 46px; }
+  .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
+  .err { color: #c98; font-size: 12px; }
+  iframe { display: none; }
+  .note { color: #6a7488; font-size: 11.5px; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <h1>FreeMotion — AI "Director" test suite</h1>
+  <div class="sub">Exercises the whole multi-agent pipeline in DRY_RUN (mock agents, zero network, zero tokens, no key). Asserts the safety boundary, the scaffold floor, parallel-builder integrity, critic termination, single-undo, intent persistence, and no-key-leak.</div>
+  <div id="sum">Loading app…</div>
+  <div id="list"></div>
+  <div class="note">Must be all-green to ship. Re-run after any change to the ai-*.js modules.</div>
+  <iframe id="app" src="../index.html"></iframe>
+  <script>
+    var frame = document.getElementById('app');
+    var results = [];
+    function ok(name) { results.push({ name: name, ok: true }); }
+    function fail(name, err) { results.push({ name: name, ok: false, error: err }); }
+    function check(name, cond, detail) { cond ? ok(name) : fail(name, detail || 'assertion failed'); }
+
+    frame.addEventListener('load', async function () {
+      var FM = frame.contentWindow.FM;
+      try {
+        if (!FM) throw new Error('FM not initialised');
+        FM.ai.DRY_RUN = true;
+
+        // 1) modules present
+        ['aiManifest', 'aiOps', 'aiKey', 'aiBudget', 'aiMock', 'aiTemplates', 'ai', 'aiPanel'].forEach(function (m) {
+          check('module FM.' + m + ' loaded', !!FM[m]);
+        });
+
+        // 2) validator clamps / drops bad ops
+        FM.scene.layers = []; FM.scene.selectedId = null;
+        var refMap = {};
+        var log = FM.aiOps.applyOps([
+          { op: 'addText', ref: 'a', text: '<img src=x onerror=alert(1)>', x: 540, y: 900 },
+          { op: 'setProp', ref: 'a', path: 'transform.opacity', value: 5 },
+          { op: 'addEffect', ref: 'a', type: 'blur', params: { radius: 999 } },
+          { op: 'addEffect', ref: 'a', type: 'glitch', params: {} },
+          { op: 'addEffect', ref: 'a', type: 'chromakey', params: {} },
+          { op: 'addCamera', ref: 'c1' }, { op: 'addCamera', ref: 'c2' },
+          { op: 'setParent', ref: 'a', parentRef: 'a' },
+          { op: 'totallyFakeOp', ref: 'a' },
+        ], refMap);
+        var a = FM.layerById(FM.scene, refMap['a']);
+        check('AI text stored as data, never markup', a && a.text === '<img src=x onerror=alert(1)>');
+        check('opacity 5 clamped to 1', a && a.transform.opacity === 1);
+        check('blur 999 clamped to 50', a && a.effects.find(function (e) { return e.type === 'blur'; }).params.radius === 50);
+        check('unknown effect dropped', a && !a.effects.some(function (e) { return e.type === 'glitch'; }));
+        check('media-only fx on text dropped', a && !a.effects.some(function (e) { return e.type === 'chromakey'; }));
+        check('2nd camera refused', FM.scene.layers.filter(function (l) { return l.type === 'camera'; }).length === 1);
+        check('self-parent dropped', a && !a.parent);
+        check('fake op dropped', log.dropped.some(function (d) { return d.op === 'totallyFakeOp'; }));
+
+        // 3) full dry build: scaffold floor + parallel builders + critic, one undo step
+        FM.scene.layers = []; FM.scene.selectedId = null; FM.refreshAll(); FM.history.reset();
+        var before = FM.scene.layers.length;
+        await FM.ai.generateScene('punchy promo for my app', {}, { dryRun: true, deepPolish: true });
+        var after = FM.scene.layers.length;
+        check('build produced a real scene (>= 4 layers)', after >= 4, 'got ' + after);
+        check('scene has a camera', FM.scene.layers.some(function (l) { return l.type === 'camera'; }));
+        check('scene has a caption track', FM.scene.layers.some(function (l) { return l.captions && l.captions.length; }));
+        check('intent recorded on project (survives save/undo)', !!FM.scene.project.aiIntent);
+
+        // 4) builders wrote distinct layers (no id collisions)
+        var ids = FM.scene.layers.map(function (l) { return l.id; });
+        check('all layer ids unique (no builder collision)', new Set(ids).size === ids.length);
+
+        // 5) renders to a frame without throwing
+        var rendered = true;
+        try { FM.ai._renderToBase64(FM.scene, 2.5); } catch (e) { rendered = false; }
+        check('scene renders to a critic frame', rendered);
+
+        // 6) one undo removes the whole build; redo restores; intent survives
+        FM.history.undo();
+        check('one undo removes the whole build', FM.scene.layers.length === before);
+        FM.history.redo();
+        check('redo restores the build', FM.scene.layers.length === after);
+        check('intent survives undo/redo', !!FM.scene.project.aiIntent);
+
+        // 7) BYOK key never serialized into the scene/export
+        FM.aiKey.set('sk-ant-LEAKTEST-shouldnever-appear-000', false);
+        var ser = JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId });
+        check('BYOK key absent from serialized scene', ser.indexOf('sk-ant') < 0);
+        var exp = await FM.storage.serializeScene(FM.scene);
+        check('BYOK key absent from project export', JSON.stringify(exp).indexOf('sk-ant') < 0);
+        FM.aiKey.forget();
+
+        // 8) no-key path falls back to a template scene
+        FM.scene.layers = []; FM.scene.selectedId = null; FM.refreshAll();
+        FM.ai.DRY_RUN = false;
+        var tr = FM.aiTemplates.build({ subject: 'Test', aspect: '9:16' });
+        check('no-key template builds an editable scene', FM.scene.layers.length >= 3 && tr.applied >= 3);
+      } catch (e) {
+        fail('suite crashed', (e && e.message) || String(e));
+      }
+
+      var pass = results.filter(function (r) { return r.ok; }).length;
+      var green = pass === results.length;
+      document.getElementById('sum').innerHTML =
+        '<span class="pill ' + (green ? 'green' : 'red') + '">' + pass + '/' + results.length + (green ? ' ✓ all green' : ' ✗') + '</span>';
+      document.getElementById('list').innerHTML = results.map(function (r) {
+        return '<div class="row ' + (r.ok ? 'ok' : 'fail') + '">' +
+          '<span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span>' +
+          '<span>' + r.name + (r.error ? ' <span class="err">— ' + r.error + '</span>' : '') + '</span></div>';
+      }).join('');
+    });
+  </script>
+</body>
+</html>
