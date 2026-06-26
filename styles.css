@@ -544,7 +544,7 @@ input[type=range]::-webkit-slider-thumb {
   #main { grid-template-columns: minmax(0, 1fr); }
   #inspector-panel {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
-    max-height: 72vh; border-left: none; border-top: 1px solid var(--line);
+    max-height: 52vh; border-left: none; border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0; box-shadow: 0 -10px 34px rgba(0,0,0,.55);
     background: var(--panel);
     transform: translateY(100%); transition: transform .22s ease;
@@ -752,7 +752,7 @@ input[type=range]::-webkit-slider-thumb {
   }
   .m-tbtn:active { background: var(--panel-2); }
   .m-ico { width: 22px; height: 22px; }
-  .m-ver { flex: 0 0 auto; font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; letter-spacing: .2px; padding: 0 2px; }
+  .m-ver { flex: 0 0 auto; font-size: 9px; color: var(--text-faint); font-variant-numeric: tabular-nums; letter-spacing: .2px; padding: 0 4px; opacity: .8; }
   .m-projname {
     flex: 1; min-width: 0; background: transparent; border: 1px solid transparent; color: var(--text);
     font-size: 16px; font-weight: 600; padding: 7px 6px; border-radius: 8px; text-overflow: ellipsis;
@@ -811,5 +811,18 @@ input[type=range]::-webkit-slider-thumb {
   /* while a bottom sheet is up (Add or the property menu), the + FAB hides (no overlap) */
   body.add-open #add-fab, body.add-open #insp-toggle,
   body.insp-open #add-fab { display: none; }
+
+  /* AM property menu: SHORT + HORIZONTAL — a compact 3-wide category grid, not a tall 2-col stack */
+  #inspector-panel .cat-grid { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  #inspector-panel .cat-card { padding: 11px 5px; gap: 6px; border-radius: 11px; }
+  #inspector-panel .cat-ico svg { width: 21px; height: 21px; }
+  #inspector-panel .cat-label { font-size: 10.5px; line-height: 1.2; }
+  /* slim the header + tighten padding so the grid sits in the bottom third */
+  #inspector-panel .insp-head { padding: 2px 0 9px; margin-bottom: 10px; gap: 7px; }
+  #inspector-panel .insp-thumb { width: 34px; height: 22px; }
+  #inspector-panel .insp-name { padding: 5px 8px; font-size: 13px; }
+  #inspector-panel .insp-del { width: 28px; height: 28px; }
+  #inspector .quick-row { padding: 0 2px 8px; }
+  #inspector { padding: 2px 12px 18px; }
 }
 

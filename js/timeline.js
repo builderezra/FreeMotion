@@ -14,6 +14,7 @@ window.FM = window.FM || {};
   let kfDrag = null;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
+  let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let dragIdx = null;    // layer index being reordered via the track head
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
@@ -262,6 +263,25 @@ window.FM = window.FM || {};
       e.stopPropagation();
       if (e.button !== 0) return;
       if (e.shiftKey || e.metaKey || e.ctrlKey) { FM.toggleSelect(layer.id); return; }   // multi-select, no drag
+      const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+      if (isTouch) {
+        // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
+        // scrubs the playhead; an already-selected clip can be press-held to move it in time.
+        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), moved: false, holdTimer: null };
+        if (FM.scene.selectedId === layer.id) {
+          clipTap.holdTimer = setTimeout(() => {
+            if (clipTap && !clipTap.moved) {
+              clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: [] };
+              clipTap = null;
+              if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+            }
+          }, 350);
+        }
+        innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
+        if (FM.playing) FM.pause();
+        return;
+      }
+      // --- desktop (mouse): select immediately + set up clip-move (unchanged) ---
       const selIds = FM.selectionIds ? FM.selectionIds() : [];
       let group = [];
       if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
@@ -448,6 +468,14 @@ window.FM = window.FM || {};
         FM.contextMenu.show(e.clientX, e.clientY, menu);
       });
       window.addEventListener('pointermove', (e) => {
+        if (clipTap) {
+          const dx = e.clientX - clipTap.startX, dy = e.clientY - clipTap.startY;
+          if (!clipTap.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;   // still a potential tap
+          clipTap.moved = true;
+          if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
+          FM.setTime(timeFromX(e.clientX));   // touch-drag on a clip = scrub the playhead (AM)
+          return;
+        }
         if (clipMove) {
           const dx = e.clientX - clipMove.startX;
           if (!clipMove.moved && Math.abs(dx) < 4) return;   // movement threshold: distinguish click from drag
@@ -510,6 +538,12 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointerup', () => {
         dragging = false;
+        if (clipTap) {
+          const ct = clipTap; clipTap = null;
+          if (ct.holdTimer) clearTimeout(ct.holdTimer);
+          if (!ct.moved) FM.selectLayer(ct.layer.id);   // a deliberate tap selects (opens the property menu)
+          return;
+        }
         if (clipMove) {
           const cm = clipMove; clipMove = null; hideSnap();
           if (cm.moved) {
@@ -537,7 +571,12 @@ window.FM = window.FM || {};
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
         }
       });
-      window.addEventListener('resize', () => this.rebuild());
+      window.addEventListener('pointercancel', () => {
+        if (clipTap && clipTap.holdTimer) clearTimeout(clipTap.holdTimer);
+        clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; hideSnap();
+      });
+      // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
+      window.addEventListener('resize', () => { HEAD_W = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--head-w'), 10) || 172; this.rebuild(); });
     },
 
     rebuild() {
