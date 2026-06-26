@@ -24,8 +24,50 @@ window.FM = window.FM || {};
     function close() { insp.classList.remove('open'); btn.classList.remove('on'); document.body.classList.remove('insp-open'); }
     function toggle() { insp.classList.contains('open') ? close() : open(); }
 
+    // Swipe a bottom sheet DOWN to dismiss it (follows the finger, then snaps closed past a threshold).
+    function makeSwipeDown(panel, grabEl, dismiss, getScrollEl) {
+      var startY = 0, startX = 0, lastY = 0, lastT = 0, vy = 0, active = false, claimed = false, pid = null, h = 0;
+      function atTop() { if (!getScrollEl) return true; var s = getScrollEl(); return !s || s.scrollTop <= 0; }
+      function onDown(e) {
+        if (!isPhone() || !panel.classList.contains('open')) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        var onGrab = grabEl && (e.target === grabEl || grabEl.contains(e.target));
+        if (!onGrab && !atTop()) return;
+        active = true; claimed = false; pid = e.pointerId;
+        startY = lastY = e.clientY; startX = e.clientX; lastT = e.timeStamp; vy = 0;
+        h = panel.getBoundingClientRect().height || 1; panel._swiped = false;
+      }
+      function onMove(e) {
+        if (!active || e.pointerId !== pid) return;
+        var dy = e.clientY - startY, dx = e.clientX - startX;
+        if (!claimed) {
+          if (dy < -4) { active = false; return; }                 // upward → not a dismiss
+          if (dy > 6 && dy > Math.abs(dx)) { claimed = true; panel.style.transition = 'none'; try { panel.setPointerCapture(pid); } catch (_) {} }
+          else return;
+        }
+        if (e.cancelable) e.preventDefault();
+        var now = e.timeStamp, ddt = now - lastT; if (ddt > 0) vy = (e.clientY - lastY) / ddt; lastY = e.clientY; lastT = now;
+        panel.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+      }
+      function settle(e) {
+        if (!active || (e && e.pointerId !== pid)) return;
+        var wasClaimed = claimed; active = false; claimed = false;
+        try { panel.releasePointerCapture(pid); } catch (_) {}
+        panel.style.transition = '';
+        panel.style.transform = '';
+        if (!wasClaimed) return;
+        panel._swiped = true;
+        if ((lastY - startY) > 0.33 * h || vy > 0.5) dismiss();      // far enough OR fast flick → close
+      }
+      panel.addEventListener('pointerdown', onDown);
+      window.addEventListener('pointermove', onMove, { passive: false });
+      window.addEventListener('pointerup', settle);
+      window.addEventListener('pointercancel', settle);
+    }
+
     btn.addEventListener('click', toggle);
-    grab.addEventListener('click', close);
+    grab.addEventListener('click', function () { if (insp._swiped) { insp._swiped = false; return; } close(); });
+    makeSwipeDown(insp, grab, close, function () { return insp; });
 
     // Selecting a layer (canvas tap or layer list) slides the inspector up so its
     // controls are reachable; deselecting drops it. Wrap, don't edit, the core fn.
@@ -84,7 +126,8 @@ window.FM = window.FM || {};
     function openAdd() { close(); addSheet.classList.add('open'); document.body.classList.add('add-open'); }
     function closeAdd() { addSheet.classList.remove('open'); document.body.classList.remove('add-open'); }
     if (addFab) addFab.addEventListener('click', function () { addSheet.classList.contains('open') ? closeAdd() : openAdd(); });
-    if (addGrab) addGrab.addEventListener('click', closeAdd);
+    if (addGrab) addGrab.addEventListener('click', function () { if (addSheet._swiped) { addSheet._swiped = false; return; } closeAdd(); });
+    if (addSheet) makeSwipeDown(addSheet, addGrab, closeAdd, null);
 
     function svg(p) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>'; }
     var ICON = {

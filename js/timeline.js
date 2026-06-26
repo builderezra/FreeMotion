@@ -8,7 +8,16 @@ window.FM = window.FM || {};
   let rulerEl, tracksEl, playheadEl, innerEl, snaplineEl, loopRegionEl, timelineEl;
   let HEAD_W = 172;
   let zoom = 1;          // 1 = fit-to-width; >1 zooms in (lanes scroll horizontally, heads stay pinned)
-  function showSnap(t) { if (snaplineEl) { snaplineEl.style.left = (HEAD_W + t * pxPerSec()) + 'px'; snaplineEl.classList.remove('hidden'); } }
+  // AM-style fixed-centre playhead: PAD = half a viewport of empty lane on each side so the pinned
+  // centre playhead can reach t=0..duration. The ruler/clips/keyframes are all shifted right by +PAD.
+  let PAD = 0, scrub = null, pinch = null; const pointers = new Map();
+  function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
+  function fps() { return FM.scene.project.fps || 30; }
+  function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
+  // Fixed-centre playhead is a PHONE behavior; desktop keeps the original moving playhead (PAD=0 → no shift).
+  function recomputePad() { PAD = isPhone() ? laneViewW() / 2 : 0; }
+  function centreX() { return HEAD_W + laneViewW() / 2; }   // viewport-x of the pinned playhead
+  function showSnap(t) { if (snaplineEl) { snaplineEl.style.left = (HEAD_W + PAD + t * pxPerSec()) + 'px'; snaplineEl.classList.remove('hidden'); } }
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
   let kfDrag = null;
@@ -122,35 +131,38 @@ window.FM = window.FM || {};
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
   function pxPerSec() { return (laneViewW() / FM.scene.project.duration) * zoom; }
   // Widen the inner area when zoomed so the lanes overflow + scroll (heads are sticky-pinned).
-  function applyInnerWidth() { if (innerEl) innerEl.style.width = (HEAD_W + FM.scene.project.duration * pxPerSec()) + 'px'; }
+  function applyInnerWidth() { recomputePad(); if (innerEl) innerEl.style.width = (HEAD_W + PAD * 2 + FM.scene.project.duration * pxPerSec()) + 'px'; }
 
-  // Map a clientX to project time, accounting for the head column offset.
+  // Map a clientX to project time, accounting for the head column + the PAD origin shift.
   function timeFromX(clientX) {
     const rect = innerEl.getBoundingClientRect();
-    const x = clientX - rect.left - HEAD_W;
+    const x = clientX - rect.left - HEAD_W - PAD;
     const t = x / pxPerSec();
     return Math.max(0, Math.min(FM.scene.project.duration, t));
   }
 
+  // timecode MM:SS:FF for a given time (frame-accurate)
+  function tc(t) { const f = fps(); const tot = Math.round(t * f); const ff = tot % f; const s = Math.floor(tot / f); const mm = Math.floor(s / 60); const ss = s % 60; const p2 = n => (n < 10 ? '0' : '') + n; return p2(mm) + ':' + p2(ss) + ':' + p2(ff); }
   function buildRuler() {
-    const dur = FM.scene.project.duration;
-    const pps = pxPerSec();
-    // Pick a "nice" step so ticks land ~every 88px — denser as you zoom in.
+    const dur = FM.scene.project.duration, pps = pxPerSec(), f = fps();
+    // FRAME NOTCHES: a fine tick per frame (thinned so they stay >=5px apart; denser as you zoom in).
+    const frameW = pps / f;
+    let frameStep = 1; while (frameW * frameStep < 5) frameStep *= (frameStep < 5 ? 5 : 2);
+    // MAJOR timecode ticks ~every 88px.
     const nice = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
-    const step = nice.find(s => s * pps >= 88) || nice[nice.length - 1];
+    const majStep = nice.find(s => s * pps >= 88) || nice[nice.length - 1];
     let html = '';
-    for (let t = 0; t <= dur + 1e-6; t += step) {
-      const lbl = (step < 1 ? t.toFixed(1) : (t % 1 ? t.toFixed(1) : t.toFixed(0))) + 's';
-      html += '<div class="tick" style="left:' + (t * pps) + 'px">' + lbl + '</div>';
-    }
+    const totalFrames = Math.ceil(dur * f);
+    for (let fr = 0; fr <= totalFrames; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
+    for (let t = 0; t <= dur + 1e-6; t += majStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px">' + tc(t) + '</div>'; }
     rulerEl.innerHTML = html;
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
-      el.className = 'tl-marker'; el.style.left = (mk.t * pps) + 'px'; el.title = (mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's  (double-click to rename)';
+      el.className = 'tl-marker'; el.style.left = (PAD + mk.t * pps) + 'px'; el.title = (mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's  (double-click to rename)';
       el.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         const input = document.createElement('input');
-        input.className = 'marker-edit'; input.value = mk.label || ''; input.style.left = (mk.t * pps) + 'px';
+        input.className = 'marker-edit'; input.value = mk.label || ''; input.style.left = (PAD + mk.t * pps) + 'px';
         const commit = () => { if (!input.parentNode) return; mk.label = input.value.trim() || 'Marker'; input.remove(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
         input.addEventListener('pointerdown', (pv) => pv.stopPropagation());
         input.addEventListener('keydown', (kv) => { kv.stopPropagation(); if (kv.key === 'Enter') commit(); else if (kv.key === 'Escape') { input.remove(); FM.timeline.rebuild(); } });
@@ -224,7 +236,7 @@ window.FM = window.FM || {};
 
     const clip = document.createElement('div');
     clip.className = 'clip' + (isSelected(layer.id) ? ' sel' : '') + (layer.reversed ? ' reversed' : '');
-    clip.style.left = (layer.start * pps) + 'px';
+    clip.style.left = (PAD + layer.start * pps) + 'px';
     clip.style.width = Math.max(8, layer.duration * pps) + 'px';
     const col = layer.clipColor || '#3a5a8c';
     clip.style.background = 'linear-gradient(180deg, ' + shade(col, 8) + ', ' + shade(col, -20) + ')';
@@ -267,7 +279,7 @@ window.FM = window.FM || {};
       if (isTouch) {
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
-        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), moved: false, holdTimer: null };
+        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), moved: false, holdTimer: null, startScroll: null };
         if (FM.scene.selectedId === layer.id) {
           clipTap.holdTimer = setTimeout(() => {
             if (clipTap && !clipTap.moved) {
@@ -328,7 +340,7 @@ window.FM = window.FM || {};
             : (dotEase === 'overshoot' || dotEase === 'anticipate') ? 'ease-back'
               : dotEase === 'custom' ? 'ease-custom' : 'ease-smooth';
         dot.className = 'kf-dot ' + easeClass;
-        dot.style.left = (tt * pps) + 'px';
+        dot.style.left = (PAD + tt * pps) + 'px';
         dot.title = 'Drag to retime · double-click to delete';
         dot.addEventListener('pointerdown', (e) => {
           e.stopPropagation(); e.preventDefault();
@@ -421,13 +433,37 @@ window.FM = window.FM || {};
       const sn = document.getElementById('btn-snap');
       if (sn) sn.addEventListener('click', () => { snapping = !snapping; sn.classList.toggle('active', snapping); });
       // Cmd/Ctrl + wheel zooms the timeline
-      if (timelineEl) timelineEl.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15); } }, { passive: false });
+      if (timelineEl) timelineEl.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, timeFromX(e.clientX)); } }, { passive: false });
+      // two-finger PINCH zoom — tracked on window in CAPTURE phase so clip/ruler stopPropagation can't hide it
+      const pdist = () => { const p = [...pointers.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
+      const pmidX = () => { const p = [...pointers.values()]; return (p[0].x + p[1].x) / 2; };
+      window.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch' || !timelineEl || !(e.target instanceof Node) || !timelineEl.contains(e.target)) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 2) { dragging = false; scrub = null; clipTap = null; clipMove = null; pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
+      }, true);
+      window.addEventListener('pointermove', (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pinch && pointers.size === 2) { if (e.cancelable) e.preventDefault(); FM.timeline.setZoom(pinch.startZoom * (pdist() / Math.max(1, pinch.startDist)), pinch.anchorTime); }
+      }, true);
+      const endPtr = (e) => { if (!pointers.has(e.pointerId)) return; pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; };
+      window.addEventListener('pointerup', endPtr, true);
+      window.addEventListener('pointercancel', endPtr, true);
       snaplineEl = document.createElement('div'); snaplineEl.id = 'tl-snapline'; snaplineEl.className = 'hidden';
       innerEl.appendChild(snaplineEl);
       loopRegionEl = document.createElement('div'); loopRegionEl.id = 'tl-loopregion'; loopRegionEl.className = 'hidden';
       innerEl.appendChild(loopRegionEl);
 
-      const onDown = (e) => { FM.setTime(timeFromX(e.clientX)); beginScrub(e); };
+      const onDown = (e) => {
+        if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+          scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft };   // AM: relative drag-to-scroll
+          beginScrub(e);
+        } else {
+          FM.setTime(snapT(timeFromX(e.clientX)));                              // desktop mouse: absolute
+          beginScrub(e);
+        }
+      };
       rulerEl.addEventListener('pointerdown', onDown);
       // right-click ruler → add / remove a marker
       rulerEl.addEventListener('contextmenu', (e) => {
@@ -473,7 +509,8 @@ window.FM = window.FM || {};
           if (!clipTap.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;   // still a potential tap
           clipTap.moved = true;
           if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
-          FM.setTime(timeFromX(e.clientX));   // touch-drag on a clip = scrub the playhead (AM)
+          if (clipTap.startScroll == null) clipTap.startScroll = timelineEl.scrollLeft;
+          FM.setTime(snapT((clipTap.startScroll - (e.clientX - clipTap.startX)) / pxPerSec()));   // relative drag-scrub
           return;
         }
         if (clipMove) {
@@ -486,13 +523,13 @@ window.FM = window.FM || {};
           clipMove.layer.start = sr.v;
           if (sr.snapped) showSnap(sr.guide); else hideSnap();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
-          if (clipEl) clipEl.style.left = (sr.v * pps) + 'px';
+          if (clipEl) clipEl.style.left = (PAD + sr.v * pps) + 'px';
           // group move: shift the other selected clips by the same delta
           const delta = sr.v - clipMove.origStart;
           (clipMove.group || []).forEach(g => {
             g.layer.start = Math.max(0, g.origStart + delta);
             const ge = tracksEl.querySelector('.clip[data-id="' + g.layer.id + '"]');
-            if (ge) ge.style.left = (g.layer.start * pps) + 'px';
+            if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
           });
           FM.requestRender();
           return;
@@ -521,7 +558,7 @@ window.FM = window.FM || {};
           }
           const pps2 = pxPerSec();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
-          if (clipEl) { clipEl.style.left = (L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
+          if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
           FM.requestRender();
           return;
         }
@@ -530,14 +567,17 @@ window.FM = window.FM || {};
           let nt = Math.round(timeFromX(e.clientX) * fps) / fps;
           nt = Math.max(0, Math.min(FM.scene.project.duration, nt));
           kfDrag.kfs.forEach(kf => { kf.t = nt; });
-          kfDrag.dot.style.left = (nt * pxPerSec()) + 'px';
+          kfDrag.dot.style.left = (PAD + nt * pxPerSec()) + 'px';
           FM.requestRender();
           return;
         }
-        if (dragging) FM.setTime(timeFromX(e.clientX));
+        if (dragging) {
+          if (scrub) FM.setTime(snapT((scrub.startScroll - (e.clientX - scrub.startX)) / pxPerSec()));   // touch: relative
+          else FM.setTime(snapT(timeFromX(e.clientX)));                                                    // mouse: absolute
+        }
       });
       window.addEventListener('pointerup', () => {
-        dragging = false;
+        dragging = false; scrub = null;
         if (clipTap) {
           const ct = clipTap; clipTap = null;
           if (ct.holdTimer) clearTimeout(ct.holdTimer);
@@ -573,7 +613,7 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointercancel', () => {
         if (clipTap && clipTap.holdTimer) clearTimeout(clipTap.holdTimer);
-        clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; hideSnap();
+        clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       window.addEventListener('resize', () => { HEAD_W = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--head-w'), 10) || 172; this.rebuild(); });
@@ -595,7 +635,7 @@ window.FM = window.FM || {};
       if (!loopRegionEl) return;
       const P = FM.scene.project, pps = pxPerSec();
       if (P.loopIn != null && P.loopOut != null && P.loopOut > P.loopIn) {
-        loopRegionEl.style.left = (HEAD_W + P.loopIn * pps) + 'px';
+        loopRegionEl.style.left = (HEAD_W + PAD + P.loopIn * pps) + 'px';
         loopRegionEl.style.width = ((P.loopOut - P.loopIn) * pps) + 'px';
         loopRegionEl.classList.remove('hidden');
       } else loopRegionEl.classList.add('hidden');
@@ -603,27 +643,40 @@ window.FM = window.FM || {};
 
     updatePlayhead() {
       if (!playheadEl) return;
-      const px = HEAD_W + FM.time * pxPerSec();
-      playheadEl.style.left = px + 'px';
-      // highlight clips the playhead is currently over
+      const pps = pxPerSec();
+      if (isPhone()) {
+        // PHONE (AM): pin the playhead at the centre; scroll the CONTENT so FM.time sits under it.
+        const targetScroll = Math.max(0, FM.time * pps);
+        if (timelineEl && !trimDrag && !clipMove && !kfDrag) {
+          if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
+        }
+        const sl = timelineEl ? timelineEl.scrollLeft : 0;
+        playheadEl.style.left = (sl + centreX()) + 'px';
+      } else {
+        // DESKTOP (original): the playhead moves; content pages to keep it visible.
+        const px = HEAD_W + FM.time * pps;
+        playheadEl.style.left = px + 'px';
+        if (timelineEl && !trimDrag && !clipMove && !dragging) {
+          const vw = timelineEl.clientWidth, sl = timelineEl.scrollLeft;
+          if (px > sl + vw - 8 || px < sl + HEAD_W) timelineEl.scrollLeft = Math.max(0, px - HEAD_W - 24);
+        }
+      }
       const t = FM.time;
       tracksEl.querySelectorAll('.clip').forEach(clipEl => {
         const l = FM.layerById(FM.scene, clipEl.dataset.id);
         clipEl.classList.toggle('under-playhead', !!l && t >= l.start && t < l.start + l.duration);
       });
-      // When zoomed (content overflows), page the scroll so the playhead stays visible.
-      if (timelineEl && !trimDrag && !clipMove && !dragging) {
-        const vw = timelineEl.clientWidth, sl = timelineEl.scrollLeft;
-        if (px > sl + vw - 8 || px < sl + HEAD_W) timelineEl.scrollLeft = Math.max(0, px - HEAD_W - 24);
-      }
     },
 
-    setZoom(z) {
-      zoom = Math.max(1, Math.min(12, z));
+    setZoom(z, anchorTime) {
+      zoom = Math.max(0.25, Math.min(12, z));
+      const at = (anchorTime != null) ? anchorTime : FM.time;
       this.rebuild();
+      if (timelineEl) timelineEl.scrollLeft = Math.max(0, at * pxPerSec());
+      this.updatePlayhead();
       const zl = document.getElementById('tl-zoom-label');
       if (zl) zl.textContent = (Math.round(zoom * 10) / 10) + '×';
     },
-    zoomBy(f) { this.setZoom(zoom * f); },
+    zoomBy(f, anchorTime) { this.setZoom(zoom * f, anchorTime); },
   };
 })(window.FM);
