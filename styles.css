@@ -752,6 +752,7 @@ input[type=range]::-webkit-slider-thumb {
   }
   .m-tbtn:active { background: var(--panel-2); }
   .m-ico { width: 22px; height: 22px; }
+  .m-ver { flex: 0 0 auto; font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; letter-spacing: .2px; padding: 0 2px; }
   .m-projname {
     flex: 1; min-width: 0; background: transparent; border: 1px solid transparent; color: var(--text);
     font-size: 16px; font-weight: 600; padding: 7px 6px; border-radius: 8px; text-overflow: ellipsis;

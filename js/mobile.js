@@ -41,6 +41,11 @@ window.FM = window.FM || {};
     // ---------- AM-style mobile chrome: top bar + green + FAB + Add sheet ----------
     function clickHidden(id) { var b = document.getElementById(id); if (b) b.click(); }
 
+    // mirror the build version onto the phone top bar so Ezra can confirm he's on the latest deploy
+    var verM = document.getElementById('ver-m');
+    var verSrc = document.querySelector('.ver');
+    if (verM && verSrc) { var vm = verSrc.textContent.match(/v[\d.]+/); verM.textContent = vm ? vm[0] : ''; }
+
     // project name field (mirrors the desktop #proj-name + FM.scene.project.name)
     var pnM = document.getElementById('proj-name-m');
     var pnD = document.getElementById('proj-name');
