@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreeMotion</title>
+<link rel="stylesheet" href="styles.css?v=85">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12151b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FreeMotion">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">▶ FreeMotion <span class="ver">v1.33 · installable</span></div>
+      <div class="top-actions">
+        <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
+        <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
+        <span class="tb-divider"></span>
+        <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
+        <button id="btn-add-text" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg>Text</button>
+        <button id="btn-add-layer" class="btn" title="Add a shape, camera, adjustment, or null layer"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+        <button id="btn-sample" class="btn" title="Generate a test clip (no file needed)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM4 9.5h16M9 5v4.5M15 5v4.5"/></svg>Sample</button>
+        <button id="btn-captions" class="btn" title="Add a caption track"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/></svg>Captions</button>
+        <span class="spacer"></span>
+        <input id="proj-name" class="proj-name" type="text" value="Untitled" title="Project name" spellcheck="false">
+        <span class="spacer"></span>
+        <button id="btn-canvas" class="icon-btn" title="Canvas size / aspect ratio"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg></button>
+        <button id="btn-guides" class="icon-btn" title="Safe margins & rule-of-thirds overlay"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></button>
+        <button id="btn-snapshot" class="icon-btn" title="Save current frame as PNG"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg></button>
+        <button id="btn-help" class="icon-btn" title="Keyboard shortcuts (?)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5M12 17.5h.01"/></svg></button>
+        <button id="btn-open-proj" class="icon-btn" title="Open project file (.fmotion.json)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/></svg></button>
+        <button id="btn-save-proj" class="icon-btn" title="Save project file (.fmotion.json)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5zM8 3v6h7V3M8 21v-7h8v7"/></svg></button>
+        <button id="btn-export" class="btn btn-accent"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Export</button>
+      </div>
+    </header>
+
+    <div id="main">
+      <section id="stage">
+        <div id="canvas-wrap">
+          <canvas id="preview"></canvas>
+          <div id="drop-hint">
+            <div class="dh-icon">🎬</div>
+            <div>Drag a video or image here<br>or click <b>Import media</b></div>
+          </div>
+        </div>
+      </section>
+
+      <aside id="inspector-panel" class="panel">
+        <div class="panel-title">Inspector</div>
+        <div id="inspector"><div class="empty">Select a layer to edit it.</div></div>
+      </aside>
+    </div>
+
+    <footer id="timeline-panel">
+      <div id="transport">
+        <button id="btn-tostart" class="tbtn" title="Jump to start">⏮</button>
+        <button id="btn-play" class="tbtn" title="Play / Pause (space)">⏵</button>
+        <button id="btn-toend" class="tbtn" title="Jump to end">⏭</button>
+        <button id="btn-loop" class="tbtn" title="Loop playback">↻</button>
+        <button id="btn-split" class="tbtn" title="Split clip at playhead (S)">✂</button>
+        <button id="btn-snap" class="tbtn active" title="Snapping (magnet)">🧲</button>
+        <button id="btn-onion" class="tbtn" title="Onion skin (ghost prev/next frames of the selected layer)">👻</button>
+        <select id="preview-rate" class="prate" title="Preview playback speed (preview only)">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <span id="time-readout">0.00 / 10.00s</span>
+        <span class="spacer"></span>
+        <button id="btn-fit" class="tbtn" title="Trim project length to the last clip">⤢</button>
+        <button id="btn-zoomout" class="tbtn" title="Zoom timeline out">－</button>
+        <span id="tl-zoom-label" title="Timeline zoom">1×</span>
+        <button id="btn-zoomin" class="tbtn" title="Zoom timeline in (⌘/Ctrl + scroll)">＋</button>
+      </div>
+      <div id="timeline">
+        <div id="tl-inner">
+          <div id="tl-rulerrow"><div class="tl-headspace"></div><div id="tl-ruler"></div></div>
+          <div id="tl-tracks"></div>
+          <div id="tl-playhead"></div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+  <button id="insp-toggle" title="Inspector">✎</button>
+
+  <input type="file" id="file-input" accept="video/*,image/*" multiple hidden>
+
+  <div id="export-overlay" class="hidden">
+    <div class="export-card">
+      <div class="export-title">Exporting</div>
+      <div id="export-status">Preparing…</div>
+      <div class="progress"><div id="export-bar"></div></div>
+      <button id="export-cancel" class="btn">Cancel</button>
+    </div>
+  </div>
+
+  <div id="export-dialog" class="hidden">
+    <div class="export-card">
+      <div class="export-title">Export video</div>
+      <label class="field"><span>Resolution</span>
+        <select id="exp-res">
+          <option value="1">Full (project size)</option>
+          <option value="0.5">Half</option>
+          <option value="0.75">75%</option>
+        </select>
+      </label>
+      <label class="field"><span>Frame rate</span>
+        <select id="exp-fps">
+          <option value="30">30 fps</option>
+          <option value="24">24 fps</option>
+          <option value="60">60 fps</option>
+        </select>
+      </label>
+      <label class="field"><span>Quality</span>
+        <select id="exp-quality">
+          <option value="0.18">High</option>
+          <option value="0.1" selected>Medium</option>
+          <option value="0.05">Low</option>
+        </select>
+      </label>
+      <label class="field"><span>Range</span>
+        <select id="exp-range">
+          <option value="whole">Whole project</option>
+          <option value="loop">Loop region (if set)</option>
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button id="exp-cancel" class="btn">Cancel</button>
+        <button id="exp-go" class="btn btn-accent">Export MP4</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="canvas-dialog" class="hidden">
+    <div class="export-card">
+      <div class="export-title">Canvas size</div>
+      <div class="aspect-row" id="aspect-row">
+        <button class="aspect-chip" data-aspect="16:9"><span class="ac-frame ac-169"></span>16:9</button>
+        <button class="aspect-chip" data-aspect="9:16"><span class="ac-frame ac-916"></span>9:16</button>
+        <button class="aspect-chip" data-aspect="4:5"><span class="ac-frame ac-45"></span>4:5</button>
+        <button class="aspect-chip" data-aspect="1:1"><span class="ac-frame ac-11"></span>1:1</button>
+        <button class="aspect-chip" data-aspect="4:3"><span class="ac-frame ac-43"></span>4:3</button>
+      </div>
+      <label class="field"><span>Resolution</span>
+        <select id="cv-res">
+          <option value="720">720p</option>
+          <option value="1080" selected>1080p (FHD)</option>
+          <option value="1440">1440p (QHD)</option>
+          <option value="2160">2160p (4K)</option>
+        </select>
+      </label>
+      <label class="field"><span>Frame rate</span>
+        <select id="cv-fps">
+          <option value="24">24 fps</option>
+          <option value="30" selected>30 fps</option>
+          <option value="60">60 fps</option>
+        </select>
+      </label>
+      <div class="field"><span>Size</span><span id="cv-size" class="cv-size">1080 × 1920</span></div>
+      <div class="dialog-actions">
+        <button id="cv-cancel" class="btn">Cancel</button>
+        <button id="cv-go" class="btn btn-accent">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/mp4-muxer.js?v=9"></script>
+  <script src="js/scene.js?v=61"></script>
+  <script src="js/media.js?v=28"></script>
+  <script src="js/compositor.js?v=97"></script>
+  <script src="js/timeline.js?v=87"></script>
+  <script src="js/inspector.js?v=86"></script>
+  <script src="js/color-wheel.js?v=52"></script>
+  <script src="js/canvas-edit.js?v=32"></script>
+  <script src="js/frames.js?v=9"></script>
+  <script src="js/audio-play.js?v=51"></script>
+  <script src="js/history.js?v=18"></script>
+  <script src="js/storage.js?v=49"></script>
+  <script src="js/graph-editor.js?v=41"></script>
+  <script src="js/exporter.js?v=75"></script>
+  <script src="js/sample.js?v=9"></script>
+  <script src="js/contextmenu.js?v=32"></script>
+  <script src="js/shortcuts.js?v=70"></script>
+  <script src="js/captions.js?v=45"></script>
+  <script src="js/app.js?v=88"></script>
+  <script src="js/mobile.js?v=1"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
+  </script>
+</body>
+</html>
