@@ -479,7 +479,14 @@ window.FM = window.FM || {};
         scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
         beginScrub(e);
       };
-      rulerEl.addEventListener('pointerdown', onDown);
+      // Grab ANYWHERE the timeline could be — the ruler, the lanes, AND the empty space above/below the
+      // clips (the whole scroller) — to scrub on drag / deselect on tap (AM behaviour). Clips, trim grips,
+      // keyframes, track heads and markers own their own pointers, so let those through untouched.
+      timelineEl.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+        if (e.target.closest('.clip, .clip-grip, .kf-dot, .track-head, .tl-marker, .marker-edit, input, button, select, textarea')) return;
+        onDown(e);
+      });
       // right-click ruler → add / remove a marker
       rulerEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -493,10 +500,7 @@ window.FM = window.FM || {};
         if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { P.markers = []; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         FM.contextMenu.show(e.clientX, e.clientY, items);
       });
-      tracksEl.addEventListener('pointerdown', (e) => {
-        // clicking an empty clip lane scrubs on drag; a tap deselects (heads + clips handle their own pointers)
-        if (e.target.classList.contains('track-lane') || e.target === tracksEl || e.target.classList.contains('tl-empty')) onDown(e, true);
-      });
+      // (scrub/deselect on the lanes is handled by the #timeline pointerdown above)
       // right-click empty timeline → quick Add menu
       tracksEl.addEventListener('contextmenu', (e) => {
         if (!(e.target.classList.contains('track-lane') || e.target === tracksEl || e.target.classList.contains('tl-empty'))) return;
