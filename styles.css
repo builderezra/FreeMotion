@@ -373,7 +373,7 @@ input[type=range]::-webkit-slider-thumb {
 .clip-trim.l { left: 0; } .clip-trim.r { right: 0; }
 .th-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text); font-weight: 500; }
 .th-name-edit { flex: 1 1 auto; min-width: 0; width: 100%; background: var(--panel-3); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 2px 5px; font-size: 11.5px; }
-.track-lane { flex: 1; position: relative; min-width: 0; }
+.track-lane { flex: 1; position: relative; min-width: 0; touch-action: pan-y; }
 .tl-empty { color: var(--text-faint); font-size: 12px; padding: 16px var(--head-w); padding-right: 16px; }
 .clip {
   position: absolute; top: 5px; height: 32px;
@@ -556,6 +556,16 @@ input[type=range]::-webkit-slider-thumb {
 
   /* empty-timeline hint wraps + sits clear of the head column instead of running off-screen */
   .tl-empty { padding: 14px 14px 14px calc(var(--head-w) + 6px); white-space: normal; line-height: 1.5; }
+
+  /* FIXED-CENTRE PLAYHEAD — pinned ENTIRELY in CSS so it can never move. JS does not position it;
+     it only scrolls the timeline content underneath. left = head column + half the lane width, in
+     viewport units (100vw is horizontally stable even when the iOS URL bar collapses mid-drag). */
+  #tl-playhead { display: none; }                         /* the in-scroller line never shows on phone */
+  #tl-centerline {
+    display: block;
+    left: calc(var(--head-w) + (100vw - var(--head-w)) / 2);
+    top: 40px; bottom: 0;                                  /* spans the timeline row (below the 40px transport) */
+  }
 
   /* stage takes the full width; the inspector becomes a bottom sheet */
   #main { grid-template-columns: minmax(0, 1fr); }

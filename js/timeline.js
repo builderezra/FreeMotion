@@ -5,7 +5,7 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  let rulerEl, tracksEl, playheadEl, innerEl, snaplineEl, loopRegionEl, timelineEl, centerlineEl, panelEl;
+  let rulerEl, tracksEl, playheadEl, innerEl, snaplineEl, loopRegionEl, timelineEl;
   let HEAD_W = 172;
   let zoom = 1;          // 1 = fit-to-width; >1 zooms in (lanes scroll horizontally, heads stay pinned)
   // AM-style fixed-centre playhead: PAD = half a viewport of empty lane on each side so the pinned
@@ -17,18 +17,10 @@ window.FM = window.FM || {};
   // Fixed-centre playhead is a PHONE behavior; desktop keeps the original moving playhead (PAD=0 → no shift).
   function recomputePad() { PAD = isPhone() ? laneViewW() / 2 : 0; }
   function centreX() { return HEAD_W + laneViewW() / 2; }   // viewport-x of the pinned playhead
-  // Park the phone playhead as a STATIC line over the lane centre. It lives outside the scroller
-  // (#timeline), anchored to #timeline-panel, so it never moves — only the content scrolls under it.
-  // Recomputed only on layout change (centreX depends on width/HEAD_W), never per-scroll.
-  function positionCenterline() {
-    if (!centerlineEl) return;
-    if (!isPhone() || !panelEl || !timelineEl) { centerlineEl.style.display = 'none'; return; }
-    const pr = panelEl.getBoundingClientRect(), tr = timelineEl.getBoundingClientRect();
-    centerlineEl.style.display = 'block';
-    centerlineEl.style.left = ((tr.left - pr.left) + centreX()) + 'px';
-    centerlineEl.style.top = (tr.top - pr.top) + 'px';
-    centerlineEl.style.height = tr.height + 'px';
-  }
+  // NOTE: the phone playhead (#tl-centerline) is pinned ENTIRELY in CSS (styles.css phone media query):
+  // left = calc(var(--head-w) + (100vw - var(--head-w))/2). JS never positions it, so it physically
+  // cannot move — reading getBoundingClientRect per-frame here was what let it drift on real iOS
+  // (URL-bar collapse shifts the viewport mid-drag). JS only scrolls the content under the line.
   function showSnap(t) { if (snaplineEl) { snaplineEl.style.left = (HEAD_W + PAD + t * pxPerSec()) + 'px'; snaplineEl.classList.remove('hidden'); } }
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
@@ -438,8 +430,6 @@ window.FM = window.FM || {};
       playheadEl = document.getElementById('tl-playhead');
       innerEl = document.getElementById('tl-inner');
       timelineEl = document.getElementById('timeline');
-      centerlineEl = document.getElementById('tl-centerline');
-      panelEl = document.getElementById('timeline-panel');
       HEAD_W = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--head-w'), 10) || 172;
       const zo = document.getElementById('btn-zoomout'), zi = document.getElementById('btn-zoomin');
       if (zo) zo.addEventListener('click', () => this.zoomBy(1 / 1.5));
@@ -659,19 +649,15 @@ window.FM = window.FM || {};
       if (!playheadEl) return;
       const pps = pxPerSec();
       if (isPhone()) {
-        // PHONE (AM): the playhead is a STATIC line at the lane centre (#tl-centerline, outside the
-        // scroller — see positionCenterline). It NEVER moves. We only scroll the CONTENT so the
-        // current time sits under it. The in-scroller #tl-playhead is hidden so there's just one line.
-        playheadEl.style.display = 'none';
-        positionCenterline();
+        // PHONE (AM): the playhead is #tl-centerline, a CSS-pinned static line at the lane centre
+        // (styles.css). It NEVER moves and JS never touches it — we only scroll the CONTENT so the
+        // current time sits under it. Visibility of both lines is owned by the phone media query.
         const targetScroll = Math.max(0, FM.time * pps);
         if (timelineEl && !trimDrag && !clipMove && !kfDrag) {
           if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
         }
       } else {
         // DESKTOP (original): the playhead moves; content pages to keep it visible.
-        playheadEl.style.display = '';
-        if (centerlineEl) centerlineEl.style.display = 'none';
         const px = HEAD_W + FM.time * pps;
         playheadEl.style.left = px + 'px';
         if (timelineEl && !trimDrag && !clipMove && !dragging) {
