@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=98">
+<link rel="stylesheet" href="styles.css?v=99">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver">v1.41 · AM layout</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver">v1.42 · centre playhead</span></div>
       <div class="top-actions">
         <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
         <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
@@ -97,6 +97,9 @@
           <div id="tl-playhead"></div>
         </div>
       </div>
+      <!-- Phone only: a fixed-centre playhead that lives OUTSIDE the scroller, so it can never move.
+           The timeline content scrolls underneath it (AM behaviour). Positioned by timeline.js. -->
+      <div id="tl-centerline" aria-hidden="true"></div>
     </footer>
   </div>
 
@@ -196,7 +199,7 @@
   <script src="js/scene.js?v=61"></script>
   <script src="js/media.js?v=28"></script>
   <script src="js/compositor.js?v=97"></script>
-  <script src="js/timeline.js?v=92"></script>
+  <script src="js/timeline.js?v=93"></script>
   <script src="js/inspector.js?v=87"></script>
   <script src="js/color-wheel.js?v=52"></script>
   <script src="js/canvas-edit.js?v=32"></script>

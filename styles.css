@@ -317,6 +317,7 @@ input[type=range]::-webkit-slider-thumb {
   background: var(--panel);
   border-top: 1px solid var(--line);
   display: grid; grid-template-rows: 40px 1fr;
+  position: relative;   /* anchors the fixed-centre #tl-centerline (phone) */
 }
 #transport {
   display: flex; align-items: center; gap: 11px;
@@ -436,6 +437,18 @@ input[type=range]::-webkit-slider-thumb {
   content: ""; position: absolute; top: 0; left: -5px;
   border-left: 5px solid transparent; border-right: 5px solid transparent;
   border-top: 7px solid #eaf0f8;
+}
+/* Phone fixed-centre playhead: lives OUTSIDE #timeline (the scroller), so it physically can't
+   move — the content scrolls under it. Positioned by timeline.js (left/top/height). Hidden on desktop. */
+#tl-centerline {
+  position: absolute; width: 0; z-index: 12; display: none;
+  border-left: 2px solid #eaf0f8; pointer-events: none;
+  box-shadow: 0 0 6px rgba(255,255,255,.45);
+}
+#tl-centerline::before {
+  content: ""; position: absolute; top: 0; left: -5px;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 8px solid #eaf0f8;
 }
 .kf-dot { position: absolute; top: 13px; width: 11px; height: 11px; background: #ffffff; transform: translateX(-5.5px) rotate(45deg); z-index: 6; box-shadow: 0 0 0 1px rgba(0,0,0,.55); cursor: ew-resize; }
 .kf-dot.ease-linear { background: #ffffff; }      /* linear */
