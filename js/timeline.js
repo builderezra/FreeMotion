@@ -8,15 +8,16 @@ window.FM = window.FM || {};
   let rulerEl, tracksEl, playheadEl, innerEl, snaplineEl, loopRegionEl, timelineEl;
   let HEAD_W = 172;
   let zoom = 1;          // 1 = fit-to-width; >1 zooms in (lanes scroll horizontally, heads stay pinned)
-  // AM-style fixed-centre playhead: PAD = half a viewport of empty lane on each side so the pinned
-  // centre playhead can reach t=0..duration. The ruler/clips/keyframes are all shifted right by +PAD.
+  // AM-style fixed-centre playhead (phone): the line is CSS-pinned at TRUE screen centre (left: 50vw).
+  // PAD shifts the ruler/clips/keyframes right so the current time lands exactly under that line —
+  // PAD = (half the viewport) − head column. Left pad lets t=0 reach centre; the trailing pad in
+  // applyInnerWidth() lets t=duration reach it too. Desktop keeps the original moving playhead (PAD=0).
   let PAD = 0, scrub = null, pinch = null; const pointers = new Map();
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
-  // Fixed-centre playhead is a PHONE behavior; desktop keeps the original moving playhead (PAD=0 → no shift).
-  function recomputePad() { PAD = isPhone() ? laneViewW() / 2 : 0; }
-  function centreX() { return HEAD_W + laneViewW() / 2; }   // viewport-x of the pinned playhead
+  function recomputePad() { PAD = isPhone() ? Math.max(0, window.innerWidth / 2 - HEAD_W) : 0; }
+  function centreX() { return isPhone() ? window.innerWidth / 2 : HEAD_W; }   // viewport-x the current time sits at
   // NOTE: the phone playhead (#tl-centerline) is pinned ENTIRELY in CSS (styles.css phone media query):
   // left = calc(var(--head-w) + (100vw - var(--head-w))/2). JS never positions it, so it physically
   // cannot move — reading getBoundingClientRect per-frame here was what let it drift on real iOS
@@ -135,7 +136,14 @@ window.FM = window.FM || {};
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
   function pxPerSec() { return (laneViewW() / FM.scene.project.duration) * zoom; }
   // Widen the inner area when zoomed so the lanes overflow + scroll (heads are sticky-pinned).
-  function applyInnerWidth() { recomputePad(); if (innerEl) innerEl.style.width = (HEAD_W + PAD * 2 + FM.scene.project.duration * pxPerSec()) + 'px'; }
+  // Phone: viewport + content, so t=0 (centre line at 50vw) AND t=duration can each scroll under the
+  // line. Desktop: head + content (PAD=0, the playhead moves instead).
+  function applyInnerWidth() {
+    recomputePad();
+    if (!innerEl) return;
+    const content = FM.scene.project.duration * pxPerSec();
+    innerEl.style.width = (isPhone() ? (window.innerWidth + content) : (HEAD_W + content)) + 'px';
+  }
 
   // Map a clientX to project time, accounting for the head column + the PAD origin shift.
   function timeFromX(clientX) {
@@ -208,16 +216,11 @@ window.FM = window.FM || {};
       name.replaceWith(input); input.focus(); input.select();
     });
 
-    const lock = document.createElement('span');
-    lock.className = 'th-lock'; lock.textContent = layer.locked ? '🔒' : '🔓';
-    lock.title = layer.locked ? 'Unlock layer' : 'Lock layer';
-    lock.addEventListener('click', (e) => { e.stopPropagation(); layer.locked = !layer.locked; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); });
-
     const solo = document.createElement('span');
     solo.className = 'th-solo' + (layer.solo ? ' on' : '');
     solo.textContent = 'S'; solo.title = layer.solo ? 'Unsolo' : 'Solo (hide other layers)';
     solo.addEventListener('click', (e) => { e.stopPropagation(); layer.solo = !layer.solo; FM.requestRender(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); });
-    head.append(eye, thumb, name, lock, solo);
+    head.append(eye, thumb, name, solo);
     head.addEventListener('click', (e) => { if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id); });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     // drag to reorder (z-order)

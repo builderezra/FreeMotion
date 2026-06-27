@@ -18,7 +18,7 @@
   --good: #4cd497;
   --radius: 10px;
   --radius-sm: 7px;
-  --head-w: 172px;   /* timeline track-head (per-layer controls) column width */
+  --head-w: 150px;   /* timeline track-head (per-layer controls) column width */
 }
 
 * { box-sizing: border-box; }
@@ -354,7 +354,7 @@ input[type=range]::-webkit-slider-thumb {
 .track-row { display: flex; height: 42px; border-bottom: 1px solid var(--line-soft); }
 .track-head {
   width: var(--head-w); flex: 0 0 var(--head-w);
-  display: flex; align-items: center; gap: 7px; padding: 0 8px;
+  display: flex; align-items: center; gap: 6px; padding: 0 8px;
   border-right: 1px solid var(--line); cursor: grab; background: var(--panel);
   position: sticky; left: 0; z-index: 6;
 }
@@ -362,10 +362,10 @@ input[type=range]::-webkit-slider-thumb {
 .track-head.sel.primary { background: rgba(41,217,187,.18); }
 .track-head.dragging { opacity: .5; }
 .track-head.drop-target { box-shadow: inset 0 2px 0 var(--accent); }
-.th-eye, .th-lock { flex: 0 0 auto; font-size: 13px; line-height: 1; cursor: pointer; opacity: .85; user-select: none; }
-.th-eye:hover, .th-lock:hover { opacity: 1; }
+.th-eye { flex: 0 0 auto; font-size: 12px; line-height: 1; cursor: pointer; opacity: .85; user-select: none; }
+.th-eye:hover { opacity: 1; }
 .th-eye.off { opacity: .4; }
-.th-thumb { width: 38px; height: 24px; flex: 0 0 auto; border-radius: 4px; background: #000; }
+.th-thumb { width: 30px; height: 19px; flex: 0 0 auto; border-radius: 4px; background: #000; }
 .th-solo { flex: 0 0 auto; font-size: 10px; font-weight: 800; line-height: 1; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid var(--line); color: var(--text-faint); cursor: pointer; }
 .th-solo:hover { color: var(--text); }
 .th-solo.on { background: var(--kf); border-color: var(--kf); color: #1a1400; }
@@ -563,7 +563,7 @@ input[type=range]::-webkit-slider-thumb {
   #tl-playhead { display: none; }                         /* the in-scroller line never shows on phone */
   #tl-centerline {
     display: block;
-    left: calc(var(--head-w) + (100vw - var(--head-w)) / 2);
+    left: 50vw;                                            /* TRUE screen centre; JS shifts content (PAD) so the current time lands here */
     top: 40px; bottom: 0;                                  /* spans the timeline row (below the 40px transport) */
   }
 
@@ -593,8 +593,10 @@ input[type=range]::-webkit-slider-thumb {
   /* with the grab handle present, the floating button hides while the sheet is open (no overlap) */
   #insp-toggle.on { display: none; }
 
-  /* shrink the timeline head column so clips get room on a narrow screen */
-  :root { --head-w: 116px; }
+  /* shrink the timeline head column so clips get room on a narrow screen; declutter to eye + thumb + name */
+  :root { --head-w: 104px; }
+  .th-solo { display: none; }                              /* solo is a desktop control; phone head = eye + thumb + name */
+  .th-thumb { width: 28px; height: 18px; }
 
   /* floating "edit / inspector" button above the timeline */
   #insp-toggle {
