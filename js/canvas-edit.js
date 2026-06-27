@@ -113,6 +113,15 @@ window.FM = window.FM || {};
     if (!drag) return;
     const p = eventToProject(e);
     const L = drag.layer;
+    if (!drag.moved) {
+      // ignore sub-threshold jitter so a tap-to-select isn't treated as a move (no no-op undo spam).
+      // move/campan have startP; scale/rotate (handle grabs) don't and are always intentional.
+      if (drag.startP) {
+        const ds = dispScale(), dpx = Math.hypot((p.x - drag.startP.x) * ds, (p.y - drag.startP.y) * ds);
+        if (dpx < 3) return;
+      }
+      drag.moved = true;
+    }
     if (drag.mode === 'campan') {   // pan the camera so the grabbed scene point follows the cursor
       const nx = drag.startX - (p.x - drag.startP.x) / drag.zoom;
       const ny = drag.startY - (p.y - drag.startP.y) / drag.zoom;
@@ -143,8 +152,10 @@ window.FM = window.FM || {};
 
   function onUp() {
     if (!drag) return;
+    const moved = drag.moved;
     drag = null;
     showGuides(null, null);
+    if (!moved) return;   // a pure tap-select already refreshed via selectLayer — don't push a no-op undo snapshot
     if (FM.inspector) FM.inspector.refresh();  // sync number fields once, after the drag
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();

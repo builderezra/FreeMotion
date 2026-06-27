@@ -38,7 +38,7 @@ window.FM = window.FM || {};
       FM.requestRender();
       FM.timeline.updatePlayhead();
     });
-    input.addEventListener('change', commitH);
+    input.addEventListener('change', () => { commitH(); if (FM.isAnimated(p)) { FM.timeline.rebuild(); FM.inspector.refresh(); } });   // show the new kf-dot/diamond
     row.appendChild(input);
     const animated = FM.isAnimated(p);
     const onHere = FM.hasKeyframeAt(p, FM.time);
@@ -64,7 +64,7 @@ window.FM = window.FM || {};
         input.value = round(v, opts.dp != null ? opts.dp : 2);
         FM.requestRender();
       });
-      range.addEventListener('change', commitH);
+      range.addEventListener('change', () => { commitH(); if (FM.isAnimated(p)) { FM.timeline.rebuild(); FM.inspector.refresh(); } });   // show the new kf-dot/diamond
       sr.appendChild(range);
       wrap.appendChild(sr);
     }
@@ -108,7 +108,7 @@ window.FM = window.FM || {};
     return row;
   }
 
-  function rangeRow(label, get, set, min, max, step) {
+  function rangeRow(label, get, set, min, max, step, onCommit) {
     const wrap = el('div', 'prop-wrap');
     const row = el('div', 'prop-row');
     row.appendChild(el('label', null, label));
@@ -116,7 +116,7 @@ window.FM = window.FM || {};
     range.min = min; range.max = max; range.step = step || 1; range.value = get();
     const val = el('span', 'fx-val', String(get()));
     range.addEventListener('input', () => { set(parseFloat(range.value)); val.textContent = range.value; FM.requestRender(); });
-    range.addEventListener('change', commitH);
+    range.addEventListener('change', () => { commitH(); if (onCommit) onCommit(); });   // onCommit fires on RELEASE (safe to rebuild the inspector here)
     row.appendChild(range); row.appendChild(val);
     wrap.appendChild(row);
     return wrap;
@@ -127,6 +127,7 @@ window.FM = window.FM || {};
   function addRecentColor(c) {
     c = normHex(c);
     FM.recentColors = [c].concat((FM.recentColors || []).filter(x => x !== c)).slice(0, 12);
+    try { localStorage.setItem('fm.recentColors', JSON.stringify(FM.recentColors)); } catch (e) {}   // survive reload
   }
   function colorField(getVal, setVal) {
     const cont = el('div', 'color-field-wrap');
@@ -429,13 +430,16 @@ window.FM = window.FM || {};
         const setAnchor = (axisKey, v) => {
           const sz = FM.layerSize(layer), sc = FM.evalProp(layer.transform.scale, FM.time) || 1;
           const rot = FM.evalProp(layer.transform.rotation, FM.time) * Math.PI / 180;
-          const d = v - (layer.transform[axisKey] != null ? layer.transform[axisKey] : 0.5);
+          const curRaw = FM.evalProp(layer.transform[axisKey], FM.time);   // works for static OR keyframed anchor (avoid NaN → vanish)
+          const cur = (typeof curRaw === 'number' && isFinite(curRaw)) ? curRaw : 0.5;
+          const d = v - cur;
           // local compensation vector (rotate into world so a rotated layer still stays put)
           const lx = axisKey === 'anchorX' ? sz.w * d * sc : 0, ly = axisKey === 'anchorY' ? sz.h * d * sc : 0;
           const cos = Math.cos(rot), sin = Math.sin(rot);
           bumpPos('x', lx * cos - ly * sin);
           bumpPos('y', lx * sin + ly * cos);
-          layer.transform[axisKey] = v;
+          if (FM.isAnimated(layer.transform[axisKey])) FM.setProp(layer.transform, axisKey, v, FM.time);
+          else layer.transform[axisKey] = v;
           if (FM.canvasEdit) FM.canvasEdit.update();
         };
         body.appendChild(rangeRow('Anchor X', () => layer.transform.anchorX != null ? layer.transform.anchorX : 0.5, v => setAnchor('anchorX', v), 0, 1, 0.01));
@@ -660,7 +664,7 @@ window.FM = window.FM || {};
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;
           const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, sp)); } catch (e) {} }
           FM.timeline.rebuild();
-        }, 25, 400, 5));
+        }, 25, 400, 5, () => FM.inspector.refresh()));   // refresh on release so the Duration field + fade max aren't stale
         if (layer.frameBlend == null) layer.frameBlend = false;
         body.appendChild(checkRow('Frame blend (smooth slow-mo)', layer.frameBlend, async v => {
           layer.frameBlend = v;
@@ -677,7 +681,10 @@ window.FM = window.FM || {};
   }
 
   FM.inspector = {
-    init() { root = document.getElementById('inspector'); },
+    init() {
+      root = document.getElementById('inspector');
+      try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
+    },
     openCategory(key) { view = key; this.refresh(); },
     refresh() {
       const layer = FM.selectedLayer(FM.scene);

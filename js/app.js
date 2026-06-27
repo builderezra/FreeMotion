@@ -392,11 +392,9 @@ window.FM = window.FM || {};
   FM.addCaptionLayer = function () {
     const P = FM.scene.project;
     const layer = FM.makeLayer('text', { name: 'Captions', x: P.width / 2, y: Math.round(P.height * 0.82), fontSize: Math.round(P.height / 22), duration: P.duration });
-    const seg = Math.max(1, Math.min(2.5, P.duration / 2));
-    layer.captions = [
-      { start: 0, end: seg, text: 'First caption' },
-      { start: seg, end: Math.min(P.duration, seg * 2), text: 'Second caption' },
-    ];
+    const seg = Math.max(0.5, Math.min(2.5, P.duration / 2));
+    layer.captions = [{ start: 0, end: Math.min(seg, P.duration), text: 'First caption' }];
+    if (P.duration > seg + 0.3) layer.captions.push({ start: seg, end: Math.min(P.duration, seg * 2), text: 'Second caption' });   // only if there's room (no zero-length segment on tiny projects)
     layer.text = '';
     layer.captionBg = true;
     FM.scene.layers.unshift(layer);
@@ -457,6 +455,9 @@ window.FM = window.FM || {};
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
     FM.media.remove(id);
     if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id);   // drop its blob from IndexedDB
+    // A deleted clip's synthesized (reversed) audio plays from a flat node list not keyed by layer, so
+    // it keeps sounding after the clip is gone. Rebuild the active nodes from the post-delete layer set.
+    if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
     if (FM.scene.selectedId === id) FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     refreshAll();
     if (FM.history) FM.history.commit();
@@ -629,6 +630,12 @@ window.FM = window.FM || {};
       B.trimStart = origTrim + into * sp;                       // B resumes where A left off in the source
     }
     layer.duration = into;                                      // A = first half
+    if (Array.isArray(layer.captions)) {
+      // captions use LOCAL time (t − layer.start): re-base B's segments to its new start and trim A's to its new length
+      const orig = layer.captions;
+      B.captions = orig.map(c => ({ ...c, start: c.start - into, end: c.end - into })).filter(c => c.end > 0.01).map(c => ({ ...c, start: Math.max(0, c.start) }));
+      layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...c, end: Math.min(c.end, into) }));
+    }
     if (layer.type !== 'text') {
       const rec = FM.media.get(id);
       if (rec && rec.file) {

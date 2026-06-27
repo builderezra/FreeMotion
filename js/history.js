@@ -39,7 +39,7 @@ window.FM = window.FM || {};
       if (stack.length > 120) { stack.shift(); index--; }
       if (FM.storage) FM.storage.autosave();
     },
-    undo() { if (index > 0) { index--; restore(stack[index]); } },
-    redo() { if (index < stack.length - 1) { index++; restore(stack[index]); } },
+    undo() { if (index > 0) { index--; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } },   // persist so a hard kill after undo can't resurrect the edit
+    redo() { if (index < stack.length - 1) { index++; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } },
   };
 })(window.FM);

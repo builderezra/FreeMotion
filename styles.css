@@ -552,7 +552,7 @@ input[type=range]::-webkit-slider-thumb {
 
 /* Let finger-drags manipulate layers / scrub instead of scrolling the page.
    Applied only to the surfaces you DRAG ON, so the timeline can still pan-scroll. */
-#preview, #canvas-wrap, .sb-handle, .clip, .clip-grip, #tl-ruler {
+#preview, #canvas-wrap, .sb-handle, .clip, .clip-grip, #tl-ruler, .kf-dot {
   touch-action: none;
 }
 
