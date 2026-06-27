@@ -283,15 +283,26 @@ window.FM = window.FM || {};
       if (isTouch) {
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
-        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), moved: false, holdTimer: null, startScroll: null };
+        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), moved: false, holdTimer: null, startScroll: null, lastMoveAt: performance.now() };
         if (FM.scene.selectedId === layer.id) {
-          clipTap.holdTimer = setTimeout(() => {
-            if (clipTap && !clipTap.moved) {
-              clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: [] };
-              clipTap = null;
-              if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
-            }
-          }, 350);
+          // Press-and-HOLD (finger settled) on a selected clip grabs it to move in time. But a finger
+          // that is still travelling is a SCRUB, not a hold — a slow "drag the line over the clips to
+          // find a spot" gesture emits continuous pointermoves and may cover <8px in the first 350ms.
+          // So only convert to a clip move once the finger has gone still for ~150ms; otherwise leave
+          // clipTap intact and let it scrub. (Fixes the phone fixed-centre playhead "moves over clips".)
+          const armHold = () => {
+            clipTap.holdTimer = setTimeout(() => {
+              if (!clipTap || clipTap.moved) return;
+              if (performance.now() - clipTap.lastMoveAt > 150) {
+                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: [] };
+                clipTap = null;
+                if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+              } else {
+                armHold();   // finger still moving → keep waiting for it to settle
+              }
+            }, 350);
+          };
+          armHold();
         }
         innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
         if (FM.playing) FM.pause();
@@ -510,7 +521,13 @@ window.FM = window.FM || {};
       window.addEventListener('pointermove', (e) => {
         if (clipTap) {
           const dx = e.clientX - clipTap.startX, dy = e.clientY - clipTap.startY;
-          if (!clipTap.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;   // still a potential tap
+          const adx = Math.abs(dx), ady = Math.abs(dy);
+          clipTap.lastMoveAt = performance.now();   // finger is travelling → not a settled hold (see armHold)
+          // Tap vs scrub vs hold-to-move. A horizontal-dominant drag past a low threshold is a SCRUB:
+          // commit early (and kill the long-press timer) so a slow deliberate "drag the line over the
+          // clips" gesture — which can travel <8px in the first 350ms — isn't hijacked into a clip move.
+          const scrubIntent = adx > 6 && adx > ady;
+          if (!clipTap.moved && !scrubIntent && adx < 8 && ady < 8) return;   // still a potential tap / hold
           clipTap.moved = true;
           if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
           if (clipTap.startScroll == null) clipTap.startScroll = timelineEl.scrollLeft;
