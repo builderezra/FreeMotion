@@ -53,9 +53,14 @@ window.FM = window.FM || {};
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
   FM._fxStats = { ckCompute: 0, lkCompute: 0 };
+  // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
+  // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
+  // memo downstream (e.g. key over a graded video, or grade over a frame-blend) would freeze on frame 1.
+  let _gen = 0;
   function srcToken(src) {
     if (src && src.tagName === 'VIDEO') return 'v:' + Math.round((src.currentTime || 0) * 1000);
-    return src;   // ImageBitmap / canvas object identity (changes per frame in the cache path)
+    if (src && src._fmGen != null) return 'c:' + src._fmGen;   // reused offscreen canvas → key by its generation
+    return src;
   }
 
   // Key out a color → transparency (green/blue screen). Reuses one offscreen canvas + memo.
@@ -81,6 +86,7 @@ window.FM = window.FM || {};
     }
     octx.putImageData(img, 0, 0);
     _ckLast = { tok, w, h, key: keyHex, tol, filter: filterStr }; FM._fxStats.ckCompute++;
+    oc._fmGen = ++_gen;
     return oc;
   }
 
@@ -108,6 +114,7 @@ window.FM = window.FM || {};
     }
     octx.putImageData(img, 0, 0);
     _lkLast = { tok, w, h, thr: threshold, filter: filterStr }; FM._fxStats.lkCompute++;
+    oc._fmGen = ++_gen;
     return oc;
   }
 
@@ -139,6 +146,7 @@ window.FM = window.FM || {};
     for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
     octx.putImageData(img, 0, 0);
     _grLast = { tok, w, h, sig }; FM._fxStats.gradeCompute = (FM._fxStats.gradeCompute || 0) + 1;
+    oc._fmGen = ++_gen;
     return oc;
   }
 
@@ -155,6 +163,7 @@ window.FM = window.FM || {};
       octx.drawImage(b, 0, 0, w, h);
     } catch (e) { octx.globalAlpha = 1; return a; }
     octx.globalAlpha = 1;
+    oc._fmGen = ++_gen;
     return oc;
   }
 

@@ -211,9 +211,10 @@ window.FM = window.FM || {};
     const presets = FM.fxPresets.list();
     if (!presets.length) pwrap.appendChild(el('span', 'preset-empty', 'none saved'));
     presets.forEach(p => {
+      const fx = Array.isArray(p.effects) ? p.effects : [];   // tolerate a corrupt/legacy localStorage preset with no effects array
       const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : ''));
-      const nm = el('button', 'preset-name', p.name); nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + p.effects.length + ' effect' + (p.effects.length === 1 ? '' : 's') + ')';
-      nm.addEventListener('click', () => { if (!layer.effects) layer.effects = []; p.effects.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); });
+      const nm = el('button', 'preset-name', p.name); nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') + ')';
+      nm.addEventListener('click', () => { if (!layer.effects) layer.effects = []; fx.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); });
       chip.appendChild(nm);
       if (!p.builtin) {   // built-in starters aren't removable
         const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset';

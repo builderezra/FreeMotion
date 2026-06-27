@@ -86,6 +86,10 @@ window.FM = window.FM || {};
     }
     e.preventDefault();
     if (FM.scene.selectedId !== layer.id) FM.selectLayer(layer.id);
+    // Re-tapping the ALREADY-selected layer must still reopen the phone inspector sheet if it was
+    // swiped/grab-closed (the layer stays selected, so selectLayer short-circuits and the mobile
+    // open() wrapper never fires). Open it directly.
+    else if (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.mobile.open) FM.mobile.open();
     drag = { mode: 'move', layer: layer, startP: p, startX: FM.evalProp(layer.transform.x, FM.time), startY: FM.evalProp(layer.transform.y, FM.time) };
   }
 
@@ -178,11 +182,17 @@ window.FM = window.FM || {};
     const rot = FM.evalProp(tr.rotation, t);
     const s = layerSize(layer), ds = dispScale();
     const bw = s.w * sc * ds, bh = s.h * sc * ds;
+    const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
+    const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
     box.style.display = 'block';
     box.style.width = bw + 'px';
     box.style.height = bh + 'px';
-    box.style.left = (cx * ds - bw / 2) + 'px';   // anchor is centred (0.5, 0.5)
-    box.style.top = (cy * ds - bh / 2) + 'px';
+    // transform.x/y is the ANCHOR point; the compositor draws content at -w*anchorX / -h*anchorY from it
+    // and rotates around the anchor. Mirror that here so the box + handles stay glued to the layer once
+    // the anchor is moved off-centre (was hardcoded to a centred 0.5/0.5 anchor).
+    box.style.left = (cx * ds - bw * ax) + 'px';
+    box.style.top = (cy * ds - bh * ay) + 'px';
+    box.style.transformOrigin = (bw * ax) + 'px ' + (bh * ay) + 'px';
     box.style.transform = 'rotate(' + rot + 'deg)';
   }
 

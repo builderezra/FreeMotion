@@ -458,7 +458,7 @@ window.FM = window.FM || {};
       window.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch' || !timelineEl || !(e.target instanceof Node) || !timelineEl.contains(e.target)) return;
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (pointers.size === 2) { dragging = false; scrub = null; clipTap = null; clipMove = null; pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
+        if (pointers.size === 2) { dragging = false; scrub = null; clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; hideSnap(); pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
       }, true);
       window.addEventListener('pointermove', (e) => {
         if (!pointers.has(e.pointerId)) return;
@@ -519,6 +519,7 @@ window.FM = window.FM || {};
         FM.contextMenu.show(e.clientX, e.clientY, menu);
       });
       window.addEventListener('pointermove', (e) => {
+        if (pinch) return;   // a 2-finger pinch is in progress → ignore any in-flight 1-finger drag math
         if (clipTap) {
           const dx = e.clientX - clipTap.startX, dy = e.clientY - clipTap.startY;
           const adx = Math.abs(dx), ady = Math.abs(dy);
