@@ -52,8 +52,8 @@ body {
   background: linear-gradient(180deg, #161a21, #12151b);
   border-bottom: 1px solid var(--line);
 }
-.brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; display: flex; align-items: baseline; gap: 7px; }
-.brand .ver { color: var(--text-faint); font-weight: 500; font-size: 10.5px; }
+.brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; display: flex; align-items: baseline; gap: 7px; flex: 0 0 auto; white-space: nowrap; }
+.brand .ver { color: var(--text-faint); font-weight: 500; font-size: 10.5px; white-space: nowrap; }
 .top-actions { display: flex; align-items: center; gap: 9px; flex: 1; }
 .spacer { flex: 1; }
 .proj-name {
@@ -428,20 +428,14 @@ input[type=range]::-webkit-slider-thumb {
   box-shadow: 0 0 5px rgba(41,217,187,.7);
 }
 #tl-snapline.hidden { display: none; }
-#tl-playhead {
-  position: absolute; top: 0; bottom: 0; width: 1.5px;
-  background: #eaf0f8; pointer-events: none; z-index: 5;
-  box-shadow: 0 0 6px rgba(255,255,255,.4);
-}
-#tl-playhead::before {
-  content: ""; position: absolute; top: 0; left: -5px;
-  border-left: 5px solid transparent; border-right: 5px solid transparent;
-  border-top: 7px solid #eaf0f8;
-}
-/* Phone fixed-centre playhead: lives OUTSIDE #timeline (the scroller), so it physically can't
-   move — the content scrolls under it. Positioned by timeline.js (left/top/height). Hidden on desktop. */
+/* The old in-scroller moving playhead is retired — the fixed-centre line below replaces it everywhere. */
+#tl-playhead { display: none; }
+/* Fixed-centre playhead (phone AND desktop): lives OUTSIDE #timeline (the scroller), so it physically
+   CANNOT move — the content scrolls under it. Pinned ENTIRELY in CSS at true screen centre (50vw);
+   JS never positions it (avoids iOS URL-bar drift). Spans the timeline area below the 40px transport. */
 #tl-centerline {
-  position: absolute; width: 0; z-index: 12; display: none;
+  position: absolute; width: 0; z-index: 12; display: block;
+  left: 50vw; top: 40px; bottom: 0;
   border-left: 2px solid #eaf0f8; pointer-events: none;
   box-shadow: 0 0 6px rgba(255,255,255,.45);
 }
@@ -557,15 +551,7 @@ input[type=range]::-webkit-slider-thumb {
   /* empty-timeline hint wraps + sits clear of the head column instead of running off-screen */
   .tl-empty { padding: 14px 14px 14px calc(var(--head-w) + 6px); white-space: normal; line-height: 1.5; }
 
-  /* FIXED-CENTRE PLAYHEAD — pinned ENTIRELY in CSS so it can never move. JS does not position it;
-     it only scrolls the timeline content underneath. left = head column + half the lane width, in
-     viewport units (100vw is horizontally stable even when the iOS URL bar collapses mid-drag). */
-  #tl-playhead { display: none; }                         /* the in-scroller line never shows on phone */
-  #tl-centerline {
-    display: block;
-    left: 50vw;                                            /* TRUE screen centre; JS shifts content (PAD) so the current time lands here */
-    top: 40px; bottom: 0;                                  /* spans the timeline row (below the 40px transport) */
-  }
+  /* #tl-centerline (fixed-centre playhead) is now defined once in the base styles for all viewports. */
 
   /* stage takes the full width; the inspector becomes a bottom sheet */
   #main { grid-template-columns: minmax(0, 1fr); }

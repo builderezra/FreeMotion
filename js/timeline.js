@@ -8,20 +8,21 @@ window.FM = window.FM || {};
   let rulerEl, tracksEl, playheadEl, innerEl, snaplineEl, loopRegionEl, timelineEl;
   let HEAD_W = 172;
   let zoom = 1;          // 1 = fit-to-width; >1 zooms in (lanes scroll horizontally, heads stay pinned)
-  // AM-style fixed-centre playhead (phone): the line is CSS-pinned at TRUE screen centre (left: 50vw).
-  // PAD shifts the ruler/clips/keyframes right so the current time lands exactly under that line —
+  // AM-style fixed-centre playhead — now UNIVERSAL (phone AND desktop): the line (#tl-centerline) is
+  // CSS-pinned at TRUE screen centre (left: 50vw) and NEVER moves; the content scrolls under it. PAD
+  // shifts the ruler/clips/keyframes right so the current time lands exactly under that line —
   // PAD = (half the viewport) − head column. Left pad lets t=0 reach centre; the trailing pad in
-  // applyInnerWidth() lets t=duration reach it too. Desktop keeps the original moving playhead (PAD=0).
+  // applyInnerWidth() lets t=duration reach it too. (isPhone() below is kept only for TOUCH-input
+  // behaviours like pinch-zoom and clip long-press — it no longer gates the playhead mechanic.)
   let PAD = 0, scrub = null, pinch = null; const pointers = new Map();
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
-  function recomputePad() { PAD = isPhone() ? Math.max(0, window.innerWidth / 2 - HEAD_W) : 0; }
-  function centreX() { return isPhone() ? window.innerWidth / 2 : HEAD_W; }   // viewport-x the current time sits at
-  // NOTE: the phone playhead (#tl-centerline) is pinned ENTIRELY in CSS (styles.css phone media query):
-  // left = calc(var(--head-w) + (100vw - var(--head-w))/2). JS never positions it, so it physically
-  // cannot move — reading getBoundingClientRect per-frame here was what let it drift on real iOS
-  // (URL-bar collapse shifts the viewport mid-drag). JS only scrolls the content under the line.
+  function recomputePad() { PAD = Math.max(0, window.innerWidth / 2 - HEAD_W); }
+  function centreX() { return window.innerWidth / 2; }   // viewport-x the current time always sits at
+  // NOTE: #tl-centerline is pinned ENTIRELY in CSS (left: 50vw). JS never positions it, so it
+  // physically cannot move — reading getBoundingClientRect per-frame was what let it drift on real
+  // iOS (URL-bar collapse shifts the viewport mid-drag). JS only scrolls the content under the line.
   function showSnap(t) { if (snaplineEl) { snaplineEl.style.left = (HEAD_W + PAD + t * pxPerSec()) + 'px'; snaplineEl.classList.remove('hidden'); } }
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
@@ -135,14 +136,13 @@ window.FM = window.FM || {};
   // Pixels per second within the clip LANE. Fit-to-viewport at zoom 1; scaled by `zoom`.
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
   function pxPerSec() { return (laneViewW() / FM.scene.project.duration) * zoom; }
-  // Widen the inner area when zoomed so the lanes overflow + scroll (heads are sticky-pinned).
-  // Phone: viewport + content, so t=0 (centre line at 50vw) AND t=duration can each scroll under the
-  // line. Desktop: head + content (PAD=0, the playhead moves instead).
+  // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
+  // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
     recomputePad();
     if (!innerEl) return;
     const content = FM.scene.project.duration * pxPerSec();
-    innerEl.style.width = (isPhone() ? (window.innerWidth + content) : (HEAD_W + content)) + 'px';
+    innerEl.style.width = (window.innerWidth + content) + 'px';
   }
 
   // Map a clientX to project time, accounting for the head column + the PAD origin shift.
@@ -473,14 +473,11 @@ window.FM = window.FM || {};
       loopRegionEl = document.createElement('div'); loopRegionEl.id = 'tl-loopregion'; loopRegionEl.className = 'hidden';
       innerEl.appendChild(loopRegionEl);
 
+      // Fixed-centre playhead → scrub is a RELATIVE grab-and-slide for BOTH mouse and touch (the line
+      // stays put, the content moves under it). A click without a drag seeks to where it was clicked.
       const onDown = (e) => {
-        if (e.pointerType === 'touch' || e.pointerType === 'pen') {
-          scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft };   // AM: relative drag-to-scroll
-          beginScrub(e);
-        } else {
-          FM.setTime(snapT(timeFromX(e.clientX)));                              // desktop mouse: absolute
-          beginScrub(e);
-        }
+        scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft, moved: false, downTime: snapT(timeFromX(e.clientX)) };
+        beginScrub(e);
       };
       rulerEl.addEventListener('pointerdown', onDown);
       // right-click ruler → add / remove a marker
@@ -595,12 +592,13 @@ window.FM = window.FM || {};
           FM.requestRender();
           return;
         }
-        if (dragging) {
-          if (scrub) FM.setTime(snapT((scrub.startScroll - (e.clientX - scrub.startX)) / pxPerSec()));   // touch: relative
-          else FM.setTime(snapT(timeFromX(e.clientX)));                                                    // mouse: absolute
+        if (dragging && scrub) {
+          if (Math.abs(e.clientX - scrub.startX) > 3) scrub.moved = true;
+          if (scrub.moved) FM.setTime(snapT((scrub.startScroll - (e.clientX - scrub.startX)) / pxPerSec()));   // relative grab-and-slide
         }
       });
       window.addEventListener('pointerup', () => {
+        if (dragging && scrub && !scrub.moved) FM.setTime(scrub.downTime);   // a click (no drag) seeks to where it was clicked
         dragging = false; scrub = null;
         if (clipTap) {
           const ct = clipTap; clipTap = null;
@@ -666,24 +664,14 @@ window.FM = window.FM || {};
     },
 
     updatePlayhead() {
-      if (!playheadEl) return;
+      if (!tracksEl) return;
       const pps = pxPerSec();
-      if (isPhone()) {
-        // PHONE (AM): the playhead is #tl-centerline, a CSS-pinned static line at the lane centre
-        // (styles.css). It NEVER moves and JS never touches it — we only scroll the CONTENT so the
-        // current time sits under it. Visibility of both lines is owned by the phone media query.
-        const targetScroll = Math.max(0, FM.time * pps);
-        if (timelineEl && !trimDrag && !clipMove && !kfDrag) {
-          if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
-        }
-      } else {
-        // DESKTOP (original): the playhead moves; content pages to keep it visible.
-        const px = HEAD_W + FM.time * pps;
-        playheadEl.style.left = px + 'px';
-        if (timelineEl && !trimDrag && !clipMove && !dragging) {
-          const vw = timelineEl.clientWidth, sl = timelineEl.scrollLeft;
-          if (px > sl + vw - 8 || px < sl + HEAD_W) timelineEl.scrollLeft = Math.max(0, px - HEAD_W - 24);
-        }
+      // UNIVERSAL fixed-centre (phone + desktop): #tl-centerline is a CSS-pinned static line at 50vw
+      // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits
+      // under it. (Relative drag-scrub also drives FM.time, which re-enters here to set scrollLeft.)
+      const targetScroll = Math.max(0, FM.time * pps);
+      if (timelineEl && !trimDrag && !clipMove && !kfDrag) {
+        if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
       }
       const t = FM.time;
       tracksEl.querySelectorAll('.clip').forEach(clipEl => {
