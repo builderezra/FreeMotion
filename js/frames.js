@@ -29,18 +29,23 @@ window.FM = window.FM || {};
     rec._building = (async function () {
       const el = rec.el, dur = rec.duration || 0;
       const count = Math.min(900, Math.max(1, Math.round(dur * fps)));
+      // Spread the (capped) frames across the WHOLE clip, and store the EFFECTIVE fps (count/dur). The
+      // compositor maps source time → frame via this effFps, so a clip longer than the 900-frame cap no
+      // longer freezes the picture on frame 900 while the (uncapped) audio keeps running — it just loses
+      // temporal resolution. For short clips count≈dur*fps so effFps≈fps (no change).
+      const effFps = count / Math.max(1e-6, dur);
       const frames = new Array(count);
       const wasMuted = el.muted, wasTime = el.currentTime;
       el.muted = true; try { el.pause(); } catch (e) {}
       let ok = 0;
       for (let i = 0; i < count; i++) {
-        await seekAndPaint(el, Math.min(i / fps, Math.max(0, dur - 0.001)));
+        await seekAndPaint(el, Math.min((i * dur) / count, Math.max(0, dur - 0.001)));
         try { frames[i] = await createImageBitmap(el); ok++; } catch (e) { frames[i] = null; }
         if (onProgress) onProgress((i + 1) / count);
       }
       el.muted = wasMuted;
       try { el.currentTime = wasTime; } catch (e) {}
-      rec.frameCache = { fps, frames, count, decoded: ok, duration: dur };
+      rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur };
       rec._building = null;
       return rec.frameCache;
     })();

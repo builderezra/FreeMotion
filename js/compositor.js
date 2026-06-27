@@ -877,7 +877,7 @@ window.FM = window.FM || {};
         if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
-            const fc = m.frameCache, fpos = local * fc.fps;
+            const fc = m.frameCache, fpos = local * (fc.effFps || fc.fps);   // effFps spans the whole clip even past the 900-frame cap
             if (layer.frameBlend && slow && fc.count > 1) {
               let i0 = Math.floor(fpos); i0 = i0 < 0 ? 0 : i0 >= fc.count ? fc.count - 1 : i0;
               const i1 = Math.min(i0 + 1, fc.count - 1);

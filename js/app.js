@@ -94,6 +94,9 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m && m.el && !layer.reversed) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (layer.speed || 1) * FM.previewRate)); } catch (e) {} }
     });
+    // reversed clips play synthesized Web Audio (not the <video>); re-anchor it to the current playhead so
+    // a mid-play rate change re-syncs at the new speed (start() rebuilds nodes with playbackRate=previewRate).
+    if (FM.playing && FM.audioPlay && FM.scene.layers.some(l => l.type === 'video' && l.reversed && l.visible !== false)) FM.audioPlay.start();
   };
 
   function updateDropHint() {

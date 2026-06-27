@@ -55,6 +55,7 @@ window.FM = window.FM || {};
         const buf = reversedBuffer(audioCtx, m.audioBuffer, layer);
         const node = audioCtx.createBufferSource();
         node.buffer = buf;
+        node.playbackRate.value = FM.previewRate || 1;   // reversed audio must follow the preview speed (start() is re-run on rate change)
         const gain = audioCtx.createGain();
         const vol = (layer.volume != null ? layer.volume : 1);
         const clipDur = layer.duration;
