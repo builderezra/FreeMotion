@@ -475,8 +475,8 @@ window.FM = window.FM || {};
 
       // Fixed-centre playhead → scrub is a RELATIVE grab-and-slide for BOTH mouse and touch (the line
       // stays put, the content moves under it). A click without a drag seeks to where it was clicked.
-      const onDown = (e) => {
-        scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft, moved: false, downTime: snapT(timeFromX(e.clientX)) };
+      const onDown = (e, fromLane) => {
+        scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
         beginScrub(e);
       };
       rulerEl.addEventListener('pointerdown', onDown);
@@ -494,8 +494,8 @@ window.FM = window.FM || {};
         FM.contextMenu.show(e.clientX, e.clientY, items);
       });
       tracksEl.addEventListener('pointerdown', (e) => {
-        // clicking an empty clip lane scrubs (heads + clips handle their own pointers)
-        if (e.target.classList.contains('track-lane') || e.target === tracksEl || e.target.classList.contains('tl-empty')) onDown(e);
+        // clicking an empty clip lane scrubs on drag; a tap deselects (heads + clips handle their own pointers)
+        if (e.target.classList.contains('track-lane') || e.target === tracksEl || e.target.classList.contains('tl-empty')) onDown(e, true);
       });
       // right-click empty timeline → quick Add menu
       tracksEl.addEventListener('contextmenu', (e) => {
@@ -598,7 +598,16 @@ window.FM = window.FM || {};
         }
       });
       window.addEventListener('pointerup', () => {
-        if (dragging && scrub && !scrub.moved) FM.setTime(scrub.downTime);   // a click (no drag) seeks to where it was clicked
+        if (dragging && scrub && !scrub.moved) {
+          if (scrub.fromLane) {
+            // tap the empty track area (off any clip) → deselect, revealing the Add menu (shapes / media / …).
+            // If nothing is selected, fall back to seeking to the tapped point.
+            if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+            else FM.setTime(scrub.downTime);
+          } else {
+            FM.setTime(scrub.downTime);   // tap the ruler → seek to where clicked (keeps the current selection)
+          }
+        }
         dragging = false; scrub = null;
         if (clipTap) {
           const ct = clipTap; clipTap = null;
