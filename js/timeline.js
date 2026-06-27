@@ -600,14 +600,9 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointerup', () => {
         if (dragging && scrub && !scrub.moved) {
-          if (scrub.fromLane) {
-            // tap the empty track area (off any clip) → deselect, revealing the Add menu (shapes / media / …).
-            // If nothing is selected, fall back to seeking to the tapped point.
-            if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
-            else FM.setTime(scrub.downTime);
-          } else {
-            FM.setTime(scrub.downTime);   // tap the ruler → seek to where clicked (keeps the current selection)
-          }
+          // A TAP on the timeline (ruler OR empty lane) NEVER seeks — only a horizontal DRAG scrubs.
+          // Tapping off any clip just deselects (revealing the Add menu / dropping the phone sheet).
+          if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
         }
         dragging = false; scrub = null;
         if (clipTap) {
@@ -623,9 +618,8 @@ window.FM = window.FM || {};
             (cm.group || []).forEach(g => { end = Math.max(end, g.layer.start + g.layer.duration); });
             if (end > FM.scene.project.duration) FM.scene.project.duration = end;   // grow comp to fit
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
-          } else {
-            FM.setTime(cm.downTime);   // it was a click, not a drag → scrub to it
           }
+          // else: a plain click already SELECTED the clip on pointerdown — never seek/scroll the timeline.
           return;
         }
         if (trimDrag) {

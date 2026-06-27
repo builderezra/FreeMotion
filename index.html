@@ -17,17 +17,14 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Bug-hunt fixes: grade+key freeze, selection-box anchor, mobile sheet reopen, pinch-trim, fx-preset guard">v1.51</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap never seeks the timeline; tap anywhere empty to deselect; clip selects cleanly; removed duplicate toolbar add buttons">v1.52</span></div>
       <div class="top-actions">
         <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
         <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
         <span class="tb-divider"></span>
         <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
         <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
-        <button id="btn-add-text" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg>Text</button>
-        <button id="btn-add-layer" class="btn" title="Add a shape, camera, adjustment, or null layer"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
-        <button id="btn-sample" class="btn" title="Generate a test clip (no file needed)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM4 9.5h16M9 5v4.5M15 5v4.5"/></svg>Sample</button>
-        <button id="btn-captions" class="btn" title="Add a caption track"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/></svg>Captions</button>
+        <!-- Text / Add / Sample / Captions removed: they duplicated the inspector's Add menu (shown when nothing is selected). -->
         <span class="spacer"></span>
         <input id="proj-name" class="proj-name" type="text" value="Untitled" title="Project name" spellcheck="false">
         <span class="spacer"></span>
@@ -199,7 +196,7 @@
   <script src="js/scene.js?v=61"></script>
   <script src="js/media.js?v=28"></script>
   <script src="js/compositor.js?v=98"></script>
-  <script src="js/timeline.js?v=100"></script>
+  <script src="js/timeline.js?v=101"></script>
   <script src="js/addmenu.js?v=1"></script>
   <script src="js/inspector.js?v=89"></script>
   <script src="js/color-wheel.js?v=52"></script>
@@ -214,7 +211,7 @@
   <script src="js/contextmenu.js?v=32"></script>
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
-  <script src="js/app.js?v=89"></script>
+  <script src="js/app.js?v=90"></script>
   <script src="js/mobile.js?v=7"></script>
   <script src="js/ai-manifest.js?v=1"></script>
   <script src="js/ai-ops.js?v=2"></script>

@@ -780,7 +780,8 @@ window.FM = window.FM || {};
     const fileInput = document.getElementById('file-input');
     document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => { handleFiles(Array.from(fileInput.files)); fileInput.value = ''; });
-    document.getElementById('btn-add-text').addEventListener('click', () => FM.addTextLayer());
+    const txtBtn = document.getElementById('btn-add-text');   // removed from the toolbar (dup of the Add menu) — guard it
+    if (txtBtn) txtBtn.addEventListener('click', () => FM.addTextLayer());
     const addBtn = document.getElementById('btn-add-layer');
     if (addBtn) addBtn.addEventListener('click', () => {
       const r = addBtn.getBoundingClientRect();
