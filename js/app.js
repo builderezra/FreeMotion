@@ -964,6 +964,29 @@ window.FM = window.FM || {};
     window.addEventListener('keyup', e => {
       if (_nudged && e.code.indexOf('Arrow') === 0) { _nudged = false; if (FM.history) FM.history.commit(); }
     });
+
+    // Tap ANY empty background (the stage around the comp, the gaps between panels, etc.) → deselect,
+    // which reveals the Add menu (PC) / drops the inspector sheet (phone). Tap-vs-drag aware so a
+    // scrub/move never deselects. The canvas (#preview) and timeline (#timeline) own their OWN
+    // select/deselect (and every clip/head/ruler/lane lives inside #timeline), so the deny-list keeps
+    // them plus every interactive control; everything else counts as empty space.
+    (function deselectOnEmptyTap() {
+      const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel,' +
+        ' #ctx-menu, #shortcuts-overlay, #export-overlay, #export-dialog, #canvas-dialog, #add-sheet,' +
+        ' #topbar, #topbar-m, .sb-handle, button, input, select, textarea, label, a, option, [contenteditable]';
+      let dx = 0, dy = 0, tgt = null, armed = false;
+      document.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
+        dx = e.clientX; dy = e.clientY; tgt = e.target; armed = true;
+      }, true);
+      document.addEventListener('pointerup', (e) => {
+        if (!armed) return; armed = false;
+        if (Math.abs(e.clientX - dx) > 6 || Math.abs(e.clientY - dy) > 6) return;           // a drag, not a tap
+        if (!FM.scene || (!FM.scene.selectedId && !(FM.scene.selectedIds && FM.scene.selectedIds.length))) return;
+        if (tgt && tgt.closest && tgt.closest(KEEP)) return;                                 // a control / self-managing area
+        FM.selectLayer(null);                                                               // empty background → deselect
+      }, true);
+    })();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
