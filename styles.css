@@ -215,6 +215,42 @@ body {
 .cat-label { font-size: 11.5px; color: var(--text-dim); text-align: center; line-height: 1.3; }
 .cat-card:hover .cat-label { color: var(--text); }
 .cat-back { display: flex; align-items: center; gap: 4px; background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0 14px; }
+
+/* ---------- AM-style Add menu (PC inspector no-selection state + mobile + bottom-sheet) ---------- */
+.addmenu { display: flex; gap: 10px; align-items: stretch; }
+.addmenu-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.addmenu-tabs { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.addmenu-tabs::-webkit-scrollbar { display: none; }
+.addmenu-tab, .addmenu-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--text-dim); cursor: pointer; padding: 11px 6px; min-width: 0;
+  transition: background .12s, border-color .12s, color .12s, transform .04s;
+}
+.addmenu-tab { flex: 0 0 auto; min-width: 66px; }
+.addmenu-tab:hover, .addmenu-card:hover { background: var(--panel-3); color: var(--text); border-color: var(--accent); }
+.addmenu-tab:active, .addmenu-card:active { transform: translateY(1px); }
+.addmenu-tab.active { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
+.addmenu-ic { display: flex; color: var(--accent); }
+.addmenu-ic svg { width: 22px; height: 22px; }
+.add-emoji { font-size: 22px; line-height: 1; }
+.addmenu-lbl { font-size: 10.5px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
+.addmenu-body { flex: 1 1 auto; }
+.addmenu-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.addmenu-side { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
+.addmenu-close { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); border-radius: var(--radius-sm); cursor: pointer; padding: 10px 6px; font-size: 13px; }
+.addmenu-close:hover { background: var(--panel-3); color: var(--text); }
+
+/* PC inspector column (narrow): stack — quick-add row on top, then tabs, then the chosen section. */
+.addmenu--panel { flex-direction: column; }
+.addmenu--panel .addmenu-side { flex-direction: row; flex-wrap: wrap; order: -1; }
+.addmenu--panel .addmenu-side > .addmenu-card { flex: 1 1 0; min-width: 70px; }
+
+/* Mobile bottom-sheet: AM layout — content on the left, quick-add rail on the right. */
+.addmenu-host { padding: 0 12px 6px; }
+.addmenu--sheet { padding-top: 2px; }
+.addmenu--sheet .addmenu-side { flex: 0 0 88px; }
+.addmenu--sheet .addmenu-grid { grid-template-columns: repeat(2, 1fr); }
 .cat-back:hover { color: var(--text); }
 .insp-sub-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); font-weight: 700; margin: 14px 0 8px; }
 .cw-wrap { position: relative; width: 176px; height: 176px; margin: 4px auto 0; }

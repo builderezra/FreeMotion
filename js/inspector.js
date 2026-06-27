@@ -680,8 +680,17 @@ window.FM = window.FM || {};
     openCategory(key) { view = key; this.refresh(); },
     refresh() {
       const layer = FM.selectedLayer(FM.scene);
+      const title = document.querySelector('#inspector-panel .panel-title');
       root.innerHTML = '';
-      if (!layer) { root.appendChild(el('div', 'empty', 'Select a layer to edit it.')); return; }
+      if (!layer) {
+        // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
+        // Selecting a clip swaps this for the property editor (refresh() re-runs on select).
+        if (title) title.textContent = 'Add';
+        if (FM.addMenu) FM.addMenu.render(root, { variant: 'panel' });
+        else root.appendChild(el('div', 'empty', 'Select a layer to edit it.'));
+        return;
+      }
+      if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; }
       root.appendChild(layerHeader(layer));
       if (view === 'home') {

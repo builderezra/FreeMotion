@@ -129,45 +129,12 @@ window.FM = window.FM || {};
     if (addGrab) addGrab.addEventListener('click', function () { if (addSheet._swiped) { addSheet._swiped = false; return; } closeAdd(); });
     if (addSheet) makeSwipeDown(addSheet, addGrab, closeAdd, null);
 
-    function svg(p) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>'; }
-    var ICON = {
-      text: '<path d="M6 5h12M12 5v14M9 19h6"/>',
-      shape: '<rect x="4" y="4" width="9" height="9" rx="1.5"/><circle cx="16" cy="16" r="5"/>',
-      media: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>',
-      sample: '<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>',
-      captions: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>',
-    };
-    function shapeMenu(card) {
-      if (!FM.contextMenu) { if (FM.addShapeLayer) FM.addShapeLayer('rect'); return; }
-      var r = card.getBoundingClientRect();
-      FM.contextMenu.show(Math.max(8, r.left), Math.max(60, r.top - 8), [
-        { label: 'Rectangle', action: function () { FM.addShapeLayer('rect'); } },
-        { label: 'Ellipse', action: function () { FM.addShapeLayer('ellipse'); } },
-        { label: 'Triangle', action: function () { FM.addShapeLayer('triangle'); } },
-        { label: 'Star', action: function () { FM.addShapeLayer('star'); } },
-        { sep: true },
-        { label: 'Camera', action: function () { if (FM.addCameraLayer) FM.addCameraLayer(); } },
-        { label: 'Adjustment layer', action: function () { if (FM.addAdjustmentLayer) FM.addAdjustmentLayer(); } },
-        { label: 'Null (rig)', action: function () { if (FM.addNullLayer) FM.addNullLayer(); } },
-      ]);
-    }
-    var CARDS = [
-      { label: 'AI Scene', emoji: '✨', action: function () { if (FM.aiPanel) FM.aiPanel.show(); } },
-      { label: 'Text', icon: ICON.text, action: function () { if (FM.addTextLayer) FM.addTextLayer(); } },
-      { label: 'Shape', icon: ICON.shape, action: function (card) { shapeMenu(card); } },
-      { label: 'Media', icon: ICON.media, action: function () { clickHidden('file-input'); } },
-      { label: 'Sample', icon: ICON.sample, action: function () { if (FM.addSampleClip) FM.addSampleClip(); } },
-      { label: 'Captions', icon: ICON.captions, action: function () { if (FM.addCaptionLayer) FM.addCaptionLayer(); } },
-    ];
-    if (addGrid) {
-      CARDS.forEach(function (c) {
-        var b = document.createElement('button');
-        b.className = 'add-card';
-        var ic = c.emoji ? '<span style="font-size:24px;line-height:1">' + c.emoji + '</span>' : svg(c.icon);
-        b.innerHTML = '<span class="add-ic">' + ic + '</span><span>' + c.label + '</span>';
-        b.addEventListener('click', function () { closeAdd(); c.action(b); });
-        addGrid.appendChild(b);
-      });
+    // The Add sheet now hosts the shared AM-style Add menu (same component the PC inspector uses when
+    // nothing is selected). Tabs open a sub-section; the quick-add rail adds instantly; X closes.
+    if (addGrid && FM.addMenu) {
+      addGrid.classList.remove('add-grid');           // drop the old 3-col grid; the menu owns its layout
+      addGrid.classList.add('addmenu-host');
+      FM.addMenu.render(addGrid, { variant: 'sheet', onAfterAdd: closeAdd, onClose: closeAdd });
     }
 
     // Returning to desktop width must never strand the drawer off-screen.

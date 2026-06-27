@@ -78,7 +78,12 @@ window.FM = window.FM || {};
       return;
     }
     const layer = topHit(p.x, p.y);
-    if (!layer) return;
+    if (!layer) {
+      // Tap empty canvas → deselect. On PC this reveals the Add menu in the inspector; on phone it
+      // drops the inspector sheet back to just the timeline + the green (+) (AM behaviour).
+      if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+      return;
+    }
     e.preventDefault();
     if (FM.scene.selectedId !== layer.id) FM.selectLayer(layer.id);
     drag = { mode: 'move', layer: layer, startP: p, startX: FM.evalProp(layer.transform.x, FM.time), startY: FM.evalProp(layer.transform.y, FM.time) };
