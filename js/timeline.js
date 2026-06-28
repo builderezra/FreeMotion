@@ -526,7 +526,7 @@ window.FM = window.FM || {};
       // Fixed-centre playhead → scrub is a RELATIVE grab-and-slide for BOTH mouse and touch (the line
       // stays put, the content moves under it). A click without a drag seeks to where it was clicked.
       const onDown = (e, fromLane) => {
-        scrub = { startX: e.clientX, startScroll: timelineEl.scrollLeft, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
+        scrub = { startX: e.clientX, startY: e.clientY, startScroll: timelineEl.scrollLeft, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
         beginScrub(e);
       };
       // Grab ANYWHERE the timeline could be — the ruler, the lanes, AND the empty space above/below the
@@ -651,8 +651,16 @@ window.FM = window.FM || {};
           return;
         }
         if (dragging && scrub) {
-          if (Math.abs(e.clientX - scrub.startX) > 3) scrub.moved = true;
-          if (scrub.moved) FM.setTime(snapT((scrub.startScroll - (e.clientX - scrub.startX)) / pxPerSec()));   // relative grab-and-slide
+          const dx = e.clientX - scrub.startX, dy = e.clientY - scrub.startY;
+          // lock to an axis once the finger commits: a clearly-vertical drag pans the layer list,
+          // otherwise it's a horizontal grab-scrub (the primary action, so it wins ties).
+          if (!scrub.axis && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) scrub.axis = (Math.abs(dy) > Math.abs(dx) + 4) ? 'y' : 'x';
+          if (scrub.axis === 'y') {
+            timelineEl.scrollTop = scrub.startScrollTop - dy;                                  // vertical pan
+          } else if (Math.abs(dx) > 3) {
+            scrub.moved = true;
+            FM.setTime(snapT((scrub.startScroll - dx) / pxPerSec()));                          // horizontal grab-and-slide
+          }
         }
       });
       window.addEventListener('pointerup', () => {

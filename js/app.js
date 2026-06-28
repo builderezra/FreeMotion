@@ -826,6 +826,22 @@ window.FM = window.FM || {};
     if (saveProjBtn) saveProjBtn.addEventListener('click', () => { if (FM.storage && FM.storage.exportFile) FM.storage.exportFile(); });
     const openProjBtn = document.getElementById('btn-open-proj');
     if (openProjBtn) openProjBtn.addEventListener('click', () => { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); });
+    // ⋯ More menu — the decluttered home for canvas/guides/save-frame/open/save/shortcuts (AM keeps the top minimal)
+    const moreBtn = document.getElementById('btn-more');
+    if (moreBtn) moreBtn.addEventListener('click', () => {
+      const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
+      const r = moreBtn.getBoundingClientRect();
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 190), r.bottom + 4, [
+        { label: 'Canvas size…', action: () => clickHidden('btn-canvas') },
+        { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
+        { label: 'Save frame (PNG)', action: () => clickHidden('btn-snapshot') },
+        { sep: true },
+        { label: 'Open project…', action: () => clickHidden('btn-open-proj') },
+        { label: 'Save project', action: () => clickHidden('btn-save-proj') },
+        { sep: true },
+        { label: 'Keyboard shortcuts', action: () => clickHidden('btn-help') },
+      ]);
+    });
     const prateEl = document.getElementById('preview-rate');
     if (prateEl) prateEl.addEventListener('change', () => FM.setPreviewRate(parseFloat(prateEl.value) || 1));
     const guidesBtn = document.getElementById('btn-guides');

@@ -377,7 +377,9 @@ input[type=range]::-webkit-slider-thumb {
 #tl-zoom-label { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 11.5px; min-width: 30px; text-align: center; }
 .time-edit { width: 64px; background: var(--panel-3); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 2px 6px; font-size: 12px; font-variant-numeric: tabular-nums; margin-left: 2px; }
 
-#timeline { position: relative; overflow: auto; touch-action: pan-y; overscroll-behavior-x: contain; }
+/* touch-action:none so JS owns ALL timeline gestures — horizontal grab-scrub works ANYWHERE (lanes,
+   empty space, ruler), not just the ruler. The scrub handler does vertical pan itself when needed. */
+#timeline { position: relative; overflow: auto; touch-action: none; overscroll-behavior: contain; }
 #tl-inner { position: relative; min-height: 100%; }
 #tl-rulerrow { display: flex; height: 24px; position: sticky; top: 0; z-index: 7; background: var(--panel); }
 .tl-headspace { width: var(--head-w); flex: 0 0 var(--head-w); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line-soft); position: sticky; left: 0; z-index: 9; background: var(--panel); }
@@ -417,7 +419,7 @@ input[type=range]::-webkit-slider-thumb {
 .clip-trim.l { left: 0; } .clip-trim.r { right: 0; }
 .th-name { display: none; }   /* AM: the layer NAME lives ON the clip bar (.clip-label), never in the left head column */
 .th-name-edit { flex: 1 1 auto; min-width: 0; width: 100%; background: var(--panel-3); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 2px 5px; font-size: 11.5px; }
-.track-lane { flex: 1; position: relative; min-width: 0; touch-action: pan-y; }
+.track-lane { flex: 1; position: relative; min-width: 0; touch-action: none; }
 .tl-empty { color: var(--text-faint); font-size: 12px; padding: 16px var(--head-w); padding-right: 16px; }
 .clip {
   position: absolute; top: 5px; height: 32px;
