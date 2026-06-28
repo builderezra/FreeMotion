@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=105">
+<link rel="stylesheet" href="styles.css?v=106">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Clips can be dragged PAST 0 into negative start (AM) — keep going, view stays clamped at 0">v1.58</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Mobile AM clip-edit: selected clip = white bar + arrow grips; timeline solos the selected clip; options dock below without covering it; rename/dup/delete moved to the top bar">v1.59</span></div>
       <div class="top-actions">
         <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
         <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
@@ -42,9 +42,12 @@
     <header id="topbar-m">
       <button id="m-back" class="m-tbtn" aria-label="Projects / file"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
       <input id="proj-name-m" class="m-projname" type="text" value="Untitled" spellcheck="false" aria-label="Project name">
+      <input id="clip-name-m" class="m-projname m-clipname" type="text" spellcheck="false" aria-label="Layer name">
       <span id="ver-m" class="m-ver" title="Build version"></span>
       <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button id="m-export" class="m-export" aria-label="Export"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M6 20h12"/></svg></button>
+      <button id="m-dup" class="m-tbtn" aria-label="Duplicate layer"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h11v11H9zM5 15H4V4h11v1"/></svg></button>
+      <button id="m-del" class="m-tbtn" aria-label="Delete layer"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
     </header>
 
     <div id="main">
@@ -196,9 +199,9 @@
   <script src="js/scene.js?v=61"></script>
   <script src="js/media.js?v=28"></script>
   <script src="js/compositor.js?v=99"></script>
-  <script src="js/timeline.js?v=103"></script>
+  <script src="js/timeline.js?v=104"></script>
   <script src="js/addmenu.js?v=1"></script>
-  <script src="js/inspector.js?v=90"></script>
+  <script src="js/inspector.js?v=91"></script>
   <script src="js/color-wheel.js?v=52"></script>
   <script src="js/canvas-edit.js?v=35"></script>
   <script src="js/frames.js?v=10"></script>
@@ -212,7 +215,7 @@
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
   <script src="js/app.js?v=93"></script>
-  <script src="js/mobile.js?v=7"></script>
+  <script src="js/mobile.js?v=9"></script>
   <script src="js/ai-manifest.js?v=1"></script>
   <script src="js/ai-ops.js?v=2"></script>
   <script src="js/ai-key.js?v=1"></script>

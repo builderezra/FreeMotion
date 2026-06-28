@@ -423,7 +423,12 @@ window.FM = window.FM || {};
       tracksEl.appendChild(empty);
       return;
     }
+    // AM phone-edit: when a clip is selected on a phone, show ONLY that clip's row
+    // (the others hide so the property options can dock right under it).
+    const soloId = (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.scene.selectedId
+      && FM.scene.layers.some(l => l.id === FM.scene.selectedId)) ? FM.scene.selectedId : null;
     FM.scene.layers.forEach((layer, index) => {
+      if (soloId && layer.id !== soloId) return;
       const row = document.createElement('div');
       row.className = 'track-row';
       row.append(buildHead(layer, index), buildLane(layer));

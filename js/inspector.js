@@ -700,7 +700,8 @@ window.FM = window.FM || {};
       }
       if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; }
-      root.appendChild(layerHeader(layer));
+      // On phone the swatch/rename/dup/delete "extra bar" moves to the top bar (AM); skip it here.
+      if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) root.appendChild(layerHeader(layer));
       if (view === 'home') {
         root.appendChild(quickRow(layer));
         if (FM.selectionIds && FM.selectionIds().length >= 2) root.appendChild(alignRow());

@@ -421,17 +421,23 @@ input[type=range]::-webkit-slider-thumb {
   box-shadow: 0 2px 6px rgba(0,0,0,.3);
 }
 .clip:active { cursor: grabbing; }
-.clip.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 2px 8px rgba(0,0,0,.4); }
+/* AM: a selected clip gets a WHITE bar/outline with grip caps + chevron arrows at each end. */
+.clip.sel { border-color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 10px rgba(0,0,0,.45); }
 .clip.under-playhead { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.3); }
-.clip.sel.under-playhead { box-shadow: 0 0 0 1px var(--accent), inset 0 0 0 1px rgba(255,255,255,.4), 0 2px 8px rgba(0,0,0,.4); }
+.clip.sel.under-playhead { box-shadow: 0 0 0 2px #fff, inset 0 0 0 1px rgba(255,255,255,.5), 0 2px 8px rgba(0,0,0,.4); }
 .clip.reversed { background-image: linear-gradient(180deg, #5a3a78, #3f2860); }
 .clip-thumb { width: 40px; height: 24px; flex: 0 0 auto; border-radius: 4px; background: #000; }
 .clip-wave { position: absolute; left: 0; top: 0; height: 100%; z-index: 0; pointer-events: none; opacity: .85; }
 .clip-thumb, .clip-label { position: relative; z-index: 1; }
-.clip-grip { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; }
+.clip-grip { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; display: flex; align-items: center; justify-content: center; }
 .clip-grip.left { left: 0; border-radius: 7px 0 0 7px; }
 .clip-grip.right { right: 0; border-radius: 0 7px 7px 0; }
 .clip-grip:hover { background: rgba(255,255,255,.3); }
+/* chevron arrows — only shown on the SELECTED clip's grips (white caps, like AM) */
+.clip.sel .clip-grip { background: #fff; width: 13px; }
+.clip.sel .clip-grip::after { content: ''; width: 5px; height: 5px; border-top: 2px solid #1b1f27; border-right: 2px solid #1b1f27; }
+.clip.sel .clip-grip.left::after { transform: rotate(-135deg); margin-left: 2px; }
+.clip.sel .clip-grip.right::after { transform: rotate(45deg); margin-right: 2px; }
 .clip-label { overflow: hidden; text-overflow: ellipsis; padding-right: 6px; font-weight: 500; }
 .clip-speed { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 9.5px; font-weight: 700; line-height: 1; padding: 2px 4px; border-radius: 4px; background: rgba(0,0,0,.55); color: #fff; letter-spacing: .3px; pointer-events: none; }
 .quick-row { display: flex; gap: 6px; padding: 0 2px 11px; }
@@ -630,6 +636,24 @@ input[type=range]::-webkit-slider-thumb {
     box-shadow: 0 5px 18px rgba(0,0,0,.55);
   }
   #insp-toggle.on { background: var(--panel-3); color: var(--text); border: 1px solid var(--accent); }
+
+  /* ---------- AM: a clip is SELECTED → focused edit layout ----------
+     Canvas shrinks; the timeline shows ONLY the selected clip; the property
+     options dock right below the clip (sheet top is anchored by mobile.js so it
+     never covers the clip, on any screen size). */
+  body.m-editing { --stage-h: 30vh; }
+  body.m-editing #inspector-panel { overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,.5); }
+  body.m-editing .panel-title { display: none; }     /* AM shows no "Inspector" label */
+  body.m-editing #add-fab { display: none; }          /* no + while editing a clip */
+  body.m-editing #insp-grab { display: none; }        /* docked panel, not a dismissable sheet */
+  body.m-editing #inspector { padding-top: 12px; }
+
+  /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete */
+  #clip-name-m, #m-dup, #m-del { display: none; }
+  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export { display: none; }
+  body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
+  body.m-editing #m-dup, body.m-editing #m-del { display: flex; }
+  #m-del:active .m-ico { color: #ff6b6b; }
 }
 
 /* ============================================================

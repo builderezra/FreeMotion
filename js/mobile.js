@@ -67,7 +67,7 @@ window.FM = window.FM || {};
 
     btn.addEventListener('click', toggle);
     grab.addEventListener('click', function () { if (insp._swiped) { insp._swiped = false; return; } close(); });
-    makeSwipeDown(insp, grab, close, function () { return insp; });
+    makeSwipeDown(insp, grab, function () { if (isPhone() && document.body.classList.contains('m-editing')) FM.selectLayer(null); else close(); }, function () { return insp; });
 
     // Selecting a layer (canvas tap or layer list) slides the inspector up so its
     // controls are reachable; deselecting drops it. Wrap, don't edit, the core fn.
@@ -75,10 +75,43 @@ window.FM = window.FM || {};
       var orig = FM.selectLayer;
       FM.selectLayer = function (id) {
         var r = orig.apply(this, arguments);
-        if (isPhone()) { if (id) open(); else close(); }
+        if (isPhone()) {
+          if (id) { document.body.classList.add('m-editing'); open(); syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); }
+          else { document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; close(); }
+        }
         return r;
       };
     }
+
+    // ---------- AM phone clip-edit: top-bar clip name + duplicate/delete + docked sheet ----------
+    var clipNameM = document.getElementById('clip-name-m');
+    var mDup = document.getElementById('m-dup');
+    var mDel = document.getElementById('m-del');
+    function curLayer() { return FM.selectedLayer ? FM.selectedLayer(FM.scene) : null; }
+    function syncClipName() { var L = curLayer(); if (clipNameM && L && document.activeElement !== clipNameM) clipNameM.value = L.name || ''; }
+    if (clipNameM) {
+      clipNameM.addEventListener('input', function () {
+        var L = curLayer(); if (!L) return;
+        L.name = clipNameM.value;
+        if (FM.layersPanel) FM.layersPanel.refresh();
+        if (FM.timeline) FM.timeline.rebuild();
+      });
+      clipNameM.addEventListener('change', function () { if (FM.history) FM.history.commit(); });
+    }
+    if (mDup) mDup.addEventListener('click', function () { var L = curLayer(); if (L && FM.duplicateLayer) FM.duplicateLayer(L.id); });
+    if (mDel) mDel.addEventListener('click', function () { var L = curLayer(); if (L && FM.deleteLayer) FM.deleteLayer(L.id); });
+
+    // Anchor the docked sheet's top just below the single selected-clip row so the property
+    // options never cover the clip — clamped so the panel always keeps a usable height.
+    function dockSheet() {
+      if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
+      var tracks = document.getElementById('tl-tracks');
+      var b = tracks ? tracks.getBoundingClientRect().bottom : 0;
+      var top = Math.min(Math.round(b + 6), Math.round(window.innerHeight * 0.54));
+      insp.style.top = top + 'px';
+      insp.style.maxHeight = 'none';
+    }
+    window.addEventListener('resize', function () { if (isPhone() && document.body.classList.contains('m-editing')) { syncClipName(); requestAnimationFrame(dockSheet); } });
 
     // ---------- AM-style mobile chrome: top bar + green + FAB + Add sheet ----------
     function clickHidden(id) { var b = document.getElementById(id); if (b) b.click(); }
@@ -99,11 +132,21 @@ window.FM = window.FM || {};
     }
     if (typeof FM.refreshAll === 'function') {   // keep it synced on load / undo / restore
       var origRefresh = FM.refreshAll;
-      FM.refreshAll = function () { var r = origRefresh.apply(this, arguments); syncProjName(); return r; };
+      FM.refreshAll = function () {
+        var r = origRefresh.apply(this, arguments);
+        syncProjName();
+        if (isPhone()) {
+          var sel = FM.scene && FM.scene.selectedId;
+          document.body.classList.toggle('m-editing', !!sel);
+          if (sel) { syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); } else { insp.style.top = ''; insp.style.maxHeight = ''; }
+        }
+        return r;
+      };
     }
 
     var mBack = document.getElementById('m-back');
     if (mBack) mBack.addEventListener('click', function () {
+      if (isPhone() && document.body.classList.contains('m-editing')) { FM.selectLayer(null); return; }   // AM: back = deselect the clip
       var r = mBack.getBoundingClientRect();
       if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, [
         { label: 'Open project…', action: function () { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); } },
@@ -138,7 +181,7 @@ window.FM = window.FM || {};
     }
 
     // Returning to desktop width must never strand the drawer off-screen.
-    window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); } });
+    window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; } });
 
     FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd };
   }
