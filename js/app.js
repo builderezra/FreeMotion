@@ -75,6 +75,7 @@ window.FM = window.FM || {};
     const P = FM.scene.project;
     canvas.width = P.width;
     canvas.height = P.height;
+    document.documentElement.style.setProperty('--comp-ar', P.width + ' / ' + P.height);   // canvas-wrap holds this aspect → preview always contains in the stage
     render();
   }
   FM.resizeCanvas = resizeCanvas;
@@ -237,7 +238,7 @@ window.FM = window.FM || {};
       }
     });
     if (FM.audioPlay) FM.audioPlay.start();   // reversed clips: play synthesized reversed audio
-    document.getElementById('btn-play').textContent = '⏸';
+    document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';   // pause icon
     rafId = requestAnimationFrame(tick);
   };
 
@@ -261,7 +262,7 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m && m.el && m.el.pause) { try { m.el.pause(); m.el.muted = true; } catch (e) {} }
     });
-    document.getElementById('btn-play').textContent = '⏵';
+    document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>';   // play icon
   };
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };

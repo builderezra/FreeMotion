@@ -107,7 +107,7 @@ window.FM = window.FM || {};
       if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
       var tracks = document.getElementById('tl-tracks');
       var b = tracks ? tracks.getBoundingClientRect().bottom : 0;
-      var top = Math.min(Math.round(b + 6), Math.round(window.innerHeight * 0.54));
+      var top = Math.min(Math.round(b + 6), Math.round(window.innerHeight * 0.66));
       insp.style.top = top + 'px';
       insp.style.maxHeight = 'none';
     }
