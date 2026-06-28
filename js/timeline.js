@@ -295,17 +295,32 @@ window.FM = window.FM || {};
     if (layer.type === 'video' || layer.type === 'image') {
       const m = FM.media.get(layer.id);
       if (m && m.el) {
-        const strip = document.createElement('canvas');
-        strip.className = 'clip-filmstrip';
-        strip.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
-        strip.height = 32;
-        if (m.stripFrames && m.stripFrames.length) {
-          drawFilmstrip(strip, m.stripFrames, m);
-        } else if (m.stripFrames === undefined && !m._stripPending && !FM.playing && FM.buildClipStrip) {
-          m._stripPending = true;   // build ONCE; m.stripFrames is then set (even to []) so this never re-fires
-          FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; FM.timeline.rebuild(); });
+        const hasPicture = layer.type === 'image' || (m.width > 0 && m.height > 0);
+        if (hasPicture) {
+          const strip = document.createElement('canvas');
+          strip.className = 'clip-filmstrip';
+          strip.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
+          strip.height = 32;
+          if (m.stripFrames && m.stripFrames.length) {
+            drawFilmstrip(strip, m.stripFrames, m);
+          } else if (m.stripFrames === undefined && !m._stripPending && !FM.playing && FM.buildClipStrip) {
+            m._stripPending = true;   // build ONCE; m.stripFrames is then set (even to []) so this never re-fires
+            FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; FM.timeline.rebuild(); });
+          }
+          clip.appendChild(strip);
+        } else if (m.file) {
+          // a video with NO picture (used purely for audio) → waveform, not a black filmstrip
+          if (m.waveform && m.waveform.length) {
+            const wc = document.createElement('canvas');
+            wc.className = 'clip-wave';
+            wc.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
+            wc.height = 32;
+            drawWaveform(wc, m.waveform);
+            clip.appendChild(wc);
+          } else if (!m._wfPending && !m.waveform) {
+            FM.getWaveform(m).then(() => { FM.timeline.rebuild(); });
+          }
         }
-        clip.appendChild(strip);
       }
     }
     clip.addEventListener('pointerdown', (e) => {

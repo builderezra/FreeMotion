@@ -61,8 +61,18 @@ window.FM = window.FM || {};
 
   // Small filmstrip of DISTINCT frames for a clip's timeline bar (AM-style). Cheap + cached on the
   // media record (m.stripFrames). Video: seek to `count` evenly-spaced times. Image: a single frame.
-  FM.buildClipStrip = async function (m, count) {
-    if (!m || !m.el || m._stripBuilding) return m && m.stripFrames;
+  // SERIALIZED through one global queue so a project with many video clips doesn't seek N <video>s at
+  // once (that storm spikes CPU/memory + fights the preview compositor for each element).
+  let _stripQueue = Promise.resolve();
+  FM.buildClipStrip = function (m, count) {
+    if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return Promise.resolve(m && m.stripFrames);
+    const p = _stripQueue.then(function () { return _extractStrip(m, count); });
+    _stripQueue = p.catch(function () {});   // keep the chain alive even if one build throws
+    return p;
+  };
+
+  async function _extractStrip(m, count) {
+    if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return m && m.stripFrames;
     count = count || 8;
     m._stripBuilding = true;
     try {
