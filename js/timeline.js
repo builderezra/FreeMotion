@@ -37,7 +37,7 @@ window.FM = window.FM || {};
   // Snap a proposed clip start so the clip's start OR end lands on 0 / playhead / another clip edge.
   // Returns { v: snapped start, snapped: bool, guide: alignment time for the guide line }.
   function snapStart(layer, ns, pps) {
-    if (!snapping) return { v: Math.max(0, ns), snapped: false, guide: 0 };
+    if (!snapping) return { v: ns, snapped: false, guide: 0 };   // clip start may go NEGATIVE (AM: drag past 0); floor applied by the caller
     const snapPx = 7, dur = layer.duration;
     const starts = [0, FM.time], ends = [FM.time];
     FM.scene.layers.forEach(l => { if (l.id !== layer.id) { starts.push(l.start, l.start + l.duration); ends.push(l.start, l.start + l.duration); } });
@@ -45,7 +45,7 @@ window.FM = window.FM || {};
     let best = ns, bestD = snapPx / pps, snapped = false, guide = 0;
     starts.forEach(c => { if (Math.abs(ns - c) < bestD) { bestD = Math.abs(ns - c); best = c; snapped = true; guide = c; } });
     ends.forEach(c => { const s = c - dur; if (s >= 0 && Math.abs(ns - s) < bestD) { bestD = Math.abs(ns - s); best = s; snapped = true; guide = c; } });
-    return { v: Math.max(0, best), snapped: snapped, guide: guide };
+    return { v: best, snapped: snapped, guide: guide };   // may be negative (start before 0); caller floors it
   }
 
   // Snap a single edge time (a trim grip) to 0 / playhead / another clip's edge.
@@ -544,16 +544,19 @@ window.FM = window.FM || {};
           if (!clipMove.moved && Math.abs(dx) < 4) return;   // movement threshold: distinguish click from drag
           clipMove.moved = true;
           const pps = pxPerSec();
-          const raw = Math.max(0, clipMove.origStart + dx / pps);
+          // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
+          // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
+          const floor = -(clipMove.layer.duration - 0.1);
+          const raw = Math.max(floor, clipMove.origStart + dx / pps);
           const sr = e.shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps);   // Shift bypasses snap
-          clipMove.layer.start = sr.v;
+          clipMove.layer.start = Math.max(floor, sr.v);
           if (sr.snapped) showSnap(sr.guide); else hideSnap();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
-          if (clipEl) clipEl.style.left = (PAD + sr.v * pps) + 'px';
-          // group move: shift the other selected clips by the same delta
-          const delta = sr.v - clipMove.origStart;
+          if (clipEl) clipEl.style.left = (PAD + clipMove.layer.start * pps) + 'px';
+          // group move: shift the other selected clips by the same delta (each floored to its own duration)
+          const delta = clipMove.layer.start - clipMove.origStart;
           (clipMove.group || []).forEach(g => {
-            g.layer.start = Math.max(0, g.origStart + delta);
+            g.layer.start = Math.max(-(g.layer.duration - 0.1), g.origStart + delta);
             const ge = tracksEl.querySelector('.clip[data-id="' + g.layer.id + '"]');
             if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
           });
