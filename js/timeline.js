@@ -139,6 +139,9 @@ window.FM = window.FM || {};
   // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
   // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
+    // re-read --head-w every rebuild so a state-driven head width (overview eye-only vs edit pill)
+    // keeps PAD / clip-x / scrub math in sync (was only re-read on init + resize).
+    HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || HEAD_W;
     recomputePad();
     if (!innerEl) return;
     const content = FM.scene.project.duration * pxPerSec();
@@ -252,7 +255,12 @@ window.FM = window.FM || {};
     clip.style.borderColor = shade(col, 24);
     clip.dataset.id = layer.id;
 
-    // No clip label: the track-head shows the name and stays pinned (sticky) at all zoom levels.
+    // AM: each clip shows its NAME on the bar (the track-head becomes eye-only in the overview).
+    // Hidden on the SELECTED clip (its name lives in the edit pill + it shows the ‹ › grip caps).
+    const clabel = document.createElement('span');
+    clabel.className = 'clip-label';
+    clabel.textContent = layer.name;
+    clip.appendChild(clabel);
     if (layer.speed && Math.abs(layer.speed - 1) > 1e-3) {
       const sb = document.createElement('span');
       sb.className = 'clip-speed';
@@ -451,7 +459,7 @@ window.FM = window.FM || {};
       playheadEl = document.getElementById('tl-playhead');
       innerEl = document.getElementById('tl-inner');
       timelineEl = document.getElementById('timeline');
-      HEAD_W = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--head-w'), 10) || 172;
+      HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || 172;
       const zo = document.getElementById('btn-zoomout'), zi = document.getElementById('btn-zoomin');
       if (zo) zo.addEventListener('click', () => this.zoomBy(1 / 1.5));
       if (zi) zi.addEventListener('click', () => this.zoomBy(1.5));
@@ -656,7 +664,7 @@ window.FM = window.FM || {};
         clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
-      window.addEventListener('resize', () => { HEAD_W = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--head-w'), 10) || 172; this.rebuild(); });
+      window.addEventListener('resize', () => { HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || 172; this.rebuild(); });
     },
 
     rebuild() {

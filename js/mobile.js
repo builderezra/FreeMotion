@@ -74,10 +74,13 @@ window.FM = window.FM || {};
     if (typeof FM.selectLayer === 'function') {
       var orig = FM.selectLayer;
       FM.selectLayer = function (id) {
+        // Toggle m-editing BEFORE the rebuild inside orig() — it drives --head-w (overview eye-only
+        // vs edit pill), which the rebuild reads to keep clip-x / playhead in sync.
+        if (isPhone()) document.body.classList.toggle('m-editing', !!id);
         var r = orig.apply(this, arguments);
         if (isPhone()) {
-          if (id) { document.body.classList.add('m-editing'); open(); syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); }
-          else { document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; close(); }
+          if (id) { open(); syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); }
+          else { insp.style.top = ''; insp.style.maxHeight = ''; close(); }
         }
         return r;
       };
@@ -133,11 +136,12 @@ window.FM = window.FM || {};
     if (typeof FM.refreshAll === 'function') {   // keep it synced on load / undo / restore
       var origRefresh = FM.refreshAll;
       FM.refreshAll = function () {
+        // set m-editing BEFORE origRefresh's rebuild (drives --head-w; see selectLayer note)
+        if (isPhone()) document.body.classList.toggle('m-editing', !!(FM.scene && FM.scene.selectedId));
         var r = origRefresh.apply(this, arguments);
         syncProjName();
         if (isPhone()) {
           var sel = FM.scene && FM.scene.selectedId;
-          document.body.classList.toggle('m-editing', !!sel);
           if (sel) { syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); } else { insp.style.top = ''; insp.style.maxHeight = ''; }
         }
         return r;

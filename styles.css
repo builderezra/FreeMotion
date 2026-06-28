@@ -434,7 +434,7 @@ input[type=range]::-webkit-slider-thumb {
 .clip.reversed { background-image: linear-gradient(180deg, #5a3a78, #3f2860); }
 .clip-thumb { width: 40px; height: 24px; flex: 0 0 auto; border-radius: 4px; background: #000; }
 .clip-wave { position: absolute; left: 0; top: 0; height: 100%; z-index: 0; pointer-events: none; opacity: .85; }
-.clip-thumb, .clip-label { position: relative; z-index: 1; }
+.clip-thumb { position: relative; z-index: 1; }
 .clip-grip { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; display: flex; align-items: center; justify-content: center; }
 .clip-grip.left { left: 0; border-radius: 7px 0 0 7px; }
 .clip-grip.right { right: 0; border-radius: 0 7px 7px 0; }
@@ -444,7 +444,14 @@ input[type=range]::-webkit-slider-thumb {
 .clip.sel .clip-grip::after { content: ''; width: 5px; height: 5px; border-top: 2px solid #1b1f27; border-right: 2px solid #1b1f27; }
 .clip.sel .clip-grip.left::after { transform: rotate(-135deg); margin-left: 2px; }
 .clip.sel .clip-grip.right::after { transform: rotate(45deg); margin-right: 2px; }
-.clip-label { overflow: hidden; text-overflow: ellipsis; padding-right: 6px; font-weight: 500; }
+/* AM: the layer name printed ON the clip bar, left-aligned, readable over fills/waveforms. */
+.clip-label {
+  position: absolute; left: 9px; right: 9px; top: 50%; transform: translateY(-50%);
+  z-index: 2; pointer-events: none; line-height: 1.1;
+  font-size: 11px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.75);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.clip.sel .clip-label { display: none; }   /* selected clip: name lives in the edit pill; bar shows ‹ › grips */
 .clip-speed { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 9.5px; font-weight: 700; line-height: 1; padding: 2px 4px; border-radius: 4px; background: rgba(0,0,0,.55); color: #fff; letter-spacing: .3px; pointer-events: none; }
 .quick-row { display: flex; gap: 8px; padding: 6px 2px 10px; }
 .qr-btn { flex: 1; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text-dim); cursor: pointer; }
@@ -627,21 +634,35 @@ input[type=range]::-webkit-slider-thumb {
   /* with the grab handle present, the floating button hides while the sheet is open (no overlap) */
   #insp-toggle.on { display: none; }
 
-  /* shrink the timeline head column so clips get room on a narrow screen; declutter to eye + thumb + name */
-  :root { --head-w: 104px; }
-  .th-solo { display: none; }                              /* solo is a desktop control; phone head = eye + swatch + name */
+  /* AM phone head column: EYE-ONLY narrow column in the OVERVIEW (the names move onto the clips);
+     a wider rounded NAME-PILL only while EDITING one clip. --head-w switches per state; timeline.js
+     re-reads it each rebuild so clip-x / playhead stay in sync. */
+  :root { --head-w: 46px; }                /* overview: eye-only narrow column */
+  body.m-editing { --head-w: 119px; }      /* editing one clip: room for the name pill (pill is this − 15px margins) */
+  .th-solo { display: none; }              /* solo is a desktop control */
   .th-thumb { width: 26px; height: 17px; border-radius: 4px; }
+  .th-name { font-size: 12px; font-weight: 600; }
 
-  /* AM: the layer row is a floating rounded PILL (eye · swatch · name), not a flat cell */
-  .track-head {
+  /* OVERVIEW: just the eye, centred in a slim column with a hairline separator */
+  body:not(.m-editing) .th-thumb,
+  body:not(.m-editing) .th-name { display: none; }
+  body:not(.m-editing) .track-head {
+    justify-content: center; padding: 0; gap: 0; margin: 0;
+    background: var(--panel); border-radius: 0;
+    border-right: 1px solid var(--line); box-shadow: none;
+  }
+
+  /* EDIT (one clip selected): the AM rounded name-pill (eye · swatch · name) */
+  body.m-editing .track-head {
+    /* footprint (width + 6+9 margins) MUST equal --head-w so the lane starts at HEAD_W (no clip desync) */
+    flex: 0 0 calc(var(--head-w) - 15px); width: calc(var(--head-w) - 15px);
     border-right: none; background: var(--panel-3);
     height: 32px; align-self: center; margin: 0 9px 0 6px;
     padding: 0 9px; gap: 8px; border-radius: 18px;
     box-shadow: inset 0 0 0 1px var(--line);
   }
-  .track-head.sel { background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px var(--accent); }
-  .track-head.sel.primary { background: rgba(41,217,187,.2); box-shadow: inset 0 0 0 1px var(--accent); }
-  .th-name { font-size: 12px; font-weight: 600; }
+  body.m-editing .track-head.sel { background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px var(--accent); }
+  body.m-editing .track-head.sel.primary { background: rgba(41,217,187,.2); box-shadow: inset 0 0 0 1px var(--accent); }
 
   /* floating "edit / inspector" button above the timeline */
   #insp-toggle {
