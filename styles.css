@@ -434,6 +434,7 @@ input[type=range]::-webkit-slider-thumb {
 .clip.reversed { background-image: linear-gradient(180deg, #5a3a78, #3f2860); }
 .clip-thumb { width: 40px; height: 24px; flex: 0 0 auto; border-radius: 4px; background: #000; }
 .clip-wave { position: absolute; left: 0; top: 0; height: 100%; z-index: 0; pointer-events: none; opacity: .85; }
+.clip-filmstrip { position: absolute; left: 0; top: 0; height: 100%; z-index: 0; pointer-events: none; border-radius: 7px; }
 .clip-thumb { position: relative; z-index: 1; }
 .clip-grip { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; display: flex; align-items: center; justify-content: center; }
 .clip-grip.left { left: 0; border-radius: 7px 0 0 7px; }

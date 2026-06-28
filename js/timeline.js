@@ -133,6 +133,20 @@ window.FM = window.FM || {};
     }
   }
 
+  // AM: a row of frame thumbnails along the clip bar. `frames` are ImageBitmaps; for an image clip it's
+  // one frame (tiled); for video a handful of distinct frames cycled across the width.
+  function drawFilmstrip(canvas, frames, m) {
+    const ctx = canvas.getContext('2d'), H = canvas.height;
+    ctx.clearRect(0, 0, canvas.width, H);
+    const aspect = (m.width || 16) / (m.height || 9);
+    const tileW = Math.max(18, Math.round(H * aspect));
+    for (let x = 0, i = 0; x < canvas.width; x += tileW, i++) {
+      const f = frames[i % frames.length];
+      if (f) { try { ctx.drawImage(f, x, 0, tileW, H); } catch (e) {} }
+      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x + tileW - 1, 0, 1, H);   // frame divider
+    }
+  }
+
   // Pixels per second within the clip LANE. Fit-to-viewport at zoom 1; scaled by `zoom`.
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
   function pxPerSec() { return (laneViewW() / FM.scene.project.duration) * zoom; }
@@ -275,17 +289,23 @@ window.FM = window.FM || {};
         if (layer.trimStart > 0.03) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim l' }));
         if (layer.trimStart + layer.duration * sp < m.duration - 0.05) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim r' }));
       }
-      if (m && m.file) {
-        if (m.waveform && m.waveform.length) {
-          const wc = document.createElement('canvas');
-          wc.className = 'clip-wave';
-          wc.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
-          wc.height = 32;
-          drawWaveform(wc, m.waveform);
-          clip.appendChild(wc);
-        } else if (!m._wfPending && !m.waveform) {
-          FM.getWaveform(m).then(() => { FM.timeline.rebuild(); });
+    }
+    // AM: video + image clips show a FILMSTRIP of frames on the bar (distinct frames for video; the
+    // photo, tiled, for an image). Built lazily + cached on the media record (m.stripFrames).
+    if (layer.type === 'video' || layer.type === 'image') {
+      const m = FM.media.get(layer.id);
+      if (m && m.el) {
+        const strip = document.createElement('canvas');
+        strip.className = 'clip-filmstrip';
+        strip.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
+        strip.height = 32;
+        if (m.stripFrames && m.stripFrames.length) {
+          drawFilmstrip(strip, m.stripFrames, m);
+        } else if (m.stripFrames === undefined && !m._stripPending && !FM.playing && FM.buildClipStrip) {
+          m._stripPending = true;   // build ONCE; m.stripFrames is then set (even to []) so this never re-fires
+          FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; FM.timeline.rebuild(); });
         }
+        clip.appendChild(strip);
       }
     }
     clip.addEventListener('pointerdown', (e) => {

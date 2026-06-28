@@ -58,4 +58,39 @@ window.FM = window.FM || {};
       rec.frameCache = null;
     }
   };
+
+  // Small filmstrip of DISTINCT frames for a clip's timeline bar (AM-style). Cheap + cached on the
+  // media record (m.stripFrames). Video: seek to `count` evenly-spaced times. Image: a single frame.
+  FM.buildClipStrip = async function (m, count) {
+    if (!m || !m.el || m._stripBuilding) return m && m.stripFrames;
+    count = count || 8;
+    m._stripBuilding = true;
+    try {
+      if (m.kind === 'image') {
+        try { m.stripFrames = [await createImageBitmap(m.el)]; } catch (e) { m.stripFrames = []; }
+      } else {
+        const el = m.el;
+        if (el.readyState < 2) {   // wait for it to become decodable (don't spin / retry forever)
+          await new Promise(res => { const on = () => { el.removeEventListener('loadeddata', on); res(); }; el.addEventListener('loadeddata', on); setTimeout(res, 3000); });
+        }
+        const frames = [];
+        if (el.readyState >= 2) {
+          const dur = (isFinite(m.duration) && m.duration > 0) ? m.duration : (el.duration || 1);
+          const wasTime = el.currentTime, wasMuted = el.muted; el.muted = true;
+          for (let i = 0; i < count; i++) {
+            await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)));
+            try { frames.push(await createImageBitmap(el)); } catch (e) {}
+          }
+          try { el.currentTime = wasTime; } catch (e) {}
+          el.muted = wasMuted;
+        }
+        m.stripFrames = frames;   // ALWAYS set (even [] on failure) so the timeline never retries forever
+      }
+    } finally { m._stripBuilding = false; }
+    return m.stripFrames;
+  };
+
+  FM.clearClipStrip = function (m) {
+    if (m && m.stripFrames) { m.stripFrames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} }); m.stripFrames = null; }
+  };
 })(window.FM);
