@@ -985,16 +985,21 @@ window.FM = window.FM || {};
       const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel,' +
         ' #ctx-menu, #shortcuts-overlay, #export-overlay, #export-dialog, #canvas-dialog, #add-sheet,' +
         ' #topbar, #topbar-m, .sb-handle, button, input, select, textarea, label, a, option, [contenteditable]';
-      let dx = 0, dy = 0, tgt = null, armed = false;
+      let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
-        dx = e.clientX; dy = e.clientY; tgt = e.target; armed = true;
+        dx = e.clientX; dy = e.clientY; armed = true;
+        // Decide NOW, while the target is still attached, whether it's a control / self-managing area.
+        // Clicking a clip selects it → that calls timeline.rebuild() which DETACHES the clicked element,
+        // so a closest('#timeline') check at pointerup would see a detached node (null) and wrongly
+        // deselect. Capturing the decision at pointerdown survives the rebuild.
+        keepAtDown = !!(e.target && e.target.closest && e.target.closest(KEEP));
       }, true);
       document.addEventListener('pointerup', (e) => {
         if (!armed) return; armed = false;
+        if (keepAtDown) return;                                                             // tapped a control / self-managing area
         if (Math.abs(e.clientX - dx) > 6 || Math.abs(e.clientY - dy) > 6) return;           // a drag, not a tap
         if (!FM.scene || (!FM.scene.selectedId && !(FM.scene.selectedIds && FM.scene.selectedIds.length))) return;
-        if (tgt && tgt.closest && tgt.closest(KEEP)) return;                                 // a control / self-managing area
         FM.selectLayer(null);                                                               // empty background → deselect
       }, true);
     })();
