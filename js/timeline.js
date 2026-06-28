@@ -735,9 +735,19 @@ window.FM = window.FM || {};
         if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
       }
       const t = FM.time;
+      const sL = timelineEl ? timelineEl.scrollLeft : 0;
       tracksEl.querySelectorAll('.clip').forEach(clipEl => {
         const l = FM.layerById(FM.scene, clipEl.dataset.id);
         clipEl.classList.toggle('under-playhead', !!l && t >= l.start && t < l.start + l.duration);
+        // AM: keep the clip NAME pinned to the clip's VISIBLE left edge as the timeline scrolls, so the
+        // name stays readable even when the clip's start has scrolled off-screen. Pure math (no reflow).
+        const label = clipEl.querySelector('.clip-label');
+        if (label) {
+          const base = clipEl.classList.contains('sel') ? 17 : 9;
+          const off = sL - (parseFloat(clipEl.style.left) || 0);          // >0 → clip start is left of view
+          const maxLeft = Math.max(base, (parseFloat(clipEl.style.width) || 0) - 34);
+          label.style.left = Math.min(Math.max(base, off + base), maxLeft) + 'px';
+        }
       });
     },
 
