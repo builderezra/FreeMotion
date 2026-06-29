@@ -21,6 +21,8 @@ window.FM = window.FM || {};
     // batch 2
     vibrance: 'color', thermal: 'color',
     sharpen: 'stylize', dither: 'stylize', halftone: 'stylize',
+    // batch 3 — geometric warps
+    wave: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).

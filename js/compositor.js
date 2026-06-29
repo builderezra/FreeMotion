@@ -59,6 +59,11 @@ window.FM = window.FM || {};
     { type: 'thermal', label: 'Thermal', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'dither', label: 'Dither', param: 'levels', min: 2, max: 8, step: 1, def: 4 },
     { type: 'halftone', label: 'Halftone', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
+    // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
+    { type: 'wave', label: 'Wave', param: 'amount', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
+    { type: 'ripple', label: 'Ripple', param: 'amount', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
+    { type: 'twirl', label: 'Twirl', param: 'amount', min: -360, max: 360, step: 1, def: 140, unit: '°' },
+    { type: 'bulge', label: 'Bulge / Pinch', param: 'amount', min: -1, max: 2, step: 0.02, def: -0.5 },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -468,7 +473,8 @@ window.FM = window.FM || {};
   // array order regardless of type.
   const POSTFX = { rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
     solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
-    vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1 };
+    vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1,
+    wave: 1, ripple: 1, twirl: 1, bulge: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -478,8 +484,10 @@ window.FM = window.FM || {};
     if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#ff3366', fx);
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
-    // batch 1 — generic per-pixel effects
+    // generic per-pixel colour/texture effects
     if (PIXEL_FX[fx.type]) return drawPixelEffect(ctx, layer, t, scene, fx, PIXEL_FX[fx.type]);
+    // generic geometric warps
+    if (WARP_FX[fx.type]) return drawWarpEffect(ctx, layer, t, scene, fx, WARP_FX[fx.type]);
   }
 
   // Generic per-pixel effect: render the layer clean to an offscreen (this fx removed so the rest still
@@ -616,6 +624,67 @@ window.FM = window.FM || {};
           d[i] = v; d[i + 1] = v; d[i + 2] = v;
         }
       }
+    },
+  };
+
+  // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
+  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
+  let _wpA = null, _wpB = null;
+  function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
+    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    if (!_wpA) _wpA = document.createElement('canvas');
+    if (!_wpB) _wpB = document.createElement('canvas');
+    _wpA.width = W; _wpA.height = H; _wpB.width = W; _wpB.height = H;
+    const actx = _wpA.getContext('2d');
+    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    drawLayer(actx, tmp, t, scene);
+    const src = actx.getImageData(0, 0, W, H).data;
+    const bctx = _wpB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t);
+        let sx = m[0] | 0, sy = m[1] | 0;
+        if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+        if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+        const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+        o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+      }
+    }
+    bctx.putImageData(outImg, 0, 0);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    ctx.drawImage(_wpB, 0, 0);
+    ctx.restore();
+  }
+
+  const WARP_FX = {
+    wave: function (x, y, W, H, cx, cy, maxR, p, t) {
+      const amp = FM.evalProp(p.amount, t) || 0;
+      return [x + amp * Math.sin(y / 38), y + amp * 0.4 * Math.sin(x / 46)];
+    },
+    ripple: function (x, y, W, H, cx, cy, maxR, p, t) {
+      const amp = FM.evalProp(p.amount, t) || 0, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) || 1e-6;
+      const off = amp * Math.sin(r / 20);
+      return [x + (dx / r) * off, y + (dy / r) * off];
+    },
+    twirl: function (x, y, W, H, cx, cy, maxR, p, t) {
+      const ang = (FM.evalProp(p.amount, t) || 0) * Math.PI / 180, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
+      const f = Math.max(0, 1 - r / maxR), a = Math.atan2(dy, dx) + ang * f * f;
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    },
+    bulge: function (x, y, W, H, cx, cy, maxR, p, t) {
+      const k = FM.evalProp(p.amount, t) || 0, nx = (x - cx) / maxR, ny = (y - cy) / maxR, r = Math.hypot(nx, ny);
+      const scale = r < 1e-4 ? 1 : Math.pow(r, 1 + k) / r;   // k>0 pinch, k<0 bulge
+      return [cx + nx * scale * maxR, cy + ny * scale * maxR];
     },
   };
 
