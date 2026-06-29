@@ -331,7 +331,7 @@ window.FM = window.FM || {};
       if (isTouch) {
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
-        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), moved: false, holdTimer: null, startScroll: null, lastMoveAt: performance.now() };
+        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now() };
         if (FM.scene.selectedId === layer.id) {
           // Press-and-HOLD (finger settled) on a selected clip grabs it to move in time. But a finger
           // that is still travelling is a SCRUB, not a hold — a slow "drag the line over the clips to
@@ -526,7 +526,10 @@ window.FM = window.FM || {};
       // Fixed-centre playhead → scrub is a RELATIVE grab-and-slide for BOTH mouse and touch (the line
       // stays put, the content moves under it). A click without a drag seeks to where it was clicked.
       const onDown = (e, fromLane) => {
-        scrub = { startX: e.clientX, startY: e.clientY, startScroll: timelineEl.scrollLeft, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
+        // baseTime = the playhead time RIGHT NOW. The scrub slides relative to it, so it never depends
+        // on timelineEl.scrollLeft (which can decouple from the playhead after a manual horizontal scroll
+        // or a resize-clamp — and a tiny tap-jitter then computed (0 - dx)/pps → 0 = jump to START).
+        scrub = { startX: e.clientX, startY: e.clientY, baseTime: FM.time, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
         beginScrub(e);
       };
       // Grab ANYWHERE the timeline could be — the ruler, the lanes, AND the empty space above/below the
@@ -585,8 +588,7 @@ window.FM = window.FM || {};
           if (!clipTap.moved && !scrubIntent && adx < 8 && ady < 8) return;   // still a potential tap / hold
           clipTap.moved = true;
           if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
-          if (clipTap.startScroll == null) clipTap.startScroll = timelineEl.scrollLeft;
-          FM.setTime(snapT((clipTap.startScroll - (e.clientX - clipTap.startX)) / pxPerSec()));   // relative drag-scrub
+          FM.setTime(snapT(clipTap.baseTime - (e.clientX - clipTap.startX) / pxPerSec()));   // relative drag-scrub (scrollLeft-independent)
           return;
         }
         if (clipMove) {
@@ -659,7 +661,7 @@ window.FM = window.FM || {};
             timelineEl.scrollTop = scrub.startScrollTop - dy;                                  // vertical pan
           } else if (Math.abs(dx) > 3) {
             scrub.moved = true;
-            FM.setTime(snapT((scrub.startScroll - dx) / pxPerSec()));                          // horizontal grab-and-slide
+            FM.setTime(snapT(scrub.baseTime - dx / pxPerSec()));                               // horizontal grab-and-slide
           }
         }
       });
