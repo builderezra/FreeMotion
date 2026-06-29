@@ -394,15 +394,18 @@ input[type=range]::-webkit-slider-thumb {
    empty space, ruler), not just the ruler. The scrub handler does vertical pan itself when needed. */
 #timeline { position: relative; overflow: auto; touch-action: none; overscroll-behavior: contain; }
 #tl-inner { position: relative; min-height: 100%; }
-#tl-rulerrow { display: flex; height: 24px; position: sticky; top: 0; z-index: 7; background: var(--panel); }
+#tl-rulerrow { display: flex; height: 28px; position: sticky; top: 0; z-index: 7; background: var(--panel); }
 .tl-headspace { width: var(--head-w); flex: 0 0 var(--head-w); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line-soft); position: sticky; left: 0; z-index: 9; background: var(--panel); }
 #tl-ruler {
   position: relative; flex: 1;
   border-bottom: 1px solid var(--line-soft);
   color: var(--text-faint); font-size: 10px;
 }
-.tick { position: absolute; top: 0; height: 24px; border-left: 1px solid var(--line); padding-left: 4px; line-height: 24px; font-variant-numeric: tabular-nums; }
-.notch { position: absolute; top: 16px; height: 8px; width: 0; border-left: 1px solid var(--line-soft); opacity: .55; pointer-events: none; }
+/* The little tick lines sit at the TOP; the time labels sit BELOW them (the big timecode pill is the
+   primary readout now, so the ruler labels are small + secondary). */
+.tick { position: absolute; top: 0; height: 9px; border-left: 1px solid var(--line); }
+.tick-lbl { position: absolute; top: 11px; left: 3px; font-size: 9.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.notch { position: absolute; top: 0; height: 5px; width: 0; border-left: 1px solid var(--line-soft); opacity: .5; pointer-events: none; }
 .tl-marker { position: absolute; top: 0; width: 0; height: 0; margin-left: -5px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--kf); z-index: 3; }
 .tl-marker::after { content: ""; position: absolute; left: -0.5px; top: 7px; width: 1px; height: 320px; background: rgba(255,206,74,.35); }
 .marker-edit { position: absolute; top: 1px; transform: translateX(-50%); width: 88px; z-index: 12; background: var(--panel-3); border: 1px solid var(--kf); color: var(--text); border-radius: 5px; padding: 1px 5px; font-size: 11px; }

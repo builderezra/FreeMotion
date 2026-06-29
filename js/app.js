@@ -144,6 +144,30 @@ window.FM = window.FM || {};
   };
   FM.hideToast = function () { const t = document.getElementById('toast'); if (t) t.classList.add('hidden'); };
 
+  // Benchmarks = timeline markers. Tap the timecode to drop one at the playhead (tap again to remove it).
+  // The skip buttons jump between these (and the selected clip's edges).
+  FM.toggleMarkerAtPlayhead = function () {
+    const P = FM.scene.project; if (!P.markers) P.markers = [];
+    const t = FM.time;
+    const near = P.markers.find(m => Math.abs(m.t - t) < 0.12);
+    if (near) { P.markers = P.markers.filter(m => m !== near); if (FM.toast) FM.toast('Benchmark removed', 1000); }
+    else { P.markers.push({ t: Math.round(t * 1000) / 1000, label: 'Benchmark' }); if (FM.toast) FM.toast('Benchmark added', 1000); }
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();
+  };
+
+  // Ordered snap points the skip buttons step between: project start/end, every benchmark, and — when a
+  // layer is selected — that clip's start & end edges. (So skip-left from past a clip lands on its right
+  // edge; skip-right from before it lands on its start.)
+  FM.timelineSnapPoints = function () {
+    const P = FM.scene.project;
+    const pts = [0, P.duration];
+    (P.markers || []).forEach(m => { if (m.t >= 0 && m.t <= P.duration) pts.push(m.t); });
+    const sel = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
+    if (sel) { pts.push(Math.max(0, sel.start)); pts.push(Math.min(P.duration, sel.start + sel.duration)); }
+    return pts.sort((a, b) => a - b);
+  };
+
   // Decode a clip's frames once so reverse / frame-blend slow-mo plays + scrubs smoothly.
   FM.ensureReverseCache = async function (layer) {
     if (!layer || layer.type !== 'video') return;
@@ -780,8 +804,18 @@ window.FM = window.FM || {};
     ctx = canvas.getContext('2d');
     readoutEl = document.getElementById('time-readout');
     dropHint = document.getElementById('drop-hint');
+    // Tap the timecode → drop / remove a benchmark at the playhead. Double-tap → type an exact time.
+    // (A short timer distinguishes the two so a double-tap doesn't also leave a stray benchmark.)
+    readoutEl.style.cursor = 'pointer';
+    readoutEl.title = 'Tap to add / remove a benchmark here · double-click to type a time';
+    let tcTapTimer = null;
+    readoutEl.addEventListener('click', () => {
+      if (tcTapTimer) return;                       // second click of a double-tap → ignore here
+      tcTapTimer = setTimeout(() => { tcTapTimer = null; FM.toggleMarkerAtPlayhead(); }, 240);
+    });
     // double-click the time readout to type an exact playhead time
     readoutEl.addEventListener('dblclick', () => {
+      if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; }   // cancel the pending benchmark tap
       const input = document.createElement('input');
       input.className = 'time-edit'; input.type = 'text'; input.value = FM.time.toFixed(2);
       readoutEl.style.display = 'none'; readoutEl.parentNode.insertBefore(input, readoutEl);
@@ -905,9 +939,19 @@ window.FM = window.FM || {};
 
     // transport
     document.getElementById('btn-play').addEventListener('click', () => FM.togglePlay());
-    document.getElementById('btn-tostart').addEventListener('click', () => { FM.pause(); FM.setTime(0); });
+    // Skip ◀ / ▶| step to the PREVIOUS / NEXT snap point (benchmark or selected-clip edge), falling back
+    // to the project start / end when there's nothing closer.
+    document.getElementById('btn-tostart').addEventListener('click', () => {
+      const t = FM.time, eps = 1e-3;
+      const before = FM.timelineSnapPoints().filter(p => p < t - eps);
+      FM.pause(); FM.setTime(before.length ? before[before.length - 1] : 0);
+    });
     const toEnd = document.getElementById('btn-toend');
-    if (toEnd) toEnd.addEventListener('click', () => { FM.pause(); FM.setTime(FM.scene.project.duration); });
+    if (toEnd) toEnd.addEventListener('click', () => {
+      const t = FM.time, eps = 1e-3;
+      const next = FM.timelineSnapPoints().find(p => p > t + eps);
+      FM.pause(); FM.setTime(next != null ? next : FM.scene.project.duration);
+    });
     const loopBtn = document.getElementById('btn-loop');
     if (loopBtn) loopBtn.addEventListener('click', () => { FM.loop = !FM.loop; loopBtn.classList.toggle('active', FM.loop); });
     const splitBtn = document.getElementById('btn-split');

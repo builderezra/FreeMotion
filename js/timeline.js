@@ -187,7 +187,12 @@ window.FM = window.FM || {};
     let html = '';
     const totalFrames = Math.ceil(dur * f);
     for (let fr = 0; fr <= totalFrames; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
-    for (let t = 0; t <= dur + 1e-6; t += majStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px">' + tc(t) + '</div>'; }
+    for (let t = 0; t <= dur + 1e-6; t += majStep) {
+      // Short label (M:SS) at whole-second steps — the big timecode pill already shows frame-accurate
+      // time, so the ruler doesn't repeat the frame digits. Sub-second zoom falls back to MM:SS:FF.
+      const lbl = majStep >= 1 ? (Math.floor(Math.round(t) / 60) + ':' + String(Math.round(t) % 60).padStart(2, '0')) : tc(t);
+      html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"><span class="tick-lbl">' + lbl + '</span></div>';
+    }
     rulerEl.innerHTML = html;
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');

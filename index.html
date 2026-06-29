@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=119">
+<link rel="stylesheet" href="styles.css?v=120">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.75</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.76</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -78,11 +78,11 @@
         <div class="t-side t-left">
           <button id="btn-undo" class="tbtn" title="Undo (Cmd+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v0"/></svg></button>
           <button id="btn-redo" class="tbtn" title="Redo (Cmd+Shift+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v0"/></svg></button>
-          <button id="btn-tostart" class="tbtn" title="Jump to start"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="5" y2="19"/><polygon points="20 5 9 12 20 19 20 5"/></svg></button>
+          <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="5" y2="19"/><polygon points="20 5 9 12 20 19 20 5"/></svg></button>
         </div>
         <button id="btn-play" class="tbtn tbtn-play" title="Play / Pause (space)"><svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg></button>
         <div class="t-side t-right">
-          <button id="btn-toend" class="tbtn" title="Jump to end"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 5 15 12 4 19 4 5"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
+          <button id="btn-toend" class="tbtn" title="Skip to next benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 5 15 12 4 19 4 5"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
           <button id="btn-amfit" class="tbtn" title="View options (grid · camera · zoom)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
         </div>
@@ -217,7 +217,7 @@
   <script src="js/scene.js?v=61"></script>
   <script src="js/media.js?v=28"></script>
   <script src="js/compositor.js?v=99"></script>
-  <script src="js/timeline.js?v=115"></script>
+  <script src="js/timeline.js?v=116"></script>
   <script src="js/addmenu.js?v=1"></script>
   <script src="js/inspector.js?v=92"></script>
   <script src="js/color-wheel.js?v=52"></script>
@@ -232,7 +232,7 @@
   <script src="js/contextmenu.js?v=33"></script>
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
-  <script src="js/app.js?v=97"></script>
+  <script src="js/app.js?v=98"></script>
   <script src="js/mobile.js?v=11"></script>
   <script src="js/ai-manifest.js?v=1"></script>
   <script src="js/ai-ops.js?v=2"></script>
