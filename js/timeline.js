@@ -187,12 +187,9 @@ window.FM = window.FM || {};
     let html = '';
     const totalFrames = Math.ceil(dur * f);
     for (let fr = 0; fr <= totalFrames; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
-    for (let t = 0; t <= dur + 1e-6; t += majStep) {
-      // Short label (M:SS) at whole-second steps — the big timecode pill already shows frame-accurate
-      // time, so the ruler doesn't repeat the frame digits. Sub-second zoom falls back to MM:SS:FF.
-      const lbl = majStep >= 1 ? (Math.floor(Math.round(t) / 60) + ':' + String(Math.round(t) % 60).padStart(2, '0')) : tc(t);
-      html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"><span class="tick-lbl">' + lbl + '</span></div>';
-    }
+    // Major ticks are LINES only — no numbers. The single centred timecode pill is the only readout
+    // (Ezra: "I only want the numbers on the little counter in the middle").
+    for (let t = 0; t <= dur + 1e-6; t += majStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     rulerEl.innerHTML = html;
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
@@ -654,6 +651,12 @@ window.FM = window.FM || {};
             L.duration = trimDrag.dur - delta;
             if (L.type === 'video') L.trimStart = trimDrag.trim + delta * sp;
           }
+          // Grow the comp (and the scroller) LIVE when the right edge is dragged past the end, so the
+          // timeline expands to follow the longer clip instead of clipping it off.
+          if (trimDrag.edge === 'right') {
+            const end = L.start + L.duration;
+            if (end > FM.scene.project.duration) { FM.scene.project.duration = end; applyInnerWidth(); }
+          }
           const pps2 = pxPerSec();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
           if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
@@ -707,6 +710,8 @@ window.FM = window.FM || {};
           return;
         }
         if (trimDrag) {
+          const L = trimDrag.layer, end = L.start + L.duration;
+          if (end > FM.scene.project.duration) FM.scene.project.duration = end;   // grow comp to fit the lengthened clip
           trimDrag = null; hideSnap();
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           return;
