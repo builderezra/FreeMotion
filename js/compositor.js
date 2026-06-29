@@ -47,6 +47,12 @@ window.FM = window.FM || {};
     { type: 'tint', label: 'Tint', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ff3366' },
     { type: 'threshold', label: 'Threshold', param: 'level', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'duotone', label: 'Duotone', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights' },
+    // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
+    { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'gamma', label: 'Gamma', param: 'gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
+    { type: 'temperature', label: 'Temperature', param: 'amount', min: -100, max: 100, step: 1, def: 40 },
+    { type: 'noise', label: 'Noise', param: 'amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+    { type: 'scanlines', label: 'Scanlines', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -454,7 +460,8 @@ window.FM = window.FM || {};
   // Each draw* renders a clean copy of the layer with THIS effect instance removed (recursing
   // inward through the remaining post-fx), then applies its own transform — so they compose in
   // array order regardless of type.
-  const POSTFX = { rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1 };
+  const POSTFX = { rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
+    solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -464,7 +471,79 @@ window.FM = window.FM || {};
     if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#ff3366', fx);
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
+    // batch 1 — generic per-pixel effects
+    if (PIXEL_FX[fx.type]) return drawPixelEffect(ctx, layer, t, scene, fx, PIXEL_FX[fx.type]);
   }
+
+  // Generic per-pixel effect: render the layer clean to an offscreen (this fx removed so the rest still
+  // compose), run a pixel function over the ImageData, then draw it back with the layer's opacity/blend.
+  // Each pixel fn mutates `d` (RGBA bytes) in place; gets (d, W, H, P) where P = evaluated params.
+  let _pfA = null, _pfB = null;
+  function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
+    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    if (!_pfA) _pfA = document.createElement('canvas');
+    if (!_pfB) _pfB = document.createElement('canvas');
+    _pfA.width = W; _pfA.height = H; _pfB.width = W; _pfB.height = H;
+    const actx = _pfA.getContext('2d');
+    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    drawLayer(actx, tmp, t, scene);
+    const img = actx.getImageData(0, 0, W, H);
+    fn(img.data, W, H, fx.params || {}, t);
+    _pfB.getContext('2d').putImageData(img, 0, 0);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    ctx.drawImage(_pfB, 0, 0);
+    ctx.restore();
+  }
+
+  // Per-pixel effect functions. Each mutates the RGBA byte array in place. Read params via FM.evalProp.
+  const PIXEL_FX = {
+    solarize: function (d, W, H, p, t) {
+      const thr = clamp01(FM.evalProp(p.threshold, t) != null ? FM.evalProp(p.threshold, t) : 0.5) * 255;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i] > thr) d[i] = 255 - d[i];
+        if (d[i + 1] > thr) d[i + 1] = 255 - d[i + 1];
+        if (d[i + 2] > thr) d[i + 2] = 255 - d[i + 2];
+      }
+    },
+    gamma: function (d, W, H, p, t) {
+      const g = Math.max(0.05, FM.evalProp(p.gamma, t) || 1), inv = 1 / g, LUT = new Uint8ClampedArray(256);
+      for (let v = 0; v < 256; v++) LUT[v] = Math.round(255 * Math.pow(v / 255, inv));
+      for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
+    },
+    temperature: function (d, W, H, p, t) {
+      const a = (FM.evalProp(p.amount, t) || 0) / 100, r = a * 50, b = -a * 50;   // warm: +R -B, cool: opposite
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i] + r; d[i + 2] = d[i + 2] + b; }
+    },
+    noise: function (d, W, H, p, t) {
+      const amt = (FM.evalProp(p.amount, t) || 0) / 100 * 160;   // up to ±80
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        // deterministic per-pixel hash (stable when paused), shifted slightly by frame for subtle motion
+        const px = (i >> 2);
+        let h = (px * 374761393 + Math.floor(t * 24) * 668265263) | 0;
+        h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+        const n = ((h & 255) / 255 - 0.5) * amt;
+        d[i] += n; d[i + 1] += n; d[i + 2] += n;
+      }
+    },
+    scanlines: function (d, W, H, p, t) {
+      const amt = clamp01(FM.evalProp(p.amount, t) != null ? FM.evalProp(p.amount, t) : 0.6);
+      for (let y = 0; y < H; y++) {
+        if (y % 2 === 0) continue;                 // darken every other row
+        const k = 1 - amt, row = y * W * 4;
+        for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+      }
+    },
+  };
 
   // RGB split / chromatic aberration: render the layer clean to an offscreen, then rebuild it
   // sampling the RED channel shifted +d and the BLUE channel shifted -d → coloured edge fringes.
