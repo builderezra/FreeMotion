@@ -175,6 +175,30 @@ body {
 .dh-icon { font-size: 44px; opacity: .85; }
 #stage.dragover { box-shadow: inset 0 0 0 2px var(--accent); }
 
+/* AM right-side view toolbar (fit · grid · layers · camera · zoom). Docked over the canvas right edge. */
+#view-bar {
+  position: absolute; top: 6px; right: 6px; bottom: 6px; width: 46px; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;
+  background: rgba(18,24,36,.9); border: 1px solid var(--line); border-radius: 13px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#view-bar.hidden { display: none; }
+.vb-btn {
+  width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: var(--text); border-radius: 9px; cursor: pointer;
+}
+.vb-btn svg { width: 23px; height: 23px; }
+.vb-btn:hover { background: rgba(255,255,255,.08); }
+.vb-btn.on { color: var(--accent); }
+.vb-btn:disabled { opacity: .35; cursor: default; }
+#vb-zoom {
+  margin-top: auto; display: flex; flex-direction: column; align-items: center;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px 0; width: 38px;
+}
+.vb-z { width: 34px; height: 26px; background: none; border: none; color: var(--text); font-size: 18px; line-height: 1; cursor: pointer; }
+.vb-z:hover { color: var(--accent); }
+#vb-zlabel { font-size: 9.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; padding: 1px 0; }
+
 /* ---------- layer list ---------- */
 #layer-list { padding: 4px 8px; display: flex; flex-direction: column; gap: 4px; }
 .layer-row {

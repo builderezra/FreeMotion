@@ -143,6 +143,23 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Project reset', 1200);
   };
 
+  // ===== Canvas (preview) zoom — view-only, never affects export. Scales #canvas-wrap (the selection
+  // overlay lives inside it, so handles stay aligned; pointer mapping is rect-based, so it stays correct). =====
+  FM.canvasZoom = 1;
+  const CZOOMS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8];
+  FM.setCanvasZoom = function (z) {
+    FM.canvasZoom = Math.max(0.25, Math.min(8, z));
+    const wrap = document.getElementById('canvas-wrap');
+    if (wrap) wrap.style.transform = Math.abs(FM.canvasZoom - 1) < 1e-3 ? '' : 'scale(' + FM.canvasZoom + ')';
+    const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = Math.round(FM.canvasZoom * 100) + '%';
+    if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
+  };
+  FM.zoomCanvasStep = function (dir) {
+    let i = CZOOMS.findIndex(v => v >= FM.canvasZoom - 1e-3);
+    if (i < 0) i = CZOOMS.length - 1;
+    FM.setCanvasZoom(CZOOMS[Math.max(0, Math.min(CZOOMS.length - 1, i + dir))]);
+  };
+
   /* ---------- time / scrubbing ---------- */
   FM.seekVideosToTime = function () {
     FM.scene.layers.forEach(layer => {
@@ -948,19 +965,26 @@ window.FM = window.FM || {};
         { label: 'Paste Style', disabled: true, action: () => {} },          // placeholder — not built yet
       ]);
     });
-    // ⛶ View menu (AM's right-side view panel): grid, camera, and canvas (view-only) zoom.
-    // Grid + camera are wired; canvas zoom is a real feature still to build, shown as a placeholder.
+    // ⛶ → toggle AM's right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).
     const amFitBtn = document.getElementById('btn-amfit');
-    if (amFitBtn) amFitBtn.addEventListener('click', () => {
-      if (!FM.contextMenu) return;
-      const r = amFitBtn.getBoundingClientRect();
-      FM.contextMenu.show(Math.max(8, r.right - 210), r.bottom + 4, [
-        { label: (FM.showGuides ? '✓ Grid & guides' : 'Grid & guides'), action: () => { const b = document.getElementById('btn-guides'); if (b) b.click(); } },
-        { label: 'Add camera', action: () => { if (FM.addCameraLayer) FM.addCameraLayer(); } },
-        { sep: true },
-        { label: 'Zoom view (canvas) — coming soon', disabled: true, action: () => {} },
-      ]);
+    const viewBar = document.getElementById('view-bar');
+    if (amFitBtn && viewBar) amFitBtn.addEventListener('click', () => {
+      const open = viewBar.classList.toggle('hidden') === false;
+      amFitBtn.classList.toggle('active', open);
+      const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open
     });
+    const vbFit = document.getElementById('vb-fit');
+    if (vbFit) vbFit.addEventListener('click', () => FM.setCanvasZoom(1));
+    const vbGrid = document.getElementById('vb-grid');
+    if (vbGrid) vbGrid.addEventListener('click', () => { FM.showGuides = !FM.showGuides; vbGrid.classList.toggle('on', FM.showGuides); render(); });
+    const vbLayers = document.getElementById('vb-layers');
+    if (vbLayers) vbLayers.addEventListener('click', () => { if (FM.toast) FM.toast('Layers — coming soon', 1400); });   // function TBD (matches AM placement)
+    const vbCam = document.getElementById('vb-camera');
+    if (vbCam) vbCam.addEventListener('click', () => { if (FM.addCameraLayer) FM.addCameraLayer(); });
+    const vbZin = document.getElementById('vb-zoomin');
+    if (vbZin) vbZin.addEventListener('click', () => FM.zoomCanvasStep(1));
+    const vbZout = document.getElementById('vb-zoomout');
+    if (vbZout) vbZout.addEventListener('click', () => FM.zoomCanvasStep(-1));
 
     // transport
     document.getElementById('btn-play').addEventListener('click', () => FM.togglePlay());

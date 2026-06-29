@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=123">
+<link rel="stylesheet" href="styles.css?v=124">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.82</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.83</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -61,6 +61,18 @@
           <div id="drop-hint">
             <div class="dh-icon">🎬</div>
             <div>Drag a video or image here<br>or click <b>Import media</b></div>
+          </div>
+        </div>
+        <!-- AM-style right-side VIEW toolbar (toggled by the ⛶ button): fit · grid · layers · camera · canvas zoom -->
+        <div id="view-bar" class="hidden" aria-label="View options">
+          <button id="vb-fit" class="vb-btn" title="Fit canvas to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
+          <button id="vb-grid" class="vb-btn" title="Show grid / guides"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/></svg></button>
+          <button id="vb-layers" class="vb-btn" title="Layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5zM3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5"/></svg></button>
+          <button id="vb-camera" class="vb-btn" title="Add camera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM15 10l6-3v10l-6-3z"/></svg></button>
+          <div id="vb-zoom">
+            <button id="vb-zoomin" class="vb-z" title="Zoom in" aria-label="Zoom in">+</button>
+            <span id="vb-zlabel">100%</span>
+            <button id="vb-zoomout" class="vb-z" title="Zoom out" aria-label="Zoom out">−</button>
           </div>
         </div>
       </section>
@@ -232,7 +244,7 @@
   <script src="js/contextmenu.js?v=33"></script>
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
-  <script src="js/app.js?v=99"></script>
+  <script src="js/app.js?v=100"></script>
   <script src="js/mobile.js?v=12"></script>
   <script src="js/ai-manifest.js?v=1"></script>
   <script src="js/ai-ops.js?v=2"></script>
