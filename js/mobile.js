@@ -156,6 +156,7 @@ window.FM = window.FM || {};
         { label: 'Open project…', action: function () { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); } },
         { label: 'Save project', action: function () { if (FM.storage && FM.storage.exportFile) FM.storage.exportFile(); } },
         { label: 'Save frame (PNG)', action: function () { if (FM.snapshotPNG) FM.snapshotPNG(); } },
+        { label: 'Reset project…', danger: true, action: function () { if (confirm('Reset the project? This clears all layers and cannot be undone.') && FM.resetProject) FM.resetProject(); } },
         { sep: true },
         { label: 'Shortcuts', action: function () { if (FM.shortcuts) FM.shortcuts.toggle(); } },
       ]);

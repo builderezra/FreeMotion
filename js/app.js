@@ -119,6 +119,30 @@ window.FM = window.FM || {};
   }
   FM.refreshAll = refreshAll;
 
+  // Wipe the project back to a blank composition (drops all layers, media, markers, history).
+  // Destructive + not undoable, so call sites confirm first.
+  FM.resetProject = function () {
+    if (FM.pause) FM.pause();
+    (FM.scene.layers || []).forEach(l => {
+      const m = FM.media.get(l.id); if (m && FM.clearFrameCache) FM.clearFrameCache(m);
+      if (FM.media.remove) FM.media.remove(l.id);
+      if (FM.storage && FM.storage.removeMedia) { try { FM.storage.removeMedia(l.id); } catch (e) {} }
+    });
+    const blank = FM.newScene();
+    FM.scene.project = blank.project;
+    FM.scene.layers = blank.layers;
+    FM.scene.selectedId = null;
+    FM.scene.selectedIds = [];
+    FM.time = 0;
+    if (FM.history) FM.history.reset();
+    if (FM.resizeCanvas) FM.resizeCanvas();
+    refreshAll();
+    if (FM.setTime) FM.setTime(0);
+    const pnm = document.getElementById('proj-name-m'); if (pnm) pnm.value = FM.scene.project.name;
+    if (FM.storage && FM.storage.save) FM.storage.save();
+    if (FM.toast) FM.toast('Project reset', 1200);
+  };
+
   /* ---------- time / scrubbing ---------- */
   FM.seekVideosToTime = function () {
     FM.scene.layers.forEach(layer => {
@@ -896,6 +920,7 @@ window.FM = window.FM || {};
         { sep: true },
         { label: 'Open project…', action: () => clickHidden('btn-open-proj') },
         { label: 'Save project', action: () => clickHidden('btn-save-proj') },
+        { label: 'Reset project…', danger: true, action: () => { if (confirm('Reset the project? This clears all layers and cannot be undone.')) FM.resetProject(); } },
         { sep: true },
         { label: 'Keyboard shortcuts', action: () => clickHidden('btn-help') },
       ]);
