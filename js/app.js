@@ -81,9 +81,13 @@ window.FM = window.FM || {};
   FM.resizeCanvas = resizeCanvas;
 
   function updateReadout() {
-    readoutEl.textContent = FM.time.toFixed(2) + ' / ' + FM.scene.project.duration.toFixed(2) + 's';
+    // AM-style timecode: MM:SS:FF for the current playhead time.
+    const f = FM.scene.project.fps || 30;
+    const tot = Math.round(FM.time * f), ff = tot % f, s = Math.floor(tot / f), m = Math.floor(s / 60), sec = s % 60;
+    const p2 = n => (n < 10 ? '0' : '') + n;
+    readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
     const d = FM.scene.project.duration, mm = Math.floor(d / 60), ss = Math.round(d % 60);
-    readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + mm + ':' + String(ss).padStart(2, '0');
+    readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + 'total ' + mm + ':' + String(ss).padStart(2, '0');
   }
 
   // Global preview playback speed (preview only — export is unaffected). 0.5×, 1×, 2×…
@@ -885,9 +889,19 @@ window.FM = window.FM || {};
         { label: 'Paste Style', disabled: true, action: () => {} },          // placeholder — not built yet
       ]);
     });
-    // ⛶ Fit/expand — AM button whose exact function isn't confirmed yet, so it's a visual placeholder.
+    // ⛶ View menu (AM's right-side view panel): grid, camera, and canvas (view-only) zoom.
+    // Grid + camera are wired; canvas zoom is a real feature still to build, shown as a placeholder.
     const amFitBtn = document.getElementById('btn-amfit');
-    if (amFitBtn) amFitBtn.addEventListener('click', () => { if (FM.toast) FM.toast('Fit — coming soon', 1400); });
+    if (amFitBtn) amFitBtn.addEventListener('click', () => {
+      if (!FM.contextMenu) return;
+      const r = amFitBtn.getBoundingClientRect();
+      FM.contextMenu.show(Math.max(8, r.right - 210), r.bottom + 4, [
+        { label: (FM.showGuides ? '✓ Grid & guides' : 'Grid & guides'), action: () => { const b = document.getElementById('btn-guides'); if (b) b.click(); } },
+        { label: 'Add camera', action: () => { if (FM.addCameraLayer) FM.addCameraLayer(); } },
+        { sep: true },
+        { label: 'Zoom view (canvas) — coming soon', disabled: true, action: () => {} },
+      ]);
+    });
 
     // transport
     document.getElementById('btn-play').addEventListener('click', () => FM.togglePlay());

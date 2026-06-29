@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.73</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.74</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -84,11 +84,11 @@
         <div class="t-side t-right">
           <button id="btn-toend" class="tbtn" title="Jump to end"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 5 15 12 4 19 4 5"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
-          <button id="btn-amfit" class="tbtn" title="Fit / expand (coming soon)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
+          <button id="btn-amfit" class="tbtn" title="View options (grid · camera · zoom)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
         </div>
       </div>
       <!-- AM-style centred timecode pill, below the transport. -->
-      <div id="tc-bar"><span id="time-readout">0.00 / 10.00s</span></div>
+      <div id="tc-bar"><span id="time-readout">00:00:00</span></div>
       <!-- Non-AM controls kept OFF the row (per Ezra) but still in the DOM so app.js/timeline.js keep
            their handlers; reached from the ⋯ More menu. Hidden, never shown directly. -->
       <div id="transport-extra" style="display:none">
@@ -232,7 +232,7 @@
   <script src="js/contextmenu.js?v=33"></script>
   <script src="js/shortcuts.js?v=70"></script>
   <script src="js/captions.js?v=45"></script>
-  <script src="js/app.js?v=96"></script>
+  <script src="js/app.js?v=97"></script>
   <script src="js/mobile.js?v=11"></script>
   <script src="js/ai-manifest.js?v=1"></script>
   <script src="js/ai-ops.js?v=2"></script>
