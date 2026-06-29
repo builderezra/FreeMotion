@@ -239,11 +239,8 @@ window.FM = window.FM || {};
       name.replaceWith(input); input.focus(); input.select();
     });
 
-    const solo = document.createElement('span');
-    solo.className = 'th-solo' + (layer.solo ? ' on' : '');
-    solo.textContent = 'S'; solo.title = layer.solo ? 'Unsolo' : 'Solo (hide other layers)';
-    solo.addEventListener('click', (e) => { e.stopPropagation(); layer.solo = !layer.solo; FM.requestRender(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); });
-    head.append(eye, thumb, name, solo);
+    // (Solo "S" button removed per Ezra — was the per-layer "isolate this layer" toggle.)
+    head.append(eye, thumb, name);
     head.addEventListener('click', (e) => { if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id); });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     // drag to reorder (z-order)
