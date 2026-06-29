@@ -81,6 +81,13 @@ window.FM = window.FM || {};
     { type: 'colorize', label: 'Colorize', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#3aa0ff', colorLabel: 'Color' },
     { type: 'checker', label: 'Checker', param: 'size', min: 2, max: 120, step: 1, def: 24, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Color' },
     { type: 'grid', label: 'Grid', param: 'size', min: 4, max: 160, step: 1, def: 32, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Color' },
+    // ---- batch 7 ----
+    { type: 'mosaic', label: 'Mosaic', param: 'size', min: 2, max: 100, step: 1, def: 16, unit: 'px' },
+    { type: 'lensblur', label: 'Lens Blur', param: 'radius', min: 0, max: 30, step: 1, def: 10, unit: 'px' },
+    { type: 'dots', label: 'Dots', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Color' },
+    { type: 'polarcoords', label: 'Polar Coordinates', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
+    { type: 'bend', label: 'Bend', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'glass', label: 'Glass', param: 'amount', min: 0, max: 40, step: 1, def: 12, unit: 'px' },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -494,7 +501,8 @@ window.FM = window.FM || {};
     wave: 1, ripple: 1, twirl: 1, bulge: 1,
     edge: 1, emboss: 1, exposure: 1, fisheye: 1,
     kaleidoscope: 1, glitch: 1, zoomblur: 1, crt: 1,
-    boxblur: 1, spinblur: 1, gradientmap: 1, colorize: 1, checker: 1, grid: 1 };
+    boxblur: 1, spinblur: 1, gradientmap: 1, colorize: 1, checker: 1, grid: 1,
+    mosaic: 1, lensblur: 1, dots: 1, polarcoords: 1, bend: 1, glass: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -730,6 +738,10 @@ window.FM = window.FM || {};
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=0.25+0.75*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2]; for(var chkY=0;chkY<H;chkY++){ var chkRow=(chkY/chkSz)|0; var chkBase=chkY*W*4; for(var chkX=0;chkX<W;chkX++){ if((((chkX/chkSz)|0)+chkRow)&1){ var chkI=chkBase+chkX*4; if(d[chkI+3]>0){ d[chkI]=(d[chkI]+chkR)*0.5; d[chkI+1]=(d[chkI+1]+chkG)*0.5; d[chkI+2]=(d[chkI+2]+chkB)*0.5; } } } } },
     grid: function(d,W,H,p,t){ var grSize=FM.evalProp(p.size,t); grSize=(grSize==null?32:grSize); grSize=Math.round(grSize); if(grSize<4)grSize=4; if(grSize>160)grSize=160; var grLW=Math.max(1,Math.round(grSize*0.06)); var grCol=hexToRGB(p.color)||[255,255,255]; var grR=grCol[0],grG=grCol[1],grB=grCol[2]; for(var grY=0;grY<H;grY++){ var grYOn=((grY%grSize)<grLW); var grRow=grY*W*4; for(var grX=0;grX<W;grX++){ if(grYOn||((grX%grSize)<grLW)){ var grI=grRow+grX*4; if(d[grI+3]>0){ d[grI]=grR; d[grI+1]=grG; d[grI+2]=grB; } } } } },
+    // ---- batch 7 (pixel) ----
+    mosaic: function(d,W,H,p,t){ var moBs=Math.round(FM.evalProp(p.size,t)||16); if(moBs<2)moBs=2; if(moBs>100)moBs=100; var moS=d.slice(),moW4=W*4; for(var moBy=0;moBy<H;moBy+=moBs){ var moY1=Math.min(moBy+moBs,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4; moSr+=moS[moI]; moSg+=moS[moI+1]; moSb+=moS[moI+2]; moSa+=moS[moI+3]; moN++; } } if(moN===0)continue; var moAr=moSr/moN,moAg=moSg/moN,moAb=moSb/moN,moAa=moSa/moN; for(var moY2=moBy;moY2<moY1;moY2++){ var moRow2=moY2*moW4; for(var moX2=moBx;moX2<moX1;moX2++){ var moJ=moRow2+moX2*4; d[moJ]=moAr; d[moJ+1]=moAg; d[moJ+2]=moAb; d[moJ+3]=moAa; } } } } },
+    lensblur: function(d,W,H,p,t){ var lb_r=FM.evalProp(p.radius,t); lb_r=(lb_r==null?10:lb_r); if(lb_r<0)lb_r=0; if(lb_r>30)lb_r=30; if(lb_r<1)return; var lb_s=d.slice(),lb_w4=W*4,lb_ox=new Float64Array(16),lb_oy=new Float64Array(16),lb_k; for(lb_k=0;lb_k<16;lb_k++){var lb_a=lb_k*2.399963,lb_rd=lb_r*Math.sqrt((lb_k+0.5)/16);lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd;} for(var lb_y=0;lb_y<H;lb_y++){for(var lb_x=0;lb_x<W;lb_x++){var lb_sr=0,lb_sg=0,lb_sb=0,lb_sa=0; for(lb_k=0;lb_k<16;lb_k++){var lb_sx=lb_x+lb_ox[lb_k]|0,lb_sy=lb_y+lb_oy[lb_k]|0; if(lb_sx<0)lb_sx=0; else if(lb_sx>=W)lb_sx=W-1; if(lb_sy<0)lb_sy=0; else if(lb_sy>=H)lb_sy=H-1; var lb_si=lb_sy*lb_w4+lb_sx*4; lb_sr+=lb_s[lb_si];lb_sg+=lb_s[lb_si+1];lb_sb+=lb_s[lb_si+2];lb_sa+=lb_s[lb_si+3];} var lb_di=lb_y*lb_w4+lb_x*4; d[lb_di]=lb_sr/16;d[lb_di+1]=lb_sg/16;d[lb_di+2]=lb_sb/16;d[lb_di+3]=lb_sa/16;}} },
+    dots: function(d,W,H,p,t){ var dt_sz=FM.evalProp(p.size,t); if(dt_sz==null)dt_sz=16; dt_sz=Math.max(4,Math.min(80,dt_sz)); var dt_col=hexToRGB(p.color); var dt_cr=dt_sz*0.32, dt_r2=dt_cr*dt_cr, dt_a=0.85, dt_ia=1-dt_a, dt_w4=W*4; for(var dt_y=0;dt_y<H;dt_y++){ var dt_dcy=dt_y-(Math.floor(dt_y/dt_sz)*dt_sz+dt_sz/2); var dt_row=dt_y*dt_w4; for(var dt_x=0;dt_x<W;dt_x++){ var dt_i=dt_row+dt_x*4; if(d[dt_i+3]===0)continue; var dt_dcx=dt_x-(Math.floor(dt_x/dt_sz)*dt_sz+dt_sz/2); if(dt_dcx*dt_dcx+dt_dcy*dt_dcy<=dt_r2){ d[dt_i]=d[dt_i]*dt_ia+dt_col[0]*dt_a; d[dt_i+1]=d[dt_i+1]*dt_ia+dt_col[1]*dt_a; d[dt_i+2]=d[dt_i+2]*dt_ia+dt_col[2]*dt_a; } } } },
   };
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
@@ -804,6 +816,10 @@ window.FM = window.FM || {};
       a = Math.abs(a - slice / 2);   // fold within the wedge → mirrored kaleidoscope
       return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     },
+    // ---- batch 7 (warp) ----
+    polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; var plSx=cx+Math.cos(plAng)*plRad, plSy=cy+Math.sin(plAng)*plRad; return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
+    bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
+    glass: function(x,y,W,H,cx,cy,maxR,p,t){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
   };
 
   // RGB split / chromatic aberration: render the layer clean to an offscreen, then rebuild it
