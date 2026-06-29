@@ -27,6 +27,8 @@ window.FM = window.FM || {};
     edge: 'drawing', emboss: 'drawing', exposure: 'color', fisheye: 'distort',
     // batch 5
     kaleidoscope: 'distort', zoomblur: 'blur', glitch: 'stylize', crt: 'stylize',
+    // batch 6
+    boxblur: 'blur', spinblur: 'blur', gradientmap: 'color', colorize: 'color', checker: 'proc', grid: 'proc',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
