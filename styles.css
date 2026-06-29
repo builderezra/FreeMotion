@@ -360,9 +360,20 @@ input[type=range]::-webkit-slider-thumb {
   display: grid; grid-template-rows: 40px 1fr;
   position: relative;   /* anchors the fixed-centre #tl-centerline (phone) */
 }
+/* Play button dead-centre; the two side groups hug it symmetrically (everything revolves around play). */
 #transport {
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 10px; border-bottom: 1px solid var(--line-soft);
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid var(--line-soft);
+}
+.t-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.t-left { justify-content: flex-end; }
+.t-right { justify-content: flex-start; }
+.tbtn-play { min-width: 40px; }
+/* AM-style centred timecode pill, just under the transport row. */
+#tc-bar { display: flex; justify-content: center; padding: 3px 0 6px; }
+#tc-bar #time-readout {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  padding: 2px 12px; border-radius: 7px; font-size: 12.5px; font-variant-numeric: tabular-nums; margin: 0;
 }
 .tbtn {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
@@ -561,6 +572,8 @@ input[type=range]::-webkit-slider-thumb {
 .ctx-item:hover { background: var(--panel-3); }
 .ctx-item.danger { color: #ff6b6b; }
 .ctx-item.danger:hover { background: rgba(255,107,107,.12); }
+.ctx-item.disabled { opacity: .4; cursor: default; }
+.ctx-item.disabled:hover { background: none; }
 .ctx-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 
 #toast {
@@ -603,11 +616,9 @@ input[type=range]::-webkit-slider-thumb {
   .brand .ver { display: none; }
   .proj-name { min-width: 64px; }
 
-  /* transport: its own horizontal scroll strip so the controls never blow out the page */
-  #transport { overflow-x: auto; overflow-y: hidden; gap: 8px; padding: 0 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  #transport::-webkit-scrollbar { display: none; }
-  #transport > * { flex: 0 0 auto; }
-  #transport .spacer { display: none; }
+  /* transport: only 7 controls now (AM set) — they fit centred at phone width, no scroll strip needed */
+  #transport { gap: 6px; padding: 6px 8px; }
+  .t-side { gap: 6px; }
 
   /* empty-timeline hint wraps + sits clear of the head column instead of running off-screen */
   .tl-empty { padding: 14px 14px 14px calc(var(--head-w) + 6px); white-space: normal; line-height: 1.5; }

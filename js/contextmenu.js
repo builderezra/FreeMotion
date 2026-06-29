@@ -17,8 +17,8 @@ window.FM = window.FM || {};
       ensure(); menu.innerHTML = '';
       items.forEach(it => {
         if (it.sep) { const s = document.createElement('div'); s.className = 'ctx-sep'; menu.appendChild(s); return; }
-        const b = document.createElement('div'); b.className = 'ctx-item' + (it.danger ? ' danger' : ''); b.textContent = it.label;
-        b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
+        const b = document.createElement('div'); b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : ''); b.textContent = it.label;
+        if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
         menu.appendChild(b);
       });
       menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');

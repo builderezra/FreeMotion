@@ -128,8 +128,16 @@ window.FM = window.FM || {};
     });
   };
 
-  // Small status toast (e.g. "Preparing reverse…")
-  FM.toast = function (msg) { const t = document.getElementById('toast'); if (t) { t.textContent = msg; t.classList.remove('hidden'); } };
+  // Small status toast (e.g. "Preparing reverse…"). Pass `ms` for a one-shot toast that auto-hides;
+  // omit it for a sticky toast paired with FM.hideToast(). The seq guard stops an old timer from
+  // hiding a newer toast.
+  let toastSeq = 0;
+  FM.toast = function (msg, ms) {
+    const t = document.getElementById('toast'); if (!t) return;
+    t.textContent = msg; t.classList.remove('hidden');
+    const my = ++toastSeq;
+    if (ms) setTimeout(() => { if (my === toastSeq) FM.hideToast(); }, ms);
+  };
   FM.hideToast = function () { const t = document.getElementById('toast'); if (t) t.classList.add('hidden'); };
 
   // Decode a clip's frames once so reverse / frame-blend slow-mo plays + scrubs smoothly.
@@ -831,10 +839,22 @@ window.FM = window.FM || {};
     if (moreBtn) moreBtn.addEventListener('click', () => {
       const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
       const r = moreBtn.getBoundingClientRect();
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 190), r.bottom + 4, [
+      const rates = [0.25, 0.5, 1, 2, 4], cur = FM.previewRate || 1;
+      const nextRate = rates[(rates.indexOf(cur) + 1) % rates.length];
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Canvas size…', action: () => clickHidden('btn-canvas') },
         { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
         { label: 'Save frame (PNG)', action: () => clickHidden('btn-snapshot') },
+        { sep: true },
+        // Timeline controls that AM keeps off the play row — relocated here so they stay reachable.
+        { label: (FM.loop ? '✓ ' : '') + 'Loop playback', action: () => clickHidden('btn-loop') },
+        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin', action: () => clickHidden('btn-onion') },
+        { label: 'Snapping (magnet)', action: () => clickHidden('btn-snap') },
+        { label: 'Split clip at playhead', action: () => clickHidden('btn-split') },
+        { label: 'Trim project to last clip', action: () => clickHidden('btn-fit') },
+        { label: 'Preview speed: ' + cur + '× → ' + nextRate + '×', action: () => { FM.setPreviewRate(nextRate); const pr = document.getElementById('preview-rate'); if (pr) pr.value = String(nextRate); } },
+        { label: 'Zoom timeline in', action: () => clickHidden('btn-zoomin') },
+        { label: 'Zoom timeline out', action: () => clickHidden('btn-zoomout') },
         { sep: true },
         { label: 'Open project…', action: () => clickHidden('btn-open-proj') },
         { label: 'Save project', action: () => clickHidden('btn-save-proj') },
@@ -849,6 +869,25 @@ window.FM = window.FM || {};
     const undoBtn = document.getElementById('btn-undo'), redoBtn = document.getElementById('btn-redo');
     if (undoBtn) undoBtn.addEventListener('click', () => { if (FM.history) FM.history.undo(); });
     if (redoBtn) redoBtn.addEventListener('click', () => { if (FM.history) FM.history.redo(); });
+    // ⧉ Layer-actions menu (AM): Select All / Duplicate / Copy / Save Preset / Paste / Paste Style.
+    const layerMenuBtn = document.getElementById('btn-layermenu');
+    if (layerMenuBtn) layerMenuBtn.addEventListener('click', () => {
+      if (!FM.contextMenu) return;
+      const r = layerMenuBtn.getBoundingClientRect();
+      const hasSel = !!FM.scene.selectedId;
+      const hasClip = !!(FM.clipboard && FM.clipboard.length);
+      FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
+        { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
+        { label: 'Duplicate Layer', disabled: !hasSel, action: () => { if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId); } },
+        { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
+        { label: 'Save Preset', disabled: true, action: () => {} },          // placeholder — not built yet
+        { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); } },
+        { label: 'Paste Style', disabled: true, action: () => {} },          // placeholder — not built yet
+      ]);
+    });
+    // ⛶ Fit/expand — AM button whose exact function isn't confirmed yet, so it's a visual placeholder.
+    const amFitBtn = document.getElementById('btn-amfit');
+    if (amFitBtn) amFitBtn.addEventListener('click', () => { if (FM.toast) FM.toast('Fit — coming soon', 1400); });
 
     // transport
     document.getElementById('btn-play').addEventListener('click', () => FM.togglePlay());
