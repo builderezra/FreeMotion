@@ -53,6 +53,12 @@ window.FM = window.FM || {};
     { type: 'temperature', label: 'Temperature', param: 'amount', min: -100, max: 100, step: 1, def: 40 },
     { type: 'noise', label: 'Noise', param: 'amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     { type: 'scanlines', label: 'Scanlines', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+    // ---- batch 2 ----
+    { type: 'vibrance', label: 'Vibrance', param: 'amount', min: 0, max: 2, step: 0.02, def: 1.6 },
+    { type: 'sharpen', label: 'Sharpen', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.5 },
+    { type: 'thermal', label: 'Thermal', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
+    { type: 'dither', label: 'Dither', param: 'levels', min: 2, max: 8, step: 1, def: 4 },
+    { type: 'halftone', label: 'Halftone', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -461,7 +467,8 @@ window.FM = window.FM || {};
   // inward through the remaining post-fx), then applies its own transform — so they compose in
   // array order regardless of type.
   const POSTFX = { rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
-    solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1 };
+    solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
+    vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -541,6 +548,73 @@ window.FM = window.FM || {};
         if (y % 2 === 0) continue;                 // darken every other row
         const k = 1 - amt, row = y * W * 4;
         for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+      }
+    },
+    // ---- batch 2 ----
+    vibrance: function (d, W, H, p, t) {
+      const a = FM.evalProp(p.amount, t), k = (a == null ? 1.6 : a);
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2], avg = (r + g + b) / 3;
+        const f = 1 + (k - 1) * (1 - (Math.max(r, g, b) - Math.min(r, g, b)) / 255);   // unsaturated pixels boosted more
+        d[i] = avg + (r - avg) * f; d[i + 1] = avg + (g - avg) * f; d[i + 2] = avg + (b - avg) * f;
+      }
+    },
+    sharpen: function (d, W, H, p, t) {
+      const a = FM.evalProp(p.amount, t), amt = (a == null ? 1.5 : a);
+      if (amt <= 0) return;
+      const s = d.slice();
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const i = (y * W + x) * 4;
+          for (let c = 0; c < 3; c++) {
+            const j = i + c;
+            d[j] = s[j] * (1 + 4 * amt) - (s[j - W * 4] + s[j + W * 4] + s[j - 4] + s[j + 4]) * amt;
+          }
+        }
+      }
+    },
+    thermal: (function () {
+      const STOPS = [[0, 0, 0], [10, 0, 130], [120, 0, 170], [230, 50, 40], [255, 175, 0], [255, 255, 165]];
+      function pal(l) {
+        const seg = l * (STOPS.length - 1); let i0 = Math.floor(seg); if (i0 >= STOPS.length - 1) i0 = STOPS.length - 2; const f = seg - i0;
+        const a = STOPS[i0], b = STOPS[i0 + 1];
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+      }
+      return function (d, W, H, p, t) {
+        const a = FM.evalProp(p.amount, t), am = (a == null ? 1 : clamp01(a));
+        for (let i = 0; i < d.length; i += 4) {
+          const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255, c = pal(l);
+          d[i] += (c[0] - d[i]) * am; d[i + 1] += (c[1] - d[i + 1]) * am; d[i + 2] += (c[2] - d[i + 2]) * am;
+        }
+      };
+    })(),
+    dither: (function () {
+      const B = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+      return function (d, W, H, p, t) {
+        const lv = Math.max(2, Math.round(FM.evalProp(p.levels, t) || 4)), step = 255 / (lv - 1);
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const i = (y * W + x) * 4, thr = (B[y & 3][x & 3] / 16 - 0.5) * step;
+            d[i] = Math.round(Math.round((d[i] + thr) / step) * step);
+            d[i + 1] = Math.round(Math.round((d[i + 1] + thr) / step) * step);
+            d[i + 2] = Math.round(Math.round((d[i + 2] + thr) / step) * step);
+          }
+        }
+      };
+    })(),
+    halftone: function (d, W, H, p, t) {
+      const size = Math.max(2, Math.round(FM.evalProp(p.size, t) || 8)), r2 = size / 2, s = d.slice();
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          const ccx = Math.min(W - 1, Math.floor(x / size) * size + (size >> 1));
+          const ccy = Math.min(H - 1, Math.floor(y / size) * size + (size >> 1));
+          const ci = (ccy * W + ccx) * 4;
+          const l = (s[ci] * 0.299 + s[ci + 1] * 0.587 + s[ci + 2] * 0.114) / 255;
+          const dist = Math.hypot(x - (Math.floor(x / size) * size + r2), y - (Math.floor(y / size) * size + r2));
+          const v = dist < (1 - l) * r2 * 1.45 ? 0 : 255;
+          d[i] = v; d[i + 1] = v; d[i + 2] = v;
+        }
       }
     },
   };

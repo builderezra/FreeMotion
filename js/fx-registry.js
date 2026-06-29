@@ -18,6 +18,9 @@ window.FM = window.FM || {};
     // batch 1
     gamma: 'color', temperature: 'color',
     solarize: 'stylize', noise: 'stylize', scanlines: 'stylize',
+    // batch 2
+    vibrance: 'color', thermal: 'color',
+    sharpen: 'stylize', dither: 'stylize', halftone: 'stylize',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
