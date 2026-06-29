@@ -17,10 +17,10 @@ window.FM = window.FM || {};
     chromakey: 'matte', lumakey: 'matte',
     // batch 1
     gamma: 'color', temperature: 'color',
-    solarize: 'stylize', noise: 'stylize', scanlines: 'stylize',
+    solarize: 'stylize', noise: 'proc', scanlines: 'stylize',
     // batch 2
     vibrance: 'color', thermal: 'color',
-    sharpen: 'stylize', dither: 'stylize', halftone: 'stylize',
+    sharpen: 'blur', dither: 'stylize', halftone: 'drawing',
     // batch 3 — geometric warps
     wave: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
     // batch 4

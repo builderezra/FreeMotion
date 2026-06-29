@@ -28,11 +28,11 @@ window.FM = window.FM || {};
   // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
   FM.EFFECTS = [
-    { type: 'blur', label: 'Blur', param: 'radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+    { type: 'blur', label: 'Gaussian Blur', param: 'radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'saturate', label: 'Saturation', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.6 },
-    { type: 'hue', label: 'Hue shift', param: 'deg', min: 0, max: 360, step: 1, def: 90, unit: '°' },
+    { type: 'hue', label: 'Hue Shift', param: 'deg', min: 0, max: 360, step: 1, def: 90, unit: '°' },
     { type: 'grayscale', label: 'Grayscale', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'sepia', label: 'Sepia', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'invert', label: 'Invert', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -50,22 +50,22 @@ window.FM = window.FM || {};
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'gamma', label: 'Gamma', param: 'gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
-    { type: 'temperature', label: 'Temperature', param: 'amount', min: -100, max: 100, step: 1, def: 40 },
+    { type: 'temperature', label: 'Color Temperature', param: 'amount', min: -100, max: 100, step: 1, def: 40 },
     { type: 'noise', label: 'Noise', param: 'amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     { type: 'scanlines', label: 'Scanlines', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', param: 'amount', min: 0, max: 2, step: 0.02, def: 1.6 },
     { type: 'sharpen', label: 'Sharpen', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.5 },
-    { type: 'thermal', label: 'Thermal', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
+    { type: 'thermal', label: 'Hot Color', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'dither', label: 'Dither', param: 'levels', min: 2, max: 8, step: 1, def: 4 },
-    { type: 'halftone', label: 'Halftone', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
+    { type: 'halftone', label: 'Halftone Dots', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', param: 'amount', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
-    { type: 'ripple', label: 'Ripple', param: 'amount', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
+    { type: 'ripple', label: 'Circular Ripple', param: 'amount', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
     { type: 'twirl', label: 'Twirl', param: 'amount', min: -360, max: 360, step: 1, def: 140, unit: '°' },
-    { type: 'bulge', label: 'Bulge / Pinch', param: 'amount', min: -1, max: 2, step: 0.02, def: -0.5 },
+    { type: 'bulge', label: 'Pinch / Bulge', param: 'amount', min: -1, max: 2, step: 0.02, def: -0.5 },
     // ---- batch 4 ----
-    { type: 'edge', label: 'Edge Detect', param: 'amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
+    { type: 'edge', label: 'Find Edges', param: 'amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
     { type: 'emboss', label: 'Emboss', param: 'amount', min: 0, max: 3, step: 0.05, def: 1 },
     { type: 'exposure', label: 'Exposure', param: 'stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
     { type: 'fisheye', label: 'Fisheye', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
