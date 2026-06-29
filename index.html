@@ -17,20 +17,20 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Scrub the timeline by dragging anywhere; decluttered PC top bar (extras in the ⋯ menu)">v1.69</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v1.70</span></div>
       <div class="top-actions">
         <button id="btn-undo" class="icon-btn" title="Undo (Cmd+Z)">↶</button>
         <button id="btn-redo" class="icon-btn" title="Redo (Cmd+Shift+Z)">↷</button>
-        <span class="tb-divider"></span>
-        <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
-        <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
-        <!-- Text / Add / Sample / Captions removed: they duplicated the inspector's Add menu (shown when nothing is selected). -->
+        <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
+             is selected), so they're off the bar here — kept hidden below so app.js keeps their handlers. -->
         <span class="spacer"></span>
         <input id="proj-name" class="proj-name" type="text" value="Untitled" title="Project name" spellcheck="false">
         <span class="spacer"></span>
         <!-- These live here (so app.js keeps their handlers wired) but are hidden from the bar — AM keeps
              the top minimal. They're reached from the ⋯ More menu (btn-more). -->
         <div id="topbar-extra" style="display:none">
+          <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
+          <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
           <button id="btn-canvas" class="icon-btn" title="Canvas size / aspect ratio"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg></button>
           <button id="btn-guides" class="icon-btn" title="Safe margins & rule-of-thirds overlay"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></button>
           <button id="btn-snapshot" class="icon-btn" title="Save current frame as PNG"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg></button>
@@ -254,7 +254,9 @@
         el.title = 'Tap to force-update to the very latest build';
         el.addEventListener('click', function () {
           el.textContent = '…';
-          var done = function () { window.location.reload(); };
+          // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
+          // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
+          var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
           (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
             .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
             .then(done, done);
