@@ -174,125 +174,131 @@ window.FM = window.FM || {};
     remove(name) { this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
   };
 
-  function effectsSection(layer) {
-    const s = section('Effects');
-    const addRow = el('div', 'prop-row');
-    addRow.appendChild(el('label', null, 'Add'));
-    const sel = document.createElement('select');
-    const ph = document.createElement('option'); ph.value = ''; ph.textContent = '+ Add effect…'; sel.appendChild(ph);
-    // geometric post-fx need a per-layer geometry pass — an adjustment layer can't apply them to the
-    // scene below, so don't offer them there (avoids a confusing no-op).
-    const adjUnsupported = { mirror: 1 };   // adjustment supports all post-fx now except whole-scene mirror
-    FM.EFFECTS.forEach(def => {
-      if (layer.type === 'adjustment' && adjUnsupported[def.type]) return;
-      const o = document.createElement('option'); o.value = def.type; o.textContent = def.label; sel.appendChild(o);
-    });
-    sel.addEventListener('change', () => {
-      const def = FM.EFFECTS.find(e => e.type === sel.value); if (!def) return;
-      if (!layer.effects) layer.effects = [];
-      const params = {}; params[def.param] = def.def; if (def.color) params.color = def.defColor || '#ffffff'; if (def.color2) params.color2 = def.defColor2 || '#ffffff';
-      layer.effects.push({ type: def.type, enabled: true, params: params });
-      FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
-    });
-    addRow.appendChild(sel);
-    // copy / paste the whole effect stack between layers
-    const cp = el('button', 'fx-act', 'Copy'); cp.title = "Copy this layer's effect stack";
-    cp.disabled = !(layer.effects && layer.effects.length);
-    cp.addEventListener('click', () => { FM.effectClipboard = JSON.parse(JSON.stringify(layer.effects || [])); if (FM.toast) FM.toast('Copied ' + FM.effectClipboard.length + ' effect(s)'); FM.inspector.refresh(); });
-    const pa = el('button', 'fx-act', 'Paste'); pa.title = 'Append copied effects to this layer';
-    pa.disabled = !(FM.effectClipboard && FM.effectClipboard.length);
-    pa.addEventListener('click', () => { if (!FM.effectClipboard || !FM.effectClipboard.length) return; if (!layer.effects) layer.effects = []; FM.effectClipboard.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); });
-    addRow.appendChild(cp); addRow.appendChild(pa);
-    s.appendChild(addRow);
+  // The mutation trio every effect change must run (canvas + timeline keyframes + undo).
+  function afterFx() { FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); }
 
-    // saved presets: click a chip to apply, × to delete, or Save the current stack
-    const presetRow = el('div', 'prop-row');
-    presetRow.appendChild(el('label', null, 'Presets'));
-    const pwrap = el('div', 'preset-wrap');
-    const presets = FM.fxPresets.list();
-    if (!presets.length) pwrap.appendChild(el('span', 'preset-empty', 'none saved'));
-    presets.forEach(p => {
-      const fx = Array.isArray(p.effects) ? p.effects : [];   // tolerate a corrupt/legacy localStorage preset with no effects array
-      const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : ''));
-      const nm = el('button', 'preset-name', p.name); nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') + ')';
-      nm.addEventListener('click', () => { if (!layer.effects) layer.effects = []; fx.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); });
-      chip.appendChild(nm);
-      if (!p.builtin) {   // built-in starters aren't removable
-        const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset';
-        del.addEventListener('click', () => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); });
-        chip.appendChild(del);
-      }
-      pwrap.appendChild(chip);
-    });
-    const sv = el('button', 'fx-act', 'Save…'); sv.title = 'Save this effect stack as a reusable preset';
-    sv.disabled = !(layer.effects && layer.effects.length);
-    sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
-    pwrap.appendChild(sv);
-    presetRow.appendChild(pwrap);
-    s.appendChild(presetRow);
+  // AM signature control: a horizontal tick strip you drag to scrub a value, + an editable value box.
+  function fxScrubber(fx, p) {
+    const row = el('div', 'fx-scrub-row');
+    const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : 2);
+    const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : p.default); };
+    // keyframe gutter (only for keyframable params)
+    if (p.keyframable) {
+      const c = fx.params[p.key];
+      const kfb = el('button', 'fx-kf' + (FM.isAnimated(c) ? ' active' : '') + (FM.hasKeyframeAt(c, FM.time) ? ' here' : ''), '◆');
+      kfb.title = FM.isAnimated(c) ? 'Keyframe at playhead (click to remove)' : 'Animate this parameter';
+      kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, p.default); afterFx(); });
+      row.appendChild(kfb);
+    } else { row.appendChild(el('span', 'fx-kf-spacer')); }
+    row.appendChild(el('span', 'fx-scrub-label', p.label));
+    const strip = el('div', 'fx-scrub'); strip.appendChild(el('div', 'fx-scrub-notch'));
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || '');
+    function apply(v, commit) {
+      v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
+      FM.setProp(fx.params, p.key, v, FM.time);
+      valBox.value = v.toFixed(prec) + (p.unit || '');
+      FM.requestRender();
+      if (commit && FM.history) FM.history.commit();
+    }
+    let drag = null;
+    strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: read() }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
+    strip.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x; apply(drag.v + dx * ((p.max - p.min) / 300), false); strip.style.backgroundPositionX = (-dx) + 'px'; });
+    const end = () => { if (drag) { drag = null; strip.style.backgroundPositionX = '0px'; if (FM.history) FM.history.commit(); } };
+    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end);
+    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + (p.unit || ''); });
+    valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
+    row.appendChild(strip); row.appendChild(valBox);
+    return row;
+  }
 
-    (layer.effects || []).forEach((fx, idx) => {
-      const def = FM.EFFECTS.find(e => e.type === fx.type) || { label: fx.type, param: 'amount', min: 0, max: 2, step: 0.05, def: 1 };
-      const row = el('div', 'fx-row' + (fx.enabled === false ? ' fx-off' : ''));
-      const head = el('div', 'fx-head');
-      const en = el('button', 'fx-toggle' + (fx.enabled === false ? '' : ' on'), '●');
-      en.title = fx.enabled === false ? 'Effect off — click to enable' : 'Effect on — click to disable';
-      en.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); });
-      head.appendChild(en);
-      head.appendChild(el('span', 'fx-name', def.label));
-      if (!def.options) {   // discrete-mode effects aren't keyframeable
-        const kfP = fx.params[def.param];
-        const kfb = el('button', 'kf-btn' + (FM.isAnimated(kfP) ? ' active' : '') + (FM.hasKeyframeAt(kfP, FM.time) ? ' here' : ''), '◆');
-        kfb.title = FM.isAnimated(kfP) ? 'Keyframe at playhead (click to remove)' : 'Animate this effect — adds a keyframe at the playhead';
-        kfb.addEventListener('click', () => { FM.toggleProp(fx.params, def.param, FM.time, def.def); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); commitH(); });
-        head.appendChild(kfb);
-      }
-      if ((layer.effects || []).length > 1) {   // reorder — effect order changes the composite
+  // AM segmented control (e.g. Mirror direction) — no slider, no keyframe.
+  function fxSegment(fx, p) {
+    const row = el('div', 'fx-seg-row');
+    row.appendChild(el('span', 'fx-scrub-label', p.label));
+    const seg = el('div', 'fx-seg');
+    p.options.forEach(opt => {
+      const b = el('button', 'fx-seg-btn' + ((fx.params[p.key] || 0) == opt[0] ? ' on' : ''), opt[1]);
+      b.addEventListener('click', () => { fx.params[p.key] = parseFloat(opt[0]); FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); });
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+    return row;
+  }
+
+  function fxMoreMenu(layer, fx, idx, btn) {
+    if (!FM.contextMenu) return;
+    const r = btn.getBoundingClientRect();
+    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, [
+      { label: 'Reset', action: () => { const inst = FM.fxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterFx(); } } },
+      { label: 'Duplicate', action: () => { const inst = FM.fxRegistry.makeInstance(fx.type); if (inst) { layer.effects.splice(idx + 1, 0, inst); afterFx(); } } },
+      { sep: true },
+      { label: 'Delete', danger: true, action: () => { layer.effects.splice(idx, 1); afterFx(); } },
+    ]);
+  }
+
+  // One effect row (AM): collapsed = ▸ name … eye + reorder; expanded = ▾ name … ⋯ + delete, then its editor.
+  function fxRow(layer, fx, idx) {
+    const reg = FM.fxRegistry.get(fx.type) || { label: fx.type, params: [] };
+    const expanded = !!fx._expanded, off = fx.enabled === false;
+    const row = el('div', 'fx-row' + (off ? ' fx-off' : '') + (expanded ? ' fx-open' : ''));
+    const head = el('div', 'fx-head');
+    const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
+    const name = el('span', 'fx-name', reg.label);
+    const toggle = () => { fx._expanded = !expanded; FM.inspector.refresh(); };
+    disc.addEventListener('click', toggle); name.addEventListener('click', toggle);
+    head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
+    if (expanded) {
+      const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
+      more.addEventListener('click', (ev) => fxMoreMenu(layer, fx, idx, ev.currentTarget));
+      const del = el('button', 'fx-icon-btn fx-del'); del.title = 'Delete effect'; del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
+      del.addEventListener('click', () => { layer.effects.splice(idx, 1); afterFx(); });
+      head.appendChild(more); head.appendChild(del);
+    } else {
+      const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : '')); eye.title = off ? 'Effect off — enable' : 'Effect on — disable';
+      eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterFx(); });
+      head.appendChild(eye);
+      if ((layer.effects || []).length > 1) {
         const e = layer.effects;
-        const up = el('button', 'fx-mv' + (idx === 0 ? ' dis' : ''), '▲'); up.title = 'Move effect up';
-        up.addEventListener('click', () => { if (idx > 0) { const x = e[idx - 1]; e[idx - 1] = e[idx]; e[idx] = x; FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit(); } });
-        const dn = el('button', 'fx-mv' + (idx === e.length - 1 ? ' dis' : ''), '▼'); dn.title = 'Move effect down';
-        dn.addEventListener('click', () => { if (idx < e.length - 1) { const x = e[idx + 1]; e[idx + 1] = e[idx]; e[idx] = x; FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit(); } });
+        const up = el('button', 'fx-icon-btn fx-mv' + (idx === 0 ? ' dis' : ''), '▴'); up.title = 'Move up';
+        up.addEventListener('click', () => { if (idx > 0) { const x = e[idx - 1]; e[idx - 1] = e[idx]; e[idx] = x; afterFx(); } });
+        const dn = el('button', 'fx-icon-btn fx-mv' + (idx === e.length - 1 ? ' dis' : ''), '▾'); dn.title = 'Move down';
+        dn.addEventListener('click', () => { if (idx < e.length - 1) { const x = e[idx + 1]; e[idx + 1] = e[idx]; e[idx] = x; afterFx(); } });
         head.appendChild(up); head.appendChild(dn);
       }
-      const rm = el('button', 'fx-rm', '×'); rm.title = 'Remove effect';
-      rm.addEventListener('click', () => { layer.effects.splice(idx, 1); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); });
-      head.appendChild(rm);
-      row.appendChild(head);
+    }
+    row.appendChild(head);
+    if (expanded) {
+      const body = el('div', 'fx-ed-body');
+      reg.params.forEach(p => {
+        if (p.type === 'range') body.appendChild(fxScrubber(fx, p));
+        else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
+        else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
+      });
+      if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+      row.appendChild(body);
+    }
+    return row;
+  }
 
-      if (def.options) {   // discrete-mode effect (e.g. Mirror direction) → dropdown
-        const mr2 = el('div', 'prop-row');
-        const msel = document.createElement('select');
-        def.options.forEach(opt => { const o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1]; if ((fx.params[def.param] || 0) == opt[0]) o.selected = true; msel.appendChild(o); });
-        msel.addEventListener('change', () => { fx.params[def.param] = parseFloat(msel.value); FM.requestRender(); if (FM.history) FM.history.commit(); });
-        mr2.appendChild(msel); row.appendChild(mr2);
-      } else {
-        const sr = el('div', 'fx-slider');
-        const range = document.createElement('input'); range.type = 'range';
-        range.min = def.min; range.max = def.max; range.step = def.step;
-        const cur = fx.params[def.param];
-        range.value = FM.isAnimated(cur) ? FM.evalProp(cur, FM.time) : ((typeof cur === 'number') ? cur : def.def);
-        const val = el('span', 'fx-val', (Math.round(range.value * 100) / 100) + (def.unit || ''));
-        range.addEventListener('input', () => { FM.setProp(fx.params, def.param, parseFloat(range.value), FM.time); val.textContent = (Math.round(range.value * 100) / 100) + (def.unit || ''); FM.requestRender(); });
-        range.addEventListener('change', () => { if (FM.history) FM.history.commit(); });
-        sr.appendChild(range); sr.appendChild(val);
-        row.appendChild(sr);
-      }
-
-      if (def.color) {
-        const cr = el('div', 'prop-row');
-        cr.appendChild(el('label', null, def.colorLabel || 'Color'));
-        cr.appendChild(colorField(() => fx.params.color || '#ffffff', v => { fx.params.color = v; }));
-        row.appendChild(cr);
-      }
-      if (def.color2) {
-        const cr2 = el('div', 'prop-row');
-        cr2.appendChild(el('label', null, def.color2Label || 'Color 2'));
-        cr2.appendChild(colorField(() => fx.params.color2 || '#ffffff', v => { fx.params.color2 = v; }));
-        row.appendChild(cr2);
-      }
-      s.appendChild(row);
-    });
+  function effectsSection(layer) {
+    const s = section('Effects');
+    const list = el('div', 'fx-list');
+    (layer.effects || []).forEach((fx, idx) => list.appendChild(fxRow(layer, fx, idx)));
+    s.appendChild(list);
+    const add = el('button', 'fx-add-btn', '+ Add Effect');
+    add.addEventListener('click', () => { if (FM.fxBrowser) FM.fxBrowser.open(layer); });
+    s.appendChild(add);
+    // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)
+    const tools = el('div', 'fx-stack-tools');
+    const cp = el('button', 'fx-act', 'Copy'); cp.disabled = !(layer.effects && layer.effects.length);
+    cp.addEventListener('click', () => { FM.effectClipboard = JSON.parse(JSON.stringify(layer.effects || [])); if (FM.toast) FM.toast('Copied ' + FM.effectClipboard.length + ' effect(s)'); FM.inspector.refresh(); });
+    const pa = el('button', 'fx-act', 'Paste'); pa.disabled = !(FM.effectClipboard && FM.effectClipboard.length);
+    pa.addEventListener('click', () => { if (!FM.effectClipboard || !FM.effectClipboard.length) return; if (!layer.effects) layer.effects = []; FM.effectClipboard.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); afterFx(); });
+    const sv = el('button', 'fx-act', 'Save preset…'); sv.disabled = !(layer.effects && layer.effects.length);
+    sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
+    tools.appendChild(cp); tools.appendChild(pa); tools.appendChild(sv);
+    s.appendChild(tools);
     return s;
   }
 
@@ -491,7 +497,8 @@ window.FM = window.FM || {};
         const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : ''));
         const nm = el('button', 'preset-name', p.name);
         nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') + ')';
-        nm.addEventListener('click', () => { if (!layer.effects) layer.effects = []; fx.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Applied “' + p.name + '”'); });
+        // A preset is a saved LOOK → REPLACE the stack (not append), so re-tapping never stacks duplicates.
+        nm.addEventListener('click', () => { layer.effects = fx.map(e => JSON.parse(JSON.stringify(e))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Applied “' + p.name + '”'); });
         chip.appendChild(nm);
         if (!p.builtin) { const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset'; del.addEventListener('click', () => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); }); chip.appendChild(del); }
         pwrap.appendChild(chip);
