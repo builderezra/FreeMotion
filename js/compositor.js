@@ -64,6 +64,11 @@ window.FM = window.FM || {};
     { type: 'ripple', label: 'Ripple', param: 'amount', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
     { type: 'twirl', label: 'Twirl', param: 'amount', min: -360, max: 360, step: 1, def: 140, unit: '°' },
     { type: 'bulge', label: 'Bulge / Pinch', param: 'amount', min: -1, max: 2, step: 0.02, def: -0.5 },
+    // ---- batch 4 ----
+    { type: 'edge', label: 'Edge Detect', param: 'amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
+    { type: 'emboss', label: 'Emboss', param: 'amount', min: 0, max: 3, step: 0.05, def: 1 },
+    { type: 'exposure', label: 'Exposure', param: 'stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
+    { type: 'fisheye', label: 'Fisheye', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -474,7 +479,8 @@ window.FM = window.FM || {};
   const POSTFX = { rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
     solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
     vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1,
-    wave: 1, ripple: 1, twirl: 1, bulge: 1 };
+    wave: 1, ripple: 1, twirl: 1, bulge: 1,
+    edge: 1, emboss: 1, exposure: 1, fisheye: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -625,6 +631,39 @@ window.FM = window.FM || {};
         }
       }
     },
+    // ---- batch 4 ----
+    edge: function (d, W, H, p, t) {
+      const k = FM.evalProp(p.amount, t) || 1, s = d.slice(), w4 = W * 4;
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const i = (y * W + x) * 4;
+          const tl = s[i - w4 - 4] * 0.299 + s[i - w4 - 3] * 0.587 + s[i - w4 - 2] * 0.114;
+          const tc = s[i - w4] * 0.299 + s[i - w4 + 1] * 0.587 + s[i - w4 + 2] * 0.114;
+          const tr = s[i - w4 + 4] * 0.299 + s[i - w4 + 5] * 0.587 + s[i - w4 + 6] * 0.114;
+          const ml = s[i - 4] * 0.299 + s[i - 3] * 0.587 + s[i - 2] * 0.114;
+          const mr = s[i + 4] * 0.299 + s[i + 5] * 0.587 + s[i + 6] * 0.114;
+          const bl = s[i + w4 - 4] * 0.299 + s[i + w4 - 3] * 0.587 + s[i + w4 - 2] * 0.114;
+          const bc = s[i + w4] * 0.299 + s[i + w4 + 1] * 0.587 + s[i + w4 + 2] * 0.114;
+          const br = s[i + w4 + 4] * 0.299 + s[i + w4 + 5] * 0.587 + s[i + w4 + 6] * 0.114;
+          const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
+          const mag = Math.min(255, Math.hypot(gx, gy) * k);
+          d[i] = mag; d[i + 1] = mag; d[i + 2] = mag;
+        }
+      }
+    },
+    emboss: function (d, W, H, p, t) {
+      const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = d.slice(), w4 = W * 4;
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const i = (y * W + x) * 4;
+          for (let c = 0; c < 3; c++) { const j = i + c; d[j] = 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; }
+        }
+      }
+    },
+    exposure: function (d, W, H, p, t) {
+      const m = Math.pow(2, FM.evalProp(p.stops, t) || 0);
+      for (let i = 0; i < d.length; i += 4) { d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
+    },
   };
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
@@ -685,6 +724,12 @@ window.FM = window.FM || {};
       const k = FM.evalProp(p.amount, t) || 0, nx = (x - cx) / maxR, ny = (y - cy) / maxR, r = Math.hypot(nx, ny);
       const scale = r < 1e-4 ? 1 : Math.pow(r, 1 + k) / r;   // k>0 pinch, k<0 bulge
       return [cx + nx * scale * maxR, cy + ny * scale * maxR];
+    },
+    fisheye: function (x, y, W, H, cx, cy, maxR, p, t) {
+      const k = FM.evalProp(p.amount, t) || 0, dx = (x - cx) / maxR, dy = (y - cy) / maxR, r = Math.hypot(dx, dy);
+      if (r >= 1 || r < 1e-5) return [x, y];
+      const f = (r * (1 - k * (1 - r * r))) / r;   // barrel (k>0) / pincushion (k<0)
+      return [cx + dx * f * maxR, cy + dy * f * maxR];
     },
   };
 

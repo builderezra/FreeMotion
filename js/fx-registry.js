@@ -23,6 +23,8 @@ window.FM = window.FM || {};
     sharpen: 'stylize', dither: 'stylize', halftone: 'stylize',
     // batch 3 — geometric warps
     wave: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
+    // batch 4
+    edge: 'drawing', emboss: 'drawing', exposure: 'color', fisheye: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
