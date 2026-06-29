@@ -35,6 +35,8 @@ window.FM = window.FM || {};
     lightglow: 'color', longshadow: 'color', halftonelines: 'drawing', clouds: 'proc', rays: 'proc', stripes: 'stylize',
     // batch 9
     darkglow: 'color', stroke: 'drawing', smoothedges: 'drawing', blocknoise: 'proc', starfield: 'proc', curl: 'distort',
+    // batch 10
+    bumpmap: 'color', edgeglow: 'drawing', contourlines: 'drawing', grunge: 'proc', iridescence: 'color', fractalwarp: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
