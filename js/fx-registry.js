@@ -31,6 +31,8 @@ window.FM = window.FM || {};
     boxblur: 'blur', spinblur: 'blur', gradientmap: 'color', colorize: 'color', checker: 'proc', grid: 'proc',
     // batch 7
     mosaic: 'blur', lensblur: 'blur', polarcoords: 'distort', bend: 'distort', glass: 'distort', dots: 'proc',
+    // batch 8
+    lightglow: 'color', longshadow: 'color', halftonelines: 'drawing', clouds: 'proc', rays: 'proc', stripes: 'stylize',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
