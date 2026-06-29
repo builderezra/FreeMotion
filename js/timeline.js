@@ -651,15 +651,17 @@ window.FM = window.FM || {};
             L.duration = trimDrag.dur - delta;
             if (L.type === 'video') L.trimStart = trimDrag.trim + delta * sp;
           }
-          // Grow the comp (and the scroller) LIVE when the right edge is dragged past the end, so the
-          // timeline expands to follow the longer clip instead of clipping it off.
-          if (trimDrag.edge === 'right') {
-            const end = L.start + L.duration;
-            if (end > FM.scene.project.duration) { FM.scene.project.duration = end; applyInnerWidth(); }
-          }
           const pps2 = pxPerSec();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
           if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
+          // Keep the extending edge VISIBLE without rescaling: widen the scroller to fit the clip's new
+          // end at the CURRENT pps. Do NOT change project.duration mid-drag — that recomputes pps (fit-to-
+          // view) and makes the whole timeline rubber-band under your finger (the v1.77 jank). The comp
+          // grows for real on pointerup.
+          if (trimDrag.edge === 'right' && innerEl) {
+            const needW = window.innerWidth + Math.max(FM.scene.project.duration, L.start + L.duration) * pps2;
+            if ((parseFloat(innerEl.style.width) || 0) < needW - 0.5) innerEl.style.width = needW + 'px';
+          }
           FM.requestRender();
           return;
         }
