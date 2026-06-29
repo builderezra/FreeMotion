@@ -25,6 +25,8 @@ window.FM = window.FM || {};
     wave: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
     // batch 4
     edge: 'drawing', emboss: 'drawing', exposure: 'color', fisheye: 'distort',
+    // batch 5
+    kaleidoscope: 'distort', zoomblur: 'blur', glitch: 'stylize', crt: 'stylize',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).

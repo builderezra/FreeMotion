@@ -69,6 +69,11 @@ window.FM = window.FM || {};
     { type: 'emboss', label: 'Emboss', param: 'amount', min: 0, max: 3, step: 0.05, def: 1 },
     { type: 'exposure', label: 'Exposure', param: 'stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
     { type: 'fisheye', label: 'Fisheye', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    // ---- batch 5 ----
+    { type: 'kaleidoscope', label: 'Kaleidoscope', param: 'segments', min: 2, max: 12, step: 1, def: 6 },
+    { type: 'glitch', label: 'Glitch', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'zoomblur', label: 'Zoom Blur', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'crt', label: 'CRT', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.7 },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -480,7 +485,8 @@ window.FM = window.FM || {};
     solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
     vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1,
     wave: 1, ripple: 1, twirl: 1, bulge: 1,
-    edge: 1, emboss: 1, exposure: 1, fisheye: 1 };
+    edge: 1, emboss: 1, exposure: 1, fisheye: 1,
+    kaleidoscope: 1, glitch: 1, zoomblur: 1, crt: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -664,6 +670,51 @@ window.FM = window.FM || {};
       const m = Math.pow(2, FM.evalProp(p.stops, t) || 0);
       for (let i = 0; i < d.length; i += 4) { d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
     },
+    // ---- batch 5 ----
+    glitch: function (d, W, H, p, t) {
+      const amt = clamp01(FM.evalProp(p.amount, t)); if (amt <= 0) return;
+      const s = d.slice(), bands = 14, bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * 10);
+      for (let b = 0; b < bands; b++) {
+        let h = (b * 2654435761 + frame * 40503) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h ^ (h >> 16);
+        const shift = Math.round(((h & 255) / 255 - 0.5) * amt * W * 0.28);
+        if (!shift) continue;
+        const y0 = b * bandH, y1 = Math.min(H, y0 + bandH);
+        for (let y = y0; y < y1; y++) {
+          const row = y * W * 4;
+          for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx += W; else if (sx >= W) sx -= W; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        }
+      }
+      const cs = Math.round(amt * 9);
+      if (cs > 0) { const s2 = d.slice(); for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] = s2[row + Math.min(W - 1, x + cs) * 4]; d[i + 2] = s2[row + Math.max(0, x - cs) * 4 + 2]; } } }
+    },
+    zoomblur: function (d, W, H, p, t) {
+      const amt = FM.evalProp(p.amount, t) || 0; if (amt <= 0) return;
+      const s = d.slice(), cx = W / 2, cy = H / 2, N = 9;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, dx = x - cx, dy = y - cy; let r = 0, g = 0, b = 0, a = 0, n = 0;
+          for (let k = 0; k < N; k++) {
+            const f = 1 - (k / N) * amt * 0.35, sx = (cx + dx * f) | 0, sy = (cy + dy * f) | 0;
+            if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+            const si = (sy * W + sx) * 4; r += s[si]; g += s[si + 1]; b += s[si + 2]; a += s[si + 3]; n++;
+          }
+          if (n) { d[i] = r / n; d[i + 1] = g / n; d[i + 2] = b / n; d[i + 3] = a / n; }
+        }
+      }
+    },
+    crt: function (d, W, H, p, t) {
+      const amt = clamp01(FM.evalProp(p.amount, t)), cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+      for (let y = 0; y < H; y++) {
+        const scan = (y & 1) ? (1 - amt * 0.45) : 1, row = y * W;
+        for (let x = 0; x < W; x++) {
+          const i = (row + x) * 4, ph = x % 3;
+          let kr = scan, kg = scan, kb = scan;
+          if (ph === 0) { kg *= 1 - amt * 0.18; kb *= 1 - amt * 0.18; } else if (ph === 1) { kr *= 1 - amt * 0.18; kb *= 1 - amt * 0.18; } else { kr *= 1 - amt * 0.18; kg *= 1 - amt * 0.18; }
+          const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * 0.55 * Math.max(0, r - 0.4);
+          d[i] *= kr * vg; d[i + 1] *= kg * vg; d[i + 2] *= kb * vg;
+        }
+      }
+    },
   };
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
@@ -730,6 +781,13 @@ window.FM = window.FM || {};
       if (r >= 1 || r < 1e-5) return [x, y];
       const f = (r * (1 - k * (1 - r * r))) / r;   // barrel (k>0) / pincushion (k<0)
       return [cx + dx * f * maxR, cy + dy * f * maxR];
+    },
+    kaleidoscope: function (x, y, W, H, cx, cy, maxR, p, t) {
+      const seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6)), dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
+      const slice = Math.PI * 2 / seg;
+      let a = Math.atan2(dy, dx) % slice; if (a < 0) a += slice;
+      a = Math.abs(a - slice / 2);   // fold within the wedge → mirrored kaleidoscope
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     },
   };
 
