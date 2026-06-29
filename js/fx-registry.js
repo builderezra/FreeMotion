@@ -37,6 +37,8 @@ window.FM = window.FM || {};
     darkglow: 'color', stroke: 'drawing', smoothedges: 'drawing', blocknoise: 'proc', starfield: 'proc', curl: 'distort',
     // batch 10
     bumpmap: 'color', edgeglow: 'drawing', contourlines: 'drawing', grunge: 'proc', iridescence: 'color', fractalwarp: 'distort',
+    // batch 11 (multi-param)
+    motionblur: 'blur', colorbalance: 'color', highlightsshadows: 'color', tiltshift: 'blur',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -64,7 +66,12 @@ window.FM = window.FM || {};
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {
     const out = [];
-    if (def.options) {
+    if (Array.isArray(def.params)) {
+      // multi-param effects: a `params` array on the def, each a range control
+      def.params.forEach(function (pp) {
+        out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true });
+      });
+    } else if (def.options) {
       out.push({ key: def.param, label: def.label, type: 'segment', options: def.options, default: def.def, keyframable: false });
     } else if (def.param) {
       out.push({ key: def.param, label: def.label, type: 'range', min: def.min, max: def.max, step: def.step, default: def.def, unit: def.unit || '', keyframable: true });
