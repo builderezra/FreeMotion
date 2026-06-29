@@ -19,6 +19,8 @@ window.FM = window.FM || {};
   // was caused by us (time→scroll) and must be ignored; anything else is a real user scroll that should
   // DRIVE the playhead (so the view + FM.time can never decouple → no "click sends me to the start").
   let lastProgScroll = -1;
+  const TRIM_EDGE = 46;     // px from a viewport edge that triggers auto-scroll while trimming
+  let trimScrollRAF = 0;
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
@@ -382,7 +384,7 @@ window.FM = window.FM || {};
       grip.addEventListener('pointerdown', (e) => {
         e.stopPropagation(); e.preventDefault();
         const m = FM.media.get(layer.id);
-        trimDrag = { layer: layer, edge: edge, startX: e.clientX, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type };
+        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
       });
@@ -488,6 +490,61 @@ window.FM = window.FM || {};
     dragging = true;
     innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
     if (FM.playing) FM.pause();
+  }
+
+  // Apply a trim to trimDrag.layer for a pointer at clientX. SCROLL-AWARE: the delta counts both finger
+  // movement AND how far the timeline has auto-scrolled since the grab, so when the view scrolls out from
+  // under the finger the edge keeps tracking it (the screen-edge position stays put while the clip grows).
+  function applyTrimAt(clientX) {
+    if (!trimDrag) return;
+    const fps = FM.scene.project.fps || 30, pps = pxPerSec();
+    let dt = Math.round((((clientX - trimDrag.startX) + (timelineEl.scrollLeft - trimDrag.startScroll)) / pps) * fps) / fps;
+    const L = trimDrag.layer, sp = L.speed || 1;
+    const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
+    const se = snapEdge(L, movingEdge, pps);
+    if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); } else hideSnap();
+    if (trimDrag.edge === 'right') {
+      let nd = Math.max(0.1, trimDrag.dur + dt);
+      if (L.type === 'video' && isFinite(trimDrag.srcDur)) nd = Math.min(nd, (trimDrag.srcDur - L.trimStart) / sp);
+      L.duration = nd;
+    } else {
+      let delta = dt;
+      if (trimDrag.start + delta < 0) delta = -trimDrag.start;
+      if (trimDrag.dur - delta < 0.1) delta = trimDrag.dur - 0.1;
+      if (L.type === 'video' && trimDrag.trim + delta * sp < 0) delta = -trimDrag.trim / sp;
+      L.start = trimDrag.start + delta;
+      L.duration = trimDrag.dur - delta;
+      if (L.type === 'video') L.trimStart = trimDrag.trim + delta * sp;
+    }
+    const pps2 = pxPerSec();
+    const clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
+    if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
+    // widen the scroller (current pps — no rescale) so the extending edge + auto-scroll have room
+    if (innerEl) {
+      const need = window.innerWidth + Math.max(FM.scene.project.duration, L.start + L.duration) * pps2 + 120;
+      if ((parseFloat(innerEl.style.width) || 0) < need - 0.5) innerEl.style.width = need + 'px';
+    }
+    FM.requestRender();
+  }
+
+  // While a trim finger sits near a viewport edge, scroll the timeline so the clip can keep extending past
+  // the screen (AM behaviour). Re-arms via rAF until the finger leaves the edge or the drag ends.
+  function trimEdgeScroll() {
+    trimScrollRAF = 0;
+    if (!trimDrag || !timelineEl) return;
+    const rect = timelineEl.getBoundingClientRect();
+    const x = trimDrag.lastX, headRight = rect.left + HEAD_W, MAX = 22;
+    let v = 0;
+    if (x > rect.right - TRIM_EDGE) v = Math.min(MAX, ((x - (rect.right - TRIM_EDGE)) / TRIM_EDGE) * MAX);
+    else if (x < headRight + TRIM_EDGE) v = -Math.min(MAX, (((headRight + TRIM_EDGE) - x) / TRIM_EDGE) * MAX);
+    if (v === 0) return;
+    if (v > 0 && innerEl) {   // ensure room to the right before scrolling into it
+      const need = timelineEl.scrollLeft + timelineEl.clientWidth + v + 120;
+      if ((parseFloat(innerEl.style.width) || 0) < need) innerEl.style.width = need + 'px';
+    }
+    timelineEl.scrollLeft = Math.max(0, timelineEl.scrollLeft + v);
+    applyTrimAt(trimDrag.lastX);
+    trimScrollRAF = requestAnimationFrame(trimEdgeScroll);
   }
 
   FM.timeline = {
@@ -630,39 +687,13 @@ window.FM = window.FM || {};
           return;
         }
         if (trimDrag) {
-          const fps = FM.scene.project.fps || 30, pps = pxPerSec();
-          let dt = Math.round(((e.clientX - trimDrag.startX) / pps) * fps) / fps;
-          const L = trimDrag.layer;
-          const sp = L.speed || 1;
-          // snap the moving edge to 0 / playhead / other clip edges, and show the guide
-          const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
-          const se = snapEdge(L, movingEdge, pps);
-          if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); } else hideSnap();
-          if (trimDrag.edge === 'right') {
-            let nd = Math.max(0.1, trimDrag.dur + dt);
-            if (L.type === 'video' && isFinite(trimDrag.srcDur)) nd = Math.min(nd, (trimDrag.srcDur - L.trimStart) / sp);
-            L.duration = nd;
-          } else {
-            let delta = dt;
-            if (trimDrag.start + delta < 0) delta = -trimDrag.start;
-            if (trimDrag.dur - delta < 0.1) delta = trimDrag.dur - 0.1;
-            if (L.type === 'video' && trimDrag.trim + delta * sp < 0) delta = -trimDrag.trim / sp;
-            L.start = trimDrag.start + delta;
-            L.duration = trimDrag.dur - delta;
-            if (L.type === 'video') L.trimStart = trimDrag.trim + delta * sp;
+          trimDrag.lastX = e.clientX;
+          applyTrimAt(e.clientX);
+          // Near a viewport edge? Start the auto-scroll loop so the clip can keep extending past the screen.
+          const rect = timelineEl.getBoundingClientRect();
+          if ((e.clientX > rect.right - TRIM_EDGE || e.clientX < rect.left + HEAD_W + TRIM_EDGE) && !trimScrollRAF) {
+            trimScrollRAF = requestAnimationFrame(trimEdgeScroll);
           }
-          const pps2 = pxPerSec();
-          const clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
-          if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
-          // Keep the extending edge VISIBLE without rescaling: widen the scroller to fit the clip's new
-          // end at the CURRENT pps. Do NOT change project.duration mid-drag — that recomputes pps (fit-to-
-          // view) and makes the whole timeline rubber-band under your finger (the v1.77 jank). The comp
-          // grows for real on pointerup.
-          if (trimDrag.edge === 'right' && innerEl) {
-            const needW = window.innerWidth + Math.max(FM.scene.project.duration, L.start + L.duration) * pps2;
-            if ((parseFloat(innerEl.style.width) || 0) < needW - 0.5) innerEl.style.width = needW + 'px';
-          }
-          FM.requestRender();
           return;
         }
         if (kfDrag) {
@@ -688,6 +719,7 @@ window.FM = window.FM || {};
         }
       });
       window.addEventListener('pointerup', () => {
+        if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
         if (dragging && scrub && !scrub.moved) {
           // A TAP on the timeline (ruler OR empty lane) NEVER seeks — only a horizontal DRAG scrubs.
           // Tapping off any clip just deselects (revealing the Add menu / dropping the phone sheet).
@@ -729,6 +761,7 @@ window.FM = window.FM || {};
         }
       });
       window.addEventListener('pointercancel', () => {
+        if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
         if (clipTap && clipTap.holdTimer) clearTimeout(clipTap.holdTimer);
         clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
