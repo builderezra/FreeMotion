@@ -15,6 +15,10 @@ window.FM = window.FM || {};
   // applyInnerWidth() lets t=duration reach it too. (isPhone() below is kept only for TOUCH-input
   // behaviours like pinch-zoom and clip long-press — it no longer gates the playhead mechanic.)
   let PAD = 0, scrub = null, pinch = null; const pointers = new Map();
+  // The scrollLeft value the playhead itself last wrote. A native 'scroll' whose scrollLeft matches this
+  // was caused by us (time→scroll) and must be ignored; anything else is a real user scroll that should
+  // DRIVE the playhead (so the view + FM.time can never decouple → no "click sends me to the start").
+  let lastProgScroll = -1;
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
@@ -502,6 +506,17 @@ window.FM = window.FM || {};
       if (sn) sn.addEventListener('click', () => { snapping = !snapping; sn.classList.toggle('active', snapping); });
       // Cmd/Ctrl + wheel zooms the timeline
       if (timelineEl) timelineEl.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, timeFromX(e.clientX)); } }, { passive: false });
+      // FIXED-CENTRE CONTRACT: whatever sits under the centre line IS the current time. A plain horizontal
+      // scroll (trackpad / scrollbar / wheel) therefore MOVES the playhead. Without this, scrolling left
+      // scrollLeft decoupled from FM.time, so the next render (selecting/deselecting a clip) snapped the
+      // view back to the playhead — the "I'm 40s in, click a clip, get sent to the start" bug.
+      if (timelineEl) timelineEl.addEventListener('scroll', () => {
+        if (trimDrag || clipMove || kfDrag || scrub) return;            // those drive scroll/time themselves
+        const sL = timelineEl.scrollLeft;
+        if (Math.abs(sL - lastProgScroll) < 1) return;                  // our own playhead-driven write → ignore (no feedback loop)
+        lastProgScroll = sL;
+        FM.setTime(snapT(Math.max(0, Math.min(FM.scene.project.duration, sL / pxPerSec()))));
+      }, { passive: true });
       // two-finger PINCH zoom — tracked on window in CAPTURE phase so clip/ruler stopPropagation can't hide it
       const pdist = () => { const p = [...pointers.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
       const pmidX = () => { const p = [...pointers.values()]; return (p[0].x + p[1].x) / 2; };
@@ -743,6 +758,7 @@ window.FM = window.FM || {};
       const targetScroll = Math.max(0, FM.time * pps);
       if (timelineEl && !trimDrag && !clipMove && !kfDrag) {
         if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
+        lastProgScroll = targetScroll;   // remember our own write so the resulting 'scroll' event is ignored
       }
       const t = FM.time;
       const sL = timelineEl ? timelineEl.scrollLeft : 0;
