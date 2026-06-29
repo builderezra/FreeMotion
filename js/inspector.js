@@ -306,9 +306,17 @@ window.FM = window.FM || {};
     { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
-    { key: 'element', label: 'Element Properties', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8v4l3 2' },
+    { key: 'element', label: 'Element Properties', icon: 'M4 9h7v7H4zM15 6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M16 14l4 6h-8z' },
+    { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
   ];
+
+  // Alight Motion labels its element category after the layer kind ("Edit Shape" / "Edit Text").
+  function elementLabel(layer) {
+    if (layer.type === 'text' || layer.type === 'caption') return 'Edit Text';
+    if (layer.shape || layer.type === 'shape') return 'Edit Shape';
+    return 'Element Properties';
+  }
 
   const FONTS = ['Inter, sans-serif', 'Helvetica, Arial, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Verdana, sans-serif', 'Trebuchet MS, sans-serif', 'Palatino, serif', 'Comic Sans MS, cursive'];
 
@@ -333,27 +341,44 @@ window.FM = window.FM || {};
     return h;
   }
 
-  // AM-style property quick-row: fast toggles between the header and the category grid.
+  // AM-style clip-action quick-row (matches Alight Motion's selected-layer panel):
+  // speed/timing · split · trim-start-to-playhead · trim-end-to-playhead · mute.
   function quickRow(layer) {
     const row = el('div', 'quick-row');
-    const P = FM.scene.project;
-    function qbtn(title, icon, on, fn) {
-      const b = el('button', 'qr-btn' + (on ? ' on' : '')); b.title = title; b.innerHTML = svgIcon(icon);
-      b.addEventListener('click', fn); return b;
+    function qbtn(title, icon, opts, fn) {
+      opts = opts || {};
+      const b = el('button', 'qr-btn' + (opts.on ? ' on' : '') + (opts.disabled ? ' disabled' : ''));
+      b.title = title; b.innerHTML = svgIcon(icon);
+      if (opts.disabled) b.disabled = true; else b.addEventListener('click', fn);
+      return b;
     }
-    const after = () => { FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); };
-    row.appendChild(qbtn('Center horizontally', 'M12 4v16M7 9l-3 3 3 3M17 9l3 3-3 3', false, () => { FM.setTransform(layer, 'x', Math.round(P.width / 2), FM.time); after(); }));
-    row.appendChild(qbtn('Center vertically', 'M4 12h16M9 7l3-3 3 3M9 17l3 3 3-3', false, () => { FM.setTransform(layer, 'y', Math.round(P.height / 2), FM.time); after(); }));
-    row.appendChild(qbtn('Reset scale & rotation', 'M3 12a9 9 0 1 0 2.6-6.3M3 4v4h4', false, () => { FM.setTransform(layer, 'scale', 1, FM.time); FM.setTransform(layer, 'rotation', 0, FM.time); after(); }));
-    row.appendChild(qbtn(layer.locked ? 'Unlock layer' : 'Lock layer', 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z', !!layer.locked, () => { layer.locked = !layer.locked; FM.layersPanel.refresh(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); }));
-    if (layer.type === 'video') {
-      const muted = (layer.volume || 0) <= 0;
-      row.appendChild(qbtn(muted ? 'Unmute' : 'Mute', muted ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7', muted, () => {
+    const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
+    const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
+    // speed / timing → opens the timing category
+    row.appendChild(qbtn('Speed & timing', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => { view = 'element'; FM.inspector.refresh(); }));
+    // split at playhead
+    row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onClip }, () => { FM.splitLayer(layer.id); }));
+    // trim START to playhead (drop everything before the playhead)
+    row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onClip }, () => {
+      const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
+      layer.start = FM.time; layer.duration -= cut;
+      if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + cut * (layer.speed || 1);
+      after();
+    }));
+    // trim END to playhead (drop everything after the playhead)
+    row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { disabled: !onClip }, () => {
+      const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
+      layer.duration = nd; after();
+    }));
+    // mute — video only; greyed for layers with no audio (AM shows it greyed for shapes)
+    const isVid = layer.type === 'video', muted = (layer.volume || 0) <= 0;
+    row.appendChild(qbtn(isVid ? (muted ? 'Unmute' : 'Mute') : 'No audio on this layer',
+      (muted ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7'),
+      { on: isVid && muted, disabled: !isVid }, () => {
         if ((layer.volume || 0) > 0) { layer._lastVol = layer.volume; layer.volume = 0; } else { layer.volume = layer._lastVol != null ? layer._lastVol : 1; }
         const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = layer.volume;
         FM.inspector.refresh(); commitH();
       }));
-    }
     return row;
   }
 
@@ -382,13 +407,20 @@ window.FM = window.FM || {};
     return CATEGORIES;
   }
   function categoryGrid(layer) {
-    const wrap = el('div', 'cat-grid');
-    catsFor(layer).forEach(cat => {
+    // AM lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
+    const cats = catsFor(layer);
+    const wrap = el('div', 'cat-wrap');
+    const top = el('div', 'cat-grid cat-grid-top');
+    const bot = el('div', 'cat-grid cat-grid-bot');
+    cats.forEach((cat, i) => {
       const card = el('button', 'cat-card');
-      card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + cat.label + '</span>';
+      const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
+      card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => { view = cat.key; FM.inspector.refresh(); });
-      wrap.appendChild(card);
+      (i < 3 ? top : bot).appendChild(card);
     });
+    wrap.appendChild(top);
+    if (bot.children.length) wrap.appendChild(bot);
     return wrap;
   }
 
@@ -451,6 +483,23 @@ window.FM = window.FM || {};
     } else if (key === 'blend') {
       body.appendChild(selectRow('Blend mode', layer.blendMode, FM.BLEND_MODES, v => { layer.blendMode = v; FM.requestRender(); }));
       body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));
+    } else if (key === 'presets') {
+      body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
+      const pwrap = el('div', 'preset-wrap');
+      FM.fxPresets.list().forEach(p => {
+        const fx = Array.isArray(p.effects) ? p.effects : [];
+        const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : ''));
+        const nm = el('button', 'preset-name', p.name);
+        nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') + ')';
+        nm.addEventListener('click', () => { if (!layer.effects) layer.effects = []; fx.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Applied “' + p.name + '”'); });
+        chip.appendChild(nm);
+        if (!p.builtin) { const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset'; del.addEventListener('click', () => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); }); chip.appendChild(del); }
+        pwrap.appendChild(chip);
+      });
+      const sv = el('button', 'fx-act', 'Save current effects…'); sv.disabled = !(layer.effects && layer.effects.length);
+      sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
+      pwrap.appendChild(sv);
+      body.appendChild(pwrap);
     } else if (key === 'effects') {
       const s = effectsSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();

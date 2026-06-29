@@ -211,6 +211,7 @@ body {
 .insp-del { width: 30px; height: 30px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text-dim); cursor: pointer; }
 .insp-del svg { width: 15px; height: 15px; }
 .insp-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
+.cat-wrap { display: flex; flex-direction: column; gap: 9px; }
 .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .cat-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 17px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; transition: background .12s, border-color .12s, transform .04s; }
 .cat-card:hover { background: var(--panel-3); border-color: var(--accent); }
@@ -478,6 +479,8 @@ input[type=range]::-webkit-slider-thumb {
 .qr-btn svg { width: 18px; height: 18px; }
 .qr-btn:hover { background: var(--panel-3); color: var(--text); }
 .qr-btn.on { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
+.qr-btn:disabled, .qr-btn.disabled { opacity: .35; cursor: default; }
+.qr-btn:disabled:hover { background: var(--panel-2); color: var(--text-dim); }
 .align-row { padding: 0 2px 4px; }
 .align-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin: 2px 0 6px; }
 
@@ -933,7 +936,9 @@ input[type=range]::-webkit-slider-thumb {
   body.insp-open #add-fab { display: none; }
 
   /* AM property menu: SHORT + HORIZONTAL — a compact 3-wide category grid, not a tall 2-col stack */
-  #inspector-panel .cat-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #inspector-panel .cat-grid { gap: 8px; }
+  #inspector-panel .cat-grid-top { grid-template-columns: repeat(3, 1fr); }  /* AM: Color/Border/Blending */
+  #inspector-panel .cat-grid-bot { grid-template-columns: repeat(4, 1fr); }  /* AM: Transform/Edit/Presets/Effects */
   #inspector-panel .cat-card { padding: 14px 5px; gap: 7px; border-radius: 12px; }
   #inspector-panel .cat-ico svg { width: 23px; height: 23px; }
   #inspector-panel .cat-label { font-size: 10.5px; line-height: 1.25; }
