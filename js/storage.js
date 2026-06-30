@@ -53,9 +53,9 @@ window.FM = window.FM || {};
     async load() {
       let scene = null;
       try { const raw = localStorage.getItem(SCENE_KEY); if (raw) scene = JSON.parse(raw); } catch (e) {}
-      if (!scene || !Array.isArray(scene.layers) || !scene.layers.length) return false;
+      if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       FM.scene.project = scene.project;
-      FM.scene.layers = scene.layers;
+      FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
       FM.scene.selectedId = scene.selectedId;
       FM.scene.selectedIds = scene.selectedId ? [scene.selectedId] : [];   // keep multi-selection state consistent after load
       try {
@@ -85,7 +85,10 @@ window.FM = window.FM || {};
 
   // ---- portable project file (.fmotion.json): scene graph + small media as base64 ----
   function fileToDataURL(file) { return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(file); }); }
-  async function dataURLToFile(dataURL, name) { const blob = await (await fetch(dataURL)).blob(); return new File([blob], name || 'media', { type: blob.type }); }
+  // ONLY rehydrate real data: URIs. An imported .fmotion.json is untrusted input; a non-data URL here
+  // (e.g. https://attacker/beacon) would otherwise be fetch()ed on open — a zero-click tracking beacon /
+  // LAN probe. Reject anything that isn't an embedded data URL.
+  async function dataURLToFile(dataURL, name) { if (typeof dataURL !== 'string' || !/^data:/i.test(dataURL)) return null; const blob = await (await fetch(dataURL)).blob(); return new File([blob], name || 'media', { type: blob.type }); }
   const EMBED_LIMIT = 6 * 1024 * 1024;   // skip embedding media larger than this (keeps the JSON sane)
 
   FM.storage.serializeScene = async function (scene) {
@@ -121,8 +124,10 @@ window.FM = window.FM || {};
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
         const md = obj.media[id];
+        if (!md || (md.kind !== 'video' && md.kind !== 'image')) continue;
         try {
           const file = await dataURLToFile(md.dataURL, md.name);
+          if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
           if (rec) { FM.media.set(id, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }

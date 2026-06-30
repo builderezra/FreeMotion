@@ -25,7 +25,11 @@ window.FM = window.FM || {};
 
   // The ONE add path — exactly one push, then close + refresh the inspector/timeline/canvas.
   function addEffect(id) {
-    const layer = _layer; if (!layer) return;
+    // Re-resolve from the LIVE scene by id: the overlay caches _layer at open(), but a delete (Backspace)
+    // or undo (Cmd+Z, which rebuilds layer objects) can orphan it — pushing into the detached object would
+    // silently lose the effect (history.commit snapshots the live scene without it).
+    const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
+    if (!layer) { FM.fxBrowser.close(); return; }
     const inst = FM.fxRegistry.makeInstance(id);
     if (!inst || !FM.fxRegistry.supportsLayer(id, layer)) {
       if (FM.toast) FM.toast('That effect needs a video or image layer', 1600);

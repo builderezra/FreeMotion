@@ -29,6 +29,7 @@ window.FM = window.FM || {};
       var startY = 0, startX = 0, lastY = 0, lastT = 0, vy = 0, active = false, claimed = false, pid = null, h = 0;
       function atTop() { if (!getScrollEl) return true; var s = getScrollEl(); return !s || s.scrollTop <= 0; }
       function onDown(e) {
+        if (active) return;   // a swipe is already in progress — ignore a 2nd finger (it would steal pid/startY and stall/misfire the gesture)
         if (!isPhone() || !panel.classList.contains('open')) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         var onGrab = grabEl && (e.target === grabEl || grabEl.contains(e.target));

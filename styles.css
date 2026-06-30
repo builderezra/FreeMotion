@@ -155,6 +155,9 @@ body {
   background: #fff; border: 1px solid var(--accent); border-radius: 2px;
   pointer-events: auto; box-shadow: 0 1px 2px rgba(0,0,0,.45);
 }
+/* Enlarge the TOUCH target without moving the visible 10px dot — a fingertip is ~40px, so on a ~380px
+   phone the bare handle is ~4x too small and taps land on the canvas (move/deselect) instead of resize. */
+.sb-handle::before, .sb-rot::before { content: ""; position: absolute; inset: -14px; }
 .sb-nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .sb-ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .sb-se { right: -5px; bottom: -5px; cursor: nwse-resize; }

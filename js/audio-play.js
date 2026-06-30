@@ -61,13 +61,17 @@ window.FM = window.FM || {};
         const clipDur = layer.duration;
         const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;   // scaled so fades never overlap
         if (fi > 0 || fo > 0) {
-          const base = when - into;   // context time aligned to clip timeline-local 0
+          // Reversed audio plays at previewRate (pr): buffer position b is reached at real time
+          // when + (b - into)/pr. Schedule every fade point in that scaled timeline so fades land ON the
+          // audio at any preview speed (at 2x the old 1x offsets fired after the audio had already ended).
+          const pr = FM.previewRate || 1;
+          const base = when - into / pr;   // real context time at buffer position 0
           // The reversed buffer is only buf.duration long; anchor the fade-out to the AUDIBLE end so
           // it completes instead of being cut off mid-ramp when source audio is shorter than the clip.
           const audibleDur = Math.min(clipDur, buf.duration);
           gain.gain.setValueAtTime(FM.fadeMul(layer, Math.max(0, into), clipDur) * vol, when);
-          if (fi > 0 && base + fi > when) gain.gain.linearRampToValueAtTime(vol, base + fi);
-          if (fo > 0) { const fs = base + (audibleDur - fo); if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + audibleDur); }
+          if (fi > 0 && base + fi / pr > when) gain.gain.linearRampToValueAtTime(vol, base + fi / pr);
+          if (fo > 0) { const fs = base + (audibleDur - fo) / pr; if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + audibleDur / pr); }
         } else {
           gain.gain.value = vol;
         }

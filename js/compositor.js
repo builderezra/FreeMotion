@@ -123,9 +123,12 @@ window.FM = window.FM || {};
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
   // memo downstream (e.g. key over a graded video, or grade over a frame-blend) would freeze on frame 1.
-  let _gen = 0;
+  let _gen = 0, _idSeq = 0;
   function srcToken(src) {
-    if (src && src.tagName === 'VIDEO') return 'v:' + Math.round((src.currentTime || 0) * 1000);
+    // include a stable per-element id so two distinct videos sharing the same fps/res/start (and thus the
+    // same rounded currentTime bucket) can't collide in a single-slot key/grade memo (would return the
+    // first video's pixels for the second).
+    if (src && src.tagName === 'VIDEO') { if (src._fmId == null) src._fmId = ++_idSeq; return 'v:' + src._fmId + ':' + Math.round((src.currentTime || 0) * 1000); }
     if (src && src._fmGen != null) return 'c:' + src._fmGen;   // reused offscreen canvas → key by its generation
     return src;
   }
@@ -1336,7 +1339,7 @@ window.FM = window.FM || {};
         // vignette: radial darkening over the clip's bounds (not a CSS filter)
         const vig = layer.effects && layer.effects.find(e => e.type === 'vignette' && e.enabled !== false);
         if (vig) {
-          const amt = (vig.params && vig.params.amount != null) ? vig.params.amount : 0.6;
+          const amt = clamp01(vig.params && vig.params.amount != null ? FM.evalProp(vig.params.amount, t) : 0.6);
           // Darken as a flat source-over overlay regardless of the layer's blend mode/opacity.
           ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
           const gx = -w * tr.anchorX + w / 2, gy = -h * tr.anchorY + h / 2, rad = Math.hypot(w, h) / 2;

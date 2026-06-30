@@ -23,16 +23,36 @@ window.FM = window.FM || {};
   /* Decode the clip at `fps` into ImageBitmaps. Capped so very long clips stay bounded.
    * De-duplicated: concurrent calls for the same clip share one in-flight build, so rapidly
    * toggling reverse on/off can't kick off competing decodes (the source of the glitching). */
-  FM.buildFrameCache = function (rec, fps, onProgress) {
-    if (rec.frameCache && rec.frameCache.fps === fps) return Promise.resolve(rec.frameCache);
+  // opts (preview only): { maxDim } downscales the longest side at decode so each cached ImageBitmap is
+  // bytes-bounded, and { maxBytes } caps total cache size by deriving the frame count from a byte budget.
+  // Export passes NO opts → full source resolution + only the 900-frame count cap (quality preserved).
+  FM.buildFrameCache = function (rec, fps, onProgress, opts) {
+    opts = opts || {};
+    var maxDim = opts.maxDim || 0;        // 0 = full source resolution
+    var maxBytes = opts.maxBytes || 0;    // 0 = no byte budget
+    var scaled = maxDim > 0;
+    // Reuse only a cache of the SAME fps AND scaled-ness, so a downscaled preview cache is never silently
+    // reused for a full-res export (exporter.js force-clears a scaled cache before exporting).
+    if (rec.frameCache && rec.frameCache.fps === fps && !!rec.frameCache.scaled === scaled) return Promise.resolve(rec.frameCache);
     if (rec._building) return rec._building;
     rec._building = (async function () {
       const el = rec.el, dur = rec.duration || 0;
-      const count = Math.min(900, Math.max(1, Math.round(dur * fps)));
+      // A full 1080x1920 bitmap is ~8MB; a reversed/slow clip can need hundreds of frames → multiple GB,
+      // which OOM-kills mobile Safari. On the preview path, downscale the longest side to maxDim and cap
+      // the frame COUNT by a byte budget. The compositor draws frames scaled to display size anyway, so a
+      // softer preview cache is invisible; export (no opts) stays pixel-exact.
+      var sw = (el && (el.videoWidth || el.naturalWidth)) || 0;
+      var sh = (el && (el.videoHeight || el.naturalHeight)) || 0;
+      var tw = sw, th = sh, useResize = false;
+      if (scaled && sw > 0 && sh > 0) {
+        var longest = Math.max(sw, sh);
+        if (longest > maxDim) { var k = maxDim / longest; tw = Math.max(1, Math.round(sw * k)); th = Math.max(1, Math.round(sh * k)); useResize = true; }
+      }
+      var count = Math.min(900, Math.max(1, Math.round(dur * fps)));
+      if (maxBytes > 0 && tw > 0 && th > 0) count = Math.min(count, Math.max(1, Math.floor(maxBytes / (tw * th * 4))));
       // Spread the (capped) frames across the WHOLE clip, and store the EFFECTIVE fps (count/dur). The
-      // compositor maps source time → frame via this effFps, so a clip longer than the 900-frame cap no
-      // longer freezes the picture on frame 900 while the (uncapped) audio keeps running — it just loses
-      // temporal resolution. For short clips count≈dur*fps so effFps≈fps (no change).
+      // compositor maps source time → frame via this effFps, so a clip longer than the cap no longer
+      // freezes the picture while the (uncapped) audio keeps running — it just loses temporal resolution.
       const effFps = count / Math.max(1e-6, dur);
       const frames = new Array(count);
       const wasMuted = el.muted, wasTime = el.currentTime;
@@ -40,12 +60,17 @@ window.FM = window.FM || {};
       let ok = 0;
       for (let i = 0; i < count; i++) {
         await seekAndPaint(el, Math.min((i * dur) / count, Math.max(0, dur - 0.001)));
-        try { frames[i] = await createImageBitmap(el); ok++; } catch (e) { frames[i] = null; }
+        try {
+          frames[i] = useResize
+            ? await createImageBitmap(el, { resizeWidth: tw, resizeHeight: th, resizeQuality: 'medium' })
+            : await createImageBitmap(el);
+          ok++;
+        } catch (e) { frames[i] = null; }
         if (onProgress) onProgress((i + 1) / count);
       }
       el.muted = wasMuted;
       try { el.currentTime = wasTime; } catch (e) {}
-      rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur };
+      rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur, scaled: scaled, w: tw, h: th };
       rec._building = null;
       return rec.frameCache;
     })();

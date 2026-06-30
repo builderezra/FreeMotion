@@ -216,7 +216,8 @@ window.FM = window.FM || {};
     if (!m || m.frameCache) return;
     const fps = Math.min(FM.scene.project.fps || 30, 24);
     FM.toast('Preparing frames…');
-    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%')); }
+    // Preview: downscale + byte-cap so a long reversed/slow clip can't OOM-kill mobile Safari.
+    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%'), { maxDim: 960, maxBytes: 384 * 1024 * 1024 }); }
     finally { FM.hideToast(); }
     render();
   };
@@ -374,6 +375,7 @@ window.FM = window.FM || {};
     refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
+    if (FM.storage && FM.storage.save) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close
   }
 
   FM.addTextLayer = function () {
@@ -599,6 +601,7 @@ window.FM = window.FM || {};
     refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
+    if (FM.storage && FM.storage.save) FM.storage.save();   // persist the duplicated layer's media blob immediately
   };
 
   // ---- copy / paste layers (in-memory clipboard; survives across the session) ----
@@ -648,6 +651,7 @@ window.FM = window.FM || {};
     refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
+    if (FM.storage && FM.storage.save) FM.storage.save();   // persist pasted layers' media blobs immediately
   };
 
   // ---- replace a layer's media, keeping its transform / keyframes / timing / effects ----
@@ -1127,7 +1131,7 @@ window.FM = window.FM || {};
       else if (e.code === 'BracketLeft') { e.preventDefault(); const P = FM.scene.project; P.loopIn = FM.time; if (P.loopOut != null && P.loopOut <= P.loopIn) P.loopOut = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); }
       else if (e.code === 'BracketRight') { e.preventDefault(); const P = FM.scene.project; P.loopOut = FM.time; if (P.loopIn != null && P.loopIn >= P.loopOut) P.loopIn = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); }
       else if (e.code === 'Backslash') { e.preventDefault(); FM.scene.project.loopIn = null; FM.scene.project.loopOut = null; FM.timeline.rebuild(); }
-      else if (e.code === 'KeyM') { e.preventDefault(); const P = FM.scene.project; if (!P.markers) P.markers = []; P.markers.push({ t: Math.round(FM.time * 100) / 100, label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); }
+      else if (e.code === 'KeyM') { e.preventDefault(); if (e.repeat) return; if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(); }   // toggle (dedups within 0.12s) + ignore OS autorepeat → no stacked duplicates / undo spam
       else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }

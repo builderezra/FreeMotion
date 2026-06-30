@@ -160,7 +160,8 @@ window.FM = window.FM || {};
       if (!needs) continue;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) continue;
-      if (m.frameCache && m.frameCache.fps !== fps) FM.clearFrameCache(m);
+      // Export must be pixel-exact: discard a downscaled PREVIEW cache (scaled) and rebuild at full res.
+      if (m.frameCache && (m.frameCache.fps !== fps || m.frameCache.scaled)) FM.clearFrameCache(m);
       if (!m.frameCache) { if (onStatus) onStatus('Decoding frames…'); await FM.buildFrameCache(m, fps); }
     }
   }
@@ -195,6 +196,20 @@ window.FM = window.FM || {};
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
       try { mix = await buildAudioMix(scene, start, end); } catch (e) { console.warn('audio mix failed', e); mix = null; }
+
+      // Only declare an audio track if AAC encoding will actually work (it's unavailable on some iOS
+      // Safari versions). Otherwise the muxer commits an empty audio track to the moov → a broken/silent
+      // track that strict players reject. Probe with the SAME config encodeAudio() uses.
+      if (mix) {
+        let audioOK = false;
+        try {
+          if (typeof AudioEncoder !== 'undefined') {
+            const s = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: mix.sampleRate, numberOfChannels: mix.channels, bitrate: 160000 });
+            audioOK = !!(s && s.supported);
+          }
+        } catch (e) { audioOK = false; }
+        if (!audioOK) { console.warn('AAC audio encoding unavailable — exporting video only'); mix = null; }
+      }
 
       const muxer = new Mp4Muxer.Muxer({
         target: new Mp4Muxer.ArrayBufferTarget(),

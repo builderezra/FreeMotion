@@ -23,6 +23,9 @@ window.FM = window.FM || {};
     FM.scene.selectedId = s.selectedId;
     FM.scene.selectedIds = (s.selectedId && FM.layerById(FM.scene, s.selectedId)) ? [s.selectedId] : [];   // avoid stale multi-selection after undo/redo
     suppress = false;
+    // Snapshots don't include FM.time; clamp it into the restored duration so undoing a duration-grow
+    // (with the playhead parked past the new end) doesn't blank the preview / divide-by-zero in pxPerSec.
+    FM.time = Math.max(0, Math.min((FM.scene.project && FM.scene.project.duration) || 0, FM.time || 0));
     if (FM.playing && FM.pause) FM.pause();
     if (FM.resizeCanvas) FM.resizeCanvas();
     FM.refreshAll();
