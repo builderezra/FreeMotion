@@ -158,6 +158,43 @@ body {
 /* Enlarge the TOUCH target without moving the visible 10px dot — a fingertip is ~40px, so on a ~380px
    phone the bare handle is ~4x too small and taps land on the canvas (move/deselect) instead of resize. */
 .sb-handle::before, .sb-rot::before { content: ""; position: absolute; inset: -14px; }
+
+/* ===== Move & Transform panel (Alight Motion mode-rail editor) ===== */
+.mt-panel { display: flex; gap: 9px; align-items: stretch; padding: 6px 2px 10px; }
+.mt-rail { display: flex; flex-direction: column; gap: 9px; justify-content: center; }
+.mt-rail button { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
+.mt-rail button svg { width: 21px; height: 21px; }
+.mt-rail button.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px rgba(41,217,187,.45); }
+.mt-kf { font-size: 15px; line-height: 1; }
+.mt-kf.active { color: var(--accent); }
+.mt-kf.here { color: var(--accent); background: rgba(41,217,187,.20); border-color: rgba(41,217,187,.5); }
+.mt-center { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mt-values { display: flex; gap: 8px; align-items: flex-start; justify-content: center; }
+.mt-vbox { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.mt-vbox-val { width: 100%; box-sizing: border-box; text-align: center; font-size: 18px; font-weight: 600; color: var(--accent); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; cursor: ew-resize; user-select: none; font-variant-numeric: tabular-nums; touch-action: none; }
+.mt-vbox-val.editing { outline: 2px solid var(--accent); outline-offset: -1px; cursor: text; color: #fff; }
+.mt-vbox-lab { font-size: 11px; color: #7d8ca5; }
+.mt-link { width: 32px !important; height: 32px !important; align-self: center; margin-top: 4px; flex: none; }
+.mt-link.on { color: var(--accent); border-color: rgba(41,217,187,.5); }
+.mt-control { flex: 1; min-height: 124px; display: flex; flex-direction: column; gap: 8px; }
+.mt-control-dual { gap: 14px; justify-content: center; }
+/* 2D move trackpad */
+.mt-trackpad { flex: 1; position: relative; border-radius: 12px; background: var(--panel-2); display: flex; align-items: center; justify-content: center; min-height: 124px; touch-action: none; cursor: grab; overflow: hidden; }
+.mt-trackpad:active { cursor: grabbing; }
+.mt-trackpad-hint { color: #56657c; font-size: 13px; pointer-events: none; }
+.mt-trackpad::before, .mt-trackpad::after { content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #475774; }
+.mt-trackpad::before { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
+.mt-trackpad::after { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
+/* rotation dial */
+.mt-dial { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 124px; }
+.mt-dial-ring { position: relative; width: 140px; height: 140px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); touch-action: none; cursor: pointer; }
+.mt-dial-knob { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #fff; transform: translate(-50%,-50%); box-shadow: 0 1px 4px rgba(0,0,0,.55); }
+.mt-dial-read { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: var(--accent); pointer-events: none; }
+/* horizontal tick scrubber */
+.mt-scrub { position: relative; height: 92px; border-radius: 10px; background: var(--panel-2); overflow: hidden; touch-action: none; cursor: ew-resize; background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.09) 0 1px, transparent 1px 9px); }
+.mt-control-dual .mt-scrub { height: 66px; }
+.mt-scrub-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--accent); transform: translateX(-50%); }
+.mt-scrub-ticks { display: none; }
 .sb-nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .sb-ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .sb-se { right: -5px; bottom: -5px; cursor: nwse-resize; }

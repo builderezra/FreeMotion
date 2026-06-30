@@ -1323,6 +1323,18 @@ window.FM = window.FM || {};
     const opacity = clamp01(FM.evalProp(tr.opacity, t));
     if (opacity <= 0) return;
 
+    // Non-uniform scale (W/H), skew (X/Y), and a real Z via planar perspective about the project
+    // centre. All additive: absent fields fall back so existing projects render identically.
+    const _P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const sclX = scale * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);   // scaleX/scaleY are non-uniform multipliers on the uniform master `scale`
+    const sclY = scale * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
+    const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
+    const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
+    const zz = tr.z != null ? FM.evalProp(tr.z, t) : 0;
+    const _F = Math.max(1, (_P.height || 1080) * 2);              // focal length (~2× project height)
+    const pscale = zz ? _F / Math.max(_F * 0.05, _F + zz) : 1;    // z>0 = farther (smaller), z<0 = nearer (bigger)
+    const _vpx = (_P.width || 0) / 2, _vpy = (_P.height || 0) / 2;
+
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
@@ -1336,10 +1348,15 @@ window.FM = window.FM || {};
     }
     const accumRot = applyParentChain(ctx, layer, t, scene);   // inherit parent motion before the layer's own transform
     const wig = FM.wiggleOffset(layer, t);                      // procedural jitter (motion-blur path averages it per sub-frame)
-    ctx.translate(x + (wig ? wig.x : 0), y + (wig ? wig.y : 0));
+    // Z perspective shifts the on-screen position toward/away from the vanishing point (project centre).
+    const _px = pscale !== 1 ? _vpx + (x - _vpx) * pscale : x;
+    const _py = pscale !== 1 ? _vpy + (y - _vpy) * pscale : y;
+    ctx.translate(_px + (wig ? wig.x : 0), _py + (wig ? wig.y : 0));
     applyParentRotMode(ctx, layer, accumRot);   // 'locked'/'weighted' cancel some inherited rotation
     if (rot) ctx.rotate(rot);
-    if (scale !== 1) ctx.scale(scale, scale);
+    const _sx = sclX * pscale, _sy = sclY * pscale;
+    if (_sx !== 1 || _sy !== 1) ctx.scale(_sx, _sy);
+    if (skX || skY) ctx.transform(1, Math.tan(skY * Math.PI / 180), Math.tan(skX * Math.PI / 180), 1, 0, 0);   // X/Y skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
 
     if (layer.type === 'text') {

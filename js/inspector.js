@@ -448,44 +448,151 @@ window.FM = window.FM || {};
     });
   }
 
+  // ===== Move & Transform — Alight Motion's mode-rail editor (Move / Rotate / Scale / Skew) =====
+  const MT_ICONS = {
+    move: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>',
+    rotate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="7.5" width="9" height="9" rx="1.6"/><path d="M18.5 6.5a7 7 0 0 0-5-2.5"/><path d="M13.2 2.6 13.5 4l-1.4.4"/></svg>',
+    scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6"/><path d="M9 15 15 9"/></svg>',
+    skew: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h12l-4 14H4z"/></svg>',
+    ease: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19c5 0 5-14 16-14"/><circle cx="4" cy="19" r="1.4" fill="currentColor"/><circle cx="20" cy="5" r="1.4" fill="currentColor"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 8H7a4 4 0 0 0 0 8h2"/><path d="M15 8h2a4 4 0 0 1 0 8h-2"/></svg>',
+  };
+  const MT_MODES = ['move', 'rotate', 'scale', 'skew'];
+  const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew' };
+  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'] };
+  const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 };
+
+  function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
+  function mtSet(layer, key, v) { FM.setTransform(layer, key, v, FM.time); FM.requestRender(); if (FM.timeline) FM.timeline.updatePlayhead(); }
+
+  // A value box: shows the number (drag horizontally to scrub, tap to type) + a label beneath.
+  function mtVBox(labelText, getVal, setVal, opts) {
+    opts = opts || {}; const dp = opts.dp != null ? opts.dp : 1;
+    const box = el('div', 'mt-vbox');
+    const val = el('div', 'mt-vbox-val');
+    const lab = el('div', 'mt-vbox-lab', labelText);
+    const fmtS = () => round(getVal(), dp).toFixed(dp) + (opts.unit || '');
+    const refresh = () => { if (!val.isContentEditable) val.textContent = fmtS(); };
+    refresh(); box.appendChild(val); box.appendChild(lab);
+    const clamp = v => { if (opts.min != null) v = Math.max(opts.min, v); if (opts.max != null) v = Math.min(opts.max, v); return v; };
+    let drag = null;
+    val.addEventListener('pointerdown', e => { if (val.isContentEditable) return; drag = { x: e.clientX, v: getVal(), moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    val.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { setVal(clamp(drag.v + dx * (opts.scrub || 1))); refresh(); if (opts.onScrub) opts.onScrub(); } });
+    val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } else startEdit(); });
+    function startEdit() {
+      val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
+      const r = document.createRange(); r.selectNodeContents(val); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      const finish = commit => { val.removeEventListener('blur', onBlur); val.removeEventListener('keydown', onKey); val.contentEditable = 'false'; val.classList.remove('editing'); if (commit) { const n = parseFloat(val.textContent); if (!isNaN(n)) { setVal(clamp(n)); commitH(); } } refresh(); FM.inspector.refresh(); };
+      const onBlur = () => finish(true);
+      const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); val.blur(); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
+      val.addEventListener('blur', onBlur); val.addEventListener('keydown', onKey);
+    }
+    box._refresh = refresh; return box;
+  }
+
+  // A horizontal tick-strip you drag to scrub a value.
+  function mtScrub(getVal, setVal, scrub, onChange) {
+    const strip = el('div', 'mt-scrub'); strip.appendChild(el('div', 'mt-scrub-ticks')); strip.appendChild(el('div', 'mt-scrub-mid'));
+    let drag = null;
+    strip.addEventListener('pointerdown', e => { drag = { x: e.clientX, v: getVal() }; try { strip.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    strip.addEventListener('pointermove', e => { if (!drag) return; setVal(drag.v + (e.clientX - drag.x) * scrub); if (onChange) onChange(); });
+    strip.addEventListener('pointerup', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
+    return strip;
+  }
+
+  function moveTransformPanel(layer) {
+    const mode = MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
+    const panel = el('div', 'mt-panel');
+    const refreshables = [];
+    const refreshAllBoxes = () => refreshables.forEach(b => b._refresh && b._refresh());
+
+    // left rail: keyframe + easing
+    const left = el('div', 'mt-rail mt-rail-left');
+    const props = MT_PROPS[mode];
+    const anyAnim = props.some(k => FM.isAnimated(layer.transform[k]));
+    const onHere = props.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+    const kfBtn = el('button', 'mt-kf' + (anyAnim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
+    kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
+    kfBtn.addEventListener('click', () => {
+      const add = !onHere;
+      props.forEach(k => {
+        if (layer.transform[k] == null) layer.transform[k] = MT_DEF[k];
+        const has = FM.hasKeyframeAt(layer.transform[k], FM.time);
+        if (add && !has) FM.toggleKeyframe(layer, k, FM.time);
+        else if (!add && has) FM.toggleKeyframe(layer, k, FM.time);
+      });
+      FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH();
+    });
+    left.appendChild(kfBtn);
+    const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
+    easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, mode); });
+    left.appendChild(easeBtn);
+
+    // center: value boxes + bespoke control per mode
+    const center = el('div', 'mt-center');
+    const values = el('div', 'mt-values');
+    const control = el('div', 'mt-control');
+    center.appendChild(values); center.appendChild(control);
+
+    if (mode === 'move') {
+      const bx = mtVBox('X', () => mtEval(layer, 'x'), v => mtSet(layer, 'x', Math.round(v)), { dp: 1, scrub: 1 });
+      const by = mtVBox('Y', () => mtEval(layer, 'y'), v => mtSet(layer, 'y', Math.round(v)), { dp: 1, scrub: 1 });
+      const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2 });
+      refreshables.push(bx, by, bz); values.append(bx, by, bz);
+      // 2D trackpad
+      const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move layer'));
+      const sens = ((FM.scene.project.width || 1080) / 300);
+      let pd = null;
+      pad.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y') }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      pad.addEventListener('pointermove', e => { if (!pd) return; mtSet(layer, 'x', Math.round(pd.ix + (e.clientX - pd.x) * sens)); mtSet(layer, 'y', Math.round(pd.iy + (e.clientY - pd.y) * sens)); refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); });
+      pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      control.appendChild(pad);
+    } else if (mode === 'rotate') {
+      const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5 });
+      refreshables.push(brot); values.appendChild(brot);
+      const dial = el('div', 'mt-dial'); const ring = el('div', 'mt-dial-ring'); const knob = el('div', 'mt-dial-knob'); const read = el('div', 'mt-dial-read');
+      ring.appendChild(knob); dial.appendChild(ring); dial.appendChild(read);
+      const place = () => { const deg = mtEval(layer, 'rotation'); const rad = deg * Math.PI / 180; knob.style.left = (50 + Math.cos(rad) * 50) + '%'; knob.style.top = (50 + Math.sin(rad) * 50) + '%'; read.textContent = Math.round(deg) + '°'; };
+      place();
+      const ang = e => { const r = ring.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };
+      let rd = null;
+      ring.addEventListener('pointerdown', e => { rd = { a: ang(e), v: mtEval(layer, 'rotation') }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      ring.addEventListener('pointermove', e => { if (!rd) return; mtSet(layer, 'rotation', Math.round(rd.v + (ang(e) - rd.a))); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
+      ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      control.appendChild(dial);
+    } else if (mode === 'scale') {
+      const sz = FM.layerSize(layer);
+      const effX = () => mtEval(layer, 'scale') * (layer.transform.scaleX != null ? mtEval(layer, 'scaleX') : 1);
+      const effY = () => mtEval(layer, 'scale') * (layer.transform.scaleY != null ? mtEval(layer, 'scaleY') : 1);
+      const link = FM._mtLink !== false;
+      const setW = px => { const f = px / Math.max(1, sz.w); if (link) { mtSet(layer, 'scale', f); if (layer.transform.scaleX != null) mtSet(layer, 'scaleX', 1); if (layer.transform.scaleY != null) mtSet(layer, 'scaleY', 1); } else mtSet(layer, 'scaleX', f / Math.max(1e-4, mtEval(layer, 'scale'))); };
+      const setH = px => { const f = px / Math.max(1, sz.h); if (link) { mtSet(layer, 'scale', f); if (layer.transform.scaleX != null) mtSet(layer, 'scaleX', 1); if (layer.transform.scaleY != null) mtSet(layer, 'scaleY', 1); } else mtSet(layer, 'scaleY', f / Math.max(1e-4, mtEval(layer, 'scale'))); };
+      const bw = mtVBox('Width', () => sz.w * effX(), setW, { dp: 1, scrub: 1, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      const bh = mtVBox('Height', () => sz.h * effY(), setH, { dp: 1, scrub: 1, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      const linkBtn = el('button', 'mt-link' + (link ? ' on' : '')); linkBtn.innerHTML = MT_ICONS.link; linkBtn.title = link ? 'Aspect ratio linked' : 'Aspect ratio unlinked';
+      linkBtn.addEventListener('click', () => { FM._mtLink = !link; FM.inspector.refresh(); });
+      refreshables.push(bw, bh); values.append(bw, linkBtn, bh);
+      control.appendChild(mtScrub(() => mtEval(layer, 'scale'), v => mtSet(layer, 'scale', Math.max(0.01, v)), 0.01, () => { refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+    } else if (mode === 'skew') {
+      const bsx = mtVBox('X Skew', () => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
+      const bsy = mtVBox('Y Skew', () => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
+      refreshables.push(bsx, bsy); values.append(bsx, bsy);
+      control.classList.add('mt-control-dual');
+      control.appendChild(mtScrub(() => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', Math.max(-80, Math.min(80, v))), 0.2, () => bsx._refresh()));
+      control.appendChild(mtScrub(() => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', Math.max(-80, Math.min(80, v))), 0.2, () => bsy._refresh()));
+    }
+
+    // right rail: mode buttons
+    const right = el('div', 'mt-rail mt-rail-right');
+    MT_MODES.forEach(m => { const b = el('button', 'mt-mode' + (m === mode ? ' on' : '')); b.innerHTML = MT_ICONS[m]; b.title = MT_TITLES[m]; b.addEventListener('click', () => { FM._mtMode = m; FM.inspector.refresh(); }); right.appendChild(b); });
+
+    panel.append(left, center, right);
+    return panel;
+  }
+
   function buildCategory(key, layer, body) {
     if (key === 'transform') {
-      body.appendChild(el('div', 'insp-hint', '◆ Click a diamond to animate a property, then move the playhead and change the value to drop the next keyframe.'));
-      const isCam = layer.type === 'camera';
-      body.appendChild(transformRow(layer, 'x', isCam ? 'Pan X' : 'Position X', { step: 1 }));
-      body.appendChild(transformRow(layer, 'y', isCam ? 'Pan Y' : 'Position Y', { step: 1 }));
-      body.appendChild(transformRow(layer, 'scale', isCam ? 'Zoom' : 'Scale', { step: 0.01, dp: 3, slider: { min: 0, max: 3, step: 0.01 } }));
-      body.appendChild(transformRow(layer, 'rotation', 'Rotation', { step: 1, slider: { min: -180, max: 180, step: 1 } }));
-      if (!isCam) body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));   // camera isn't rasterized → no opacity
-      if (layer.type !== 'text' && !isCam) {
-        // Anchor point = the rotation/scale pivot. Compensate position so moving it doesn't shift the layer (AM behaviour).
-        body.appendChild(el('div', 'insp-sub-label', 'Anchor point (pivot)'));
-        const bumpPos = (key, dw) => {
-          const p = layer.transform[key];
-          if (typeof p === 'number') layer.transform[key] = p + dw;
-          else if (FM.isAnimated(p)) FM.setProp(layer.transform, key, FM.evalProp(p, FM.time) + dw, FM.time);   // animated → drop/update kf at playhead
-        };
-        const setAnchor = (axisKey, v) => {
-          const sz = FM.layerSize(layer), sc = FM.evalProp(layer.transform.scale, FM.time) || 1;
-          const rot = FM.evalProp(layer.transform.rotation, FM.time) * Math.PI / 180;
-          const curRaw = FM.evalProp(layer.transform[axisKey], FM.time);   // works for static OR keyframed anchor (avoid NaN → vanish)
-          const cur = (typeof curRaw === 'number' && isFinite(curRaw)) ? curRaw : 0.5;
-          const d = v - cur;
-          // local compensation vector (rotate into world so a rotated layer still stays put)
-          const lx = axisKey === 'anchorX' ? sz.w * d * sc : 0, ly = axisKey === 'anchorY' ? sz.h * d * sc : 0;
-          const cos = Math.cos(rot), sin = Math.sin(rot);
-          bumpPos('x', lx * cos - ly * sin);
-          bumpPos('y', lx * sin + ly * cos);
-          if (FM.isAnimated(layer.transform[axisKey])) FM.setProp(layer.transform, axisKey, v, FM.time);
-          else layer.transform[axisKey] = v;
-          if (FM.canvasEdit) FM.canvasEdit.update();
-        };
-        body.appendChild(rangeRow('Anchor X', () => layer.transform.anchorX != null ? layer.transform.anchorX : 0.5, v => setAnchor('anchorX', v), 0, 1, 0.01));
-        body.appendChild(rangeRow('Anchor Y', () => layer.transform.anchorY != null ? layer.transform.anchorY : 0.5, v => setAnchor('anchorY', v), 0, 1, 0.01));
-      }
-      const sub = el('div', 'insp-sub'); sub.appendChild(el('h4', null, 'Easing curve'));
-      const geBox = el('div', 'ge-box'); sub.appendChild(geBox); body.appendChild(sub);
-      if (FM.graphEditor) FM.graphEditor.mount(geBox, layer);
+      body.appendChild(moveTransformPanel(layer));
     } else if (key === 'blend') {
       body.appendChild(selectRow('Blend mode', layer.blendMode, FM.BLEND_MODES, v => { layer.blendMode = v; FM.requestRender(); }));
       body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));
