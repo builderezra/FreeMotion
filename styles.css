@@ -195,6 +195,26 @@ body {
 .mt-control-dual .mt-scrub { height: 66px; }
 .mt-scrub-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--accent); transform: translateX(-50%); }
 .mt-scrub-ticks { display: none; }
+
+/* ===== Easing Curve screen (AM full-screen graph editor) ===== */
+#easing-screen { position: fixed; inset: 0; z-index: 60; background: #0c0f15; display: none; flex-direction: column; }
+#easing-screen.open { display: flex; }
+.es-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.es-back { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: #d6f3ec; font-size: 22px; line-height: 1; cursor: pointer; }
+.es-title { flex: 1; text-align: center; font-size: 17px; font-weight: 600; margin-right: 38px; }
+.es-main { flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px; min-height: 0; }
+.es-graph { position: relative; flex: 1; max-width: 360px; display: flex; align-items: center; justify-content: center; }
+.es-canvas { width: 100%; max-width: 340px; aspect-ratio: 1 / 1; border-radius: 12px; touch-action: none; }
+.es-hint { color: #7d8ca5; font-size: 14px; text-align: center; padding: 22px; line-height: 1.5; }
+.es-presets { display: flex; flex-direction: column; gap: 10px; }
+.es-preset { width: 46px; height: 38px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.es-preset.on { border-color: var(--accent); background: rgba(41,217,187,.14); box-shadow: inset 0 0 0 1px rgba(41,217,187,.5); }
+.es-carousel { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 0; }
+.es-car-arrow { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 20px; line-height: 1; cursor: pointer; }
+.es-car-label { min-width: 170px; text-align: center; color: #b8c4d6; font-size: 14px; }
+.es-foot { display: flex; align-items: center; gap: 14px; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); }
+.es-loop, .es-dots { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 20px; line-height: 1; cursor: pointer; }
+.es-loop.on { color: var(--accent); border-color: rgba(41,217,187,.5); background: rgba(41,217,187,.12); }
 .sb-nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .sb-ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .sb-se { right: -5px; bottom: -5px; cursor: nwse-resize; }

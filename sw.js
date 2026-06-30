@@ -1,6 +1,6 @@
 /* FreeMotion service worker — network-first so you always get the latest push when online,
  * with a cache fallback so the installed app still opens offline. Bump CACHE to force a refresh. */
-const CACHE = 'freemotion-v54';
+const CACHE = 'freemotion-v55';
 const CORE = ['./', './index.html', './styles.css', './manifest.json'];
 
 self.addEventListener('install', function (e) {
