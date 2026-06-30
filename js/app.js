@@ -770,6 +770,7 @@ window.FM = window.FM || {};
       { label: 'Duplicate', action: () => FM.duplicateLayer(layer.id) },
       { label: 'Duplicate in place', action: () => FM.duplicateLayer(layer.id, true) },
       { label: 'Copy', action: () => { const ids = FM.selectionIds ? FM.selectionIds() : []; if (!ids.includes(layer.id)) { FM.scene.selectedId = layer.id; FM.scene.selectedIds = [layer.id]; } FM.copySelection(); } },
+      { label: 'Paste Style…', disabled: !(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(layer); } },
       { label: 'Split at playhead', action: () => FM.splitLayer(layer.id) },
     ];
     if (layer.type === 'video' || layer.type === 'image') {
@@ -982,13 +983,14 @@ window.FM = window.FM || {};
       const r = layerMenuBtn.getBoundingClientRect();
       const hasSel = !!FM.scene.selectedId;
       const hasClip = !!(FM.clipboard && FM.clipboard.length);
+      const hasStyle = !!(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot);
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
         { label: 'Duplicate Layer', disabled: !hasSel, action: () => { if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId); } },
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
         { label: 'Save Preset', disabled: true, action: () => {} },          // placeholder — not built yet
         { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); } },
-        { label: 'Paste Style', disabled: true, action: () => {} },          // placeholder — not built yet
+        { label: 'Paste Style…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },
       ]);
     });
     // ⛶ → toggle AM's right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).

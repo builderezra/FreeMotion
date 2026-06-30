@@ -222,6 +222,21 @@ body {
 .vol-slider { flex: 1; min-width: 0; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 5px; background: var(--line); outline: none; cursor: pointer; }
 .vol-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); border: 3px solid #0c1016; box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: pointer; }
 .vol-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid #0c1016; cursor: pointer; }
+
+/* ===== Paste Style picker (AM) ===== */
+.ps-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); padding: 18px; }
+.ps-card { background: #1b2233; border: 1px solid var(--line); border-radius: 18px; padding: 16px; width: min(340px, 88vw); box-shadow: 0 22px 54px rgba(0,0,0,.55); }
+.ps-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; color: var(--text); margin: 2px 4px 14px; }
+.ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ps-cat { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; color: #8d9bb2; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
+.ps-cat svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.ps-cat.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.12); }
+.ps-cat.dis { opacity: .32; pointer-events: none; }
+.ps-aa { font-size: 23px; font-weight: 700; letter-spacing: -1px; }
+.ps-foot { display: flex; justify-content: flex-end; align-items: center; gap: 22px; margin-top: 16px; padding: 2px 6px 0; }
+.ps-cancel { background: none; border: none; color: var(--text-dim); font-size: 15px; cursor: pointer; padding: 4px; }
+.ps-cancel:hover { color: var(--text); }
+.ps-paste { background: none; border: none; color: var(--accent); font-size: 15px; font-weight: 700; cursor: pointer; padding: 4px; }
 .sb-nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .sb-ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .sb-se { right: -5px; bottom: -5px; cursor: nwse-resize; }

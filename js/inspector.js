@@ -402,6 +402,86 @@ window.FM = window.FM || {};
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>';
   }
 
+  // ===== Paste Style (Alight Motion) — copy a layer, then apply chosen style aspects to another. =====
+  const STYLE_CATS = [
+    { key: 'color',     label: 'Color & Fill',       icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
+    { key: 'border',    label: 'Border & Shadow',    icon: 'M4 4h12v12H4zM9 20h11V9' },
+    { key: 'blend',     label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
+    { key: 'transform', label: 'Move & Transform',   icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
+    { key: 'text',      label: 'Text',               textOnly: true },
+    { key: 'effects',   label: 'Effects',            icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
+  ];
+
+  // Apply the chosen style categories from a copied layer snapshot `src` onto `target`.
+  function applyStyle(target, src, cats) {
+    const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
+    if (cats.color) {
+      if (src.color != null) target.color = src.color;
+      if (src.fill != null) target.fill = src.fill;
+      if ('fillGradient' in src) target.fillGradient = clone(src.fillGradient);
+      if ('colorGrade' in src) target.colorGrade = clone(src.colorGrade);
+    }
+    if (cats.border) { target.stroke = clone(src.stroke); target.shadow = clone(src.shadow); }
+    if (cats.blend) {
+      target.blendMode = src.blendMode || 'normal';
+      if (src.transform && 'opacity' in src.transform) target.transform.opacity = clone(src.transform.opacity);
+    }
+    if (cats.transform && src.transform) {
+      const keepOpacity = target.transform.opacity;   // opacity belongs to Blending & Opacity, not here
+      const t = clone(src.transform); t.opacity = keepOpacity;
+      target.transform = t;
+    }
+    if (cats.text && target.type === 'text' && src.type === 'text') {
+      ['fontFamily', 'fontSize', 'bold', 'italic', 'align', 'letterSpacing', 'lineHeight', 'textCurve'].forEach(k => { if (k in src) target[k] = src[k]; });
+      if ('textAnim' in src) target.textAnim = clone(src.textAnim);
+      if (src.color != null) target.color = src.color;
+    }
+    if (cats.effects) {
+      const fx = clone(src.effects) || [];
+      target.effects = (FM.fxRegistry && FM.fxRegistry.supportsLayer) ? fx.filter(f => FM.fxRegistry.supportsLayer(f.type, target)) : fx;
+    }
+  }
+
+  // The AM-style picker popup: toggle which style aspects to paste, then Paste.
+  FM.openPasteStyle = function (target) {
+    target = target || FM.selectedLayer(FM.scene);
+    const src = (FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot) || null;
+    if (!target) { if (FM.toast) FM.toast('Select a layer to paste onto'); return; }
+    if (!src) { if (FM.toast) FM.toast('Copy a layer first, then Paste Style'); return; }
+    const overlay = el('div', 'ps-overlay');
+    const card = el('div', 'ps-card');
+    card.appendChild(el('div', 'ps-title', 'Paste Style'));
+    const grid = el('div', 'ps-grid');
+    const sel = {};
+    STYLE_CATS.forEach(c => {
+      const disabled = c.textOnly && !(target.type === 'text' && src.type === 'text');
+      sel[c.key] = !disabled;
+      const b = el('button', 'ps-cat' + (disabled ? ' dis' : ' on'));
+      b.title = c.label;
+      b.innerHTML = c.key === 'text' ? '<span class="ps-aa">Aa</span>' : svgIcon(c.icon);
+      if (!disabled) b.addEventListener('click', () => { sel[c.key] = !sel[c.key]; b.classList.toggle('on', sel[c.key]); });
+      grid.appendChild(b);
+    });
+    card.appendChild(grid);
+    const foot = el('div', 'ps-foot');
+    const cancel = el('button', 'ps-cancel', 'Cancel');
+    const paste = el('button', 'ps-paste', 'Paste');
+    const close = () => overlay.remove();
+    cancel.addEventListener('click', close);
+    paste.addEventListener('click', () => {
+      const live = FM.layerById(FM.scene, target.id) || target;
+      applyStyle(live, src, sel);
+      close();
+      FM.requestRender(); FM.inspector.refresh(); if (FM.timeline) FM.timeline.rebuild(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.history) FM.history.commit();
+      if (FM.toast) FM.toast('Pasted style');
+    });
+    foot.append(cancel, paste);
+    card.appendChild(foot);
+    overlay.appendChild(card);
+    overlay.addEventListener('pointerdown', e => { if (e.target === overlay) close(); });
+    document.body.appendChild(overlay);
+  };
+
   function layerHeader(layer) {
     const h = el('div', 'insp-head');
     const thumb = document.createElement('canvas'); thumb.className = 'insp-thumb'; thumb.width = 46; thumb.height = 30;
