@@ -41,6 +41,8 @@ window.FM = window.FM || {};
     motionblur: 'blur', colorbalance: 'color', highlightsshadows: 'color', tiltshift: 'blur',
     // batch 12
     dropshadow: 'stylize', chromaticaberration: 'distort', innerglow: 'drawing', unsharpmask: 'blur', hextiles: 'distort', linstreaks: 'blur',
+    // batch 13 (opacity / visibility)
+    blink: 'opacity', flicker: 'opacity', pulseopacity: 'opacity', dissolve: 'opacity', blockdissolve: 'opacity',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -55,9 +57,11 @@ window.FM = window.FM || {};
     repeat: 'Repeat',
     stylize: 'Stylize',
     threed: '3D',
+    opacity: 'Opacity / Visibility',
+    text: 'Text',
     other: 'Other',
   };
-  const CATEGORY_ORDER = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'threed', 'other'];
+  const CATEGORY_ORDER = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'opacity', 'text', 'threed', 'other'];
 
   // chromakey/lumakey/vignette only affect media (video/image) layers — never text/shape.
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1, vignette: 1 };
