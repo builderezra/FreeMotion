@@ -49,6 +49,8 @@ window.FM = window.FM || {};
     gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat',
     // batch 16 (other / color / proc / drawing)
     channelremap: 'other', gradientoverlay: 'color', lensflare: 'proc', roughenedges: 'drawing', hexarray: 'proc',
+    // batch 17 (drawing / blur / proc)
+    electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', smoothbevel: 'drawing',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
