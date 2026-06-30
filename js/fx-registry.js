@@ -57,6 +57,8 @@ window.FM = window.FM || {};
     counter: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
     // batch 20 (cinematic grades + framing)
     bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
+    // batch 21
+    faded: 'color', nightvision: 'stylize', sketch: 'drawing',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).

@@ -170,6 +170,10 @@ window.FM = window.FM || {};
     { type: 'lightleak', label: 'Light Leak', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6, color: true, defColor: '#ff7a3c', colorLabel: 'Leak' },
     { type: 'letterbox', label: 'Letterbox', param: 'size', min: 0, max: 45, step: 1, def: 14, unit: '%' },
     { type: 'border', label: 'Border Frame', param: 'width', min: 1, max: 60, step: 1, def: 10, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Border' },
+    // ---- batch 21 ----
+    { type: 'faded', label: 'Faded Film', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+    { type: 'nightvision', label: 'Night Vision', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+    { type: 'sketch', label: 'Pencil Sketch', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -670,7 +674,8 @@ window.FM = window.FM || {};
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
-    bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1 };
+    bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
+    faded: 1, nightvision: 1, sketch: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -979,6 +984,10 @@ window.FM = window.FM || {};
     lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15; var lx=W*(0.85+0.12*Math.sin(ph)), ly=H*(0.12+0.10*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H); for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*1.8; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
     letterbox: function(d,W,H,p,t){ var s=FM.evalProp(p.size,t); if(s==null)s=14; if(s<0)s=0; if(s>48)s=48; var bar=Math.round(H*s/100); if(bar<=0)return; for(var y=0;y<H;y++){ if(y>=bar && y<H-bar) continue; var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; d[i]=0; d[i+1]=0; d[i+2]=0; if(d[i+3]<255)d[i+3]=255; } } },
     border: function(d,W,H,p,t){ var w=FM.evalProp(p.width,t); if(w==null)w=10; w=Math.round(w); if(w<1)w=1; var mx=Math.floor(Math.min(W,H)/2); if(w>mx)w=mx; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; for(var y=0;y<H;y++){ var ey=(y<w||y>=H-w); var row=y*W*4; for(var x=0;x<W;x++){ if(ey||x<w||x>=W-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } } },
+    // ---- batch 21 ----
+    faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var lift=26*a, con=1-0.25*a; function ch(v){ v=lift+v*(255-lift)/255; return 128+(v-128)*con; } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b); var nr=cr+(L-cr)*0.15*a+8*a, ng=cg+(L-cg)*0.15*a+2*a, nb=cb+(L-cb)*0.15*a-6*a; d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
+    nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*1.3+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*60; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*0.2, gg=L, gb=L*0.2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
+    sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice(); function lum(xx,yy){ var j=(yy*W+xx)*4; return s[j]*0.299+s[j+1]*0.587+s[j+2]*0.114; } for(var y=0;y<H;y++){ for(var x=0;x<W;x++){ var i=(y*W+x)*4; if(d[i+3]===0)continue; var xm=x>0?x-1:0, xp=x<W-1?x+1:W-1, ym=y>0?y-1:0, yp=y<H-1?y+1:H-1; var gx=(lum(xp,ym)+2*lum(xp,y)+lum(xp,yp))-(lum(xm,ym)+2*lum(xm,y)+lum(xm,yp)); var gy=(lum(xm,yp)+2*lum(x,yp)+lum(xp,yp))-(lum(xm,ym)+2*lum(x,ym)+lum(xp,ym)); var mag=Math.sqrt(gx*gx+gy*gy)/1442; if(mag>1)mag=1; var v=255-mag*510; if(v<0)v=0; d[i]=d[i]+(v-d[i])*a; d[i+1]=d[i+1]+(v-d[i+1])*a; d[i+2]=d[i+2]+(v-d[i+2])*a; } } },
   };
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
