@@ -432,7 +432,14 @@ window.FM = window.FM || {};
     }
     const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    // (Speed & timing moved to the dedicated Speed card — no redundant element shortcut here.)
+    const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); };
+    // Speed + Audio open their dedicated panels (video only) — they sit in this top row alongside the
+    // clip actions. The Audio button opens the full Volume panel (which has its own mute), so there's
+    // no standalone mute-only button any more.
+    if (layer.type === 'video') {
+      row.appendChild(qbtn('Speed — slow-mo / reverse', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => goCat('speed')));
+      row.appendChild(qbtn('Audio — volume & fades', 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7', {}, () => goCat('volume')));
+    }
     // split at playhead
     row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onClip }, () => { FM.splitLayer(layer.id); }));
     // trim START to playhead (drop everything before the playhead)
@@ -447,16 +454,6 @@ window.FM = window.FM || {};
       const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
       layer.duration = nd; after();
     }));
-    // mute — video only; greyed for layers with no audio (AM shows it greyed for shapes)
-    const isVid = layer.type === 'video', muted = (layer.volume || 0) <= 0;
-    row.appendChild(qbtn(isVid ? (muted ? 'Unmute' : 'Mute') : 'No audio on this layer',
-      (muted ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7'),
-      { on: isVid && muted, disabled: !isVid }, () => {
-        if ((layer.volume || 0) > 0) { layer._lastVol = layer.volume; layer.volume = 0; } else { layer.volume = layer._lastVol != null ? layer._lastVol : 1; }
-        const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = layer.volume;
-        if (FM.reconcileAudio) FM.reconcileAudio();   // reversed clips bake volume into a gain node — rebuild it live (#7)
-        FM.inspector.refresh(); commitH();
-      }));
     return row;
   }
 
@@ -482,9 +479,9 @@ window.FM = window.FM || {};
 
   function catsFor(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
-    // Video gets focused Speed + Volume cards INSTEAD of the catch-all Element Properties; everything
-    // else hides Speed/Volume (they have no audio/retiming).
-    if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element');
+    // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
+    // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
+    if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume');
     return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume');
   }
   function categoryGrid(layer) {
