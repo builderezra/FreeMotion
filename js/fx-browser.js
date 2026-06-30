@@ -32,7 +32,9 @@ window.FM = window.FM || {};
     if (!layer) { FM.fxBrowser.close(); return; }
     const inst = FM.fxRegistry.makeInstance(id);
     if (!inst || !FM.fxRegistry.supportsLayer(id, layer)) {
-      if (FM.toast) FM.toast('That effect needs a video or image layer', 1600);
+      const reg = FM.fxRegistry.get(id);
+      const need = reg && reg.appliesTo === 'text' ? 'a text layer' : 'a video or image layer';
+      if (FM.toast) FM.toast('That effect needs ' + need, 1600);
       return;
     }
     if (!layer.effects) layer.effects = [];

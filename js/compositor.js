@@ -156,6 +156,13 @@ window.FM = window.FM || {};
     { type: 'contourstrips', label: 'Contour Strips', param: 'levels', min: 2, max: 12, step: 1, def: 5, color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High' },
     { type: 'innerpinch', label: 'Inner Pinch', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
     { type: 'crosshatch', label: 'Crosshatch', param: 'spacing', min: 3, max: 30, step: 1, def: 7, unit: 'px', color: true, defColor: '#101014', colorLabel: 'Ink' },
+    // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
+    { type: 'counter', label: 'Count Up/Down', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: 0, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: 0, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 }] },
+    { type: 'textprogress', label: 'Text Progress', param: 'progress', min: 0, max: 1, step: 0.01, def: 0.5 },
+    { type: 'textrandomizer', label: 'Text Randomizer', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }] },
+    { type: 'textspacing', label: 'Text Spacing', param: 'spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
+    { type: 'texttransform', label: 'Text Transform', param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
+    { type: 'timecode', label: 'Timecode', param: 'mode', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -308,6 +315,70 @@ window.FM = window.FM || {};
   FM.effectFilter = effectFilter;
 
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+  // ---- TEXT EFFECTS ----
+  // Transform a text layer's displayed STRING and letter-spacing BEFORE layout. These live in
+  // layer.effects (so they share the same effects list / Add-Effect browser) but are NOT pixel or
+  // CSS post-fx — they're folded here, in render order, by FM.applyTextEffects (called from the text
+  // draw path). Each fn mutates st = { text, letterSpacing }. Numeric params read via FM.evalProp so
+  // they keyframe; segment params (mode) read as a plain int.
+  function tnum(v, d) { return (v == null || (typeof v === 'number' && isNaN(v))) ? d : v; }
+  function tpad(n) { n = Math.floor(n); return (n < 10 ? '0' : '') + n; }
+  const TEXT_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@?!';
+  const TEXT_FX = {
+    counter: function (st, p, t) {
+      var from = tnum(FM.evalProp(p.from, t), 0), to = tnum(FM.evalProp(p.to, t), 100);
+      var dec = Math.max(0, Math.min(4, Math.round(tnum(FM.evalProp(p.decimals, t), 0))));
+      var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
+      st.text = (from + (to - from) * pr).toFixed(dec);
+    },
+    textprogress: function (st, p, t) {
+      var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
+      st.text = st.text.slice(0, Math.round(st.text.length * pr));
+    },
+    textrandomizer: function (st, p, t) {
+      var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
+      var spd = tnum(FM.evalProp(p.speed, t), 12);
+      var s = st.text, n = Math.floor(s.length * pr), frame = Math.floor(t * spd), out = '';
+      for (var i = 0; i < s.length; i++) {
+        var c = s[i];
+        if (i < n || c === ' ' || c === '\n' || c === '\t') { out += c; }
+        else { var h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0; out += TEXT_SCRAMBLE[h % TEXT_SCRAMBLE.length]; }
+      }
+      st.text = out;
+    },
+    textspacing: function (st, p, t) {
+      st.letterSpacing = tnum(FM.evalProp(p.spacing, t), 24);
+    },
+    texttransform: function (st, p, t) {
+      var m = (p.mode | 0), s = st.text;
+      if (m === 0) st.text = s.toUpperCase();
+      else if (m === 1) st.text = s.toLowerCase();
+      else if (m === 2) st.text = s.toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      else if (m === 3) { s = s.toLowerCase(); st.text = s.charAt(0).toUpperCase() + s.slice(1); }
+    },
+    timecode: function (st, p, t, info) {
+      var m = (p.mode | 0), fps = (info && info.fps) || 30, lt = (info && info.localT != null) ? info.localT : t;
+      if (lt < 0) lt = 0;
+      var ff = Math.floor(lt * fps) % Math.max(1, Math.round(fps)), totalS = Math.floor(lt);
+      var ss = totalS % 60, mm = Math.floor(totalS / 60) % 60, hh = Math.floor(totalS / 3600);
+      if (m === 0) st.text = tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
+      else if (m === 1) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss);
+      else if (m === 2) st.text = tpad(ss) + ':' + tpad(ff);
+      else st.text = lt.toFixed(1) + 's';
+    },
+  };
+  FM.TEXT_FX = TEXT_FX;
+  // Fold every enabled text effect over the base string + spacing, in layer order. Returns {text, letterSpacing}.
+  FM.applyTextEffects = function (layer, baseText, baseSpacing, t, scene) {
+    var st = { text: String(baseText == null ? '' : baseText), letterSpacing: baseSpacing || 0 };
+    var fx = layer && layer.effects;
+    if (fx && fx.length) {
+      var info = { localT: t - (layer.start || 0), fps: (scene && scene.project && scene.project.fps) || 30 };
+      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (fn) fn(st, e.params || {}, t, info); }
+    }
+    return st;
+  };
   // Smooth deterministic pseudo-noise in ~[-1,1] (sum of incommensurate sines) — same at a given
   // time every render, so wiggle is flicker-free and exports identically.
   function wnoise(u) { return Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2; }
@@ -1276,9 +1347,13 @@ window.FM = window.FM || {};
       ctx.textAlign = layer.align || 'center';
       ctx.textBaseline = 'middle';
       ctx.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
-      if ('letterSpacing' in ctx) ctx.letterSpacing = (layer.letterSpacing || 0) + 'px';
       // Caption tracks render the segment active at time t; plain text renders layer.text.
-      const textSrc = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
+      let textSrc = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
+      // Text effects (Count Up/Down, Text Progress, Randomizer, Spacing, Transform, Timecode) transform the
+      // displayed string + letter-spacing before layout — folded in layer order.
+      const _tEff = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
+      textSrc = _tEff.text;
+      if ('letterSpacing' in ctx) ctx.letterSpacing = _tEff.letterSpacing + 'px';
       const lines = String(textSrc).split('\n');
       const lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15);
       const total = (lines.length - 1) * lh;

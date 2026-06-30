@@ -53,6 +53,8 @@ window.FM = window.FM || {};
     electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', smoothbevel: 'drawing',
     // batch 18 (blur / proc / distort / drawing)
     zoomstreaks: 'blur', innerblur: 'blur', contourstrips: 'proc', innerpinch: 'distort', crosshatch: 'drawing',
+    // batch 19 (text)
+    counter: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -75,6 +77,8 @@ window.FM = window.FM || {};
 
   // chromakey/lumakey/vignette only affect media (video/image) layers — never text/shape.
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1, vignette: 1 };
+  // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
+  const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1 };
 
   // Effects to feature in the carousel (visually interesting ones).
   FM.FX_FEATURED = ['duotone', 'chromakey', 'glow', 'rgbsplit', 'pixelate', 'mirror'];
@@ -103,7 +107,7 @@ window.FM = window.FM || {};
       id: def.type, type: def.type, label: def.label,
       category: CATEGORY_OF[def.type] || 'other',
       params: paramsOf(def),
-      appliesTo: MEDIA_ONLY[def.type] ? 'media' : 'all',
+      appliesTo: TEXT_ONLY[def.type] ? 'text' : (MEDIA_ONLY[def.type] ? 'media' : 'all'),
       _def: def,
     };
   });
@@ -129,6 +133,7 @@ window.FM = window.FM || {};
     supportsLayer: function (id, layer) {
       const e = REG[id]; if (!e || !layer) return false;
       if (e.appliesTo === 'media' && !(layer.type === 'video' || layer.type === 'image')) return false;
+      if (e.appliesTo === 'text' && layer.type !== 'text') return false;   // text effects need a text layer
       if (layer.type === 'adjustment' && id === 'mirror') return false;   // mirror needs a geometry pass adjustment layers can't do
       return true;
     },
