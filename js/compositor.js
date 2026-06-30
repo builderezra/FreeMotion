@@ -133,6 +133,11 @@ window.FM = window.FM || {};
     { type: 'solidmatte', label: 'Solid Matte', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', param: 'choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
     { type: 'mattefringe', label: 'Matte Fringe', param: 'width', min: 1, max: 12, step: 1, def: 3, unit: 'px', color: true, defColor: '#00e0ff', colorLabel: 'Fringe' },
+    // ---- batch 15: Repeat (tiled-coordinate warps) ----
+    { type: 'gridrepeat', label: 'Grid Repeat', param: 'count', min: 1, max: 10, step: 1, def: 3 },
+    { type: 'linearrepeat', label: 'Linear Repeat', param: 'count', min: 1, max: 12, step: 1, def: 4 },
+    { type: 'radialrepeat', label: 'Radial Repeat', param: 'count', min: 2, max: 16, step: 1, def: 6 },
+    { type: 'mirrortile', label: 'Mirror Tile', param: 'size', min: 20, max: 400, step: 1, def: 140, unit: 'px' },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -557,7 +562,8 @@ window.FM = window.FM || {};
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1,
-    wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1 };
+    wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
+    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -922,6 +928,11 @@ window.FM = window.FM || {};
     curl: function(x,y,W,H,cx,cy,maxR,p,t){ var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/40); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
     fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t){ var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; var fwNx=Math.sin(x/57+y/40)+Math.sin(x/29-y/53)*0.6+Math.sin(x/15+y/19)*0.35; var fwNy=Math.cos(x/47-y/61)+Math.sin(x/35+y/27)*0.6+Math.cos(x/13-y/21)*0.35; return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
+    // ---- batch 15 (repeat / tiling) ----
+    gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10; var grCellW=W/grCount, grCellH=H/grCount; var grGx=(x-Math.floor(x/grCellW)*grCellW)/grCellW; var grGy=(y-Math.floor(y/grCellH)*grCellH)/grCellH; return [grGx*W, grGy*H]; },
+    linearrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var lr_count=Math.round(FM.evalProp(p.count,t)||4); if(lr_count<1)lr_count=1; if(lr_count>12)lr_count=12; var lr_cellW=W/lr_count; var lr_lx=(x-Math.floor(x/lr_cellW)*lr_cellW)/lr_cellW; return [lr_lx*W, y]; },
+    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16; var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy); var rr_seg=Math.PI*2/rr_count; var rr_a=Math.atan2(rr_dy,rr_dx); var rr_a2=rr_a-Math.floor(rr_a/rr_seg)*rr_seg; return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
+    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; if(mt_size<1) mt_size=1; var mt_cix=Math.floor(x/mt_size); var mt_lx=x-mt_cix*mt_size; if(mt_cix&1) mt_lx=mt_size-mt_lx; var mt_ciy=Math.floor(y/mt_size); var mt_ly=y-mt_ciy*mt_size; if(mt_ciy&1) mt_ly=mt_size-mt_ly; var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
   };
 
   // RGB split / chromatic aberration: render the layer clean to an offscreen, then rebuild it
