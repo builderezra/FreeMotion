@@ -69,11 +69,13 @@ window.FM = window.FM || {};
     ctx.stroke();
   }
 
-  function pickKfs(layer, mode) {
-    const props = (MODE_PROPS[mode] || MODE_PROPS.all).filter(k => FM.isAnimated(layer.transform[k]) && layer.transform[k].kf.length >= 2);
+  // getProp(k) returns the animatable prop object for key k (layer.transform[k] for transform modes,
+  // or e.g. () => layer.volume for the audio panel). Lets this editor drive ANY keyframed prop.
+  function pickKfs(getProp, propKeys) {
+    const props = propKeys.filter(k => { const p = getProp(k); return FM.isAnimated(p) && p.kf.length >= 2; });
     const t = FM.time, keys = [], kfs = [];
     props.forEach(k => {
-      const kf = layer.transform[k].kf;
+      const kf = getProp(k).kf;
       let idx = kf.findIndex(x => x.t >= t - 1e-3);
       if (idx < 1) idx = (t <= kf[0].t) ? 1 : kf.length - 1;
       if (idx > kf.length - 1) idx = kf.length - 1;
@@ -102,7 +104,7 @@ window.FM = window.FM || {};
     const activeKey = curIsHold() ? 'hold' : (cur.kfs[0].bez ? null : cur.kfs[0].e);
     [].forEach.call(presetWrap.children, b => b.classList.toggle('on', b._key === activeKey));
     if (carLabel) carLabel.textContent = curIsHold() ? 'Hold (step)' : (cur.kfs[0].bez ? 'Cubic Bezier Easing' : (PRESETS.find(p => p.key === cur.kfs[0].e) || {}).label || 'Cubic Bezier Easing');
-    if (loopBtn) { const lm = cur.layer && cur.layer.transform[cur.keys[0]] && cur.layer.transform[cur.keys[0]].loopMode; loopBtn.classList.toggle('on', !!lm && lm !== 'none'); loopBtn.title = 'Loop: ' + (lm || 'none'); }
+    if (loopBtn) { const fp = cur.get && cur.keys.length ? cur.get(cur.keys[0]) : null; const lm = fp && fp.loopMode; loopBtn.classList.toggle('on', !!lm && lm !== 'none'); loopBtn.title = 'Loop: ' + (lm || 'none'); }
   }
 
   function toGraph(e) {
@@ -150,9 +152,9 @@ window.FM = window.FM || {};
       // also reads) and apply that same mode to every animated prop, so they stay in lockstep with
       // the highlight instead of drifting apart when they started mismatched. (#18)
       const order = ['none', 'cycle', 'pingpong'];
-      const first = cur.layer.transform[cur.keys[0]];
+      const first = cur.get(cur.keys[0]);
       const next = order[(order.indexOf((first && first.loopMode) || 'none') + 1) % order.length];
-      cur.keys.forEach(k => { const p = cur.layer.transform[k]; if (FM.isAnimated(p)) p.loopMode = next; });
+      cur.keys.forEach(k => { const p = cur.get(k); if (FM.isAnimated(p)) p.loopMode = next; });
       FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
     });
     foot.append(loopBtn);
@@ -161,10 +163,22 @@ window.FM = window.FM || {};
     return wrap;
   }
 
-  // Returns the inline editor DOM for `layer`'s active mode, ready to drop into the inspector body.
+  // Returns the inline editor DOM for `layer`'s active transform mode, ready to drop into the inspector.
   FM.buildEasingEditor = function (layer, mode) {
     cur.layer = layer; cur.mode = mode || 'all';
-    const picked = pickKfs(layer, cur.mode); cur.keys = picked.keys; cur.kfs = picked.kfs;
+    cur.get = k => layer.transform[k];
+    const picked = pickKfs(cur.get, MODE_PROPS[cur.mode] || MODE_PROPS.all); cur.keys = picked.keys; cur.kfs = picked.kfs;
+    const dom = buildEditorDom();
+    redraw();
+    return dom;
+  };
+
+  // Generic variant: edit the easing of ANY animatable prop (e.g. layer.volume). getProp(k) returns
+  // the prop object for each key in propKeys.
+  FM.buildEasingEditorFor = function (layer, getProp, propKeys, label) {
+    cur.layer = layer; cur.mode = label || 'prop';
+    cur.get = getProp;
+    const picked = pickKfs(getProp, propKeys); cur.keys = picked.keys; cur.kfs = picked.kfs;
     const dom = buildEditorDom();
     redraw();
     return dom;

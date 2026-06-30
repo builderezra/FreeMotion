@@ -57,7 +57,7 @@ window.FM = window.FM || {};
         node.buffer = buf;
         node.playbackRate.value = FM.previewRate || 1;   // reversed audio must follow the preview speed (start() is re-run on rate change)
         const gain = audioCtx.createGain();
-        const vol = (layer.volume != null ? layer.volume : 1);
+        const vol = FM.layerVolume(layer, FM.time);   // reversed clips bake the value at the current playhead (keyframed volume isn't smoothly animated here)
         const clipDur = layer.duration;
         const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;   // scaled so fades never overlap
         if (fi > 0 || fo > 0) {

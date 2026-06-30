@@ -236,7 +236,82 @@ window.FM = window.FM || {};
     ]);
   }
 
-  // One effect row (AM): collapsed = ▸ name … eye + reorder; expanded = ▾ name … ⋯ + delete, then its editor.
+  // Gestures on an effect row: SWIPE LEFT to delete, PRESS-HOLD then drag up/down to reorder.
+  // (Replaces the old ▴▾ arrow buttons.) touch-action:pan-y lets the sheet still scroll vertically.
+  function attachFxGestures(row, head, layer, idx) {
+    let sx = 0, sy = 0, mode = null, hold = null, rows = null, slotH = 0, toIdx = idx;
+    row._g = { moved: false };
+    const clearHold = () => { if (hold) { clearTimeout(hold); hold = null; } };
+    function beginReorder() {
+      const list = row.parentNode; if (!list) return;
+      mode = 'reorder'; row._g.moved = true;
+      rows = Array.prototype.slice.call(list.children);
+      slotH = row.getBoundingClientRect().height + 7;   // row height + list gap
+      row.classList.add('fx-dragging');
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (_) {} }
+    }
+    function moveReorder(e) {
+      const dy = e.clientY - sy;
+      row.style.transform = 'translateY(' + dy + 'px)';
+      toIdx = Math.max(0, Math.min(rows.length - 1, idx + Math.round(dy / slotH)));
+      rows.forEach((r, i) => {
+        if (r === row) return;
+        let ty = 0;
+        if (idx < toIdx && i > idx && i <= toIdx) ty = -slotH;
+        else if (idx > toIdx && i < idx && i >= toIdx) ty = slotH;
+        r.style.transform = ty ? 'translateY(' + ty + 'px)' : '';
+      });
+    }
+    function endReorder() {
+      if (rows) rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; });
+      row.classList.remove('fx-dragging'); row.style.transform = '';
+      if (toIdx !== idx && layer.effects && layer.effects[idx]) {
+        const m = layer.effects.splice(idx, 1)[0]; layer.effects.splice(toIdx, 0, m); afterFx();
+      } else { FM.inspector.refresh(); }
+    }
+    function moveSwipe(e) {
+      const dx = Math.min(0, e.clientX - sx);
+      row.style.transform = 'translateX(' + dx + 'px)';
+      row.classList.toggle('fx-swipe-armed', dx < -70);
+    }
+    function endSwipe(e) {
+      if (e.clientX - sx < -70) {
+        row.style.transition = 'transform .14s, opacity .14s'; row.style.transform = 'translateX(-100%)'; row.style.opacity = '0';
+        setTimeout(() => { if (layer.effects) { layer.effects.splice(idx, 1); afterFx(); } }, 130);
+      } else {
+        row.style.transition = 'transform .14s'; row.style.transform = ''; row.classList.remove('fx-swipe-armed');
+        setTimeout(() => { row.style.transition = ''; }, 150);
+      }
+    }
+    head.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return;                       // let eye / disc / etc. work
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      sx = e.clientX; sy = e.clientY; mode = null; toIdx = idx; row._g.moved = false;
+      try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);   // press-hold → reorder
+    });
+    head.addEventListener('pointermove', e => {
+      if (mode === null) {
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) + 2) { mode = 'swipe'; row._g.moved = true; clearHold(); }
+        else if (Math.abs(dy) > 8) { clearHold(); beginReorder(); }
+        else return;
+      }
+      if (mode === 'swipe') { moveSwipe(e); e.preventDefault(); }
+      else if (mode === 'reorder') { moveReorder(e); e.preventDefault(); }
+    });
+    const finish = e => {
+      clearHold();
+      try { head.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (mode === 'swipe') endSwipe(e); else if (mode === 'reorder') endReorder();
+      mode = null;
+    };
+    head.addEventListener('pointerup', finish);
+    head.addEventListener('pointercancel', finish);
+  }
+
+  // One effect row (AM): collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
+  // Reorder = press-hold + drag; delete = swipe left (see attachFxGestures).
   function fxRow(layer, fx, idx) {
     const reg = FM.fxRegistry.get(fx.type) || { label: fx.type, params: [] };
     const expanded = !!fx._expanded, off = fx.enabled === false;
@@ -244,8 +319,10 @@ window.FM = window.FM || {};
     const head = el('div', 'fx-head');
     const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
     const name = el('span', 'fx-name', reg.label);
-    const toggle = () => { fx._expanded = !expanded; FM.inspector.refresh(); };
+    // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it
+    const toggle = () => { if (row._g && row._g.moved) { row._g.moved = false; return; } fx._expanded = !expanded; FM.inspector.refresh(); };
     disc.addEventListener('click', toggle); name.addEventListener('click', toggle);
+    if (!expanded && (layer.effects || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder)
     head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
       const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
@@ -258,16 +335,9 @@ window.FM = window.FM || {};
       eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
       eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterFx(); });
       head.appendChild(eye);
-      if ((layer.effects || []).length > 1) {
-        const e = layer.effects;
-        const up = el('button', 'fx-icon-btn fx-mv' + (idx === 0 ? ' dis' : ''), '▴'); up.title = 'Move up';
-        up.addEventListener('click', () => { if (idx > 0) { const x = e[idx - 1]; e[idx - 1] = e[idx]; e[idx] = x; afterFx(); } });
-        const dn = el('button', 'fx-icon-btn fx-mv' + (idx === e.length - 1 ? ' dis' : ''), '▾'); dn.title = 'Move down';
-        dn.addEventListener('click', () => { if (idx < e.length - 1) { const x = e[idx + 1]; e[idx + 1] = e[idx]; e[idx] = x; afterFx(); } });
-        head.appendChild(up); head.appendChild(dn);
-      }
     }
     row.appendChild(head);
+    attachFxGestures(row, head, layer, idx);   // swipe-left = delete · press-hold + drag = reorder
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       reg.params.forEach(p => {
@@ -312,6 +382,8 @@ window.FM = window.FM || {};
     { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
+    { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },          // video only
+    { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },   // video only
     { key: 'element', label: 'Element Properties', icon: 'M4 9h7v7H4zM15 6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M16 14l4 6h-8z' },
     { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
@@ -360,8 +432,7 @@ window.FM = window.FM || {};
     }
     const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    // speed / timing → opens the timing category
-    row.appendChild(qbtn('Speed & timing', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => { view = 'element'; FM.inspector.refresh(); }));
+    // (Speed & timing moved to the dedicated Speed card — no redundant element shortcut here.)
     // split at playhead
     row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onClip }, () => { FM.splitLayer(layer.id); }));
     // trim START to playhead (drop everything before the playhead)
@@ -411,7 +482,10 @@ window.FM = window.FM || {};
 
   function catsFor(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
-    return CATEGORIES;
+    // Video gets focused Speed + Volume cards INSTEAD of the catch-all Element Properties; everything
+    // else hides Speed/Volume (they have no audio/retiming).
+    if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element');
+    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume');
   }
   function categoryGrid(layer) {
     // AM lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
@@ -423,7 +497,7 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
-      card.addEventListener('click', () => { view = cat.key; FM._mtEasing = false; FM.inspector.refresh(); });
+      card.addEventListener('click', () => { view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); });
       (i < 3 ? top : bot).appendChild(card);
     });
     wrap.appendChild(top);
@@ -607,9 +681,117 @@ window.FM = window.FM || {};
     return panel;
   }
 
+  // Parent picker (moved out of the old Element Properties so it lives with the transform it controls).
+  function parentControl(layer) {
+    const wrap = el('div', 'parent-ctl');
+    const candidates = FM.scene.layers.filter(l => l.id !== layer.id && !FM.isAncestor(FM.scene, layer.id, l.id));
+    const row = el('div', 'prop-row'); row.appendChild(el('label', null, 'Parent'));
+    const sel = document.createElement('select');
+    const none = document.createElement('option'); none.value = ''; none.textContent = 'None'; if (!layer.parent) none.selected = true; sel.appendChild(none);
+    candidates.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (layer.parent === c.id) o.selected = true; sel.appendChild(o); });
+    sel.addEventListener('change', () => { layer.parent = sel.value || null; FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); });
+    row.appendChild(sel); wrap.appendChild(row);
+    if (layer.parent) {
+      if (!layer.parentMode) layer.parentMode = 'normal';
+      const mr = el('div', 'prop-row'); mr.appendChild(el('label', null, 'Link rotation'));
+      const msel = document.createElement('select');
+      [['normal', 'Normal'], ['locked', 'Locked (upright)'], ['weighted', 'Weighted']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.parentMode) o.selected = true; msel.appendChild(o); });
+      msel.addEventListener('change', () => { layer.parentMode = msel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
+      mr.appendChild(msel); wrap.appendChild(mr);
+      if (layer.parentMode === 'weighted') {
+        if (layer.parentWeight == null) layer.parentWeight = 0.5;
+        wrap.appendChild(rangeRow('Weight', () => layer.parentWeight, v => { layer.parentWeight = Math.max(0, Math.min(1, v)); }, 0, 1, 0.05));
+      }
+    }
+    return wrap;
+  }
+
+  // ===== Volume panel — keyframeable audio level + easing (AM-style left rail: ◆ + curve) =====
+  function volumePanel(layer) {
+    if (layer.volume == null) layer.volume = 1;
+    const panel = el('div', 'mt-panel vol-panel');
+    const volPct = () => Math.round(FM.layerVolume(layer, FM.time) * 100);
+    const setPct = pct => {
+      const f = Math.max(0, Math.min(1, pct / 100));
+      FM.setProp(layer, 'volume', f, FM.time);            // keyframe-aware (writes a kf when animated)
+      const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = f;
+      FM.requestRender(); if (FM.reconcileAudio) FM.reconcileAudio();
+    };
+
+    // left rail: ◆ keyframe + easing-curve button
+    const left = el('div', 'mt-rail mt-rail-left');
+    const anim = FM.isAnimated(layer.volume), onHere = FM.hasKeyframeAt(layer.volume, FM.time);
+    const kfBtn = el('button', 'mt-kf' + (anim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
+    kfBtn.title = onHere ? 'Remove volume keyframe at playhead' : 'Keyframe the volume at the playhead';
+    kfBtn.addEventListener('click', () => { FM.toggleProp(layer, 'volume', FM.time, 1); FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); });
+    left.appendChild(kfBtn);
+    const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Volume easing curve';
+    easeBtn.addEventListener('click', () => { FM._volEasing = true; FM.inspector.refresh(); });
+    left.appendChild(easeBtn);
+
+    // center: value box + big slider + fades
+    const center = el('div', 'mt-center');
+    const values = el('div', 'mt-values');
+    const control = el('div', 'mt-control vol-control');
+    center.append(values, control);
+    const vbox = mtVBox('Volume', volPct, v => setPct(Math.round(v)), { dp: 0, unit: '%', scrub: 1, min: 0, max: 100 });
+    values.appendChild(vbox);
+
+    const srow = el('div', 'vol-slider-row');
+    const mute = el('button', 'vol-mute');
+    const muteIcon = () => { mute.innerHTML = svgIcon(volPct() <= 0 ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7'); };
+    muteIcon();
+    const slider = document.createElement('input'); slider.type = 'range'; slider.min = '0'; slider.max = '100'; slider.step = '1'; slider.value = String(volPct()); slider.className = 'vol-slider';
+    const paint = () => { const p = volPct(); slider.style.background = 'linear-gradient(90deg, var(--accent) ' + p + '%, var(--line) ' + p + '%)'; };
+    paint();
+    const sync = () => { slider.value = String(volPct()); if (vbox._refresh) vbox._refresh(); muteIcon(); paint(); };
+    slider.addEventListener('input', () => { setPct(parseFloat(slider.value) || 0); if (vbox._refresh) vbox._refresh(); muteIcon(); paint(); });
+    slider.addEventListener('change', () => commitH());
+    mute.addEventListener('click', () => { const cur = volPct(); if (cur > 0) { layer._lastVol = cur; setPct(0); } else { setPct(layer._lastVol != null ? layer._lastVol : 100); } sync(); commitH(); });
+    srow.append(mute, slider);
+    control.appendChild(srow);
+
+    if (layer.fadeIn == null) layer.fadeIn = 0; if (layer.fadeOut == null) layer.fadeOut = 0;
+    const fmax = Math.max(1, Math.min(10, round(layer.duration, 1)));
+    control.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fmax, 0.1));
+    control.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fmax, 0.1));
+
+    panel.append(left, center);
+    // follow the playhead when volume is keyframed
+    FM.inspector.syncTransform = () => { if (!document.contains(panel)) return; sync(); };
+    return panel;
+  }
+
   function buildCategory(key, layer, body) {
     if (key === 'transform') {
       body.appendChild(moveTransformPanel(layer));
+      body.appendChild(parentControl(layer));   // parenting lives with the transform it inherits
+    } else if (key === 'volume') {
+      body.appendChild(volumePanel(layer));
+    } else if (key === 'speed') {
+      if (layer.speed == null) layer.speed = 1;
+      body.appendChild(rangeRow('Speed %', () => Math.round((layer.speed || 1) * 100), v => {
+        const sp = Math.max(0.1, v / 100);
+        const span = layer.duration * (layer.speed || 1);   // source span is invariant → re-time the clip
+        layer.speed = sp;
+        layer.duration = Math.max(0.1, span / sp);
+        const end = layer.start + layer.duration;
+        if (end > FM.scene.project.duration) FM.scene.project.duration = end;
+        const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, sp)); } catch (e) {} }
+        FM.timeline.rebuild();
+      }, 25, 400, 5, () => FM.inspector.refresh()));
+      if (layer.frameBlend == null) layer.frameBlend = false;
+      body.appendChild(checkRow('Smooth slow-motion (frame blend)', layer.frameBlend, async v => {
+        layer.frameBlend = v;
+        if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
+        FM.requestRender(); FM.seekVideosToTime();
+      }));
+      body.appendChild(el('div', 'insp-hint', 'Frame blend interpolates new in-between frames so slowed-down clips look fluid instead of stuttery.'));
+      body.appendChild(checkRow('Reverse (video + audio)', layer.reversed, async v => {
+        layer.reversed = v; FM.timeline.rebuild();
+        if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
+        FM.requestRender(); FM.seekVideosToTime();
+      }));
     } else if (key === 'blend') {
       body.appendChild(selectRow('Blend mode', layer.blendMode, FM.BLEND_MODES, v => { layer.blendMode = v; FM.requestRender(); }));
       body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));
@@ -662,9 +844,9 @@ window.FM = window.FM || {};
       cr.appendChild(colorField(() => sh.color || '#000000', v => { sh.color = v; }));
       body.appendChild(cr);
     } else if (key === 'element') {
-      body.appendChild(checkRow('Visible', layer.visible, v => { layer.visible = v; FM.requestRender(); FM.layersPanel.refresh(); if (FM.reconcileAudio) FM.reconcileAudio(); }));
-      // Parent picker — link this layer to inherit another layer's transform (cycles excluded).
-      (function () {
+      // (Visible → timeline eye; Parent → Move & Transform. The old Visible/Parent rows were removed
+      // here so this "Edit Shape / Edit Text" panel stays focused and fits without scrolling.)
+      if (false) (function () {
         const candidates = FM.scene.layers.filter(l => l.id !== layer.id && !FM.isAncestor(FM.scene, layer.id, l.id));
         const row = el('div', 'prop-row'); row.appendChild(el('label', null, 'Parent'));
         const sel = document.createElement('select');
@@ -879,7 +1061,7 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; }
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; }
       // On phone the swatch/rename/dup/delete "extra bar" moves to the top bar (AM); skip it here.
       if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) root.appendChild(layerHeader(layer));
       if (view === 'home') {
@@ -894,10 +1076,18 @@ window.FM = window.FM || {};
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditor(layer, FM._mtMode || 'move'));
         root.appendChild(bodyEl);
+      } else if (view === 'volume' && FM._volEasing && FM.buildEasingEditorFor) {
+        // Volume easing curve — inline sub-view of the Volume panel.
+        const back = el('button', 'cat-back', '‹  Volume');
+        back.addEventListener('click', () => { FM._volEasing = false; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditorFor(layer, () => layer.volume, ['volume'], 'volume'));
+        root.appendChild(bodyEl);
       } else {
         const cat = CATEGORIES.find(c => c.key === view);
         const back = el('button', 'cat-back', '‹  ' + (cat ? cat.label : 'Back'));
-        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM.inspector.refresh(); });
+        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');
         buildCategory(view, layer, bodyEl);

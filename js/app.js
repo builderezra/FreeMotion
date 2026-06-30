@@ -293,7 +293,7 @@ window.FM = window.FM || {};
           else if (Math.abs((m.el.currentTime || 0) - local) > 0.15) { m.el.currentTime = local; } // resync drift (speed≠1)
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
-          const vol = (layer.volume != null ? layer.volume : 1) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);
+          const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);   // keyframed volume animates on forward clips
           m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol));
         } catch (e) {}
       }
@@ -320,7 +320,7 @@ window.FM = window.FM || {};
         try { m.el.currentTime = local; } catch (e) {}
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (layer.speed || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = false;
-        m.el.volume = (layer.volume != null ? layer.volume : 1);
+        m.el.volume = Math.max(0, Math.min(1, FM.layerVolume(layer, FM.time)));
         m.el.play().catch(() => {});
       }
     });

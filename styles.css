@@ -211,6 +211,17 @@ body {
 .es-foot { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 4px 0 0; }
 .es-loop { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 20px; line-height: 1; cursor: pointer; }
 .es-loop.on { color: var(--accent); border-color: rgba(41,217,187,.5); background: rgba(41,217,187,.12); }
+
+/* ===== Volume panel (keyframeable audio level + easing) ===== */
+.vol-panel .mt-center { gap: 12px; }
+.vol-control { display: flex; flex-direction: column; gap: 11px; width: 100%; }
+.vol-slider-row { display: flex; align-items: center; gap: 11px; }
+.vol-mute { width: 38px; height: 38px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: #b8c4d6; cursor: pointer; }
+.vol-mute svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.vol-mute:hover { color: var(--accent); border-color: rgba(41,217,187,.5); }
+.vol-slider { flex: 1; min-width: 0; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 5px; background: var(--line); outline: none; cursor: pointer; }
+.vol-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); border: 3px solid #0c1016; box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: pointer; }
+.vol-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid #0c1016; cursor: pointer; }
 .sb-nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .sb-ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .sb-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
@@ -427,8 +438,13 @@ body {
 
 /* ===== AM effects list + per-effect editor ===== */
 .fx-list { display: flex; flex-direction: column; gap: 7px; }
-.fx-row { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 0; margin: 0; overflow: hidden; }
-.fx-head { display: flex; align-items: center; gap: 6px; padding: 9px 8px 9px 4px; margin: 0; }
+.fx-row { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 0; margin: 0; overflow: hidden; position: relative; }
+/* effect-row gestures: swipe-left to delete, press-hold + drag to reorder */
+.fx-head { display: flex; align-items: center; gap: 6px; padding: 9px 8px 9px 4px; margin: 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.fx-grip { width: 16px; flex: none; text-align: center; color: var(--text-dim); font-size: 13px; cursor: grab; line-height: 1; }
+.fx-row.fx-dragging { z-index: 6; box-shadow: 0 10px 24px rgba(0,0,0,.45); border-color: var(--accent); opacity: .97; }
+.fx-row.fx-dragging .fx-grip { cursor: grabbing; color: var(--accent); }
+.fx-row.fx-swipe-armed { border-color: #e5484d; background: rgba(229,72,77,.16); }
 .fx-disc { background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer; width: 20px; padding: 0; }
 .fx-row .fx-name { font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; }
 .fx-spacer { flex: 1; }

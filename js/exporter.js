@@ -88,7 +88,7 @@ window.FM = window.FM || {};
       any = true;
       const node = oac.createBufferSource(); node.buffer = buf;
       const gain = oac.createGain();
-      const vol = (layer.volume != null ? layer.volume : 1);
+      const vol = FM.layerVolume(layer, layer.start);   // export uses the clip-start volume (keyframed volume not yet automated in the mix)
       const clipDur = layer.duration;                     // fade timing uses VISUAL duration (matches preview), not audio-limited
       const win = FM.fadeWindows(layer, clipDur);         // scaled so fades never overlap (no pop)
       const fi = win.fi, fo = win.fo;

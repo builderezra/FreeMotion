@@ -81,6 +81,10 @@ window.FM = window.FM || {};
   }
   FM.evalProp = evalProp;
 
+  /* A layer's audio level at time t — default 1, or the keyframed/animated value. Single source of
+   * truth so preview + export read keyframed volume the same way. */
+  FM.layerVolume = function (layer, t) { return layer.volume == null ? 1 : evalProp(layer.volume, t); };
+
   function upsertKeyframe(p, t, v) {
     const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
     if (hit) { hit.v = v; }
@@ -126,6 +130,7 @@ window.FM = window.FM || {};
   FM.animatedProps = function (layer) {
     const out = [];
     Object.keys(layer.transform).forEach(k => { if (isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
+    if (isAnimated(layer.volume)) out.push(layer.volume);   // keyframed audio shows diamonds on the clip too
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
   };
