@@ -646,7 +646,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 .clip:active { cursor: grabbing; }
 /* AM: a selected clip gets a WHITE bar/outline with grip caps + chevron arrows at each end. */
-.clip.sel { border-color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 10px rgba(0,0,0,.45); }
+.clip.sel { border-color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 10px rgba(0,0,0,.45); overflow: visible; }   /* let the grip caps sit OUTSIDE the clip */
 .clip.under-playhead { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.3); }
 .clip.sel.under-playhead { box-shadow: 0 0 0 2px #fff, inset 0 0 0 1px rgba(255,255,255,.5), 0 2px 8px rgba(0,0,0,.4); }
 .clip.reversed { background-image: linear-gradient(180deg, #5a3a78, #3f2860); }
@@ -660,8 +660,10 @@ input[type=range]::-webkit-slider-thumb {
 .clip-grip.left { left: 0; border-radius: 7px 0 0 7px; }
 .clip-grip.right { right: 0; border-radius: 0 7px 7px 0; }
 .clip-grip:hover { background: rgba(255,255,255,.3); }
-/* chevron arrows — only shown on the SELECTED clip's grips (white caps, like AM) */
+/* chevron arrows — only shown on the SELECTED clip's grips (white caps, like AM), sitting just OUTSIDE each clip edge */
 .clip.sel .clip-grip { background: #fff; width: 13px; }
+.clip.sel .clip-grip.left { left: -13px; border-radius: 7px 0 0 7px; }
+.clip.sel .clip-grip.right { right: -13px; border-radius: 0 7px 7px 0; }
 .clip.sel .clip-grip::after { content: ''; width: 5px; height: 5px; border-top: 2px solid #1b1f27; border-right: 2px solid #1b1f27; }
 .clip.sel .clip-grip.left::after { transform: rotate(-135deg); margin-left: 2px; }
 .clip.sel .clip-grip.right::after { transform: rotate(45deg); margin-right: 2px; }
