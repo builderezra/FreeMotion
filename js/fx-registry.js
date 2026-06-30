@@ -39,6 +39,8 @@ window.FM = window.FM || {};
     bumpmap: 'color', edgeglow: 'drawing', contourlines: 'drawing', grunge: 'proc', iridescence: 'color', fractalwarp: 'distort',
     // batch 11 (multi-param)
     motionblur: 'blur', colorbalance: 'color', highlightsshadows: 'color', tiltshift: 'blur',
+    // batch 12
+    dropshadow: 'stylize', chromaticaberration: 'distort', innerglow: 'drawing', unsharpmask: 'blur', hextiles: 'distort', linstreaks: 'blur',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
