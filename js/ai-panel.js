@@ -171,8 +171,13 @@ window.FM = window.FM || {};
   }
 
   function startRun(opts) {
+    opts = opts || {};
     var prompt = promptInput.value.trim();
     if (!prompt && !fields.style.value.trim()) { promptInput.classList.add('bad'); promptInput.placeholder = 'Tell me what to make first…'; promptInput.focus(); return; }
+    // No API key (and not a dry-run demo) → there's no model to call. generateScene would just return
+    // the template floor WITHOUT driving the panel, stranding it on a blank running screen. Route to
+    // the template builder, which drives the panel to done. (#16)
+    if (!opts.dryRun && FM.aiKey && !FM.aiKey.has()) { buildTemplate(); return; }
     setMode('running');
     var chips = gatherChips();
     FM.ai.generateScene(prompt, chips, { deepPolish: fields.deep.checked, dryRun: !!opts.dryRun });

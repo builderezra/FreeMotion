@@ -88,6 +88,9 @@ window.FM = window.FM || {};
     readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
     const d = FM.scene.project.duration, mm = Math.floor(d / 60), ss = Math.round(d % 60);
     readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + 'total ' + mm + ':' + String(ss).padStart(2, '0');
+    // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
+    // playhead for animated props — every time-change path passes through here. (#2)
+    if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
   }
 
   // Global preview playback speed (preview only — export is unaffected). 0.5×, 1×, 2×…
@@ -1069,21 +1072,27 @@ window.FM = window.FM || {};
     let _nudged = false;
     window.addEventListener('keydown', e => {
       const mod = e.metaKey || e.ctrlKey;
+      // Editable target = native <input>/<select>/<textarea> OR any contentEditable element
+      // (the Move & Transform value boxes are contentEditable <div>s). When focused there, let the
+      // browser handle the key (text edit / undo / copy) instead of firing app shortcuts — otherwise
+      // Backspace deletes the selected LAYER while you're trying to fix a digit. (#1)
+      const tgt = e.target;
+      const inEdit = !!(tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'SELECT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable));
       if (mod && (e.key === 'z' || e.key === 'Z')) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; // let field text-undo
+        if (inEdit) return; // let field text-undo
         e.preventDefault();
         if (e.shiftKey) { if (FM.history) FM.history.redo(); } else { if (FM.history) FM.history.undo(); }
         return;
       }
-      if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); if (FM.history) FM.history.redo(); return; }
+      if (mod && (e.key === 'y' || e.key === 'Y')) { if (inEdit) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
       if (mod && (e.key === 'd' || e.key === 'D')) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (inEdit) return;
         e.preventDefault();
         if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId);
         return;
       }
       if (mod && (e.key === 'c' || e.key === 'C')) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (inEdit) return;
         const sel = window.getSelection && window.getSelection();
         if (sel && String(sel).length) return;   // don't hijack a real text-selection copy
         e.preventDefault();
@@ -1091,18 +1100,18 @@ window.FM = window.FM || {};
         return;
       }
       if (mod && (e.key === 'v' || e.key === 'V')) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (inEdit) return;
         e.preventDefault();
         if (FM.pasteClipboard) FM.pasteClipboard();
         return;
       }
       if (mod && (e.key === 'a' || e.key === 'A')) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (inEdit) return;
         e.preventDefault();
         if (FM.selectAll) FM.selectAll();
         return;
       }
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+      if (inEdit) return;
       if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }
       else if (e.code.indexOf('Arrow') === 0) {

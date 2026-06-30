@@ -1,6 +1,6 @@
 /* FreeMotion service worker — network-first so you always get the latest push when online,
  * with a cache fallback so the installed app still opens offline. Bump CACHE to force a refresh. */
-const CACHE = 'freemotion-v55';
+const CACHE = 'freemotion-v56';
 const CORE = ['./', './index.html', './styles.css', './manifest.json'];
 
 self.addEventListener('install', function (e) {
@@ -21,8 +21,12 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;                       // never cache POST etc.
   e.respondWith(
     fetch(req).then(function (res) {
-      var copy = res.clone();
-      caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {});
+      // Only cache genuine, same-origin OK responses — never poison the cache with a 404/500
+      // (deploy swap), a captive-portal page, or an opaque error so offline keeps last-known-good.
+      if (res && res.ok && res.status === 200 && res.type === 'basic') {
+        var copy = res.clone();
+        caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {});
+      }
       return res;
     }).catch(function () {
       return caches.match(req).then(function (r) { return r || caches.match('./index.html'); });

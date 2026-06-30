@@ -28,7 +28,7 @@ window.FM = window.FM || {};
     ['Select camera, scroll', 'Zoom around the cursor'],
     ['Drag layer / handles', 'Move, or scale & rotate from the corners'],
     ['Effects panel', 'Add · animate ◆ · toggle · reorder · copy/paste · presets'],
-    ['Double-click text', 'Edit text on the canvas'],
+    ['Double-click clip', 'Open it in the inspector'],
   ];
   let overlay;
   function section(card, title, pairs, keyClass) {

@@ -12,7 +12,7 @@ window.FM = window.FM || {};
   let suppress = false;
 
   function snap() {
-    return JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId });
+    return JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds });
   }
 
   function restore(str) {
@@ -21,7 +21,9 @@ window.FM = window.FM || {};
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
     FM.scene.selectedId = s.selectedId;
-    FM.scene.selectedIds = (s.selectedId && FM.layerById(FM.scene, s.selectedId)) ? [s.selectedId] : [];   // avoid stale multi-selection after undo/redo
+    // Restore the full multi-selection (filtered to surviving layers), so undo right after a
+    // multi-select edit doesn't collapse the set align/distribute/nudge act on. (#20)
+    FM.scene.selectedIds = (Array.isArray(s.selectedIds) ? s.selectedIds : (s.selectedId ? [s.selectedId] : [])).filter(id => FM.layerById(FM.scene, id));
     suppress = false;
     // Snapshots don't include FM.time; clamp it into the restored duration so undoing a duration-grow
     // (with the playhead parked past the new end) doesn't blank the preview / divide-by-zero in pxPerSec.

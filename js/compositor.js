@@ -566,14 +566,12 @@ window.FM = window.FM || {};
     // 1) draw the layer content (no mask, full opacity, normal blend) into the offscreen
     const tmp = Object.assign({}, layer, { mask: null, blendMode: 'normal', transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(octx, tmp, t, scene);
-    // 2) composite the blurred mask shape in the layer's transformed local space
+    // 2) composite the blurred mask shape in the layer's transformed local space — the SAME full
+    // transform the content used (step 1's drawLayer), so the soft mask lines up even with skew /
+    // non-uniform scale / Z. (#7)
     octx.save();
     octx.globalCompositeOperation = layer.mask.invert ? 'destination-out' : 'destination-in';
-    const accumRot = applyParentChain(octx, layer, t, scene);
-    octx.translate(FM.evalProp(layer.transform.x, t), FM.evalProp(layer.transform.y, t));
-    applyParentRotMode(octx, layer, accumRot);
-    const rot = FM.evalProp(layer.transform.rotation, t) * Math.PI / 180; if (rot) octx.rotate(rot);
-    const sc = FM.evalProp(layer.transform.scale, t); if (sc !== 1) octx.scale(sc, sc);
+    applyLayerTransform(octx, layer, t, scene);
     octx.filter = 'blur(' + Math.max(0, layer.mask.feather || 0) + 'px)';
     octx.fillStyle = '#fff';
     const path = new Path2D(); addMaskShape(path, layer.mask); octx.fill(path);
@@ -703,7 +701,9 @@ window.FM = window.FM || {};
   // Per-pixel effect functions. Each mutates the RGBA byte array in place. Read params via FM.evalProp.
   const PIXEL_FX = {
     solarize: function (d, W, H, p, t) {
-      const thr = clamp01(FM.evalProp(p.threshold, t) != null ? FM.evalProp(p.threshold, t) : 0.5) * 255;
+      // evalProp returns 0 (never null) for a missing prop, so branch on the raw param to actually
+      // reach the 0.5 default when an instance has no threshold key (older/imported/AI nodes). (#19)
+      const thr = clamp01(p.threshold == null ? 0.5 : FM.evalProp(p.threshold, t)) * 255;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i] > thr) d[i] = 255 - d[i];
         if (d[i + 1] > thr) d[i + 1] = 255 - d[i + 1];
@@ -732,7 +732,7 @@ window.FM = window.FM || {};
       }
     },
     scanlines: function (d, W, H, p, t) {
-      const amt = clamp01(FM.evalProp(p.amount, t) != null ? FM.evalProp(p.amount, t) : 0.6);
+      const amt = clamp01(p.amount == null ? 0.6 : FM.evalProp(p.amount, t));   // reach the 0.6 default for a missing param (evalProp→0, never null) (#19)
       for (let y = 0; y < H; y++) {
         if (y % 2 === 0) continue;                 // darken every other row
         const k = 1 - amt, row = y * W * 4;
@@ -1296,6 +1296,47 @@ window.FM = window.FM || {};
   }
   FM.layerHasGradient = function (layer) { return layer.fillGradient && layer.fillGradient.enabled; };
 
+  // Apply a layer's full GEOMETRIC transform to ctx: parent chain → position (+ Z perspective shift
+  // & wiggle) → rotation (+ parent rot mode) → non-uniform scale (× Z pscale) → skew. Factored out so
+  // the feathered-mask pass applies the EXACT same transform as the content and the soft mask can't
+  // drift off when a layer is skewed / non-uniformly scaled / has Z. (#7) Does NOT touch alpha / blend
+  // / filter / shadow / mask-clip — the caller owns those.
+  function applyLayerTransform(ctx, layer, t, scene) {
+    const tr = layer.transform;
+    const x = FM.evalProp(tr.x, t);
+    const y = FM.evalProp(tr.y, t);
+    const scale = FM.evalProp(tr.scale, t);
+    const rot = FM.evalProp(tr.rotation, t) * Math.PI / 180;
+    // Non-uniform scale (W/H), skew (X/Y), and a real Z via planar perspective about the project
+    // centre. All additive: absent fields fall back so existing projects render identically.
+    const _P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const sclX = scale * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);   // scaleX/scaleY are non-uniform multipliers on the uniform master `scale`
+    const sclY = scale * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
+    const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
+    const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
+    const zz = tr.z != null ? FM.evalProp(tr.z, t) : 0;
+    const _F = Math.max(1, (_P.height || 1080) * 2);              // focal length (~2× project height)
+    const pscale = zz ? _F / Math.max(_F * 0.05, _F + zz) : 1;    // z>0 = farther (smaller), z<0 = nearer (bigger)
+    const _vpx = (_P.width || 0) / 2, _vpy = (_P.height || 0) / 2;
+    const accumRot = applyParentChain(ctx, layer, t, scene);   // inherit parent motion before the layer's own transform
+    const wig = FM.wiggleOffset(layer, t);                      // procedural jitter (motion-blur path averages it per sub-frame)
+    // Z shifts on-screen position toward the project-centre vanishing point — but ONLY for unparented
+    // layers, whose x/y are in project space. After applyParentChain the ctx is in the parent's local
+    // space, so the project-centre lerp would converge on the wrong point; a parented layer takes Z as
+    // scale alone (about its own origin). (#8)
+    const lerp = pscale !== 1 && !layer.parent;
+    const _px = lerp ? _vpx + (x - _vpx) * pscale : x;
+    const _py = lerp ? _vpy + (y - _vpy) * pscale : y;
+    ctx.translate(_px + (wig ? wig.x : 0), _py + (wig ? wig.y : 0));
+    applyParentRotMode(ctx, layer, accumRot);   // 'locked'/'weighted' cancel some inherited rotation
+    if (rot) ctx.rotate(rot);
+    // Clamp the effective scale off zero so an overshoot/back-eased keyframe that momentarily dips
+    // negative can't flip or collapse the layer for a frame. (#10)
+    const _sx = Math.max(1e-4, sclX * pscale), _sy = Math.max(1e-4, sclY * pscale);
+    if (_sx !== 1 || _sy !== 1) ctx.scale(_sx, _sy);
+    if (skX || skY) ctx.transform(1, Math.tan(skY * Math.PI / 180), Math.tan(skX * Math.PI / 180), 1, 0, 0);   // X/Y skew
+  }
+
   function drawLayer(ctx, layer, t, scene) {
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
@@ -1316,24 +1357,8 @@ window.FM = window.FM || {};
     if (scene && layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0) { drawFeatheredMaskLayer(ctx, layer, t, scene); return; }
 
     const tr = layer.transform;
-    const x = FM.evalProp(tr.x, t);
-    const y = FM.evalProp(tr.y, t);
-    const scale = FM.evalProp(tr.scale, t);
-    const rot = FM.evalProp(tr.rotation, t) * Math.PI / 180;
     const opacity = clamp01(FM.evalProp(tr.opacity, t));
     if (opacity <= 0) return;
-
-    // Non-uniform scale (W/H), skew (X/Y), and a real Z via planar perspective about the project
-    // centre. All additive: absent fields fall back so existing projects render identically.
-    const _P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const sclX = scale * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);   // scaleX/scaleY are non-uniform multipliers on the uniform master `scale`
-    const sclY = scale * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
-    const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
-    const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
-    const zz = tr.z != null ? FM.evalProp(tr.z, t) : 0;
-    const _F = Math.max(1, (_P.height || 1080) * 2);              // focal length (~2× project height)
-    const pscale = zz ? _F / Math.max(_F * 0.05, _F + zz) : 1;    // z>0 = farther (smaller), z<0 = nearer (bigger)
-    const _vpx = (_P.width || 0) / 2, _vpy = (_P.height || 0) / 2;
 
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -1346,17 +1371,7 @@ window.FM = window.FM || {};
       ctx.shadowOffsetX = sh.dx || 0;
       ctx.shadowOffsetY = sh.dy || 0;
     }
-    const accumRot = applyParentChain(ctx, layer, t, scene);   // inherit parent motion before the layer's own transform
-    const wig = FM.wiggleOffset(layer, t);                      // procedural jitter (motion-blur path averages it per sub-frame)
-    // Z perspective shifts the on-screen position toward/away from the vanishing point (project centre).
-    const _px = pscale !== 1 ? _vpx + (x - _vpx) * pscale : x;
-    const _py = pscale !== 1 ? _vpy + (y - _vpy) * pscale : y;
-    ctx.translate(_px + (wig ? wig.x : 0), _py + (wig ? wig.y : 0));
-    applyParentRotMode(ctx, layer, accumRot);   // 'locked'/'weighted' cancel some inherited rotation
-    if (rot) ctx.rotate(rot);
-    const _sx = sclX * pscale, _sy = sclY * pscale;
-    if (_sx !== 1 || _sy !== 1) ctx.scale(_sx, _sy);
-    if (skX || skY) ctx.transform(1, Math.tan(skY * Math.PI / 180), Math.tan(skX * Math.PI / 180), 1, 0, 0);   // X/Y skew
+    applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
 
     if (layer.type === 'text') {
@@ -1647,7 +1662,7 @@ window.FM = window.FM || {};
     target.restore();
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2, tr = cam.transform;
-      const zoom = FM.evalProp(tr.scale, t) || 1;
+      const zoom = Math.max(1e-3, FM.evalProp(tr.scale, t) || 1);   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
       const camX = FM.evalProp(tr.x, t), camY = FM.evalProp(tr.y, t);
       const rot = (FM.evalProp(tr.rotation, t) || 0) * Math.PI / 180;
       ctx.save();

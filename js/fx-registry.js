@@ -79,6 +79,14 @@ window.FM = window.FM || {};
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1, vignette: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1 };
+  // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
+  // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
+  // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
+  // nothing on an adjustment layer — a silent no-op — so this whitelist gates them out. (#6)
+  const ADJ_OK = {
+    blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
+    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1,
+  };
 
   // Effects to feature in the carousel (visually interesting ones).
   FM.FX_FEATURED = ['duotone', 'chromakey', 'glow', 'rgbsplit', 'pixelate', 'mirror'];
@@ -134,7 +142,7 @@ window.FM = window.FM || {};
       const e = REG[id]; if (!e || !layer) return false;
       if (e.appliesTo === 'media' && !(layer.type === 'video' || layer.type === 'image')) return false;
       if (e.appliesTo === 'text' && layer.type !== 'text') return false;   // text effects need a text layer
-      if (layer.type === 'adjustment' && id === 'mirror') return false;   // mirror needs a geometry pass adjustment layers can't do
+      if (layer.type === 'adjustment' && !ADJ_OK[id]) return false;        // adjustment layers can only grade (no geometry/most pixel passes) (#6)
       return true;
     },
   };

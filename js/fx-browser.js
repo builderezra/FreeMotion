@@ -33,8 +33,10 @@ window.FM = window.FM || {};
     const inst = FM.fxRegistry.makeInstance(id);
     if (!inst || !FM.fxRegistry.supportsLayer(id, layer)) {
       const reg = FM.fxRegistry.get(id);
-      const need = reg && reg.appliesTo === 'text' ? 'a text layer' : 'a video or image layer';
-      if (FM.toast) FM.toast('That effect needs ' + need, 1600);
+      let msg;
+      if (layer.type === 'adjustment') msg = 'Adjustment layers only do colour, blur & pixel grades — add this to the layer itself';
+      else msg = 'That effect needs ' + (reg && reg.appliesTo === 'text' ? 'a text layer' : 'a video or image layer');
+      if (FM.toast) FM.toast(msg, 2000);
       return;
     }
     if (!layer.effects) layer.effects = [];

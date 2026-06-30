@@ -82,8 +82,10 @@ window.FM = window.FM || {};
 
   function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; }); FM.requestRender(); redraw(); }
   function applyPreset(key) {
-    if (key === 'hold') cur.kfs.forEach(kf => { kf.e = 'hold'; delete kf.bez; });
-    else cur.kfs.forEach(kf => { kf.bez = FM.EASE_PRESETS[key].slice(); kf.e = key; });
+    // Store only the named easing (delete any custom bez). evalProp + bezOf both resolve a named
+    // ease from kf.e, and every "is a preset active?" read site checks for the ABSENCE of kf.bez —
+    // so writing bez here was what stopped presets highlighting and broke the label/carousel. (#4,#5)
+    cur.kfs.forEach(kf => { kf.e = key; delete kf.bez; });
     FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
   }
   function curIsHold() { return cur.kfs.length && cur.kfs[0].e === 'hold'; }
@@ -144,8 +146,13 @@ window.FM = window.FM || {};
     const foot = document.createElement('div'); foot.className = 'es-foot';
     loopBtn = document.createElement('button'); loopBtn.className = 'es-loop'; loopBtn.innerHTML = '&#8635;'; loopBtn.title = 'Loop';
     loopBtn.addEventListener('click', () => {
+      // Compute the next loop mode ONCE from the button's source-of-truth (keys[0], which redraw
+      // also reads) and apply that same mode to every animated prop, so they stay in lockstep with
+      // the highlight instead of drifting apart when they started mismatched. (#18)
       const order = ['none', 'cycle', 'pingpong'];
-      cur.keys.forEach(k => { const p = cur.layer.transform[k]; if (FM.isAnimated(p)) { const i = order.indexOf(p.loopMode || 'none'); p.loopMode = order[(i + 1) % order.length]; } });
+      const first = cur.layer.transform[cur.keys[0]];
+      const next = order[(order.indexOf((first && first.loopMode) || 'none') + 1) % order.length];
+      cur.keys.forEach(k => { const p = cur.layer.transform[k]; if (FM.isAnimated(p)) p.loopMode = next; });
       FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
     });
     const dots = document.createElement('button'); dots.className = 'es-dots'; dots.innerHTML = '&#8943;'; dots.title = 'More';

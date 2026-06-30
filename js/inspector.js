@@ -460,6 +460,10 @@ window.FM = window.FM || {};
   const MT_MODES = ['move', 'rotate', 'scale', 'skew'];
   const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew' };
   const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'] };
+  // The channels a mode keyframes by DEFAULT (matches Alight Motion). The extra channels (z for Move,
+  // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
+  // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)
+  const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'] };
   const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 };
 
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
@@ -504,6 +508,7 @@ window.FM = window.FM || {};
     const mode = MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
     const panel = el('div', 'mt-panel');
     const refreshables = [];
+    const syncFns = [];   // extra redraws (dial knob, etc.) re-run when the playhead moves (#2)
     const refreshAllBoxes = () => refreshables.forEach(b => b._refresh && b._refresh());
 
     // left rail: keyframe + easing
@@ -515,7 +520,12 @@ window.FM = window.FM || {};
     kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
     kfBtn.addEventListener('click', () => {
       const add = !onHere;
-      props.forEach(k => {
+      // Add: only the mode's primary channels + any extra channel already in use (animated or
+      // moved off its default). Remove: every channel, so stray keyframes can always be cleaned up.
+      const usable = add
+        ? props.filter(k => MT_PRIMARY[mode].indexOf(k) >= 0 || FM.isAnimated(layer.transform[k]) || (layer.transform[k] != null && layer.transform[k] !== MT_DEF[k]))
+        : props;
+      usable.forEach(k => {
         if (layer.transform[k] == null) layer.transform[k] = MT_DEF[k];
         const has = FM.hasKeyframeAt(layer.transform[k], FM.time);
         if (add && !has) FM.toggleKeyframe(layer, k, FM.time);
@@ -553,11 +563,13 @@ window.FM = window.FM || {};
       const dial = el('div', 'mt-dial'); const ring = el('div', 'mt-dial-ring'); const knob = el('div', 'mt-dial-knob'); const read = el('div', 'mt-dial-read');
       ring.appendChild(knob); dial.appendChild(ring); dial.appendChild(read);
       const place = () => { const deg = mtEval(layer, 'rotation'); const rad = deg * Math.PI / 180; knob.style.left = (50 + Math.cos(rad) * 50) + '%'; knob.style.top = (50 + Math.sin(rad) * 50) + '%'; read.textContent = Math.round(deg) + '°'; };
-      place();
+      place(); syncFns.push(place);
       const ang = e => { const r = ring.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };
       let rd = null;
-      ring.addEventListener('pointerdown', e => { rd = { a: ang(e), v: mtEval(layer, 'rotation') }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-      ring.addEventListener('pointermove', e => { if (!rd) return; mtSet(layer, 'rotation', Math.round(rd.v + (ang(e) - rd.a))); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
+      ring.addEventListener('pointerdown', e => { rd = { a: ang(e), v: mtEval(layer, 'rotation'), acc: 0 }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      // Accumulate the angle incrementally, normalising each step into (-180,180], so dragging the
+      // knob past the ±180° seam (9 o'clock) advances smoothly instead of snapping a full turn. (#3)
+      ring.addEventListener('pointermove', e => { if (!rd) return; const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a; mtSet(layer, 'rotation', Math.round(rd.v + rd.acc)); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
       ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(dial);
     } else if (mode === 'scale') {
@@ -587,6 +599,10 @@ window.FM = window.FM || {};
     MT_MODES.forEach(m => { const b = el('button', 'mt-mode' + (m === mode ? ' on' : '')); b.innerHTML = MT_ICONS[m]; b.title = MT_TITLES[m]; b.addEventListener('click', () => { FM._mtMode = m; FM.inspector.refresh(); }); right.appendChild(b); });
 
     panel.append(left, center, right);
+    // Expose a cheap "redraw values from the current playhead" hook the playback/seek paths call
+    // (via updateReadout). No-ops once this panel is detached, so a stale closure can't fight a
+    // newer one. Value boxes already skip refresh while being typed into. (#2)
+    FM.inspector.syncTransform = () => { if (!document.contains(panel)) return; refreshAllBoxes(); syncFns.forEach(fn => { try { fn(); } catch (_) {} }); };
     return panel;
   }
 

@@ -10,6 +10,20 @@ window.FM = window.FM || {};
   const DB_NAME = 'freemotion', STORE = 'media', SCENE_KEY = 'fm.scene';
   let saveTimer = null;
 
+  // The autosaved scene document. selectedIds is persisted too so a multi-layer selection survives a
+  // reload/undo instead of silently collapsing to one layer (align/distribute act on the whole set). (#20)
+  function sceneDoc() {
+    return { project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds };
+  }
+  // Surface a localStorage quota failure ONCE (autosave runs every 600ms — don't spam). The scene
+  // JSON can outgrow the ~5MB quota on a heavy project; silently swallowing it stops persistence
+  // with no sign, and a reload then reverts to the last write that fit. (#15)
+  let _quotaWarned = false;
+  function warnQuota(e) {
+    const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    if (quota && !_quotaWarned) { _quotaWarned = true; if (FM.toast) FM.toast('Storage full — autosave paused. Use ⚙ → Save project file to keep your work.', 5000); }
+  }
+
   function openDB() {
     return new Promise((res, rej) => {
       const r = indexedDB.open(DB_NAME, 1);
@@ -25,8 +39,9 @@ window.FM = window.FM || {};
 
   FM.storage = {
     async save() {
+      try { localStorage.setItem(SCENE_KEY, JSON.stringify(sceneDoc())); _quotaWarned = false; }
+      catch (e) { warnQuota(e); }   // a quota failure shouldn't block the IDB media save below
       try {
-        localStorage.setItem(SCENE_KEY, JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId }));
         const db = await openDB();
         for (const layer of FM.scene.layers) {
           if (layer.type === 'text') continue;
@@ -44,7 +59,7 @@ window.FM = window.FM || {};
     },
 
     // Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
-    flushSync() { try { clearTimeout(saveTimer); localStorage.setItem(SCENE_KEY, JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId })); } catch (e) {} },
+    flushSync() { try { clearTimeout(saveTimer); localStorage.setItem(SCENE_KEY, JSON.stringify(sceneDoc())); } catch (e) { warnQuota(e); } },
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
@@ -57,7 +72,9 @@ window.FM = window.FM || {};
       FM.scene.project = scene.project;
       FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
       FM.scene.selectedId = scene.selectedId;
-      FM.scene.selectedIds = scene.selectedId ? [scene.selectedId] : [];   // keep multi-selection state consistent after load
+      // Restore the full multi-selection (filtered to layers that still exist), not just one. (#20)
+      const liveIds = new Set(FM.scene.layers.map(l => l.id));
+      FM.scene.selectedIds = (Array.isArray(scene.selectedIds) ? scene.selectedIds : (scene.selectedId ? [scene.selectedId] : [])).filter(id => liveIds.has(id));
       try {
         const db = await openDB();
         for (const layer of FM.scene.layers) {
@@ -101,7 +118,7 @@ window.FM = window.FM || {};
         if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
       }
     }
-    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, media: media };
+    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media };
   };
 
   FM.storage.applyScene = async function (obj) {
@@ -120,7 +137,8 @@ window.FM = window.FM || {};
     FM.scene.project = obj.project;
     FM.scene.layers = obj.layers;
     FM.scene.selectedId = obj.selectedId || (obj.layers[0] ? obj.layers[0].id : null);
-    FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
+    const liveIds = new Set(obj.layers.map(l => l.id));   // restore the saved multi-selection (#20)
+    FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : (FM.scene.selectedId ? [FM.scene.selectedId] : [])).filter(id => liveIds.has(id));
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
         const md = obj.media[id];

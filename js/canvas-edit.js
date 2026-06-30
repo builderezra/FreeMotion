@@ -49,11 +49,24 @@ window.FM = window.FM || {};
     const tr = layer.transform;
     const cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
     const sc = FM.evalProp(tr.scale, t) || 1e-6;
+    // Invert the compositor's full transform (translate → rotate → non-uniform scale → skew) so a
+    // click on a stretched / skewed layer hits its REAL footprint, not the uniform-scale box. (#11,#13)
+    const scX = (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6;
+    const scY = (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6;
+    const tanX = Math.tan((tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) * Math.PI / 180);
+    const tanY = Math.tan((tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) * Math.PI / 180);
     const rot = -FM.evalProp(tr.rotation, t) * Math.PI / 180;
     const dx = px - cx, dy = py - cy;
-    const rx = (dx * Math.cos(rot) - dy * Math.sin(rot)) / sc;
-    const ry = (dx * Math.sin(rot) + dy * Math.cos(rot)) / sc;
-    const s = layerSize(layer), ax = tr.anchorX, ay = tr.anchorY;
+    // un-rotate, then un-scale → this is Skew·local
+    const sx = (dx * Math.cos(rot) - dy * Math.sin(rot)) / scX;
+    const sy = (dx * Math.sin(rot) + dy * Math.cos(rot)) / scY;
+    // un-skew: invert [[1,tanX],[tanY,1]]
+    const det = (1 - tanX * tanY) || 1e-6;
+    const rx = (sx - tanX * sy) / det;
+    const ry = (sy - tanY * sx) / det;
+    const s = layerSize(layer);
+    const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
+    const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
     return rx >= -s.w * ax && rx <= s.w * (1 - ax) && ry >= -s.h * ay && ry <= s.h * (1 - ay);
   }
 
@@ -192,7 +205,13 @@ window.FM = window.FM || {};
     const cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
     const rot = FM.evalProp(tr.rotation, t);
     const s = layerSize(layer), ds = dispScale();
-    const bw = s.w * sc * ds, bh = s.h * sc * ds;
+    // Match the compositor's effective non-uniform scale + skew so the box and its corner handles hug
+    // the rendered layer (was a uniform-scale, skew-less box that drifted off stretched/skewed layers). (#9,#12)
+    const scX = sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);
+    const scY = sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
+    const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
+    const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
+    const bw = s.w * scX * ds, bh = s.h * scY * ds;
     const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
     const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
     box.style.display = 'block';
@@ -204,7 +223,15 @@ window.FM = window.FM || {};
     box.style.left = (cx * ds - bw * ax) + 'px';
     box.style.top = (cy * ds - bh * ay) + 'px';
     box.style.transformOrigin = (bw * ax) + 'px ' + (bh * ay) + 'px';
-    box.style.transform = 'rotate(' + rot + 'deg)';
+    // rotate, then a shear K' = S·K·S⁻¹ applied to the already-scaled box reproduces the compositor's
+    // R·S·K exactly — and because K' has a unit diagonal, the handles shear but don't blow up in size.
+    let tf = 'rotate(' + rot + 'deg)';
+    if (skX || skY) {
+      const tanX = Math.tan(skX * Math.PI / 180), tanY = Math.tan(skY * Math.PI / 180);
+      const sX = scX || 1e-6, sY = scY || 1e-6;
+      tf += ' matrix(1,' + (sY * tanY / sX) + ',' + (sX * tanX / sY) + ',1,0,0)';
+    }
+    box.style.transform = tf;
   }
 
   FM.canvasEdit = {
