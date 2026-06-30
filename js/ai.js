@@ -162,6 +162,10 @@ window.FM = window.FM || {};
       async function runBuilder(i, model) {
         if (aborted()) return;
         var t = tasks[i];
+        // Gate the EXPENSIVE fan-out (and its Sonnet escalations, which re-enter here) on the budget cap
+        // so a low cap actually bounds spend instead of only stopping the critic after the fact. The
+        // interpret+plan floor is intentionally NOT gated — skipping it would leave an empty scene. (#12)
+        if (FM.aiBudget && FM.aiBudget.spentCents() >= FM.aiBudget.capCents) { P.row(t.id, t.label, 'skipped', null, 'budget cap'); return; }
         P.row(t.id, t.label, 'streaming', null, 'Builder · ' + (model === MODELS.esc ? 'Sonnet' : 'Haiku'));
         try {
           var r = await call(model, M.systemPrompts.build, [um(taskTail(t, intent))], M.tools.ops, { maxTokens: 2048, mock: { taskId: t.id }, dryDelay: 300 + i * 220 });

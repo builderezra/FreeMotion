@@ -143,7 +143,7 @@ window.FM = window.FM || {};
         syncProjName();
         if (isPhone()) {
           var sel = FM.scene && FM.scene.selectedId;
-          if (sel) { syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); } else { insp.style.top = ''; insp.style.maxHeight = ''; }
+          if (sel) { syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); } else { insp.style.top = ''; insp.style.maxHeight = ''; close(); }   // no selection (e.g. deleted last layer) → drop the sheet + restore the top bar (#13)
         }
         return r;
       };

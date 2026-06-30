@@ -224,7 +224,7 @@ window.FM = window.FM || {};
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 1 12s4 8 11 8a9 9 0 0 0 5.4-1.6"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
     eye.title = layer.visible ? 'Hide layer' : 'Show layer';
-    eye.addEventListener('click', (e) => { e.stopPropagation(); layer.visible = !layer.visible; FM.requestRender(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); });
+    eye.addEventListener('click', (e) => { e.stopPropagation(); layer.visible = !layer.visible; FM.requestRender(); FM.timeline.rebuild(); if (FM.reconcileAudio) FM.reconcileAudio(); if (FM.history) FM.history.commit(); });
 
     const thumb = document.createElement('canvas');
     thumb.className = 'th-thumb'; thumb.width = 38; thumb.height = 24;
@@ -304,7 +304,10 @@ window.FM = window.FM || {};
         if (hasPicture) {
           const strip = document.createElement('canvas');
           strip.className = 'clip-filmstrip';
-          strip.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
+          // Cap the backing width: duration*pps is unbounded (long clip × deep zoom) and a canvas wider
+          // than ~16384px renders BLANK on iOS Safari. CSS keeps the clip full-width; only the off-screen
+          // backing buffer is capped (slightly lower-res at extreme zoom, but actually visible). (#9)
+          strip.width = Math.min(8192, Math.max(2, Math.round(Math.max(8, layer.duration * pps))));
           strip.height = 32;
           if (m.stripFrames && m.stripFrames.length) {
             drawFilmstrip(strip, m.stripFrames, m);
@@ -318,7 +321,7 @@ window.FM = window.FM || {};
           if (m.waveform && m.waveform.length) {
             const wc = document.createElement('canvas');
             wc.className = 'clip-wave';
-            wc.width = Math.max(2, Math.round(Math.max(8, layer.duration * pps)));
+            wc.width = Math.min(8192, Math.max(2, Math.round(Math.max(8, layer.duration * pps))));   // cap backing width — iOS blanks canvases wider than ~16384px (#9)
             wc.height = 32;
             drawWaveform(wc, m.waveform);
             clip.appendChild(wc);

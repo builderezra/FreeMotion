@@ -25,7 +25,7 @@ window.FM = window.FM || {};
       const finish = () => { if (done) return; done = true; el.removeEventListener('seeked', finish); res(); };
       el.addEventListener('seeked', finish);
       try { el.currentTime = target; } catch (e) { finish(); }
-      setTimeout(finish, 250); // safety: never hang on a frame
+      setTimeout(finish, 1500); // safety net only — export is offline, so give a slow/large seek time to land the right frame before giving up (was 250ms, which dropped frames on big 4K seeks) (#15)
     });
   }
 
@@ -73,9 +73,10 @@ window.FM = window.FM || {};
     const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!OAC) return null;
     const oac = new OAC(channels, length, sampleRate);
+    const soloActive = scene.layers.some(l => l.solo);   // mirror the compositor's solo gate so the exported soundtrack matches the soloed picture (#14)
     let any = false;
     for (const layer of scene.layers) {
-      if (layer.type !== 'video' || layer.visible === false) continue;   // hidden layers are silent
+      if (layer.type !== 'video' || layer.visible === false || (soloActive && !layer.solo)) continue;   // hidden / solo-suppressed layers are silent
       const m = FM.media.get(layer.id);
       if (!m || !m.file) continue;
       if (m.audioBuffer === undefined) m.audioBuffer = await FM.decodeAudio(m.file);
@@ -154,6 +155,7 @@ window.FM = window.FM || {};
   // may be at a lower fps, so (re)build at the EXACT export fps before the frame loop so the
   // exported file actually contains the smooth/reversed motion seen in preview.
   async function prepareCaches(scene, fps, onStatus) {
+    const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
     for (const layer of scene.layers) {
       if (layer.type !== 'video' || layer.visible === false) continue;
       const needs = layer.reversed || (layer.frameBlend && (layer.speed || 1) < 1);
@@ -163,7 +165,9 @@ window.FM = window.FM || {};
       // Export must be pixel-exact: discard a downscaled PREVIEW cache (scaled) and rebuild at full res.
       if (m.frameCache && (m.frameCache.fps !== fps || m.frameCache.scaled)) FM.clearFrameCache(m);
       if (!m.frameCache) { if (onStatus) onStatus('Decoding frames…'); await FM.buildFrameCache(m, fps); }
+      built.push(m);
     }
+    return built;
   }
 
   FM.exporter = {
@@ -191,8 +195,10 @@ window.FM = window.FM || {};
       const outCtx = outCanvas.getContext('2d');
 
       // smooth slow-mo / reverse: build frame caches at the export fps so the output matches preview
-      try { await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s)); } catch (e) { console.warn('cache prep failed', e); }
+      let exportCaches = [];
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
+      try {
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
       try { mix = await buildAudioMix(scene, start, end); } catch (e) { console.warn('audio mix failed', e); mix = null; }
@@ -244,6 +250,12 @@ window.FM = window.FM || {};
       if (mix) { try { await encodeAudio(muxer, mix); } catch (e) { console.warn('audio encode failed', e); } }
       muxer.finalize();
       download(muxer.target.buffer, (opts.name || 'freemotion-export') + '.mp4');
+      } finally {
+        // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so
+        // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
+        // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
+        exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+      }
     },
   };
 })(window.FM);

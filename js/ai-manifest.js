@@ -30,8 +30,14 @@ window.FM = window.FM || {};
 
   function effectVocab() {
     return FM.EFFECTS.map(function (e) {
-      var p = e.options ? (e.param + '(modes: ' + e.options.map(function (o) { return o[0] + '=' + o[1]; }).join(', ') + ')')
-        : (e.param + '(' + e.min + '..' + e.max + ', def ' + e.def + ')');
+      var p;
+      if (Array.isArray(e.params)) {   // MULTI-param effect: list every key (was emitting "undefined(undefined..undefined)") (#2)
+        p = e.params.map(function (pp) { return pp.key + '(' + pp.min + '..' + pp.max + ', def ' + pp.def + ')'; }).join(', ');
+      } else if (e.options) {
+        p = e.param + '(modes: ' + e.options.map(function (o) { return o[0] + '=' + o[1]; }).join(', ') + ')';
+      } else if (e.param) {
+        p = e.param + '(' + e.min + '..' + e.max + ', def ' + e.def + ')';
+      } else { p = ''; }
       var col = e.color ? (', color hex' + (e.color2 ? ' + color2 hex' : '')) : '';
       return e.type + ' [' + p + col + ']';
     }).join('; ');
@@ -43,11 +49,12 @@ window.FM = window.FM || {};
       'FREEMOTION SCENE CAPABILITIES (what you can build).',
       'COORDINATES: pixels, origin (0,0) = canvas TOP-LEFT, +x right, +y down. A layer is positioned by its ANCHOR (default centre); to centre a layer set x=width/2, y=height/2. Default canvas is 1080x1920 portrait (9:16).',
       'ROTATION is in DEGREES (clockwise). Z-ORDER: lower z = nearer the TOP/front; z 0 is frontmost. Omit z to stack in plan order.',
+      'TRANSFORM channels (setProp transform.* or keyframe any of them): x, y, scale (uniform), scaleX/scaleY (non-uniform multipliers on scale, e.g. squash & stretch), rotation(deg), skewX/skewY(deg, -80..80), z (planar DEPTH: +z recedes/shrinks, -z approaches/enlarges), opacity(0..1), anchorX/anchorY(0..1).',
       'LAYER TYPES you can create: text, shape (rect|ellipse|line|polygon|triangle|star|heart), camera (one per scene; pan/zoom via its x/y/scale/rotation; neutral = centre, scale 1), adjustment (grades everything BELOW it), null (invisible rig control). You CANNOT create video/image layers — only reference existing media by id for retiming/grading.',
       'TEXT: text, fontSize, color(hex), fontFamily, align(left|center|right), bold, italic, letterSpacing, lineHeight, stroke, gradient fill, text curve, and kinetic textAnim presets: ' + TEXT_PRESETS.join(', ') + '.',
-      'EFFECTS (addEffect, type + params): ' + effectVocab() + '. chromakey/lumakey/vignette work on MEDIA only; mirror not on adjustment layers.',
+      'EFFECTS (addEffect, type + params): ' + effectVocab() + '. chromakey/lumakey/vignette work on MEDIA only; text effects (counter, timecode, textprogress, textspacing, texttransform, textrandomizer) need a TEXT layer; an adjustment layer only takes colour/blur/pixel grades (no geometry warps or text effects).',
       'BLEND MODES: ' + FM.BLEND_MODES.join(', ') + '.',
-      'KEYFRAMES (addKeyframe): animate any transform prop (transform.x/y/scale/rotation/opacity) or an effect param over time. keys = [{t(seconds), v(value), e(easing)}]; easings: ' + FM.EASE_NAMES.join(', ') + '; or bezPreset: ' + Object.keys(FM.EASE_PRESETS).join(', ') + '. loopMode: none|cycle|pingpong. Keys are sorted for you.',
+      'KEYFRAMES (addKeyframe): animate any transform channel (transform.x/y/scale/scaleX/scaleY/skewX/skewY/rotation/z/opacity) or a numeric effect param over time. keys = [{t(seconds), v(value), e(easing)}]; easings: ' + FM.EASE_NAMES.join(', ') + '; or bezPreset: ' + Object.keys(FM.EASE_PRESETS).join(', ') + '. loopMode: none|cycle|pingpong. Keys are sorted for you.',
       'RIG: setParent(ref → parentRef) so a layer inherits another\'s motion (cycles are rejected). wiggle (procedural jitter), motion blur, drop shadow, colour grade, masks are all available.',
       'TIMING: each layer has start(s) and duration(s); the project duration grows to fit. Captions are per-segment text on a text layer.',
     ].join('\n');

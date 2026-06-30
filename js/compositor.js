@@ -458,11 +458,13 @@ window.FM = window.FM || {};
       else if (unit === 'word') units = line.split(/(\s+)/).filter(s => s.length);
       else units = Array.from(line);
       const widths = units.map(u => ctx.measureText(u).width);
-      const lineW = widths.reduce((a, b) => a + b, 0);
+      const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
+      const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
       const lineLeft = x;
       units.forEach((u, ui) => {
         const w = widths[ui];
+        const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const p = durIn > 0 ? Math.min(1, Math.max(0, (tIn - gi * stagger) / durIn)) : (tIn >= gi * stagger ? 1 : 0);
         const pe = easeOutCubic(p);
         const outA = durOut > 0 ? Math.min(1, Math.max(0, tToEnd / durOut)) : 1;
@@ -474,10 +476,10 @@ window.FM = window.FM || {};
         else if (preset === 'slide') { alpha = p; dx = (1 - pe) * fs * 0.9; }
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
-        ctx.translate(x + w / 2 + dx, yy + dy);
+        ctx.translate(x + wDraw / 2 + dx, yy + dy);
         if (sc !== 1) ctx.scale(sc, sc);
         if (grad) {   // sample the gradient at this unit's position, respecting the gradient angle
-          const cx = x + w / 2, dxc = cx - (lineLeft + lineW / 2), dyc = yy;
+          const cx = x + wDraw / 2, dxc = cx - (lineLeft + lineW / 2), dyc = yy;
           let f;
           if (grad.type === 'radial') {
             f = Math.hypot(dxc, dyc) / (Math.max(lineW, total + fs) / 2 || 1);
@@ -488,8 +490,8 @@ window.FM = window.FM || {};
           }
           ctx.fillStyle = lerpHex(grad.c0, grad.c1, Math.max(0, Math.min(1, f)));
         }
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = stk.width * 2; ctx.strokeStyle = stk.color || '#000'; ctx.strokeText(u, -w / 2, 0); }
-        ctx.fillText(u, -w / 2, 0);
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = stk.width * 2; ctx.strokeStyle = stk.color || '#000'; ctx.strokeText(u, -wDraw / 2, 0); }
+        ctx.fillText(u, -wDraw / 2, 0);
         ctx.restore();
         x += w;
         gi++;
@@ -502,9 +504,15 @@ window.FM = window.FM || {};
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
   function drawArcLine(ctx, line, layer, curveDeg, drawStroke) {
     const chars = Array.from(line);
+    // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
+    // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
+    // and add the spacing back explicitly as inter-char advance. No-op when spacing is 0. (#5)
+    const prevLS = ('letterSpacing' in ctx) ? ctx.letterSpacing : null;
+    const sp = parseFloat(prevLS) || 0;
+    if (prevLS != null) ctx.letterSpacing = '0px';
     const widths = chars.map(c => ctx.measureText(c).width);
-    const tw = widths.reduce((a, b) => a + b, 0);
-    if (tw <= 0) return;
+    const tw = widths.reduce((a, b) => a + b, 0) + sp * Math.max(0, chars.length - 1);
+    if (tw <= 0) { if (prevLS != null) ctx.letterSpacing = prevLS; return; }
     const ac = curveDeg * Math.PI / 180, R = tw / Math.abs(ac), sign = curveDeg >= 0 ? 1 : -1;
     const stk = layer.stroke;
     const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline;
@@ -519,9 +527,10 @@ window.FM = window.FM || {};
       if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = stk.width * 2; ctx.strokeStyle = stk.color || '#000'; ctx.strokeText(ch, 0, 0); }
       ctx.fillText(ch, 0, 0);
       ctx.restore();
-      s += w;
+      s += w + sp;
     });
     ctx.textAlign = prevAlign; ctx.textBaseline = prevBase;
+    if (prevLS != null) ctx.letterSpacing = prevLS;
   }
 
   // ---- vector mask: clip the layer to a shape (rect/ellipse/polygon), in layer-local space ----
@@ -1681,9 +1690,13 @@ window.FM = window.FM || {};
     if (layer.type === 'text') {
       const c = document.createElement('canvas').getContext('2d');
       c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
-      const lines = String(layer.text || '').split('\n');
-      let w = 10; lines.forEach(l => { w = Math.max(w, c.measureText(l).width); });
-      return { w: w, h: Math.max(10, lines.length * (layer.fontSize || 96) * (layer.lineHeight || 1.15)) };
+      // A caption track sets layer.text='' and moves the visible text into layer.captions, so measuring
+      // layer.text alone gives a 10px box that the hit-test/selection/align all read wrong. Measure the
+      // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)
+      const strs = (layer.captions && layer.captions.length) ? layer.captions.map(cap => cap.text || '') : [layer.text || ''];
+      let w = 10, maxLines = 1;
+      strs.forEach(s => { const lines = String(s).split('\n'); maxLines = Math.max(maxLines, lines.length); lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
+      return { w: w, h: Math.max(10, maxLines * (layer.fontSize || 96) * (layer.lineHeight || 1.15)) };
     }
     if (layer.type === 'null') return { w: 100, h: 100 };
     if (layer.type === 'shape') return { w: layer.shapeW || 400, h: layer.shapeH || 300 };

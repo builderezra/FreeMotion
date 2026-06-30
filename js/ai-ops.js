@@ -27,8 +27,11 @@ window.FM = window.FM || {};
   function effectDef(type) { for (var i = 0; i < FM.EFFECTS.length; i++) if (FM.EFFECTS[i].type === type) return FM.EFFECTS[i]; return null; }
   var MEDIA_ONLY_FX = { chromakey: 1, lumakey: 1, vignette: 1 };
 
-  // transform.* sub-keys and their clamp ranges (rotation is degrees → unbounded)
-  var TRANSFORM_RANGE = { x: null, y: null, scale: [0, 10], rotation: null, opacity: [0, 1], anchorX: [0, 1], anchorY: [0, 1] };
+  // transform.* sub-keys and their clamp ranges (rotation/z are unbounded). scaleX/scaleY/skewX/skewY/z
+  // are first-class animatable channels since the Move & Transform rebuild — the compositor reads them
+  // and the inspector writes them, so the AI must be able to see/set/keyframe them too (else its edits
+  // can't touch a non-uniformly-scaled/skewed/Z layer and fight the user's transform). (#10)
+  var TRANSFORM_RANGE = { x: null, y: null, scale: [0, 10], scaleX: [0, 10], scaleY: [0, 10], skewX: [-80, 80], skewY: [-80, 80], z: null, rotation: null, opacity: [0, 1], anchorX: [0, 1], anchorY: [0, 1] };
 
   function setNumericPath(layer, path, value) {
     if (path.indexOf('transform.') === 0) {
@@ -275,19 +278,30 @@ window.FM = window.FM || {};
             if (!layer) { drop(o.op, ref, 'unknown ref'); break; }
             var def = effectDef(o.type);
             if (!def) { drop(o.op, ref, 'unknown effect: ' + o.type); break; }
-            var isMedia = layer.type === 'video' || layer.type === 'image';
-            if (MEDIA_ONLY_FX[def.type] && !isMedia) { drop(o.op, ref, def.type + ' only on media'); break; }
-            if (def.type === 'mirror' && layer.type === 'adjustment') { drop(o.op, ref, 'mirror not on adjustment'); break; }
-            var inp = (o.params && typeof o.params === 'object') ? o.params : {};
-            var params = {};
-            if (def.options) {
-              var allowed = def.options.map(function (x) { return x[0]; });
-              params[def.param] = allowed.indexOf(num(inp[def.param], def.def)) >= 0 ? num(inp[def.param], def.def) : def.def;
-            } else {
-              params[def.param] = clamp(num(inp[def.param], def.def), def.min, def.max);
+            // Use the engine's own gate (media-only, text-only, adjustment ADJ_OK) so the AI can't add an
+            // effect that renders as a silent no-op on the wrong layer type. (#11)
+            if (FM.fxRegistry && FM.fxRegistry.supportsLayer ? !FM.fxRegistry.supportsLayer(def.type, layer)
+                : (MEDIA_ONLY_FX[def.type] && !(layer.type === 'video' || layer.type === 'image'))) {
+              drop(o.op, ref, def.type + ' not valid on ' + layer.type); break;
             }
-            if (def.color) params.color = hex(inp.color, def.defColor || '#ffffff');
-            if (def.color2) params.color2 = hex(inp.color2, def.defColor2 || '#000000');
+            // Build params from the FULL registry schema (not just def.param) so MULTI-param effects
+            // (motionblur, colorbalance, dropshadow, …) get correctly-keyed defaults and every AI value
+            // lands — the old code stored {undefined: NaN} and discarded them all. (#2)
+            var inp = (o.params && typeof o.params === 'object') ? o.params : {};
+            var inst = (FM.fxRegistry && FM.fxRegistry.makeInstance(def.type)) || { params: {} };
+            var params = inst.params || {};
+            ((FM.fxRegistry && FM.fxRegistry.paramsOf(def.type)) || []).forEach(function (p) {
+              if (!(p.key in inp)) return;   // AI didn't supply this key → keep the registry default
+              if (p.type === 'segment') {
+                var allowed = p.options.map(function (x) { return x[0]; });
+                var raw = inp[p.key], n = num(raw, p.default);
+                params[p.key] = allowed.indexOf(raw) >= 0 ? raw : (allowed.indexOf(n) >= 0 ? n : p.default);
+              } else if (p.type === 'color') {
+                params[p.key] = hex(inp[p.key], p.default);
+              } else {
+                params[p.key] = clamp(num(inp[p.key], p.default), p.min, p.max);
+              }
+            });
             if (!Array.isArray(layer.effects)) layer.effects = [];
             layer.effects.push({ type: def.type, enabled: true, params: params });
             ok(o.op, ref); break;
@@ -308,9 +322,12 @@ window.FM = window.FM || {};
               var pr = o.path.split(':'); var fxi = parseInt(pr[1], 10); var pkey = pr[2];
               var fx = layer.effects && layer.effects[fxi];
               if (!fx) { drop(o.op, ref, 'no effect at index'); break; }
-              var d2 = effectDef(fx.type);
-              if (!d2 || d2.options || pkey !== d2.param) { drop(o.op, ref, 'effect param not keyframeable'); break; }
-              container = fx.params; key = pkey; range = [d2.min, d2.max];
+              // Resolve the param against the registry schema (handles MULTI-param effects, which have no
+              // def.param) and allow any keyframable range param — was rejecting all of them. (#2)
+              var schema2 = (FM.fxRegistry && FM.fxRegistry.paramsOf(fx.type)) || [];
+              var pdef = null; for (var pi = 0; pi < schema2.length; pi++) { if (schema2[pi].key === pkey) { pdef = schema2[pi]; break; } }
+              if (!pdef || pdef.type !== 'range' || pdef.keyframable === false) { drop(o.op, ref, 'effect param not keyframeable'); break; }
+              container = fx.params; key = pkey; range = [pdef.min, pdef.max];
             } else { drop(o.op, ref, 'bad keyframe path'); break; }
             var kf = keys.map(function (k) {
               var v = num(k && k.v, 0); if (range) v = clamp(v, range[0], range[1]);

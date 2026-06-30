@@ -383,6 +383,7 @@ window.FM = window.FM || {};
       { on: isVid && muted, disabled: !isVid }, () => {
         if ((layer.volume || 0) > 0) { layer._lastVol = layer.volume; layer.volume = 0; } else { layer.volume = layer._lastVol != null ? layer._lastVol : 1; }
         const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = layer.volume;
+        if (FM.reconcileAudio) FM.reconcileAudio();   // reversed clips bake volume into a gain node — rebuild it live (#7)
         FM.inspector.refresh(); commitH();
       }));
     return row;
@@ -661,7 +662,7 @@ window.FM = window.FM || {};
       cr.appendChild(colorField(() => sh.color || '#000000', v => { sh.color = v; }));
       body.appendChild(cr);
     } else if (key === 'element') {
-      body.appendChild(checkRow('Visible', layer.visible, v => { layer.visible = v; FM.requestRender(); FM.layersPanel.refresh(); }));
+      body.appendChild(checkRow('Visible', layer.visible, v => { layer.visible = v; FM.requestRender(); FM.layersPanel.refresh(); if (FM.reconcileAudio) FM.reconcileAudio(); }));
       // Parent picker — link this layer to inherit another layer's transform (cycles excluded).
       (function () {
         const candidates = FM.scene.layers.filter(l => l.id !== layer.id && !FM.isAncestor(FM.scene, layer.id, l.id));
@@ -827,12 +828,12 @@ window.FM = window.FM || {};
       body.appendChild(textRow('Duration (s)', round(layer.duration, 2), v => { layer.duration = Math.max(0.1, parseFloat(v) || 0.1); FM.requestRender(); FM.timeline.rebuild(); }, 'number'));
       if (layer.type === 'video') {
         if (layer.volume == null) layer.volume = 1;
-        body.appendChild(rangeRow('Volume %', () => Math.round(layer.volume * 100), v => { layer.volume = v / 100; const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = layer.volume; }, 0, 100, 1));
+        body.appendChild(rangeRow('Volume %', () => Math.round(layer.volume * 100), v => { layer.volume = v / 100; const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = layer.volume; if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, 100, 1));
         if (layer.fadeIn == null) layer.fadeIn = 0;
         if (layer.fadeOut == null) layer.fadeOut = 0;
         const fadeMax = Math.max(1, Math.min(10, round(layer.duration, 1)));
-        body.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); }, 0, fadeMax, 0.1));
-        body.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); }, 0, fadeMax, 0.1));
+        body.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fadeMax, 0.1));
+        body.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fadeMax, 0.1));
         if (layer.speed == null) layer.speed = 1;
         body.appendChild(rangeRow('Speed %', () => Math.round((layer.speed || 1) * 100), v => {
           const sp = Math.max(0.1, v / 100);

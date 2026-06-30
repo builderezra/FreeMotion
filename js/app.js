@@ -283,13 +283,19 @@ window.FM = window.FM || {};
           if (local != null) { try { m.el.currentTime = local; } catch (e) {} }
         }
       } else {
-        // forward clips free-run; resync if the element drifts from the playhead (e.g. speed≠1)
+        // Forward clips free-run their own <video> audio. Pause + mute the element the moment the
+        // playhead leaves the clip window OR the layer is hidden, so a clip trimmed shorter than its
+        // source (or hidden mid-play) stops dead instead of bleeding its source audio on. (#1,#8)
         const local = FM.layerLocalTime(layer, FM.time);
-        if (local != null && Math.abs((m.el.currentTime || 0) - local) > 0.15) { try { m.el.currentTime = local; } catch (e) {} }
-        // Reconcile element volume every tick (fadeMul = 1 when there are no fades) so removing a
-        // fade or changing volume mid-playback takes effect immediately instead of sticking.
-        const vol = (layer.volume != null ? layer.volume : 1) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);
-        try { m.el.volume = Math.max(0, Math.min(1, vol)); } catch (e) {}
+        if (local == null || layer.visible === false) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
+        try {
+          if (m.el.paused) { m.el.currentTime = local; m.el.play().catch(() => {}); }              // re-entered the window → resume
+          else if (Math.abs((m.el.currentTime || 0) - local) > 0.15) { m.el.currentTime = local; } // resync drift (speed≠1)
+          // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
+          // edit mid-playback takes effect immediately instead of sticking.
+          const vol = (layer.volume != null ? layer.volume : 1) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);
+          m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol));
+        } catch (e) {}
       }
     });
     render();
@@ -347,6 +353,16 @@ window.FM = window.FM || {};
   };
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };
+
+  // Re-anchor live audio to the current scene state mid-playback. Forward clips reconcile every frame
+  // in tick(); reversed clips synthesize their audio once in audioPlay.start(), so a volume / mute /
+  // fade / visibility / delete change needs that rebuilt to be heard. No-op unless something is playing
+  // AND a reversed clip exists (so the common forward-only case stays free). (#6,#7,#8)
+  FM.reconcileAudio = function () {
+    if (!FM.playing || !FM.audioPlay) return;
+    if (!FM.scene.layers.some(l => l.type === 'video' && l.reversed)) return;
+    FM.audioPlay.start();
+  };
 
   /* ---------- layers ---------- */
   FM.addMediaLayer = function (rec) {
@@ -527,17 +543,20 @@ window.FM = window.FM || {};
   // Delete every layer in the selection set (one history step).
   FM.deleteSelected = function () {
     const ids = FM.selectionIds(); if (!ids.length) return;
-    ids.forEach(id => { const m = FM.media.get(id); if (m) FM.clearFrameCache(m); FM.media.remove(id); if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id); });
+    ids.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); } FM.media.remove(id); if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id); });
     FM.scene.layers = FM.scene.layers.filter(l => !ids.includes(l.id));
     FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
-    refreshAll();
+    // Keyboard Delete/Backspace routes here; mirror deleteLayer's reversed-audio rebuild so a deleted
+    // reversed clip's synthesized audio stops (forward elements were just paused above). (#6)
+    if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
+    FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)
     if (FM.history) FM.history.commit();
   };
 
   FM.deleteLayer = function (id) {
     const m = FM.media.get(id);
-    if (m) FM.clearFrameCache(m);
+    if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); }   // stop a deleted forward clip's native audio (#6)
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
     FM.media.remove(id);
     if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id);   // drop its blob from IndexedDB
@@ -545,7 +564,7 @@ window.FM = window.FM || {};
     // it keeps sounding after the clip is gone. Rebuild the active nodes from the post-delete layer set.
     if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
     if (FM.scene.selectedId === id) FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
-    refreshAll();
+    FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)
     if (FM.history) FM.history.commit();
   };
 
