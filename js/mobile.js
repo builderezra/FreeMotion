@@ -80,7 +80,7 @@ window.FM = window.FM || {};
         if (isPhone()) document.body.classList.toggle('m-editing', !!id);
         var r = orig.apply(this, arguments);
         if (isPhone()) {
-          if (id) { open(); syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); }
+          if (id) { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); open(); syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); }   // tapping a clip while the Add sheet is open slides it away
           else { insp.style.top = ''; insp.style.maxHeight = ''; close(); }
         }
         return r;
