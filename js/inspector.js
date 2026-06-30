@@ -423,7 +423,7 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
-      card.addEventListener('click', () => { view = cat.key; FM.inspector.refresh(); });
+      card.addEventListener('click', () => { view = cat.key; FM._mtEasing = false; FM.inspector.refresh(); });
       (i < 3 ? top : bot).appendChild(card);
     });
     wrap.appendChild(top);
@@ -879,17 +879,25 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; }
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; }
       // On phone the swatch/rename/dup/delete "extra bar" moves to the top bar (AM); skip it here.
       if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) root.appendChild(layerHeader(layer));
       if (view === 'home') {
         root.appendChild(quickRow(layer));
         if (FM.selectionIds && FM.selectionIds().length >= 2) root.appendChild(alignRow());
         root.appendChild(categoryGrid(layer));
+      } else if (view === 'transform' && FM._mtEasing && FM.buildEasingEditor) {
+        // Easing curve editor — an INLINE sub-view of Move & Transform (same sheet), not a screen.
+        const back = el('button', 'cat-back', '‹  Move & Transform');
+        back.addEventListener('click', () => { FM._mtEasing = false; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditor(layer, FM._mtMode || 'move'));
+        root.appendChild(bodyEl);
       } else {
         const cat = CATEGORIES.find(c => c.key === view);
         const back = el('button', 'cat-back', '‹  ' + (cat ? cat.label : 'Back'));
-        back.addEventListener('click', () => { view = 'home'; FM.inspector.refresh(); });
+        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');
         buildCategory(view, layer, bodyEl);

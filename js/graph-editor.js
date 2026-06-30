@@ -1,7 +1,9 @@
-/* FreeMotion — Easing Curve screen (Alight Motion's signature graph editor).
- * Opened from the Move & Transform left rail. Edits the easing of the active mode's animated
- * properties at the playhead together: drag the two cubic-bezier handles, pick a preset, set Hold,
- * or loop the property. Writes kf.bez / kf.e / p.loopMode; evalProp uses them immediately.
+/* FreeMotion — Easing Curve editor (Alight Motion's graph editor).
+ * Rendered INLINE as a sub-view of the Move & Transform panel (same bottom sheet, NOT a separate
+ * full-screen screen — AM doesn't do that). Opened from the panel's left-rail easing button. Edits
+ * the easing of the active mode's animated properties at the playhead together: drag the two
+ * cubic-bezier handles, pick a preset, set Hold, or loop the property. Writes kf.bez / kf.e /
+ * p.loopMode; evalProp uses them immediately.
  */
 window.FM = window.FM || {};
 (function (FM) {
@@ -20,7 +22,7 @@ window.FM = window.FM || {};
     { key: 'hold', label: 'Hold' },
   ];
   const PAD = 26;
-  let overlay = null, canvas = null, presetWrap = null, hint = null, loopBtn = null, carLabel = null;
+  let canvas = null, presetWrap = null, hint = null, loopBtn = null, carLabel = null;
   let cur = { layer: null, mode: 'all', keys: [], kfs: [] };   // kfs = end-keyframes to edit together
   let dragHandle = null;
 
@@ -111,13 +113,11 @@ window.FM = window.FM || {};
   window.addEventListener('pointermove', e => { if (dragHandle === null || !cur.kfs.length || !canvas) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); bez[dragHandle * 2] = g.x; bez[dragHandle * 2 + 1] = g.y; applyBez(bez); });
   window.addEventListener('pointerup', () => { if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); } });
 
-  function build() {
-    if (overlay) return;
-    overlay = document.createElement('div'); overlay.id = 'easing-screen';
-    const head = document.createElement('div'); head.className = 'es-head';
-    const back = document.createElement('button'); back.className = 'es-back'; back.innerHTML = '&#8249;'; back.title = 'Back'; back.addEventListener('click', FM.closeEasingCurve);
-    const title = document.createElement('div'); title.className = 'es-title'; title.textContent = 'Easing Curve';
-    head.append(back, title);
+  // Build the editor as an INLINE element (no full-screen overlay) so it sits in the same Move &
+  // Transform bottom-sheet, exactly like Alight Motion. The inspector renders this as a sub-view and
+  // owns the "‹ Move & Transform" back button.
+  function buildEditorDom() {
+    const wrap = document.createElement('div'); wrap.className = 'es-inline';
 
     const main = document.createElement('div'); main.className = 'es-main';
     const gwrap = document.createElement('div'); gwrap.className = 'es-graph';
@@ -155,19 +155,23 @@ window.FM = window.FM || {};
       cur.keys.forEach(k => { const p = cur.layer.transform[k]; if (FM.isAnimated(p)) p.loopMode = next; });
       FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
     });
-    const dots = document.createElement('button'); dots.className = 'es-dots'; dots.innerHTML = '&#8943;'; dots.title = 'More';
-    foot.append(loopBtn, dots);
+    foot.append(loopBtn);
 
-    overlay.append(head, main, car, foot);
-    document.body.appendChild(overlay);
+    wrap.append(main, car, foot);
+    return wrap;
   }
 
-  FM.openEasingCurve = function (layer, mode) {
-    build();
+  // Returns the inline editor DOM for `layer`'s active mode, ready to drop into the inspector body.
+  FM.buildEasingEditor = function (layer, mode) {
     cur.layer = layer; cur.mode = mode || 'all';
     const picked = pickKfs(layer, cur.mode); cur.keys = picked.keys; cur.kfs = picked.kfs;
+    const dom = buildEditorDom();
     redraw();
-    overlay.classList.add('open');
+    return dom;
   };
-  FM.closeEasingCurve = function () { if (overlay) overlay.classList.remove('open'); };
+
+  // Open/close is now just an inspector sub-view flag — no separate screen. The Move & Transform
+  // easing button calls openEasingCurve; the inspector renders buildEasingEditor inline in the sheet.
+  FM.openEasingCurve = function (layer, mode) { FM._mtEasing = true; if (mode) FM._mtMode = mode; if (FM.inspector) FM.inspector.refresh(); };
+  FM.closeEasingCurve = function () { FM._mtEasing = false; if (FM.inspector) FM.inspector.refresh(); };
 })(window.FM);
