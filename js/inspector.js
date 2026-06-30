@@ -299,7 +299,11 @@ window.FM = window.FM || {};
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       sx = e.clientX; sy = e.clientY; mode = null; toIdx = idx; row._g.moved = false;
       try { head.setPointerCapture(e.pointerId); } catch (_) {}
-      hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);   // press-hold (finger STILL) → reorder
+      // The grip (touch-action:none) is the reliable drag handle on touch — start reorder immediately.
+      // Elsewhere on the row, a still-finger press-hold also reorders (works on desktop; on a phone a
+      // moving finger scrolls the sheet via pan-y, so the grip is the dependable path).
+      if (e.target.closest('.fx-grip')) beginReorder();
+      else hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);
     });
     head.addEventListener('pointermove', e => {
       if (mode === null) {

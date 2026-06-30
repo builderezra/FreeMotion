@@ -57,10 +57,30 @@ window.FM = window.FM || {};
         node.buffer = buf;
         node.playbackRate.value = FM.previewRate || 1;   // reversed audio must follow the preview speed (start() is re-run on rate change)
         const gain = audioCtx.createGain();
-        const vol = FM.layerVolume(layer, FM.time);   // reversed clips bake the value at the current playhead (keyframed volume isn't smoothly animated here)
+        const vol = FM.layerVolume(layer, FM.time);   // static level for non-animated clips
         const clipDur = layer.duration;
         const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;   // scaled so fades never overlap
-        if (fi > 0 || fo > 0) {
+        const animVol = FM.isAnimated(layer.volume);
+        if (animVol) {
+          // Keyframed volume: schedule the volume×fade envelope along the reversed buffer's scaled
+          // timeline so the reversed PREVIEW matches the now-animated export. Buffer position b (= clip
+          // -local time b) is reached at real time base + b/pr; volume there = level(start+b)×fade(b).
+          const pr = FM.previewRate || 1;
+          const base = when - into / pr;
+          const audibleDur = Math.min(clipDur, buf.duration);
+          const startB = Math.max(0, into);
+          if (audibleDur <= startB + 1e-3) {
+            gain.gain.value = Math.max(0, FM.layerVolume(layer, layer.start + startB) * FM.fadeMul(layer, startB, clipDur));
+          } else {
+            const steps = Math.max(2, Math.ceil((audibleDur - startB) * 30));
+            for (let i = 0; i <= steps; i++) {
+              const b = startB + (audibleDur - startB) * (i / steps);
+              const g = Math.max(0, FM.layerVolume(layer, layer.start + b) * FM.fadeMul(layer, b, clipDur));
+              const rt = Math.max(when, base + b / pr);
+              if (i === 0) gain.gain.setValueAtTime(g, rt); else gain.gain.linearRampToValueAtTime(g, rt);
+            }
+          }
+        } else if (fi > 0 || fo > 0) {
           // Reversed audio plays at previewRate (pr): buffer position b is reached at real time
           // when + (b - into)/pr. Schedule every fade point in that scaled timeline so fades land ON the
           // audio at any preview speed (at 2x the old 1x offsets fired after the audio had already ended).

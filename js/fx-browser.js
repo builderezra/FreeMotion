@@ -35,6 +35,7 @@ window.FM = window.FM || {};
       const reg = FM.fxRegistry.get(id);
       let msg;
       if (layer.type === 'adjustment') msg = 'Adjustment layers only do colour, blur & pixel grades — add this to the layer itself';
+      else if (layer.type === 'camera' || layer.type === 'null') msg = 'Camera & null layers have no pixels — effects can’t apply to them';
       else msg = 'That effect needs ' + (reg && reg.appliesTo === 'text' ? 'a text layer' : 'a video or image layer');
       if (FM.toast) FM.toast(msg, 2000);
       return;
