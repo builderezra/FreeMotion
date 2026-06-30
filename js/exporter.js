@@ -88,11 +88,22 @@ window.FM = window.FM || {};
       any = true;
       const node = oac.createBufferSource(); node.buffer = buf;
       const gain = oac.createGain();
-      const vol = FM.layerVolume(layer, layer.start);   // export uses the clip-start volume (keyframed volume not yet automated in the mix)
+      const animVol = FM.isAnimated(layer.volume);
+      const vol = FM.layerVolume(layer, layer.start);   // static level (non-animated clips)
       const clipDur = layer.duration;                     // fade timing uses VISUAL duration (matches preview), not audio-limited
       const win = FM.fadeWindows(layer, clipDur);         // scaled so fades never overlap (no pop)
       const fi = win.fi, fo = win.fo;
-      if (fi > 0 || fo > 0) {
+      if (animVol) {
+        // Keyframed volume: schedule the combined volume×fade envelope sampled across the clip in
+        // output time (30 Hz, linear-ramped) so the export matches the animated preview. (#6,#14)
+        const steps = Math.max(2, Math.ceil((oEnd - oStart) * 30));
+        for (let i = 0; i <= steps; i++) {
+          const sceneT = oStart + (oEnd - oStart) * (i / steps);
+          const g = Math.max(0, FM.layerVolume(layer, sceneT) * FM.fadeMul(layer, sceneT - layer.start, clipDur));
+          const ot = Math.max(0, sceneT - from);
+          if (i === 0) gain.gain.setValueAtTime(g, ot); else gain.gain.linearRampToValueAtTime(g, ot);
+        }
+      } else if (fi > 0 || fo > 0) {
         // Schedule the fade envelope in OUTPUT time, anchored to the clip's visual start/end.
         const startOut = oStart - from;                 // when this source begins in the mix
         const csOut = layer.start - from, ceOut = (layer.start + layer.duration) - from;
@@ -198,6 +209,7 @@ window.FM = window.FM || {};
       let exportCaches = [];
       try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
+      FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       try {
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
@@ -255,6 +267,7 @@ window.FM = window.FM || {};
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
         // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        FM._exporting = false;
       }
     },
   };

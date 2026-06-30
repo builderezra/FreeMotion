@@ -73,7 +73,12 @@ window.FM = window.FM || {};
         if (b.e === 'hold') return a.v;
         const span = b.t - a.t;
         let f = span <= 0 ? 1 : (t - a.t) / span;
-        f = b.bez ? bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f) : (EASES[b.e] || EASES.linear)(f);
+        // Resolve the easing: a custom bez, then a named EASES function, then a named EASE_PRESETS
+        // bezier (overshoot/anticipate live ONLY in EASE_PRESETS — without this they fell back to
+        // linear, so the graph editor's Overshoot preset produced straight-line motion).
+        if (b.bez) f = bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);
+        else if (EASES[b.e]) f = EASES[b.e](f);
+        else if (FM.EASE_PRESETS[b.e]) { const z = FM.EASE_PRESETS[b.e]; f = bezierAt(z[0], z[1], z[2], z[3], f); }
         return a.v + (b.v - a.v) * f;
       }
     }
@@ -83,7 +88,7 @@ window.FM = window.FM || {};
 
   /* A layer's audio level at time t — default 1, or the keyframed/animated value. Single source of
    * truth so preview + export read keyframed volume the same way. */
-  FM.layerVolume = function (layer, t) { return layer.volume == null ? 1 : evalProp(layer.volume, t); };
+  FM.layerVolume = function (layer, t) { return layer.muted ? 0 : (layer.volume == null ? 1 : evalProp(layer.volume, t)); };
 
   function upsertKeyframe(p, t, v) {
     const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);

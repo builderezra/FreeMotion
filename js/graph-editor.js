@@ -167,10 +167,19 @@ window.FM = window.FM || {};
   FM.buildEasingEditor = function (layer, mode) {
     cur.layer = layer; cur.mode = mode || 'all';
     cur.get = k => layer.transform[k];
-    const picked = pickKfs(cur.get, MODE_PROPS[cur.mode] || MODE_PROPS.all); cur.keys = picked.keys; cur.kfs = picked.kfs;
+    cur._propKeys = MODE_PROPS[cur.mode] || MODE_PROPS.all;
+    const picked = pickKfs(cur.get, cur._propKeys); cur.keys = picked.keys; cur.kfs = picked.kfs;
     const dom = buildEditorDom();
     redraw();
     return dom;
+  };
+
+  // Re-pick the keyframe segment active at the (now moved) playhead and redraw — called when the
+  // timeline is scrubbed while the editor is open, so it edits the CURRENT segment, not a stale one.
+  FM.refreshEasing = function () {
+    if (!canvas || !cur.get || !cur._propKeys || !document.contains(canvas)) return;
+    const picked = pickKfs(cur.get, cur._propKeys); cur.keys = picked.keys; cur.kfs = picked.kfs;
+    redraw();
   };
 
   // Generic variant: edit the easing of ANY animatable prop (e.g. layer.volume). getProp(k) returns
@@ -178,6 +187,7 @@ window.FM = window.FM || {};
   FM.buildEasingEditorFor = function (layer, getProp, propKeys, label) {
     cur.layer = layer; cur.mode = label || 'prop';
     cur.get = getProp;
+    cur._propKeys = propKeys;
     const picked = pickKfs(getProp, propKeys); cur.keys = picked.keys; cur.kfs = picked.kfs;
     const dom = buildEditorDom();
     redraw();

@@ -68,6 +68,7 @@ window.FM = window.FM || {};
   function deleteKeyframesAt(layer, tt) {
     const slots = [];
     Object.keys(layer.transform).forEach(k => slots.push({ c: layer.transform, k: k }));
+    if (FM.isAnimated(layer.volume)) slots.push({ c: layer, k: 'volume' });   // keyframed audio level draws diamonds too
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
     slots.forEach(({ c, k }) => {
       const p = c[k];
@@ -84,12 +85,14 @@ window.FM = window.FM || {};
   // CURRENTLY SELECTED layer. Path-keying survives the source prop reverting to static and lets
   // you copy on one layer and paste onto another.
   function propKey(layer, p) {
+    if (layer.volume === p) return 'volume';
     for (const k of Object.keys(layer.transform)) if (layer.transform[k] === p) return 'transform.' + k;
     const fx = layer.effects || [];
     for (let i = 0; i < fx.length; i++) { const params = fx[i].params || {}; for (const k of Object.keys(params)) if (params[k] === p) return 'effect.' + i + '.' + k; }
     return null;
   }
   function resolveSlot(layer, key) {
+    if (key === 'volume') return { c: layer, k: 'volume' };
     if (key.indexOf('transform.') === 0) return { c: layer.transform, k: key.slice(10) };
     const m = key.match(/^effect\.(\d+)\.(.+)$/);
     if (m) { const fx = (layer.effects || [])[parseInt(m[1], 10)]; if (fx && fx.params) return { c: fx.params, k: m[2] }; }

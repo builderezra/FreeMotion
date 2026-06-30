@@ -91,6 +91,8 @@ window.FM = window.FM || {};
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
+    if (FM.refreshEasing) FM.refreshEasing();   // re-pick the easing editor's segment when scrubbing past a keyframe
+
   }
 
   // Global preview playback speed (preview only — export is unaffected). 0.5×, 1×, 2×…

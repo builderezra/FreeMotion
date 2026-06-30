@@ -238,24 +238,33 @@ window.FM = window.FM || {};
 
   // Gestures on an effect row: SWIPE LEFT to delete, PRESS-HOLD then drag up/down to reorder.
   // (Replaces the old ▴▾ arrow buttons.) touch-action:pan-y lets the sheet still scroll vertically.
-  function attachFxGestures(row, head, layer, idx) {
-    let sx = 0, sy = 0, mode = null, hold = null, rows = null, slotH = 0, toIdx = idx;
+  function attachFxGestures(row, head, layer, fx, idx) {
+    let sx = 0, sy = 0, mode = null, hold = null, rows = null, rects = null, slotH = 0, toIdx = idx;
     row._g = { moved: false };
     const clearHold = () => { if (hold) { clearTimeout(hold); hold = null; } };
     function beginReorder() {
+      if (fx._expanded) return;                          // only collapsed rows reorder (uniform height) (#9)
       const list = row.parentNode; if (!list) return;
       mode = 'reorder'; row._g.moved = true;
       rows = Array.prototype.slice.call(list.children);
-      slotH = row.getBoundingClientRect().height + 7;   // row height + list gap
+      rects = rows.map(r => r.getBoundingClientRect());  // measured BEFORE transforms — robust to mixed heights (#9)
+      slotH = (rects[idx] ? rects[idx].height : 44) + 7;
       row.classList.add('fx-dragging');
       if (navigator.vibrate) { try { navigator.vibrate(8); } catch (_) {} }
     }
     function moveReorder(e) {
-      const dy = e.clientY - sy;
-      row.style.transform = 'translateY(' + dy + 'px)';
-      toIdx = Math.max(0, Math.min(rows.length - 1, idx + Math.round(dy / slotH)));
+      row.style.transform = 'translateY(' + (e.clientY - sy) + 'px)';
+      // drop index from the pointer vs each sibling's measured midpoint (handles expanded rows) (#9)
+      let t = idx;
+      for (let i = 0; i < rects.length; i++) {
+        if (i === idx) continue;
+        const mid = rects[i].top + rects[i].height / 2;
+        if (i < idx && e.clientY < mid) t = Math.min(t, i);
+        else if (i > idx && e.clientY > mid) t = Math.max(t, i);
+      }
+      toIdx = t;
       rows.forEach((r, i) => {
-        if (r === row) return;
+        if (i === idx) return;
         let ty = 0;
         if (idx < toIdx && i > idx && i <= toIdx) ty = -slotH;
         else if (idx > toIdx && i < idx && i >= toIdx) ty = slotH;
@@ -265,8 +274,10 @@ window.FM = window.FM || {};
     function endReorder() {
       if (rows) rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; });
       row.classList.remove('fx-dragging'); row.style.transform = '';
-      if (toIdx !== idx && layer.effects && layer.effects[idx]) {
-        const m = layer.effects.splice(idx, 1)[0]; layer.effects.splice(toIdx, 0, m); afterFx();
+      const from = layer.effects ? layer.effects.indexOf(fx) : -1;   // by object, never a stale index (#16)
+      if (from >= 0 && toIdx !== from) {
+        const m = layer.effects.splice(from, 1)[0];
+        layer.effects.splice(Math.max(0, Math.min(layer.effects.length, toIdx)), 0, m); afterFx();
       } else { FM.inspector.refresh(); }
     }
     function moveSwipe(e) {
@@ -277,10 +288,10 @@ window.FM = window.FM || {};
     function endSwipe(e) {
       if (e.clientX - sx < -70) {
         row.style.transition = 'transform .14s, opacity .14s'; row.style.transform = 'translateX(-100%)'; row.style.opacity = '0';
-        setTimeout(() => { if (layer.effects) { layer.effects.splice(idx, 1); afterFx(); } }, 130);
+        setTimeout(() => { const i = layer.effects ? layer.effects.indexOf(fx) : -1; if (i >= 0) { layer.effects.splice(i, 1); afterFx(); } }, 130);   // delete the right fx by reference (#16)
       } else {
         row.style.transition = 'transform .14s'; row.style.transform = ''; row.classList.remove('fx-swipe-armed');
-        setTimeout(() => { row.style.transition = ''; }, 150);
+        setTimeout(() => { row.style.transition = ''; row._g.moved = false; }, 200);   // clear so the next tap isn't swallowed (#17)
       }
     }
     head.addEventListener('pointerdown', e => {
@@ -288,13 +299,13 @@ window.FM = window.FM || {};
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       sx = e.clientX; sy = e.clientY; mode = null; toIdx = idx; row._g.moved = false;
       try { head.setPointerCapture(e.pointerId); } catch (_) {}
-      hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);   // press-hold → reorder
+      hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);   // press-hold (finger STILL) → reorder
     });
     head.addEventListener('pointermove', e => {
       if (mode === null) {
         const dx = e.clientX - sx, dy = e.clientY - sy;
         if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) + 2) { mode = 'swipe'; row._g.moved = true; clearHold(); }
-        else if (Math.abs(dy) > 8) { clearHold(); beginReorder(); }
+        else if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { clearHold(); return; }   // moved before the hold fired → it's a scroll; let the sheet pan, don't reorder (#18)
         else return;
       }
       if (mode === 'swipe') { moveSwipe(e); e.preventDefault(); }
@@ -337,7 +348,7 @@ window.FM = window.FM || {};
       head.appendChild(eye);
     }
     row.appendChild(head);
-    attachFxGestures(row, head, layer, idx);   // swipe-left = delete · press-hold + drag = reorder
+    attachFxGestures(row, head, layer, fx, idx);   // swipe-left = delete · press-hold + drag = reorder
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       reg.params.forEach(p => {
@@ -427,8 +438,10 @@ window.FM = window.FM || {};
       if (src.transform && 'opacity' in src.transform) target.transform.opacity = clone(src.transform.opacity);
     }
     if (cats.transform && src.transform) {
-      const keepOpacity = target.transform.opacity;   // opacity belongs to Blending & Opacity, not here
-      const t = clone(src.transform); t.opacity = keepOpacity;
+      // Paste the LOOK of the transform (scale / rotation / skew / z) but keep the target's PLACEMENT
+      // (x, y, anchor) and opacity — so Paste Style doesn't teleport the layer onto the source's spot.
+      const tr = target.transform, t = clone(src.transform);
+      ['x', 'y', 'anchorX', 'anchorY', 'opacity'].forEach(k => { t[k] = tr[k]; });
       target.transform = t;
     }
     if (cats.text && target.type === 'text' && src.type === 'text') {
@@ -444,6 +457,7 @@ window.FM = window.FM || {};
 
   // The AM-style picker popup: toggle which style aspects to paste, then Paste.
   FM.openPasteStyle = function (target) {
+    document.querySelectorAll('.ps-overlay').forEach(o => o.remove());   // never stack overlays (#10)
     target = target || FM.selectedLayer(FM.scene);
     const src = (FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot) || null;
     if (!target) { if (FM.toast) FM.toast('Select a layer to paste onto'); return; }
@@ -526,7 +540,9 @@ window.FM = window.FM || {};
     row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onClip }, () => {
       const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
       layer.start = FM.time; layer.duration -= cut;
-      if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + cut * (layer.speed || 1);
+      // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
+      // the source tail, so the kept (later) span keeps the same trimStart — matches splitLayer. (#12)
+      if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + cut * (layer.speed || 1);
       after();
     }));
     // trim END to playhead (drop everything after the playhead)
@@ -563,6 +579,16 @@ window.FM = window.FM || {};
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
     if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume');
     return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume');
+  }
+
+  // Is `v` a category this layer can actually show? Guards against unreachable views — e.g. the timeline
+  // dbl-click calling openCategory('element') on a VIDEO (which rendered a stale duplicate Volume slider
+  // that DESTROYED keyframed volume), or a persisted 'volume'/'speed' view after a media replace.
+  function viewAllowed(layer, v) {
+    if (!layer || v === 'home') return true;
+    if (v === 'speed' || v === 'volume') return layer.type === 'video';
+    if (v === 'element') return layer.type !== 'video' && layer.type !== 'camera';
+    return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
   function categoryGrid(layer) {
     // AM lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
@@ -787,7 +813,7 @@ window.FM = window.FM || {};
   function volumePanel(layer) {
     if (layer.volume == null) layer.volume = 1;
     const panel = el('div', 'mt-panel vol-panel');
-    const volPct = () => Math.round(FM.layerVolume(layer, FM.time) * 100);
+    const volPct = () => Math.round((layer.volume == null ? 1 : FM.evalProp(layer.volume, FM.time)) * 100);   // raw level (mute is a separate flag, shown on the speaker)
     const setPct = pct => {
       const f = Math.max(0, Math.min(1, pct / 100));
       FM.setProp(layer, 'volume', f, FM.time);            // keyframe-aware (writes a kf when animated)
@@ -816,7 +842,7 @@ window.FM = window.FM || {};
 
     const srow = el('div', 'vol-slider-row');
     const mute = el('button', 'vol-mute');
-    const muteIcon = () => { mute.innerHTML = svgIcon(volPct() <= 0 ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7'); };
+    const muteIcon = () => { const m = !!layer.muted || volPct() <= 0; mute.classList.toggle('on', m); mute.innerHTML = svgIcon(m ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7'); };
     muteIcon();
     const slider = document.createElement('input'); slider.type = 'range'; slider.min = '0'; slider.max = '100'; slider.step = '1'; slider.value = String(volPct()); slider.className = 'vol-slider';
     const paint = () => { const p = volPct(); slider.style.background = 'linear-gradient(90deg, var(--accent) ' + p + '%, var(--line) ' + p + '%)'; };
@@ -824,7 +850,9 @@ window.FM = window.FM || {};
     const sync = () => { slider.value = String(volPct()); if (vbox._refresh) vbox._refresh(); muteIcon(); paint(); };
     slider.addEventListener('input', () => { setPct(parseFloat(slider.value) || 0); if (vbox._refresh) vbox._refresh(); muteIcon(); paint(); });
     slider.addEventListener('change', () => commitH());
-    mute.addEventListener('click', () => { const cur = volPct(); if (cur > 0) { layer._lastVol = cur; setPct(0); } else { setPct(layer._lastVol != null ? layer._lastVol : 100); } sync(); commitH(); });
+    // Mute is a whole-clip flag (FM.layerVolume returns 0 when set) — NOT a 0-keyframe at the playhead,
+    // so it works the same whether or not volume is animated. The slider still shows the real level.
+    mute.addEventListener('click', () => { layer.muted = !layer.muted; if (FM.reconcileAudio) FM.reconcileAudio(); FM.requestRender(); muteIcon(); commitH(); });
     srow.append(mute, slider);
     control.appendChild(srow);
 
@@ -842,7 +870,7 @@ window.FM = window.FM || {};
   function buildCategory(key, layer, body) {
     if (key === 'transform') {
       body.appendChild(moveTransformPanel(layer));
-      body.appendChild(parentControl(layer));   // parenting lives with the transform it inherits
+      if (layer.type !== 'camera') body.appendChild(parentControl(layer));   // parenting lives with the transform it inherits (the camera ignores a parent) (#11)
     } else if (key === 'volume') {
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {
@@ -1085,37 +1113,9 @@ window.FM = window.FM || {};
       }
       body.appendChild(textRow('Start (s)', round(layer.start, 2), v => { layer.start = Math.max(0, parseFloat(v) || 0); FM.requestRender(); FM.timeline.rebuild(); }, 'number'));
       body.appendChild(textRow('Duration (s)', round(layer.duration, 2), v => { layer.duration = Math.max(0.1, parseFloat(v) || 0.1); FM.requestRender(); FM.timeline.rebuild(); }, 'number'));
-      if (layer.type === 'video') {
-        if (layer.volume == null) layer.volume = 1;
-        body.appendChild(rangeRow('Volume %', () => Math.round(layer.volume * 100), v => { layer.volume = v / 100; const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = layer.volume; if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, 100, 1));
-        if (layer.fadeIn == null) layer.fadeIn = 0;
-        if (layer.fadeOut == null) layer.fadeOut = 0;
-        const fadeMax = Math.max(1, Math.min(10, round(layer.duration, 1)));
-        body.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fadeMax, 0.1));
-        body.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fadeMax, 0.1));
-        if (layer.speed == null) layer.speed = 1;
-        body.appendChild(rangeRow('Speed %', () => Math.round((layer.speed || 1) * 100), v => {
-          const sp = Math.max(0.1, v / 100);
-          const span = layer.duration * (layer.speed || 1);   // source span (invariant) → re-time clip
-          layer.speed = sp;
-          layer.duration = Math.max(0.1, span / sp);
-          const end = layer.start + layer.duration;
-          if (end > FM.scene.project.duration) FM.scene.project.duration = end;
-          const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, sp)); } catch (e) {} }
-          FM.timeline.rebuild();
-        }, 25, 400, 5, () => FM.inspector.refresh()));   // refresh on release so the Duration field + fade max aren't stale
-        if (layer.frameBlend == null) layer.frameBlend = false;
-        body.appendChild(checkRow('Frame blend (smooth slow-mo)', layer.frameBlend, async v => {
-          layer.frameBlend = v;
-          if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
-          FM.requestRender(); FM.seekVideosToTime();
-        }));
-        body.appendChild(checkRow('Reverse (video + audio)', layer.reversed, async v => {
-          layer.reversed = v; FM.timeline.rebuild();
-          if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
-          FM.requestRender(); FM.seekVideosToTime();
-        }));
-      }
+      // (The old video Volume/Fade/Speed/Reverse rows were removed — video uses the dedicated Volume &
+      // Speed panels from the quick-row, and that legacy Volume slider was NOT keyframe-aware: it would
+      // overwrite a {kf} volume with a number and destroy the animation. Video never opens 'element' now.)
     }
   }
 
@@ -1124,7 +1124,7 @@ window.FM = window.FM || {};
       root = document.getElementById('inspector');
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
-    openCategory(key) { view = key; this.refresh(); },
+    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; this.refresh(); },
     refresh() {
       const layer = FM.selectedLayer(FM.scene);
       const title = document.querySelector('#inspector-panel .panel-title');
@@ -1139,6 +1139,7 @@ window.FM = window.FM || {};
       }
       if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; }
+      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // On phone the swatch/rename/dup/delete "extra bar" moves to the top bar (AM); skip it here.
       if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) root.appendChild(layerHeader(layer));
       if (view === 'home') {

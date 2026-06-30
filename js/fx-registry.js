@@ -140,6 +140,7 @@ window.FM = window.FM || {};
     },
     supportsLayer: function (id, layer) {
       const e = REG[id]; if (!e || !layer) return false;
+      if (layer.type === 'camera' || layer.type === 'null') return false;   // rig controls have no pixels to affect (#19)
       if (e.appliesTo === 'media' && !(layer.type === 'video' || layer.type === 'image')) return false;
       if (e.appliesTo === 'text' && layer.type !== 'text') return false;   // text effects need a text layer
       if (layer.type === 'adjustment' && !ADJ_OK[id]) return false;        // adjustment layers can only grade (no geometry/most pixel passes) (#6)

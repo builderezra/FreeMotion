@@ -1519,15 +1519,16 @@ window.FM = window.FM || {};
         if (!src) {
           if (m.kind === 'video' && m.el.readyState < 2) {
             // Mid-seek (scrubbing/scrolling the timeline re-seeks the element on every step): the new
-            // frame isn't decoded yet. Instead of skipping the layer — which made the clip VANISH to
-            // black for the whole scroll gesture — HOLD the last good frame we captured.
-            if (m._lastFrame && m._lastFrame.width) src = m._lastFrame;
-            else { ctx.restore(); return; }   // never produced a frame yet (still loading)
+            // frame isn't decoded yet. In PREVIEW, hold the last good frame so the clip doesn't VANISH to
+            // black for the whole scroll. In EXPORT, never substitute a stale frame — keep the original
+            // skip so a slow seek can't bake the wrong frame into the output. (#13)
+            if (!FM._exporting && m._lastFrame && m._lastFrame.width) src = m._lastFrame;
+            else { ctx.restore(); return; }   // never produced a frame yet (still loading) / exporting
           } else {
             src = m.el;
-            // Stash this good frame so the next mid-seek dip can hold it (forward clips only — reversed/
-            // frame-blend draw from m.frameCache above and never reach here).
-            if (m.kind === 'video' && w > 0 && h > 0) {
+            // Stash this good frame so the next mid-seek dip can hold it (forward clips only; preview
+            // only — capturing every export frame is pure churn the exporter never uses). (#22)
+            if (!FM._exporting && m.kind === 'video' && w > 0 && h > 0) {
               if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
               if (m._lastFrame.width !== w || m._lastFrame.height !== h) { m._lastFrame.width = w; m._lastFrame.height = h; }
               try { const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, w, h); lx.drawImage(m.el, 0, 0, w, h); } catch (e) {}
