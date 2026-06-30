@@ -43,6 +43,8 @@ window.FM = window.FM || {};
     dropshadow: 'stylize', chromaticaberration: 'distort', innerglow: 'drawing', unsharpmask: 'blur', hextiles: 'distort', linstreaks: 'blur',
     // batch 13 (opacity / visibility)
     blink: 'opacity', flicker: 'opacity', pulseopacity: 'opacity', dissolve: 'opacity', blockdissolve: 'opacity',
+    // batch 14 (matte / mask / key)
+    wipe: 'matte', radialwipe: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
