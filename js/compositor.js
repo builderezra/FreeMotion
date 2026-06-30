@@ -1517,9 +1517,22 @@ window.FM = window.FM || {};
           }
         }
         if (!src) {
-          // Skip a video that hasn't produced a frame yet to avoid drawing garbage.
-          if (m.kind === 'video' && m.el.readyState < 2) { ctx.restore(); return; }
-          src = m.el;
+          if (m.kind === 'video' && m.el.readyState < 2) {
+            // Mid-seek (scrubbing/scrolling the timeline re-seeks the element on every step): the new
+            // frame isn't decoded yet. Instead of skipping the layer — which made the clip VANISH to
+            // black for the whole scroll gesture — HOLD the last good frame we captured.
+            if (m._lastFrame && m._lastFrame.width) src = m._lastFrame;
+            else { ctx.restore(); return; }   // never produced a frame yet (still loading)
+          } else {
+            src = m.el;
+            // Stash this good frame so the next mid-seek dip can hold it (forward clips only — reversed/
+            // frame-blend draw from m.frameCache above and never reach here).
+            if (m.kind === 'video' && w > 0 && h > 0) {
+              if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
+              if (m._lastFrame.width !== w || m._lastFrame.height !== h) { m._lastFrame.width = w; m._lastFrame.height = h; }
+              try { const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, w, h); lx.drawImage(m.el, 0, 0, w, h); } catch (e) {}
+            }
+          }
         }
         // Lift/Gamma/Gain grade is a per-pixel color op → apply to the source first.
         const cg = layer.colorGrade;
