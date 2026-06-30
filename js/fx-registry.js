@@ -55,6 +55,8 @@ window.FM = window.FM || {};
     zoomstreaks: 'blur', innerblur: 'blur', contourstrips: 'proc', innerpinch: 'distort', crosshatch: 'drawing',
     // batch 19 (text)
     counter: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
+    // batch 20 (cinematic grades + framing)
+    bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
