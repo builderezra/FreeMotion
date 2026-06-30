@@ -482,7 +482,7 @@ window.FM = window.FM || {};
     const clamp = v => { if (opts.min != null) v = Math.max(opts.min, v); if (opts.max != null) v = Math.min(opts.max, v); return v; };
     let drag = null;
     val.addEventListener('pointerdown', e => { if (val.isContentEditable) return; drag = { x: e.clientX, v: getVal(), moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-    val.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { setVal(clamp(drag.v + dx * (opts.scrub || 1))); refresh(); if (opts.onScrub) opts.onScrub(); } });
+    val.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; if (moved) { commitH(); FM.inspector.refresh(); } return; } const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { setVal(clamp(drag.v + dx * (opts.scrub || 1))); refresh(); if (opts.onScrub) opts.onScrub(); } });
     val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } else startEdit(); });
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
@@ -500,7 +500,7 @@ window.FM = window.FM || {};
     const strip = el('div', 'mt-scrub'); strip.appendChild(el('div', 'mt-scrub-ticks')); strip.appendChild(el('div', 'mt-scrub-mid'));
     let drag = null;
     strip.addEventListener('pointerdown', e => { drag = { x: e.clientX, v: getVal() }; try { strip.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-    strip.addEventListener('pointermove', e => { if (!drag) return; setVal(drag.v + (e.clientX - drag.x) * scrub); if (onChange) onChange(); });
+    strip.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; } setVal(drag.v + (e.clientX - drag.x) * scrub); if (onChange) onChange(); });
     strip.addEventListener('pointerup', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
     return strip;
   }
@@ -555,7 +555,7 @@ window.FM = window.FM || {};
       const sens = ((FM.scene.project.width || 1080) / 300);
       let pd = null;
       pad.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y') }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-      pad.addEventListener('pointermove', e => { if (!pd) return; mtSet(layer, 'x', Math.round(pd.ix + (e.clientX - pd.x) * sens)); mtSet(layer, 'y', Math.round(pd.iy + (e.clientY - pd.y) * sens)); refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); });
+      pad.addEventListener('pointermove', e => { if (!pd) return; if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; } mtSet(layer, 'x', Math.round(pd.ix + (e.clientX - pd.x) * sens)); mtSet(layer, 'y', Math.round(pd.iy + (e.clientY - pd.y) * sens)); refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); });
       pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(pad);
     } else if (mode === 'rotate') {
@@ -570,7 +570,7 @@ window.FM = window.FM || {};
       ring.addEventListener('pointerdown', e => { rd = { a: ang(e), v: mtEval(layer, 'rotation'), acc: 0 }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       // Accumulate the angle incrementally, normalising each step into (-180,180], so dragging the
       // knob past the ±180° seam (9 o'clock) advances smoothly instead of snapping a full turn. (#3)
-      ring.addEventListener('pointermove', e => { if (!rd) return; const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a; mtSet(layer, 'rotation', Math.round(rd.v + rd.acc)); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
+      ring.addEventListener('pointermove', e => { if (!rd) return; if (e.pointerType === 'mouse' && e.buttons === 0) { rd = null; commitH(); return; } const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a; mtSet(layer, 'rotation', Math.round(rd.v + rd.acc)); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
       ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(dial);
     } else if (mode === 'scale') {
