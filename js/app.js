@@ -420,13 +420,16 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
-  // Vector shape layer (rect/ellipse/line/polygon with fill + stroke) — first-class graphics.
-  FM.addShapeLayer = function (shape) {
+  // Vector shape layer (any FM.traceShapePath kind, fill + stroke) — first-class graphics.
+  // opts: { name, extra } — extra props (e.g. { sides: 6 } for a hexagon) land on the layer.
+  FM.addShapeLayer = function (shape, opts) {
+    opts = opts || {};
     const P = FM.scene.project;
     const layer = FM.makeLayer('shape', {
-      name: (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
+      name: opts.name || (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
       shape: shape || 'rect', x: P.width / 2, y: P.height / 2,
       shapeW: Math.round(P.width / 3), shapeH: Math.round(P.height / 3), duration: Math.min(5, P.duration),
+      extra: opts.extra,
     });
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
@@ -821,6 +824,9 @@ window.FM = window.FM || {};
       try {
         if (file.type.startsWith('video')) FM.addMediaLayer(await FM.loadVideoFile(file));
         else if (file.type.startsWith('image')) FM.addMediaLayer(await FM.loadImageFile(file));
+        // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a
+        // 0×0-picture clip already gets the waveform lane, live mix, keyframed volume and export mix.
+        else if (file.type.startsWith('audio')) FM.addMediaLayer(await FM.loadVideoFile(file));
       } catch (e) { console.error(e); alert(e.message || 'Could not load ' + file.name); }
     }
   }

@@ -531,15 +531,10 @@ window.FM = window.FM || {};
     const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
     const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); };
-    // Speed + Audio open their dedicated panels (video only) — they sit in this top row alongside the
-    // clip actions. The Audio button opens the full Volume panel (which has its own mute), so there's
-    // no standalone mute-only button any more.
-    if (layer.type === 'video') {
-      row.appendChild(qbtn('Speed — slow-mo / reverse', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => goCat('speed')));
-      row.appendChild(qbtn('Audio — volume & fades', 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7', {}, () => goCat('volume')));
-    }
-    // split at playhead
-    row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onClip }, () => { FM.splitLayer(layer.id); }));
+    // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
+    // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
+    const isVideo = layer.type === 'video';
+    if (isVideo) row.appendChild(qbtn('Speed — slow-mo / reverse', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => goCat('speed')));
     // trim START to playhead (drop everything before the playhead)
     row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onClip }, () => {
       const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
@@ -549,11 +544,15 @@ window.FM = window.FM || {};
       if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + cut * (layer.speed || 1);
       after();
     }));
+    // split at playhead
+    row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onClip }, () => { FM.splitLayer(layer.id); }));
     // trim END to playhead (drop everything after the playhead)
     row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { disabled: !onClip }, () => {
       const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
       layer.duration = nd; after();
     }));
+    // The Audio button opens the full Volume panel (which has its own mute) — no standalone mute button.
+    if (isVideo) row.appendChild(qbtn('Audio — volume & fades', 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7', {}, () => goCat('volume')));
     return row;
   }
 
@@ -1047,20 +1046,20 @@ window.FM = window.FM || {};
         const P = FM.scene.project;
         const kr = el('div', 'prop-row'); kr.appendChild(el('label', null, 'Shape'));
         const ksel = document.createElement('select');
-        [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['polygon', 'Polygon'], ['triangle', 'Triangle'], ['star', 'Star'], ['heart', 'Heart']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
+        [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['triangle', 'Triangle'], ['star', 'Star'], ['heart', 'Heart'], ['plus', 'Plus'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring'], ['arrow', 'Arrow'], ['chevron', 'Chevron'], ['trapezoid', 'Trapezoid'], ['parallelogram', 'Parallelogram']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         kr.appendChild(ksel); body.appendChild(kr);
-        const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, layer.shape === 'line' ? 'Color' : 'Fill'));
+        const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, (layer.shape === 'line' || layer.shape === 'arc') ? 'Color' : 'Fill'));
         fr.appendChild(colorField(() => layer.fill || '#3a7bd5', v => { layer.fill = v; }));
         body.appendChild(fr);
-        if (layer.shape !== 'line') gradientControls(layer, body);
+        if (layer.shape !== 'line' && layer.shape !== 'arc') gradientControls(layer, body);
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));
         if (layer.shape === 'rect') body.appendChild(rangeRow('Corner radius', () => layer.cornerRadius || 0, v => { layer.cornerRadius = Math.max(0, v); }, 0, Math.round(Math.min(layer.shapeW, layer.shapeH) / 2), 1));
         if (layer.shape === 'polygon' || layer.shape === 'star') body.appendChild(rangeRow(layer.shape === 'star' ? 'Points' : 'Sides', () => layer.sides || 5, v => { layer.sides = Math.max(3, Math.round(v)); }, 3, 12, 1));
         if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
         const stk = layer.stroke;
-        if (layer.shape === 'line') {
+        if (layer.shape === 'line' || layer.shape === 'arc') {
           body.appendChild(rangeRow('Line width', () => stk.width, v => { stk.width = Math.max(1, v); }, 1, 60, 1));
         } else {
           body.appendChild(checkRow('Stroke', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));

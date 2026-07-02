@@ -530,6 +530,14 @@ body {
 .fxb-banner[data-cat="distort"] { background: linear-gradient(120deg, rgba(0,210,255,.3), rgba(41,217,187,.18)); }
 .fxb-banner[data-cat="proc"] { background: linear-gradient(120deg, rgba(255,140,240,.3), rgba(140,106,255,.2)); }
 .fxb-banner[data-cat="matte"] { background: linear-gradient(120deg, rgba(41,217,187,.3), rgba(26,143,110,.2)); }
+.fxb-banner[data-cat="stylize"] { background: linear-gradient(120deg, rgba(255,94,158,.3), rgba(255,148,94,.18)); }
+.fxb-banner[data-cat="drawing"] { background: linear-gradient(120deg, rgba(255,214,102,.3), rgba(255,132,66,.18)); }
+.fxb-banner[data-cat="move"] { background: linear-gradient(120deg, rgba(102,255,178,.28), rgba(56,182,255,.18)); }
+.fxb-banner[data-cat="repeat"] { background: linear-gradient(120deg, rgba(196,113,255,.3), rgba(255,113,206,.18)); }
+.fxb-banner[data-cat="opacity"] { background: linear-gradient(120deg, rgba(148,163,255,.3), rgba(94,234,212,.16)); }
+.fxb-banner[data-cat="text"] { background: linear-gradient(120deg, rgba(255,255,255,.18), rgba(148,163,184,.14)); }
+.fxb-banner[data-cat="threed"] { background: linear-gradient(120deg, rgba(126,231,255,.3), rgba(94,106,255,.22)); }
+.fxb-banner[data-cat="other"] { background: linear-gradient(120deg, rgba(170,180,200,.24), rgba(110,120,140,.16)); }
 .fxb-banner-count { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.7); }
 .fxb-catview { position: absolute; inset: 0; z-index: 5; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 .fxb-catview-top { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line-soft); }
@@ -542,6 +550,14 @@ body {
 .fxb-thumb[data-cat="distort"] { background: linear-gradient(135deg, #00d2ff, #29d9bb); }
 .fxb-thumb[data-cat="proc"] { background: linear-gradient(135deg, #ff8cf0, #8c6aff); }
 .fxb-thumb[data-cat="matte"] { background: linear-gradient(135deg, #29d9bb, #1a8f6e); }
+.fxb-thumb[data-cat="stylize"] { background: linear-gradient(135deg, #ff5e9e, #ff945e); }
+.fxb-thumb[data-cat="drawing"] { background: linear-gradient(135deg, #ffd666, #ff8442); }
+.fxb-thumb[data-cat="move"] { background: linear-gradient(135deg, #66ffb2, #38b6ff); }
+.fxb-thumb[data-cat="repeat"] { background: linear-gradient(135deg, #c471ff, #ff71ce); }
+.fxb-thumb[data-cat="opacity"] { background: linear-gradient(135deg, #94a3ff, #5eead4); }
+.fxb-thumb[data-cat="text"] { background: linear-gradient(135deg, #cbd5e1, #64748b); }
+.fxb-thumb[data-cat="threed"] { background: linear-gradient(135deg, #7ee7ff, #5e6aff); }
+.fxb-thumb[data-cat="other"] { background: linear-gradient(135deg, #aab4c8, #6e788c); }
 .fxb-thumb-glyph { font-size: 22px; font-weight: 800; color: rgba(255,255,255,.92); }
 input[type=range] {
   -webkit-appearance: none; appearance: none; flex: 1; height: 4px;
@@ -1153,3 +1169,22 @@ input[type=range]::-webkit-slider-thumb {
   #inspector { padding: 2px 12px 18px; }
 }
 
+
+/* ---- Add Effect browser: AM parity ---- */
+/* Phone: categories as a 2-col wall of tiles (label over count), like AM */
+@media (max-width: 700px) {
+  .fxb-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .fxb-banner { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 4px; min-height: 64px; padding: 12px 13px; font-size: 14px; }
+}
+/* PC: the browser is a centered modal over a dim scrim, not a full-bleed sheet */
+@media (min-width: 701px) {
+  #fx-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
+  #fx-browser .fxb-top, #fx-browser .fxb-search-input { width: min(680px, 94vw); }
+  #fx-browser .fxb-top { border-bottom: none; }
+  #fx-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
+  .fxb-catview { position: fixed; inset: 0; background: rgba(6, 8, 12, .72); align-items: center; }
+  .fxb-catview-top, .fxb-catview-scroll { width: min(680px, 94vw); }
+  .fxb-catview-scroll { background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 18px; flex: 1; }
+}
+/* Add-menu: the shape catalog is tall now — let the sheet body scroll instead of growing */
+.addmenu--sheet .addmenu-body { max-height: min(46vh, 420px); overflow-y: auto; -webkit-overflow-scrolling: touch; }

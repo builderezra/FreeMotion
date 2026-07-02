@@ -158,7 +158,7 @@ window.FM = window.FM || {};
           }
 
           case 'addShape': {
-            var shp = snap(o.shape, ['rect', 'ellipse', 'line', 'polygon', 'triangle', 'star', 'heart'], 'rect');
+            var shp = snap(o.shape, ['rect', 'ellipse', 'line', 'arc', 'polygon', 'triangle', 'star', 'heart', 'plus', 'pie', 'semicircle', 'ring', 'arrow', 'chevron', 'trapezoid', 'parallelogram'], 'rect');
             layer = createLayer(o, 'shape', {
               shape: shp,
               shapeW: o.shapeW != null ? clamp(num(o.shapeW, 400), 1, 16000) : Math.round((P.width || 1080) / 3),

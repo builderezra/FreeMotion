@@ -174,6 +174,38 @@ window.FM = window.FM || {};
     { type: 'faded', label: 'Faded Film', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     { type: 'nightvision', label: 'Night Vision', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
     { type: 'sketch', label: 'Pencil Sketch', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+    // ---- batch 22: 3D (textured-mesh renderer via CANVAS_FX — AM's 3D category) ----
+    // Shared params: rotx/roty/rotz spin the solid (keyframe them to animate), size scales it
+    // relative to the layer's rendered bounds, shading = strength of the fixed key light.
+    { type: 'cube3d', label: 'Cube', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'box3d', label: 'Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 60, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'cylinder3d', label: 'Cylinder', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 75, unit: '°' }, { key: 'length', label: 'Length', min: 20, max: 250, step: 1, def: 150, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'sphere3d', label: 'Spherize', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.55 }] },
+    { type: 'ellipsoid3d', label: 'Ellipsoid', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.55 }] },
+    { type: 'torus3d', label: 'Torus', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 55, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 10, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'thickness', label: 'Thickness', min: 8, max: 45, step: 1, def: 30, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'ring3d', label: 'Ring', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 60, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 8, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'hole', label: 'Hole', min: 20, max: 90, step: 1, def: 62, unit: '%' }, { key: 'depth', label: 'Depth', min: 5, max: 100, step: 1, def: 35, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'pyramid3d', label: 'Pyramid', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
+    { type: 'octahedron3d', label: 'Octahedron', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
+    { type: 'hexprism3d', label: 'Hexagonal Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 55, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'starprism3d', label: 'Star Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'points', label: 'Points', min: 4, max: 10, step: 1, def: 5 }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 40, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'starpoly3d', label: 'Star Polyhedron', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'spike', label: 'Spike Length', min: 0.2, max: 2.5, step: 0.05, def: 1.1 }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
+    { type: 'heart3d', label: 'Heart', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 45, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'hollowbox3d', label: 'Hollow Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'axiscross3d', label: 'Three-axis Cross', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'arm', label: 'Arm Width', min: 15, max: 60, step: 1, def: 34, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
+    { type: 'pagecurl', label: 'Page Curl', params: [{ key: 'amount', label: 'Curl', min: 0, max: 1, step: 0.01, def: 0.45 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }, { key: 'radius', label: 'Radius', min: 5, max: 60, step: 1, def: 20, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.5 }] },
+    { type: 'fliplayer', label: 'Flip Layer', param: 'mode', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
+    { type: 'rasterextrude', label: 'Raster Extrude', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
+    // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
+    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 200, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 10, step: 0.1, def: 2, unit: 'Hz' }] },
+    { type: 'shake', label: 'Shake', params: [{ key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 20, unit: 'px' }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 0.5, def: 12, unit: 'Hz' }, { key: 'twist', label: 'Twist', min: 0, max: 20, step: 0.5, def: 4, unit: '°' }] },
+    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
+    { type: 'spin', label: 'Spin', param: 'speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
+    { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }] },
+    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -400, max: 400, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -400, max: 400, step: 5, def: 0, unit: 'px/s' }] },
+    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 400, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }] },
+    // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
+    { type: 'squeeze', label: 'Squeeze', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'tiles', label: 'Tiles', params: [{ key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 }, { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 8, unit: '%' }] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -675,7 +707,12 @@ window.FM = window.FM || {};
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
-    faded: 1, nightvision: 1, sketch: 1 };
+    faded: 1, nightvision: 1, sketch: 1,
+    cube3d: 1, box3d: 1, cylinder3d: 1, sphere3d: 1, ellipsoid3d: 1, torus3d: 1, ring3d: 1,
+    pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
+    hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
+    wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
+    squeeze: 1, tiles: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -689,6 +726,8 @@ window.FM = window.FM || {};
     if (PIXEL_FX[fx.type]) return drawPixelEffect(ctx, layer, t, scene, fx, PIXEL_FX[fx.type]);
     // generic geometric warps
     if (WARP_FX[fx.type]) return drawWarpEffect(ctx, layer, t, scene, fx, WARP_FX[fx.type]);
+    // canvas-composited effects (3D mesh solids, Move/Transform motion, tiles/extrude)
+    if (CANVAS_FX[fx.type]) return drawCanvasEffect(ctx, layer, t, scene, fx, CANVAS_FX[fx.type]);
   }
 
   // Generic per-pixel effect: render the layer clean to an offscreen (this fx removed so the rest still
@@ -1077,6 +1116,523 @@ window.FM = window.FM || {};
     mirrortile: function(x,y,W,H,cx,cy,maxR,p,t){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; if(mt_size<1) mt_size=1; var mt_cix=Math.floor(x/mt_size); var mt_lx=x-mt_cix*mt_size; if(mt_cix&1) mt_lx=mt_size-mt_lx; var mt_ciy=Math.floor(y/mt_size); var mt_ly=y-mt_ciy*mt_size; if(mt_ciy&1) mt_ly=mt_size-mt_ly; var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
     // ---- batch 18 (warp) ----
     innerpinch: function(x,y,W,H,cx,cy,maxR,p,t){ var ip_a=FM.evalProp(p.amount,t); if(ip_a===null||ip_a===undefined)ip_a=0.5; if(ip_a<-1)ip_a=-1; if(ip_a>1)ip_a=1; var ip_dx=x-cx, ip_dy=y-cy; var ip_r=Math.hypot(ip_dx,ip_dy); var ip_rad=maxR*0.6; if(ip_rad<=0)return [x,y]; var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8; return [cx+ip_dx*ip_k, cy+ip_dy*ip_k]; },
+    // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), AM featured ----
+    squeeze: function(x,y,W,H,cx,cy,maxR,p,t){ var sq_k=p.amount==null?0.5:FM.evalProp(p.amount,t); if(sq_k<-1)sq_k=-1; if(sq_k>1)sq_k=1; var sq_f=1-sq_k*Math.sin(Math.PI*y/H); if(sq_f<0.05)sq_f=0.05; return [cx+(x-cx)/sq_f, y]; },
+  };
+
+  // ================== CANVAS_FX: 3D solids + Move/Transform ==================
+  // Canvas-composited effects. Like drawPixelEffect the layer is rendered clean to an offscreen,
+  // but the effect fn then REDRAWS it with plain canvas ops (textured triangles / matrices) —
+  // no per-pixel loops, so the 3D solids stay realtime. fn(srcCanvas, dstCtx, W, H, bbox, params,
+  // t, tl) where bbox = the layer's rendered alpha bounds (the "texture" region AM wraps onto its
+  // solids) and tl = time since the clip began (so Spin/Drift/Orbit start at the clip's start).
+  // Everything derives from params + t only — deterministic, so preview == export.
+  function alphaBBox(d, W, H) {
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y += 2) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x += 2) {
+        if (d[row + x * 4 + 3] > 8) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return null;
+    minX = Math.max(0, minX - 2); minY = Math.max(0, minY - 2);
+    maxX = Math.min(W - 1, maxX + 2); maxY = Math.min(H - 1, maxY + 2);
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+  let _cfA = null, _cfB = null, _cfTex = null, _reC = null;
+  function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
+    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    if (!_cfA) _cfA = document.createElement('canvas');
+    if (!_cfB) _cfB = document.createElement('canvas');
+    _cfA.width = W; _cfA.height = H; _cfB.width = W; _cfB.height = H;
+    const actx = _cfA.getContext('2d');
+    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    drawLayer(actx, tmp, t, scene);
+    let bbox = null;
+    try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
+    // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases
+    const bctx = _cfB.getContext('2d');
+    _cfB.width = W; _cfB.height = H;
+    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
+    bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer.start || 0));
+    else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Nested canvas fx (two+ stacked): dst IS our scratch A, still holding this call's clean-layer
+    // render — wipe it so only the effected result goes up, not a ghost of the plain layer under it.
+    if (ctx.canvas === _cfA) ctx.clearRect(0, 0, W, H);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    ctx.drawImage(_cfB, 0, 0);
+    ctx.restore();
+  }
+  function fparam(p, key, def, t) { return p[key] == null ? def : FM.evalProp(p[key], t); }
+  // Crop the layer's alpha bounds out of the frame → the texture the solids wrap.
+  function extractTex(src, bb) {
+    if (!_cfTex) _cfTex = document.createElement('canvas');
+    _cfTex.width = bb.w; _cfTex.height = bb.h;
+    const c = _cfTex.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, bb.w, bb.h);
+    c.drawImage(src, bb.x, bb.y, bb.w, bb.h, 0, 0, bb.w, bb.h);
+    return _cfTex;
+  }
+
+  // ---- tiny fixed-function mesh pipeline ----
+  // verts: [x,y,z,u,v] in unit space (|xyz| ≲ 1, uv 0..1), tris: index triples.
+  // Euler-rotates, projects with weak perspective, painter-sorts, then draws each triangle as an
+  // affine texture map (clip + setTransform + drawImage) with flat double-sided Lambert shading.
+  function renderMesh(dctx, tex, tw, th, verts, tris, o) {
+    const cX = Math.cos(o.rx), sX = Math.sin(o.rx);
+    const cY = Math.cos(o.ry), sY = Math.sin(o.ry);
+    const cZ = Math.cos(o.rz), sZ = Math.sin(o.rz);
+    const n = verts.length, F = 3.2;   // focal length in solid radii (weak perspective)
+    const P = new Array(n), RZ = new Float32Array(n), RX3 = new Float32Array(n), RY3 = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const v = verts[i];
+      let x = v[0], y = v[1], z = v[2], w;
+      w = y * cX - z * sX; z = y * sX + z * cX; y = w;          // rotate X
+      w = x * cY + z * sY; z = -x * sY + z * cY; x = w;         // rotate Y
+      w = x * cZ - y * sZ; y = x * sZ + y * cZ; x = w;          // rotate Z
+      RX3[i] = x; RY3[i] = y; RZ[i] = z;
+      const f = F / (F - z);                                    // z+ toward viewer
+      P[i] = [o.cx + x * f * o.R, o.cy + y * f * o.R];
+    }
+    const order = [];
+    for (let i = 0; i < tris.length; i++) order.push(i);
+    order.sort((a, b) => (RZ[tris[a][0]] + RZ[tris[a][1]] + RZ[tris[a][2]]) - (RZ[tris[b][0]] + RZ[tris[b][1]] + RZ[tris[b][2]]));
+    const Lx = 0.42, Ly = -0.55, Lz = 0.72;   // key light: upper-left, toward viewer
+    for (let k = 0; k < order.length; k++) {
+      const tr = tris[order[k]];
+      const a = P[tr[0]], b = P[tr[1]], c = P[tr[2]];
+      const gx = (a[0] + b[0] + c[0]) / 3, gy = (a[1] + b[1] + c[1]) / 3;
+      // inflate ~0.4px outward from the centroid to hide hairline seams between triangles
+      const pts = [a, b, c].map(pp => {
+        const dx = pp[0] - gx, dy = pp[1] - gy, len = Math.hypot(dx, dy) || 1;
+        return [pp[0] + dx / len * 0.4, pp[1] + dy / len * 0.4];
+      });
+      const va = verts[tr[0]], vb = verts[tr[1]], vc = verts[tr[2]];
+      const u0 = va[3] * tw, v0 = va[4] * th, u1 = vb[3] * tw, v1 = vb[4] * th, u2 = vc[3] * tw, v2 = vc[4] * th;
+      const den = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
+      if (Math.abs(den) < 1e-6) continue;
+      const x0 = pts[0][0], y0 = pts[0][1], x1 = pts[1][0], y1 = pts[1][1], x2 = pts[2][0], y2 = pts[2][1];
+      const ma = (x0 * (v1 - v2) + x1 * (v2 - v0) + x2 * (v0 - v1)) / den;
+      const mb = (y0 * (v1 - v2) + y1 * (v2 - v0) + y2 * (v0 - v1)) / den;
+      const mc = (x0 * (u2 - u1) + x1 * (u0 - u2) + x2 * (u1 - u0)) / den;
+      const md = (y0 * (u2 - u1) + y1 * (u0 - u2) + y2 * (u1 - u0)) / den;
+      const me = x0 - ma * u0 - mc * v0;
+      const mf = y0 - mb * u0 - md * v0;
+      // flat double-sided Lambert from the rotated face normal
+      const e1x = RX3[tr[1]] - RX3[tr[0]], e1y = RY3[tr[1]] - RY3[tr[0]], e1z = RZ[tr[1]] - RZ[tr[0]];
+      const e2x = RX3[tr[2]] - RX3[tr[0]], e2y = RY3[tr[2]] - RY3[tr[0]], e2z = RZ[tr[2]] - RZ[tr[0]];
+      let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      const lam = Math.abs((nx * Lx + ny * Ly + nz * Lz) / nl);
+      const shade = (1 - o.shading) + o.shading * (0.25 + 0.75 * lam);
+      dctx.save();
+      dctx.beginPath();
+      dctx.moveTo(pts[0][0], pts[0][1]); dctx.lineTo(pts[1][0], pts[1][1]); dctx.lineTo(pts[2][0], pts[2][1]);
+      dctx.closePath();
+      dctx.clip();
+      dctx.transform(ma, mb, mc, md, me, mf);
+      // shade baked into this face's own pixels (a source-atop fill would also darken farther
+      // faces showing through transparent texels); brightness(s) ≡ compositing black at 1-s
+      if (shade < 0.999) dctx.filter = 'brightness(' + shade.toFixed(3) + ')';
+      dctx.drawImage(tex, 0, 0);
+      dctx.restore();
+    }
+  }
+
+  // ---- mesh builders (memoized per effect type on a geometry signature) ----
+  const _meshCache = {};
+  function meshFor(type, sig, build) {
+    const m = _meshCache[type];
+    if (m && m.sig === sig) return m.mesh;
+    const mesh = build();
+    _meshCache[type] = { sig, mesh };
+    return mesh;
+  }
+  // parametric patch: fn(u01, v01) -> [x,y,z]
+  function bParam(fn, nu, nv) {
+    const V = [], T = [];
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+      const u = i / nu, v = j / nv, p = fn(u, v);
+      V.push([p[0], p[1], p[2], u, v]);
+    }
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const k = j * (nu + 1) + i;
+      T.push([k, k + 1, k + nu + 2], [k, k + nu + 2, k + nu + 1]);
+    }
+    return { v: V, t: T };
+  }
+  // box: 6 faces, each sub×sub so weak perspective doesn't shear the texture visibly
+  function bBox(wx, wy, wz, sub) {
+    const V = [], T = [];
+    function face(ox, oy, oz, ux, uy, uz, vx, vy, vz) {
+      const base = V.length;
+      for (let j = 0; j <= sub; j++) for (let i = 0; i <= sub; i++) {
+        const fu = i / sub, fv = j / sub;
+        V.push([ox + ux * fu + vx * fv, oy + uy * fu + vy * fv, oz + uz * fu + vz * fv, fu, fv]);
+      }
+      for (let j = 0; j < sub; j++) for (let i = 0; i < sub; i++) {
+        const k = base + j * (sub + 1) + i;
+        T.push([k, k + 1, k + sub + 2], [k, k + sub + 2, k + sub + 1]);
+      }
+    }
+    face(-wx, -wy, wz, 2 * wx, 0, 0, 0, 2 * wy, 0);       // front
+    face(wx, -wy, -wz, -2 * wx, 0, 0, 0, 2 * wy, 0);      // back
+    face(wx, -wy, wz, 0, 0, -2 * wz, 0, 2 * wy, 0);       // right
+    face(-wx, -wy, -wz, 0, 0, 2 * wz, 0, 2 * wy, 0);      // left
+    face(-wx, -wy, -wz, 2 * wx, 0, 0, 0, 0, 2 * wz);      // top
+    face(-wx, wy, wz, 2 * wx, 0, 0, 0, 0, -2 * wz);       // bottom
+    return { v: V, t: T };
+  }
+  // extrude a 2D outline (pts in [-1,1]², star-convex about its centroid) to ±depth/2.
+  // Sides sample a band between the edge and the centroid so the UV triangles stay non-degenerate.
+  function bPrism(pts, depth) {
+    const V = [], T = [], n = pts.length, hz = depth / 2;
+    let cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) { cx += pts[i][0]; cy += pts[i][1]; }
+    cx /= n; cy /= n;
+    const cu = (cx + 1) / 2, cv = (cy + 1) / 2;
+    const uu = p => (p[0] + 1) / 2, vv = p => (p[1] + 1) / 2;
+    const f0 = V.length;
+    V.push([cx, cy, hz, cu, cv]);
+    for (let i = 0; i < n; i++) V.push([pts[i][0], pts[i][1], hz, uu(pts[i]), vv(pts[i])]);
+    for (let i = 0; i < n; i++) T.push([f0, f0 + 1 + i, f0 + 1 + (i + 1) % n]);
+    const b0 = V.length;
+    V.push([cx, cy, -hz, cu, cv]);
+    for (let i = 0; i < n; i++) V.push([pts[i][0], pts[i][1], -hz, uu(pts[i]), vv(pts[i])]);
+    for (let i = 0; i < n; i++) T.push([b0, b0 + 1 + (i + 1) % n, b0 + 1 + i]);
+    for (let i = 0; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      const s = V.length;
+      const pu = uu(p), pv = vv(p), qu = uu(q), qv = vv(q);
+      const pu2 = pu + (cu - pu) * 0.3, pv2 = pv + (cv - pv) * 0.3;
+      const qu2 = qu + (cu - qu) * 0.3, qv2 = qv + (cv - qv) * 0.3;
+      V.push([p[0], p[1], hz, pu, pv], [q[0], q[1], hz, qu, qv], [q[0], q[1], -hz, qu2, qv2], [p[0], p[1], -hz, pu2, pv2]);
+      T.push([s, s + 1, s + 2], [s, s + 2, s + 3]);
+    }
+    return { v: V, t: T };
+  }
+  // tube: outer loop + aligned inner loop extruded to ±depth/2, with ring caps (Ring / Hollow Box)
+  function bTube(outer, inner, depth) {
+    const V = [], T = [], n = outer.length, hz = depth / 2;
+    const uu = p => (p[0] + 1) / 2, vv = p => (p[1] + 1) / 2;
+    function loopSides(pts, flip) {
+      for (let i = 0; i < n; i++) {
+        const p = pts[i], q = pts[(i + 1) % n], s = V.length;
+        const pu = uu(p), pv = vv(p), qu = uu(q), qv = vv(q);
+        V.push([p[0], p[1], hz, pu, pv], [q[0], q[1], hz, qu, qv], [q[0], q[1], -hz, qu * 0.94 + 0.03, qv * 0.94 + 0.03], [p[0], p[1], -hz, pu * 0.94 + 0.03, pv * 0.94 + 0.03]);
+        if (flip) T.push([s, s + 2, s + 1], [s, s + 3, s + 2]);
+        else T.push([s, s + 1, s + 2], [s, s + 2, s + 3]);
+      }
+    }
+    loopSides(outer, false);
+    loopSides(inner, true);
+    for (let i = 0; i < n; i++) {   // front + back ring caps
+      const o1 = outer[i], o2 = outer[(i + 1) % n], i1 = inner[i], i2 = inner[(i + 1) % n];
+      let s = V.length;
+      V.push([o1[0], o1[1], hz, uu(o1), vv(o1)], [o2[0], o2[1], hz, uu(o2), vv(o2)], [i2[0], i2[1], hz, uu(i2), vv(i2)], [i1[0], i1[1], hz, uu(i1), vv(i1)]);
+      T.push([s, s + 1, s + 2], [s, s + 2, s + 3]);
+      s = V.length;
+      V.push([o1[0], o1[1], -hz, uu(o1), vv(o1)], [o2[0], o2[1], -hz, uu(o2), vv(o2)], [i2[0], i2[1], -hz, uu(i2), vv(i2)], [i1[0], i1[1], -hz, uu(i1), vv(i1)]);
+      T.push([s, s + 2, s + 1], [s, s + 3, s + 2]);
+    }
+    return { v: V, t: T };
+  }
+  function circlePts(r, n) {
+    const pts = [];
+    for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / n; pts.push([r * Math.cos(a), r * Math.sin(a)]); }
+    return pts;
+  }
+  function starPts(points, inr) {
+    const pts = [];
+    for (let i = 0; i < points * 2; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / points, rr = (i % 2 === 0) ? 1 : inr;
+      pts.push([rr * Math.cos(a), rr * Math.sin(a)]);
+    }
+    return pts;
+  }
+  function heartPts(n) {
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = i * 2 * Math.PI / n;
+      pts.push([Math.pow(Math.sin(a), 3) * 16 / 17, -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)) / 17]);
+    }
+    return pts;
+  }
+  // octahedron, optionally stellated (a pyramid raised on every face → Star Polyhedron)
+  function bOcta(spike) {
+    const base = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    const faces = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
+    const V = [], T = [];
+    const uv = p => [(p[0] + 1) / 2, (p[1] + 1) / 2];   // planar projection wrap
+    for (let fi = 0; fi < faces.length; fi++) {
+      const f = faces[fi], A = base[f[0]], B = base[f[1]], C = base[f[2]], s = V.length;
+      V.push([A[0], A[1], A[2], uv(A)[0], uv(A)[1]], [B[0], B[1], B[2], uv(B)[0], uv(B)[1]], [C[0], C[1], C[2], uv(C)[0], uv(C)[1]]);
+      if (!spike) { T.push([s, s + 1, s + 2]); continue; }
+      const k = (1 + spike) / 3;
+      const gx = (A[0] + B[0] + C[0]) * k, gy = (A[1] + B[1] + C[1]) * k, gz = (A[2] + B[2] + C[2]) * k;
+      V.push([gx, gy, gz, (uv(A)[0] + uv(B)[0] + uv(C)[0]) / 3, (uv(A)[1] + uv(B)[1] + uv(C)[1]) / 3]);
+      T.push([s, s + 1, s + 3], [s + 1, s + 2, s + 3], [s + 2, s, s + 3]);
+    }
+    return { v: V, t: T };
+  }
+  function bPyramid() {
+    const V = [], T = [];
+    const b = [[-1, 1, -1], [1, 1, -1], [1, 1, 1], [-1, 1, 1]];   // base at y=+1 (canvas y-down ⇒ bottom)
+    const apex = [0, -1, 0];
+    for (let i = 0; i < 4; i++) {
+      // per-face UV triangle — planar-projected UVs collapse (den=0) on the two faces whose base
+      // edge runs along z, and renderMesh would skip them, leaving see-through holes
+      const A = b[i], B = b[(i + 1) % 4], s = V.length;
+      V.push([A[0], A[1], A[2], 0, 1], [B[0], B[1], B[2], 1, 1], [apex[0], apex[1], apex[2], 0.5, 0]);
+      T.push([s, s + 1, s + 2]);
+    }
+    const s = V.length;
+    for (let i = 0; i < 4; i++) V.push([b[i][0], b[i][1], b[i][2], (b[i][0] + 1) / 2, (b[i][2] + 1) / 2]);
+    T.push([s, s + 2, s + 1], [s, s + 3, s + 2]);
+    return { v: V, t: T };
+  }
+  function meshMerge(list) {
+    const V = [], T = [];
+    for (const m of list) {
+      const off = V.length;
+      for (const v of m.v) V.push(v);
+      for (const tr of m.t) T.push([tr[0] + off, tr[1] + off, tr[2] + off]);
+    }
+    return { v: V, t: T };
+  }
+  // page curl: a plane that rolls around a cylinder whose front line sweeps across the layer
+  function bCurl(ax, ay, amount, angRad, radius) {
+    const dx = Math.cos(angRad), dy = Math.sin(angRad);
+    const m = Math.abs(ax * dx) + Math.abs(ay * dy);
+    const front = m * (1 - 2 * amount);
+    return bParam(function (u, v) {
+      const x = (u * 2 - 1) * ax, y = (v * 2 - 1) * ay;
+      const s = x * dx + y * dy - front;
+      if (s <= 0) return [x, y, 0];
+      const per = -x * dy + y * dx;
+      const a = s / radius;
+      let along, z;
+      if (a <= Math.PI) { along = front + radius * Math.sin(a); z = radius * (1 - Math.cos(a)); }
+      else { along = front - (s - Math.PI * radius); z = 2 * radius; }
+      return [along * dx - per * dy, along * dy + per * dx, z];
+    }, 26, 26);
+  }
+
+  // ---- the CANVAS_FX catalog ----
+  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs) {
+    const rx = fparam(p, 'rotx', defs.rotx, t) * Math.PI / 180;
+    const ry = fparam(p, 'roty', defs.roty, t) * Math.PI / 180;
+    const rz = fparam(p, 'rotz', defs.rotz, t) * Math.PI / 180;
+    const size = fparam(p, 'size', defs.size, t) / 100;
+    const shading = clamp01(fparam(p, 'shading', defs.shading, t));
+    const tex = extractTex(A, bb);
+    const mesh = buildMesh();
+    renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, {
+      cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
+      rx, ry, rz, shading,
+    });
+  }
+  const CANVAS_FX = {
+    // ---- 3D solids ----
+    cube3d: function (A, B, W, H, bb, p, t) {
+      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 });
+    },
+    box3d: function (A, B, W, H, bb, p, t) {
+      const d = fparam(p, 'depth', 60, t) / 100;
+      const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;
+      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+    },
+    cylinder3d: function (A, B, W, H, bb, p, t) {
+      const len = fparam(p, 'length', 150, t) / 100;
+      solidFx(A, B, W, H, bb, p, t, 'cylinder3d', () => meshFor('cylinder3d', String(len), () => {
+        const side = bParam(function (u, v) {
+          const lon = (u - 0.5) * 2 * Math.PI;
+          return [Math.sin(lon) * 0.62, (v - 0.5) * len, Math.cos(lon) * 0.62];
+        }, 24, 4);
+        const capPts = circlePts(0.62, 20);
+        const capF = { v: [], t: [] }, capB = { v: [], t: [] };
+        capF.v.push([0, -len / 2, 0, 0.5, 0.5]); capB.v.push([0, len / 2, 0, 0.5, 0.5]);
+        for (let i = 0; i < capPts.length; i++) {
+          const c = capPts[i];
+          capF.v.push([c[0], -len / 2, c[1], (c[0] / 0.62 + 1) / 2, (c[1] / 0.62 + 1) / 2]);
+          capB.v.push([c[0], len / 2, c[1], (c[0] / 0.62 + 1) / 2, (c[1] / 0.62 + 1) / 2]);
+        }
+        for (let i = 0; i < capPts.length; i++) {
+          capF.t.push([0, 1 + i, 1 + (i + 1) % capPts.length]);
+          capB.t.push([0, 1 + (i + 1) % capPts.length, 1 + i]);
+        }
+        return meshMerge([side, capF, capB]);
+      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 });
+    },
+    sphere3d: function (A, B, W, H, bb, p, t) {
+      solidFx(A, B, W, H, bb, p, t, 'sphere3d', () => meshFor('sphere3d', 'u', () => bParam(function (u, v) {
+        const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
+        return [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
+      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 });
+    },
+    ellipsoid3d: function (A, B, W, H, bb, p, t) {
+      solidFx(A, B, W, H, bb, p, t, 'ellipsoid3d', () => meshFor('ellipsoid3d', 'u', () => bParam(function (u, v) {
+        const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
+        return [Math.cos(lat) * Math.sin(lon) * 1.15, Math.sin(lat) * 0.62, Math.cos(lat) * Math.cos(lon) * 0.62];
+      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 });
+    },
+    torus3d: function (A, B, W, H, bb, p, t) {
+      const thk = Math.min(0.45, fparam(p, 'thickness', 30, t) / 100);
+      solidFx(A, B, W, H, bb, p, t, 'torus3d', () => meshFor('torus3d', String(thk), () => bParam(function (u, v) {
+        const lon = (u - 0.5) * 2 * Math.PI, tube = v * 2 * Math.PI, R0 = 1 - thk;
+        return [(R0 + thk * Math.cos(tube)) * Math.sin(lon), thk * Math.sin(tube), (R0 + thk * Math.cos(tube)) * Math.cos(lon)];
+      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 });
+    },
+    ring3d: function (A, B, W, H, bb, p, t) {
+      const hole = Math.min(0.92, Math.max(0.1, fparam(p, 'hole', 62, t) / 100));
+      const d = fparam(p, 'depth', 35, t) / 100;
+      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 });
+    },
+    pyramid3d: function (A, B, W, H, bb, p, t) {
+      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    },
+    octahedron3d: function (A, B, W, H, bb, p, t) {
+      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    },
+    hexprism3d: function (A, B, W, H, bb, p, t) {
+      const d = fparam(p, 'depth', 55, t) / 100;
+      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+    },
+    starprism3d: function (A, B, W, H, bb, p, t) {
+      const n = Math.max(4, Math.min(10, Math.round(fparam(p, 'points', 5, t))));
+      const d = fparam(p, 'depth', 40, t) / 100;
+      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d, () => bPrism(starPts(n, 0.45), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+    },
+    starpoly3d: function (A, B, W, H, bb, p, t) {
+      const spike = fparam(p, 'spike', 1.1, t);
+      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', () => meshFor('starpoly3d', String(spike), () => bOcta(spike)), { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 });
+    },
+    heart3d: function (A, B, W, H, bb, p, t) {
+      const d = fparam(p, 'depth', 45, t) / 100;
+      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+    },
+    hollowbox3d: function (A, B, W, H, bb, p, t) {
+      const wall = Math.min(0.45, Math.max(0.08, fparam(p, 'wall', 22, t) / 100));
+      const d = fparam(p, 'depth', 70, t) / 100;
+      const inner = 1 - wall * 2;
+      const sq = [[-1, -1], [1, -1], [1, 1], [-1, 1]], si = sq.map(q => [q[0] * inner, q[1] * inner]);
+      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+    },
+    axiscross3d: function (A, B, W, H, bb, p, t) {
+      const arm = Math.min(0.6, Math.max(0.15, fparam(p, 'arm', 34, t) / 100));
+      solidFx(A, B, W, H, bb, p, t, 'axiscross3d', () => meshFor('axiscross3d', String(arm), () => meshMerge([
+        bBox(1, arm / 2, arm / 2, 2), bBox(arm / 2, 1, arm / 2, 2), bBox(arm / 2, arm / 2, 1, 2),
+      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+    },
+    pagecurl: function (A, B, W, H, bb, p, t) {
+      const amount = clamp01(fparam(p, 'amount', 0.45, t));
+      const ang = fparam(p, 'angle', 45, t) * Math.PI / 180;
+      const radius = Math.max(0.02, fparam(p, 'radius', 20, t) / 100);
+      const shading = clamp01(fparam(p, 'shading', 0.5, t));
+      const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;
+      const tex = extractTex(A, bb);
+      const mesh = bCurl(ax, ay, amount, ang, radius);   // amount animates → rebuilt per frame (cheap)
+      renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: 0, ry: 0, rz: 0, shading });
+    },
+    fliplayer: function (A, B, W, H, bb, p, t) {
+      const m = (p.mode | 0), px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      B.save();
+      B.translate(px, py);
+      B.scale(m === 1 ? 1 : -1, m === 0 ? 1 : -1);
+      B.translate(-px, -py);
+      B.drawImage(A, 0, 0);
+      B.restore();
+    },
+    rasterextrude: function (A, B, W, H, bb, p, t) {
+      const depth = Math.max(0, Math.min(100, fparam(p, 'depth', 40, t)));
+      const ang = fparam(p, 'angle', 225, t) * Math.PI / 180;
+      const dk = clamp01(fparam(p, 'darken', 0.55, t));
+      const steps = Math.round(depth);
+      if (!steps) { B.drawImage(A, 0, 0); return; }
+      if (!_reC) _reC = document.createElement('canvas');
+      _reC.width = W; _reC.height = H;
+      const rctx = _reC.getContext('2d');
+      rctx.setTransform(1, 0, 0, 1, 0, 0); rctx.clearRect(0, 0, W, H);
+      rctx.globalCompositeOperation = 'source-over'; rctx.drawImage(A, 0, 0);
+      rctx.globalCompositeOperation = 'source-atop';
+      rctx.fillStyle = 'rgba(0,0,0,' + dk.toFixed(3) + ')';
+      rctx.fillRect(0, 0, W, H);
+      rctx.globalCompositeOperation = 'source-over';
+      const ddx = Math.cos(ang), ddy = Math.sin(ang);
+      for (let i = steps; i >= 1; i--) B.drawImage(_reC, ddx * i, ddy * i);
+      B.drawImage(A, 0, 0);
+    },
+    tiles: function (A, B, W, H, bb, p, t) {
+      const n = Math.max(1, Math.min(8, Math.round(fparam(p, 'count', 3, t))));
+      const gap = Math.max(0, Math.min(0.4, fparam(p, 'gap', 8, t) / 100));
+      const cw = W / n, ch = H / n, gx = cw * gap, gy = ch * gap;
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+        B.drawImage(A, 0, 0, W, H, i * cw + gx / 2, j * ch + gy / 2, cw - gx, ch - gy);
+      }
+    },
+    // ---- Move / Transform (motion about the layer's rendered bounds) ----
+    wiggle: function (A, B, W, H, bb, p, t, tl) {
+      const amt = fparam(p, 'amount', 40, t), spd = fparam(p, 'speed', 2, t);
+      B.save(); B.translate(amt * wnoise(tl * spd), amt * wnoise(tl * spd + 100)); B.drawImage(A, 0, 0); B.restore();
+    },
+    shake: function (A, B, W, H, bb, p, t, tl) {
+      const amt = fparam(p, 'amount', 20, t), spd = fparam(p, 'speed', 12, t), tw = fparam(p, 'twist', 4, t);
+      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      B.save();
+      B.translate(px + amt * wnoise(tl * spd), py + amt * wnoise(tl * spd + 55));
+      B.rotate(tw * wnoise(tl * spd + 200) * Math.PI / 180);
+      B.translate(-px, -py);
+      B.drawImage(A, 0, 0); B.restore();
+    },
+    swing: function (A, B, W, H, bb, p, t, tl) {
+      const amp = fparam(p, 'angle', 15, t), spd = fparam(p, 'speed', 1, t);
+      const px = bb.x + bb.w / 2, py = bb.y;   // pendulum pivot: top-centre of the layer
+      B.save();
+      B.translate(px, py);
+      B.rotate(amp * Math.sin(2 * Math.PI * spd * tl) * Math.PI / 180);
+      B.translate(-px, -py);
+      B.drawImage(A, 0, 0); B.restore();
+    },
+    spin: function (A, B, W, H, bb, p, t, tl) {
+      const spd = fparam(p, 'speed', 90, t);
+      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      B.save();
+      B.translate(px, py);
+      B.rotate(spd * tl * Math.PI / 180);
+      B.translate(-px, -py);
+      B.drawImage(A, 0, 0); B.restore();
+    },
+    pulse: function (A, B, W, H, bb, p, t, tl) {
+      const amt = fparam(p, 'amount', 0.2, t), spd = fparam(p, 'speed', 1.5, t);
+      const s = 1 + amt * Math.sin(2 * Math.PI * spd * tl);
+      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      B.save();
+      B.translate(px, py); B.scale(s, s); B.translate(-px, -py);
+      B.drawImage(A, 0, 0); B.restore();
+    },
+    drift: function (A, B, W, H, bb, p, t, tl) {
+      const vx = fparam(p, 'x', 120, t), vy = fparam(p, 'y', 0, t);
+      B.save(); B.translate(vx * tl, vy * tl); B.drawImage(A, 0, 0); B.restore();
+    },
+    orbit: function (A, B, W, H, bb, p, t, tl) {
+      const r = fparam(p, 'radius', 80, t), spd = fparam(p, 'speed', 0.5, t);
+      const a = 2 * Math.PI * spd * tl;
+      B.save(); B.translate(r * Math.cos(a), r * Math.sin(a)); B.drawImage(A, 0, 0); B.restore();
+    },
   };
 
   // RGB split / chromatic aberration: render the layer clean to an offscreen, then rebuild it
@@ -1370,6 +1926,78 @@ window.FM = window.FM || {};
     if (skX || skY) ctx.transform(1, Math.tan(skY * Math.PI / 180), Math.tan(skX * Math.PI / 180), 1, 0, 0);   // X/Y skew
   }
 
+  // Trace a shape layer's outline into ctx (beginPath + geometry only — caller fills/strokes).
+  // ONE tracer shared by drawLayer and renderThumb so the two can never drift. Returns 'stroke'
+  // for open kinds (line/arc — stroked, never filled) and 'fill' for everything else.
+  FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh) {
+    const kind = layer.shape || 'rect';
+    const P = (u, v) => [ox + u * sw, oy + v * sh];
+    const poly = pts => {
+      pts.forEach((p, i) => { const q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
+      ctx.closePath();
+    };
+    ctx.beginPath();
+    if (kind === 'ellipse') {
+      ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+    } else if (kind === 'line') {
+      ctx.moveTo(ox, oy + sh / 2); ctx.lineTo(ox + sw, oy + sh / 2);
+      return 'stroke';
+    } else if (kind === 'arc') {
+      ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, -Math.PI / 3, Math.PI * 4 / 3);
+      return 'stroke';
+    } else if (kind === 'polygon') {
+      const n = Math.max(3, layer.sides || 5), cx = ox + sw / 2, cy = oy + sh / 2;
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+        const px = cx + (sw / 2) * Math.cos(a), py = cy + (sh / 2) * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    } else if (kind === 'triangle') {
+      ctx.moveTo(ox + sw / 2, oy); ctx.lineTo(ox + sw, oy + sh); ctx.lineTo(ox, oy + sh); ctx.closePath();
+    } else if (kind === 'star') {
+      const n = Math.max(3, layer.sides || 5), cx = ox + sw / 2, cy = oy + sh / 2, inr = 0.45;
+      for (let i = 0; i < n * 2; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / n, rr = (i % 2 === 0) ? 1 : inr;
+        const px = cx + (sw / 2) * rr * Math.cos(a), py = cy + (sh / 2) * rr * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    } else if (kind === 'heart') {
+      const cx = ox + sw / 2;
+      ctx.moveTo(cx, oy + sh * 0.95);
+      ctx.bezierCurveTo(ox - sw * 0.02, oy + sh * 0.55, ox + sw * 0.12, oy + sh * 0.02, cx, oy + sh * 0.30);
+      ctx.bezierCurveTo(ox + sw * 0.88, oy + sh * 0.02, ox + sw * 1.02, oy + sh * 0.55, cx, oy + sh * 0.95);
+      ctx.closePath();
+    } else if (kind === 'plus') {
+      poly([[0.33, 0], [0.67, 0], [0.67, 0.33], [1, 0.33], [1, 0.67], [0.67, 0.67], [0.67, 1], [0.33, 1], [0.33, 0.67], [0, 0.67], [0, 0.33], [0.33, 0.33]]);
+    } else if (kind === 'pie') {
+      const cx = ox + sw / 2, cy = oy + sh / 2;
+      ctx.moveTo(cx, cy);
+      ctx.ellipse(cx, cy, sw / 2, sh / 2, 0, -Math.PI / 2, Math.PI);   // 270° wedge
+      ctx.closePath();
+    } else if (kind === 'semicircle') {
+      ctx.ellipse(ox + sw / 2, oy + sh * 0.98, sw / 2, sh * 0.96, 0, Math.PI, Math.PI * 2);
+      ctx.closePath();
+    } else if (kind === 'ring') {
+      ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+      ctx.moveTo(ox + sw / 2 + sw * 0.275, oy + sh / 2);   // new subpath — else stroke() draws an outer→hole connector line
+      ctx.ellipse(ox + sw / 2, oy + sh / 2, sw * 0.275, sh * 0.275, 0, 0, Math.PI * 2, true);   // hole (reverse winding)
+    } else if (kind === 'arrow') {
+      poly([[0, 0.3], [0.55, 0.3], [0.55, 0], [1, 0.5], [0.55, 1], [0.55, 0.7], [0, 0.7]]);
+    } else if (kind === 'chevron') {
+      poly([[0, 0], [0.55, 0], [1, 0.5], [0.55, 1], [0, 1], [0.45, 0.5]]);
+    } else if (kind === 'trapezoid') {
+      poly([[0.22, 0], [0.78, 0], [1, 1], [0, 1]]);
+    } else if (kind === 'parallelogram') {
+      poly([[0.28, 0], [1, 0], [0.72, 1], [0, 1]]);
+    } else {   // rect
+      const r = Math.min(layer.cornerRadius || 0, sw / 2, sh / 2);
+      if (r > 0 && ctx.roundRect) ctx.roundRect(ox, oy, sw, sh, r); else ctx.rect(ox, oy, sw, sh);
+    }
+    return 'fill';
+  };
+
   function drawLayer(ctx, layer, t, scene) {
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
@@ -1470,42 +2098,9 @@ window.FM = window.FM || {};
     } else if (layer.type === 'shape') {
       const sw = layer.shapeW || 400, sh = layer.shapeH || 300;
       const ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;   // top-left of the shape box (anchor-relative)
-      const kind = layer.shape || 'rect';
       const stk = layer.stroke;
-      ctx.beginPath();
-      if (kind === 'ellipse') {
-        ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
-      } else if (kind === 'line') {
-        ctx.moveTo(ox, oy + sh / 2); ctx.lineTo(ox + sw, oy + sh / 2);
-      } else if (kind === 'polygon') {
-        const n = Math.max(3, layer.sides || 5), cx = ox + sw / 2, cy = oy + sh / 2;
-        for (let i = 0; i < n; i++) {
-          const a = -Math.PI / 2 + i * 2 * Math.PI / n;
-          const px = cx + (sw / 2) * Math.cos(a), py = cy + (sh / 2) * Math.sin(a);
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-      } else if (kind === 'triangle') {
-        ctx.moveTo(ox + sw / 2, oy); ctx.lineTo(ox + sw, oy + sh); ctx.lineTo(ox, oy + sh); ctx.closePath();
-      } else if (kind === 'star') {
-        const n = Math.max(3, layer.sides || 5), cx = ox + sw / 2, cy = oy + sh / 2, inr = 0.45;
-        for (let i = 0; i < n * 2; i++) {
-          const a = -Math.PI / 2 + i * Math.PI / n, rr = (i % 2 === 0) ? 1 : inr;
-          const px = cx + (sw / 2) * rr * Math.cos(a), py = cy + (sh / 2) * rr * Math.sin(a);
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-      } else if (kind === 'heart') {
-        const cx = ox + sw / 2;
-        ctx.moveTo(cx, oy + sh * 0.95);
-        ctx.bezierCurveTo(ox - sw * 0.02, oy + sh * 0.55, ox + sw * 0.12, oy + sh * 0.02, cx, oy + sh * 0.30);
-        ctx.bezierCurveTo(ox + sw * 0.88, oy + sh * 0.02, ox + sw * 1.02, oy + sh * 0.55, cx, oy + sh * 0.95);
-        ctx.closePath();
-      } else {   // rect
-        const r = Math.min(layer.cornerRadius || 0, sw / 2, sh / 2);
-        if (r > 0 && ctx.roundRect) ctx.roundRect(ox, oy, sw, sh, r); else ctx.rect(ox, oy, sw, sh);
-      }
-      if (kind === 'line') {
+      const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
+      if (mode === 'stroke') {   // open kinds (line / arc) are stroked, never filled
         ctx.lineWidth = (stk && stk.width) ? stk.width : 8;
         ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (layer.fill || '#ffffff');
         ctx.lineCap = 'round'; ctx.stroke();
@@ -1779,13 +2374,10 @@ window.FM = window.FM || {};
     }
     if (layer.type === 'shape') {
       ctx.fillStyle = layer.fill || '#3a7bd5';
-      const k = layer.shape || 'rect', pad = 6;
-      ctx.beginPath();
-      if (k === 'ellipse') ctx.ellipse(W / 2, H / 2, W / 2 - pad, H / 2 - pad, 0, 0, Math.PI * 2);
-      else if (k === 'line') { ctx.strokeStyle = layer.fill || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.moveTo(pad, H / 2); ctx.lineTo(W - pad, H / 2); ctx.stroke(); return; }
-      else if (k === 'polygon') { const n = Math.max(3, layer.sides || 5); for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / n; const px = W / 2 + (W / 2 - pad) * Math.cos(a), py = H / 2 + (H / 2 - pad) * Math.sin(a); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } ctx.closePath(); }
-      else ctx.rect(pad, pad, W - 2 * pad, H - 2 * pad);
-      ctx.fill();
+      const pad = 6;
+      const mode = FM.traceShapePath(ctx, layer, pad, pad, W - 2 * pad, H - 2 * pad);
+      if (mode === 'stroke') { ctx.strokeStyle = layer.fill || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); }
+      else ctx.fill();
       return;
     }
     const m = FM.media.get(layer.id);

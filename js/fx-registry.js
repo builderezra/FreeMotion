@@ -59,6 +59,15 @@ window.FM = window.FM || {};
     bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
     // batch 21
     faded: 'color', nightvision: 'stylize', sketch: 'drawing',
+    // batch 22 (3D — textured-mesh solids)
+    cube3d: 'threed', box3d: 'threed', cylinder3d: 'threed', sphere3d: 'threed', ellipsoid3d: 'threed',
+    torus3d: 'threed', ring3d: 'threed', pyramid3d: 'threed', octahedron3d: 'threed', hexprism3d: 'threed',
+    starprism3d: 'threed', starpoly3d: 'threed', heart3d: 'threed', hollowbox3d: 'threed', axiscross3d: 'threed',
+    pagecurl: 'threed', fliplayer: 'threed', rasterextrude: 'threed',
+    // batch 23 (move / transform)
+    wiggle: 'move', shake: 'move', swing: 'move', spin: 'move', pulse: 'move', drift: 'move', orbit: 'move',
+    // batch 24
+    squeeze: 'distort', tiles: 'repeat',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -92,8 +101,8 @@ window.FM = window.FM || {};
     posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1,
   };
 
-  // Effects to feature in the carousel (visually interesting ones).
-  FM.FX_FEATURED = ['duotone', 'chromakey', 'glow', 'rgbsplit', 'pixelate', 'mirror'];
+  // Effects to feature in the carousel (visually interesting ones). Chroma Key + Squeeze lead, like AM.
+  FM.FX_FEATURED = ['chromakey', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {
