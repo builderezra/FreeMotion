@@ -239,7 +239,7 @@ window.FM = window.FM || {};
   // Gestures on an effect row: SWIPE LEFT to delete, PRESS-HOLD then drag up/down to reorder.
   // (Replaces the old ▴▾ arrow buttons.) touch-action:pan-y lets the sheet still scroll vertically.
   function attachFxGestures(row, head, layer, fx, idx) {
-    let sx = 0, sy = 0, mode = null, hold = null, rows = null, rects = null, slotH = 0, toIdx = idx;
+    let sx = 0, sy = 0, mode = null, hold = null, rows = null, rects = null, slotH = 0, toIdx = idx, down = false;
     row._g = { moved: false };
     const clearHold = () => { if (hold) { clearTimeout(hold); hold = null; } };
     function beginReorder() {
@@ -297,7 +297,7 @@ window.FM = window.FM || {};
     head.addEventListener('pointerdown', e => {
       if (e.target.closest('button')) return;                       // let eye / disc / etc. work
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      sx = e.clientX; sy = e.clientY; mode = null; toIdx = idx; row._g.moved = false;
+      sx = e.clientX; sy = e.clientY; mode = null; toIdx = idx; row._g.moved = false; down = true;
       try { head.setPointerCapture(e.pointerId); } catch (_) {}
       // The grip (touch-action:none) is the reliable drag handle on touch — start reorder immediately.
       // Elsewhere on the row, a still-finger press-hold also reorders (works on desktop; on a phone a
@@ -306,6 +306,7 @@ window.FM = window.FM || {};
       else hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);
     });
     head.addEventListener('pointermove', e => {
+      if (!down) return;   // a mouse fires pointermove on plain HOVER (no button) — ignore it, else the row swipes itself away as the cursor passes over
       if (mode === null) {
         const dx = e.clientX - sx, dy = e.clientY - sy;
         if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) + 2) { mode = 'swipe'; row._g.moved = true; clearHold(); }
@@ -316,6 +317,8 @@ window.FM = window.FM || {};
       else if (mode === 'reorder') { moveReorder(e); e.preventDefault(); }
     });
     const finish = e => {
+      if (!down) return;   // ignore stray pointerup/cancel from hover when we never started (mouse) (#swipe)
+      down = false;
       clearHold();
       try { head.releasePointerCapture(e.pointerId); } catch (_) {}
       if (mode === 'swipe') endSwipe(e); else if (mode === 'reorder') endReorder();
