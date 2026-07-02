@@ -75,6 +75,14 @@ window.FM = window.FM || {};
     for (let i = 0; i < FM.scene.layers.length; i++) {
       const l = FM.scene.layers[i];
       if (l.type === 'camera' || l.type === 'adjustment') continue;   // non-visual — select via the layer list
+      if (l.type === 'group') {
+        if (FM.groupContext === l.id) continue;   // inside Edit Group, taps pick MEMBERS, not the open group
+        if (l.visible && !l.locked && FM.groupBounds) {
+          const gb = FM.groupBounds(l, FM.scene, t);
+          if (gb && px >= gb.x - gb.w / 2 && px <= gb.x + gb.w / 2 && py >= gb.y - gb.h / 2 && py <= gb.y + gb.h / 2) return l;
+        }
+        continue;   // a group acts as ONE object on canvas (AM); its members sit below it in z-order
+      }
       if (l.visible && !l.locked && FM.isLayerVisibleAt(l, t) && hitTest(l, px, py, t)) return l;
     }
     return null;
@@ -211,17 +219,23 @@ window.FM = window.FM || {};
     const scY = sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
     const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
     const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
-    const bw = s.w * scX * ds, bh = s.h * scY * ds;
-    const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
-    const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
+    // GROUPS: box hugs the members' world bounds (bounds already include the group's own offset/scale)
+    // instead of a meaningless 100px square at the group's 0,0 origin. Centre-anchored by construction.
+    let bw = s.w * scX * ds, bh = s.h * scY * ds, bcx = cx, bcy = cy;
+    let ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
+    let ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
+    if (layer.type === 'group' && FM.groupBounds) {
+      const gb = FM.groupBounds(layer, FM.scene, t);
+      if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
+    }
     box.style.display = 'block';
     box.style.width = bw + 'px';
     box.style.height = bh + 'px';
     // transform.x/y is the ANCHOR point; the compositor draws content at -w*anchorX / -h*anchorY from it
     // and rotates around the anchor. Mirror that here so the box + handles stay glued to the layer once
     // the anchor is moved off-centre (was hardcoded to a centred 0.5/0.5 anchor).
-    box.style.left = (cx * ds - bw * ax) + 'px';
-    box.style.top = (cy * ds - bh * ay) + 'px';
+    box.style.left = (bcx * ds - bw * ax) + 'px';
+    box.style.top = (bcy * ds - bh * ay) + 'px';
     box.style.transformOrigin = (bw * ax) + 'px ' + (bh * ay) + 'px';
     // rotate, then a shear K' = S·K·S⁻¹ applied to the already-scaled box reproduces the compositor's
     // R·S·K exactly — and because K' has a unit diagonal, the handles shear but don't blow up in size.

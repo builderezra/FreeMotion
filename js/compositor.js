@@ -2421,6 +2421,31 @@ window.FM = window.FM || {};
     return { w: m ? m.width : 100, h: m ? m.height : 100 };
   };
 
+  // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
+  // selection box + hit-test, which previously showed a meaningless 100px box at the group's 0,0).
+  FM.groupBounds = function (group, scene, t) {
+    const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
+    const gs = FM.evalProp(group.transform.scale, t) || 1;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
+    (function walk(gid, ox, oy) {
+      scene.layers.forEach(l => {
+        if (l.parent !== gid) return;
+        if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
+        if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
+        if (!FM.isLayerVisibleAt(l, t)) return;
+        const s = FM.layerSize(l);
+        const sc = FM.evalProp(l.transform.scale, t) || 1;
+        const x = ox + FM.evalProp(l.transform.x, t), y = oy + FM.evalProp(l.transform.y, t);
+        const w = s.w * sc / 2, h = s.h * sc / 2;
+        any = true;
+        minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
+        minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
+      });
+    })(group.id, 0, 0);
+    if (!any) return null;
+    return { x: gx + ((minX + maxX) / 2) * gs, y: gy + ((minY + maxY) / 2) * gs, w: (maxX - minX) * gs, h: (maxY - minY) * gs };
+  };
+
   FM.renderThumb = function (layer, canvas) {
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
