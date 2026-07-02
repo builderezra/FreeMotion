@@ -273,7 +273,7 @@ window.FM = window.FM || {};
       if (id) {
         const doc = readJSON('fm.proj.' + id, null);
         if (doc && doc.project) {
-          idx.unshift({ id: id, name: doc.project.name || 'My project', modified: Date.now(), width: doc.project.width, height: doc.project.height, duration: doc.project.duration, thumb: null });
+          idx.unshift({ id: id, name: doc.project.name || 'My project', modified: Date.now(), width: doc.project.width, height: doc.project.height, duration: doc.project.duration, layers: (doc.layers || []).length, thumb: null });
           this.saveIndex(idx);
           return;
         }
@@ -283,7 +283,7 @@ window.FM = window.FM || {};
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
       if (legacy && legacy.project) {
         writeJSON('fm.proj.' + id, legacy);
-        idx.unshift({ id: id, name: legacy.project.name || 'My project', modified: Date.now(), width: legacy.project.width, height: legacy.project.height, duration: legacy.project.duration, thumb: null });
+        idx.unshift({ id: id, name: legacy.project.name || 'My project', modified: Date.now(), width: legacy.project.width, height: legacy.project.height, duration: legacy.project.duration, layers: (legacy.layers || []).length, thumb: null });
         try { localStorage.removeItem(SCENE_KEY); } catch (e) {}
       } else {
         idx.unshift({ id: id, name: 'My project', modified: Date.now(), width: 1080, height: 1920, duration: 10, thumb: null });
@@ -299,6 +299,7 @@ window.FM = window.FM || {};
       const P = FM.scene.project;
       e.name = P.name || 'Untitled'; e.modified = Date.now();
       e.width = P.width; e.height = P.height; e.duration = P.duration;
+      e.layers = FM.scene.layers.length;
       const now = Date.now();
       if (forceThumb || (now - thumbTimer > 12000 && !FM.playing)) { thumbTimer = now; const t = makeThumb(); if (t) e.thumb = t; }
       this.saveIndex(idx);
@@ -350,7 +351,7 @@ window.FM = window.FM || {};
         db.close();
       } catch (e) {}
       const idx = this.list();
-      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now() }));
+      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length }));
       this.saveIndex(idx);
     },
     rename(id, name) {

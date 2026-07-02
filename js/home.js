@@ -39,7 +39,7 @@ window.FM = window.FM || {};
     else th.appendChild(el('span', 'hm-thumb-empty', '▶'));
     if (p.id === FM.projects.currentId()) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
     const name = el('div', 'hm-name', p.name || 'Untitled');
-    const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.duration || 0) + 's', ago(p.modified)].filter(Boolean).join(' · '));
+    const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.duration || 0) + 's', (p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : null), ago(p.modified)].filter(Boolean).join(' · '));
     const more = el('button', 'hm-card-more', '⋯');
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
