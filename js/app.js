@@ -907,7 +907,15 @@ window.FM = window.FM || {};
     FM.canvasEdit.init();
     refreshAll();
     if (FM.history) FM.history.reset();
-    if (FM.storage) FM.storage.load().then(restored => { if (restored && FM.history) FM.history.reset(); });
+    if (FM.storage) FM.storage.load().then(restored => {
+      if (restored && FM.history) FM.history.reset();
+      // Land on the AM-style home screen (project browser); the restored project sits behind it.
+      if (FM.home) { FM.home.init(); FM.home.open(); }
+      if (FM.projects) FM.projects.pruneOrphans();   // boot sweep of orphaned media blobs
+    });
+    // desktop: clicking the brand goes Home (mobile uses the ‹ back arrow)
+    const brandEl = document.querySelector('#topbar .brand');
+    if (brandEl) brandEl.addEventListener('click', (e) => { if (e.target.classList.contains('ver')) return; if (FM.home) FM.home.open(); });
 
     // top bar
     const fileInput = document.getElementById('file-input');

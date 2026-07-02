@@ -152,12 +152,14 @@ window.FM = window.FM || {};
     var mBack = document.getElementById('m-back');
     if (mBack) mBack.addEventListener('click', function () {
       if (isPhone() && document.body.classList.contains('m-editing')) { FM.selectLayer(null); return; }   // AM: back = deselect the clip
+      // AM: back from the editor = the home screen (project browser). The old file menu's actions
+      // moved there: Import/Export live on home (⋯ + per-project menu); reset = delete the project.
+      if (FM.home) { FM.home.open(); return; }
       var r = mBack.getBoundingClientRect();
       if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, [
         { label: 'Open project…', action: function () { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); } },
         { label: 'Save project', action: function () { if (FM.storage && FM.storage.exportFile) FM.storage.exportFile(); } },
         { label: 'Save frame (PNG)', action: function () { if (FM.snapshotPNG) FM.snapshotPNG(); } },
-        { label: 'Reset project…', danger: true, action: function () { if (confirm('Reset the project? This clears all layers and cannot be undone.') && FM.resetProject) FM.resetProject(); } },
         { sep: true },
         { label: 'Shortcuts', action: function () { if (FM.shortcuts) FM.shortcuts.toggle(); } },
       ]);

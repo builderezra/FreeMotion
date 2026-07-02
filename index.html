@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=137">
+<link rel="stylesheet" href="styles.css?v=138">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.24</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.25</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -146,6 +146,35 @@
 
   <input type="file" id="file-input" accept="video/*,image/*,audio/*" multiple hidden>
 
+  <!-- Home screen (AM): all projects at a glance + Templates tab. Built by home.js. -->
+  <div id="home-screen" class="hidden">
+    <div class="hm-top">
+      <div class="hm-brand">▶ FreeMotion</div>
+      <button class="hm-more" aria-label="More">⋯</button>
+    </div>
+    <div class="hm-tabs">
+      <button class="hm-tab active" data-tab="projects">Projects</button>
+      <button class="hm-tab" data-tab="templates">Templates</button>
+    </div>
+    <div class="hm-scroll"><div class="hm-grid"></div></div>
+    <button id="hm-new" aria-label="New project">+</button>
+    <div id="hm-dialog" class="hidden">
+      <div class="hm-dlg-card">
+        <div class="hm-dlg-title">New project</div>
+        <input id="hm-new-name" type="text" placeholder="Project name" spellcheck="false">
+        <div class="hm-aspects">
+          <button class="hm-aspect active" data-size="1080x1920">9:16<span>Phone</span></button>
+          <button class="hm-aspect" data-size="1920x1080">16:9<span>Wide</span></button>
+          <button class="hm-aspect" data-size="1080x1080">1:1<span>Square</span></button>
+        </div>
+        <div class="hm-dlg-actions">
+          <button id="hm-cancel">Cancel</button>
+          <button id="hm-create" class="accent">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Full-screen Add-Effect browser (AM): featured carousel · paged recents/favourites · categories · search. Built by fx-browser.js. -->
   <div id="fx-browser" class="hidden">
     <div class="fxb-top">
@@ -250,15 +279,16 @@
   <script src="js/frames.js?v=14"></script>
   <script src="js/audio-play.js?v=55"></script>
   <script src="js/history.js?v=21"></script>
-  <script src="js/storage.js?v=51"></script>
+  <script src="js/storage.js?v=52"></script>
+  <script src="js/home.js?v=1"></script>
   <script src="js/graph-editor.js?v=103"></script>
   <script src="js/exporter.js?v=79"></script>
   <script src="js/sample.js?v=9"></script>
   <script src="js/contextmenu.js?v=33"></script>
   <script src="js/shortcuts.js?v=71"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=107"></script>
-  <script src="js/mobile.js?v=15"></script>
+  <script src="js/app.js?v=108"></script>
+  <script src="js/mobile.js?v=16"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=4"></script>
   <script src="js/ai-key.js?v=1"></script>
