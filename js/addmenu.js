@@ -77,8 +77,11 @@ window.FM = window.FM || {};
   function card(item, cls) {
     var b = document.createElement('button');
     b.className = cls; b.type = 'button'; b.title = item.label;
-    var ic = item.emoji ? '<span class="add-emoji">' + item.emoji + '</span>' : item.icon;
-    b.innerHTML = '<span class="addmenu-ic">' + ic + '</span><span class="addmenu-lbl">' + item.label + '</span>';
+    var ic = document.createElement('span'); ic.className = 'addmenu-ic';
+    ic.innerHTML = item.emoji ? '<span class="add-emoji">' + item.emoji + '</span>' : item.icon;   // trusted literals only (ico()/emoji)
+    var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
+    lb.textContent = item.label;   // element/template names are USER input — textContent, never innerHTML (#r3)
+    b.appendChild(ic); b.appendChild(lb);
     return b;
   }
 

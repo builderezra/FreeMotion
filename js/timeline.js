@@ -35,6 +35,7 @@ window.FM = window.FM || {};
   let kfDrag = null;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
+  let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let dragIdx = null;    // layer index being reordered via the track head
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
@@ -271,17 +272,20 @@ window.FM = window.FM || {};
     if (inGroup(layer)) head.classList.add('in-group');
     head.append(eye, thumb, name);
     head.addEventListener('click', (e) => {
-      if (head._lp) { head._lp = false; return; }               // the long-press that just fired isn't a tap
+      if (Date.now() - lpFiredAt < 800) return;                 // the long-press that just fired isn't a tap (survives the DOM rebuild)
       if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership
       if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id);
     });
-    // AM: long-press the header cell → multi-select mode (then tap more rows; Group appears in the top bar)
+    // AM: long-press the header cell → multi-select mode (then tap more rows; Group appears in the top bar).
+    // TOUCH ONLY — a mouse press-and-hold must stay a click/drag-reorder, and Android's synthetic
+    // contextmenu (~500ms) is suppressed via the shared lpFiredAt window (see contextmenu handler).
     let lpTimer = null, lpStart = null;
     head.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
       lpStart = { x: e.clientX, y: e.clientY };
       clearTimeout(lpTimer);
       lpTimer = setTimeout(() => {
-        lpTimer = null; head._lp = true;
+        lpTimer = null; lpFiredAt = Date.now();
         FM.selectMode = true;
         if (!isSelected(layer.id)) FM.toggleSelect(layer.id);
         if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
@@ -293,7 +297,7 @@ window.FM = window.FM || {};
     });
     head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; });
     head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; });
-    head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
+    head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - lpFiredAt < 800) return; FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     // drag to reorder (z-order)
     head.addEventListener('dragstart', (e) => { dragIdx = index; head.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(index)); } catch (_) {} });
     head.addEventListener('dragend', () => { head.classList.remove('dragging'); document.querySelectorAll('.track-head.drop-target').forEach(h => h.classList.remove('drop-target')); });
@@ -531,7 +535,7 @@ window.FM = window.FM || {};
       && FM.scene.layers.some(l => l.id === FM.scene.selectedId)) ? FM.scene.selectedId : null;
     FM.scene.layers.forEach((layer, index) => {
       if (soloId && layer.id !== soloId) return;
-      if (hiddenByCollapse(layer)) return;   // members of a collapsed group stay off-screen
+      if (hiddenByCollapse(layer) && layer.id !== soloId) return;   // members of a collapsed group stay off-screen (except the phone-solo row itself)
       const row = document.createElement('div');
       row.className = 'track-row';
       row.append(buildHead(layer, index), buildLane(layer));

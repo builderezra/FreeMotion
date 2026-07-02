@@ -148,31 +148,25 @@ window.FM = window.FM || {};
 
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
-    // Drop any stale media for incoming layer ids first — in BOTH the in-memory registry AND
-    // IndexedDB. uid() resets its counter on reload, so an opened project's layer id CAN collide
-    // with a leftover autosave blob; without clearing IDB too, a non-embedded (large) layer would
-    // attach the WRONG clip on the next reload. Embedded media is rehydrated below; the rest load
-    // empty (relink via Replace media…).
-    for (const l of obj.layers) {
-      if (l.type === 'video' || l.type === 'image') {
-        if (FM.media.get(l.id)) FM.media.remove(l.id);
-        if (FM.storage.removeMedia) { try { await FM.storage.removeMedia(l.id); } catch (e) {} }
-      }
-    }
+    // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
+    // reusing them would collide with that project in the SHARED IDB media store (the old
+    // "drop stale media" loop here actively deleted the other project's blobs). Fresh ids need
+    // no clearing at all; embedded media is rehydrated under the new ids below.
+    const re = reIdLayers(obj.layers);
     FM.scene.project = obj.project;
-    FM.scene.layers = obj.layers;
-    FM.scene.selectedId = obj.selectedId || (obj.layers[0] ? obj.layers[0].id : null);
-    const liveIds = new Set(obj.layers.map(l => l.id));   // restore the saved multi-selection (#20)
-    FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : (FM.scene.selectedId ? [FM.scene.selectedId] : [])).filter(id => liveIds.has(id));
+    FM.scene.layers = re.layers;
+    FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
+    FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
+    if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
-        const md = obj.media[id];
-        if (!md || (md.kind !== 'video' && md.kind !== 'image')) continue;
+        const md = obj.media[id], nid = re.map[id];
+        if (!nid || !md || (md.kind !== 'video' && md.kind !== 'image')) continue;
         try {
           const file = await dataURLToFile(md.dataURL, md.name);
           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
-          if (rec) { FM.media.set(id, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
+          if (rec) { FM.media.set(nid, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
       }
     }
@@ -202,8 +196,10 @@ window.FM = window.FM || {};
       try {
         const obj = JSON.parse(await file.text());
         if (obj.app !== 'freemotion') { if (FM.toast) FM.toast('Not a FreeMotion project file'); return; }
+        // Import into a NEW project — never overwrite whatever happens to be open. (#r1)
+        if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
         const ok = await FM.storage.applyScene(obj);
-        if (ok) { if (FM.history) FM.history.reset(); FM.storage.save(); if (FM.toast) FM.toast('Project loaded'); }
+        if (ok) { if (FM.history) FM.history.reset(); FM.storage.save(); if (FM.projects) FM.projects.touchCurrent(true); if (FM.toast) FM.toast('Project imported'); }
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
     });
     document.body.appendChild(input); input.click();
@@ -272,6 +268,16 @@ window.FM = window.FM || {};
       let id = curId();
       const idx = this.list();
       if (id && idx.some(p => p.id === id)) return;
+      // A current doc that lost its index entry (e.g. a saveIndex quota failure) gets RE-indexed,
+      // not abandoned — minting a new id would orphan the doc and pruneOrphans would eat its media.
+      if (id) {
+        const doc = readJSON('fm.proj.' + id, null);
+        if (doc && doc.project) {
+          idx.unshift({ id: id, name: doc.project.name || 'My project', modified: Date.now(), width: doc.project.width, height: doc.project.height, duration: doc.project.duration, thumb: null });
+          this.saveIndex(idx);
+          return;
+        }
+      }
       const legacy = readJSON(SCENE_KEY, null);
       id = newId('p');
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
@@ -300,7 +306,7 @@ window.FM = window.FM || {};
     // Switch the editor to another project (stash current first).
     async open(id) {
       if (id === curId()) return true;
-      FM.playing = false;
+      if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       FM.storage.flushSync(); this.touchCurrent(true);
       // drop the outgoing project's media from the in-memory registry (blobs stay in IDB)
       FM.scene.layers.forEach(l => { if (FM.media.get(l.id)) FM.media.remove(l.id); });
@@ -366,6 +372,9 @@ window.FM = window.FM || {};
         const rest = this.list();
         if (rest.length) await this.open(rest[0].id);
         else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({}); }
+        // open()/create() flushSync'd BEFORE switching CUR_KEY, resurrecting the deleted doc as an
+        // unindexed localStorage orphan that leaks quota forever — remove it (again) now. (#r2)
+        try { localStorage.removeItem('fm.proj.' + id); localStorage.removeItem('fm.proj.default'); } catch (e) {}
       }
     },
     // Boot sweep: delete IDB media keys that belong to no project doc and no template/element pack.

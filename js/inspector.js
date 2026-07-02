@@ -194,6 +194,14 @@ window.FM = window.FM || {};
     c.kf.forEach(k => { k.v = (k.v || 0) + base; });
     return c;
   }
+  // Keyframe times are ABSOLUTE project time — store them relative to the source clip's start and
+  // re-anchor onto the target clip's start, or presets saved at 8s would be dead on a clip at 0s.
+  function shiftKf(prop, dt) {
+    if (!prop || typeof prop !== 'object' || !Array.isArray(prop.kf)) return clone(prop);
+    const c = clone(prop);
+    c.kf.forEach(k => { k.t = Math.max(0, (k.t || 0) + dt); });
+    return c;
+  }
   FM.layerPresets = {
     _key: 'fm.layerpresets',
     list() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
@@ -207,8 +215,8 @@ window.FM = window.FM || {};
         shadow: clone(layer.shadow), blendMode: layer.blendMode, colorGrade: clone(layer.colorGrade),
         cornerRadius: layer.cornerRadius,
         transform: {
-          rotation: clone(tr.rotation), scale: clone(tr.scale), opacity: clone(tr.opacity),
-          xDelta: xyDelta(tr.x), yDelta: xyDelta(tr.y),
+          rotation: shiftKf(tr.rotation, -(layer.start || 0)), scale: shiftKf(tr.scale, -(layer.start || 0)), opacity: shiftKf(tr.opacity, -(layer.start || 0)),
+          xDelta: xyDelta(shiftKf(tr.x, -(layer.start || 0))), yDelta: xyDelta(shiftKf(tr.y, -(layer.start || 0))),
         },
       };
       const arr = this.list().filter(p => p.name !== name);
@@ -227,12 +235,12 @@ window.FM = window.FM || {};
       if (d.blendMode) layer.blendMode = d.blendMode;
       if (d.colorGrade !== undefined) layer.colorGrade = clone(d.colorGrade);
       if (d.cornerRadius != null && layer.type === 'shape') layer.cornerRadius = d.cornerRadius;
-      const tr = layer.transform, dt = d.transform || {};
-      if (dt.rotation !== undefined && dt.rotation !== null) tr.rotation = clone(dt.rotation);
-      if (dt.scale !== undefined && dt.scale !== null) tr.scale = clone(dt.scale);
-      if (dt.opacity !== undefined && dt.opacity !== null) tr.opacity = clone(dt.opacity);
-      if (dt.xDelta) tr.x = xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time));   // relative motion from HERE
-      if (dt.yDelta) tr.y = xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time));
+      const tr = layer.transform, dt = d.transform || {}, t0 = layer.start || 0;
+      if (dt.rotation !== undefined && dt.rotation !== null) tr.rotation = shiftKf(dt.rotation, t0);
+      if (dt.scale !== undefined && dt.scale !== null) tr.scale = shiftKf(dt.scale, t0);
+      if (dt.opacity !== undefined && dt.opacity !== null) tr.opacity = shiftKf(dt.opacity, t0);
+      if (dt.xDelta) tr.x = shiftKf(xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time)), t0);   // relative motion from HERE, timed from the clip's start
+      if (dt.yDelta) tr.y = shiftKf(xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time)), t0);
       afterFx();
       if (FM.canvasEdit) FM.canvasEdit.update();
     },

@@ -523,6 +523,7 @@ window.FM = window.FM || {};
   };
 
   FM.selectLayer = function (id) {
+    FM.selectMode = false;   // single-select anywhere (canvas/clip/head) exits multi-select mode (#r8)
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
     FM.layersPanel.refresh();
@@ -564,18 +565,20 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
-  FM.deleteLayer = function (id) {
+  FM.deleteLayer = function (id, _nested) {
     // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
-    // each member's media/audio teardown runs through this same path.
+    // each member's media/audio teardown runs through this same path — but refresh/undo commit
+    // only once, at the outermost call (one Ctrl+Z restores the whole group). (#r7)
     const target = FM.scene.layers.find(l => l.id === id);
     if (target && target.type === 'group') {
-      FM.scene.layers.filter(l => l.parent === id).forEach(child => FM.deleteLayer(child.id));
+      FM.scene.layers.filter(l => l.parent === id).forEach(child => FM.deleteLayer(child.id, true));
     }
     const m = FM.media.get(id);
     if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); }   // stop a deleted forward clip's native audio (#6)
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
     FM.media.remove(id);
     if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id);   // drop its blob from IndexedDB
+    if (_nested) return;   // outermost call finishes the teardown below exactly once (#r7)
     // A deleted clip's synthesized (reversed) audio plays from a flat node list not keyed by layer, so
     // it keeps sounding after the clip is gone. Rebuild the active nodes from the post-delete layer set.
     if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }

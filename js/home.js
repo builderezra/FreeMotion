@@ -157,7 +157,7 @@ window.FM = window.FM || {};
     },
     open() {
       if (!root) return;
-      FM.playing = false;
+      if (FM.pause) FM.pause(); else FM.playing = false;   // silence playback under the overlay (#r4)
       FM.projects.touchCurrent(true);   // fresh thumbnail for the card
       tab = 'projects';
       render();
