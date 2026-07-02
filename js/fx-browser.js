@@ -149,8 +149,16 @@ window.FM = window.FM || {};
 
   function buildSearchResults(q) {
     const grid = el('div', 'fxb-grid fxb-search-grid');
-    FM.fxRegistry.all().filter(r => r.label.toLowerCase().indexOf(q.toLowerCase()) >= 0)
-      .forEach(reg => grid.appendChild(tile(reg, null)));
+    const needle = q.toLowerCase();
+    const catLabel = {};
+    (FM.fxRegistry.categories() || []).forEach(c => { catLabel[c.key] = (c.label || '').toLowerCase(); });
+    // match the label, the type id, OR the category name — so "3d", "blur" or "warp" surface
+    // the whole family, not just effects that happen to carry the word in their title
+    FM.fxRegistry.all().filter(r =>
+      r.label.toLowerCase().indexOf(needle) >= 0 ||
+      (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
+      (catLabel[r.category] || '').indexOf(needle) >= 0
+    ).forEach(reg => grid.appendChild(tile(reg, null)));
     if (!grid.children.length) grid.appendChild(el('div', 'fxb-empty', 'No effects match “' + q + '”'));
     return grid;
   }
