@@ -455,7 +455,7 @@ body {
 .fx-list { display: flex; flex-direction: column; gap: 7px; }
 .fx-row { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 0; margin: 0; overflow: hidden; position: relative; }
 /* effect-row gestures: swipe-left to delete, press-hold + drag to reorder */
-.fx-head { display: flex; align-items: center; gap: 6px; padding: 9px 8px 9px 4px; margin: 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.fx-head { display: flex; align-items: center; gap: 6px; padding: 9px 8px 9px 4px; margin: 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: pointer; }
 .fx-grip { width: 22px; flex: none; text-align: center; color: var(--text-dim); font-size: 14px; cursor: grab; line-height: 1; touch-action: none; }   /* the drag handle owns its gesture (no pan-y scroll hijack on touch) */
 .fx-row.fx-dragging { z-index: 6; box-shadow: 0 10px 24px rgba(0,0,0,.45); border-color: var(--accent); opacity: .97; }
 .fx-row.fx-dragging .fx-grip { cursor: grabbing; color: var(--accent); }

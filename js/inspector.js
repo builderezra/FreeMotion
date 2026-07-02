@@ -339,7 +339,9 @@ window.FM = window.FM || {};
     const name = el('span', 'fx-name', reg.label);
     // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it
     const toggle = () => { if (row._g && row._g.moved) { row._g.moved = false; return; } fx._expanded = !expanded; FM.inspector.refresh(); };
-    disc.addEventListener('click', toggle); name.addEventListener('click', toggle);
+    // Tap ANYWHERE on the row header to open/close the editor — not just the ▸ arrow. The action
+    // buttons (eye / ⋯ / delete) keep their own behaviour; the disc + name + empty space all toggle.
+    head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
     if (!expanded && (layer.effects || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder)
     head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
