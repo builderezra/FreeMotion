@@ -664,9 +664,9 @@ window.FM = window.FM || {};
 
   function catsFor(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
-    // A group is an invisible transform parent — Move & Transform acts on it (opacity/blend act on
-    // the flattened unit for MASKING groups), plus the door into its own timeline.
-    if (layer.type === 'group') return CATEGORIES.filter(c => c.key === 'transform' || c.key === 'blend' || c.key === 'editgroup');
+    // Groups composite as a flattened unit whenever they carry a look of their own, so effects,
+    // blending/opacity and presets all act on the whole group — plus the door into its own timeline.
+    if (layer.type === 'group') return CATEGORIES.filter(c => ['blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
     if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
