@@ -103,7 +103,14 @@ window.FM = window.FM || {};
       clipNameM.addEventListener('change', function () { if (FM.history) FM.history.commit(); });
     }
     if (mDup) mDup.addEventListener('click', function () { var L = curLayer(); if (L && FM.duplicateLayer) FM.duplicateLayer(L.id); });
-    if (mDel) mDel.addEventListener('click', function () { var L = curLayer(); if (L && FM.deleteLayer) FM.deleteLayer(L.id); });
+    if (mDel) mDel.addEventListener('click', function () {
+      var ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (ids.length > 1 && FM.deleteSelected) { FM.deleteSelected(); return; }   // select-mode: delete the whole set
+      var L = curLayer(); if (L && FM.deleteLayer) FM.deleteLayer(L.id);
+    });
+    // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
+    var mGroup = document.getElementById('m-group');
+    if (mGroup) mGroup.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection(); });
 
     // Anchor the docked sheet's top just below the single selected-clip row so the property
     // options never cover the clip — clamped so the panel always keeps a usable height.
@@ -138,11 +145,11 @@ window.FM = window.FM || {};
       var origRefresh = FM.refreshAll;
       FM.refreshAll = function () {
         // set m-editing BEFORE origRefresh's rebuild (drives --head-w; see selectLayer note)
-        if (isPhone()) document.body.classList.toggle('m-editing', !!(FM.scene && FM.scene.selectedId));
+        if (isPhone()) document.body.classList.toggle('m-editing', !!(FM.scene && FM.scene.selectedId) && !FM.selectMode && !(FM.scene.selectedIds && FM.scene.selectedIds.length > 1));
         var r = origRefresh.apply(this, arguments);
         syncProjName();
         if (isPhone()) {
-          var sel = FM.scene && FM.scene.selectedId;
+          var sel = FM.scene && FM.scene.selectedId && document.body.classList.contains('m-editing');
           if (sel) { syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); } else { insp.style.top = ''; insp.style.maxHeight = ''; close(); }   // no selection (e.g. deleted last layer) → drop the sheet + restore the top bar (#13)
         }
         return r;

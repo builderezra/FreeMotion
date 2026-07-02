@@ -44,11 +44,27 @@ window.FM = window.FM || {};
     { key: 'audio', label: 'Audio', icon: ico('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), options: [
       { label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
     ] },
-    { key: 'object', label: 'Object / Element', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: [
-      { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
-      { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
-      { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
-    ] },
+    { key: 'object', label: 'Object / Element', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: function () {
+      var base = [
+        { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
+        { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
+        { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
+      ];
+      // the user's saved Elements (reusable layer selections) insert at the playhead
+      (FM.elements ? FM.elements.list() : []).forEach(function (e) {
+        base.push({ label: e.name, icon: ico('<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z"/>'), elementId: e.id,
+          add: function () { FM.elements.insert(e.id); } });
+      });
+      return base;
+    } },
+    { key: 'template', label: 'Template', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'), options: function () {
+      var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
+        return { label: t.name, icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
+          add: function () { FM.templates.insertInto(t.id); if (FM.toast) FM.toast('Inserted \u201c' + t.name + '\u201d'); } };
+      });
+      if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });
+      return out;
+    } },
   ];
 
   // QUICK-ADD rail — one tap creates immediately (AM: the side column does NOT open a section).
@@ -86,9 +102,14 @@ window.FM = window.FM || {};
         bodyEl.innerHTML = '';
         var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
         var grid = document.createElement('div'); grid.className = 'addmenu-grid';
-        tab.options.forEach(function (o) {
+        var opts = typeof tab.options === 'function' ? tab.options() : tab.options;   // Elements/Templates lists are live
+        opts.forEach(function (o) {
           var c = card(o, 'addmenu-card');
           c.addEventListener('click', function () { o.add(); after(); });
+          if (o.elementId) c.addEventListener('contextmenu', function (ev) {   // desktop: right-click removes a saved element
+            ev.preventDefault();
+            if (confirm('Delete element \u201c' + o.label + '\u201d?')) { FM.elements.remove(o.elementId); drawBody(); }
+          });
           grid.appendChild(c);
         });
         bodyEl.appendChild(grid);

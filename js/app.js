@@ -121,6 +121,11 @@ window.FM = window.FM || {};
     render();
     const pn = document.getElementById('proj-name');
     if (pn && document.activeElement !== pn) pn.value = FM.scene.project.name || 'Untitled';
+    // multi-selection state drives the Group button; select-mode ends when the selection empties
+    const multi = FM.selectionIds ? FM.selectionIds().length : 0;
+    if (multi === 0 && FM.selectMode) FM.selectMode = false;
+    document.body.classList.toggle('sel-multi', multi >= 2);
+    document.body.classList.toggle('sel-mode', !!FM.selectMode);
   }
   FM.refreshAll = refreshAll;
 
@@ -560,6 +565,12 @@ window.FM = window.FM || {};
   };
 
   FM.deleteLayer = function (id) {
+    // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
+    // each member's media/audio teardown runs through this same path.
+    const target = FM.scene.layers.find(l => l.id === id);
+    if (target && target.type === 'group') {
+      FM.scene.layers.filter(l => l.parent === id).forEach(child => FM.deleteLayer(child.id));
+    }
     const m = FM.media.get(id);
     if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); }   // stop a deleted forward clip's native audio (#6)
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
@@ -571,6 +582,44 @@ window.FM = window.FM || {};
     if (FM.scene.selectedId === id) FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)
     if (FM.history) FM.history.commit();
+  };
+
+  // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
+  // via the existing parent chain. Timeline shows the group as a collapsible row.
+  FM.groupSelection = function () {
+    const ids = FM.selectionIds();
+    const members = FM.scene.layers.filter(l => ids.includes(l.id) && l.type !== 'camera');
+    if (members.length < 2) return;
+    const start = Math.min.apply(null, members.map(l => l.start));
+    const end = Math.max.apply(null, members.map(l => l.start + l.duration));
+    const P = FM.scene.project;
+    const g = FM.makeLayer('group', { name: 'Group', x: P.width / 2, y: P.height / 2, start: start, duration: end - start });
+    // Re-parent only top-level members — a child whose parent is also being grouped keeps it.
+    members.forEach(l => { if (!l.parent || !ids.includes(l.parent)) l.parent = g.id; });
+    // Pull members contiguous directly under the group row (top-most member's slot).
+    const topIdx = FM.scene.layers.findIndex(l => members.includes(l));
+    FM.scene.layers = FM.scene.layers.filter(l => !members.includes(l));
+    FM.scene.layers.splice(Math.max(0, Math.min(topIdx, FM.scene.layers.length)), 0, g);
+    Array.prototype.splice.apply(FM.scene.layers, [FM.scene.layers.indexOf(g) + 1, 0].concat(members));
+    FM.selectMode = false;
+    FM.selectLayer(g.id);
+    if (FM.toast) FM.toast('Grouped ' + members.length + ' layers');
+    if (FM.history) FM.history.commit();
+  };
+  FM.ungroup = function (id) {
+    const g = FM.scene.layers.find(l => l.id === id);
+    if (!g || g.type !== 'group') return;
+    FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = null; });
+    FM.scene.layers = FM.scene.layers.filter(l => l !== g);
+    FM.selectLayer(null);
+    FM.refreshAll();
+    if (FM.history) FM.history.commit();
+  };
+  FM.groupDescendants = function (id) {
+    const out = [];
+    const walk = gid => FM.scene.layers.forEach(l => { if (l.parent === gid) { out.push(l); if (l.type === 'group') walk(l.id); } });
+    walk(id);
+    return out;
   };
 
   // Export the current frame as a PNG (clean render, no onion/overlays).
@@ -801,8 +850,35 @@ window.FM = window.FM || {};
         } });
       }
     }
+    // grouping + reusable saves
+    const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
+    items.push({ sep: true });
+    if (layer.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(layer.id) });
+    if (selCount >= 2) items.push({ label: 'Group selection', action: () => FM.groupSelection() });
+    items.push({ label: 'Save as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
+    items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
     items.push({ sep: true }, { label: 'Delete', danger: true, action: () => FM.deleteLayer(layer.id) });
     return items;
+  };
+
+  // Save the selected layer's LOOK + ANIMATIONS as a reusable preset (see inspector.js FM.layerPresets).
+  FM.savePresetPrompt = function (layer) {
+    layer = layer || FM.selectedLayer(FM.scene);
+    if (!layer) { if (FM.toast) FM.toast('Select a layer first'); return; }
+    const name = prompt('Preset name:', layer.name + ' look');
+    if (!name || !name.trim()) return;
+    FM.layerPresets.save(name.trim(), layer);
+    if (FM.toast) FM.toast('Preset saved — apply it from any layer’s Presets section');
+  };
+  // Save the current selection as a reusable ELEMENT (insertable from Add → Object/Element).
+  FM.saveElementPrompt = async function () {
+    const ids = FM.selectionIds();
+    const layers = FM.scene.layers.filter(l => ids.includes(l.id));
+    if (!layers.length) { if (FM.toast) FM.toast('Select the layers to save first'); return; }
+    const name = prompt('Element name:', layers.length === 1 ? layers[0].name : layers.length + ' layers');
+    if (!name || !name.trim()) return;
+    const ok = await FM.elements.save(name.trim(), layers);
+    if (FM.toast) FM.toast(ok ? 'Element saved — find it under Add → Object / Element' : 'Could not save element');
   };
 
   /* ---------- layers live in the timeline now (AM-style); this is a thin alias ---------- */
@@ -1000,11 +1076,14 @@ window.FM = window.FM || {};
       const hasSel = !!FM.scene.selectedId;
       const hasClip = !!(FM.clipboard && FM.clipboard.length);
       const hasStyle = !!(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot);
+      const selN = FM.selectionIds ? FM.selectionIds().length : 0;
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
+        { label: 'Group Selection', disabled: selN < 2, action: () => FM.groupSelection() },
         { label: 'Duplicate Layer', disabled: !hasSel, action: () => { if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId); } },
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
-        { label: 'Save Preset', disabled: true, action: () => {} },          // placeholder — not built yet
+        { label: 'Save Preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
+        { label: 'Save Selection as Element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
         { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); } },
         { label: 'Paste Style…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },
       ]);

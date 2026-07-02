@@ -2002,6 +2002,7 @@ window.FM = window.FM || {};
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
     if (layer.type === 'null') return;
+    if (layer.type === 'group') return;        // invisible transform parent for its members (AM grouping)
     if (layer.type === 'adjustment') return;   // handled by renderScene (grades layers below)
     if (layer.type === 'camera') return;       // handled by renderScene (drives the composite)
     if (!FM.isLayerVisibleAt(layer, t)) return;
@@ -2357,6 +2358,14 @@ window.FM = window.FM || {};
       ctx.moveTo(5, H / 2); ctx.lineTo(W - 5, H / 2);
       ctx.stroke();
       ctx.strokeRect(W / 2 - 5, H / 2 - 5, 10, 10);
+      return;
+    }
+    if (layer.type === 'group') {   // folder glyph
+      ctx.strokeStyle = '#9aa7bd'; ctx.lineWidth = 1.6;
+      const fw = W * 0.6, fh = H * 0.52, fx = (W - fw) / 2, fy = (H - fh) / 2 + 2;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy); ctx.lineTo(fx + fw * 0.36, fy); ctx.lineTo(fx + fw * 0.48, fy + fh * 0.24); ctx.lineTo(fx + fw, fy + fh * 0.24);
+      ctx.lineTo(fx + fw, fy + fh); ctx.lineTo(fx, fy + fh); ctx.closePath(); ctx.stroke();
       return;
     }
     if (layer.type === 'adjustment') {

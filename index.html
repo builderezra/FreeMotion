@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=138">
+<link rel="stylesheet" href="styles.css?v=139">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.25</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.26</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -50,6 +50,7 @@
       <span id="ver-m" class="m-ver" title="Build version"></span>
       <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button id="m-export" class="m-export" aria-label="Export"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M6 20h12"/></svg></button>
+      <button id="m-group" class="m-tbtn" aria-label="Group selected layers"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
       <button id="m-dup" class="m-tbtn" aria-label="Duplicate layer"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h11v11H9zM5 15H4V4h11v1"/></svg></button>
       <button id="m-del" class="m-tbtn" aria-label="Delete layer"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
     </header>
@@ -266,13 +267,13 @@
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/scene.js?v=63"></script>
+  <script src="js/scene.js?v=64"></script>
   <script src="js/media.js?v=28"></script>
-  <script src="js/compositor.js?v=128"></script>
+  <script src="js/compositor.js?v=129"></script>
   <script src="js/fx-registry.js?v=26"></script>
-  <script src="js/timeline.js?v=121"></script>
-  <script src="js/addmenu.js?v=2"></script>
-  <script src="js/inspector.js?v=108"></script>
+  <script src="js/timeline.js?v=122"></script>
+  <script src="js/addmenu.js?v=3"></script>
+  <script src="js/inspector.js?v=109"></script>
   <script src="js/fx-browser.js?v=5"></script>
   <script src="js/color-wheel.js?v=52"></script>
   <script src="js/canvas-edit.js?v=36"></script>
@@ -287,8 +288,8 @@
   <script src="js/contextmenu.js?v=33"></script>
   <script src="js/shortcuts.js?v=71"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=108"></script>
-  <script src="js/mobile.js?v=16"></script>
+  <script src="js/app.js?v=109"></script>
+  <script src="js/mobile.js?v=17"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=4"></script>
   <script src="js/ai-key.js?v=1"></script>

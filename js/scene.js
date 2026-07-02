@@ -319,7 +319,17 @@ window.FM = window.FM || {};
   };
 
   FM.isLayerVisibleAt = function (layer, t) {
-    return layer.visible && t >= layer.start && t < layer.start + layer.duration;
+    if (!(layer.visible && t >= layer.start && t < layer.start + layer.duration)) return false;
+    // A hidden GROUP hides all its descendants — render, audio and export all share this gate.
+    // Cycle-safe walk; only group-type ancestors gate visibility (plain parenting never did).
+    let pid = layer.parent, hops = 0;
+    while (pid && hops++ < 64) {
+      const p = FM.scene && FM.scene.layers.find(l => l.id === pid);
+      if (!p) break;
+      if (p.type === 'group' && !p.visible) return false;
+      pid = p.parent;
+    }
+    return true;
   };
 
   /* Caption tracks: text of the segment active at the playhead (or null between segments).

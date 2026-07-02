@@ -177,6 +177,68 @@ window.FM = window.FM || {};
   // The mutation trio every effect change must run (canvas + timeline keyframes + undo).
   function afterFx() { FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); }
 
+  // ---- LAYER presets: the whole look + its animations (AM presets), not just the effect stack.
+  // Captures effects, fill/gradient/stroke/shadow/blend/grade and the transform's keyframes.
+  // Position keyframes are stored as DELTAS from their first key, then re-based onto the target
+  // layer's current position on apply — so a preset animates the layer from where it already is
+  // instead of teleporting it to wherever the source layer lived.
+  const clone = v => v == null ? v : JSON.parse(JSON.stringify(v));
+  function xyDelta(prop) {
+    if (!prop || typeof prop !== 'object' || !Array.isArray(prop.kf) || !prop.kf.length) return null;
+    const c = clone(prop), v0 = c.kf[0].v || 0;
+    c.kf.forEach(k => { k.v = (k.v || 0) - v0; });
+    return c;
+  }
+  function xyRebase(delta, base) {
+    const c = clone(delta);
+    c.kf.forEach(k => { k.v = (k.v || 0) + base; });
+    return c;
+  }
+  FM.layerPresets = {
+    _key: 'fm.layerpresets',
+    list() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
+    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); } },
+    save(name, layer) {
+      if (!name || !layer) return;
+      const tr = layer.transform || {};
+      const data = {
+        effects: clone(layer.effects || []),
+        fill: layer.fill, fillGradient: clone(layer.fillGradient), stroke: clone(layer.stroke),
+        shadow: clone(layer.shadow), blendMode: layer.blendMode, colorGrade: clone(layer.colorGrade),
+        cornerRadius: layer.cornerRadius,
+        transform: {
+          rotation: clone(tr.rotation), scale: clone(tr.scale), opacity: clone(tr.opacity),
+          xDelta: xyDelta(tr.x), yDelta: xyDelta(tr.y),
+        },
+      };
+      const arr = this.list().filter(p => p.name !== name);
+      arr.unshift({ name: name, data: data });
+      this._write(arr);
+    },
+    apply(name, layer) {
+      const p = this.list().find(x => x.name === name);
+      if (!p || !layer) return;
+      const d = p.data;
+      layer.effects = clone(d.effects) || [];
+      if (d.fill != null && layer.type === 'shape') layer.fill = d.fill;
+      if (d.fillGradient !== undefined && (layer.type === 'shape' || layer.type === 'text')) layer.fillGradient = clone(d.fillGradient);
+      if (d.stroke && (layer.type === 'shape' || layer.type === 'text')) layer.stroke = clone(d.stroke);
+      if (d.shadow) layer.shadow = clone(d.shadow);
+      if (d.blendMode) layer.blendMode = d.blendMode;
+      if (d.colorGrade !== undefined) layer.colorGrade = clone(d.colorGrade);
+      if (d.cornerRadius != null && layer.type === 'shape') layer.cornerRadius = d.cornerRadius;
+      const tr = layer.transform, dt = d.transform || {};
+      if (dt.rotation !== undefined && dt.rotation !== null) tr.rotation = clone(dt.rotation);
+      if (dt.scale !== undefined && dt.scale !== null) tr.scale = clone(dt.scale);
+      if (dt.opacity !== undefined && dt.opacity !== null) tr.opacity = clone(dt.opacity);
+      if (dt.xDelta) tr.x = xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time));   // relative motion from HERE
+      if (dt.yDelta) tr.y = xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time));
+      afterFx();
+      if (FM.canvasEdit) FM.canvasEdit.update();
+    },
+    remove(name) { this._write(this.list().filter(p => p.name !== name)); },
+  };
+
   // AM signature control: a horizontal tick strip you drag to scrub a value, + an editable value box.
   function fxScrubber(fx, p) {
     const row = el('div', 'fx-scrub-row');
@@ -564,6 +626,10 @@ window.FM = window.FM || {};
   function alignRow() {
     const n = FM.selectionIds().length;
     const wrap = el('div', 'align-row');
+    // Group the multi-selection (AM) — the headline action for a multi-select, so it leads.
+    const grp = el('button', 'fx-add-btn', '⧉ Group ' + n + ' layers');
+    grp.addEventListener('click', () => FM.groupSelection());
+    wrap.appendChild(grp);
     wrap.appendChild(el('div', 'align-label', 'Align ' + n + ' layers'));
     const bar = el('div', 'quick-row');
     function ab(title, icon, fn) { const b = el('button', 'qr-btn'); b.title = title; b.innerHTML = svgIcon(icon); b.addEventListener('click', fn); bar.appendChild(b); }
@@ -911,6 +977,24 @@ window.FM = window.FM || {};
     } else if (key === 'presets') {
       body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
       const pwrap = el('div', 'preset-wrap');
+      // LAYER presets first (look + animations — the AM-style ones saved via “Save Preset”)
+      const lps = FM.layerPresets.list();
+      if (lps.length) pwrap.appendChild(el('div', 'preset-sec', 'My presets'));
+      lps.forEach(p => {
+        const chip = el('div', 'preset-chip');
+        const nm = el('button', 'preset-name', p.name);
+        nm.title = 'Apply “' + p.name + '” — look + animations';
+        nm.addEventListener('click', () => { FM.layerPresets.apply(p.name, layer); if (FM.toast) FM.toast('Applied “' + p.name + '”'); });
+        chip.appendChild(nm);
+        const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset';
+        del.addEventListener('click', () => { FM.layerPresets.remove(p.name); FM.inspector.refresh(); });
+        chip.appendChild(del);
+        pwrap.appendChild(chip);
+      });
+      const svL = el('button', 'fx-act', 'Save this layer as preset…');
+      svL.addEventListener('click', () => FM.savePresetPrompt && FM.savePresetPrompt(layer));
+      pwrap.appendChild(svL);
+      pwrap.appendChild(el('div', 'preset-sec', 'Effect looks'));
       FM.fxPresets.list().forEach(p => {
         const fx = Array.isArray(p.effects) ? p.effects : [];
         const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : ''));

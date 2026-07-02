@@ -215,6 +215,18 @@ window.FM = window.FM || {};
 
   function isSelected(id) { return id === FM.scene.selectedId || !!(FM.scene.selectedIds && FM.scene.selectedIds.indexOf(id) >= 0); }
 
+  // group-membership helpers (cycle-safe parent walks)
+  function inGroup(layer) {
+    let pid = layer.parent, hops = 0;
+    while (pid && hops++ < 64) { const p = FM.scene.layers.find(l => l.id === pid); if (!p) return false; if (p.type === 'group') return true; pid = p.parent; }
+    return false;
+  }
+  function hiddenByCollapse(layer) {
+    let pid = layer.parent, hops = 0;
+    while (pid && hops++ < 64) { const p = FM.scene.layers.find(l => l.id === pid); if (!p) return false; if (p.type === 'group' && p.collapsed) return true; pid = p.parent; }
+    return false;
+  }
+
   function buildHead(layer, index) {
     const head = document.createElement('div');
     head.className = 'track-head' + (isSelected(layer.id) ? ' sel' : '') + (layer.id === FM.scene.selectedId ? ' primary' : '');
@@ -247,8 +259,40 @@ window.FM = window.FM || {};
     });
 
     // (Solo "S" button removed per Ezra — was the per-layer "isolate this layer" toggle.)
+    if (layer.type === 'group') {   // collapsible group row
+      const chev = document.createElement('button');
+      chev.className = 'th-chevron';
+      chev.textContent = layer.collapsed ? '▸' : '▾';
+      chev.title = layer.collapsed ? 'Expand group' : 'Collapse group';
+      chev.addEventListener('click', (e) => { e.stopPropagation(); layer.collapsed = !layer.collapsed; FM.timeline.rebuild(); });
+      head.appendChild(chev);
+      head.classList.add('group-head');
+    }
+    if (inGroup(layer)) head.classList.add('in-group');
     head.append(eye, thumb, name);
-    head.addEventListener('click', (e) => { if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id); });
+    head.addEventListener('click', (e) => {
+      if (head._lp) { head._lp = false; return; }               // the long-press that just fired isn't a tap
+      if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership
+      if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id);
+    });
+    // AM: long-press the header cell → multi-select mode (then tap more rows; Group appears in the top bar)
+    let lpTimer = null, lpStart = null;
+    head.addEventListener('pointerdown', (e) => {
+      lpStart = { x: e.clientX, y: e.clientY };
+      clearTimeout(lpTimer);
+      lpTimer = setTimeout(() => {
+        lpTimer = null; head._lp = true;
+        FM.selectMode = true;
+        if (!isSelected(layer.id)) FM.toggleSelect(layer.id);
+        if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+        FM.refreshAll();
+      }, 420);
+    });
+    head.addEventListener('pointermove', (e) => {
+      if (lpTimer && lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 10) { clearTimeout(lpTimer); lpTimer = null; }
+    });
+    head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; });
+    head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     // drag to reorder (z-order)
     head.addEventListener('dragstart', (e) => { dragIdx = index; head.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(index)); } catch (_) {} });
@@ -269,7 +313,7 @@ window.FM = window.FM || {};
     lane.className = 'track-lane';
 
     const clip = document.createElement('div');
-    clip.className = 'clip' + (isSelected(layer.id) ? ' sel' : '') + (layer.reversed ? ' reversed' : '');
+    clip.className = 'clip' + (isSelected(layer.id) ? ' sel' : '') + (layer.reversed ? ' reversed' : '') + (layer.type === 'group' ? ' group-bar' : '');
     clip.style.left = (PAD + layer.start * pps) + 'px';
     clip.style.width = Math.max(8, layer.duration * pps) + 'px';
     const col = layer.clipColor || '#3a5a8c';
@@ -481,10 +525,13 @@ window.FM = window.FM || {};
     }
     // AM phone-edit: when a clip is selected on a phone, show ONLY that clip's row
     // (the others hide so the property options can dock right under it).
-    const soloId = (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.scene.selectedId
+    // Never solo during multi-select / select-mode — you need every row visible to build the set.
+    const multiSel = FM.selectMode || (FM.scene.selectedIds && FM.scene.selectedIds.length > 1);
+    const soloId = (!multiSel && FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.scene.selectedId
       && FM.scene.layers.some(l => l.id === FM.scene.selectedId)) ? FM.scene.selectedId : null;
     FM.scene.layers.forEach((layer, index) => {
       if (soloId && layer.id !== soloId) return;
+      if (hiddenByCollapse(layer)) return;   // members of a collapsed group stay off-screen
       const row = document.createElement('div');
       row.className = 'track-row';
       row.append(buildHead(layer, index), buildLane(layer));
@@ -672,6 +719,14 @@ window.FM = window.FM || {};
           const dx = e.clientX - clipMove.startX;
           if (!clipMove.moved && Math.abs(dx) < 4) return;   // movement threshold: distinguish click from drag
           clipMove.moved = true;
+          // dragging a GROUP bar drags its members' time too (attach descendants once, lazily —
+          // they then ride the existing multi-selection move mechanism below)
+          if (clipMove.layer.type === 'group' && !clipMove._grpInit) {
+            clipMove._grpInit = true;
+            if (!clipMove.group) clipMove.group = [];
+            const have = new Set(clipMove.group.map(g => g.layer.id));
+            (FM.groupDescendants ? FM.groupDescendants(clipMove.layer.id) : []).forEach(l => { if (!have.has(l.id)) clipMove.group.push({ layer: l, origStart: l.start }); });
+          }
           const pps = pxPerSec();
           // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
           // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
