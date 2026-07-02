@@ -10,7 +10,11 @@ window.FM = window.FM || {};
 
   let _idc = 1;
   function uid(prefix) {
-    return (prefix || 'id') + '_' + (_idc++).toString(36) + Math.floor(performance.now()).toString(36);
+    // counter + performance.now() reset every reload, so two projects created in different sessions
+    // could mint the SAME id — and media blobs live in ONE shared IndexedDB store keyed by layer id,
+    // so a collision silently cross-links clips between projects (deleting one killed the other's
+    // media). The random suffix makes ids globally unique for good.
+    return (prefix || 'id') + '_' + (_idc++).toString(36) + Math.floor(performance.now()).toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
 
   // Per-layer timeline colors, cycled like Alight Motion (each layer gets its own clip color).
