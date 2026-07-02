@@ -542,11 +542,12 @@ window.FM = window.FM || {};
   };
 
   // Shift/Cmd-click: add or remove a layer from the selection set.
-  FM.toggleSelect = function (id) {
+  FM.toggleSelect = function (id, silent) {
     let ids = FM.selectionIds().slice();
     if (ids.includes(id)) { ids = ids.filter(x => x !== id); FM.scene.selectedId = ids.length ? ids[ids.length - 1] : null; }
     else { ids.push(id); FM.scene.selectedId = id; }
     FM.scene.selectedIds = ids;
+    if (silent) return;   // paint-select updates mid-gesture — a rebuild here would detach the pointer's target
     FM.inspector.refresh();
     FM.timeline.rebuild();
     if (FM.canvasEdit) FM.canvasEdit.update();

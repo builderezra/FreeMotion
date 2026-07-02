@@ -1244,3 +1244,14 @@ body.sel-mode .track-head.sel { outline: 2px solid var(--accent); outline-offset
 #group-crumb .gc-label { color: var(--text-dim); font-weight: 500; }
 #group-crumb .gc-name { color: var(--accent); max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.group-editing #add-fab { display: none; }   /* adding layers happens at project level, not inside the group view */
+
+/* ---- ≡ reorder handle + paint-select (v2.29) ---- */
+.track-row { position: relative; }
+/* rows live inside the WIDE horizontal scroller, so absolute-right would land thousands of px
+   off-screen — sticky pins the handle to the visible right edge of the scrollport instead */
+.row-drag { position: sticky; right: 5px; margin-left: auto; align-self: center; flex: none; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0; background: rgba(13, 17, 25, .78); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); cursor: grab; z-index: 6; touch-action: none; }
+.row-drag svg { width: 15px; height: 15px; }
+.row-drag:active { cursor: grabbing; color: var(--accent); }
+.track-row.row-dragging { opacity: .88; z-index: 30; }
+.track-row.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
+.track-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }

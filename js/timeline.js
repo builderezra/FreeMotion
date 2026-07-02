@@ -37,7 +37,6 @@ window.FM = window.FM || {};
   let clipMove = null;   // dragging a clip body to reposition it in time
   let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
-  let dragIdx = null;    // layer index being reordered via the track head
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
 
@@ -236,8 +235,7 @@ window.FM = window.FM || {};
   function buildHead(layer, index) {
     const head = document.createElement('div');
     head.className = 'track-head' + (isSelected(layer.id) ? ' sel' : '') + (layer.id === FM.scene.selectedId ? ' primary' : '');
-    head.draggable = true;
-    head.dataset.idx = index;
+    head.dataset.idx = index;   // reorder moved to the right-edge ≡ handle (pointer-based)
 
     const eye = document.createElement('span');
     eye.className = 'th-eye' + (layer.visible ? '' : ' off');
@@ -255,7 +253,6 @@ window.FM = window.FM || {};
     name.className = 'th-name'; name.textContent = layer.name; name.title = layer.name + '  (double-click to rename)';
     name.addEventListener('dblclick', (e) => {
       e.stopPropagation();
-      head.draggable = false;
       const input = document.createElement('input');
       input.className = 'th-name-edit'; input.value = layer.name;
       input.addEventListener('pointerdown', (ev) => ev.stopPropagation());
@@ -281,21 +278,17 @@ window.FM = window.FM || {};
       if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership
       if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id);
     });
-    // AM: long-press the header cell → multi-select mode (then tap more rows; Group appears in the top bar).
-    // TOUCH ONLY — a mouse press-and-hold must stay a click/drag-reorder, and Android's synthetic
-    // contextmenu (~500ms) is suppressed via the shared lpFiredAt window (see contextmenu handler).
+    // AM: HOLD the header cell (mouse OR touch) → multi-select mode; keep holding and DRAG up/down
+    // to paint more rows into the selection. Reordering lives on the right-edge ≡ handle now, so a
+    // mouse hold no longer conflicts with anything. Android's synthetic long-press contextmenu is
+    // suppressed via the shared lpFiredAt window (see contextmenu handler).
     let lpTimer = null, lpStart = null;
     head.addEventListener('pointerdown', (e) => {
-      if (e.pointerType !== 'touch') return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target.closest('.th-eye') || e.target.closest('.th-chevron')) return;   // buttons stay buttons
       lpStart = { x: e.clientX, y: e.clientY };
       clearTimeout(lpTimer);
-      lpTimer = setTimeout(() => {
-        lpTimer = null; lpFiredAt = Date.now();
-        FM.selectMode = true;
-        if (!isSelected(layer.id)) FM.toggleSelect(layer.id);
-        if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
-        FM.refreshAll();
-      }, 420);
+      lpTimer = setTimeout(() => { lpTimer = null; beginPaintSelect(layer); }, 380);
     });
     head.addEventListener('pointermove', (e) => {
       if (lpTimer && lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 10) { clearTimeout(lpTimer); lpTimer = null; }
@@ -303,17 +296,99 @@ window.FM = window.FM || {};
     head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; });
     head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - lpFiredAt < 800) return; FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
-    // drag to reorder (z-order)
-    head.addEventListener('dragstart', (e) => { dragIdx = index; head.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(index)); } catch (_) {} });
-    head.addEventListener('dragend', () => { head.classList.remove('dragging'); document.querySelectorAll('.track-head.drop-target').forEach(h => h.classList.remove('drop-target')); });
-    head.addEventListener('dragover', (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; head.classList.add('drop-target'); });
-    head.addEventListener('dragleave', () => head.classList.remove('drop-target'));
-    head.addEventListener('drop', (e) => {
-      e.preventDefault(); head.classList.remove('drop-target');
-      const from = dragIdx; dragIdx = null;
-      if (FM.reorderLayer) FM.reorderLayer(from, index);
-    });
     return head;
+  }
+
+  // Long-press fired on a header: enter select mode and PAINT-SELECT — every row the pointer passes
+  // while held joins the selection (AM). No timeline rebuild mid-gesture (it would detach the node
+  // under the pointer); highlights are applied directly and the full refresh runs on release.
+  function beginPaintSelect(layer) {
+    lpFiredAt = Date.now();
+    FM.selectMode = true;
+    if (!isSelected(layer.id)) FM.toggleSelect(layer.id, true);
+    document.body.classList.add('sel-mode');
+    syncPaintClasses();
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+    const seen = new Set([layer.id]);
+    const stopScroll = ev => ev.preventDefault();   // keep the browser from panning instead of painting
+    const move = (ev) => {
+      const el2 = document.elementFromPoint(ev.clientX, ev.clientY);
+      const hd = el2 && el2.closest ? el2.closest('.track-head') : null;
+      if (!hd) return;
+      const L = FM.scene.layers[parseInt(hd.dataset.idx, 10)];
+      if (!L || seen.has(L.id)) return;
+      seen.add(L.id);
+      if (!isSelected(L.id)) FM.toggleSelect(L.id, true);
+      syncPaintClasses();
+      if (navigator.vibrate) { try { navigator.vibrate(5); } catch (_) {} }
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('touchmove', stopScroll);
+      lpFiredAt = Date.now();   // swallow the trailing click wherever it lands
+      FM.refreshAll();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('touchmove', stopScroll, { passive: false });
+  }
+  function syncPaintClasses() {
+    const sel = new Set(FM.selectionIds ? FM.selectionIds() : []);
+    tracksEl.querySelectorAll('.track-head').forEach(h => {
+      const L = FM.scene.layers[parseInt(h.dataset.idx, 10)];
+      h.classList.toggle('sel', !!(L && sel.has(L.id)));
+    });
+    document.body.classList.toggle('sel-multi', sel.size >= 2);
+  }
+
+  // ≡ drag handle at each row's RIGHT edge (AM): press + drag vertically to reorder layers.
+  // Pointer-based, so it works with mouse AND touch (the old HTML5 head-drag was desktop-only).
+  function buildDragHandle(row, layer, index) {
+    const h = document.createElement('button');
+    h.className = 'row-drag';
+    h.title = 'Drag to reorder';
+    h.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+    h.addEventListener('contextmenu', e => e.preventDefault());
+    h.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      try { h.setPointerCapture(e.pointerId); } catch (_) {}
+      const startY = e.clientY;
+      let over = null, moved = false;
+      const move = (ev) => {
+        if (!moved && Math.abs(ev.clientY - startY) < 4) return;
+        moved = true;
+        row.classList.add('row-dragging');
+        row.style.transform = 'translateY(' + (ev.clientY - startY) + 'px)';
+        if (over) over.classList.remove('drop-target');
+        row.style.pointerEvents = 'none';   // let elementFromPoint see the row underneath
+        const el2 = document.elementFromPoint(ev.clientX, ev.clientY);
+        row.style.pointerEvents = '';
+        const r2 = el2 && el2.closest ? el2.closest('.track-row') : null;
+        over = (r2 && r2 !== row) ? r2 : null;
+        if (over) over.classList.add('drop-target');
+      };
+      const up = () => {
+        h.removeEventListener('pointermove', move);
+        h.removeEventListener('pointerup', up);
+        h.removeEventListener('pointercancel', up);
+        row.classList.remove('row-dragging');
+        row.style.transform = '';
+        if (over) {
+          const hd = over.querySelector('.track-head');
+          over.classList.remove('drop-target');
+          const to = hd ? parseInt(hd.dataset.idx, 10) : NaN;
+          if (moved && !isNaN(to) && FM.reorderLayer) FM.reorderLayer(index, to);
+        }
+      };
+      h.addEventListener('pointermove', move);
+      h.addEventListener('pointerup', up);
+      h.addEventListener('pointercancel', up);
+    });
+    return h;
   }
 
   function buildLane(layer) {
@@ -546,6 +621,7 @@ window.FM = window.FM || {};
       const row = document.createElement('div');
       row.className = 'track-row';
       row.append(buildHead(layer, index), buildLane(layer));
+      row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
       tracksEl.appendChild(row);
     });
   }
