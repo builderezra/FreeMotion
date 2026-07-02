@@ -2474,6 +2474,15 @@ window.FM = window.FM || {};
     }
     const m = FM.media.get(layer.id);
     if (m && m.el) {
+      // audio-only clips (mp3/wav ride the pictureless-video path, 0×0 picture) — music note, not a blank
+      if (m.kind === 'video' && (!m.width || !m.height)) {
+        ctx.strokeStyle = '#b39ddb'; ctx.fillStyle = '#b39ddb'; ctx.lineWidth = 1.6;
+        const nx = W / 2 + 3, ny = H / 2 + 4;
+        ctx.beginPath(); ctx.ellipse(nx - 5, ny + 3, 3.4, 2.6, -0.35, 0, Math.PI * 2); ctx.fill();   // note head
+        ctx.beginPath(); ctx.moveTo(nx - 2, ny + 2); ctx.lineTo(nx - 2, ny - 9); ctx.stroke();       // stem
+        ctx.beginPath(); ctx.moveTo(nx - 2, ny - 9); ctx.quadraticCurveTo(nx + 4, ny - 8, nx + 4, ny - 3); ctx.stroke();   // flag
+        return;
+      }
       if (m.kind === 'video' && m.el.readyState < 2) return;
       const mw = m.width || 1, mh = m.height || 1;
       const fit = Math.min(W / mw, H / mh);
