@@ -2278,6 +2278,60 @@ window.FM = window.FM || {};
   // onto the real canvas through the camera's (inverse) transform — so EVERY layer, including
   // post-fx / motion-blur / masked ones, is panned & zoomed uniformly.
   let _camCv = null;
+  // ---- masking groups: gather each visible mask-group's member set + its mask (topmost member) ----
+  function collectMaskUnits(scene, t) {
+    let map = null;
+    for (const g of scene.layers) {
+      if (g.type !== 'group' || !g.maskGroup || !g.visible) continue;
+      const members = [];
+      (function walk(gid) {
+        scene.layers.forEach(l => { if (l.parent === gid) { members.push(l); if (l.type === 'group') walk(l.id); } });
+      })(g.id);
+      const drawable = members.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'adjustment' && l.type !== 'null');
+      if (drawable.length < 2) continue;   // nothing to clip — draw members normally
+      let mask = drawable[0], mi = scene.layers.indexOf(drawable[0]);
+      drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
+      const unit = { group: g, memberIds: new Set(members.map(l => l.id)), maskId: mask.id, drawn: false };
+      map = map || {};
+      unit.memberIds.forEach(id => { if (!map[id]) map[id] = unit; });   // nearest-first: an outer unit wins over a nested one
+    }
+    return map;
+  }
+  let _mgA = null, _mgB = null;
+  function drawMaskUnit(ctx, u, t, scene) {
+    const P = scene.project;
+    if (!_mgA) _mgA = document.createElement('canvas');
+    if (!_mgB) _mgB = document.createElement('canvas');
+    _mgA.width = P.width; _mgA.height = P.height;
+    _mgB.width = P.width; _mgB.height = P.height;
+    const a = _mgA.getContext('2d');
+    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, P.width, P.height);
+    a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
+    for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
+      const L = scene.layers[i];
+      if (!u.memberIds.has(L.id) || L.id === u.maskId || L.type === 'group') continue;
+      drawLayer(a, L, t, scene);
+    }
+    const maskLayer = scene.layers.find(l => l.id === u.maskId);
+    if (maskLayer && FM.isLayerVisibleAt(maskLayer, t)) {   // hidden mask → members show unclipped
+      const b = _mgB.getContext('2d');
+      b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, P.width, P.height);
+      b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.filter = 'none';
+      drawLayer(b, maskLayer, t, scene);
+      a.globalCompositeOperation = 'destination-in';
+      a.drawImage(_mgB, 0, 0);
+      a.globalCompositeOperation = 'source-over';
+    }
+    // the flattened unit is the one place a GROUP's own opacity/blend can act
+    const op = clamp01(FM.evalProp(u.group.transform.opacity, t));
+    if (op <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = op;
+    ctx.globalCompositeOperation = BLEND[u.group.blendMode] || 'source-over';
+    ctx.drawImage(_mgA, 0, 0);
+    ctx.restore();
+  }
+
   FM.renderScene = function (ctx, scene, t) {
     const P = scene.project;
     const cam = scene.layers.find(l => l.type === 'camera' && l.visible !== false && FM.isLayerVisibleAt(l, t));
@@ -2294,11 +2348,16 @@ window.FM = window.FM || {};
       target.fillStyle = P.background;
       target.fillRect(0, 0, P.width, P.height);
     }
+    // MASKING groups (AM): the group's TOP member clips the rest. Members composite as ONE unit,
+    // drawn at the z-slot of the group's bottom-most member so stacking stays correct.
+    const memberToUnit = collectMaskUnits(scene, t);
     const soloActive = scene.layers.some(l => l.solo);   // if any layer is soloed, only draw soloed ones
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;
       if (L.type === 'camera') continue;   // the camera drives the composite; it is never rasterized
+      const unit = memberToUnit && memberToUnit[L.id];
+      if (unit) { if (!unit.drawn) { unit.drawn = true; drawMaskUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else drawLayer(target, L, t, scene);
     }

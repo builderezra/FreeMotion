@@ -475,6 +475,7 @@ window.FM = window.FM || {};
     { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },          // video only
     { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },   // video only
     { key: 'element', label: 'Element Properties', icon: 'M4 9h7v7H4zM15 6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M16 14l4 6h-8z' },
+    { key: 'editgroup', label: 'Edit Group', icon: 'M4 4h7v7H4zM13 13h7v7h-7zM13 7.5h3.5a1 1 0 0 1 1 1V12M11 16.5H7.5a1 1 0 0 1-1-1V12' },   // group only — opens the group's own timeline
     { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
   ];
@@ -636,7 +637,13 @@ window.FM = window.FM || {};
     const wrap = el('div', 'align-row');
     // Group the multi-selection (AM) — the headline action for a multi-select, so it leads.
     const grp = el('button', 'fx-add-btn', '⧉ Group ' + n + ' layers');
-    grp.addEventListener('click', () => FM.groupSelection());
+    grp.addEventListener('click', (ev) => {
+      const r = ev.currentTarget.getBoundingClientRect();
+      if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, [
+        { label: 'Group', action: () => FM.groupSelection() },
+        { label: 'Masking Group — top layer clips the rest', action: () => FM.groupSelection({ mask: true }) },
+      ]); else FM.groupSelection();
+    });
     wrap.appendChild(grp);
     wrap.appendChild(el('div', 'align-label', 'Align ' + n + ' layers'));
     const bar = el('div', 'quick-row');
@@ -657,10 +664,13 @@ window.FM = window.FM || {};
 
   function catsFor(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
+    // A group is an invisible transform parent — Move & Transform acts on it (opacity/blend act on
+    // the flattened unit for MASKING groups), plus the door into its own timeline.
+    if (layer.type === 'group') return CATEGORIES.filter(c => c.key === 'transform' || c.key === 'blend' || c.key === 'editgroup');
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
-    if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume');
-    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume');
+    if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
+    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
   }
 
   // Is `v` a category this layer can actually show? Guards against unreachable views — e.g. the timeline
@@ -669,7 +679,8 @@ window.FM = window.FM || {};
   function viewAllowed(layer, v) {
     if (!layer || v === 'home') return true;
     if (v === 'speed' || v === 'volume') return layer.type === 'video';
-    if (v === 'element') return layer.type !== 'video' && layer.type !== 'camera';
+    if (v === 'element') return layer.type !== 'video' && layer.type !== 'camera' && layer.type !== 'group';
+    if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
   function categoryGrid(layer) {
@@ -682,7 +693,10 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
-      card.addEventListener('click', () => { view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); });
+      card.addEventListener('click', () => {
+        if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
+        view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh();
+      });
       (i < 3 ? top : bot).appendChild(card);
     });
     wrap.appendChild(top);

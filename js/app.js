@@ -183,14 +183,15 @@ window.FM = window.FM || {};
     });
   };
 
-  // Small status toast (e.g. "Preparing reverse…"). Pass `ms` for a one-shot toast that auto-hides;
-  // omit it for a sticky toast paired with FM.hideToast(). The seq guard stops an old timer from
-  // hiding a newer toast.
+  // Small status toast. AUTO-HIDES by default (omitting ms used to mean sticky — which left every
+  // duration-less caller, e.g. "Grouped 3 layers", on screen forever). Pass ms=0 for a sticky
+  // progress toast paired with FM.hideToast(). The seq guard stops an old timer from hiding a newer toast.
   let toastSeq = 0;
   FM.toast = function (msg, ms) {
     const t = document.getElementById('toast'); if (!t) return;
     t.textContent = msg; t.classList.remove('hidden');
     const my = ++toastSeq;
+    if (ms === undefined) ms = 2200;
     if (ms) setTimeout(() => { if (my === toastSeq) FM.hideToast(); }, ms);
   };
   FM.hideToast = function () { const t = document.getElementById('toast'); if (t) t.classList.add('hidden'); };
@@ -225,9 +226,9 @@ window.FM = window.FM || {};
     const m = FM.media.get(layer.id);
     if (!m || m.frameCache) return;
     const fps = Math.min(FM.scene.project.fps || 30, 24);
-    FM.toast('Preparing frames…');
+    FM.toast('Preparing frames…', 0);   // sticky progress toast — hidden by the finally below
     // Preview: downscale + byte-cap so a long reversed/slow clip can't OOM-kill mobile Safari.
-    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%'), { maxDim: 960, maxBytes: 384 * 1024 * 1024 }); }
+    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%', 0), { maxDim: 960, maxBytes: 384 * 1024 * 1024 }); }
     finally { FM.hideToast(); }
     render();
   };
@@ -566,6 +567,7 @@ window.FM = window.FM || {};
   };
 
   FM.deleteLayer = function (id, _nested) {
+    if (FM.groupContext === id && FM.exitGroup) FM.exitGroup(true);   // deleting the group you're inside
     // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
     // each member's media/audio teardown runs through this same path — but refresh/undo commit
     // only once, at the outermost call (one Ctrl+Z restores the whole group). (#r7)
@@ -589,14 +591,19 @@ window.FM = window.FM || {};
 
   // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
   // via the existing parent chain. Timeline shows the group as a collapsible row.
-  FM.groupSelection = function () {
+  // opts.mask → MASKING group: the top member clips the rest (composited as one unit in renderScene).
+  FM.groupSelection = function (opts) {
+    opts = opts || {};
     const ids = FM.selectionIds();
     const members = FM.scene.layers.filter(l => ids.includes(l.id) && l.type !== 'camera');
     if (members.length < 2) return;
     const start = Math.min.apply(null, members.map(l => l.start));
     const end = Math.max.apply(null, members.map(l => l.start + l.duration));
-    const P = FM.scene.project;
-    const g = FM.makeLayer('group', { name: 'Group', x: P.width / 2, y: P.height / 2, start: start, duration: end - start });
+    // NEUTRAL transform (0,0) — the group becomes the members' PARENT, so any x/y here would
+    // instantly displace every member by that amount the moment they're grouped.
+    const g = FM.makeLayer('group', { name: opts.mask ? 'Mask Group' : 'Group', x: 0, y: 0, start: start, duration: end - start });
+    if (opts.mask) g.maskGroup = true;
+    if (FM.groupContext) g.parent = FM.groupContext;   // grouping while editing a group nests inside it
     // Re-parent only top-level members — a child whose parent is also being grouped keeps it.
     members.forEach(l => { if (!l.parent || !ids.includes(l.parent)) l.parent = g.id; });
     // Pull members contiguous directly under the group row (top-most member's slot).
@@ -606,17 +613,44 @@ window.FM = window.FM || {};
     Array.prototype.splice.apply(FM.scene.layers, [FM.scene.layers.indexOf(g) + 1, 0].concat(members));
     FM.selectMode = false;
     FM.selectLayer(g.id);
-    if (FM.toast) FM.toast('Grouped ' + members.length + ' layers');
+    if (FM.toast) FM.toast(opts.mask ? 'Masking group — its top layer clips the rest' : 'Grouped ' + members.length + ' layers');
     if (FM.history) FM.history.commit();
   };
   FM.ungroup = function (id) {
     const g = FM.scene.layers.find(l => l.id === id);
     if (!g || g.type !== 'group') return;
-    FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = null; });
+    if (FM.groupContext === id) FM.exitGroup(true);
+    FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = g.parent || null; });   // members lift into the parent context
     FM.scene.layers = FM.scene.layers.filter(l => l !== g);
     FM.selectLayer(null);
     FM.refreshAll();
     if (FM.history) FM.history.commit();
+  };
+
+  // ---- Edit Group (AM): open a group in its own timeline view — only its members show, edit them
+  // individually, then back out (‹ back / the crumb pill). Purely a view scope; time stays global.
+  FM.groupContext = null;
+  function updateGroupCrumb() {
+    const c = document.getElementById('group-crumb'); if (!c) return;
+    const g = FM.groupContext ? FM.scene.layers.find(l => l.id === FM.groupContext) : null;
+    if (g) { c.querySelector('.gc-name').textContent = g.name || 'Group'; c.classList.remove('hidden'); document.body.classList.add('group-editing'); }
+    else { c.classList.add('hidden'); document.body.classList.remove('group-editing'); }
+  }
+  FM.enterGroup = function (id) {
+    const g = FM.scene.layers.find(l => l.id === id && l.type === 'group');
+    if (!g) return;
+    FM.selectMode = false;
+    FM.groupContext = id;
+    FM.selectLayer(null);
+    updateGroupCrumb();
+    FM.refreshAll();
+  };
+  FM.exitGroup = function (silent) {
+    const id = FM.groupContext;
+    FM.groupContext = null;
+    updateGroupCrumb();
+    if (!silent && id && FM.scene.layers.some(l => l.id === id)) FM.selectLayer(id);
+    else FM.refreshAll();
   };
   FM.groupDescendants = function (id) {
     const out = [];
@@ -856,8 +890,15 @@ window.FM = window.FM || {};
     // grouping + reusable saves
     const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
     items.push({ sep: true });
-    if (layer.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(layer.id) });
-    if (selCount >= 2) items.push({ label: 'Group selection', action: () => FM.groupSelection() });
+    if (layer.type === 'group') {
+      items.push({ label: 'Edit group', action: () => FM.enterGroup(layer.id) });
+      items.push({ label: layer.maskGroup ? 'Masking: ON — make normal group' : 'Use as masking group', action: () => { layer.maskGroup = !layer.maskGroup; FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit(); } });
+      items.push({ label: 'Ungroup', action: () => FM.ungroup(layer.id) });
+    }
+    if (selCount >= 2) {
+      items.push({ label: 'Group selection', action: () => FM.groupSelection() });
+      items.push({ label: 'Masking group', action: () => FM.groupSelection({ mask: true }) });
+    }
     items.push({ label: 'Save as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
     items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
     items.push({ sep: true }, { label: 'Delete', danger: true, action: () => FM.deleteLayer(layer.id) });
@@ -992,6 +1033,9 @@ window.FM = window.FM || {};
       if (FM.home) { FM.home.init(); FM.home.open(); }
       if (FM.projects) FM.projects.pruneOrphans();   // boot sweep of orphaned media blobs
     });
+    // ‹ crumb pill exits the Edit Group view
+    const gcBack = document.getElementById('group-crumb');
+    if (gcBack) gcBack.addEventListener('click', () => { if (FM.exitGroup) FM.exitGroup(); });
     // desktop: clicking the brand goes Home (mobile uses the ‹ back arrow)
     const brandEl = document.querySelector('#topbar .brand');
     if (brandEl) brandEl.addEventListener('click', (e) => { if (e.target.classList.contains('ver')) return; if (FM.home) FM.home.open(); });
@@ -1083,6 +1127,7 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
         { label: 'Group Selection', disabled: selN < 2, action: () => FM.groupSelection() },
+        { label: 'Masking Group', disabled: selN < 2, action: () => FM.groupSelection({ mask: true }) },
         { label: 'Duplicate Layer', disabled: !hasSel, action: () => { if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId); } },
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
         { label: 'Save Preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },

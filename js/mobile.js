@@ -110,7 +110,13 @@ window.FM = window.FM || {};
     });
     // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
     var mGroup = document.getElementById('m-group');
-    if (mGroup) mGroup.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection(); });
+    if (mGroup) mGroup.addEventListener('click', function () {
+      var r = mGroup.getBoundingClientRect();   // AM: the group action offers Grouping OR Masking
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, [
+        { label: 'Group', action: function () { FM.groupSelection(); } },
+        { label: 'Masking Group — top layer clips the rest', action: function () { FM.groupSelection({ mask: true }); } },
+      ]); else if (FM.groupSelection) FM.groupSelection();
+    });
 
     // Anchor the docked sheet's top just below the single selected-clip row so the property
     // options never cover the clip — clamped so the panel always keeps a usable height.
@@ -159,6 +165,7 @@ window.FM = window.FM || {};
     var mBack = document.getElementById('m-back');
     if (mBack) mBack.addEventListener('click', function () {
       if (isPhone() && document.body.classList.contains('m-editing')) { FM.selectLayer(null); return; }   // AM: back = deselect the clip
+      if (FM.groupContext && FM.exitGroup) { FM.exitGroup(); return; }   // back out of the Edit Group timeline first
       // AM: back from the editor = the home screen (project browser). The old file menu's actions
       // moved there: Import/Export live on home (⋯ + per-project menu); reset = delete the project.
       if (FM.home) { FM.home.open(); return; }

@@ -1236,3 +1236,11 @@ body.sel-mode .track-head { border-radius: 8px; }
 body.sel-mode .track-head.sel { outline: 2px solid var(--accent); outline-offset: -2px; background: rgba(41, 217, 187, .12); }
 .clip.group-bar { background: linear-gradient(180deg, rgba(126, 231, 255, .5), rgba(94, 106, 255, .45)); }
 #m-group:active .m-ico { color: var(--accent); }
+
+/* ---- Edit Group breadcrumb (v2.28) ---- */
+#group-crumb { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); z-index: 150; display: flex; align-items: center; gap: 7px; padding: 9px 16px 9px 12px; border-radius: 999px; border: 1px solid var(--accent); background: rgba(10, 14, 20, .92); color: var(--text); font-size: 12.5px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 26px rgba(0,0,0,.5); }
+#group-crumb.hidden { display: none; }
+#group-crumb .gc-arrow { color: var(--accent); font-size: 16px; line-height: 1; }
+#group-crumb .gc-label { color: var(--text-dim); font-weight: 500; }
+#group-crumb .gc-name { color: var(--accent); max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.group-editing #add-fab { display: none; }   /* adding layers happens at project level, not inside the group view */

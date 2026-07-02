@@ -307,6 +307,7 @@ window.FM = window.FM || {};
     async open(id) {
       if (id === curId()) return true;
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
+      if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
       FM.storage.flushSync(); this.touchCurrent(true);
       // drop the outgoing project's media from the in-memory registry (blobs stay in IDB)
       FM.scene.layers.forEach(l => { if (FM.media.get(l.id)) FM.media.remove(l.id); });

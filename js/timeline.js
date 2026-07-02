@@ -222,6 +222,11 @@ window.FM = window.FM || {};
     while (pid && hops++ < 64) { const p = FM.scene.layers.find(l => l.id === pid); if (!p) return false; if (p.type === 'group') return true; pid = p.parent; }
     return false;
   }
+  function inSubtree(layer, gid) {
+    let pid = layer.parent, hops = 0;
+    while (pid && hops++ < 64) { if (pid === gid) return true; const p = FM.scene.layers.find(l => l.id === pid); if (!p) return false; pid = p.parent; }
+    return false;
+  }
   function hiddenByCollapse(layer) {
     let pid = layer.parent, hops = 0;
     while (pid && hops++ < 64) { const p = FM.scene.layers.find(l => l.id === pid); if (!p) return false; if (p.type === 'group' && p.collapsed) return true; pid = p.parent; }
@@ -533,9 +538,11 @@ window.FM = window.FM || {};
     const multiSel = FM.selectMode || (FM.scene.selectedIds && FM.scene.selectedIds.length > 1);
     const soloId = (!multiSel && FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.scene.selectedId
       && FM.scene.layers.some(l => l.id === FM.scene.selectedId)) ? FM.scene.selectedId : null;
+    const gctx = FM.groupContext;
     FM.scene.layers.forEach((layer, index) => {
       if (soloId && layer.id !== soloId) return;
-      if (hiddenByCollapse(layer) && layer.id !== soloId) return;   // members of a collapsed group stay off-screen (except the phone-solo row itself)
+      if (gctx) { if (!inSubtree(layer, gctx)) return; }   // Edit Group: only the group's members, fully expanded
+      else if (hiddenByCollapse(layer) && layer.id !== soloId) return;   // members of a collapsed group stay off-screen (except the phone-solo row itself)
       const row = document.createElement('div');
       row.className = 'track-row';
       row.append(buildHead(layer, index), buildLane(layer));
