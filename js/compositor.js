@@ -1144,6 +1144,9 @@ window.FM = window.FM || {};
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
   let _cfA = null, _cfB = null, _cfTex = null, _reC = null;
+  // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
+  // getImageData scan — it was the single most expensive part of running them per frame.
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1 };
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
     if (opacity <= 0) return;
@@ -1158,7 +1161,8 @@ window.FM = window.FM || {};
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     let bbox = null;
-    try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
+    if (CFX_NO_BBOX[fx.type]) bbox = { x: 0, y: 0, w: W, h: H };   // fn ignores it — full frame stands in
+    else try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
     // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases
     const bctx = _cfB.getContext('2d');
     _cfB.width = W; _cfB.height = H;
