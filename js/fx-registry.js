@@ -68,6 +68,7 @@ window.FM = window.FM || {};
     wiggle: 'move', shake: 'move', swing: 'move', spin: 'move', pulse: 'move', drift: 'move', orbit: 'move',
     // batch 24
     squeeze: 'distort', tiles: 'repeat',
+    motionflow: 'blur',   // content-aware motion blur (temporal)
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -102,15 +103,17 @@ window.FM = window.FM || {};
   };
 
   // Effects to feature in the carousel (visually interesting ones). Chroma Key + Squeeze lead, like AM.
-  FM.FX_FEATURED = ['chromakey', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
+  FM.FX_FEATURED = ['chromakey', 'motionflow', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {
     const out = [];
     if (Array.isArray(def.params)) {
-      // multi-param effects: a `params` array on the def, each a range control
+      // multi-param effects: a `params` array on the def — each a range control, or a segmented
+      // choice when the entry carries `options` (e.g. Motion Blur (Content) styles).
       def.params.forEach(function (pp) {
-        out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true });
+        if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: pp.options, default: pp.def, keyframable: false });
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true });
       });
     } else if (def.options) {
       out.push({ key: def.param, label: def.label, type: 'segment', options: def.options, default: def.def, keyframable: false });

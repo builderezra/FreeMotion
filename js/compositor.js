@@ -213,6 +213,16 @@ window.FM = window.FM || {};
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
     { type: 'tiles', label: 'Tiles', params: [{ key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 }, { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 8, unit: '%' }] },
+    // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
+    // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
+    // (RSMB/AE Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
+    { type: 'motionflow', label: 'Motion Blur (Content)', params: [
+      { key: 'style', label: 'Style', options: [[0, 'Pixel'], [1, 'Smear'], [2, 'Echo'], [3, 'Blend']], def: 0 },
+      { key: 'amount', label: 'Shutter', min: 0, max: 2, step: 0.05, def: 1 },
+      { key: 'samples', label: 'Quality', min: 4, max: 24, step: 1, def: 10 },
+      { key: 'threshold', label: 'Threshold', min: 0, max: 0.4, step: 0.01, def: 0.05 },
+      { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0.5 },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -723,7 +733,7 @@ window.FM = window.FM || {};
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
-    squeeze: 1, tiles: 1 };
+    squeeze: 1, tiles: 1, motionflow: 1 };
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
@@ -1157,7 +1167,7 @@ window.FM = window.FM || {};
   let _cfA = null, _cfB = null, _cfTex = null, _reC = null;
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1 };
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1, motionflow: 1 };
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
     if (opacity <= 0) return;
@@ -1179,7 +1189,7 @@ window.FM = window.FM || {};
     _cfB.width = W; _cfB.height = H;
     bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer.start || 0));
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer.start || 0), layer);   // layer = temporal-cache key (motionflow)
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1461,7 +1471,205 @@ window.FM = window.FM || {};
       rx, ry, rz, shading,
     });
   }
+  // ---- Motion Blur (Content) — TEMPORAL blur driven by what moves INSIDE the plate ----
+  // Keeps each layer's previous rendered plate, block-matches a coarse optical-flow field between
+  // frames, then blurs along the motion. Styles: 0 Pixel Motion (per-pixel directional, RSMB/AE
+  // style) · 1 Directional Smear (global vector, masked) · 2 Echo Trails (long exposure feedback)
+  // · 3 Frame Blend (temporal smoothing — rescues low-fps clips). Works during forward playback,
+  // frame-stepping and export; a backwards seek or a >0.35s jump just shows the frame unblurred.
+  let _mfSa = null, _mfSb = null, _mfW1 = null, _mfMask = null, _mfMov = null;
+  const _mflow = {};   // layerId -> { cv (prev plate), t, at, acc (echo feedback) }
+  function _mfRec(id, W, H) {
+    let r = _mflow[id];
+    if (!r) {
+      const keys = Object.keys(_mflow);
+      if (keys.length > 12) { let old = keys[0]; keys.forEach(k => { if (_mflow[k].at < _mflow[old].at) old = k; }); delete _mflow[old]; }   // bounded cache
+      r = _mflow[id] = { cv: document.createElement('canvas'), t: -1, at: 0, acc: null };
+    }
+    if (r.cv.width !== W || r.cv.height !== H) { r.cv.width = W; r.cv.height = H; r.t = -1; r.acc = null; }
+    return r;
+  }
+  function _mfGrayOf(cv, FW, FH, useB) {
+    let sc = useB ? _mfSb : _mfSa;
+    if (!sc) { sc = document.createElement('canvas'); if (useB) _mfSb = sc; else _mfSa = sc; }
+    if (sc.width !== FW || sc.height !== FH) { sc.width = FW; sc.height = FH; }
+    const c = sc.getContext('2d', { willReadFrequently: true });
+    c.clearRect(0, 0, FW, FH);
+    c.drawImage(cv, 0, 0, FW, FH);
+    const d = c.getImageData(0, 0, FW, FH).data, g = new Float32Array(FW * FH);
+    for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * (d[i + 3] / 255);
+    return g;
+  }
+  // Coarse block-matched flow field: 8px blocks at ~160px wide, search ±5. Returns per-block
+  // velocity (block moved BY (vx,vy) since the previous frame) + normalized frame-diff per block.
+  function _mfField(prevCv, curCv, W, H, thr) {
+    const FW = 160, FH = Math.max(16, Math.round(H * 160 / W)), BS = 8, R = 5;
+    const gp = _mfGrayOf(prevCv, FW, FH, false), gc = _mfGrayOf(curCv, FW, FH, true);
+    const gw = Math.floor(FW / BS), gh = Math.floor(FH / BS), n = gw * gh;
+    const vx = new Float32Array(n), vy = new Float32Array(n), df = new Float32Array(n);
+    const sad = (ox, oy, px, py) => {   // cur block at (ox,oy) vs prev block at (px,py)
+      let s = 0;
+      for (let y = 0; y < BS; y++) {
+        const cy = oy + y, py2 = py + y;
+        if (py2 < 0 || py2 >= FH) { s += BS * 40; continue; }
+        const cRow = cy * FW, pRow = py2 * FW;
+        for (let x = 0; x < BS; x++) {
+          const px2 = px + x;
+          s += (px2 < 0 || px2 >= FW) ? 40 : Math.abs(gc[cRow + ox + x] - gp[pRow + px2]);
+        }
+      }
+      return s;
+    };
+    const thrSad = thr * 255 * BS * BS;   // block considered static below this diff
+    for (let by = 0; by < gh; by++) for (let bx = 0; bx < gw; bx++) {
+      const i = by * gw + bx, ox = bx * BS, oy = by * BS;
+      const d0 = sad(ox, oy, ox, oy);
+      df[i] = d0 / (255 * BS * BS);
+      if (d0 <= thrSad) continue;   // unchanged block → no motion
+      // A near-uniform block has nothing to track: a VACATED region (object just left) would
+      // otherwise "match" any same-coloured area and claim a bogus vector (occlusion artifact).
+      let mean = 0, dev = 0;
+      for (let y2 = 0; y2 < BS; y2++) { const r2 = (oy + y2) * FW + ox; for (let x2 = 0; x2 < BS; x2++) mean += gc[r2 + x2]; }
+      mean /= BS * BS;
+      for (let y2 = 0; y2 < BS; y2++) { const r2 = (oy + y2) * FW + ox; for (let x2 = 0; x2 < BS; x2++) dev += Math.abs(gc[r2 + x2] - mean); }
+      if (dev / (BS * BS) < 5) continue;
+      // Two-stage search: coarse step 3 over ±24 flow px (~16% of the frame width PER FRAME — a
+      // hard sword-swing still lands inside), then a ±2 fine pass around the best coarse hit.
+      let best = d0, bdx = 0, bdy = 0;
+      for (let dy = -24; dy <= 24; dy += 3) for (let dx = -24; dx <= 24; dx += 3) {
+        if (!dx && !dy) continue;
+        const s = sad(ox, oy, ox + dx, oy + dy);
+        if (s < best) { best = s; bdx = dx; bdy = dy; }
+      }
+      const cbx = bdx, cby = bdy;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        if (!dx && !dy) continue;
+        const s = sad(ox, oy, ox + cbx + dx, oy + cby + dy);
+        if (s < best) { best = s; bdx = cbx + dx; bdy = cby + dy; }
+      }
+      // only accept a genuinely better match — otherwise it's appearance change, not motion
+      if (best < d0 * 0.75) { vx[i] = -bdx; vy[i] = -bdy; }   // block CAME FROM (dx,dy) → moved by −(dx,dy)
+    }
+    // 3×3 pass: direction from the box AVERAGE (kills speckle), magnitude from the neighbourhood
+    // MAX. A plain average dilutes a small fast object to a fraction of its true motion AND stops
+    // dead at its edge — max-magnitude keeps the blur full-length and lets it bleed one block past
+    // the object, which is exactly what real motion blur does.
+    const sx = new Float32Array(n), sy = new Float32Array(n);
+    for (let by = 0; by < gh; by++) for (let bx = 0; bx < gw; bx++) {
+      let ax = 0, ay = 0, c = 0, mmax = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = bx + dx, ny = by + dy;
+        if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+        const j = ny * gw + nx, m = Math.hypot(vx[j], vy[j]);
+        ax += vx[j]; ay += vy[j]; c++;
+        if (m > mmax) mmax = m;
+      }
+      const i = by * gw + bx, al = Math.hypot(ax, ay);
+      if (al > 1e-3 && mmax > 0.3) { sx[i] = (ax / al) * mmax; sy[i] = (ay / al) * mmax; }
+    }
+    return { vx: sx, vy: sy, df: df, gw: gw, gh: gh, FW: FW, FH: FH, BS: BS };
+  }
+
   const CANVAS_FX = {
+    // ---- Motion Blur (Content) ----
+    motionflow: function (A, B, W, H, bb, p, t, tl, layer) {
+      const id = (layer && layer.id) || '_anon';
+      const rec = _mfRec(id, W, H);
+      const style = Math.round(FM.evalProp(p.style, t) || 0);
+      const amount = p.amount == null ? 1 : Math.max(0, FM.evalProp(p.amount, t));
+      const samples = Math.max(4, Math.min(24, Math.round(p.samples == null ? 10 : FM.evalProp(p.samples, t))));
+      const thr = Math.max(0.005, p.threshold == null ? 0.05 : FM.evalProp(p.threshold, t));
+      const soft = Math.max(0, Math.min(1, p.softness == null ? 0.5 : FM.evalProp(p.softness, t)));
+      const valid = rec.t >= 0 && t > rec.t + 1e-4 && (t - rec.t) <= 0.35;   // sequential frames only
+      const finish = () => {   // remember THIS plate for the next frame
+        const c = rec.cv.getContext('2d');
+        c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
+        rec.t = t; rec.at = performance.now();
+      };
+      if (amount <= 0.001 || (!valid && style !== 2)) { B.drawImage(A, 0, 0); finish(); return; }
+
+      if (style === 3) {   // FRAME BLEND — temporal smoothing (low-fps rescue)
+        B.drawImage(A, 0, 0);
+        B.save(); B.globalAlpha = Math.min(0.85, amount * 0.45); B.drawImage(rec.cv, 0, 0); B.restore();
+        finish(); return;
+      }
+      if (style === 2) {   // ECHO TRAILS — long-exposure feedback
+        if (!rec.acc) { rec.acc = document.createElement('canvas'); rec.acc.width = W; rec.acc.height = H; }
+        const ac = rec.acc.getContext('2d');
+        if (!valid) { ac.clearRect(0, 0, W, H); ac.drawImage(A, 0, 0); B.drawImage(A, 0, 0); finish(); return; }
+        const persist = Math.min(0.96, 0.35 + amount * 0.3);
+        ac.save(); ac.globalCompositeOperation = 'destination-in'; ac.fillStyle = 'rgba(0,0,0,' + persist + ')'; ac.fillRect(0, 0, W, H); ac.restore();
+        // merge with LIGHTEN (per-channel max, AE Echo style) — an opaque new frame would otherwise
+        // paint its background right over the trail and hide it
+        ac.save(); ac.globalCompositeOperation = 'lighten'; ac.drawImage(A, 0, 0); ac.restore();
+        B.drawImage(rec.acc, 0, 0);
+        finish(); return;
+      }
+
+      const F = _mfField(rec.cv, A, W, H, thr);
+      FM._mfLastField = F;   // debug hook (harmless in prod)
+      if (style === 1) {   // DIRECTIONAL SMEAR — one dominant vector, moving areas only
+        let gx = 0, gy = 0, wsum = 0;
+        for (let i = 0; i < F.vx.length; i++) { const m = Math.hypot(F.vx[i], F.vy[i]); if (m > 0.3) { gx += F.vx[i] * m; gy += F.vy[i] * m; wsum += m; } }
+        if (wsum < 0.5) { B.drawImage(A, 0, 0); finish(); return; }
+        gx = (gx / wsum) * (W / F.FW) * amount; gy = (gy / wsum) * (W / F.FW) * amount;
+        if (Math.hypot(gx, gy) < 1.2) { B.drawImage(A, 0, 0); finish(); return; }
+        if (!_mfMask) _mfMask = document.createElement('canvas');
+        _mfMask.width = F.gw; _mfMask.height = F.gh;
+        const mc = _mfMask.getContext('2d');
+        const md = mc.createImageData(F.gw, F.gh);
+        for (let i = 0; i < F.df.length; i++) {
+          const a = Math.max(0, Math.min(1, (F.df[i] - thr) / (thr * (0.5 + soft) + 0.03)));
+          md.data[i * 4] = md.data[i * 4 + 1] = md.data[i * 4 + 2] = 255; md.data[i * 4 + 3] = Math.round(a * 255);
+        }
+        mc.putImageData(md, 0, 0);
+        if (!_mfMov) _mfMov = document.createElement('canvas');
+        _mfMov.width = W; _mfMov.height = H;
+        const vc = _mfMov.getContext('2d');
+        vc.clearRect(0, 0, W, H); vc.drawImage(A, 0, 0);
+        vc.save(); vc.globalCompositeOperation = 'destination-in';
+        vc.imageSmoothingEnabled = true; vc.filter = 'blur(' + Math.round(4 + soft * 10) + 'px)';
+        vc.drawImage(_mfMask, 0, 0, W, H); vc.restore();
+        B.drawImage(A, 0, 0);   // sharp base, smear layered over it
+        B.save(); B.globalAlpha = Math.min(0.5, 1.6 / samples);
+        for (let k = 0; k < samples; k++) { const f = k / (samples - 1) - 0.5; B.drawImage(_mfMov, gx * f, gy * f); }
+        B.restore();
+        finish(); return;
+      }
+
+      // STYLE 0: PIXEL MOTION — per-pixel blur along the local flow vector, at a capped working res
+      const WW = Math.min(FM._exporting ? 720 : 480, W), WH = Math.max(2, Math.round(H * WW / W));
+      if (!_mfW1) _mfW1 = document.createElement('canvas');
+      if (_mfW1.width !== WW || _mfW1.height !== WH) { _mfW1.width = WW; _mfW1.height = WH; }
+      const wc = _mfW1.getContext('2d', { willReadFrequently: true });
+      wc.clearRect(0, 0, WW, WH); wc.drawImage(A, 0, 0, WW, WH);
+      const img = wc.getImageData(0, 0, WW, WH), d = img.data, src = d.slice();
+      const bScale = F.FW / WW, vScale = (WW / F.FW) * amount;
+      for (let y = 0; y < WH; y++) {
+        const byv = Math.min(F.gh - 1, (y * bScale / F.BS) | 0), row = y * WW;
+        for (let x = 0; x < WW; x++) {
+          const bi = byv * F.gw + Math.min(F.gw - 1, (x * bScale / F.BS) | 0);
+          const mvx = F.vx[bi] * vScale, mvy = F.vy[bi] * vScale;
+          const len = Math.hypot(mvx, mvy);
+          if (len < 0.8) continue;   // static pixel — stays razor sharp
+          let r = 0, g = 0, b = 0, a = 0;
+          for (let k = 0; k < samples; k++) {
+            const f = k / (samples - 1) - 0.5;
+            let sx2 = Math.round(x + mvx * f), sy2 = Math.round(y + mvy * f);
+            sx2 = sx2 < 0 ? 0 : sx2 >= WW ? WW - 1 : sx2; sy2 = sy2 < 0 ? 0 : sy2 >= WH ? WH - 1 : sy2;
+            const si = (sy2 * WW + sx2) * 4;
+            r += src[si]; g += src[si + 1]; b += src[si + 2]; a += src[si + 3];
+          }
+          const o = (row + x) * 4;
+          d[o] = r / samples; d[o + 1] = g / samples; d[o + 2] = b / samples; d[o + 3] = a / samples;
+        }
+      }
+      wc.putImageData(img, 0, 0);
+      B.imageSmoothingEnabled = true;
+      B.drawImage(_mfW1, 0, 0, W, H);
+      finish();
+    },
+
     // ---- 3D solids ----
     cube3d: function (A, B, W, H, bb, p, t) {
       solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 });
@@ -2570,6 +2778,7 @@ window.FM = window.FM || {};
     }
     _mgA._fmGen = ++_gen;   // unit pixels change every frame — key downstream memos (gradeCanvas) off a generation
     const tmp = FM.makeLayer('_flat', { name: g.name, x: 0, y: 0 });
+    tmp.id = g.id + ':flat';   // STABLE id per group — temporal effects (motionflow) key their cache on it
     tmp._canvas = _mgA;
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp.effects = g.effects || [];
