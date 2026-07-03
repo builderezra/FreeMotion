@@ -2041,7 +2041,12 @@ window.FM = window.FM || {};
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
 
     if (layer.type === '_flat') {   // flattened group unit — full-frame blit (effects/opacity/blend already set up above)
-      try { ctx.drawImage(layer._canvas, 0, 0); } catch (e) {}
+      let src = layer._canvas;
+      const cg = layer.colorGrade;
+      if (cg && ((cg.lift || 0) !== 0 || (cg.gamma != null && cg.gamma !== 1) || (cg.gain != null && cg.gain !== 1))) {
+        src = gradeCanvas(src, src.width, src.height, cg.lift || 0, cg.gamma || 1, cg.gain != null ? cg.gain : 1);   // hue/sat apply via effectFilter above
+      }
+      try { ctx.drawImage(src, 0, 0); } catch (e) {}
     } else if (layer.type === 'text') {
       ctx.fillStyle = layer.color || '#fff';
       ctx.textAlign = layer.align || 'center';
@@ -2292,6 +2297,9 @@ window.FM = window.FM || {};
     if (g.effects && g.effects.some(e => e.enabled !== false)) return true;
     if (g.blendMode && g.blendMode !== 'normal') return true;
     if (g.shadow && g.shadow.enabled) return true;
+    if (g.stroke && g.stroke.enabled && g.stroke.width > 0) return true;   // border around the silhouette
+    const cg = g.colorGrade;
+    if (cg && ((cg.hue || 0) !== 0 || (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) || (cg.lift || 0) !== 0 || (cg.gamma != null && Math.abs(cg.gamma - 1) > 1e-3) || (cg.gain != null && Math.abs(cg.gain - 1) > 1e-3))) return true;
     const op = g.transform ? FM.evalProp(g.transform.opacity, t) : 1;
     if (op < 0.999 || (FM.isAnimated && FM.isAnimated(g.transform && g.transform.opacity))) return true;
     return false;
@@ -2348,10 +2356,15 @@ window.FM = window.FM || {};
     // effects/opacity/blend/shadow — the entire effect pipeline (CSS filters, pixel, warp, canvas/3D)
     // then applies to the group exactly as it would to a single layer.
     const g = u.group;
+    _mgA._fmGen = ++_gen;   // unit pixels change every frame — key downstream memos (gradeCanvas) off a generation
     const tmp = FM.makeLayer('_flat', { name: g.name, x: 0, y: 0 });
     tmp._canvas = _mgA;
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp.effects = g.effects || [];
+    // group BORDER = the existing alpha-outline 'stroke' effect run on the flattened unit
+    if (g.stroke && g.stroke.enabled && g.stroke.width > 0) {
+      tmp.effects = tmp.effects.concat([{ type: 'stroke', enabled: true, params: { width: g.stroke.width, color: g.stroke.color || '#ffffff' } }]);
+    }
     tmp.blendMode = g.blendMode || 'normal';
     if (g.shadow) tmp.shadow = g.shadow;
     if (g.colorGrade) tmp.colorGrade = g.colorGrade;

@@ -666,7 +666,7 @@ window.FM = window.FM || {};
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
     // Groups composite as a flattened unit whenever they carry a look of their own, so effects,
     // blending/opacity and presets all act on the whole group — plus the door into its own timeline.
-    if (layer.type === 'group') return CATEGORIES.filter(c => ['blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
+    if (layer.type === 'group') return CATEGORIES.filter(c => ['color', 'border', 'blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
     if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
@@ -1053,6 +1053,15 @@ window.FM = window.FM || {};
       body.appendChild(rangeRow('Gamma', () => cg.gamma, v => { cg.gamma = v; }, 0.3, 3, 0.05));
       body.appendChild(rangeRow('Gain', () => cg.gain, v => { cg.gain = v; }, 0, 3, 0.02));
     } else if (key === 'border') {
+      if (layer.type === 'group') {   // border = outline traced around the group's composited silhouette
+        if (!layer.stroke) layer.stroke = { enabled: false, width: 6, color: '#ffffff' };
+        const stk = layer.stroke;
+        body.appendChild(checkRow('Border', stk.enabled, v => { stk.enabled = v; FM.requestRender(); }));
+        body.appendChild(rangeRow('Border width', () => stk.width, v => { stk.width = Math.max(1, Math.min(16, v)); }, 1, 16, 1));
+        const bc = el('div', 'prop-row'); bc.appendChild(el('label', null, 'Border color'));
+        bc.appendChild(colorField(() => stk.color || '#ffffff', v => { stk.color = v; }));
+        body.appendChild(bc);
+      }
       if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 8, dy: 8, color: '#000000' };
       const sh = layer.shadow;
       body.appendChild(checkRow('Drop shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); }));
