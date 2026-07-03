@@ -431,10 +431,14 @@ window.FM = window.FM || {};
   FM.addShapeLayer = function (shape, opts) {
     opts = opts || {};
     const P = FM.scene.project;
+    // SQUARE default box sized off the SHORTER side — so a shape is identical in every project
+    // format (a circle stays a circle in 9:16 / 16:9 / 1:1, not a stretched oval). Was width/3 ×
+    // height/3, which inherited the canvas aspect ratio and distorted every shape.
+    const d = Math.round(Math.min(P.width, P.height) / 3);
     const layer = FM.makeLayer('shape', {
       name: opts.name || (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
       shape: shape || 'rect', x: P.width / 2, y: P.height / 2,
-      shapeW: Math.round(P.width / 3), shapeH: Math.round(P.height / 3), duration: Math.min(5, P.duration),
+      shapeW: d, shapeH: d, duration: Math.min(5, P.duration),
       extra: opts.extra,
     });
     FM.scene.layers.unshift(layer);
