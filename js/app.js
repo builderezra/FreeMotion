@@ -113,7 +113,20 @@ window.FM = window.FM || {};
     dropHint.classList.toggle('hidden', FM.scene.layers.length > 0);
   }
 
+  // Keep the composition EXACTLY as long as its clips — grows when a clip extends past the end,
+  // shrinks when the furthest clip ends earlier. Runs on every refresh so the timeline never has
+  // trailing empty space. Empty project keeps its configured length.
+  FM.autoFitDuration = function () {
+    if (!FM.scene.layers.length) return;
+    let end = 0;
+    FM.scene.layers.forEach(l => { const e = (l.start || 0) + (l.duration || 0); if (e > end) end = e; });
+    end = Math.max(0.5, Math.round(end * 1000) / 1000);
+    if (FM.scene.project.duration !== end) FM.scene.project.duration = end;
+    if (FM.time > end) FM.time = end;   // clamp the playhead to the new end
+  };
+
   function refreshAll() {
+    if (FM.autoFitDuration) FM.autoFitDuration();   // timeline length always tracks the clips
     FM.inspector.refresh();
     FM.timeline.rebuild();
     updateDropHint();
@@ -384,7 +397,7 @@ window.FM = window.FM || {};
     const dur = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : 5;
     const layer = FM.makeLayer(rec.kind, {
       name: rec.file ? rec.file.name.replace(/\.[^.]+$/, '') : rec.kind,
-      x: P.width / 2, y: P.height / 2, duration: dur,
+      x: P.width / 2, y: P.height / 2, start: first ? 0 : FM.time, duration: dur,   // import AT THE PLAYHEAD (first clip anchors at 0)
     });
     const fit = Math.min(P.width / rec.width, P.height / rec.height);
     layer.transform.scale = (isFinite(fit) && fit > 0) ? fit : 1;
@@ -407,7 +420,7 @@ window.FM = window.FM || {};
 
   FM.addTextLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), duration: Math.min(5, P.duration) });
+    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), start: FM.time, duration: 5 });
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
     refreshAll();
@@ -438,7 +451,7 @@ window.FM = window.FM || {};
     const layer = FM.makeLayer('shape', {
       name: opts.name || (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
       shape: shape || 'rect', x: P.width / 2, y: P.height / 2,
-      shapeW: d, shapeH: d, duration: Math.min(5, P.duration),
+      shapeW: d, shapeH: d, start: FM.time, duration: 5,   // add AT THE PLAYHEAD (was start 0); a fixed 5s clip that extends the comp
       extra: opts.extra,
     });
     FM.scene.layers.unshift(layer);
@@ -463,7 +476,7 @@ window.FM = window.FM || {};
       name: opt.name || 'Drawing', shape: 'path',
       x: minX + w / 2, y: minY + h / 2,
       shapeW: Math.round(w), shapeH: Math.round(h),
-      duration: Math.min(5, P.duration),
+      start: FM.time, duration: 5,   // appears at the playhead
       extra: { points: pts, closed: !!opt.closed },
     });
     if (opt.closed) {

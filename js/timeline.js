@@ -883,17 +883,14 @@ window.FM = window.FM || {};
         if (clipMove) {
           const cm = clipMove; clipMove = null; hideSnap();
           if (cm.moved) {
-            let end = cm.layer.start + cm.layer.duration;
-            (cm.group || []).forEach(g => { end = Math.max(end, g.layer.start + g.layer.duration); });
-            if (end > FM.scene.project.duration) FM.scene.project.duration = end;   // grow comp to fit
+            if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips (grows or shrinks)
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           }
           // else: a plain click already SELECTED the clip on pointerdown — never seek/scroll the timeline.
           return;
         }
         if (trimDrag) {
-          const L = trimDrag.layer, end = L.start + L.duration;
-          if (end > FM.scene.project.duration) FM.scene.project.duration = end;   // grow comp to fit the lengthened clip
+          if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips after a trim
           trimDrag = null; hideSnap();
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           return;

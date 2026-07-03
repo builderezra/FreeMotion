@@ -201,7 +201,7 @@ window.FM = window.FM || {};
       locked: false,
       blendMode: 'normal',
       // timeline placement (seconds)
-      start: 0,
+      start: props.start != null ? props.start : 0,   // creators pass start: FM.time to add at the playhead
       duration: props.duration != null ? props.duration : 5,
       trimStart: 0,
       reversed: false,
