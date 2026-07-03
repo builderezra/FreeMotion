@@ -1320,6 +1320,11 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .addmenu-page { flex: 0 0 100%; scroll-snap-align: start; box-sizing: border-box; }
 .addmenu-page .addmenu-grid { grid-template-columns: repeat(3, 1fr); }
 .addmenu--panel .addmenu-page .addmenu-grid { grid-template-columns: repeat(4, 1fr); }
+/* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like AM */
+.addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(5, 1fr); }
+.addmenu--panel .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
+.addmenu-card--ico { padding: 12px 4px; }
+.addmenu-card--ico .addmenu-ic svg, .addmenu-card--ico .addmenu-ic { width: 34px; height: 34px; }
 .addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
 .addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
 .addmenu-dot.on { background: var(--accent); }

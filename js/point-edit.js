@@ -61,7 +61,8 @@ window.FM = window.FM || {};
 
   function draw() {
     const l = layer(), cv = preview();
-    if (!l || !overlay || !cv) return;
+    if (!l) { FM.pointEdit.stop(); return; }   // layer deleted / project switched mid-edit → clean exit
+    if (!overlay || !cv) return;
     const r = cv.getBoundingClientRect(), wr = overlay.parentElement.getBoundingClientRect();
     overlay.style.left = (r.left - wr.left) + 'px';
     overlay.style.top = (r.top - wr.top) + 'px';

@@ -510,8 +510,9 @@ window.FM = window.FM || {};
   function applyStyle(target, src, cats) {
     const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
     if (cats.color) {
-      if (src.color != null) target.color = src.color;
-      if (src.fill != null) target.fill = src.fill;
+      // clone: fill/color can be KEYFRAME OBJECTS now — pasting onto several layers must not share one
+      if (src.color != null) target.color = clone(src.color);
+      if (src.fill != null) target.fill = clone(src.fill);
       if ('fillMode' in src) target.fillMode = src.fillMode;
       if ('fillOpacity' in src) target.fillOpacity = src.fillOpacity;
       if ('fillImage' in src) { if (src.fillImage) target.fillImage = src.fillImage; else delete target.fillImage; }
@@ -533,7 +534,7 @@ window.FM = window.FM || {};
     if (cats.text && target.type === 'text' && src.type === 'text') {
       ['fontFamily', 'fontSize', 'bold', 'italic', 'align', 'letterSpacing', 'lineHeight', 'textCurve'].forEach(k => { if (k in src) target[k] = src[k]; });
       if ('textAnim' in src) target.textAnim = clone(src.textAnim);
-      if (src.color != null) target.color = src.color;
+      if (src.color != null) target.color = clone(src.color);   // may be a keyframe object
     }
     if (cats.effects) {
       const fx = clone(src.effects) || [];
@@ -656,9 +657,15 @@ window.FM = window.FM || {};
     // Groups composite as a flattened unit whenever they carry a look of their own, so effects,
     // blending/opacity and presets all act on the whole group — plus the door into its own timeline.
     if (layer.type === 'group') return CATEGORIES.filter(c => ['color', 'border', 'blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
+    // Nulls/adjustments never rasterize their own pixels — a fill or border card would be a dead end.
+    if (layer.type === 'null' || layer.type === 'adjustment') return CATEGORIES.filter(c => ['blend', 'transform', 'presets', 'effects'].indexOf(c.key) >= 0);
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
-    if (layer.type === 'video') return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
+    if (layer.type === 'video') {
+      const m = FM.media.get(layer.id);
+      const audioOnly = m && (!m.width || !m.height);   // mp3/wav ride the video path with a 0×0 picture
+      return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && !(audioOnly && (c.key === 'color' || c.key === 'border')));
+    }
     return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
   }
 
@@ -761,7 +768,7 @@ window.FM = window.FM || {};
     if (!layer.fillMode) layer.fillMode = FM.fillModeOf ? FM.fillModeOf(layer) : 'solid';
     if (layer.fillOpacity == null) layer.fillOpacity = 1;
     const isText = layer.type === 'text';
-    const openStroke = layer.type === 'shape' && (layer.shape === 'line' || layer.shape === 'arc' || (layer.shape === 'path' && !layer.closed));
+    const openStroke = layer.type === 'shape' && (layer.shape === 'line' || layer.shape === 'arc' || layer.shape === 'spiral' || (layer.shape === 'path' && !layer.closed));
     let modes;
     if (openStroke) modes = [['solid', 'Colour']];                                   // a line/arc is just its colour
     else if (isText) modes = [['solid', 'Solid'], ['gradient', 'Gradient']];
@@ -1363,7 +1370,7 @@ window.FM = window.FM || {};
           pe.addEventListener('click', () => FM.pointEdit.start(layer.id));
           body.appendChild(pe);
         }
-        const openStroke = (layer.shape === 'line' || layer.shape === 'arc' || (layer.shape === 'path' && !layer.closed));   // stroked, never filled
+        const openStroke = (layer.shape === 'line' || layer.shape === 'arc' || layer.shape === 'spiral' || (layer.shape === 'path' && !layer.closed));   // stroked, never filled
         // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));

@@ -102,14 +102,17 @@ window.FM = window.FM || {};
     { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
 
-  function card(item, cls) {
+  function card(item, cls, iconOnly) {
     var b = document.createElement('button');
     b.className = cls; b.type = 'button'; b.title = item.label;
     var ic = document.createElement('span'); ic.className = 'addmenu-ic';
     ic.innerHTML = item.emoji ? '<span class="add-emoji">' + item.emoji + '</span>' : item.icon;   // trusted literals only (ico()/emoji)
-    var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
-    lb.textContent = item.label;   // element/template names are USER input — textContent, never innerHTML (#r3)
-    b.appendChild(ic); b.appendChild(lb);
+    b.appendChild(ic);
+    if (!iconOnly) {   // shape cards are icon-only (AM) — the name lives in the tooltip
+      var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
+      lb.textContent = item.label;   // element/template names are USER input — textContent, never innerHTML (#r3)
+      b.appendChild(lb);
+    }
     return b;
   }
 
@@ -133,8 +136,9 @@ window.FM = window.FM || {};
         bodyEl.innerHTML = '';
         var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
         var opts = typeof tab.options === 'function' ? tab.options() : (tab.options || []);   // Elements/Templates lists are live
+        var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         function makeCard(o) {
-          var c = card(o, 'addmenu-card');
+          var c = card(o, 'addmenu-card' + (iconOnly ? ' addmenu-card--ico' : ''), iconOnly);
           c.addEventListener('click', function () { o.add(); after(); });
           if (o.elementId) c.addEventListener('contextmenu', function (ev) {   // desktop: right-click removes a saved element
             ev.preventDefault();
@@ -143,11 +147,11 @@ window.FM = window.FM || {};
           return c;
         }
         // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots \u2014 not a vertical scroll.
-        var perPage = variant === 'sheet' ? 9 : 12;   // 3\u00d73 on phone, 4\u00d73 on desktop
+        var perPage = iconOnly ? (variant === 'sheet' ? 15 : 18) : (variant === 'sheet' ? 9 : 12);   // shapes 5\u00d73 / 6\u00d73; others 3\u00d73 / 4\u00d73
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';
-          var grid = document.createElement('div'); grid.className = 'addmenu-grid';
+          var grid = document.createElement('div'); grid.className = 'addmenu-grid' + (iconOnly ? ' addmenu-grid--ico' : '');
           opts.slice(i, i + perPage).forEach(function (o) { grid.appendChild(makeCard(o)); });
           page.appendChild(grid); pager.appendChild(page);
         }
