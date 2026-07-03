@@ -1190,7 +1190,7 @@ input[type=range]::-webkit-slider-thumb {
   .fxb-catview-scroll { background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 18px; flex: 1; }
 }
 /* Add-menu: the shape catalog is tall now — let the sheet body scroll instead of growing */
-.addmenu--sheet .addmenu-body { max-height: min(46vh, 420px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.addmenu--sheet .addmenu-body { overflow: hidden; }
 
 /* ---- Home screen (AM-style project browser) ---- */
 #home-screen { position: fixed; inset: 0; z-index: 200; background: var(--bg, #0b0e14); display: flex; flex-direction: column; }
@@ -1255,3 +1255,27 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .track-row.row-dragging { opacity: .88; z-index: 30; }
 .track-row.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
 .track-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+
+/* ---- Add-menu horizontal paging (AM: swipe sideways) ---- */
+.addmenu-pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.addmenu-pager::-webkit-scrollbar { display: none; }
+.addmenu-page { flex: 0 0 100%; scroll-snap-align: start; box-sizing: border-box; }
+.addmenu-page .addmenu-grid { grid-template-columns: repeat(3, 1fr); }
+.addmenu--panel .addmenu-page .addmenu-grid { grid-template-columns: repeat(4, 1fr); }
+.addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
+.addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
+.addmenu-dot.on { background: var(--accent); }
+
+/* ---- Freehand / Vector drawing overlay + toolbar (v2.39) ---- */
+#draw-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
+body.drawing #select-box { display: none !important; }
+#draw-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 170; display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 14px; background: rgba(10,14,20,.94); border: 1px solid var(--accent); box-shadow: 0 10px 30px rgba(0,0,0,.55); max-width: 94vw; }
+#draw-bar.hidden { display: none; }
+#draw-bar .db-hint { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
+#draw-bar .db-color input, #draw-bar .db-width input { vertical-align: middle; }
+#draw-bar .db-color input { width: 30px; height: 28px; padding: 0; border: none; background: none; cursor: pointer; }
+#draw-bar .db-width { width: 92px; }
+#draw-bar .db-width input { width: 92px; }
+#draw-bar button { padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 12.5px; cursor: pointer; }
+#draw-bar .db-done { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+#draw-bar .db-cancel { color: var(--text-dim); }

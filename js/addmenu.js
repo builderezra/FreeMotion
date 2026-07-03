@@ -40,6 +40,8 @@ window.FM = window.FM || {};
     { key: 'media', label: 'Media', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'), options: [
       { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
       { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
+      { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
+      { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
     ] },
     { key: 'audio', label: 'Audio', icon: ico('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), options: [
       { label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
@@ -65,13 +67,14 @@ window.FM = window.FM || {};
       if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });
       return out;
     } },
+    // AM keeps Freehand Drawing as a top tab; tapping it starts drawing immediately (no sub-grid).
+    { key: 'freehand', label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), instant: function () { FM.startDraw && FM.startDraw('freehand'); } },
   ];
 
-  // QUICK-ADD rail — one tap creates immediately (AM: the side column does NOT open a section).
+  // QUICK-ADD rail — one tap creates immediately (AM: Vector Drawing · Text · ✕).
   var INSTANT = [
+    { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
     { label: 'Text', icon: ico('<path d="M6 5h12M12 5v14M9 19h6"/>'), add: function () { FM.addTextLayer && FM.addTextLayer(); } },
-    { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
-    { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
   ];
 
   function card(item, cls) {
@@ -104,18 +107,37 @@ window.FM = window.FM || {};
       function drawBody() {
         bodyEl.innerHTML = '';
         var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
-        var grid = document.createElement('div'); grid.className = 'addmenu-grid';
-        var opts = typeof tab.options === 'function' ? tab.options() : tab.options;   // Elements/Templates lists are live
-        opts.forEach(function (o) {
+        var opts = typeof tab.options === 'function' ? tab.options() : (tab.options || []);   // Elements/Templates lists are live
+        function makeCard(o) {
           var c = card(o, 'addmenu-card');
           c.addEventListener('click', function () { o.add(); after(); });
           if (o.elementId) c.addEventListener('contextmenu', function (ev) {   // desktop: right-click removes a saved element
             ev.preventDefault();
             if (confirm('Delete element \u201c' + o.label + '\u201d?')) { FM.elements.remove(o.elementId); drawBody(); }
           });
-          grid.appendChild(c);
-        });
-        bodyEl.appendChild(grid);
+          return c;
+        }
+        // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots \u2014 not a vertical scroll.
+        var perPage = variant === 'sheet' ? 9 : 12;   // 3\u00d73 on phone, 4\u00d73 on desktop
+        var pager = document.createElement('div'); pager.className = 'addmenu-pager';
+        for (var i = 0; i < opts.length; i += perPage) {
+          var page = document.createElement('div'); page.className = 'addmenu-page';
+          var grid = document.createElement('div'); grid.className = 'addmenu-grid';
+          opts.slice(i, i + perPage).forEach(function (o) { grid.appendChild(makeCard(o)); });
+          page.appendChild(grid); pager.appendChild(page);
+        }
+        bodyEl.appendChild(pager);
+        var pageCount = Math.max(1, Math.ceil(opts.length / perPage));
+        if (pageCount > 1) {
+          var dots = document.createElement('div'); dots.className = 'addmenu-dots';
+          for (var d = 0; d < pageCount; d++) { var dot = document.createElement('span'); dot.className = 'addmenu-dot' + (d === 0 ? ' on' : ''); dots.appendChild(dot); }
+          bodyEl.appendChild(dots);
+          pager.addEventListener('scroll', function () {
+            var idx = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+            var ds = dots.querySelectorAll('.addmenu-dot');
+            for (var k = 0; k < ds.length; k++) ds[k].classList.toggle('on', k === idx);
+          });
+        }
       }
 
       TABS.forEach(function (t) {
@@ -124,6 +146,7 @@ window.FM = window.FM || {};
         tb.className = 'addmenu-tab' + (t.key === active ? ' active' : '');
         tb.innerHTML = '<span class="addmenu-ic">' + t.icon + '</span><span class="addmenu-lbl">' + t.label + '</span>';
         tb.addEventListener('click', function () {
+          if (t.instant) { t.instant(); after(); return; }   // Freehand Drawing acts immediately, no sub-grid
           active = t.key;
           var all = tabsEl.querySelectorAll('.addmenu-tab');
           for (var i = 0; i < all.length; i++) all[i].classList.remove('active');

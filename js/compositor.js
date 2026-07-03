@@ -1941,7 +1941,14 @@ window.FM = window.FM || {};
       ctx.closePath();
     };
     ctx.beginPath();
-    if (kind === 'ellipse') {
+    if (kind === 'path') {
+      // Freehand / vector drawing: layer.points are [0,1]-normalized within the box.
+      const pts = layer.points || [];
+      if (!pts.length) return layer.closed ? 'fill' : 'stroke';
+      pts.forEach((p, i) => { const q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
+      if (layer.closed) { ctx.closePath(); return 'fill'; }
+      return 'stroke';   // open path (freehand brush) is stroked, never filled
+    } else if (kind === 'ellipse') {
       ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
     } else if (kind === 'line') {
       ctx.moveTo(ox, oy + sh / 2); ctx.lineTo(ox + sw, oy + sh / 2);

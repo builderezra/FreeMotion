@@ -444,6 +444,39 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // Path shape layer from drawn points (freehand brush stroke / vector polygon). projPts are in
+  // project pixels; stored normalized [0,1] inside a box fitted to their bounds so they scale/rotate
+  // like any shape. opt: { closed, name, color, fill, stroke }.
+  FM.addPathLayer = function (projPts, opt) {
+    opt = opt || {};
+    if (!projPts || projPts.length < 2) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    projPts.forEach(p => { if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0]; if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1]; });
+    const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
+    const pts = projPts.map(p => [(p[0] - minX) / w, (p[1] - minY) / h]);
+    const P = FM.scene.project;
+    const layer = FM.makeLayer('shape', {
+      name: opt.name || 'Drawing', shape: 'path',
+      x: minX + w / 2, y: minY + h / 2,
+      shapeW: Math.round(w), shapeH: Math.round(h),
+      duration: Math.min(5, P.duration),
+      extra: { points: pts, closed: !!opt.closed },
+    });
+    if (opt.closed) {
+      layer.fill = opt.fill || '#3a7bd5';
+      layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
+    } else {
+      layer.fill = opt.color || '#ffffff';   // open path is stroked with fill-as-colour (matches 'line')
+      layer.stroke = { enabled: true, width: opt.stroke || 6, color: opt.color || '#ffffff' };
+    }
+    FM.scene.layers.unshift(layer);
+    FM.scene.selectedId = layer.id;
+    FM.scene.selectedIds = [layer.id];
+    refreshAll();
+    if (FM.history) FM.history.commit();
+    return layer;
+  };
+
   // ---- multi-layer align & distribute (relative to the canvas; treats transform.x/y as centre) ----
   function alignTargets() {
     const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
@@ -1026,6 +1059,7 @@ window.FM = window.FM || {};
     FM.timeline.init();
     FM.inspector.init();
     FM.canvasEdit.init();
+    if (FM.drawTools) FM.drawTools.init();   // freehand / vector drawing overlay + toolbar
     refreshAll();
     if (FM.history) FM.history.reset();
     if (FM.storage) FM.storage.load().then(restored => {

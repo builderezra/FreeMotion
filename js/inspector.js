@@ -1168,18 +1168,20 @@ window.FM = window.FM || {};
         const ksel = document.createElement('select');
         [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['triangle', 'Triangle'], ['star', 'Star'], ['heart', 'Heart'], ['plus', 'Plus'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring'], ['arrow', 'Arrow'], ['chevron', 'Chevron'], ['trapezoid', 'Trapezoid'], ['parallelogram', 'Parallelogram']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-        kr.appendChild(ksel); body.appendChild(kr);
-        const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, (layer.shape === 'line' || layer.shape === 'arc') ? 'Color' : 'Fill'));
+        // a drawn path keeps its 'path' kind (not in the dropdown) — swapping kinds would discard its points
+        if (layer.shape !== 'path') { kr.appendChild(ksel); body.appendChild(kr); }
+        const openStroke = (layer.shape === 'line' || layer.shape === 'arc' || (layer.shape === 'path' && !layer.closed));   // stroked, never filled
+        const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, openStroke ? 'Color' : 'Fill'));
         fr.appendChild(colorField(() => layer.fill || '#3a7bd5', v => { layer.fill = v; }));
         body.appendChild(fr);
-        if (layer.shape !== 'line' && layer.shape !== 'arc') gradientControls(layer, body);
+        if (!openStroke) gradientControls(layer, body);
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));
         if (layer.shape === 'rect') body.appendChild(rangeRow('Corner radius', () => layer.cornerRadius || 0, v => { layer.cornerRadius = Math.max(0, v); }, 0, Math.round(Math.min(layer.shapeW, layer.shapeH) / 2), 1));
         if (layer.shape === 'polygon' || layer.shape === 'star') body.appendChild(rangeRow(layer.shape === 'star' ? 'Points' : 'Sides', () => layer.sides || 5, v => { layer.sides = Math.max(3, Math.round(v)); }, 3, 12, 1));
         if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
         const stk = layer.stroke;
-        if (layer.shape === 'line' || layer.shape === 'arc') {
+        if (openStroke) {
           body.appendChild(rangeRow('Line width', () => stk.width, v => { stk.width = Math.max(1, v); }, 1, 60, 1));
         } else {
           body.appendChild(checkRow('Stroke', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
