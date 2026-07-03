@@ -8,3 +8,4 @@ One line per shipped iteration — newest at the bottom. (Started when Ezra went
 - v2.35 — Wiggle/Drift/Orbit/Tiles/Raster-Extrude skip the per-frame full-canvas pixel scan they never used: those effects now cost a fraction of what they did during playback.
 - v2.36 — home-screen project cards show their layer count in the meta line (fills in as each project is next opened/saved).
 - v2.37 — hardened the boot media-cleanup against a race: it now stands down while template/duplicate media writes are in flight and re-verifies every candidate right before deleting, so fast actions at startup can never lose a clip.
+- v2.38 — groups gained Color & Fill (full colour grade) and Border & Shadow (silhouette outline + drop shadow) — property parity with normal layers complete.
