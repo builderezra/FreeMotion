@@ -723,8 +723,10 @@ window.FM = window.FM || {};
     gAngular: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 12 20 4M12 12v-8" stroke-width="1"/></svg>',
   };
   // A shape's solid colour lives on layer.fill; text's on layer.color — one accessor for both.
-  function fillColorGet(layer) { return (layer.type === 'text' ? layer.color : layer.fill) || (layer.type === 'text' ? '#ffffff' : '#3a7bd5'); }
-  function fillColorSet(layer, v) { if (layer.type === 'text') layer.color = v; else layer.fill = v; }
+  // Keyframe-aware: get evaluates at the playhead; set upserts a keyframe when the prop is animated.
+  function fillColorKey(layer) { return layer.type === 'text' ? 'color' : 'fill'; }
+  function fillColorGet(layer) { return FM.evalProp(layer[fillColorKey(layer)], FM.time) || (layer.type === 'text' ? '#ffffff' : '#3a7bd5'); }
+  function fillColorSet(layer, v) { FM.setProp(layer, fillColorKey(layer), v, FM.time); }
   const FILL_SWATCHES = ['#ffffff', '#000000', '#7c4dff', '#8a8f98', '#e53935', '#ff1744', '#ff4dd2', '#ff6e40', '#ffd740', '#00e5c0', '#18c8ff', '#2979ff', '#00c853', '#b0ff57', '#a1887f', '#5d4037'];
 
   // Pick + downscale an image → self-contained data URL on layer.fillImage (keeps localStorage small).
@@ -784,6 +786,20 @@ window.FM = window.FM || {};
     if (mode === 'solid') {
       const head = el('div', 'fill-readout');
       head.appendChild(el('span', 'fill-hex', normHex(fillColorGet(layer)).toUpperCase() + '   ' + Math.round((layer.fillOpacity != null ? layer.fillOpacity : 1) * 100) + '%'));
+      // Keyframe diamond — animate the colour over time (AM). Filled when a keyframe sits at the
+      // playhead; toggling on/off converts static ↔ animated exactly like the transform props.
+      const ckey = fillColorKey(layer);
+      const kfBtn = el('button', 'fill-kf');
+      const paintKf = () => {
+        const p = layer[ckey], anim = FM.isAnimated(p);
+        const at = anim && p.kf.some(k => Math.abs(k.t - FM.time) < 1e-3);
+        kfBtn.textContent = at ? '◆' : '◇';
+        kfBtn.classList.toggle('on', !!anim);
+        kfBtn.title = anim ? (p.kf.length + ' colour keyframe' + (p.kf.length === 1 ? '' : 's') + ' — tap to ' + (at ? 'remove one here' : 'add one here')) : 'Animate colour: add a keyframe at the playhead';
+      };
+      paintKf();
+      kfBtn.addEventListener('click', () => { FM.toggleProp(layer, ckey, FM.time, fillColorGet(layer)); paintKf(); FM.requestRender(); commitH(); if (FM.timeline) FM.timeline.rebuild(); });
+      head.appendChild(kfBtn);
       body.appendChild(head);
       const grid = el('div', 'swatch-grid');
       FILL_SWATCHES.forEach(c => {
@@ -1158,12 +1174,13 @@ window.FM = window.FM || {};
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
       body.appendChild(s);
     } else if (key === 'color') {
-      if (layer.type === 'shape' || layer.type === 'text') {
-        // Shapes & text get AM's fill selector (None / Solid / Gradient / Media) — a solid colour
-        // fills the whole shape solidly; gradients are their own tab, not the default.
-        fillPanel(layer, body);
-      } else {
-        // Media / groups: this panel is a colour GRADE (there's no single "fill" to set).
+      // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
+      // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
+      // content as-is. A solid colour fills flat — gradients are their own tab, never an accident.
+      fillPanel(layer, body);
+      if (layer.type !== 'shape' && layer.type !== 'text' && FM.fillModeOf(layer) === 'none') {
+        // Content is showing → offer the colour GRADE tools underneath (hidden while a fill
+        // override paints the layer, where grading a replaced picture makes no sense).
         body.appendChild(el('div', 'insp-sub-label', 'Color Tune'));
         const cwBox = el('div', 'cw-box'); body.appendChild(cwBox);
         if (FM.colorWheel) FM.colorWheel.mount(cwBox, layer);

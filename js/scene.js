@@ -37,6 +37,14 @@ window.FM = window.FM || {};
   function isAnimated(p) { return p && typeof p === 'object' && Array.isArray(p.kf); }
   FM.isAnimated = isAnimated;
 
+  // Colour keyframes: evalProp lerps '#rrggbb' values channel-wise so fill/colour props animate.
+  function hexRGBk(c) { c = String(c || '#000000').replace('#', ''); if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]; const n = parseInt(c, 16); return isNaN(n) ? [0, 0, 0] : [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function lerpHexKf(a, b, f) {
+    const A = hexRGBk(a), B = hexRGBk(b);
+    const h = i => { const x = Math.max(0, Math.min(255, Math.round(A[i] + (B[i] - A[i]) * f))); return (x < 16 ? '0' : '') + x.toString(16); };
+    return '#' + h(0) + h(1) + h(2);
+  }
+
   // Cubic-bezier easing solver (CSS timing-function style): control points P1=(x1,y1),
   // P2=(x2,y2) with endpoints (0,0)→(1,1). Returns eased y for input progress x.
   function bezierAt(x1, y1, x2, y2, x) {
@@ -56,7 +64,7 @@ window.FM = window.FM || {};
   FM.EASE_PRESETS = { linear: [0, 0, 1, 1], easeIn: [.42, 0, 1, 1], easeOut: [0, 0, .58, 1], easeInOut: [.42, 0, .58, 1], overshoot: [.34, 1.56, .64, 1], anticipate: [.36, 0, .66, -.56] };
 
   function evalProp(p, t) {
-    if (!isAnimated(p)) return (typeof p === 'number') ? p : (p || 0);
+    if (!isAnimated(p)) return (typeof p === 'number' || typeof p === 'string') ? p : (p || 0);
     const kf = p.kf;
     if (!kf.length) return 0;
     // Loop a keyframed property past its last keyframe (AM: cycle repeats, pingpong reverses each pass).
@@ -83,6 +91,7 @@ window.FM = window.FM || {};
         if (b.bez) f = bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);
         else if (EASES[b.e]) f = EASES[b.e](f);
         else if (FM.EASE_PRESETS[b.e]) { const z = FM.EASE_PRESETS[b.e]; f = bezierAt(z[0], z[1], z[2], z[3], f); }
+        if (typeof a.v === 'string' || typeof b.v === 'string') return lerpHexKf(a.v, b.v, f);   // colour keyframes
         return a.v + (b.v - a.v) * f;
       }
     }
@@ -140,6 +149,8 @@ window.FM = window.FM || {};
     const out = [];
     Object.keys(layer.transform).forEach(k => { if (isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
     if (isAnimated(layer.volume)) out.push(layer.volume);   // keyframed audio shows diamonds on the clip too
+    if (isAnimated(layer.fill)) out.push(layer.fill);       // colour keyframes show on the clip
+    if (isAnimated(layer.color)) out.push(layer.color);
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
   };
@@ -154,7 +165,8 @@ window.FM = window.FM || {};
   FM.toggleProp = function (container, key, time, dflt) {
     let p = container[key];
     if (!isAnimated(p)) {
-      const cur = (typeof p === 'number') ? p : (dflt != null ? dflt : 0);
+      // numbers AND strings (colour props like layer.fill) seed from the current static value
+      const cur = (typeof p === 'number' || typeof p === 'string') ? p : (dflt != null ? dflt : 0);
       container[key] = { kf: [{ t: time, v: cur, e: 'easeInOut' }] };
       return true;
     }

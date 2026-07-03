@@ -378,7 +378,10 @@ body {
 .fill-none { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-faint); padding: 32px 0 24px; }
 .fill-none svg { width: 62px; height: 62px; opacity: .45; }
 .fill-none span { font-size: 13px; }
-.fill-readout { font-variant-numeric: tabular-nums; font-size: 14px; letter-spacing: .04em; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 11px; text-align: center; }
+.fill-readout { display: flex; align-items: center; justify-content: center; gap: 10px; font-variant-numeric: tabular-nums; font-size: 14px; letter-spacing: .04em; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; margin-bottom: 11px; text-align: center; }
+.fill-kf { border: 0; background: transparent; color: var(--text-faint); font-size: 17px; line-height: 1; padding: 4px 6px; cursor: pointer; border-radius: 6px; }
+.fill-kf.on { color: var(--accent); }
+.fill-kf:hover { background: var(--panel-2); }
 .swatch-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-bottom: 13px; }
 .swatch-cell { aspect-ratio: 1; border-radius: 7px; border: 1px solid rgba(255,255,255,.09); cursor: pointer; padding: 0; }
 .swatch-cell.on { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }

@@ -69,6 +69,8 @@ window.FM = window.FM || {};
     const slots = [];
     Object.keys(layer.transform).forEach(k => slots.push({ c: layer.transform, k: k }));
     if (FM.isAnimated(layer.volume)) slots.push({ c: layer, k: 'volume' });   // keyframed audio level draws diamonds too
+    if (FM.isAnimated(layer.fill)) slots.push({ c: layer, k: 'fill' });       // colour keyframes delete like any other
+    if (FM.isAnimated(layer.color)) slots.push({ c: layer, k: 'color' });
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
     slots.forEach(({ c, k }) => {
       const p = c[k];

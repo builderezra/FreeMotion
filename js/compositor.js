@@ -348,7 +348,11 @@ window.FM = window.FM || {};
         case 'glow': parts.push('drop-shadow(0 0 ' + v('radius', 12) + 'px ' + (p.color || '#ffffff') + ')'); break;
       }
     }
-    if (layer.colorGrade) {
+    // Skip the colour-grade filter when the FILL system owns the layer's colour (shapes/text, or a
+    // media layer overridden by a solid/gradient/media fill) — a stale hue/sat grade from the old
+    // colour-wheel panel was silently shifting every picked fill colour. Grades still apply to
+    // media/groups showing their own pixels, which is what grading is for.
+    if (layer.colorGrade && !fillOwnsColor(layer)) {
       const cg = layer.colorGrade;
       if (cg.hue) parts.push('hue-rotate(' + cg.hue + 'deg)');
       if (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) parts.push('saturate(' + cg.sat + ')');
@@ -1873,8 +1877,8 @@ window.FM = window.FM || {};
   }
 
   // Two-stop gradient (linear/radial) spanning a box {x,y,w,h} in the current transform space.
-  function buildGradient(ctx, grad, box) {
-    const c0 = grad.c0 || '#ffffff', c1 = grad.c1 || '#000000';
+  function buildGradient(ctx, grad, box, t) {
+    const c0 = FM.evalProp(grad.c0, t || 0) || '#ffffff', c1 = FM.evalProp(grad.c1, t || 0) || '#000000';
     const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
     let g;
     if (grad.type === 'radial') {
@@ -1892,12 +1896,19 @@ window.FM = window.FM || {};
     return g;
   }
   // Effective fill mode: explicit layer.fillMode, else derived from legacy fields so old projects
-  // render byte-identically. One of 'none' | 'solid' | 'gradient' | 'media'.
+  // render byte-identically. One of 'none' | 'solid' | 'gradient' | 'media'. Media/groups default
+  // to 'none' (show their own content) — shapes/text default to 'solid'.
   FM.fillModeOf = function (layer) {
     if (layer.fillMode) return layer.fillMode;
     if (layer.fillGradient && layer.fillGradient.enabled) return 'gradient';
-    return 'solid';
+    return (layer.type === 'shape' || layer.type === 'text') ? 'solid' : 'none';
   };
+  // Does the fill system own this layer's colour right now? (drawn fill replaces/paints the content,
+  // so the legacy colorGrade hue/sat filter must NOT shift the picked colour — WYSIWYG.)
+  function fillOwnsColor(layer) {
+    if (layer.type === 'shape' || layer.type === 'text') return true;
+    return layer.fillMode != null && layer.fillMode !== 'none';
+  }
   FM.layerHasGradient = function (layer) { return FM.fillModeOf(layer) === 'gradient' && !!layer.fillGradient; };
   // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
   // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
@@ -1912,6 +1923,29 @@ window.FM = window.FM || {};
       rec.img.src = src;
     }
     return rec.ready ? rec.img : null;
+  }
+  // Paint the CURRENT path with the layer's fill (solid / gradient / media), honouring fillOpacity
+  // and colour keyframes. Shared by the shape branch and the media fill-override so a rect, a video
+  // and a group silhouette all colour identically. Assumes the caller traced the path.
+  function paintFillInPath(ctx, layer, t, ox, oy, w, h) {
+    const fmode = FM.fillModeOf(layer);
+    if (fmode === 'none') return;
+    const prevA = ctx.globalAlpha;
+    ctx.globalAlpha = prevA * (layer.fillOpacity != null ? clamp01(layer.fillOpacity) : 1);
+    if (fmode === 'media') {
+      const fimg = getFillImage(layer);
+      if (fimg && fimg.width) {
+        ctx.save(); ctx.clip();                                        // clip to the traced outline
+        const sc = Math.max(w / fimg.width, h / fimg.height);          // cover-fit inside the box
+        const dw = fimg.width * sc, dh = fimg.height * sc;
+        try { ctx.drawImage(fimg, ox + (w - dw) / 2, oy + (h - dh) / 2, dw, dh); } catch (e) {}
+        ctx.restore();
+      } else { ctx.fillStyle = FM.evalProp(layer.fill, t) || '#3a7bd5'; ctx.fill(); }   // still decoding → placeholder
+    } else {
+      ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: ox, y: oy, w: w, h: h }, t) : (FM.evalProp(layer.fill, t) || '#3a7bd5');
+      ctx.fill();
+    }
+    ctx.globalAlpha = prevA;
   }
 
   // Apply a layer's full GEOMETRIC transform to ctx: parent chain → position (+ Z perspective shift
@@ -2080,7 +2114,7 @@ window.FM = window.FM || {};
       }
       try { ctx.drawImage(src, 0, 0); } catch (e) {}
     } else if (layer.type === 'text') {
-      ctx.fillStyle = layer.color || '#fff';
+      ctx.fillStyle = FM.evalProp(layer.color, t) || '#fff';   // keyframable text colour
       ctx.textAlign = layer.align || 'center';
       ctx.textBaseline = 'middle';
       ctx.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
@@ -2121,7 +2155,7 @@ window.FM = window.FM || {};
           const fs = layer.fontSize || 96, align = layer.align || 'center';
           let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, ctx.measureText(l).width); });
           const bx = align === 'center' ? -maxW / 2 : align === 'right' ? -maxW : 0;
-          ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(total + fs) / 2, w: maxW, h: total + fs });
+          ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(total + fs) / 2, w: maxW, h: total + fs }, t);
         }
         const curve = layer.textCurve || 0;
         if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke);   // text on a curve
@@ -2146,34 +2180,27 @@ window.FM = window.FM || {};
       const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
       if (mode === 'stroke') {   // open kinds (line / arc) are stroked, never filled — Color & Fill IS the line colour
         ctx.lineWidth = (stk && stk.width) ? stk.width : 8;
-        ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (layer.fill || '#ffffff');
+        ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (FM.evalProp(layer.fill, t) || '#ffffff');
         ctx.lineCap = 'round'; ctx.stroke();
       } else {
-        const fmode = FM.fillModeOf(layer);
-        if (fmode !== 'none') {
-          const prevA = ctx.globalAlpha;
-          ctx.globalAlpha = prevA * (layer.fillOpacity != null ? clamp01(layer.fillOpacity) : 1);
-          if (fmode === 'media') {
-            const fimg = getFillImage(layer);
-            if (fimg && fimg.width) {
-              ctx.save(); ctx.clip();                                        // clip to the shape outline
-              const sc = Math.max(sw / fimg.width, sh / fimg.height);        // cover-fit inside the box
-              const dw = fimg.width * sc, dh = fimg.height * sc;
-              try { ctx.drawImage(fimg, ox + (sw - dw) / 2, oy + (sh - dh) / 2, dw, dh); } catch (e) {}
-              ctx.restore();
-            } else { ctx.fillStyle = layer.fill || '#3a7bd5'; ctx.fill(); }   // still decoding → placeholder
-          } else {
-            ctx.fillStyle = (fmode === 'gradient') ? buildGradient(ctx, layer.fillGradient, { x: ox, y: oy, w: sw, h: sh }) : (layer.fill || '#3a7bd5');
-            ctx.fill();
-          }
-          ctx.globalAlpha = prevA;
-        }
+        paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
         if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }
       }
     } else {
       const m = FM.media.get(layer.id);
       if (m && m.el) {
         const w = m.width, h = m.height;
+        // Fill OVERRIDE (AM): a solid/gradient/media fill on a video or image layer fully replaces
+        // its pixels with that fill over the clip's bounds. 'media' with no picture chosen yet keeps
+        // showing the original clip, and audio-only clips (0×0) can't be filled.
+        const fmode = FM.fillModeOf(layer);
+        if (fmode !== 'none' && !(fmode === 'media' && !layer.fillImage) && w > 0 && h > 0) {
+          const fx0 = -w * tr.anchorX, fy0 = -h * tr.anchorY;
+          ctx.beginPath(); ctx.rect(fx0, fy0, w, h);
+          paintFillInPath(ctx, layer, t, fx0, fy0, w, h);
+          ctx.restore();
+          return;
+        }
         let src = null;
         // Render from the pre-decoded frame cache: reversed clips always; forward clips when
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
@@ -2343,6 +2370,7 @@ window.FM = window.FM || {};
   // group exactly like on a single layer. Plain transform-only groups keep the cheap per-member path.
   function groupNeedsUnit(g, t) {
     if (g.maskGroup) return true;
+    if (g.fillMode && g.fillMode !== 'none') return true;   // fill recolours the flattened silhouette
     if (g.effects && g.effects.some(e => e.enabled !== false)) return true;
     if (g.blendMode && g.blendMode !== 'normal') return true;
     if (g.shadow && g.shadow.enabled) return true;
@@ -2405,6 +2433,16 @@ window.FM = window.FM || {};
     // effects/opacity/blend/shadow — the entire effect pipeline (CSS filters, pixel, warp, canvas/3D)
     // then applies to the group exactly as it would to a single layer.
     const g = u.group;
+    // Group FILL: recolour the flattened silhouette (source-atop) with the group's solid/gradient/
+    // media fill — same behaviour as a fill on a single layer, applied to the whole unit.
+    const gFill = FM.fillModeOf(g);
+    if (gFill !== 'none' && !(gFill === 'media' && !g.fillImage)) {
+      a.save();
+      a.globalCompositeOperation = 'source-atop';   // paintFillInPath handles fillOpacity itself
+      a.beginPath(); a.rect(0, 0, P.width, P.height);
+      paintFillInPath(a, g, t, 0, 0, P.width, P.height);
+      a.restore();
+    }
     _mgA._fmGen = ++_gen;   // unit pixels change every frame — key downstream memos (gradeCanvas) off a generation
     const tmp = FM.makeLayer('_flat', { name: g.name, x: 0, y: 0 });
     tmp._canvas = _mgA;
@@ -2416,7 +2454,7 @@ window.FM = window.FM || {};
     }
     tmp.blendMode = g.blendMode || 'normal';
     if (g.shadow) tmp.shadow = g.shadow;
-    if (g.colorGrade) tmp.colorGrade = g.colorGrade;
+    if (g.colorGrade && gFill === 'none') tmp.colorGrade = g.colorGrade;   // grade never shifts a picked fill colour
     tmp.transform.anchorX = 0; tmp.transform.anchorY = 0;
     tmp.transform.opacity = (g.transform && g.transform.opacity != null) ? g.transform.opacity : 1;
     drawLayer(ctx, tmp, t, scene);
@@ -2558,9 +2596,9 @@ window.FM = window.FM || {};
     if (layer.type === 'shape') {
       const pad = 6, iw = W - 2 * pad, ih = H - 2 * pad;
       const mode = FM.traceShapePath(ctx, layer, pad, pad, iw, ih);
-      if (mode === 'stroke') { ctx.strokeStyle = layer.fill || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
+      if (mode === 'stroke') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
       const fmode = FM.fillModeOf(layer);
-      if (fmode === 'none') { ctx.strokeStyle = layer.fill || '#8b9bb4'; ctx.lineWidth = 2; ctx.stroke(); return; }
+      if (fmode === 'none') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#8b9bb4'; ctx.lineWidth = 2; ctx.stroke(); return; }
       if (fmode === 'media') {
         const fimg = getFillImage(layer);
         if (fimg && fimg.width) {
@@ -2570,7 +2608,7 @@ window.FM = window.FM || {};
           ctx.restore(); return;
         }
       }
-      ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: pad, y: pad, w: iw, h: ih }) : (layer.fill || '#3a7bd5');
+      ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: pad, y: pad, w: iw, h: ih }, FM.time || 0) : (FM.evalProp(layer.fill, FM.time || 0) || '#3a7bd5');
       ctx.fill();
       return;
     }

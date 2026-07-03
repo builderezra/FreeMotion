@@ -452,17 +452,25 @@ window.FM = window.FM || {};
 
   // Vector shape layer (any FM.traceShapePath kind, fill + stroke) — first-class graphics.
   // opts: { name, extra } — extra props (e.g. { sides: 6 } for a hexagon) land on the layer.
+  // Natural default aspect (w×h multipliers) per shape kind — a Rectangle spawns landscape, an
+  // arrow/line elongated, a semicircle as half a CIRCLE… instead of everything being an identical square.
+  const SHAPE_ASPECT = {
+    rect: [1.5, 1], line: [1.6, 0.4], arrow: [1.6, 0.8], semicircle: [1.3, 0.65],
+    trapezoid: [1.4, 0.9], parallelogram: [1.5, 0.9],
+  };
   FM.addShapeLayer = function (shape, opts) {
     opts = opts || {};
     const P = FM.scene.project;
-    // SQUARE default box sized off the SHORTER side — so a shape is identical in every project
-    // format (a circle stays a circle in 9:16 / 16:9 / 1:1, not a stretched oval). Was width/3 ×
-    // height/3, which inherited the canvas aspect ratio and distorted every shape.
+    // Base size off the SHORTER project side so a shape is IDENTICAL in every format (9:16 / 16:9 /
+    // 1:1 — never stretched by the canvas aspect), then apply the shape's own natural aspect so it
+    // actually looks like what it's called (a circle stays a circle, a rectangle isn't a square).
     const d = Math.round(Math.min(P.width, P.height) / 3);
+    const asp = SHAPE_ASPECT[shape || 'rect'] || [1, 1];
     const layer = FM.makeLayer('shape', {
       name: opts.name || (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
       shape: shape || 'rect', x: P.width / 2, y: P.height / 2,
-      shapeW: d, shapeH: d, start: FM.time, duration: 5,   // add AT THE PLAYHEAD (was start 0); a fixed 5s clip that extends the comp
+      shapeW: Math.round(d * asp[0]), shapeH: Math.round(d * asp[1]),
+      start: FM.time, duration: 5,   // add AT THE PLAYHEAD (was start 0); a fixed 5s clip that extends the comp
       extra: opts.extra,
     });
     FM.scene.layers.unshift(layer);
