@@ -211,7 +211,7 @@ window.FM = window.FM || {};
       const tr = layer.transform || {};
       const data = {
         effects: clone(layer.effects || []),
-        fill: layer.fill, fillGradient: clone(layer.fillGradient), stroke: clone(layer.stroke),
+        fill: layer.fill, fillMode: layer.fillMode, fillOpacity: layer.fillOpacity, fillImage: layer.fillImage, fillGradient: clone(layer.fillGradient), stroke: clone(layer.stroke),
         shadow: clone(layer.shadow), blendMode: layer.blendMode, colorGrade: clone(layer.colorGrade),
         cornerRadius: layer.cornerRadius,
         transform: {
@@ -229,6 +229,9 @@ window.FM = window.FM || {};
       const d = p.data;
       layer.effects = clone(d.effects) || [];
       if (d.fill != null && layer.type === 'shape') layer.fill = d.fill;
+      if (d.fillMode != null && (layer.type === 'shape' || layer.type === 'text')) layer.fillMode = d.fillMode;
+      if (d.fillOpacity != null) layer.fillOpacity = d.fillOpacity;
+      if (d.fillImage !== undefined && layer.type === 'shape') { if (d.fillImage) layer.fillImage = d.fillImage; else delete layer.fillImage; }
       if (d.fillGradient !== undefined && (layer.type === 'shape' || layer.type === 'text')) layer.fillGradient = clone(d.fillGradient);
       if (d.stroke && (layer.type === 'shape' || layer.type === 'text')) layer.stroke = clone(d.stroke);
       if (d.shadow) layer.shadow = clone(d.shadow);
@@ -509,6 +512,9 @@ window.FM = window.FM || {};
     if (cats.color) {
       if (src.color != null) target.color = src.color;
       if (src.fill != null) target.fill = src.fill;
+      if ('fillMode' in src) target.fillMode = src.fillMode;
+      if ('fillOpacity' in src) target.fillOpacity = src.fillOpacity;
+      if ('fillImage' in src) { if (src.fillImage) target.fillImage = src.fillImage; else delete target.fillImage; }
       if ('fillGradient' in src) target.fillGradient = clone(src.fillGradient);
       if ('colorGrade' in src) target.colorGrade = clone(src.colorGrade);
     }
@@ -704,6 +710,138 @@ window.FM = window.FM || {};
       body.appendChild(r);
     });
   }
+
+  // ===== Color & Fill — Alight Motion's None / Solid / Gradient / Media selector =====
+  const FILL_ICO = {
+    none: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M6.4 6.4l11.2 11.2"/></svg>',
+    solid: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2c2.9 3.8 5.8 6.3 5.8 9.8a5.8 5.8 0 0 1-11.6 0c0-3.5 2.9-6 5.8-9.8z"/></svg>',
+    gradient: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M20 6.5 6.5 20" fill="none"/><path d="M20 4v16H4z" fill="currentColor" stroke="none" opacity=".5"/></svg>',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M12 9.1l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2 1.1.4-2.3L8.7 11.5l2.3-.3z" fill="currentColor" stroke="none"/></svg>',
+    noneBig: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+    gLinear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="7" width="16" height="10" rx="2"/><path d="M9 7v10M14 7v10" stroke-width="1" opacity=".75"/></svg>',
+    gRadial: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="12" cy="12" r="4"/></svg>',
+    gAngular: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 12 20 4M12 12v-8" stroke-width="1"/></svg>',
+  };
+  // A shape's solid colour lives on layer.fill; text's on layer.color — one accessor for both.
+  function fillColorGet(layer) { return (layer.type === 'text' ? layer.color : layer.fill) || (layer.type === 'text' ? '#ffffff' : '#3a7bd5'); }
+  function fillColorSet(layer, v) { if (layer.type === 'text') layer.color = v; else layer.fill = v; }
+  const FILL_SWATCHES = ['#ffffff', '#000000', '#7c4dff', '#8a8f98', '#e53935', '#ff1744', '#ff4dd2', '#ff6e40', '#ffd740', '#00e5c0', '#18c8ff', '#2979ff', '#00c853', '#b0ff57', '#a1887f', '#5d4037'];
+
+  // Pick + downscale an image → self-contained data URL on layer.fillImage (keeps localStorage small).
+  function pickFillImage(layer) {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.addEventListener('change', () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const img = new Image();
+      img.onload = () => {
+        const max = 1024, sc = Math.min(1, max / Math.max(img.width, img.height));
+        const cw = Math.max(1, Math.round(img.width * sc)), ch = Math.max(1, Math.round(img.height * sc));
+        const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+        cv.getContext('2d').drawImage(img, 0, 0, cw, ch);
+        try { layer.fillImage = cv.toDataURL('image/jpeg', 0.85); } catch (e) { if (FM.toast) FM.toast('Could not read image'); return; }
+        layer.fillMode = 'media';
+        try { URL.revokeObjectURL(img.src); } catch (e) {}
+        FM.requestRender(); FM.inspector.refresh(); commitH();
+      };
+      img.onerror = () => { if (FM.toast) FM.toast('Could not load image'); };
+      img.src = URL.createObjectURL(f);
+    });
+    inp.click();
+  }
+
+  function fillPanel(layer, body) {
+    if (!layer.fillMode) layer.fillMode = FM.fillModeOf ? FM.fillModeOf(layer) : 'solid';
+    if (layer.fillOpacity == null) layer.fillOpacity = 1;
+    const isText = layer.type === 'text';
+    const openStroke = layer.type === 'shape' && (layer.shape === 'line' || layer.shape === 'arc' || (layer.shape === 'path' && !layer.closed));
+    let modes;
+    if (openStroke) modes = [['solid', 'Colour']];                                   // a line/arc is just its colour
+    else if (isText) modes = [['solid', 'Solid'], ['gradient', 'Gradient']];
+    else modes = [['none', 'None'], ['solid', 'Solid'], ['gradient', 'Gradient'], ['media', 'Media']];
+    if (!modes.some(m => m[0] === layer.fillMode)) layer.fillMode = 'solid';
+
+    const tabs = el('div', 'fill-tabs');
+    modes.forEach(m => {
+      const b = el('button', 'fill-tab' + (layer.fillMode === m[0] ? ' on' : ''));
+      b.innerHTML = FILL_ICO[m[0]]; b.title = m[1];
+      b.addEventListener('click', () => {
+        layer.fillMode = m[0];
+        if (m[0] === 'gradient') { if (!layer.fillGradient) layer.fillGradient = { enabled: true, type: 'linear', angle: 90, c0: fillColorGet(layer), c1: '#0a0c10' }; layer.fillGradient.enabled = true; }
+        else if (layer.fillGradient) layer.fillGradient.enabled = false;   // keep legacy renderers in sync with the tab
+        FM.requestRender(); FM.inspector.refresh(); commitH();
+      });
+      tabs.appendChild(b);
+    });
+    body.appendChild(tabs);
+    const opacityRow = () => rangeRow('Opacity', () => Math.round((layer.fillOpacity != null ? layer.fillOpacity : 1) * 100), v => { layer.fillOpacity = Math.max(0, Math.min(1, v / 100)); const s = body.querySelector('.fill-hex'); if (s) s.textContent = normHex(fillColorGet(layer)).toUpperCase() + '   ' + Math.round(layer.fillOpacity * 100) + '%'; }, 0, 100, 1);
+
+    const mode = layer.fillMode;
+    if (mode === 'none') {
+      const n = el('div', 'fill-none'); n.innerHTML = FILL_ICO.noneBig + '<span>No fill</span>';
+      body.appendChild(n);
+      return;
+    }
+    if (mode === 'solid') {
+      const head = el('div', 'fill-readout');
+      head.appendChild(el('span', 'fill-hex', normHex(fillColorGet(layer)).toUpperCase() + '   ' + Math.round((layer.fillOpacity != null ? layer.fillOpacity : 1) * 100) + '%'));
+      body.appendChild(head);
+      const grid = el('div', 'swatch-grid');
+      FILL_SWATCHES.forEach(c => {
+        const cell = el('button', 'swatch-cell' + (normHex(fillColorGet(layer)) === normHex(c) ? ' on' : ''));
+        cell.style.background = c; cell.title = c;
+        cell.addEventListener('click', () => { fillColorSet(layer, normHex(c)); addRecentColor(c); FM.requestRender(); FM.inspector.refresh(); commitH(); });
+        grid.appendChild(cell);
+      });
+      body.appendChild(grid);
+      const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, 'Custom'));
+      cr.appendChild(colorField(() => fillColorGet(layer), v => { fillColorSet(layer, v); const s = body.querySelector('.fill-hex'); if (s) s.textContent = normHex(v).toUpperCase() + '   ' + Math.round((layer.fillOpacity != null ? layer.fillOpacity : 1) * 100) + '%'; }));
+      body.appendChild(cr);
+      body.appendChild(opacityRow());
+      return;
+    }
+    if (mode === 'gradient') {
+      if (!layer.fillGradient) layer.fillGradient = { enabled: true, type: 'linear', angle: 90, c0: fillColorGet(layer), c1: '#0a0c10' };
+      const g = layer.fillGradient; g.enabled = true;
+      const prev = el('div', 'grad-preview');
+      const paintPrev = () => {
+        const c0 = g.c0 || '#ffffff', c1 = g.c1 || '#000000', a = g.angle || 0;
+        prev.style.background = g.type === 'radial' ? ('radial-gradient(circle at 50% 50%, ' + c0 + ', ' + c1 + ')')
+          : g.type === 'angular' ? ('conic-gradient(from ' + a + 'deg at 50% 50%, ' + c0 + ', ' + c1 + ', ' + c0 + ')')
+            : ('linear-gradient(' + (a + 90) + 'deg, ' + c0 + ', ' + c1 + ')');
+      };
+      paintPrev(); body.appendChild(prev);
+      const types = el('div', 'grad-types');
+      [['linear', 'Linear', FILL_ICO.gLinear], ['radial', 'Radial', FILL_ICO.gRadial], ['angular', 'Angular', FILL_ICO.gAngular]].forEach(tt => {
+        const b = el('button', 'grad-type' + (g.type === tt[0] ? ' on' : '')); b.innerHTML = tt[2]; b.title = tt[1];
+        b.addEventListener('click', () => { g.type = tt[0]; FM.requestRender(); FM.inspector.refresh(); commitH(); });
+        types.appendChild(b);
+      });
+      body.appendChild(types);
+      [['Colour 1', 'c0'], ['Colour 2', 'c1']].forEach(pair => {
+        const r = el('div', 'prop-row'); r.appendChild(el('label', null, pair[0]));
+        r.appendChild(colorField(() => g[pair[1]] || '#ffffff', v => { g[pair[1]] = v; paintPrev(); }));
+        body.appendChild(r);
+      });
+      if (g.type !== 'radial') body.appendChild(rangeRow('Angle', () => g.angle || 0, v => { g.angle = v; paintPrev(); }, 0, 360, 1));
+      body.appendChild(opacityRow());
+      return;
+    }
+    if (mode === 'media') {
+      if (layer.fillImage) { const prev = el('div', 'fill-media-prev'); prev.style.backgroundImage = 'url(' + layer.fillImage + ')'; body.appendChild(prev); }
+      const pick = el('button', 'btn fill-media-pick', layer.fillImage ? 'Replace image' : 'Select image');
+      pick.addEventListener('click', () => pickFillImage(layer));
+      body.appendChild(pick);
+      if (layer.fillImage) {
+        const rm = el('button', 'btn fill-media-rm', 'Remove image');
+        rm.addEventListener('click', () => { delete layer.fillImage; layer.fillMode = 'solid'; FM.requestRender(); FM.inspector.refresh(); commitH(); });
+        body.appendChild(rm);
+        body.appendChild(opacityRow());
+      }
+      body.appendChild(el('div', 'insp-hint', 'The picture fills the shape — cover-fit and clipped to its outline.'));
+      return;
+    }
+  }
+  FM._fillPanel = fillPanel;
 
   // ===== Move & Transform — Alight Motion's mode-rail editor (Move / Rotate / Scale / Skew) =====
   const MT_ICONS = {
@@ -1020,21 +1158,23 @@ window.FM = window.FM || {};
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
       body.appendChild(s);
     } else if (key === 'color') {
-      if (layer.type === 'text') {
-        const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, 'Text color'));
-        cr.appendChild(colorField(() => layer.color || '#ffffff', v => { layer.color = v; }));
-        body.appendChild(cr);
+      if (layer.type === 'shape' || layer.type === 'text') {
+        // Shapes & text get AM's fill selector (None / Solid / Gradient / Media) — a solid colour
+        // fills the whole shape solidly; gradients are their own tab, not the default.
+        fillPanel(layer, body);
+      } else {
+        // Media / groups: this panel is a colour GRADE (there's no single "fill" to set).
+        body.appendChild(el('div', 'insp-sub-label', 'Color Tune'));
+        const cwBox = el('div', 'cw-box'); body.appendChild(cwBox);
+        if (FM.colorWheel) FM.colorWheel.mount(cwBox, layer);
+        if (!layer.colorGrade) layer.colorGrade = { hue: 0, sat: 1 };
+        const cg = layer.colorGrade;
+        if (cg.lift == null) cg.lift = 0; if (cg.gamma == null) cg.gamma = 1; if (cg.gain == null) cg.gain = 1;
+        body.appendChild(el('div', 'insp-sub-label', 'Grade (lift / gamma / gain)'));
+        body.appendChild(rangeRow('Lift', () => cg.lift, v => { cg.lift = v; }, -0.3, 0.3, 0.01));
+        body.appendChild(rangeRow('Gamma', () => cg.gamma, v => { cg.gamma = v; }, 0.3, 3, 0.05));
+        body.appendChild(rangeRow('Gain', () => cg.gain, v => { cg.gain = v; }, 0, 3, 0.02));
       }
-      body.appendChild(el('div', 'insp-sub-label', 'Color Tune'));
-      const cwBox = el('div', 'cw-box'); body.appendChild(cwBox);
-      if (FM.colorWheel) FM.colorWheel.mount(cwBox, layer);
-      if (!layer.colorGrade) layer.colorGrade = { hue: 0, sat: 1 };
-      const cg = layer.colorGrade;
-      if (cg.lift == null) cg.lift = 0; if (cg.gamma == null) cg.gamma = 1; if (cg.gain == null) cg.gain = 1;
-      body.appendChild(el('div', 'insp-sub-label', 'Grade (lift / gamma / gain)'));
-      body.appendChild(rangeRow('Lift', () => cg.lift, v => { cg.lift = v; }, -0.3, 0.3, 0.01));
-      body.appendChild(rangeRow('Gamma', () => cg.gamma, v => { cg.gamma = v; }, 0.3, 3, 0.05));
-      body.appendChild(rangeRow('Gain', () => cg.gain, v => { cg.gain = v; }, 0, 3, 0.02));
     } else if (key === 'border') {
       if (layer.type === 'group') {   // border = outline traced around the group's composited silhouette
         if (!layer.stroke) layer.stroke = { enabled: false, width: 6, color: '#ffffff' };
@@ -1116,7 +1256,7 @@ window.FM = window.FM || {};
           sr.appendChild(colorField(() => stk.color || '#000000', v => { stk.color = v; }));
           body.appendChild(sr);
         }
-        gradientControls(layer, body);
+        // Text fill (solid / gradient) now lives in "Color & Fill" — Edit Text is content + outline + animation.
         if (!layer.textAnim) layer.textAnim = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
         const an = layer.textAnim;
         const ar2 = el('div', 'prop-row'); ar2.appendChild(el('label', null, 'Animate'));
@@ -1154,10 +1294,7 @@ window.FM = window.FM || {};
         // a drawn path keeps its 'path' kind (not in the dropdown) — swapping kinds would discard its points
         if (layer.shape !== 'path') { kr.appendChild(ksel); body.appendChild(kr); }
         const openStroke = (layer.shape === 'line' || layer.shape === 'arc' || (layer.shape === 'path' && !layer.closed));   // stroked, never filled
-        const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, openStroke ? 'Color' : 'Fill'));
-        fr.appendChild(colorField(() => layer.fill || '#3a7bd5', v => { layer.fill = v; }));
-        body.appendChild(fr);
-        if (!openStroke) gradientControls(layer, body);
+        // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));
         if (layer.shape === 'rect') body.appendChild(rangeRow('Corner radius', () => layer.cornerRadius || 0, v => { layer.cornerRadius = Math.max(0, v); }, 0, Math.round(Math.min(layer.shapeW, layer.shapeH) / 2), 1));

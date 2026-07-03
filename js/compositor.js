@@ -1879,6 +1879,10 @@ window.FM = window.FM || {};
     let g;
     if (grad.type === 'radial') {
       g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, Math.hypot(box.w, box.h) / 2));
+    } else if (grad.type === 'angular' && ctx.createConicGradient) {
+      g = ctx.createConicGradient((grad.angle || 0) * Math.PI / 180, cx, cy);
+      g.addColorStop(0, c0); g.addColorStop(0.5, c1); g.addColorStop(1, c0);   // seamless wrap around the sweep
+      return g;
     } else {
       const ang = (grad.angle || 0) * Math.PI / 180, dx = Math.cos(ang), dy = Math.sin(ang);
       const half = (Math.abs(dx) * box.w + Math.abs(dy) * box.h) / 2 || 1;
@@ -1887,7 +1891,28 @@ window.FM = window.FM || {};
     g.addColorStop(0, c0); g.addColorStop(1, c1);
     return g;
   }
-  FM.layerHasGradient = function (layer) { return layer.fillGradient && layer.fillGradient.enabled; };
+  // Effective fill mode: explicit layer.fillMode, else derived from legacy fields so old projects
+  // render byte-identically. One of 'none' | 'solid' | 'gradient' | 'media'.
+  FM.fillModeOf = function (layer) {
+    if (layer.fillMode) return layer.fillMode;
+    if (layer.fillGradient && layer.fillGradient.enabled) return 'gradient';
+    return 'solid';
+  };
+  FM.layerHasGradient = function (layer) { return FM.fillModeOf(layer) === 'gradient' && !!layer.fillGradient; };
+  // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
+  // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
+  const _fillImg = {};
+  function getFillImage(layer) {
+    const src = layer.fillImage;
+    if (!src) return null;
+    let rec = _fillImg[layer.id];
+    if (!rec || rec.src !== src) {
+      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false };
+      rec.img.onload = () => { rec.ready = true; FM.requestRender(); };
+      rec.img.src = src;
+    }
+    return rec.ready ? rec.img : null;
+  }
 
   // Apply a layer's full GEOMETRIC transform to ctx: parent chain → position (+ Z perspective shift
   // & wiggle) → rotation (+ parent rot mode) → non-uniform scale (× Z pscale) → skew. Factored out so
@@ -2119,13 +2144,30 @@ window.FM = window.FM || {};
       const ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;   // top-left of the shape box (anchor-relative)
       const stk = layer.stroke;
       const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
-      if (mode === 'stroke') {   // open kinds (line / arc) are stroked, never filled
+      if (mode === 'stroke') {   // open kinds (line / arc) are stroked, never filled — Color & Fill IS the line colour
         ctx.lineWidth = (stk && stk.width) ? stk.width : 8;
         ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (layer.fill || '#ffffff');
         ctx.lineCap = 'round'; ctx.stroke();
       } else {
-        ctx.fillStyle = FM.layerHasGradient(layer) ? buildGradient(ctx, layer.fillGradient, { x: ox, y: oy, w: sw, h: sh }) : (layer.fill || '#3a7bd5');
-        ctx.fill();
+        const fmode = FM.fillModeOf(layer);
+        if (fmode !== 'none') {
+          const prevA = ctx.globalAlpha;
+          ctx.globalAlpha = prevA * (layer.fillOpacity != null ? clamp01(layer.fillOpacity) : 1);
+          if (fmode === 'media') {
+            const fimg = getFillImage(layer);
+            if (fimg && fimg.width) {
+              ctx.save(); ctx.clip();                                        // clip to the shape outline
+              const sc = Math.max(sw / fimg.width, sh / fimg.height);        // cover-fit inside the box
+              const dw = fimg.width * sc, dh = fimg.height * sc;
+              try { ctx.drawImage(fimg, ox + (sw - dw) / 2, oy + (sh - dh) / 2, dw, dh); } catch (e) {}
+              ctx.restore();
+            } else { ctx.fillStyle = layer.fill || '#3a7bd5'; ctx.fill(); }   // still decoding → placeholder
+          } else {
+            ctx.fillStyle = (fmode === 'gradient') ? buildGradient(ctx, layer.fillGradient, { x: ox, y: oy, w: sw, h: sh }) : (layer.fill || '#3a7bd5');
+            ctx.fill();
+          }
+          ctx.globalAlpha = prevA;
+        }
         if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }
       }
     } else {
@@ -2514,11 +2556,22 @@ window.FM = window.FM || {};
       return;
     }
     if (layer.type === 'shape') {
-      ctx.fillStyle = layer.fill || '#3a7bd5';
-      const pad = 6;
-      const mode = FM.traceShapePath(ctx, layer, pad, pad, W - 2 * pad, H - 2 * pad);
-      if (mode === 'stroke') { ctx.strokeStyle = layer.fill || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); }
-      else ctx.fill();
+      const pad = 6, iw = W - 2 * pad, ih = H - 2 * pad;
+      const mode = FM.traceShapePath(ctx, layer, pad, pad, iw, ih);
+      if (mode === 'stroke') { ctx.strokeStyle = layer.fill || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
+      const fmode = FM.fillModeOf(layer);
+      if (fmode === 'none') { ctx.strokeStyle = layer.fill || '#8b9bb4'; ctx.lineWidth = 2; ctx.stroke(); return; }
+      if (fmode === 'media') {
+        const fimg = getFillImage(layer);
+        if (fimg && fimg.width) {
+          ctx.save(); ctx.clip();
+          const sc = Math.max(iw / fimg.width, ih / fimg.height), dw = fimg.width * sc, dh = fimg.height * sc;
+          try { ctx.drawImage(fimg, pad + (iw - dw) / 2, pad + (ih - dh) / 2, dw, dh); } catch (e) {}
+          ctx.restore(); return;
+        }
+      }
+      ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: pad, y: pad, w: iw, h: ih }) : (layer.fill || '#3a7bd5');
+      ctx.fill();
       return;
     }
     const m = FM.media.get(layer.id);
