@@ -1150,7 +1150,10 @@ window.FM = window.FM || {};
       const r = moreBtn.getBoundingClientRect();
       const rates = [0.25, 0.5, 1, 2, 4], cur = FM.previewRate || 1;
       const nextRate = rates[(rates.indexOf(cur) + 1) % rates.length];
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
+      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      const items = [];
+      if (sel && sel.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(sel.id) }, { sep: true });
+      items.push(
         { label: 'Canvas size…', action: () => clickHidden('btn-canvas') },
         { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
         { label: 'Save frame (PNG)', action: () => clickHidden('btn-snapshot') },
@@ -1169,8 +1172,9 @@ window.FM = window.FM || {};
         { label: 'Save project', action: () => clickHidden('btn-save-proj') },
         { label: 'Reset project…', danger: true, action: () => { if (confirm('Reset the project? This clears all layers and cannot be undone.')) FM.resetProject(); } },
         { sep: true },
-        { label: 'Keyboard shortcuts', action: () => clickHidden('btn-help') },
-      ]);
+        { label: 'Keyboard shortcuts', action: () => clickHidden('btn-help') }
+      );
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, items);
     });
     const prateEl = document.getElementById('preview-rate');
     if (prateEl) prateEl.addEventListener('change', () => FM.setPreviewRate(parseFloat(prateEl.value) || 1));

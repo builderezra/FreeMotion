@@ -916,6 +916,10 @@ window.FM = window.FM || {};
 
     rebuild() {
       if (!tracksEl) return;
+      // Preserve the vertical scroll across the DOM rebuild — buildTracks empties the container, which
+      // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
+      // glitch). The browser clamps if the content is now shorter (mobile solo / collapsed group).
+      const sTop = timelineEl ? timelineEl.scrollTop : 0;
       // Keep every animated prop in sync with its layer's loopMode so newly-keyframed props inherit
       // the loop setting instead of silently freezing at their last keyframe.
       FM.scene.layers.forEach(l => { if (l.loopMode && l.loopMode !== 'none') FM.animatedProps(l).forEach(p => { p.loopMode = l.loopMode; }); });
@@ -924,6 +928,7 @@ window.FM = window.FM || {};
       buildTracks();
       this.updateLoopRegion();
       this.updatePlayhead();
+      if (timelineEl && timelineEl.scrollTop !== sTop) timelineEl.scrollTop = sTop;
     },
 
     updateLoopRegion() {
