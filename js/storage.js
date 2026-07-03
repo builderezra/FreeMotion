@@ -230,6 +230,7 @@ window.FM = window.FM || {};
   }
   // Register a pack's media for freshly re-id'd layers: in-memory registry + IDB (so it autosaves).
   async function hydratePack(layers, media, idMap) {
+    FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // pruneOrphans stands down while packs hydrate
     let db = null;
     try { db = await openDB(); } catch (e) {}
     for (const oldId of Object.keys(media || {})) {
@@ -244,6 +245,7 @@ window.FM = window.FM || {};
       } catch (e) { /* that layer loads media-less */ }
     }
     if (db) db.close();
+    FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
   }
   // Small poster frame of the current scene for home-screen cards.
   function makeThumb() {
@@ -337,6 +339,7 @@ window.FM = window.FM || {};
     },
     async duplicate(id) {
       const doc = readJSON('fm.proj.' + id, null); if (!doc) return;
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       const src = this.list().find(p => p.id === id) || {};
       const re = reIdLayers(doc.layers || []);
       const nid = newId('p');
@@ -353,6 +356,7 @@ window.FM = window.FM || {};
       const idx = this.list();
       idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length }));
       this.saveIndex(idx);
+      FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
     },
     rename(id, name) {
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
@@ -380,15 +384,32 @@ window.FM = window.FM || {};
       }
     },
     // Boot sweep: delete IDB media keys that belong to no project doc and no template/element pack.
+    // Race-hardened: stands down entirely while a pack hydration/duplicate is writing media, and
+    // re-verifies every candidate against a FRESH keep-set (plus the live media registry) right
+    // before deleting — the classic mark-and-sweep window shrinks from the whole scan to ~0.
     async pruneOrphans() {
       try {
-        const keep = new Set();
-        this.list().forEach(p => { const d = readJSON('fm.proj.' + p.id, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id)); });
-        FM.scene.layers.forEach(l => keep.add(l.id));
+        if (FM._mediaBusy) return;   // media writes in flight — sweep again next boot
+        const collectKeep = () => {
+          const keep = new Set();
+          this.list().forEach(p => { const d = readJSON('fm.proj.' + p.id, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id)); });
+          FM.scene.layers.forEach(l => keep.add(l.id));
+          return keep;
+        };
+        const keep = collectKeep();
         const db = await openDB();
+        const candidates = [];
         for (const k of await idbKeys(db)) {
           if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0)) continue;
-          if (!keep.has(k)) await idbDel(db, k);
+          if (!keep.has(k)) candidates.push(k);
+        }
+        if (candidates.length) {
+          if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
+          const keep2 = collectKeep();                  // fresh snapshot at delete time
+          for (const k of candidates) {
+            if (keep2.has(k) || FM.media.get(k)) continue;   // referenced since the scan / live in memory
+            await idbDel(db, k);
+          }
         }
         db.close();
       } catch (e) {}
