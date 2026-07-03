@@ -132,8 +132,7 @@ window.FM = window.FM || {};
     updateDropHint();
     updateReadout();
     render();
-    const pn = document.getElementById('proj-name');
-    if (pn && document.activeElement !== pn) pn.value = FM.scene.project.name || 'Untitled';
+    syncTopBar();
     // multi-selection state drives the Group button; select-mode ends when the selection empties
     const multi = FM.selectionIds ? FM.selectionIds().length : 0;
     if (multi === 0 && FM.selectMode) FM.selectMode = false;
@@ -141,6 +140,18 @@ window.FM = window.FM || {};
     document.body.classList.toggle('sel-mode', !!FM.selectMode);
   }
   FM.refreshAll = refreshAll;
+
+  // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there, AM-style) and
+  // reverts to the project name when nothing is selected; the delete button appears only with a
+  // selection. Called from refreshAll AND selectLayer so it tracks every selection change.
+  function syncTopBar() {
+    const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+    const pn = document.getElementById('proj-name');
+    if (pn && document.activeElement !== pn) { pn.value = sel ? (sel.name || '') : (FM.scene.project.name || 'Untitled'); pn.title = sel ? 'Layer name' : 'Project name'; }
+    const delBtn = document.getElementById('btn-del-layer');
+    if (delBtn) delBtn.style.display = sel ? '' : 'none';
+  }
+  FM.syncTopBar = syncTopBar;
 
   // Wipe the project back to a blank composition (drops all layers, media, markers, history).
   // Destructive + not undoable, so call sites confirm first.
@@ -580,6 +591,7 @@ window.FM = window.FM || {};
     FM.layersPanel.refresh();
     FM.inspector.refresh();
     FM.timeline.rebuild();
+    if (FM.syncTopBar) FM.syncTopBar();   // name field ↔ layer name + delete button
     if (FM.canvasEdit) FM.canvasEdit.update();
   };
 
@@ -1231,9 +1243,21 @@ window.FM = window.FM || {};
     const pn = document.getElementById('proj-name');
     if (pn) {
       pn.value = FM.scene.project.name || 'Untitled';
-      pn.addEventListener('input', () => { FM.scene.project.name = pn.value; });
+      pn.addEventListener('input', () => {
+        const sel = FM.selectedLayer(FM.scene);   // typing renames the SELECTED layer, else the project
+        if (sel) { sel.name = pn.value; if (FM.timeline) FM.timeline.rebuild(); }
+        else FM.scene.project.name = pn.value;
+      });
       pn.addEventListener('change', () => { if (FM.history) FM.history.commit(); });
     }
+    // Top-bar delete: removes the selected layer(s). Sits next to ⋯ / Export (the inspector's own
+    // delete/duplicate/thumbnail header row was removed — those live on the timeline / top bar now).
+    const btnDelLayer = document.getElementById('btn-del-layer');
+    if (btnDelLayer) btnDelLayer.addEventListener('click', () => {
+      const ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (ids.length > 1 && FM.deleteSelected) FM.deleteSelected();
+      else if (FM.scene.selectedId) FM.deleteLayer(FM.scene.selectedId);
+    });
 
     // canvas-size / aspect-ratio dialog (AM-style)
     let cvAspect = '9:16';

@@ -576,23 +576,6 @@ window.FM = window.FM || {};
     document.body.appendChild(overlay);
   };
 
-  function layerHeader(layer) {
-    const h = el('div', 'insp-head');
-    const thumb = document.createElement('canvas'); thumb.className = 'insp-thumb'; thumb.width = 46; thumb.height = 30;
-    FM.renderThumb(layer, thumb);
-    const name = document.createElement('input'); name.className = 'insp-name'; name.type = 'text'; name.value = layer.name;
-    name.addEventListener('input', () => { layer.name = name.value; FM.layersPanel.refresh(); FM.timeline.rebuild(); });
-    name.addEventListener('change', commitH);
-    const dup = document.createElement('button'); dup.className = 'insp-del'; dup.title = 'Duplicate layer (Cmd+D)';
-    dup.innerHTML = svgIcon('M9 9h11v11H9zM5 15H4V4h11v1');
-    dup.addEventListener('click', () => FM.duplicateLayer(layer.id));
-    const del = document.createElement('button'); del.className = 'insp-del'; del.title = 'Delete layer';
-    del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
-    del.addEventListener('click', () => FM.deleteLayer(layer.id));
-    h.append(thumb, name, dup, del);
-    return h;
-  }
-
   // AM-style clip-action quick-row (matches Alight Motion's selected-layer panel):
   // speed/timing · split · trim-start-to-playhead · trim-end-to-playhead · mute.
   function quickRow(layer) {
@@ -1265,8 +1248,9 @@ window.FM = window.FM || {};
       if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
-      // On phone the swatch/rename/dup/delete "extra bar" moves to the top bar (AM); skip it here.
-      if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) root.appendChild(layerHeader(layer));
+      // The old header row (thumbnail + name + duplicate + delete) is gone: the thumbnail lives on
+      // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
+      // now the top-bar name field. So the inspector goes straight to the actions.
       if (view === 'home') {
         root.appendChild(quickRow(layer));
         if (FM.selectionIds && FM.selectionIds().length >= 2) root.appendChild(alignRow());

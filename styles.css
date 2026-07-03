@@ -326,6 +326,9 @@ body {
 .cat-ico svg { width: 26px; height: 26px; }
 .cat-label { font-size: 11.5px; color: var(--text-dim); text-align: center; line-height: 1.3; }
 .cat-card:hover .cat-label { color: var(--text); }
+/* PC: a lone last card (odd count in a 2-col grid) spans the full width — no orphan gap. */
+@media (min-width: 701px) { .cat-grid .cat-card:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+#btn-del-layer:hover { color: #ff6b6b; border-color: #ff6b6b; }
 .cat-back { display: flex; align-items: center; gap: 4px; background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0 10px; }
 
 /* ---------- AM-style Add menu (PC inspector no-selection state + mobile + bottom-sheet) ---------- */
