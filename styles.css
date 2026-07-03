@@ -327,7 +327,35 @@ body {
 .cat-label { font-size: 11.5px; color: var(--text-dim); text-align: center; line-height: 1.3; }
 .cat-card:hover .cat-label { color: var(--text); }
 /* PC: a lone last card (odd count in a 2-col grid) spans the full width — no orphan gap. */
-@media (min-width: 701px) { .cat-grid .cat-card:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+/* PC: 3-across squares, Effects as the big full-width card at the bottom; span classes pad the
+   last row of squares so no orphan gap remains. (Phone keeps its own 3+4 layout below.) */
+@media (min-width: 701px) {
+  .cat-grid { grid-template-columns: repeat(3, 1fr); }
+  .cat-card-fx { grid-column: 1 / -1; }
+  .cat-span2 { grid-column: span 2; }
+  .cat-span3 { grid-column: 1 / -1; }
+  .cat-grid-top .cat-card:only-child { grid-column: 1 / -1; }
+}
+
+/* Blending & Opacity — AM-style category dropdowns */
+.blend-cat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 9px; overflow: hidden; }
+.blend-cat.active { border-color: rgba(41,217,187,.4); }
+.blend-cat-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 14px; background: transparent; border: 0; color: var(--text); font-size: 14.5px; cursor: pointer; text-align: left; }
+.blend-cat-head:hover { background: var(--panel-3); }
+.blend-arrow { color: var(--text-faint); font-size: 11px; width: 12px; }
+.blend-cat-name { flex: 1; }
+.blend-cur { color: var(--accent); font-size: 13px; }
+.blend-check { color: var(--accent); font-weight: 700; }
+.blend-list { display: flex; flex-direction: column; padding: 2px 8px 8px; gap: 4px; }
+.blend-mode { text-align: left; padding: 10px 12px; border: 1px solid transparent; border-radius: 9px; background: var(--bg); color: var(--text); font-size: 13.5px; cursor: pointer; }
+.blend-mode:hover { border-color: var(--line); }
+.blend-mode.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* Point editor overlay */
+#pe-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
+#pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+#pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
+.pe-btn { width: 100%; margin: 8px 0 2px; }
 #btn-del-layer:hover { color: #ff6b6b; border-color: #ff6b6b; }
 .cat-back { display: flex; align-items: center; gap: 4px; background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0 10px; }
 

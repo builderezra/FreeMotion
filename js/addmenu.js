@@ -14,6 +14,30 @@ window.FM = window.FM || {};
 
   function shp(kind, opts) { return function () { FM.addShapeLayer && FM.addShapeLayer(kind, opts); }; }
 
+  // Icon rendered straight from the shape's own polygon data (FM.SHAPE_POLYS) — the menu preview
+  // can never drift from what actually gets added.
+  function icoPoly(kind) {
+    var polys = (FM.SHAPE_POLYS && FM.SHAPE_POLYS[kind]) || [];
+    var open = kind === 'spiral';
+    var body = polys.map(function (pl) {
+      var pts = pl.map(function (p) { return (3 + p[0] * 18).toFixed(1) + ',' + (3 + p[1] * 18).toFixed(1); }).join(' ');
+      return open ? '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.4"/>'
+                  : '<polygon points="' + pts + '" fill="currentColor" stroke="none"/>';
+    }).join('');
+    return '<svg viewBox="0 0 24 24">' + body + '</svg>';
+  }
+  // The extra AM shape library (pages 2–4 of AM's shape sheet).
+  var LIB_SHAPES = [
+    ['speech', 'Speech'], ['moon', 'Moon'], ['snowflake', 'Snowflake'], ['shield', 'Shield'], ['check', 'Check'],
+    ['droplet', 'Droplet'], ['cloud', 'Cloud'], ['play', 'Play'], ['spiral', 'Spiral'], ['sparkle', 'Sparkle'],
+    ['stamp', 'Stamp'], ['bolt', 'Bolt'], ['puzzle', 'Puzzle'], ['pushpin', 'Pushpin'],
+    ['flag', 'Flag'], ['thumbsup', 'Thumbs up'], ['paperplane', 'Paper plane'], ['house', 'House'], ['laurel', 'Laurel'],
+    ['bookmark', 'Bookmark'], ['pointhand', 'Pointing hand'], ['flame', 'Flame'], ['banner', 'Banner'], ['wreath', 'Wreath'],
+    ['diamond', 'Diamond'], ['plane', 'Plane'], ['umbrella', 'Umbrella'], ['bomb', 'Bomb'],
+    ['boat', 'Boat'], ['magnifier', 'Magnifier'], ['key', 'Key'], ['sun', 'Sun'], ['person', 'Person'],
+    ['rocket', 'Rocket'], ['envelope', 'Envelope'], ['woman', 'Woman'], ['car', 'Car'],
+  ];
+
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
     { key: 'shape', label: 'Shape', icon: ico('<rect x="4" y="4" width="9" height="9" rx="1.5"/><circle cx="16" cy="16" r="5"/>'), options: [
@@ -36,7 +60,7 @@ window.FM = window.FM || {};
       { label: 'Parallelogram', icon: ico('<path d="M8 5h13l-5 14H3z"/>'), add: shp('parallelogram') },
       { label: 'Line', icon: ico('<path d="M4 12h16"/>'), add: shp('line') },
       { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/><circle cx="12" cy="12" r="1.6"/>'), add: shp('polygon') },
-    ] },
+    ].concat(LIB_SHAPES.map(function (s) { return { label: s[1], icon: icoPoly(s[0]), add: shp(s[0], { name: s[1] }) }; })) },
     { key: 'media', label: 'Media', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'), options: [
       { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
       { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },

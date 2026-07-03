@@ -681,6 +681,7 @@ window.FM = window.FM || {};
     cats.forEach((cat, i) => {
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
+      if (cat.key === 'effects') card.classList.add('cat-card-fx');   // PC: Effects is the big full-width card
       card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
@@ -688,6 +689,11 @@ window.FM = window.FM || {};
       });
       (i < 3 ? top : bot).appendChild(card);
     });
+    // PC row-fill: the bot grid is 3 columns with Effects spanning the full bottom row — pad the
+    // last row of squares so no orphan gap remains (classes only styled ≥701px; phone untouched).
+    const nonFx = bot.querySelectorAll('.cat-card:not(.cat-card-fx)');
+    if (nonFx.length % 3 === 2) nonFx[nonFx.length - 1].classList.add('cat-span2');
+    else if (nonFx.length % 3 === 1 && nonFx.length > 1) nonFx[nonFx.length - 1].classList.add('cat-span3');
     wrap.appendChild(top);
     if (bot.children.length) wrap.appendChild(bot);
     return wrap;
@@ -1131,8 +1137,45 @@ window.FM = window.FM || {};
         FM.requestRender(); FM.seekVideosToTime();
       }));
     } else if (key === 'blend') {
-      body.appendChild(selectRow('Blend mode', layer.blendMode, FM.BLEND_MODES, v => { layer.blendMode = v; FM.requestRender(); }));
+      // AM layout: opacity slider on top, then blend CATEGORIES as expandable rows — each opens a
+      // dropdown of the modes in that family (one per family for now; more land as AM refs arrive).
       body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));
+      const CATS = [
+        ['Normal', [['normal', 'Normal']]],
+        ['Darken', [['darken', 'Darken']]],
+        ['Lighten', [['lighten', 'Lighten']]],
+        ['Contrast', [['overlay', 'Overlay']]],
+        ['Difference', [['difference', 'Difference'], ['exclusion', 'Exclusion']]],
+        ['Color', [['color', 'Color']]],
+        ['Mask', [['mask-include', 'Mask (include)'], ['mask-exclude', 'Mask (exclude)']]],
+      ];
+      // Legacy/unlisted modes still resolve to their family so the current mode is always visible.
+      const FAMILY = { multiply: 'Darken', 'color-burn': 'Darken', screen: 'Lighten', add: 'Lighten', 'color-dodge': 'Lighten', 'hard-light': 'Contrast', 'soft-light': 'Contrast', hue: 'Color', saturation: 'Color', luminosity: 'Color' };
+      const cur = layer.blendMode || 'normal';
+      CATS.forEach(c => { const fam = FAMILY[cur]; if (fam === c[0] && !c[1].some(m => m[0] === cur)) c[1].push([cur, cur.charAt(0).toUpperCase() + cur.slice(1)]); });
+      const catOf = m => { const hit = CATS.find(c => c[1].some(x => x[0] === m)); return hit ? hit[0] : 'Normal'; };
+      const activeCat = catOf(cur);
+      if (!FM._blendOpen) FM._blendOpen = {};
+      CATS.forEach(([name, modes]) => {
+        const row = el('div', 'blend-cat' + (activeCat === name ? ' active' : ''));
+        const head = el('button', 'blend-cat-head');
+        const open = !!FM._blendOpen[name];
+        const curIn = modes.find(m => m[0] === cur);
+        head.innerHTML = '<span class="blend-arrow">' + (open ? '▾' : '▸') + '</span><span class="blend-cat-name">' + name + '</span>' +
+          (curIn ? '<span class="blend-cur">' + curIn[1] + '</span><span class="blend-check">✓</span>' : '');
+        head.addEventListener('click', () => { FM._blendOpen[name] = !FM._blendOpen[name]; FM.inspector.refresh(); });
+        row.appendChild(head);
+        if (open) {
+          const list = el('div', 'blend-list');
+          modes.forEach(([mode, label]) => {
+            const b = el('button', 'blend-mode' + (cur === mode ? ' on' : ''), label);
+            b.addEventListener('click', () => { layer.blendMode = mode; FM.requestRender(); FM.inspector.refresh(); commitH(); });
+            list.appendChild(b);
+          });
+          row.appendChild(list);
+        }
+        body.appendChild(row);
+      });
     } else if (key === 'presets') {
       body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
       const pwrap = el('div', 'preset-wrap');
@@ -1306,10 +1349,20 @@ window.FM = window.FM || {};
         const P = FM.scene.project;
         const kr = el('div', 'prop-row'); kr.appendChild(el('label', null, 'Shape'));
         const ksel = document.createElement('select');
-        [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['triangle', 'Triangle'], ['star', 'Star'], ['heart', 'Heart'], ['plus', 'Plus'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring'], ['arrow', 'Arrow'], ['chevron', 'Chevron'], ['trapezoid', 'Trapezoid'], ['parallelogram', 'Parallelogram']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
+        const baseKinds = [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['triangle', 'Triangle'], ['star', 'Star'], ['heart', 'Heart'], ['plus', 'Plus'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring'], ['arrow', 'Arrow'], ['chevron', 'Chevron'], ['trapezoid', 'Trapezoid'], ['parallelogram', 'Parallelogram']]
+          .concat(Object.keys(FM.SHAPE_POLYS || {}).map(k => [k, k.charAt(0).toUpperCase() + k.slice(1)]));
+        baseKinds.forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         // a drawn path keeps its 'path' kind (not in the dropdown) — swapping kinds would discard its points
         if (layer.shape !== 'path') { kr.appendChild(ksel); body.appendChild(kr); }
+        // Edit points — every shape becomes an editable path (drag vertices to reshape it)
+        if (FM.pointEdit) {
+          const pe = el('button', 'btn pe-btn', FM.pointEdit.isActive() ? 'Editing points…' : '✎ Edit points');
+          pe.disabled = FM.pointEdit.isActive();
+          pe.title = layer.shape === 'path' ? 'Drag the shape’s points on the canvas' : 'Converts this shape to an editable path, then drag its points on the canvas';
+          pe.addEventListener('click', () => FM.pointEdit.start(layer.id));
+          body.appendChild(pe);
+        }
         const openStroke = (layer.shape === 'line' || layer.shape === 'arc' || (layer.shape === 'path' && !layer.closed));   // stroked, never filled
         // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));

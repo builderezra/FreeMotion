@@ -457,6 +457,7 @@ window.FM = window.FM || {};
   const SHAPE_ASPECT = {
     rect: [1.5, 1], line: [1.6, 0.4], arrow: [1.6, 0.8], semicircle: [1.3, 0.65],
     trapezoid: [1.4, 0.9], parallelogram: [1.5, 0.9],
+    banner: [1.6, 0.7], envelope: [1.4, 1], car: [1.5, 1], check: [1.25, 1], cloud: [1.4, 0.95], boat: [1.1, 1.1],
   };
   FM.addShapeLayer = function (shape, opts) {
     opts = opts || {};

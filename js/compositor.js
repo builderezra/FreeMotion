@@ -22,6 +22,13 @@ window.FM = window.FM || {};
     'soft-light': 'soft-light',
     difference: 'difference',
     exclusion: 'exclusion',
+    hue: 'hue',
+    saturation: 'saturation',
+    color: 'color',
+    luminosity: 'luminosity',
+    // Mask blending (AM): the layer's alpha KEEPS (include) or CUTS (exclude) everything below it.
+    'mask-include': 'destination-in',
+    'mask-exclude': 'destination-out',
   };
   FM.BLEND_MODES = Object.keys(BLEND);
 
@@ -1989,6 +1996,60 @@ window.FM = window.FM || {};
     if (skX || skY) ctx.transform(1, Math.tan(skY * Math.PI / 180), Math.tan(skX * Math.PI / 180), 1, 0, 0);   // X/Y skew
   }
 
+  // ---- Data-driven shape library (AM parity) ----
+  // Every entry is an ARRAY OF POLYGONS in normalized [0,1] space (multi-polygon shapes like the
+  // sun's rays are several subpaths of one fill). Generated once at load; traceShapePath scales
+  // them into the layer's box, and point editing converts them straight into editable paths.
+  FM.SHAPE_POLYS = (function () {
+    const arc = (cx, cy, rx, ry, a0, a1, n) => { const o = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; o.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); } return o; };
+    const rot = (pts, cx, cy, ang) => pts.map(([x, y]) => { const dx = x - cx, dy = y - cy, c = Math.cos(ang), s = Math.sin(ang); return [cx + dx * c - dy * s, cy + dx * s + dy * c]; });
+    const bez = (p0, p1, p2, p3, n) => { const o = []; for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; o.push([u*u*u*p0[0] + 3*u*u*t*p1[0] + 3*u*t*t*p2[0] + t*t*t*p3[0], u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1]]); } return o; };
+    const PI = Math.PI, T = PI * 2;
+    const S = {};
+    // — page 2 —
+    S.speech = [[[0.1,0.06],[0.9,0.06],[0.97,0.14],[0.97,0.66],[0.9,0.74],[0.42,0.74],[0.16,0.95],[0.22,0.74],[0.1,0.74],[0.03,0.66],[0.03,0.14]]];
+    S.moon = [arc(0.5,0.5,0.47,0.47,-PI*0.62,PI*0.62,22).concat(arc(0.72,0.5,0.34,0.4,PI*0.55,-PI*0.55,20))];
+    (function(){ const spoke=[[0.47,0.06],[0.53,0.06],[0.53,0.94],[0.47,0.94]], stub=(y,dir)=>[[0.5,y],[0.5+0.14*dir,y-0.1],[0.5+0.17*dir,y-0.06],[0.53*0+0.5+0.03*dir,y+0.045]]; const polys=[]; for(let k=0;k<3;k++){ const a=k*PI/3; polys.push(rot(spoke,0.5,0.5,a)); [[0.16,1],[0.16,-1],[0.84,1],[0.84,-1]].forEach(([y,d])=>polys.push(rot(stub(y,d),0.5,0.5,a))); } S.snowflake=polys; })();
+    S.shield = [[[0.5,0.02],[0.94,0.14]].concat(arc(0.5,0.14,0.44,0.62,0,PI/2,12)).concat([[0.5,0.98]]).concat(arc(0.5,0.14,0.44,0.62,PI/2,PI,12)).concat([[0.06,0.14]])];
+    S.check = [[[0.05,0.55],[0.2,0.4],[0.38,0.58],[0.8,0.12],[0.95,0.26],[0.38,0.88]]];
+    S.droplet = [[[0.5,0.02],[0.68,0.32]].concat(arc(0.5,0.62,0.32,0.34,-PI*0.3,PI*1.3,24)).concat([[0.32,0.32]])];
+    S.cloud = [arc(0.26,0.58,0.17,0.17,PI*0.5,PI*1.36,12).concat(arc(0.48,0.42,0.2,0.2,PI,PI*1.95,14)).concat(arc(0.72,0.56,0.17,0.17,PI*1.42,PI*2.5,12))];
+    S.play = [[[0.12,0.06],[0.94,0.5],[0.12,0.94]]];
+    (function(){ const o=[]; const turns=2.6,N=110; for(let i=0;i<=N;i++){const f=i/N,a=f*turns*T,r=0.04+f*0.44;o.push([0.5+r*Math.cos(a),0.5+r*Math.sin(a)]);} S.spiral=[o]; })();
+    (function(){ const o=[]; for(let i=0;i<8;i++){const a=-PI/2+i*PI/4,r=(i%2===0)?0.48:0.13;o.push([0.5+r*Math.cos(a),0.5+r*Math.sin(a)]);} S.sparkle=[o]; })();
+    S.bolt = [[[0.62,0.02],[0.2,0.56],[0.44,0.56],[0.36,0.98],[0.8,0.42],[0.55,0.42]]];
+    S.puzzle = [[[0.1,0.3],[0.431,0.3]].concat(arc(0.5,0.19,0.13,0.13,2.13,7.29,16)).concat([[0.569,0.3],[0.9,0.3],[0.9,0.5]]).concat(arc(0.9,0.62,-0.12,0.12,-PI/2,PI/2,10)).concat([[0.9,0.74],[0.9,0.95],[0.1,0.95]])];
+    S.pushpin = [arc(0.5,0.3,0.26,0.26,PI*0.9,PI*2.1,20).concat([[0.62,0.55],[0.54,0.6],[0.5,0.97],[0.46,0.6],[0.38,0.55]])];
+    // — page 3 —
+    S.flag = [[[0.14,0.02],[0.22,0.02],[0.22,0.12],[0.9,0.2],[0.68,0.34],[0.9,0.48],[0.22,0.42],[0.22,0.98],[0.14,0.98]]];
+    S.thumbsup = [[[0.06,0.5],[0.24,0.5],[0.24,0.96],[0.06,0.96]],[[0.28,0.52],[0.42,0.22],[0.46,0.06],[0.58,0.06],[0.58,0.36],[0.94,0.36],[0.9,0.52],[0.92,0.64],[0.86,0.78],[0.84,0.92],[0.6,0.96],[0.28,0.92]]];
+    S.paperplane = [[[0.04,0.5],[0.96,0.08],[0.62,0.92],[0.46,0.62],[0.96,0.08],[0.46,0.62],[0.3,0.56]]];
+    S.house = [[[0.5,0.04],[0.96,0.44],[0.86,0.44],[0.86,0.96],[0.6,0.96],[0.6,0.66],[0.4,0.66],[0.4,0.96],[0.14,0.96],[0.14,0.44],[0.04,0.44]]];
+    (function(){ const polys=[[[0.55,0.98],[0.50,0.98],[0.365,0.06],[0.415,0.05]]]; const sa=Math.atan2(-0.9,-0.14); for(let i=0;i<6;i++){ const f=0.15+i*0.14, cx=0.525-0.14*f, cy=0.98-0.9*f; [[1,sa+0.7],[-1,sa-0.7]].forEach(([sgn,ang])=>{ const lx=cx+sgn*0.078, ly=cy-sgn*0.012; polys.push(rot(arc(lx,ly,0.095,0.034,0,T,10),lx,ly,ang)); }); } S.laurel=polys; })();
+    S.bookmark = [[[0.22,0.02],[0.78,0.02],[0.78,0.96],[0.5,0.72],[0.22,0.96]]];
+    S.pointhand = [[[0.02,0.44],[0.36,0.42],[0.4,0.28],[0.47,0.22],[0.54,0.28],[0.52,0.42],[0.96,0.42],[0.98,0.48],[0.94,0.53],[0.6,0.53],[0.9,0.55],[0.9,0.64],[0.58,0.64],[0.84,0.67],[0.83,0.76],[0.56,0.75],[0.72,0.79],[0.7,0.88],[0.42,0.87],[0.22,0.82],[0.02,0.72]]];
+    S.flame = [bez([0.52,0.02],[0.72,0.22],[0.6,0.3],[0.76,0.42],10).concat(bez([0.76,0.42],[0.9,0.54],[0.84,0.78],[0.64,0.88],12)).concat(arc(0.48,0.76,0.2,0.14,PI*0.25,PI*0.85,8)).concat(bez([0.3,0.84],[0.12,0.72],[0.16,0.5],[0.3,0.38],12)).concat(bez([0.3,0.38],[0.42,0.3],[0.34,0.2],[0.52,0.02],10))];
+    S.banner = [[[0.02,0.24],[0.98,0.24],[0.86,0.5],[0.98,0.76],[0.02,0.76],[0.14,0.5]]];
+    (function(){ const polys=[]; const N=14, a0=PI*1.61, a1=PI*3.39; for(let i=0;i<N;i++){ const a=a0+i*(a1-a0)/(N-1); const cx=0.5+0.38*Math.cos(a), cy=0.52+0.38*Math.sin(a); polys.push(rot(arc(cx,cy,0.088,0.033,0,T,8),cx,cy,a+PI/2)); } S.wreath=polys; })();
+    S.diamond = [[[0.5,0.02],[0.92,0.5],[0.5,0.98],[0.08,0.5]]];
+    S.plane = [[[0.5,0.04],[0.58,0.12],[0.58,0.34],[0.98,0.58],[0.98,0.68],[0.58,0.56],[0.58,0.78],[0.72,0.9],[0.72,0.97],[0.5,0.9],[0.28,0.97],[0.28,0.9],[0.42,0.78],[0.42,0.56],[0.02,0.68],[0.02,0.58],[0.42,0.34],[0.42,0.12]]];
+    S.umbrella = [arc(0.5,0.52,0.47,0.44,PI,T,26).concat([[0.86,0.55],[0.78,0.48],[0.68,0.55],[0.6,0.48],[0.54,0.53],[0.54,0.84]]).concat(arc(0.44,0.84,0.1,0.1,0,PI,8)).concat([[0.28,0.84],[0.28,0.8],[0.4,0.8]]).concat(arc(0.44,0.84,0.02,0.02,PI,0,4)).concat([[0.46,0.53],[0.4,0.48],[0.31,0.55],[0.22,0.48],[0.13,0.55]])];
+    S.bomb = [arc(0.44,0.62,0.36,0.36,0,T,26),[[0.6,0.28],[0.72,0.14],[0.8,0.2],[0.68,0.36]],[[0.78,0.06],[0.84,0.12],[0.88,0.04],[0.94,0.1],[0.9,0.16],[0.98,0.18],[0.86,0.22],[0.8,0.14]]];
+    // — page 4 —
+    S.boat = [[[0.5,0.02],[0.54,0.02],[0.54,0.62],[0.5,0.62]],[[0.58,0.1],[0.94,0.6],[0.58,0.6]],[[0.46,0.22],[0.46,0.6],[0.1,0.6]],[[0.06,0.68],[0.94,0.68],[0.82,0.94],[0.18,0.94]]];
+    S.magnifier = [arc(0.42,0.42,0.34,0.34,0,T,26).concat([]),[[0.62,0.68],[0.7,0.6],[0.98,0.86],[0.9,0.94]]];
+    S.key = [arc(0.3,0.3,0.24,0.24,0,T,22),[[0.44,0.42],[0.94,0.88],[0.94,0.97],[0.84,0.97],[0.84,0.88],[0.74,0.88],[0.74,0.78],[0.64,0.78],[0.36,0.5]]];
+    (function(){ const polys=[arc(0.5,0.5,0.24,0.24,0,T,24)]; for(let i=0;i<8;i++){ const a=i*PI/4; polys.push(rot([[0.5,0.02],[0.56,0.18],[0.44,0.18]],0.5,0.5,a)); } S.sun=polys; })();
+    S.person = [arc(0.5,0.16,0.13,0.13,0,T,18),[[0.34,0.32],[0.66,0.32],[0.74,0.62],[0.66,0.64],[0.62,0.46],[0.62,0.96],[0.53,0.96],[0.53,0.66],[0.47,0.66],[0.47,0.96],[0.38,0.96],[0.38,0.46],[0.34,0.64],[0.26,0.62]]];
+    S.rocket = [bez([0.5,0.02],[0.68,0.2],[0.66,0.5],[0.62,0.7],14).concat([[0.62,0.7],[0.38,0.7]]).concat(bez([0.38,0.7],[0.34,0.5],[0.32,0.2],[0.5,0.02],14)),[[0.38,0.6],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.6],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
+    S.envelope = [[[0.03,0.16],[0.97,0.16],[0.5,0.6]],[[0.03,0.24],[0.44,0.56],[0.03,0.84]],[[0.97,0.24],[0.97,0.84],[0.56,0.56]],[[0.1,0.86],[0.46,0.62],[0.5,0.66],[0.54,0.62],[0.9,0.86]]];
+    S.woman = [arc(0.5,0.14,0.12,0.12,0,T,18),[[0.4,0.28],[0.6,0.28],[0.78,0.72],[0.6,0.72],[0.6,0.96],[0.52,0.96],[0.52,0.78],[0.48,0.78],[0.48,0.96],[0.4,0.96],[0.4,0.72],[0.22,0.72]]];
+    S.car = [[[0.2,0.36],[0.34,0.2],[0.68,0.2],[0.82,0.36],[0.96,0.42],[0.98,0.6],[0.9,0.62]].concat(arc(0.78,0.64,0.09,0.09,0,PI,8)).concat([[0.69,0.64],[0.35,0.64]]).concat(arc(0.24,0.64,0.09,0.09,0,PI,8)).concat([[0.15,0.64],[0.02,0.6],[0.04,0.42]])];
+    S.stamp = [(function(){ const pts=[]; const bumps=5,r=0.045; for(let i=0;i<bumps;i++) pts.push(...arc(0.1+ (0.8/(bumps-1))*i,0.08,r,r,PI,0,6)); for(let i=0;i<bumps;i++) pts.push(...arc(0.92,0.1+(0.8/(bumps-1))*i,r,r,-PI/2,PI/2,6)); for(let i=0;i<bumps;i++) pts.push(...arc(0.9-(0.8/(bumps-1))*i,0.92,r,r,0,PI,6)); for(let i=0;i<bumps;i++) pts.push(...arc(0.08,0.9-(0.8/(bumps-1))*i,r,r,PI/2,PI*1.5,6)); return pts; })()];
+    return S;
+  })();
+  const OPEN_POLY = { spiral: 1 };   // data shapes that STROKE their polyline instead of filling
+
   // Trace a shape layer's outline into ctx (beginPath + geometry only — caller fills/strokes).
   // ONE tracer shared by drawLayer and renderThumb so the two can never drift. Returns 'stroke'
   // for open kinds (line/arc — stroked, never filled) and 'fill' for everything else.
@@ -2000,13 +2061,21 @@ window.FM = window.FM || {};
       ctx.closePath();
     };
     ctx.beginPath();
+    const dp = FM.SHAPE_POLYS[kind];
+    if (dp) {   // data-driven library shape: one or more normalized polygons
+      dp.forEach(pl => { pl.forEach((q, i) => { const v = P(q[0], q[1]); if (i === 0) ctx.moveTo(v[0], v[1]); else ctx.lineTo(v[0], v[1]); }); if (!OPEN_POLY[kind]) ctx.closePath(); });
+      return OPEN_POLY[kind] ? 'stroke' : 'fill';
+    }
     if (kind === 'path') {
-      // Freehand / vector drawing: layer.points are [0,1]-normalized within the box.
-      const pts = layer.points || [];
-      if (!pts.length) return layer.closed ? 'fill' : 'stroke';
-      pts.forEach((p, i) => { const q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
-      if (layer.closed) { ctx.closePath(); return 'fill'; }
-      return 'stroke';   // open path (freehand brush) is stroked, never filled
+      // Freehand / vector / converted-shape path. layer.subs = multi-subpath (array of point
+      // arrays); layer.points = single path. All [0,1]-normalized within the box.
+      const subs = layer.subs || (layer.points && layer.points.length ? [layer.points] : []);
+      if (!subs.length) return layer.closed ? 'fill' : 'stroke';
+      subs.forEach(pts => {
+        pts.forEach((p, i) => { const q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
+        if (layer.closed) ctx.closePath();
+      });
+      return layer.closed ? 'fill' : 'stroke';   // open path (freehand brush) is stroked, never filled
     } else if (kind === 'ellipse') {
       ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
     } else if (kind === 'line') {
@@ -2068,6 +2137,44 @@ window.FM = window.FM || {};
     return 'fill';
   };
 
+  // Convert ANY shape kind into editable normalized points → { subs: [[ [u,v], … ], …], closed }.
+  // The single source for "Edit points": parametric kinds are sampled/vertex-listed to match
+  // traceShapePath exactly, library kinds hand over their polygon data.
+  FM.shapeToPoints = function (layer) {
+    const kind = layer.shape || 'rect';
+    const clone = a => a.map(pl => pl.map(p => [p[0], p[1]]));
+    const ell = (cx, cy, rx, ry, a0, a1, n) => { const o = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; o.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); } return o; };
+    const PI = Math.PI;
+    if (FM.SHAPE_POLYS[kind]) return { subs: clone(FM.SHAPE_POLYS[kind]), closed: !OPEN_POLY[kind] };
+    if (kind === 'path') return { subs: clone(layer.subs || (layer.points ? [layer.points] : [])), closed: layer.closed !== false };
+    if (kind === 'ellipse') { const o = ell(0.5, 0.5, 0.5, 0.5, 0, PI * 2, 24); o.pop(); return { subs: [o], closed: true }; }
+    if (kind === 'line') return { subs: [[[0, 0.5], [1, 0.5]]], closed: false };
+    if (kind === 'arc') return { subs: [ell(0.5, 0.5, 0.5, 0.5, -PI / 3, PI * 4 / 3, 20)], closed: false };
+    if (kind === 'polygon' || kind === 'star') {
+      const n = Math.max(3, layer.sides || 5), o = [];
+      if (kind === 'polygon') for (let i = 0; i < n; i++) { const a = -PI / 2 + i * 2 * PI / n; o.push([0.5 + 0.5 * Math.cos(a), 0.5 + 0.5 * Math.sin(a)]); }
+      else for (let i = 0; i < n * 2; i++) { const a = -PI / 2 + i * PI / n, r = (i % 2 === 0) ? 0.5 : 0.5 * 0.45; o.push([0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a)]); }
+      return { subs: [o], closed: true };
+    }
+    if (kind === 'triangle') return { subs: [[[0.5, 0], [1, 1], [0, 1]]], closed: true };
+    if (kind === 'plus') return { subs: [[[0.33, 0], [0.67, 0], [0.67, 0.33], [1, 0.33], [1, 0.67], [0.67, 0.67], [0.67, 1], [0.33, 1], [0.33, 0.67], [0, 0.67], [0, 0.33], [0.33, 0.33]]], closed: true };
+    if (kind === 'arrow') return { subs: [[[0, 0.3], [0.55, 0.3], [0.55, 0], [1, 0.5], [0.55, 1], [0.55, 0.7], [0, 0.7]]], closed: true };
+    if (kind === 'chevron') return { subs: [[[0, 0], [0.55, 0], [1, 0.5], [0.55, 1], [0, 1], [0.45, 0.5]]], closed: true };
+    if (kind === 'trapezoid') return { subs: [[[0.22, 0], [0.78, 0], [1, 1], [0, 1]]], closed: true };
+    if (kind === 'parallelogram') return { subs: [[[0.28, 0], [1, 0], [0.72, 1], [0, 1]]], closed: true };
+    if (kind === 'pie') return { subs: [[[0.5, 0.5]].concat(ell(0.5, 0.5, 0.5, 0.5, -PI / 2, PI, 18))], closed: true };
+    if (kind === 'semicircle') return { subs: [ell(0.5, 0.98, 0.5, 0.96, PI, PI * 2, 16)], closed: true };
+    if (kind === 'ring') { const outer = ell(0.5, 0.5, 0.5, 0.5, 0, PI * 2, 24); outer.pop(); const inner = ell(0.5, 0.5, 0.275, 0.275, PI * 2, 0, 24); inner.pop(); return { subs: [outer, inner], closed: true }; }
+    if (kind === 'heart') {
+      const bz = (p0, p1, p2, p3, n) => { const o = []; for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; o.push([u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0], u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]]); } return o; };
+      const a = bz([0.5, 0.95], [-0.02, 0.55], [0.12, 0.02], [0.5, 0.30], 12), b = bz([0.5, 0.30], [0.88, 0.02], [1.02, 0.55], [0.5, 0.95], 12);
+      a.pop(); b.pop();
+      return { subs: [a.concat(b)], closed: true };
+    }
+    return { subs: [[[0, 0], [1, 0], [1, 1], [0, 1]]], closed: true };   // rect + fallback
+  };
+
+  let _blendMaskCv = null;
   function drawLayer(ctx, layer, t, scene) {
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
@@ -2076,6 +2183,24 @@ window.FM = window.FM || {};
     if (layer.type === 'adjustment') return;   // handled by renderScene (grades layers below)
     if (layer.type === 'camera') return;       // handled by renderScene (drives the composite)
     if (!FM.isLayerVisibleAt(layer, t)) return;
+    // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
+    // (fill+stroke, caption pill, keyed video) would otherwise each re-clip the canvas below.
+    const _bop = BLEND[layer.blendMode];
+    if ((_bop === 'destination-in' || _bop === 'destination-out') && scene && (!_blendMaskCv || ctx.canvas !== _blendMaskCv)) {
+      const P = scene.project;
+      if (!_blendMaskCv) _blendMaskCv = document.createElement('canvas');
+      if (_blendMaskCv.width !== P.width || _blendMaskCv.height !== P.height) { _blendMaskCv.width = P.width; _blendMaskCv.height = P.height; }
+      const mc = _blendMaskCv.getContext('2d');
+      mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, P.width, P.height);
+      mc.globalAlpha = 1; mc.globalCompositeOperation = 'source-over'; mc.filter = 'none';
+      const saved = layer.blendMode; layer.blendMode = 'normal';
+      try { drawLayer(mc, layer, t, scene); } finally { layer.blendMode = saved; }
+      ctx.save();
+      ctx.globalCompositeOperation = _bop; ctx.globalAlpha = 1; ctx.filter = 'none';
+      ctx.drawImage(_blendMaskCv, 0, 0);
+      ctx.restore();
+      return;
+    }
     // Per-pixel post-process effects compose in ARRAY ORDER: the last one in the stack is the
     // outermost pass, rendered over a clean copy of the layer with that effect removed (recursing
     // inward through the rest). So effect[0] is applied first (innermost), effect[n] last (outermost).
