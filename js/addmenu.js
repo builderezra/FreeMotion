@@ -67,14 +67,15 @@ window.FM = window.FM || {};
       if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });
       return out;
     } },
-    // AM keeps Freehand Drawing as a top tab; tapping it starts drawing immediately (no sub-grid).
-    { key: 'freehand', label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), instant: function () { FM.startDraw && FM.startDraw('freehand'); } },
   ];
 
-  // QUICK-ADD rail — one tap creates immediately (AM: Vector Drawing · Text · ✕).
+  // QUICK-ADD rail — one tap spawns/starts immediately. The instant-spawn tools live together on one
+  // row (AM): Text · Freehand Drawing · Vector Drawing. On a phone this rail is always visible, so
+  // Freehand Drawing is easy to find (it used to be a top tab that scrolled off-screen).
   var INSTANT = [
-    { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
     { label: 'Text', icon: ico('<path d="M6 5h12M12 5v14M9 19h6"/>'), add: function () { FM.addTextLayer && FM.addTextLayer(); } },
+    { label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
+    { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
 
   function card(item, cls) {
@@ -146,7 +147,6 @@ window.FM = window.FM || {};
         tb.className = 'addmenu-tab' + (t.key === active ? ' active' : '');
         tb.innerHTML = '<span class="addmenu-ic">' + t.icon + '</span><span class="addmenu-lbl">' + t.label + '</span>';
         tb.addEventListener('click', function () {
-          if (t.instant) { t.instant(); after(); return; }   // Freehand Drawing acts immediately, no sub-grid
           active = t.key;
           var all = tabsEl.querySelectorAll('.addmenu-tab');
           for (var i = 0; i < all.length; i++) all[i].classList.remove('active');

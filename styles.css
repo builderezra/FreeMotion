@@ -1265,6 +1265,7 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
 .addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
 .addmenu-dot.on { background: var(--accent); }
+.addmenu-quick .addmenu-lbl { white-space: normal; max-width: none; line-height: 1.12; }   /* let "Freehand Drawing" show fully in the narrow rail */
 
 /* ---- Freehand / Vector drawing overlay + toolbar (v2.39) ---- */
 #draw-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
