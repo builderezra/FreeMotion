@@ -227,7 +227,7 @@ window.FM = window.FM || {};
     const t = FM.time;
     const near = P.markers.find(m => Math.abs(m.t - t) < 0.12);
     if (near) { P.markers = P.markers.filter(m => m !== near); if (FM.toast) FM.toast('Benchmark removed', 1000); }
-    else { P.markers.push({ t: Math.round(t * 1000) / 1000, label: 'Benchmark' }); if (FM.toast) FM.toast('Benchmark added', 1000); }
+    else { P.markers.push({ t: FM.snapFrame(t), label: 'Benchmark' }); if (FM.toast) FM.toast('Benchmark added', 1000); }   // markers live on exact frames
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();
   };
@@ -240,7 +240,13 @@ window.FM = window.FM || {};
     const pts = [0, P.duration];
     (P.markers || []).forEach(m => { if (m.t >= 0 && m.t <= P.duration) pts.push(m.t); });
     const sel = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
-    if (sel) { pts.push(Math.max(0, sel.start)); pts.push(Math.min(P.duration, sel.start + sel.duration)); }
+    if (sel) {
+      pts.push(Math.max(0, sel.start)); pts.push(Math.min(P.duration, sel.start + sel.duration));
+      // Playhead ON the selected clip → its KEYFRAMES join the skip stops (off the clip they don't).
+      if (FM.time >= sel.start - 1e-6 && FM.time <= sel.start + sel.duration + 1e-6 && FM.animatedProps) {
+        FM.animatedProps(sel).forEach(pr => pr.kf.forEach(k => { if (k.t >= 0 && k.t <= P.duration) pts.push(k.t); }));
+      }
+    }
     return pts.sort((a, b) => a - b);
   };
 
@@ -257,7 +263,11 @@ window.FM = window.FM || {};
     render();
   };
 
+  // Quantize to the project frame grid — EVERYTHING user-placed (playhead, keyframes, markers,
+  // splits) lives on an exact frame, like AM. Playback itself stays smooth (tick bypasses setTime).
+  FM.snapFrame = function (t) { const f = FM.scene.project.fps || 30; return Math.round(t * f) / f; };
   FM.setTime = function (t) {
+    if (!FM.playing) t = FM.snapFrame(t);
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
     if (!FM.playing) FM.seekVideosToTime();
     render();
@@ -378,6 +388,7 @@ window.FM = window.FM || {};
   FM.pause = function () {
     FM.playing = false;
     if (rafId) cancelAnimationFrame(rafId);
+    FM.time = FM.snapFrame ? FM.snapFrame(FM.time) : FM.time;   // land ON a frame, never between two
     if (FM.audioPlay) FM.audioPlay.stop();
     FM.scene.layers.forEach(layer => {
       const m = FM.media.get(layer.id);
@@ -889,17 +900,19 @@ window.FM = window.FM || {};
     const t = FM.time, end = layer.start + layer.duration;
     if (t <= layer.start + 0.02 || t >= end - 0.02) return;   // playhead must be inside the clip
     const into = t - layer.start;
-    const sp = layer.speed || 1;                                // trimStart is SOURCE time → scale by speed
     const origTrim = layer.trimStart, origDur = layer.duration;
+    // trimStart is SOURCE time — advance through the (possibly RAMPED) speed curve, not a flat multiply
+    const advInto = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, into) : into * (layer.speed || 1);
+    const advTotal = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, origDur) : origDur * (layer.speed || 1);
     const B = FM.cloneLayer(layer, true);                       // identical copy (new id)
     B.start = t;
     B.duration = end - t;
     if (layer.reversed) {
       // reversed plays source end→start: A keeps the END span, B keeps the START span
       B.trimStart = origTrim;
-      layer.trimStart = origTrim + (origDur - into) * sp;
+      layer.trimStart = origTrim + (advTotal - advInto);
     } else {
-      B.trimStart = origTrim + into * sp;                       // B resumes where A left off in the source
+      B.trimStart = origTrim + advInto;                          // B resumes where A left off in the source (ramp-aware)
     }
     layer.duration = into;                                      // A = first half
     if (Array.isArray(layer.captions)) {

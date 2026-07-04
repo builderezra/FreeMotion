@@ -782,7 +782,7 @@ window.FM = window.FM || {};
         const near = P.markers.find(m => Math.abs(m.t - t) < 10 / pxPerSec());
         const items = near
           ? [{ label: 'Remove marker', danger: true, action: () => { P.markers = P.markers.filter(m => m !== near); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }]
-          : [{ label: 'Add marker here', action: () => { P.markers.push({ t: Math.round(t * 100) / 100, label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }];
+          : [{ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }];   // markers live on exact frames
         if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { P.markers = []; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         FM.contextMenu.show(e.clientX, e.clientY, items);
       });
