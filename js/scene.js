@@ -149,6 +149,7 @@ window.FM = window.FM || {};
     const out = [];
     Object.keys(layer.transform).forEach(k => { if (isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
     if (isAnimated(layer.volume)) out.push(layer.volume);   // keyframed audio shows diamonds on the clip too
+    if (isAnimated(layer.speed)) out.push(layer.speed);     // speed-ramp keyframes show on the clip
     if (isAnimated(layer.fill)) out.push(layer.fill);       // colour keyframes show on the clip
     if (isAnimated(layer.color)) out.push(layer.color);
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
@@ -306,13 +307,45 @@ window.FM = window.FM || {};
 
   /* Local source time for a layer at global project time t.
    * Returns null when the layer is not on-screen at t. Accounts for reverse + trim. */
+  // Source-seconds advanced after `into` clip-seconds. Static speed = plain multiply (old path,
+  // byte-identical). KEYFRAMED speed = SPEED RAMPING: numerically integrate the eased curve with a
+  // cached cumulative table (trapezoid @120Hz) so every lookup — scrub, playback, export — is O(1).
+  const _spInt = {};   // layerId -> { sig, tab, SR } (module cache; never serialized with the layer)
+  FM.layerSourceAdvance = function (layer, into) {
+    const sp = layer.speed;
+    if (!isAnimated(sp)) return Math.max(0, into) * (sp || 1);
+    const sig = JSON.stringify(sp.kf) + '|' + (sp.loopMode || '') + '|' + layer.start + '|' + layer.duration;
+    let c = _spInt[layer.id];
+    if (!c || c.sig !== sig) {
+      const SR = 120, n = Math.max(2, Math.ceil((layer.duration || 0) * SR) + 2);
+      const tab = new Float32Array(n);
+      let acc = 0, prev = Math.max(0.05, evalProp(sp, layer.start));
+      for (let i = 1; i < n; i++) {
+        const v = Math.max(0.05, evalProp(sp, layer.start + i / SR));
+        acc += (prev + v) / (2 * SR);
+        tab[i] = acc; prev = v;
+      }
+      c = _spInt[layer.id] = { sig: sig, tab: tab, SR: SR };
+      const keys = Object.keys(_spInt);   // bounded: drop a stale entry if the cache grows
+      if (keys.length > 24) delete _spInt[keys[0]];
+    }
+    const x = Math.max(0, Math.min(c.tab.length - 1, into * c.SR));
+    const i0 = Math.floor(x), f = x - i0;
+    const a = c.tab[i0], b = c.tab[Math.min(c.tab.length - 1, i0 + 1)];
+    return a + (b - a) * f;
+  };
   FM.layerLocalTime = function (layer, t) {
     if (t < layer.start || t >= layer.start + layer.duration) return null;
     const into = t - layer.start;                       // seconds into the clip
-    const sp = layer.speed || 1;                         // source advances sp× wall time
-    const adv = into * sp;
-    const src = layer.reversed ? (layer.duration * sp - adv) : adv;
-    return layer.trimStart + src;
+    if (!isAnimated(layer.speed)) {                      // fast path — unchanged behaviour
+      const sp = layer.speed || 1;                       // source advances sp× wall time
+      const adv = into * sp;
+      const src = layer.reversed ? (layer.duration * sp - adv) : adv;
+      return layer.trimStart + src;
+    }
+    const adv = FM.layerSourceAdvance(layer, into);      // speed ramp: integral of the curve
+    const total = FM.layerSourceAdvance(layer, layer.duration);
+    return layer.trimStart + (layer.reversed ? total - adv : adv);
   };
 
   // Effective fade-in/out windows for a clip: when fadeIn+fadeOut exceed the clip duration they're

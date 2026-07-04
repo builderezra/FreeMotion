@@ -408,6 +408,12 @@ body {
 .fill-none span { font-size: 13px; }
 .fill-readout { display: flex; align-items: center; justify-content: center; gap: 10px; font-variant-numeric: tabular-nums; font-size: 14px; letter-spacing: .04em; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; margin-bottom: 11px; text-align: center; }
 .fill-kf { border: 0; background: transparent; color: var(--text-faint); font-size: 17px; line-height: 1; padding: 4px 6px; cursor: pointer; border-radius: 6px; }
+/* Speed panel rail (◆ + easing, like Volume) + per-param effect easing buttons */
+.spd-panel { display: flex; gap: 10px; align-items: flex-start; }
+.spd-center { flex: 1; min-width: 0; }
+.fx-ease { flex: 0 0 auto; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0; }
+.fx-ease svg { width: 16px; height: 16px; }
+.fx-ease:hover { color: var(--accent); background: var(--panel-2); }
 .fill-kf.on { color: var(--accent); }
 .fill-kf:hover { background: var(--panel-2); }
 .swatch-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-bottom: 13px; }

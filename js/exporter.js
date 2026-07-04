@@ -44,9 +44,31 @@ window.FM = window.FM || {};
   // ---- audio: render the timeline's audio (with reverse/trim) to one buffer ----
   function makeClipBuffer(oac, ab, layer) {
     const sr = ab.sampleRate;
-    const sp = layer.speed || 1;                          // source advances sp× per output sample
     const startSample = Math.floor(layer.trimStart * sr);
     const availSec = Math.max(0, ab.duration - layer.trimStart);
+    const ramped = FM.isAnimated && FM.isAnimated(layer.speed);
+    if (ramped) {
+      // SPEED RAMP: resample along the SAME integral the video frames use (FM.layerSourceAdvance),
+      // so pitch/tempo follow the curve and audio stays sample-locked to the picture.
+      const totalAdv = FM.layerSourceAdvance(layer, layer.duration);
+      const lenSamples = Math.max(1, Math.floor(layer.duration * sr));
+      const out = oac.createBuffer(ab.numberOfChannels, lenSamples, sr);
+      for (let ch = 0; ch < ab.numberOfChannels; ch++) {
+        const src = ab.getChannelData(ch);
+        const dst = out.getChannelData(ch);
+        for (let i = 0; i < lenSamples; i++) {
+          const adv = FM.layerSourceAdvance(layer, i / sr);
+          const posSec = layer.reversed ? (totalAdv - adv) : adv;
+          if (posSec < 0 || posSec > availSec) continue;   // ran past the source → silence
+          const pos = startSample + posSec * sr;
+          const i0 = Math.floor(pos), frac = pos - i0;
+          const a = src[i0] || 0, b = src[i0 + 1] || 0;
+          dst[i] = a + (b - a) * frac;
+        }
+      }
+      return out;
+    }
+    const sp = layer.speed || 1;                          // source advances sp× per output sample
     const lenSec = Math.min(layer.duration, availSec / sp); // timeline seconds this clip fills
     const lenSamples = Math.max(1, Math.floor(lenSec * sr));
     const out = oac.createBuffer(ab.numberOfChannels, lenSamples, sr);

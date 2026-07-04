@@ -102,7 +102,7 @@ window.FM = window.FM || {};
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
-      if (m && m.el && !layer.reversed) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (layer.speed || 1) * FM.previewRate)); } catch (e) {} }
+      if (m && m.el && !layer.reversed) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate)); } catch (e) {} }
     });
     // reversed clips play synthesized Web Audio (not the <video>); re-anchor it to the current playhead so
     // a mid-play rate change re-syncs at the new speed (start() rebuilds nodes with playbackRate=previewRate).
@@ -323,6 +323,8 @@ window.FM = window.FM || {};
         try {
           if (m.el.paused) { m.el.currentTime = local; m.el.play().catch(() => {}); }              // re-entered the window → resume
           else if (Math.abs((m.el.currentTime || 0) - local) > 0.15) { m.el.currentTime = local; } // resync drift (speed≠1)
+          // speed RAMP: follow the keyframed curve live (drift-resync above catches any residue)
+          if (FM.isAnimated(layer.speed)) m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
           const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);   // keyframed volume animates on forward clips
@@ -350,7 +352,7 @@ window.FM = window.FM || {};
       // Forward clips play natively; reversed clips are drawn from the frame cache by tick.
       if (!layer.reversed) {
         try { m.el.currentTime = local; } catch (e) {}
-        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (layer.speed || 1) * (FM.previewRate || 1))); } catch (e) {}
+        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = false;
         m.el.volume = Math.max(0, Math.min(1, FM.layerVolume(layer, FM.time)));
         m.el.play().catch(() => {});

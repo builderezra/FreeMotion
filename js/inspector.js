@@ -251,7 +251,7 @@ window.FM = window.FM || {};
   };
 
   // AM signature control: a horizontal tick strip you drag to scrub a value, + an editable value box.
-  function fxScrubber(fx, p) {
+  function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
     const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : 2);
     const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : p.default); };
@@ -263,6 +263,13 @@ window.FM = window.FM || {};
       kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, p.default); afterFx(); });
       row.appendChild(kfb);
     } else { row.appendChild(el('span', 'fx-kf-spacer')); }
+    // easing curve for THIS parameter's keyframes (every effect param eases, like Move & Transform)
+    if (p.keyframable && fxIdx != null) {
+      const eb = el('button', 'fx-ease');
+      eb.innerHTML = MT_ICONS.ease; eb.title = 'Easing curve — ' + p.label;
+      eb.addEventListener('click', () => { FM._fxEasing = { fxIdx: fxIdx, key: p.key, label: p.label }; FM.inspector.refresh(); });
+      row.appendChild(eb);
+    }
     row.appendChild(el('span', 'fx-scrub-label', p.label));
     const strip = el('div', 'fx-scrub'); strip.appendChild(el('div', 'fx-scrub-notch'));
     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || '');
@@ -436,7 +443,7 @@ window.FM = window.FM || {};
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       reg.params.forEach(p => {
-        if (p.type === 'range') body.appendChild(fxScrubber(fx, p));
+        if (p.type === 'range') body.appendChild(fxScrubber(fx, p, layer, idx));
         else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
         else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
       });
@@ -598,7 +605,7 @@ window.FM = window.FM || {};
     }
     const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); };
+    const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh(); };
     // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
     // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
     const isVideo = layer.type === 'video';
@@ -694,7 +701,7 @@ window.FM = window.FM || {};
       card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
-        view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh();
+        view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh();
       });
       (i < 3 ? top : bot).appendChild(card);
     });
@@ -1123,16 +1130,38 @@ window.FM = window.FM || {};
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {
       if (layer.speed == null) layer.speed = 1;
-      body.appendChild(rangeRow('Speed %', () => Math.round((layer.speed || 1) * 100), v => {
+      // AM-style left rail (◆ keyframe + easing curve) beside the speed control — keyframed speed
+      // = SPEED RAMPING: playback accelerates/decelerates along the eased curve between keyframes.
+      const spRow = el('div', 'mt-panel spd-panel');
+      const rail = el('div', 'mt-rail mt-rail-left');
+      const spAnim = FM.isAnimated(layer.speed), spHere = FM.hasKeyframeAt(layer.speed, FM.time);
+      const kfBtn = el('button', 'mt-kf' + (spAnim ? ' active' : '') + (spHere ? ' here' : ''), '◆');
+      kfBtn.title = spHere ? 'Remove the speed keyframe at the playhead' : 'Keyframe the speed at the playhead (speed ramp)';
+      kfBtn.addEventListener('click', () => { FM.toggleProp(layer, 'speed', FM.time, 1); FM.requestRender(); FM.seekVideosToTime(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); });
+      rail.appendChild(kfBtn);
+      const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Speed easing curve';
+      easeBtn.addEventListener('click', () => { FM._spdEasing = true; FM.inspector.refresh(); });
+      rail.appendChild(easeBtn);
+      spRow.appendChild(rail);
+      const spCenter = el('div', 'mt-center spd-center');
+      spCenter.appendChild(rangeRow('Speed %', () => Math.round((FM.evalProp(layer.speed, FM.time) || 1) * 100), v => {
         const sp = Math.max(0.1, v / 100);
-        const span = layer.duration * (layer.speed || 1);   // source span is invariant → re-time the clip
-        layer.speed = sp;
-        layer.duration = Math.max(0.1, span / sp);
-        const end = layer.start + layer.duration;
-        if (end > FM.scene.project.duration) FM.scene.project.duration = end;
-        const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, sp)); } catch (e) {} }
+        if (FM.isAnimated(layer.speed)) {
+          FM.setProp(layer, 'speed', sp, FM.time);          // ramp: writes/updates a keyframe at the playhead; clip window stays fixed
+        } else {
+          const span = layer.duration * (layer.speed || 1);   // source span is invariant → re-time the clip
+          layer.speed = sp;
+          layer.duration = Math.max(0.1, span / sp);
+          const end = layer.start + layer.duration;
+          if (end > FM.scene.project.duration) FM.scene.project.duration = end;
+        }
+        const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, FM.evalProp(layer.speed, FM.time) || 1)); } catch (e) {} }
+        FM.seekVideosToTime();
         FM.timeline.rebuild();
       }, 25, 400, 5, () => FM.inspector.refresh()));
+      if (spAnim) spCenter.appendChild(el('div', 'insp-hint', 'Speed is keyframed (ramp): the clip length stays fixed while playback speeds up and slows down along the curve — use the curve button to shape the easing.'));
+      spRow.appendChild(spCenter);
+      body.appendChild(spRow);
       if (layer.frameBlend == null) layer.frameBlend = false;
       body.appendChild(checkRow('Smooth slow-motion (frame blend)', layer.frameBlend, async v => {
         layer.frameBlend = v;
@@ -1448,7 +1477,7 @@ window.FM = window.FM || {};
       root = document.getElementById('inspector');
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
-    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; this.refresh(); },
+    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh(); },
     refresh() {
       const layer = FM.selectedLayer(FM.scene);
       const title = document.querySelector('#inspector-panel .panel-title');
@@ -1462,8 +1491,8 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; }
-      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; }
+      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // The old header row (thumbnail + name + duplicate + delete) is gone: the thumbnail lives on
       // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
       // now the top-bar name field. So the inspector goes straight to the actions.
@@ -1487,10 +1516,27 @@ window.FM = window.FM || {};
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditorFor(layer, () => layer.volume, ['volume'], 'volume'));
         root.appendChild(bodyEl);
+      } else if (view === 'speed' && FM._spdEasing && FM.buildEasingEditorFor) {
+        // Speed easing curve — inline sub-view of the Speed panel (speed ramping).
+        const back = el('button', 'cat-back', '‹  Speed');
+        back.addEventListener('click', () => { FM._spdEasing = false; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditorFor(layer, () => layer.speed, ['speed'], 'speed'));
+        root.appendChild(bodyEl);
+      } else if (view === 'effects' && FM._fxEasing && FM.buildEasingEditorFor && (layer.effects || [])[FM._fxEasing.fxIdx]) {
+        // Per-parameter easing for ANY effect — inline sub-view of the Effects panel.
+        const info = FM._fxEasing, fx = layer.effects[info.fxIdx];
+        const back = el('button', 'cat-back', '‹  Effects');
+        back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditorFor(layer, k => fx.params[k], [info.key], info.label || info.key));
+        root.appendChild(bodyEl);
       } else {
         const cat = CATEGORIES.find(c => c.key === view);
         const back = el('button', 'cat-back', '‹  ' + (cat ? cat.label : 'Back'));
-        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM.inspector.refresh(); });
+        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');
         buildCategory(view, layer, bodyEl);
