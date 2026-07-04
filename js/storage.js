@@ -52,7 +52,7 @@ window.FM = window.FM || {};
 
   FM.storage = {
     async save() {
-      try { localStorage.setItem(curKey(), JSON.stringify(sceneDoc())); _quotaWarned = false; }
+      try { localStorage.setItem(curKey(), JSON.stringify(sceneDoc(), FM.jsonReplacer)); _quotaWarned = false; }
       catch (e) { warnQuota(e); }   // a quota failure shouldn't block the IDB media save below
       if (FM.projects) FM.projects.touchCurrent();
       try {
@@ -73,7 +73,7 @@ window.FM = window.FM || {};
     },
 
     // Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
-    flushSync() { try { clearTimeout(saveTimer); localStorage.setItem(curKey(), JSON.stringify(sceneDoc())); } catch (e) { warnQuota(e); } },
+    flushSync() { try { clearTimeout(saveTimer); localStorage.setItem(curKey(), JSON.stringify(sceneDoc(), FM.jsonReplacer)); } catch (e) { warnQuota(e); } },
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
@@ -180,7 +180,7 @@ window.FM = window.FM || {};
   FM.storage.exportFile = async function () {
     const obj = await FM.storage.serializeScene(FM.scene);
     const name = ((FM.scene.project.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
-    const blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name + '.fmotion.json';
     document.body.appendChild(a); a.click(); a.remove();
@@ -214,7 +214,7 @@ window.FM = window.FM || {};
   // into a project that already has those ids — can never collide with existing layers/media.
   function reIdLayers(layers) {
     const map = {};
-    const out = JSON.parse(JSON.stringify(layers));
+    const out = JSON.parse(JSON.stringify(layers, FM.jsonReplacer));
     out.forEach(l => { map[l.id] = newId('l'); l.id = map[l.id]; });
     out.forEach(l => { if (l.parent) l.parent = map[l.parent] || null; });
     return { layers: out, map };
@@ -226,7 +226,7 @@ window.FM = window.FM || {};
       const m = FM.media.get(l.id);
       if (m && m.file) media[l.id] = { file: m.file, kind: m.kind };
     });
-    return { layers: JSON.parse(JSON.stringify(layers)), media: media };
+    return { layers: JSON.parse(JSON.stringify(layers, FM.jsonReplacer)), media: media };
   }
   // Register a pack's media for freshly re-id'd layers: in-memory registry + IDB (so it autosaves).
   async function hydratePack(layers, media, idMap) {
@@ -309,6 +309,8 @@ window.FM = window.FM || {};
     // Switch the editor to another project (stash current first).
     async open(id) {
       if (id === curId()) return true;
+      if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // drop any tracking overlay from the outgoing project
+      if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
       FM.storage.flushSync(); this.touchCurrent(true);

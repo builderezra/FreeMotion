@@ -2457,14 +2457,19 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: W, h: H });
+    const ax = (typeof layer.transform.anchorX === 'number') ? layer.transform.anchorX : 0.5;
+    const ay = (typeof layer.transform.anchorY === 'number') ? layer.transform.anchorY : 0.5;
     const nscale = Math.min(1, (W * 0.92) / Math.max(1, sz.w), (H * 0.92) / Math.max(1, sz.h));   // fit content into the plate (constant per clip → transform-independent flow)
     if (!_mbcA) _mbcA = document.createElement('canvas');
     if (_mbcA.width !== W || _mbcA.height !== H) { _mbcA.width = W; _mbcA.height = H; }
     const actx = _mbcA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const ntr = Object.assign({}, layer.transform, { x: W / 2, y: H / 2, scale: nscale, scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, skewY: 0, z: 0, opacity: 1 });
-    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, motionBlur: null, mask: null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx) });
+    const feathered = layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0;
+    const ntr = Object.assign({}, layer.transform, { x: W / 2, y: H / 2, scale: nscale, scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, skewY: 0, z: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1 });
+    // feathered mask stays on the proxy (applied in content space → keeps its soft edge); a hard mask
+    // is clipped crisply at composite instead.
+    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, motionBlur: null, mask: feathered ? layer.mask : null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx) });
     drawLayer(actx, proxy, t, scene);
     if (!_mbcB) _mbcB = document.createElement('canvas');
     if (_mbcB.width !== W || _mbcB.height !== H) { _mbcB.width = W; _mbcB.height = H; }
@@ -2479,9 +2484,11 @@ window.FM = window.FM || {};
     ctx.filter = 'none';
     if (layer.shadow && layer.shadow.enabled) { const sh = layer.shadow; ctx.shadowColor = sh.color || '#000'; ctx.shadowBlur = sh.blur || 0; ctx.shadowOffsetX = sh.dx || 0; ctx.shadowOffsetY = sh.dy || 0; }
     applyLayerTransform(ctx, layer, t, scene);
-    applyMaskClip(ctx, layer);
+    if (!feathered) applyMaskClip(ctx, layer);   // feathered mask already baked into the content plate
     ctx.scale(1 / nscale, 1 / nscale);
-    try { ctx.drawImage(_mbcB, -W / 2, -H / 2); } catch (e) {}
+    // proxy centres the content (anchor 0.5) so it always fits; shift so the REAL anchor point maps
+    // to the origin, matching the normal draw for any anchor.
+    try { ctx.drawImage(_mbcB, -W / 2 - (ax - 0.5) * sz.w * nscale, -H / 2 - (ay - 0.5) * sz.h * nscale); } catch (e) {}
     ctx.restore();
   }
   function drawLayer(ctx, layer, t, scene) {
@@ -2519,7 +2526,7 @@ window.FM = window.FM || {};
       // Motion Blur (Content): blur ONLY what moves INSIDE the layer, never the layer's own transform.
       // Render the content at a neutral transform, blur it there, then composite with the REAL
       // transform — so panning/zooming/rotating the clip to reframe it never smears the picture.
-      if (outer && outer.type === 'motionflow') { drawContentMotionBlur(ctx, layer, t, scene, outer); return; }
+      if (outer && outer.type === 'motionflow' && layer.type !== '_flat') { drawContentMotionBlur(ctx, layer, t, scene, outer); return; }
       if (pp.length) { applyPostFx(ctx, layer, t, scene, outer); return; }
     }
     // Motion blur wraps the whole layer (averaged sub-frames).
@@ -2936,7 +2943,7 @@ window.FM = window.FM || {};
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
         if (FM.hasCopyBg(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far as this layer's content
-          if (!L._bgSnap) L._bgSnap = document.createElement('canvas');
+          if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = document.createElement('canvas');
           if (L._bgSnap.width !== P.width || L._bgSnap.height !== P.height) { L._bgSnap.width = P.width; L._bgSnap.height = P.height; }
           const bs = L._bgSnap.getContext('2d');
           bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, P.width, P.height);

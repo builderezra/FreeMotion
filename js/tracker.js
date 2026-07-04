@@ -98,16 +98,20 @@ window.FM = window.FM || {};
   }
 
   // ---- Ramer–Douglas–Peucker on one channel: which indices to KEEP as keyframes ----
-  function rdpKeep(times, vals, keep, lo, hi, tol) {
-    if (hi <= lo + 1) return;
-    const t0 = times[lo], v0 = vals[lo], t1 = times[hi], v1 = vals[hi], dt = (t1 - t0) || 1e-6;
-    let worst = -1, wd = tol;
-    for (let i = lo + 1; i < hi; i++) {
-      const pred = v0 + (v1 - v0) * (times[i] - t0) / dt;
-      const d = Math.abs(vals[i] - pred);
-      if (d > wd) { wd = d; worst = i; }
+  function rdpKeep(times, vals, keep, lo, hi, tol) {   // iterative (explicit stack) — no overflow on long tracks
+    const stack = [[lo, hi]];
+    while (stack.length) {
+      const seg = stack.pop(), a = seg[0], b = seg[1];
+      if (b <= a + 1) continue;
+      const t0 = times[a], v0 = vals[a], t1 = times[b], v1 = vals[b], dt = (t1 - t0) || 1e-6;
+      let worst = -1, wd = tol;
+      for (let i = a + 1; i < b; i++) {
+        const pred = v0 + (v1 - v0) * (times[i] - t0) / dt;
+        const d = Math.abs(vals[i] - pred);
+        if (d > wd) { wd = d; worst = i; }
+      }
+      if (worst >= 0) { keep[worst] = 1; stack.push([a, worst], [worst, b]); }
     }
-    if (worst >= 0) { keep[worst] = 1; rdpKeep(times, vals, keep, lo, worst, tol); rdpKeep(times, vals, keep, worst, hi, tol); }
   }
 
   // ================= run the track =================
@@ -117,6 +121,7 @@ window.FM = window.FM || {};
     // Enter pick mode: overlay captures ONE tap → seed point + adjustable box, then Track/Cancel.
     pick(layer) {
       if (!layer || layer.type !== 'video') { if (FM.toast) FM.toast('Motion tracking works on a video/clip layer'); return; }
+      if (layer.parent) { if (FM.toast) FM.toast('Un-parent this layer first — tracking can’t account for a parent’s motion', 3500); return; }
       const m = FM.media.get(layer.id);
       if (!m || !m.el || !m.width) { if (FM.toast) FM.toast('This layer has no trackable footage'); return; }
       this.cancel();
@@ -166,7 +171,11 @@ window.FM = window.FM || {};
       if (!m || !m.el) return false;
       const P = FM.scene.project, fps = P.fps || 30;
       // downscaled frame cache to run the matcher on (fast, offline)
-      await FM.buildFrameCache(m, Math.min(fps, 30), null, { maxDim: 480, maxBytes: 96 * 1024 * 1024 });
+      const trkFps = Math.min(fps, 30);
+      // budget the cache so we keep ~1 unique frame per tracked frame (up to a sane cap), not a fixed 194
+      const clipFrames = Math.ceil(layer.duration * trkFps);
+      const budget = Math.min(360 * 1024 * 1024, Math.max(96 * 1024 * 1024, clipFrames * 400 * 225 * 4));
+      await FM.buildFrameCache(m, trkFps, null, { maxDim: 440, maxBytes: budget });
       const fc = m.frameCache; if (!fc || !fc.count) return false;
       // cache frames are stored at (fc.w × fc.h); content(media) px → cache px by this ratio
       const cw = fc.w || (m.width), ch = fc.h || (m.height);
@@ -186,8 +195,12 @@ window.FM = window.FM || {};
 
       // build the timeline-frame list across the clip
       const t0 = layer.start, t1 = layer.start + layer.duration - 1e-6, frames = [];
-      for (let t = t0; t <= t1; t += 1 / fps) frames.push(FM.snapFrame(t));
-      const seedIdxInList = Math.max(0, Math.min(frames.length - 1, Math.round((FM.snapFrame(seedT) - t0) * fps)));
+      const MAXTRK = 2400;   // frame budget — beyond this, sample every Nth timeline frame
+      const stepFr = Math.max(1, Math.ceil((layer.duration * fps) / MAXTRK));
+      for (let t = t0; t <= t1; t += stepFr / fps) frames.push(FM.snapFrame(t));
+      const sT = FM.snapFrame(seedT);
+      let seedIdxInList = 0, seedBest = Infinity;
+      for (let i = 0; i < frames.length; i++) { const d = Math.abs(frames[i] - sT); if (d < seedBest) { seedBest = d; seedIdxInList = i; } }
 
       // seed template (cache px)
       const tw = Math.max(16, Math.round(boxContentPx * rx) | 1), th = tw;

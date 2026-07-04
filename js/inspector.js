@@ -972,7 +972,7 @@ window.FM = window.FM || {};
     easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, mode); });
     left.appendChild(easeBtn);
     // Auto motion/head track — video only, on the Move rail. Seeds from a tap, writes x/y keyframes.
-    if (layer.type === 'video' && mode === 'move' && FM.tracker) {
+    if (layer.type === 'video' && mode === 'move' && !layer.parent && FM.tracker) {
       const trk = el('button', 'mt-ease mt-track'); trk.innerHTML = MT_ICONS.track; trk.title = 'Auto-track a head / point (writes position keyframes you can then edit)';
       trk.addEventListener('click', () => FM.tracker.pick(layer));
       left.appendChild(trk);

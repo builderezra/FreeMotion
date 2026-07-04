@@ -268,8 +268,12 @@ window.FM = window.FM || {};
 
   // Deep-clone a layer. Default = "duplicate" (new color, offset, " copy" name).
   // plain=true = identical copy with just a new id (used by split).
+  // JSON replacer: DROP runtime-only fields (canvas snapshots, decode caches — keys starting with
+  // '_'). A live <canvas> serialises to {} and comes back methodless, which crashed the compositor
+  // (Copy Background's _bgSnap, motion-blur plates, media _lastFrame, group _canvas, …).
+  FM.jsonReplacer = function (k, v) { return (typeof k === 'string' && k.charCodeAt(0) === 95) ? undefined : v; };
   FM.cloneLayer = function (layer, plain) {
-    const c = JSON.parse(JSON.stringify(layer));
+    const c = JSON.parse(JSON.stringify(layer, FM.jsonReplacer));
     c.id = uid('layer');
     if (!plain) {
       c.clipColor = CLIP_COLORS[_colorIdx++ % CLIP_COLORS.length];
