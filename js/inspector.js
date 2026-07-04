@@ -1172,7 +1172,7 @@ window.FM = window.FM || {};
         const curIn = modes.find(m => m[0] === cur);
         head.innerHTML = '<span class="blend-arrow">' + (open ? '▾' : '▸') + '</span><span class="blend-cat-name">' + name + '</span>' +
           (curIn ? '<span class="blend-cur">' + curIn[1] + '</span><span class="blend-check">✓</span>' : '');
-        head.addEventListener('click', () => { FM._blendOpen[name] = !FM._blendOpen[name]; FM.inspector.refresh(); });
+        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) FM._blendOpen[name] = true; FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time (AM)
         row.appendChild(head);
         if (open) {
           const list = el('div', 'blend-list');
