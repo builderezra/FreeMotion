@@ -883,6 +883,7 @@ window.FM = window.FM || {};
 
   // ===== Move & Transform — Alight Motion's mode-rail editor (Move / Rotate / Scale / Skew) =====
   const MT_ICONS = {
+    track: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
     move: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>',
     rotate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="7.5" width="9" height="9" rx="1.6"/><path d="M18.5 6.5a7 7 0 0 0-5-2.5"/><path d="M13.2 2.6 13.5 4l-1.4.4"/></svg>',
     scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6"/><path d="M9 15 15 9"/></svg>',
@@ -970,6 +971,12 @@ window.FM = window.FM || {};
     const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
     easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, mode); });
     left.appendChild(easeBtn);
+    // Auto motion/head track — video only, on the Move rail. Seeds from a tap, writes x/y keyframes.
+    if (layer.type === 'video' && mode === 'move' && FM.tracker) {
+      const trk = el('button', 'mt-ease mt-track'); trk.innerHTML = MT_ICONS.track; trk.title = 'Auto-track a head / point (writes position keyframes you can then edit)';
+      trk.addEventListener('click', () => FM.tracker.pick(layer));
+      left.appendChild(trk);
+    }
 
     // center: value boxes + bespoke control per mode
     const center = el('div', 'mt-center');

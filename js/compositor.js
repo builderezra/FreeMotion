@@ -223,6 +223,10 @@ window.FM = window.FM || {};
       { key: 'threshold', label: 'Threshold', min: 0, max: 0.4, step: 0.01, def: 0.05 },
       { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0.5 },
     ] },
+    // ---- Copy Background: this layer shows a live copy of everything rendered BELOW it, clipped to
+    // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
+    // full-screen shape + Copy Background = an adjustment/colour-grade layer you can mask & animate.
+    { type: 'copybg', label: 'Copy Background', params: [] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -2145,6 +2149,8 @@ window.FM = window.FM || {};
     return layer.fillMode != null && layer.fillMode !== 'none';
   }
   FM.layerHasGradient = function (layer) { return FM.fillModeOf(layer) === 'gradient' && !!layer.fillGradient; };
+  // Copy Background: does this layer copy the backdrop below it?
+  FM.hasCopyBg = function (layer) { return !!(layer.effects && layer.effects.some(function (e) { return e.type === 'copybg' && e.enabled !== false; })); };
   // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
   // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
   const _fillImg = {};
@@ -2440,6 +2446,44 @@ window.FM = window.FM || {};
   };
 
   let _blendMaskCv = null;
+  // Content-space motion blur: render the layer at a NEUTRAL transform (centered, no rotation/scale/
+  // skew/parent), run the optical-flow blur in that transform-free space, then composite with the
+  // layer's REAL transform. Result: internal motion (a swinging sword, playing footage) blurs;
+  // moving/zooming the whole layer to reframe it does NOT.
+  let _mbcA = null, _mbcB = null;
+  function drawContentMotionBlur(ctx, layer, t, scene, fx) {
+    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    if (opacity <= 0) return;
+    const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = P.width, H = P.height;
+    const sz = (FM.layerSize ? FM.layerSize(layer) : { w: W, h: H });
+    const nscale = Math.min(1, (W * 0.92) / Math.max(1, sz.w), (H * 0.92) / Math.max(1, sz.h));   // fit content into the plate (constant per clip → transform-independent flow)
+    if (!_mbcA) _mbcA = document.createElement('canvas');
+    if (_mbcA.width !== W || _mbcA.height !== H) { _mbcA.width = W; _mbcA.height = H; }
+    const actx = _mbcA.getContext('2d');
+    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    const ntr = Object.assign({}, layer.transform, { x: W / 2, y: H / 2, scale: nscale, scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, skewY: 0, z: 0, opacity: 1 });
+    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, motionBlur: null, mask: null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx) });
+    drawLayer(actx, proxy, t, scene);
+    if (!_mbcB) _mbcB = document.createElement('canvas');
+    if (_mbcB.width !== W || _mbcB.height !== H) { _mbcB.width = W; _mbcB.height = H; }
+    const bctx = _mbcB.getContext('2d');
+    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
+    bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
+    try { CANVAS_FX.motionflow(_mbcA, bctx, W, H, { x: 0, y: 0, w: W, h: H }, fx.params || {}, t, t - (layer.start || 0), layer); }
+    catch (e) { bctx.drawImage(_mbcA, 0, 0); }
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    if (layer.shadow && layer.shadow.enabled) { const sh = layer.shadow; ctx.shadowColor = sh.color || '#000'; ctx.shadowBlur = sh.blur || 0; ctx.shadowOffsetX = sh.dx || 0; ctx.shadowOffsetY = sh.dy || 0; }
+    applyLayerTransform(ctx, layer, t, scene);
+    applyMaskClip(ctx, layer);
+    ctx.scale(1 / nscale, 1 / nscale);
+    try { ctx.drawImage(_mbcB, -W / 2, -H / 2); } catch (e) {}
+    ctx.restore();
+  }
   function drawLayer(ctx, layer, t, scene) {
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
@@ -2471,7 +2515,12 @@ window.FM = window.FM || {};
     // inward through the rest). So effect[0] is applied first (innermost), effect[n] last (outermost).
     if (scene && layer.effects) {
       const pp = layer.effects.filter(e => POSTFX[e.type] && e.enabled !== false);
-      if (pp.length) { applyPostFx(ctx, layer, t, scene, pp[pp.length - 1]); return; }
+      const outer = pp[pp.length - 1];
+      // Motion Blur (Content): blur ONLY what moves INSIDE the layer, never the layer's own transform.
+      // Render the content at a neutral transform, blur it there, then composite with the REAL
+      // transform — so panning/zooming/rotating the clip to reframe it never smears the picture.
+      if (outer && outer.type === 'motionflow') { drawContentMotionBlur(ctx, layer, t, scene, outer); return; }
+      if (pp.length) { applyPostFx(ctx, layer, t, scene, outer); return; }
     }
     // Motion blur wraps the whole layer (averaged sub-frames).
     if (scene && layer.motionBlur && layer.motionBlur.enabled) { drawMotionBlur(ctx, layer, t, scene); return; }
@@ -2572,6 +2621,13 @@ window.FM = window.FM || {};
         ctx.lineWidth = (stk && stk.width) ? stk.width : 8;
         ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (FM.evalProp(layer.fill, t) || '#ffffff');
         ctx.lineCap = 'round'; ctx.stroke();
+      } else if (FM.hasCopyBg(layer) && layer._bgSnap) {
+        // fill the shape with a pixel-aligned copy of the backdrop below (clip local, draw in screen space)
+        ctx.save(); ctx.clip();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        try { ctx.drawImage(layer._bgSnap, 0, 0); } catch (e) {}
+        ctx.restore();
+        if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }
       } else {
         paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
         if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }
@@ -2878,7 +2934,16 @@ window.FM = window.FM || {};
       const unit = memberToUnit && memberToUnit[L.id];
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
-      else drawLayer(target, L, t, scene);
+      else {
+        if (FM.hasCopyBg(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far as this layer's content
+          if (!L._bgSnap) L._bgSnap = document.createElement('canvas');
+          if (L._bgSnap.width !== P.width || L._bgSnap.height !== P.height) { L._bgSnap.width = P.width; L._bgSnap.height = P.height; }
+          const bs = L._bgSnap.getContext('2d');
+          bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, P.width, P.height);
+          try { bs.drawImage(target.canvas, 0, 0); } catch (e) {}
+        }
+        drawLayer(target, L, t, scene);
+      }
     }
     target.restore();
     if (cam) {

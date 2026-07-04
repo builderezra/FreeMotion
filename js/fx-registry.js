@@ -69,6 +69,7 @@ window.FM = window.FM || {};
     // batch 24
     squeeze: 'distort', tiles: 'repeat',
     motionflow: 'blur',   // content-aware motion blur (temporal)
+    copybg: 'stylize',    // copy the backdrop below into this layer
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -103,7 +104,7 @@ window.FM = window.FM || {};
   };
 
   // Effects to feature in the carousel (visually interesting ones). Chroma Key + Squeeze lead, like AM.
-  FM.FX_FEATURED = ['chromakey', 'motionflow', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
+  FM.FX_FEATURED = ['chromakey', 'motionflow', 'copybg', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {

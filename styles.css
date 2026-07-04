@@ -1356,3 +1356,14 @@ body.drawing #select-box { display: none !important; }
 .ctx-swatch:hover { transform: scale(1.12); }
 .ctx-swatch-none { background: var(--panel-2); color: var(--text-faint); font-size: 13px; line-height: 1; }
 #btn-parent.active { color: var(--accent); }
+
+/* Layer colour tag (track-head left stripe) */
+.th-stripe { flex: 0 0 auto; width: 4px; align-self: stretch; border-radius: 2px; margin-right: 2px; transition: opacity .15s; }
+.ctx-swatch-label { font-size: 11px; color: var(--text-faint); padding: 6px 12px 2px; }
+
+/* Motion / head tracker overlay + bar */
+#trk-overlay { position: absolute; z-index: 42; touch-action: none; cursor: crosshair; }
+#trk-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 92vw; }
+#trk-bar span { font-size: 12px; color: var(--text-faint); }
+.mt-track.mt-ease { color: var(--text-faint); }
+.mt-track.mt-ease:hover { color: var(--accent); }

@@ -276,7 +276,11 @@ window.FM = window.FM || {};
       head.classList.add('group-head');
     }
     if (inGroup(layer)) head.classList.add('in-group');
-    head.append(eye, thumb, name);
+    const stripe = document.createElement('span');
+    stripe.className = 'th-stripe';
+    stripe.style.background = layer.labelColor || 'transparent';
+    stripe.style.opacity = layer.labelColor ? '1' : '0';
+    head.append(stripe, eye, thumb, name);
     head.addEventListener('click', (e) => {
       if (Date.now() - lpFiredAt < 800) return;                 // the long-press that just fired isn't a tap (survives the DOM rebuild)
       if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership

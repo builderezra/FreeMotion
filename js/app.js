@@ -207,16 +207,11 @@ window.FM = window.FM || {};
     FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
     if (FM.toast) FM.toast(layer.blendMode === 'mask-include' ? 'Clipping mask ON — layers below show only inside this layer' : 'Clipping mask off');
   };
-  FM.quickFill = function (layer, hex) {   // ⋯ menu swatch strip: null = clear the fill override
-    if (hex == null) {
-      if (layer.type === 'shape') { layer.fillMode = 'none'; }
-      else if (layer.type === 'text') { FM.setProp(layer, 'color', '#ffffff', FM.time); }
-      else layer.fillMode = 'none';
-    } else {
-      layer.fillMode = 'solid';
-      FM.setProp(layer, layer.type === 'text' ? 'color' : 'fill', hex, FM.time);
-    }
-    FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+  FM.setLayerLabel = function (layer, hex) {   // ⋯ menu swatch strip: a colour TAG on the layer header (not the fill). null clears it.
+    if (hex == null) delete layer.labelColor; else layer.labelColor = hex;
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();
+    if (FM.toast) FM.toast(hex ? 'Layer tagged' : 'Tag cleared', 900);
   };
   FM.openParentPicker = function (layer, x, y) {
     const cands = FM.scene.layers.filter(l => l.id !== layer.id && l.type !== 'camera' && !(FM.isAncestor && FM.isAncestor(FM.scene, layer.id, l.id)));
@@ -1290,7 +1285,7 @@ window.FM = window.FM || {};
         items.push({ label: 'Media Info', action: () => FM.mediaInfoToast(sel) });
         if (sel.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(sel.id) });
         items.push({ sep: true });
-        items.push({ swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff'], onPick: (hex) => FM.quickFill(sel, hex) });
+        items.push({ swatchLabel: 'Layer colour tag', swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff', '#9b5cff'], onPick: (hex) => FM.setLayerLabel(sel, hex) });
         items.push({ sep: true });
         items.push({ label: 'Project options…', action: () => { FM.selectLayer(null); setTimeout(() => moreBtn.click(), 0); } });
         if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 4, items);

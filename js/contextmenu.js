@@ -17,7 +17,8 @@ window.FM = window.FM || {};
       ensure(); menu.innerHTML = '';
       items.forEach(it => {
         if (it.sep) { const s = document.createElement('div'); s.className = 'ctx-sep'; menu.appendChild(s); return; }
-        if (it.swatches) {   // quick-colour strip (AM ⋯ menu): ✕ clears, dots apply a solid fill
+        if (it.swatches) {   // quick-colour strip (AM ⋯ menu): ✕ clears, dots set a layer colour tag
+          if (it.swatchLabel) { const lb = document.createElement('div'); lb.className = 'ctx-swatch-label'; lb.textContent = it.swatchLabel; menu.appendChild(lb); }
           const row = document.createElement('div'); row.className = 'ctx-swatches';
           const none = document.createElement('button'); none.className = 'ctx-swatch ctx-swatch-none'; none.textContent = '✕'; none.title = 'No fill';
           none.addEventListener('click', () => { FM.contextMenu.hide(); it.onPick(null); });
