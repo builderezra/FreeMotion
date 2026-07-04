@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=149">
+<link rel="stylesheet" href="styles.css?v=150">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.53</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.54</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -37,6 +37,7 @@
           <button id="btn-open-proj" class="icon-btn" title="Open project file (.fmotion.json)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/></svg></button>
           <button id="btn-save-proj" class="icon-btn" title="Save project file (.fmotion.json)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5zM8 3v6h7V3M8 21v-7h8v7"/></svg></button>
         </div>
+        <button id="btn-parent" class="icon-btn" title="Parent — link this layer to another layer" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="11" height="11" rx="2" stroke-dasharray="3 2"/><rect x="10" y="10" width="11" height="11" rx="2"/></svg></button>
         <button id="btn-del-layer" class="icon-btn" title="Delete selected layer" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
         <button id="btn-more" class="icon-btn" title="More — canvas size, guides, save frame, open/save project, shortcuts"><svg viewBox="0 0 24 24" class="ico" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
         <button id="btn-export" class="btn btn-accent"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Export</button>
@@ -273,9 +274,9 @@
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/scene.js?v=68"></script>
   <script src="js/media.js?v=28"></script>
-  <script src="js/compositor.js?v=142"></script>
+  <script src="js/compositor.js?v=143"></script>
   <script src="js/fx-registry.js?v=27"></script>
-  <script src="js/timeline.js?v=131"></script>
+  <script src="js/timeline.js?v=132"></script>
   <script src="js/addmenu.js?v=8"></script>
   <script src="js/inspector.js?v=122"></script>
   <script src="js/fx-browser.js?v=6"></script>
@@ -291,10 +292,10 @@
   <script src="js/graph-editor.js?v=103"></script>
   <script src="js/exporter.js?v=80"></script>
   <script src="js/sample.js?v=9"></script>
-  <script src="js/contextmenu.js?v=33"></script>
+  <script src="js/contextmenu.js?v=34"></script>
   <script src="js/shortcuts.js?v=71"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=121"></script>
+  <script src="js/app.js?v=122"></script>
   <script src="js/mobile.js?v=18"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=4"></script>

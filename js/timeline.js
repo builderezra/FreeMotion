@@ -19,6 +19,7 @@ window.FM = window.FM || {};
   // was caused by us (time→scroll) and must be ignored; anything else is a real user scroll that should
   // DRIVE the playhead (so the view + FM.time can never decouple → no "click sends me to the start").
   let lastProgScroll = -1;
+  let userScrollAt = 0, scrollSettle = 0;   // user-scroll grace window: while swiping, the finger owns scrollLeft
   const TRIM_EDGE = 46;     // px from a viewport edge that triggers auto-scroll while trimming
   let trimScrollRAF = 0;
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
@@ -726,6 +727,13 @@ window.FM = window.FM || {};
         const sL = timelineEl.scrollLeft;
         if (Math.abs(sL - lastProgScroll) < 1) return;                  // our own playhead-driven write → ignore (no feedback loop)
         lastProgScroll = sL;
+        // USER gesture in progress: the finger owns scrollLeft — updatePlayhead must not yank it
+        // back to the snapped-frame pixel mid-swipe (at high zoom a frame is many px, so the yank
+        // made scrubbing jagged and could pin you against a frame boundary entirely). Time still
+        // snaps per frame; the strip settles onto the exact notch when the gesture goes idle.
+        userScrollAt = performance.now();
+        clearTimeout(scrollSettle);
+        scrollSettle = setTimeout(() => { userScrollAt = 0; FM.timeline.updatePlayhead(); }, 160);
         FM.setTime(snapT(Math.max(0, Math.min(FM.scene.project.duration, sL / pxPerSec()))));
       }, { passive: true });
       // Grabbing the timeline while it's PLAYING pauses it (AM). Detected on the raw INPUT (touch/
@@ -970,7 +978,7 @@ window.FM = window.FM || {};
       // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits
       // under it. (Relative drag-scrub also drives FM.time, which re-enters here to set scrollLeft.)
       const targetScroll = Math.max(0, FM.time * pps);
-      if (timelineEl && !trimDrag && !clipMove && !kfDrag) {
+      if (timelineEl && !trimDrag && !clipMove && !kfDrag && (!userScrollAt || performance.now() - userScrollAt > 150)) {
         if (Math.abs(timelineEl.scrollLeft - targetScroll) > 0.5) timelineEl.scrollLeft = targetScroll;
         lastProgScroll = targetScroll;   // remember our own write so the resulting 'scroll' event is ignored
       }

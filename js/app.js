@@ -144,12 +144,95 @@ window.FM = window.FM || {};
   // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there, AM-style) and
   // reverts to the project name when nothing is selected; the delete button appears only with a
   // selection. Called from refreshAll AND selectLayer so it tracks every selection change.
+  // ===== AM layer actions (top-bar ⋯ menu when a clip is selected) =====
+  FM.fitLayer = function (layer, mode) {   // 'fit' | 'fill' | 'stretch' to the composition area
+    const P = FM.scene.project;
+    const sz = FM.layerSize ? FM.layerSize(layer) : { w: 100, h: 100 };
+    if (!sz.w || !sz.h) return;
+    const t = FM.time;
+    FM.setTransform(layer, 'x', Math.round(P.width / 2), t);
+    FM.setTransform(layer, 'y', Math.round(P.height / 2), t);
+    layer.transform.anchorX = 0.5; layer.transform.anchorY = 0.5;
+    if (mode === 'stretch') {
+      FM.setTransform(layer, 'scale', 1, t);
+      layer.transform.scaleX = Math.round(P.width / sz.w * 1000) / 1000;
+      layer.transform.scaleY = Math.round(P.height / sz.h * 1000) / 1000;
+    } else {
+      const s = (mode === 'fill' ? Math.max : Math.min)(P.width / sz.w, P.height / sz.h);
+      FM.setTransform(layer, 'scale', Math.round(s * 1000) / 1000, t);
+      layer.transform.scaleX = 1; layer.transform.scaleY = 1;
+    }
+    FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.inspector) FM.inspector.refresh();
+    if (FM.history) FM.history.commit();
+  };
+  FM.flipLayer = function (layer, axis) {   // mirror without touching scale keyframes
+    if (axis === 'h') layer.flipH = !layer.flipH; else layer.flipV = !layer.flipV;
+    FM.requestRender(); if (FM.history) FM.history.commit();
+  };
+  FM.extractAudio = async function (layer) {   // audio-only twin of a video clip
+    const before = new Set(FM.scene.layers.map(l => l.id));
+    await FM.duplicateLayer(layer.id, true);
+    const dup = FM.scene.layers.find(l => !before.has(l.id));
+    if (!dup) return;
+    dup.name = (layer.name || 'Clip') + ' (audio)';
+    dup.transform.opacity = 0;      // picture invisible; the tick still plays its sound
+    layer.muted = true;             // the original keeps the picture, the twin keeps the voice
+    FM.refreshAll(); if (FM.history) FM.history.commit();
+    if (FM.toast) FM.toast('Audio extracted to its own layer — original muted');
+  };
+  FM.mediaInfoToast = function (layer) {
+    const m = FM.media.get(layer.id);
+    const parts = [];
+    if (m) {
+      if (m.width || m.height) parts.push(m.width + '×' + m.height);
+      if (m.duration) parts.push(m.duration.toFixed(2) + 's');
+      if (m.file && m.file.size) parts.push((m.file.size / 1048576).toFixed(1) + ' MB');
+      if (m.file && m.file.name) parts.push(m.file.name);
+    } else if (layer.type === 'shape') parts.push('Shape ' + (layer.shape || 'rect'), (layer.shapeW || 0) + '×' + (layer.shapeH || 0));
+    parts.push('clip ' + (layer.duration || 0).toFixed(2) + 's @ ' + (FM.scene.project.fps || 30) + 'fps');
+    if (FM.toast) FM.toast(parts.join('  ·  '), 5000);
+  };
+  FM.convertToOutline = function (layer) {   // shape → editable path drawn as a stroke
+    if (layer.type !== 'shape') return;
+    const cv = FM.shapeToPoints(layer);
+    layer.shape = 'path'; layer.subs = cv.subs; delete layer.points; layer.closed = cv.closed;
+    layer.fillMode = 'none';
+    if (!layer.stroke) layer.stroke = { enabled: true, width: 6, color: '#ffffff' };
+    layer.stroke.enabled = true; if (!layer.stroke.width) layer.stroke.width = 6;
+    FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+    if (FM.toast) FM.toast('Converted to outline — Edit points to reshape it');
+  };
+  FM.toggleClippingMask = function (layer) {   // this layer clips everything below to its silhouette
+    layer.blendMode = layer.blendMode === 'mask-include' ? 'normal' : 'mask-include';
+    FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+    if (FM.toast) FM.toast(layer.blendMode === 'mask-include' ? 'Clipping mask ON — layers below show only inside this layer' : 'Clipping mask off');
+  };
+  FM.quickFill = function (layer, hex) {   // ⋯ menu swatch strip: null = clear the fill override
+    if (hex == null) {
+      if (layer.type === 'shape') { layer.fillMode = 'none'; }
+      else if (layer.type === 'text') { FM.setProp(layer, 'color', '#ffffff', FM.time); }
+      else layer.fillMode = 'none';
+    } else {
+      layer.fillMode = 'solid';
+      FM.setProp(layer, layer.type === 'text' ? 'color' : 'fill', hex, FM.time);
+    }
+    FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+  };
+  FM.openParentPicker = function (layer, x, y) {
+    const cands = FM.scene.layers.filter(l => l.id !== layer.id && l.type !== 'camera' && !(FM.isAncestor && FM.isAncestor(FM.scene, layer.id, l.id)));
+    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', action: () => { layer.parent = null; FM.refreshAll(); if (FM.history) FM.history.commit(); } }, { sep: true }];
+    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), action: () => { layer.parent = c.id; if (!layer.parentMode) layer.parentMode = 'normal'; FM.refreshAll(); if (FM.history) FM.history.commit(); } }));
+    if (FM.contextMenu) FM.contextMenu.show(x, y, items);
+  };
+
   function syncTopBar() {
     const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     const pn = document.getElementById('proj-name');
     if (pn && document.activeElement !== pn) { pn.value = sel ? (sel.name || '') : (FM.scene.project.name || 'Untitled'); pn.title = sel ? 'Layer name' : 'Project name'; }
     const delBtn = document.getElementById('btn-del-layer');
     if (delBtn) delBtn.style.display = sel ? '' : 'none';
+    const parBtn = document.getElementById('btn-parent');
+    if (parBtn) { parBtn.style.display = sel ? '' : 'none'; parBtn.classList.toggle('active', !!(sel && sel.parent)); }
   }
   FM.syncTopBar = syncTopBar;
 
@@ -225,7 +308,9 @@ window.FM = window.FM || {};
   FM.toggleMarkerAtPlayhead = function () {
     const P = FM.scene.project; if (!P.markers) P.markers = [];
     const t = FM.time;
-    const near = P.markers.find(m => Math.abs(m.t - t) < 0.12);
+    // "already here?" = SAME FRAME only (was 0.12s ≈ 3-4 frames — adding a benchmark on the very
+    // next frame used to delete the previous one instead)
+    const near = P.markers.find(m => Math.abs(m.t - t) < 0.5 / (P.fps || 30));
     if (near) { P.markers = P.markers.filter(m => m !== near); if (FM.toast) FM.toast('Benchmark removed', 1000); }
     else { P.markers.push({ t: FM.snapFrame(t), label: 'Benchmark' }); if (FM.toast) FM.toast('Benchmark added', 1000); }   // markers live on exact frames
     if (FM.timeline) FM.timeline.rebuild();
@@ -1168,6 +1253,12 @@ window.FM = window.FM || {};
     const openProjBtn = document.getElementById('btn-open-proj');
     if (openProjBtn) openProjBtn.addEventListener('click', () => { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); });
     // ⋯ More menu — the decluttered home for canvas/guides/save-frame/open/save/shortcuts (AM keeps the top minimal)
+    const parentBtn = document.getElementById('btn-parent');
+    if (parentBtn) parentBtn.addEventListener('click', () => {
+      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null; if (!sel) return;
+      const r = parentBtn.getBoundingClientRect();
+      FM.openParentPicker(sel, Math.max(8, r.right - 220), r.bottom + 4);
+    });
     const moreBtn = document.getElementById('btn-more');
     if (moreBtn) moreBtn.addEventListener('click', () => {
       const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
@@ -1176,7 +1267,35 @@ window.FM = window.FM || {};
       const nextRate = rates[(rates.indexOf(cur) + 1) % rates.length];
       const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
       const items = [];
-      if (sel && sel.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(sel.id) }, { sep: true });
+      if (sel) {
+        // AM's layer menu — a clip is selected, so ⋯ is about THIS layer (deselect for project options).
+        const isMedia = sel.type === 'video' || sel.type === 'image';
+        const selLayers = (FM.selectionIds ? FM.selectionIds() : [sel.id]).map(id => FM.layerById(FM.scene, id)).filter(Boolean);
+        items.push({ label: 'Save to My Elements', action: async () => {
+          const name = prompt('Element name:', sel.name || 'My element'); if (!name || !name.trim()) return;
+          const ok = await FM.elements.save(name.trim(), selLayers.length ? selLayers : [sel]);
+          if (FM.toast) FM.toast(ok ? 'Saved to My Elements' : 'Could not save element');
+        } });
+        items.push({ label: (sel.flipH ? '✓ ' : '') + 'Flip Horizontally', action: () => FM.flipLayer(sel, 'h') });
+        items.push({ label: (sel.flipV ? '✓ ' : '') + 'Flip Vertically', action: () => FM.flipLayer(sel, 'v') });
+        if (sel.type !== 'group' && sel.type !== 'null') {
+          items.push({ label: 'Fit Composition Area', action: () => FM.fitLayer(sel, 'fit') });
+          items.push({ label: 'Fill Composition Area', action: () => FM.fitLayer(sel, 'fill') });
+          items.push({ label: 'Stretch to Composition Area', action: () => FM.fitLayer(sel, 'stretch') });
+        }
+        items.push({ sep: true });
+        items.push({ label: (sel.blendMode === 'mask-include' ? '✓ ' : '') + 'Create Clipping Mask', action: () => FM.toggleClippingMask(sel) });
+        if (sel.type === 'shape' && sel.shape !== 'path') items.push({ label: 'Convert to Outline', action: () => FM.convertToOutline(sel) });
+        if (sel.type === 'video') items.push({ label: 'Extract Audio', action: () => FM.extractAudio(sel) });
+        items.push({ label: 'Media Info', action: () => FM.mediaInfoToast(sel) });
+        if (sel.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(sel.id) });
+        items.push({ sep: true });
+        items.push({ swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff'], onPick: (hex) => FM.quickFill(sel, hex) });
+        items.push({ sep: true });
+        items.push({ label: 'Project options…', action: () => { FM.selectLayer(null); setTimeout(() => moreBtn.click(), 0); } });
+        if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 4, items);
+        return;
+      }
       items.push(
         { label: 'Canvas size…', action: () => clickHidden('btn-canvas') },
         { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },

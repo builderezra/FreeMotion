@@ -2222,6 +2222,7 @@ window.FM = window.FM || {};
     const _sx = Math.max(1e-4, sclX * pscale), _sy = Math.max(1e-4, sclY * pscale);
     if (_sx !== 1 || _sy !== 1) ctx.scale(_sx, _sy);
     if (skX || skY) ctx.transform(1, Math.tan(skY * Math.PI / 180), Math.tan(skX * Math.PI / 180), 1, 0, 0);   // X/Y skew
+    if (layer.flipH || layer.flipV) ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);   // mirror (⋯ → Flip) — flags, so scale keyframes stay untouched
   }
 
   // ---- Data-driven shape library (AM parity) ----

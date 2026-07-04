@@ -1349,3 +1349,10 @@ body.drawing #select-box { display: none !important; }
 #draw-bar button { padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 12.5px; cursor: pointer; }
 #draw-bar .db-done { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 #draw-bar .db-cancel { color: var(--text-dim); }
+
+/* ⋯ menu quick-colour strip + parent-picker button state */
+.ctx-swatches { display: flex; gap: 6px; padding: 8px 12px; }
+.ctx-swatch { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(255,255,255,.14); cursor: pointer; padding: 0; }
+.ctx-swatch:hover { transform: scale(1.12); }
+.ctx-swatch-none { background: var(--panel-2); color: var(--text-faint); font-size: 13px; line-height: 1; }
+#btn-parent.active { color: var(--accent); }

@@ -17,6 +17,18 @@ window.FM = window.FM || {};
       ensure(); menu.innerHTML = '';
       items.forEach(it => {
         if (it.sep) { const s = document.createElement('div'); s.className = 'ctx-sep'; menu.appendChild(s); return; }
+        if (it.swatches) {   // quick-colour strip (AM ⋯ menu): ✕ clears, dots apply a solid fill
+          const row = document.createElement('div'); row.className = 'ctx-swatches';
+          const none = document.createElement('button'); none.className = 'ctx-swatch ctx-swatch-none'; none.textContent = '✕'; none.title = 'No fill';
+          none.addEventListener('click', () => { FM.contextMenu.hide(); it.onPick(null); });
+          row.appendChild(none);
+          it.swatches.forEach(hex => {
+            const b = document.createElement('button'); b.className = 'ctx-swatch'; b.style.background = hex; b.title = hex;
+            b.addEventListener('click', () => { FM.contextMenu.hide(); it.onPick(hex); });
+            row.appendChild(b);
+          });
+          menu.appendChild(row); return;
+        }
         const b = document.createElement('div'); b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : ''); b.textContent = it.label;
         if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
         menu.appendChild(b);
