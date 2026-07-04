@@ -104,7 +104,8 @@ window.FM = window.FM || {};
     grid.innerHTML = '';
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'projects') {
-      const list = FM.projects.list();
+      // most recently EDITED first — the project you just worked on is always the front card
+      const list = FM.projects.list().slice().sort((a, b) => (b.modified || 0) - (a.modified || 0));
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.'));
       list.forEach(p => grid.appendChild(projectCard(p)));
     } else {

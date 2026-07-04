@@ -311,16 +311,28 @@ window.FM = window.FM || {};
     document.body.classList.add('sel-mode');
     syncPaintClasses();
     if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
-    const seen = new Set([layer.id]);
+    // RANGE painting: the selection made by this gesture is always the span anchor→current row.
+    // Drag down to add rows; drag BACK the way you came and the rows you passed unselect again
+    // (all the way back to just the anchor) — no manual deselecting. Rows selected BEFORE the
+    // gesture are never touched.
+    const anchorIdx = FM.scene.layers.indexOf(layer);
+    const preSel = new Set(FM.selectionIds ? FM.selectionIds() : []);   // includes the anchor (added above)
+    let gestureAdded = new Set();
     const stopScroll = ev => ev.preventDefault();   // keep the browser from panning instead of painting
     const move = (ev) => {
       const el2 = document.elementFromPoint(ev.clientX, ev.clientY);
       const hd = el2 && el2.closest ? el2.closest('.track-head') : null;
       if (!hd) return;
-      const L = FM.scene.layers[parseInt(hd.dataset.idx, 10)];
-      if (!L || seen.has(L.id)) return;
-      seen.add(L.id);
-      if (!isSelected(L.id)) FM.toggleSelect(L.id, true);
+      const curIdx = parseInt(hd.dataset.idx, 10);
+      if (isNaN(curIdx) || anchorIdx < 0) return;
+      const lo = Math.min(anchorIdx, curIdx), hi = Math.max(anchorIdx, curIdx);
+      const want = new Set();
+      for (let i = lo; i <= hi; i++) { const L = FM.scene.layers[i]; if (L && !preSel.has(L.id)) want.add(L.id); }
+      let changed = false;
+      gestureAdded.forEach(id => { if (!want.has(id)) { if (isSelected(id)) FM.toggleSelect(id, false); changed = true; } });   // backtracked past → unselect
+      want.forEach(id => { if (!gestureAdded.has(id)) { if (!isSelected(id)) FM.toggleSelect(id, true); changed = true; } });
+      if (!changed) return;
+      gestureAdded = want;
       syncPaintClasses();
       if (navigator.vibrate) { try { navigator.vibrate(5); } catch (_) {} }
     };
@@ -715,6 +727,13 @@ window.FM = window.FM || {};
         lastProgScroll = sL;
         FM.setTime(snapT(Math.max(0, Math.min(FM.scene.project.duration, sL / pxPerSec()))));
       }, { passive: true });
+      // Grabbing the timeline while it's PLAYING pauses it (AM). Detected on the raw INPUT (touch/
+      // mouse down + wheel), not the scroll event — during playback the playhead's own auto-scroll
+      // rewrites scrollLeft every frame, so user scrolls get swallowed by the feedback guard above.
+      if (timelineEl) {
+        timelineEl.addEventListener('pointerdown', () => { if (FM.playing) FM.pause(); }, true);
+        timelineEl.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.metaKey && FM.playing) FM.pause(); }, { passive: true });
+      }
       // two-finger PINCH zoom — tracked on window in CAPTURE phase so clip/ruler stopPropagation can't hide it
       const pdist = () => { const p = [...pointers.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
       const pmidX = () => { const p = [...pointers.values()]; return (p[0].x + p[1].x) / 2; };

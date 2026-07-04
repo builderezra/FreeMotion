@@ -275,9 +275,11 @@ window.FM = window.FM || {};
     }
     let drag = null;
     strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: read() }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
-    strip.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x; apply(drag.v + dx * ((p.max - p.min) / 300), false); strip.style.backgroundPositionX = (-dx) + 'px'; });
     const end = () => { if (drag) { const wasAnim = FM.isAnimated(fx.params[p.key]); drag = null; strip.style.backgroundPositionX = '0px'; if (wasAnim) afterFx(); else if (FM.history) FM.history.commit(); } };   // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
-    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end);
+    // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
+    // hover would otherwise KEEP scrubbing — the "slider drags itself back when I return" bug.
+    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const dx = e.clientX - drag.x; apply(drag.v + dx * ((p.max - p.min) / 300), false); strip.style.backgroundPositionX = (-dx) + 'px'; });
+    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
     valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + (p.unit || ''); });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
     row.appendChild(strip); row.appendChild(valBox);

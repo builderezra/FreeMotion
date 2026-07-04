@@ -1484,9 +1484,9 @@ window.FM = window.FM || {};
     if (!r) {
       const keys = Object.keys(_mflow);
       if (keys.length > 12) { let old = keys[0]; keys.forEach(k => { if (_mflow[k].at < _mflow[old].at) old = k; }); delete _mflow[old]; }   // bounded cache
-      r = _mflow[id] = { cv: document.createElement('canvas'), t: -1, at: 0, acc: null };
+      r = _mflow[id] = { cv: document.createElement('canvas'), t: -1, at: 0, acc: null, prev: null, tPrev: -1 };
     }
-    if (r.cv.width !== W || r.cv.height !== H) { r.cv.width = W; r.cv.height = H; r.t = -1; r.acc = null; }
+    if (r.cv.width !== W || r.cv.height !== H) { r.cv.width = W; r.cv.height = H; r.t = -1; r.acc = null; r.prev = null; r.tPrev = -1; }
     return r;
   }
   function _mfGrayOf(cv, FW, FH, useB) {
@@ -1580,40 +1580,60 @@ window.FM = window.FM || {};
       const samples = Math.max(4, Math.min(24, Math.round(p.samples == null ? 10 : FM.evalProp(p.samples, t))));
       const thr = Math.max(0.005, p.threshold == null ? 0.05 : FM.evalProp(p.threshold, t));
       const soft = Math.max(0, Math.min(1, p.softness == null ? 0.5 : FM.evalProp(p.softness, t)));
-      const valid = rec.t >= 0 && t > rec.t + 1e-4 && (t - rec.t) <= 0.35;   // sequential frames only
-      const finish = () => {   // remember THIS plate for the next frame
-        const c = rec.cv.getContext('2d');
-        c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
-        rec.t = t; rec.at = performance.now();
+      // Two-slot plate cache: `cv` is the frame before this one, `prev` the one before that.
+      // ADVANCE (t moved forward) → blur against cv, then rotate the slots. REPAINT (same t —
+      // paused param tweaks, inspector refreshes) → blur against prev so the effect stays VISIBLE
+      // while you adjust it instead of collapsing to a sharp frame. Anything else (backwards seek,
+      // big jump) → reset and show sharp for one frame.
+      const advance = rec.t >= 0 && t > rec.t + 1e-4 && (t - rec.t) <= 0.35;
+      const repaint = rec.t >= 0 && Math.abs(t - rec.t) <= 1e-4 && rec.prev && (rec.t - rec.tPrev) <= 0.35;
+      const ref = advance ? rec.cv : (repaint ? rec.prev : null);
+      const rotate = () => {   // cv→prev, A→cv (reuses the spare canvas — no per-frame allocation)
+        let spare = rec.prev;
+        if (!spare) spare = document.createElement('canvas');
+        if (spare.width !== W || spare.height !== H) { spare.width = W; spare.height = H; }
+        rec.prev = rec.cv; rec.cv = spare;
+        const c = rec.cv.getContext('2d'); c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
+        rec.tPrev = rec.t; rec.t = t; rec.at = performance.now();
       };
-      if (amount <= 0.001 || (!valid && style !== 2)) { B.drawImage(A, 0, 0); finish(); return; }
+      const reset = () => {
+        const c = rec.cv.getContext('2d'); c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
+        rec.t = t; rec.tPrev = -1; rec.prev = null; rec.at = performance.now();
+      };
+      const done = () => { if (advance) rotate(); };   // repaint leaves the slots untouched
+      if (amount <= 0.001 || (!ref && style !== 2)) {
+        B.drawImage(A, 0, 0);
+        if (advance) rotate(); else if (!repaint) reset();
+        return;
+      }
 
       if (style === 3) {   // FRAME BLEND — temporal smoothing (low-fps rescue)
         B.drawImage(A, 0, 0);
-        B.save(); B.globalAlpha = Math.min(0.85, amount * 0.45); B.drawImage(rec.cv, 0, 0); B.restore();
-        finish(); return;
+        B.save(); B.globalAlpha = Math.min(0.85, amount * 0.45); B.drawImage(ref, 0, 0); B.restore();
+        done(); return;
       }
       if (style === 2) {   // ECHO TRAILS — long-exposure feedback
         if (!rec.acc) { rec.acc = document.createElement('canvas'); rec.acc.width = W; rec.acc.height = H; }
         const ac = rec.acc.getContext('2d');
-        if (!valid) { ac.clearRect(0, 0, W, H); ac.drawImage(A, 0, 0); B.drawImage(A, 0, 0); finish(); return; }
+        if (repaint) { B.drawImage(rec.acc, 0, 0); return; }   // same frame — the trail is already merged
+        if (!advance) { ac.clearRect(0, 0, W, H); ac.drawImage(A, 0, 0); B.drawImage(A, 0, 0); reset(); return; }
         const persist = Math.min(0.96, 0.35 + amount * 0.3);
         ac.save(); ac.globalCompositeOperation = 'destination-in'; ac.fillStyle = 'rgba(0,0,0,' + persist + ')'; ac.fillRect(0, 0, W, H); ac.restore();
         // merge with LIGHTEN (per-channel max, AE Echo style) — an opaque new frame would otherwise
         // paint its background right over the trail and hide it
         ac.save(); ac.globalCompositeOperation = 'lighten'; ac.drawImage(A, 0, 0); ac.restore();
         B.drawImage(rec.acc, 0, 0);
-        finish(); return;
+        done(); return;
       }
 
-      const F = _mfField(rec.cv, A, W, H, thr);
+      const F = _mfField(ref, A, W, H, thr);
       FM._mfLastField = F;   // debug hook (harmless in prod)
       if (style === 1) {   // DIRECTIONAL SMEAR — one dominant vector, moving areas only
         let gx = 0, gy = 0, wsum = 0;
         for (let i = 0; i < F.vx.length; i++) { const m = Math.hypot(F.vx[i], F.vy[i]); if (m > 0.3) { gx += F.vx[i] * m; gy += F.vy[i] * m; wsum += m; } }
-        if (wsum < 0.5) { B.drawImage(A, 0, 0); finish(); return; }
+        if (wsum < 0.5) { B.drawImage(A, 0, 0); done(); return; }
         gx = (gx / wsum) * (W / F.FW) * amount; gy = (gy / wsum) * (W / F.FW) * amount;
-        if (Math.hypot(gx, gy) < 1.2) { B.drawImage(A, 0, 0); finish(); return; }
+        if (Math.hypot(gx, gy) < 1.2) { B.drawImage(A, 0, 0); done(); return; }
         if (!_mfMask) _mfMask = document.createElement('canvas');
         _mfMask.width = F.gw; _mfMask.height = F.gh;
         const mc = _mfMask.getContext('2d');
@@ -1634,7 +1654,7 @@ window.FM = window.FM || {};
         B.save(); B.globalAlpha = Math.min(0.5, 1.6 / samples);
         for (let k = 0; k < samples; k++) { const f = k / (samples - 1) - 0.5; B.drawImage(_mfMov, gx * f, gy * f); }
         B.restore();
-        finish(); return;
+        done(); return;
       }
 
       // STYLE 0: PIXEL MOTION — per-pixel blur along the local flow vector, at a capped working res
@@ -1667,7 +1687,7 @@ window.FM = window.FM || {};
       wc.putImageData(img, 0, 0);
       B.imageSmoothingEnabled = true;
       B.drawImage(_mfW1, 0, 0, W, H);
-      finish();
+      done();
     },
 
     // ---- 3D solids ----
@@ -2235,7 +2255,13 @@ window.FM = window.FM || {};
     S.house = [[[0.5,0.04],[0.96,0.44],[0.86,0.44],[0.86,0.96],[0.6,0.96],[0.6,0.66],[0.4,0.66],[0.4,0.96],[0.14,0.96],[0.14,0.44],[0.04,0.44]]];
     (function(){ const polys=[[[0.55,0.98],[0.50,0.98],[0.365,0.06],[0.415,0.05]]]; const sa=Math.atan2(-0.9,-0.14); for(let i=0;i<6;i++){ const f=0.15+i*0.14, cx=0.525-0.14*f, cy=0.98-0.9*f; [[1,sa+0.7],[-1,sa-0.7]].forEach(([sgn,ang])=>{ const lx=cx+sgn*0.078, ly=cy-sgn*0.012; polys.push(rot(arc(lx,ly,0.095,0.034,0,T,10),lx,ly,ang)); }); } S.laurel=polys; })();
     S.bookmark = [[[0.22,0.02],[0.78,0.02],[0.78,0.96],[0.5,0.72],[0.22,0.96]]];
-    S.pointhand = [[[0.02,0.44],[0.36,0.42],[0.4,0.28],[0.47,0.22],[0.54,0.28],[0.52,0.42],[0.96,0.42],[0.98,0.48],[0.94,0.53],[0.6,0.53],[0.9,0.55],[0.9,0.64],[0.58,0.64],[0.84,0.67],[0.83,0.76],[0.56,0.75],[0.72,0.79],[0.7,0.88],[0.42,0.87],[0.22,0.82],[0.02,0.72]]];
+    // pointing hand (☞): wrist → thumb bump on top → long index finger with a rounded tip →
+    // three stacked curled fingers, each a clear notch → rounded palm base back to the wrist
+    S.pointhand = [[[0.02,0.40],[0.20,0.36],[0.28,0.26],[0.36,0.22],[0.43,0.25],[0.44,0.33],[0.40,0.40],
+      [0.90,0.40],[0.96,0.43],[0.96,0.50],[0.90,0.53],[0.56,0.53],
+      [0.74,0.55],[0.78,0.58],[0.78,0.64],[0.74,0.67],[0.55,0.66],
+      [0.71,0.69],[0.74,0.72],[0.74,0.78],[0.70,0.81],[0.53,0.79],
+      [0.65,0.82],[0.67,0.86],[0.65,0.91],[0.58,0.93],[0.40,0.93],[0.22,0.90],[0.08,0.82],[0.02,0.68]]];
     S.flame = [bez([0.52,0.02],[0.72,0.22],[0.6,0.3],[0.76,0.42],10).concat(bez([0.76,0.42],[0.9,0.54],[0.84,0.78],[0.64,0.88],12)).concat(arc(0.48,0.76,0.2,0.14,PI*0.25,PI*0.85,8)).concat(bez([0.3,0.84],[0.12,0.72],[0.16,0.5],[0.3,0.38],12)).concat(bez([0.3,0.38],[0.42,0.3],[0.34,0.2],[0.52,0.02],10))];
     S.banner = [[[0.02,0.24],[0.98,0.24],[0.86,0.5],[0.98,0.76],[0.02,0.76],[0.14,0.5]]];
     (function(){ const polys=[]; const N=14, a0=PI*1.61, a1=PI*3.39; for(let i=0;i<N;i++){ const a=a0+i*(a1-a0)/(N-1); const cx=0.5+0.38*Math.cos(a), cy=0.52+0.38*Math.sin(a); polys.push(rot(arc(cx,cy,0.088,0.033,0,T,8),cx,cy,a+PI/2)); } S.wreath=polys; })();
