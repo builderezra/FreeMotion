@@ -2491,6 +2491,46 @@ window.FM = window.FM || {};
     try { ctx.drawImage(_mbcB, -W / 2 - (ax - 0.5) * sz.w * nscale, -H / 2 - (ay - 0.5) * sz.h * nscale); } catch (e) {}
     ctx.restore();
   }
+  // Copy Background (any layer type): fill the layer's FOOTPRINT — a shape's outline, a text layer's
+  // glyphs, or a media/other layer's bounds — with a pixel-aligned copy of the backdrop below it.
+  // The layer's own effects (set on ctx before this runs) then grade/blur that copy = a maskable,
+  // shaped adjustment layer over the whole scene.
+  let _cbA = null;
+  function drawCopyBg(ctx, layer, t, scene) {
+    const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = P.width, H = P.height, tr = layer.transform;
+    if (!_cbA) _cbA = document.createElement('canvas');
+    if (_cbA.width !== W || _cbA.height !== H) { _cbA.width = W; _cbA.height = H; }
+    const a = _cbA.getContext('2d');
+    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
+    a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
+    let M = null; try { M = ctx.getTransform(); } catch (e) {}
+    if (M) a.setTransform(M.a, M.b, M.c, M.d, M.e, M.f);   // same transform as the layer → footprint in screen space
+    a.fillStyle = '#fff';
+    if (layer.type === 'shape') {
+      const sw = layer.shapeW || 400, sh = layer.shapeH || 300, ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;
+      const mode = FM.traceShapePath(a, layer, ox, oy, sw, sh);
+      if (mode === 'stroke') { a.lineWidth = (layer.stroke && layer.stroke.width) || 8; a.strokeStyle = '#fff'; a.lineCap = 'round'; a.stroke(); }
+      else a.fill();
+    } else if (layer.type === 'text') {
+      a.textAlign = layer.align || 'center'; a.textBaseline = 'middle';
+      a.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
+      let textSrc = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
+      const lines = String(textSrc).split('\n'), lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
+      lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
+    } else {
+      const m = FM.media.get(layer.id), sz = FM.layerSize ? FM.layerSize(layer) : { w: W, h: H };
+      const w = (m && m.width) || sz.w, h = (m && m.height) || sz.h;
+      a.fillRect(-w * tr.anchorX, -h * tr.anchorY, w, h);
+    }
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.globalCompositeOperation = 'source-in';   // keep the backdrop ONLY inside the footprint
+    try { a.drawImage(layer._bgSnap, 0, 0); } catch (e) {}
+    a.globalCompositeOperation = 'source-over';
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);   // composite in screen space; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)
+    try { ctx.drawImage(_cbA, 0, 0); } catch (e) {}
+    ctx.restore();
+  }
   function drawLayer(ctx, layer, t, scene) {
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
@@ -2551,6 +2591,8 @@ window.FM = window.FM || {};
     }
     applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
+
+    if (FM.hasCopyBg(layer) && layer._bgSnap && layer.type !== '_flat') { drawCopyBg(ctx, layer, t, scene); ctx.restore(); return; }
 
     if (layer.type === '_flat') {   // flattened group unit — full-frame blit (effects/opacity/blend already set up above)
       let src = layer._canvas;
@@ -2628,13 +2670,6 @@ window.FM = window.FM || {};
         ctx.lineWidth = (stk && stk.width) ? stk.width : 8;
         ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (FM.evalProp(layer.fill, t) || '#ffffff');
         ctx.lineCap = 'round'; ctx.stroke();
-      } else if (FM.hasCopyBg(layer) && layer._bgSnap) {
-        // fill the shape with a pixel-aligned copy of the backdrop below (clip local, draw in screen space)
-        ctx.save(); ctx.clip();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        try { ctx.drawImage(layer._bgSnap, 0, 0); } catch (e) {}
-        ctx.restore();
-        if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }
       } else {
         paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
         if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }

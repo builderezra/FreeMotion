@@ -1492,6 +1492,9 @@ window.FM = window.FM || {};
       if (!layer) {
         // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
         // Selecting a clip swaps this for the property editor (refresh() re-runs on select).
+        // Clearing lastLayerId means re-selecting a layer (even the SAME one) reopens at the category
+        // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
+        lastLayerId = null;
         if (title) title.textContent = 'Add';
         if (FM.addMenu) FM.addMenu.render(root, { variant: 'panel' });
         else root.appendChild(el('div', 'empty', 'Select a layer to edit it.'));
