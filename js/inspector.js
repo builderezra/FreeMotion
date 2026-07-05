@@ -1521,6 +1521,17 @@ window.FM = window.FM || {};
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
     openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh(); },
+    // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
+    // grid → deselect. Returns true if it did something. (AM: Esc doesn't nuke the layer outright.)
+    back() {
+      const layer = FM.selectedLayer(FM.scene);
+      if (!layer) return false;
+      if (FM._mtEasing || FM._volEasing || FM._spdEasing || FM._fxEasing) {
+        FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh(); return true;
+      }
+      if (view !== 'home') { view = 'home'; this.refresh(); return true; }
+      FM.selectLayer(null); return true;   // at the grid → deselect (closes the editor)
+    },
     refresh() {
       const layer = FM.selectedLayer(FM.scene);
       const title = document.querySelector('#inspector-panel .panel-title');

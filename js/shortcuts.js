@@ -4,6 +4,8 @@ window.FM = window.FM || {};
   'use strict';
   const SHORTCUTS = [
     ['Space', 'Play / pause'],
+    ['1 – 5', 'Add menu → Shape · Media · Audio · Object/Element · Template'],
+    ['⇧ 1 / 2 / 3', 'Add Text · Freehand Drawing · Vector Drawing'],
     ['← / →', 'Nudge selected layer  (Shift = 10px)'],
     ['↑ / ↓', 'Nudge selected layer vertically'],
     [', / .', 'Step one frame back / forward'],
@@ -15,10 +17,11 @@ window.FM = window.FM || {};
     ['Delete', 'Delete selected layer'],
     ['⌘/Ctrl + D', 'Duplicate selected layer'],
     ['⌘/Ctrl + C / V', 'Copy / paste layer(s)'],
+    ['⌘/Ctrl + A', 'Select all layers'],
     ['⌘/Ctrl + Z', 'Undo'],
     ['⌘/Ctrl + ⇧ + Z', 'Redo'],
     ['Tab / ⇧Tab', 'Select next / previous layer'],
-    ['Esc', 'Deselect'],
+    ['Esc', 'Go back a page (sub-menu → grid → deselect)'],
     ['?', 'Show / hide this help'],
   ];
   // Mouse / stage interactions — the powerful bits that aren't obvious from the UI.
@@ -27,7 +30,8 @@ window.FM = window.FM || {};
     ['Select camera, drag', 'Pan the whole scene'],
     ['Select camera, scroll', 'Zoom around the cursor'],
     ['Drag layer / handles', 'Move, or scale & rotate from the corners'],
-    ['Effects panel', 'Add · animate ◆ · toggle · reorder · copy/paste · presets'],
+    ['Effects panel', 'Add · animate ◆ · toggle · reorder · swipe-left to delete'],
+    ['Click off the panel (PC)', 'Step back / close the open menu'],
     ['Double-click clip', 'Open it in the inspector'],
   ];
   let overlay;

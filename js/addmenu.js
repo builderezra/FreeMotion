@@ -102,6 +102,8 @@ window.FM = window.FM || {};
     { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
 
+  var _startTab = null;   // set by openTab() so a keyboard shortcut can jump straight to a tab
+
   function card(item, cls, iconOnly) {
     var b = document.createElement('button');
     b.className = cls; b.type = 'button'; b.title = item.label;
@@ -130,7 +132,7 @@ window.FM = window.FM || {};
       var main = document.createElement('div'); main.className = 'addmenu-main';
       var tabsEl = document.createElement('div'); tabsEl.className = 'addmenu-tabs';
       var bodyEl = document.createElement('div'); bodyEl.className = 'addmenu-body';
-      var active = TABS[0].key;
+      var active = _startTab || TABS[0].key; _startTab = null;
 
       function drawBody() {
         bodyEl.innerHTML = '';
@@ -172,7 +174,7 @@ window.FM = window.FM || {};
       TABS.forEach(function (t) {
         var tb = document.createElement('button');
         tb.type = 'button'; tb.title = t.label;
-        tb.className = 'addmenu-tab' + (t.key === active ? ' active' : '');
+        tb.className = 'addmenu-tab' + (t.key === active ? ' active' : ''); tb.dataset.key = t.key;
         tb.innerHTML = '<span class="addmenu-ic">' + t.icon + '</span><span class="addmenu-lbl">' + t.label + '</span>';
         tb.addEventListener('click', function () {
           active = t.key;
@@ -201,5 +203,20 @@ window.FM = window.FM || {};
       root.appendChild(main); root.appendChild(side);
       container.appendChild(root);
     },
+    // number-key shortcut targets
+    TAB_KEYS: TABS.map(function (t) { return t.key; }),   // 1-5 → Shape / Media / Audio / Object / Template
+    // Open the Add menu on a specific tab (deselects on PC so the inspector shows it).
+    openTab: function (key) {
+      if (!key) return;
+      _startTab = key;
+      var hasSel = FM.scene && (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length));
+      if (hasSel && FM.selectLayer) FM.selectLayer(null);           // deselect → inspector re-renders the Add menu (reads _startTab)
+      else if (FM.inspector) FM.inspector.refresh();                // already showing → re-render on the chosen tab
+      var b = document.querySelector('.addmenu-tab[data-key="' + key + '"]');   // fallback: switch tab in place
+      if (b && !b.classList.contains('active')) b.click();
+      _startTab = null;
+    },
+    // Shift+1/2/3 → the instant rail: Text / Freehand Drawing / Vector Drawing.
+    instant: function (i) { if (INSTANT[i]) INSTANT[i].add(); },
   };
 })(window.FM);

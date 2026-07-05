@@ -1528,7 +1528,21 @@ window.FM = window.FM || {};
       else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
-      else if (e.code === 'Escape') { e.preventDefault(); if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); } else if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) { FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.layersPanel.refresh(); if (FM.inspector) FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); } }
+      // Number keys: 1-5 open the Add-menu tabs; Shift+1/2/3 add Text / Freehand / Vector.
+      else if (/^Digit[1-9]$/.test(e.code) && !mod) {
+        const n = parseInt(e.code.slice(5), 10);
+        if (e.shiftKey) { if (n <= 3 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }
+        else if (n <= 5 && FM.addMenu && FM.addMenu.openTab) { e.preventDefault(); FM.addMenu.openTab(FM.addMenu.TAB_KEYS[n - 1]); }
+      }
+      // Esc: step BACK a page (effects → grid → deselect), not straight to closed. Also bails out of
+      // any modal overlay / point-edit / tracking pick first.
+      else if (e.code === 'Escape') {
+        e.preventDefault();
+        if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
+        if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) { FM.pointEdit.stop(); return; }
+        if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) { FM.tracker.cancel(); return; }
+        if (FM.inspector && FM.inspector.back) FM.inspector.back();
+      }
       else if (e.code === 'KeyS') { e.preventDefault(); if (FM.scene.selectedId) FM.splitLayer(FM.scene.selectedId); }
       else if (e.code === 'Backspace' || e.code === 'Delete') { e.preventDefault(); FM.deleteSelected(); }
     });
@@ -1560,7 +1574,12 @@ window.FM = window.FM || {};
         if (keepAtDown) return;                                                             // tapped a control / self-managing area
         if (Math.abs(e.clientX - dx) > 6 || Math.abs(e.clientY - dy) > 6) return;           // a drag, not a tap
         if (!FM.scene || (!FM.scene.selectedId && !(FM.scene.selectedIds && FM.scene.selectedIds.length))) return;
-        FM.selectLayer(null);                                                               // empty background → deselect
+        // PC: clicking off the panel steps BACK a page (effects → grid → deselect) so you can dismiss
+        // the open sub-menu by clicking anywhere but the inspector. Phone keeps the plain deselect
+        // (tap-empty drops the whole sheet).
+        const desktop = !window.matchMedia('(max-width: 700px)').matches;
+        if (desktop && FM.inspector && FM.inspector.back) FM.inspector.back();
+        else FM.selectLayer(null);                                                          // empty background → deselect
       }, true);
     })();
   }
