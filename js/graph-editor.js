@@ -19,8 +19,12 @@ window.FM = window.FM || {};
     { key: 'easeIn', label: 'Ease In' },
     { key: 'easeInOut', label: 'Ease In-Out' },
     { key: 'overshoot', label: 'Overshoot' },
+    { key: 'bounce', label: 'Bounce' },
+    { key: 'elastic', label: 'Elastic' },
     { key: 'hold', label: 'Hold' },
   ];
+  // Non-bezier named eases (bounce/elastic) — drawn by sampling FM.EASES, not as a draggable bezier.
+  const CURVE_EASES = ['bounce', 'elastic'];
   const PAD = 26;
   let canvas = null, presetWrap = null, hint = null, loopBtn = null, carLabel = null;
   let cur = { layer: null, mode: 'all', keys: [], kfs: [] };   // kfs = end-keyframes to edit together
@@ -58,6 +62,14 @@ window.FM = window.FM || {};
     ctx.beginPath(); ctx.moveTo(gx(0), gy(0)); ctx.lineTo(gx(1), gy(0)); ctx.lineTo(gx(1), gy(1)); ctx.stroke();
     ctx.fillStyle = '#fff'; [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
   }
+  // Sample a non-bezier ease (bounce/elastic) straight from FM.EASES — no draggable handles, just the curve.
+  function drawEaseCurve(ctx, W, H, fn) {
+    const g = grid(ctx, W, H), gx = g.gx, gy = g.gy;
+    ctx.strokeStyle = '#29d9bb'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
+    for (let i = 0; i <= 96; i++) { const x = i / 96, y = Math.max(-0.3, Math.min(1.45, fn(x))); const px = gx(x), py = gy(y); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+    ctx.stroke();
+    ctx.fillStyle = '#29d9bb'; [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
+  }
   // Mini preview for a preset glyph button.
   function drawGlyph(cv, key) {
     const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, p = 4;
@@ -65,6 +77,7 @@ window.FM = window.FM || {};
     const gx = x => p + x * (W - 2 * p), gy = y => (H - p) - y * (H - 2 * p);
     ctx.strokeStyle = '#c2cee0'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
     if (key === 'hold') { ctx.moveTo(gx(0), gy(0)); ctx.lineTo(gx(1), gy(0)); ctx.lineTo(gx(1), gy(1)); }
+    else if (CURVE_EASES.indexOf(key) >= 0 && FM.EASES && FM.EASES[key]) { const fn = FM.EASES[key]; for (let i = 0; i <= 32; i++) { const x = i / 32, y = Math.max(-0.2, Math.min(1.2, fn(x))); const px = gx(x), py = gy(y); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
     else { const b = FM.EASE_PRESETS[key]; for (let i = 0; i <= 24; i++) { const x = i / 24, y = FM.bezierAt(b[0], b[1], b[2], b[3], x); const px = gx(x), py = gy(Math.max(-0.2, Math.min(1.2, y))); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
     ctx.stroke();
   }
@@ -93,12 +106,14 @@ window.FM = window.FM || {};
     FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
   }
   function curIsHold() { return cur.kfs.length && cur.kfs[0].e === 'hold'; }
+  function curIsCurve() { return cur.kfs.length && !cur.kfs[0].bez && CURVE_EASES.indexOf(cur.kfs[0].e) >= 0; }
 
   function redraw() {
     if (!canvas) return;
     if (!cur.kfs.length) { hint.style.display = ''; canvas.style.display = 'none'; presetWrap.style.opacity = '.4'; if (carLabel) carLabel.textContent = '—'; return; }
     hint.style.display = 'none'; canvas.style.display = ''; presetWrap.style.opacity = '1';
     if (curIsHold()) drawHold(canvas.getContext('2d'), canvas.width, canvas.height);
+    else if (curIsCurve()) drawEaseCurve(canvas.getContext('2d'), canvas.width, canvas.height, FM.EASES[cur.kfs[0].e]);
     else drawBez(canvas.getContext('2d'), canvas.width, canvas.height, bezOf(cur.kfs[0]));
     // active preset highlight
     const activeKey = curIsHold() ? 'hold' : (cur.kfs[0].bez ? null : cur.kfs[0].e);
@@ -125,7 +140,7 @@ window.FM = window.FM || {};
     const gwrap = document.createElement('div'); gwrap.className = 'es-graph';
     canvas = document.createElement('canvas'); canvas.className = 'es-canvas'; canvas.width = 320; canvas.height = 320;
     hint = document.createElement('div'); hint.className = 'es-hint'; hint.textContent = 'Animate this property (tap ◆), add a second keyframe, then shape its easing here.'; hint.style.display = 'none';
-    canvas.addEventListener('pointerdown', e => { if (!cur.kfs.length || curIsHold()) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); dragHandle = Math.hypot(g.x - bez[0], g.y - bez[1]) <= Math.hypot(g.x - bez[2], g.y - bez[3]) ? 0 : 1; e.preventDefault(); });
+    canvas.addEventListener('pointerdown', e => { if (!cur.kfs.length || curIsHold() || curIsCurve()) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); dragHandle = Math.hypot(g.x - bez[0], g.y - bez[1]) <= Math.hypot(g.x - bez[2], g.y - bez[3]) ? 0 : 1; e.preventDefault(); });
     gwrap.append(canvas, hint);
 
     presetWrap = document.createElement('div'); presetWrap.className = 'es-presets';

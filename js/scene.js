@@ -30,8 +30,13 @@ window.FM = window.FM || {};
     easeIn:    t => t * t,
     easeOut:   t => 1 - (1 - t) * (1 - t),
     easeInOut: t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
+    // Bounce & elastic can't be expressed as a cubic-bezier (they oscillate past the endpoints), so
+    // they live here as real functions — evalProp resolves EASES[e] before falling back to a bezier.
+    bounce:    t => { const n = 7.5625, d = 2.75; if (t < 1 / d) return n * t * t; if (t < 2 / d) { t -= 1.5 / d; return n * t * t + 0.75; } if (t < 2.5 / d) { t -= 2.25 / d; return n * t * t + 0.9375; } t -= 2.625 / d; return n * t * t + 0.984375; },
+    elastic:   t => (t <= 0 ? 0 : t >= 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * (2 * Math.PI / 3)) + 1),
     hold:      t => 0,
   };
+  FM.EASES = EASES;   // exposed so the graph editor can draw the exact non-bezier curves (bounce/elastic)
   FM.EASE_NAMES = Object.keys(EASES);
 
   function isAnimated(p) { return p && typeof p === 'object' && Array.isArray(p.kf); }
