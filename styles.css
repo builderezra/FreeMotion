@@ -724,7 +724,10 @@ input[type=range]::-webkit-slider-thumb {
 .th-name { display: none; }   /* AM: the layer NAME lives ON the clip bar (.clip-label), never in the left head column */
 .th-name-edit { flex: 1 1 auto; min-width: 0; width: 100%; background: var(--panel-3); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 2px 5px; font-size: 11.5px; }
 .track-lane { flex: 1; position: relative; min-width: 0; touch-action: none; }
-.tl-empty { color: var(--text-faint); font-size: 12px; padding: 16px var(--head-w); padding-right: 16px; }
+/* The hint lives inside the horizontally-scrolling track area, so it inherits the (wide) scroll
+   width and its text runs off the right edge instead of wrapping. Pin it sticky to the visible
+   viewport and cap its width so it always wraps on-screen (esp. mobile at 375px). */
+.tl-empty { color: var(--text-faint); font-size: 12px; padding: 16px var(--head-w); padding-right: 16px; position: sticky; left: 0; max-width: 100vw; box-sizing: border-box; white-space: normal; }
 .clip {
   position: absolute; top: 5px; height: 32px;
   background: linear-gradient(180deg, #34507e, #283c63);
