@@ -646,7 +646,7 @@ window.FM = window.FM || {};
     }
     const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh(); };
+    const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); };
     // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
     // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
     const isVideo = layer.type === 'video';
@@ -745,7 +745,7 @@ window.FM = window.FM || {};
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') + '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
-        view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh();
+        view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
       });
       (i < 3 ? top : bot).appendChild(card);
     });
@@ -984,91 +984,101 @@ window.FM = window.FM || {};
   }
 
   // ===== AM "Edit Shape" for media (photo/video) = a Size editor =====
-  // Pixel Width/Height with an aspect-ratio lock and a size-from-edge/center origin toggle (the two
-  // controls AM shows top-right), plus a keyframe + easing rail. Size is the layer's SCALE expressed
-  // in pixels: on-screen w = intrinsicW × scale × scaleX. Aspect-locked drives uniform `scale`;
-  // free drives scaleX / scaleY independently. Both are session tools (like the MT mode), not saved.
+  // AM "Edit Shape" for media = a CROP editor. Width/Height are the crop-frame size in SOURCE pixels;
+  // shrinking them crops the photo/video (the content is NOT scaled — you just see less of it). The two
+  // top-right controls (aspect-ratio lock + size-from-edge/center) and a keyframe + easing rail that
+  // keyframes the crop. Both toggle states are session tools (like the MT mode), not saved.
   let _szLock = true, _szEdge = false;
   const ES_ICONS = {
     center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="12" cy="12" r="2.3" fill="currentColor" stroke="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/></svg>',
     edge:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="6.6" cy="6.6" r="2" fill="currentColor" stroke="none"/><path d="M11 6.6h9M6.6 11v9"/></svg>',
+    crop:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v13a2 2 0 0 0 2 2h13M2 7h13a2 2 0 0 1 2 2v13"/></svg>',
   };
-  function mediaSizePanel(layer, body) {
-    const sz0 = FM.layerSize(layer);
-    if (!sz0.w || !sz0.h) { body.appendChild(el('div', 'insp-hint', 'This clip has no picture to resize.')); return; }
-    const S_MAX = 40;
-    const clampScale = s => Math.max(0.02, Math.min(S_MAX, s));
+  function cropMediaOf(layer) { const m = FM.media && FM.media.get(layer.id); return (m && m.width && m.height) ? m : null; }
+  function ensureCrop(layer) { const m = cropMediaOf(layer); if (!m) return null; if (!layer.crop) layer.crop = { x: 0, y: 0, w: m.width, h: m.height }; return m; }
 
-    const panel = el('div', 'mt-panel es-media');
-
-    // top-right toggles: aspect-ratio lock + size origin (edge vs center)
+  // The two top-right controls (aspect lock + size origin). Built here so the inspector header can
+  // place them at the far top-right, matching AM. Toggling re-renders the panel + canvas.
+  function cropToggles(layer) {
     const top = el('div', 'es-toprow');
     const aspectBtn = el('button', 'es-toggle' + (_szLock ? ' on' : ''));
     aspectBtn.innerHTML = MT_ICONS.link;
-    aspectBtn.title = _szLock ? 'Aspect Ratio Locked — resize proportionally' : 'Resize Freely — Width & Height independent';
+    aspectBtn.title = _szLock ? 'Aspect Ratio Locked — the crop keeps its ratio' : 'Resize Freely — crop each side on its own';
     aspectBtn.addEventListener('click', () => { _szLock = !_szLock; if (FM.toast) FM.toast(_szLock ? 'Aspect Ratio Locked' : 'Resize Freely'); FM.inspector.refresh(); });
     const originBtn = el('button', 'es-toggle' + (_szEdge ? '' : ' on'));
     originBtn.innerHTML = _szEdge ? ES_ICONS.edge : ES_ICONS.center;
-    originBtn.title = _szEdge ? 'Size from edge — the top-left corner stays put' : 'Size from center — the anchor stays put';
+    originBtn.title = _szEdge ? 'Size from edge — the crop grows from the top-left corner' : 'Size from center — the crop grows around the middle';
     originBtn.addEventListener('click', () => { _szEdge = !_szEdge; if (FM.toast) FM.toast(_szEdge ? 'Size from edge' : 'Size from center'); FM.inspector.refresh(); });
     top.appendChild(aspectBtn); top.appendChild(originBtn);
-    panel.appendChild(top);
+    return top;
+  }
+  FM._inspectorCropToggles = cropToggles;   // the inspector header uses this to place the toggles top-right
 
+  function mediaSizePanel(layer, body) {
+    const m = ensureCrop(layer);
+    if (!m) { body.appendChild(el('div', 'insp-hint', 'This clip has no picture to crop.')); return; }
+    const MW = m.width, MH = m.height;
+    const CK = ['w', 'h', 'x', 'y'];
+    const def = k => (k === 'w' ? MW : k === 'h' ? MH : 0);
+
+    const panel = el('div', 'mt-panel es-media');
     const row = el('div', 'es-body');
-    // left rail — keyframe + easing (keyframes the size = scale / scaleX / scaleY)
+
+    // left rail — keyframe the crop + easing curve
     const left = el('div', 'mt-rail mt-rail-left');
-    const SK = ['scale', 'scaleX', 'scaleY'];
-    const anim = SK.some(k => FM.isAnimated(layer.transform[k]));
-    const onHere = SK.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+    const anim = CK.some(k => FM.isAnimated(layer.crop[k]));
+    const onHere = CK.some(k => FM.hasKeyframeAt(layer.crop[k], FM.time));
     const kfBtn = el('button', 'mt-kf' + (anim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
-    kfBtn.title = onHere ? 'Remove size keyframe at playhead' : 'Keyframe the size at the playhead';
+    kfBtn.title = onHere ? 'Remove crop keyframe at playhead' : 'Keyframe the crop at the playhead';
     kfBtn.addEventListener('click', () => {
-      const keys = _szLock ? ['scale'] : SK;
-      keys.forEach(k => { if (layer.transform[k] == null) layer.transform[k] = 1; });
-      const has = keys.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));   // add unless already there → then remove
-      keys.forEach(k => { const kh = FM.hasKeyframeAt(layer.transform[k], FM.time); if ((!has && !kh) || (has && kh)) FM.toggleKeyframe(layer, k, FM.time); });
+      CK.forEach(k => { if (layer.crop[k] == null) layer.crop[k] = def(k); });
+      const has = CK.some(k => FM.hasKeyframeAt(layer.crop[k], FM.time));   // add unless already there → then remove
+      CK.forEach(k => { const kh = FM.hasKeyframeAt(layer.crop[k], FM.time); if ((!has && !kh) || (has && kh)) FM.toggleProp(layer.crop, k, FM.time, def(k)); });
       FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH();
     });
     left.appendChild(kfBtn);
     const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
-    easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, 'scale'); });
+    easeBtn.addEventListener('click', () => { FM._cropEasing = true; FM.inspector.refresh(); });
     left.appendChild(easeBtn);
     row.appendChild(left);
 
-    // center — Width / Height pixel boxes
-    const getX = () => sz0.w * mtEval(layer, 'scale') * mtEval(layer, 'scaleX');
-    const getY = () => sz0.h * mtEval(layer, 'scale') * mtEval(layer, 'scaleY');
-    let boxX, boxY;
-    const syncAll = () => { if (boxX) boxX._refresh(); if (boxY) boxY._refresh(); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); };
-    function edgeCompensate(oldX, oldY) {   // keep the top-left corner fixed (grow toward bottom-right)
-      const ax = layer.transform.anchorX != null ? FM.evalProp(layer.transform.anchorX, FM.time) : 0.5;
-      const ay = layer.transform.anchorY != null ? FM.evalProp(layer.transform.anchorY, FM.time) : 0.5;
-      const dX = (getX() - oldX) * ax, dY = (getY() - oldY) * ay;
-      if (dX) mtSet(layer, 'x', Math.round(mtEval(layer, 'x') + dX));
-      if (dY) mtSet(layer, 'y', Math.round(mtEval(layer, 'y') + dY));
+    // center — Width / Height crop boxes (source px)
+    const cur = () => FM.cropOf(layer, FM.time);
+    const getW = () => Math.round(cur().w), getH = () => Math.round(cur().h);
+    let boxW, boxH;
+    const syncAll = () => { if (boxW) boxW._refresh(); if (boxH) boxH._refresh(); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); };
+    function resizeCrop(axis, V) {
+      const c = cur(); let nw = c.w, nh = c.h;
+      if (axis === 'w') { nw = Math.max(1, Math.min(MW, Math.round(V))); if (_szLock) nh = Math.max(1, Math.min(MH, Math.round(nw * (c.h / c.w)))); }
+      else { nh = Math.max(1, Math.min(MH, Math.round(V))); if (_szLock) nw = Math.max(1, Math.min(MW, Math.round(nh * (c.w / c.h)))); }
+      let nx, ny;
+      if (_szEdge) { nx = c.x; ny = c.y; }                                   // keep the top-left corner
+      else { nx = Math.round(c.x + c.w / 2 - nw / 2); ny = Math.round(c.y + c.h / 2 - nh / 2); }   // keep centre
+      nx = Math.max(0, Math.min(MW - nw, nx)); ny = Math.max(0, Math.min(MH - nh, ny));
+      FM.setProp(layer.crop, 'w', nw, FM.time); FM.setProp(layer.crop, 'h', nh, FM.time);
+      FM.setProp(layer.crop, 'x', nx, FM.time); FM.setProp(layer.crop, 'y', ny, FM.time);
     }
-    function resize(axis, V) {
-      V = Math.max(1, V);
-      const s = mtEval(layer, 'scale'), sx = mtEval(layer, 'scaleX'), sy = mtEval(layer, 'scaleY');
-      const oldX = sz0.w * s * sx, oldY = sz0.h * s * sy;
-      if (_szLock) {   // uniform: drive `scale` so the chosen dimension hits V; the other follows
-        const base = axis === 'x' ? (sz0.w * sx) : (sz0.h * sy);
-        mtSet(layer, 'scale', clampScale(V / base));
-      } else if (axis === 'x') {
-        if (layer.transform.scaleX == null) layer.transform.scaleX = 1;
-        mtSet(layer, 'scaleX', clampScale((V / sz0.w) / s));
-      } else {
-        if (layer.transform.scaleY == null) layer.transform.scaleY = 1;
-        mtSet(layer, 'scaleY', clampScale((V / sz0.h) / s));
-      }
-      if (_szEdge) edgeCompensate(oldX, oldY);
-    }
-    boxX = mtVBox('Width', getX, v => resize('x', v), { dp: 0, min: 1, onScrub: syncAll });
-    boxY = mtVBox('Height', getY, v => resize('y', v), { dp: 0, min: 1, onScrub: syncAll });
+    boxW = mtVBox('Width', getW, v => resizeCrop('w', v), { dp: 0, min: 1, max: MW, onScrub: syncAll });
+    boxH = mtVBox('Height', getH, v => resizeCrop('h', v), { dp: 0, min: 1, max: MH, onScrub: syncAll });
     const center = el('div', 'mt-center');
-    const boxes = el('div', 'es-boxes'); boxes.appendChild(boxX); boxes.appendChild(boxY);
+    const boxes = el('div', 'es-boxes'); boxes.appendChild(boxW); boxes.appendChild(boxH);
     center.appendChild(boxes);
-    if (anim) center.appendChild(el('div', 'insp-hint', 'Size is keyframed — it animates between keyframes along the easing curve.'));
+
+    // Free crop (not in AM) — drag a box right on the playback area, iPhone-style.
+    const tools = el('div', 'es-crop-tools');
+    const freeBtn = el('button', 'btn es-freecrop'); freeBtn.innerHTML = ES_ICONS.crop + '<span>Free crop</span>';
+    freeBtn.title = 'Drag a crop box directly on the video';
+    freeBtn.addEventListener('click', () => { if (FM.cropTool) FM.cropTool.start(layer.id); });
+    tools.appendChild(freeBtn);
+    const cr0 = cur();
+    if (!(cr0.w >= MW - 0.5 && cr0.h >= MH - 0.5)) {   // show Reset only when actually cropped
+      const resetBtn = el('button', 'btn es-cropreset', 'Reset');
+      resetBtn.title = 'Show the whole frame again';
+      resetBtn.addEventListener('click', () => { layer.crop = { x: 0, y: 0, w: MW, h: MH }; FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); FM.inspector.refresh(); commitH(); });
+      tools.appendChild(resetBtn);
+    }
+    center.appendChild(tools);
+    if (anim) center.appendChild(el('div', 'insp-hint', 'Crop is keyframed — it animates between keyframes along the easing curve.'));
     row.appendChild(center);
     panel.appendChild(row);
     body.appendChild(panel);
@@ -1580,13 +1590,13 @@ window.FM = window.FM || {};
       root = document.getElementById('inspector');
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
-    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh(); },
+    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
     // Number keys 1..N (a layer selected): open the Nth category card in the grid's order.
     openCategoryByIndex(i) {
       const layer = FM.selectedLayer(FM.scene); if (!layer) return false;
       const cat = catsFor(layer)[i - 1]; if (!cat) return false;
       if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return true; }
-      view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh();
+      view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       return true;
     },
     // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
@@ -1594,8 +1604,8 @@ window.FM = window.FM || {};
     back() {
       const layer = FM.selectedLayer(FM.scene);
       if (!layer) return false;
-      if (FM._mtEasing || FM._volEasing || FM._spdEasing || FM._fxEasing) {
-        FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh(); return true;
+      if (FM._mtEasing || FM._volEasing || FM._spdEasing || FM._fxEasing || FM._cropEasing) {
+        FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); return true;
       }
       if (view !== 'home') { view = 'home'; this.refresh(); return true; }
       FM.selectLayer(null); return true;   // at the grid → deselect (closes the editor)
@@ -1616,8 +1626,8 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; }
-      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }
+      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // The old header row (thumbnail + name + duplicate + delete) is gone: the thumbnail lives on
       // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
       // now the top-bar name field. So the inspector goes straight to the actions.
@@ -1658,12 +1668,30 @@ window.FM = window.FM || {};
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditorFor(layer, k => fx.params[k], [info.key], info.label || info.key));
         root.appendChild(bodyEl);
+      } else if (view === 'element' && FM._cropEasing && FM.buildEasingEditorFor && layer.crop) {
+        // Crop easing — inline sub-view of the Edit Shape (crop) panel.
+        const back = el('button', 'cat-back', '‹  ' + elementLabel(layer));
+        back.addEventListener('click', () => { FM._cropEasing = false; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditorFor(layer, k => layer.crop[k], ['w', 'h', 'x', 'y'], 'Crop'));
+        root.appendChild(bodyEl);
       } else {
         const cat = CATEGORIES.find(c => c.key === view);
         const backLabel = (view === 'element') ? elementLabel(layer) : (cat ? cat.label : 'Back');
         const back = el('button', 'cat-back', '‹  ' + backLabel);
-        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh(); });
-        root.appendChild(back);
+        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
+        // AM shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
+        // header — put them on the header row for media so they sit far right, not buried in the body.
+        if (view === 'element' && (layer.type === 'video' || layer.type === 'image') && FM._inspectorCropToggles) {
+          const head = el('div', 'cat-head-row');
+          back.classList.add('cat-back-flex');
+          head.appendChild(back);
+          head.appendChild(FM._inspectorCropToggles(layer));
+          root.appendChild(head);
+        } else {
+          root.appendChild(back);
+        }
         const bodyEl = el('div', 'cat-body');
         buildCategory(view, layer, bodyEl);
         root.appendChild(bodyEl);

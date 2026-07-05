@@ -2678,14 +2678,18 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m && m.el) {
         const w = m.width, h = m.height;
+        // Crop: the visible frame is the crop rect (in source px). cw/ch = frame size, cr.x/cr.y = the
+        // source sub-rect to sample. Colour ops (grade/key) still process the FULL source (w×h) — only
+        // the final composite samples the crop sub-rect, so cropping never scales the content.
+        const cr = FM.cropOf(layer, t), cw = cr.w || w, ch = cr.h || h;
         // Fill OVERRIDE (AM): a solid/gradient/media fill on a video or image layer fully replaces
-        // its pixels with that fill over the clip's bounds. 'media' with no picture chosen yet keeps
-        // showing the original clip, and audio-only clips (0×0) can't be filled.
+        // its pixels with that fill over the clip's (cropped) bounds. 'media' with no picture chosen
+        // yet keeps showing the original clip, and audio-only clips (0×0) can't be filled.
         const fmode = FM.fillModeOf(layer);
         if (fmode !== 'none' && !(fmode === 'media' && !layer.fillImage) && w > 0 && h > 0) {
-          const fx0 = -w * tr.anchorX, fy0 = -h * tr.anchorY;
-          ctx.beginPath(); ctx.rect(fx0, fy0, w, h);
-          paintFillInPath(ctx, layer, t, fx0, fy0, w, h);
+          const fx0 = -cw * tr.anchorX, fy0 = -ch * tr.anchorY;
+          ctx.beginPath(); ctx.rect(fx0, fy0, cw, ch);
+          paintFillInPath(ctx, layer, t, fx0, fy0, cw, ch);
           ctx.restore();
           return;
         }
@@ -2751,20 +2755,23 @@ window.FM = window.FM || {};
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {
-          ctx.drawImage(src, -w * tr.anchorX, -h * tr.anchorY, w, h);
+          // Sample the crop sub-rect (cr.x,cr.y,cr.w,cr.h) of the full source into the frame box (cw×ch)
+          // at 1:1 density — shrinking the frame shows LESS of the media, it doesn't scale the content.
+          if (cr.full) ctx.drawImage(src, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
+          else ctx.drawImage(src, cr.x, cr.y, cr.w, cr.h, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
         } catch (e) { /* frame not ready */ }
-        // vignette: radial darkening over the clip's bounds (not a CSS filter)
+        // vignette: radial darkening over the clip's (cropped) bounds (not a CSS filter)
         const vig = layer.effects && layer.effects.find(e => e.type === 'vignette' && e.enabled !== false);
         if (vig) {
           const amt = clamp01(vig.params && vig.params.amount != null ? FM.evalProp(vig.params.amount, t) : 0.6);
           // Darken as a flat source-over overlay regardless of the layer's blend mode/opacity.
           ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-          const gx = -w * tr.anchorX + w / 2, gy = -h * tr.anchorY + h / 2, rad = Math.hypot(w, h) / 2;
+          const gx = -cw * tr.anchorX + cw / 2, gy = -ch * tr.anchorY + ch / 2, rad = Math.hypot(cw, ch) / 2;
           const grad = ctx.createRadialGradient(gx, gy, rad * 0.45, gx, gy, rad);
           grad.addColorStop(0, 'rgba(0,0,0,0)');
           grad.addColorStop(1, 'rgba(0,0,0,' + amt + ')');
           ctx.fillStyle = grad;
-          ctx.fillRect(-w * tr.anchorX, -h * tr.anchorY, w, h);
+          ctx.fillRect(-cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
         }
       }
     }
@@ -3005,7 +3012,29 @@ window.FM = window.FM || {};
 
   /* Draw a small fitted thumbnail of one layer's content into a canvas (layer list + timeline). */
   // Unscaled intrinsic size of a layer's content (text measured, media natural, null/fallback 100).
+  // Media CROP rect, in SOURCE pixels. AM's "Edit Shape" for a photo/video crops the visible frame
+  // (it does NOT scale the content). Missing/partial crop → the full frame. Each field is animatable
+  // (number or {kf}) so the crop can be keyframed. `full` flags an uncropped frame (fast path).
+  FM.cropOf = function (layer, t) {
+    const m = FM.media && FM.media.get(layer.id);
+    const mw = m ? m.width : 0, mh = m ? m.height : 0;
+    const c = layer.crop;
+    // While the Free-Crop tool is open on this layer, show the WHOLE frame so you can re-crop from it.
+    if (!c || !mw || !mh || layer._cropEditing) return { x: 0, y: 0, w: mw, h: mh, full: true };
+    if (t == null) t = FM.time;
+    const ev = (v, d) => (v == null ? d : FM.evalProp(v, t));
+    let w = Math.max(1, Math.min(mw, ev(c.w, mw))), h = Math.max(1, Math.min(mh, ev(c.h, mh)));
+    let x = Math.max(0, Math.min(mw - w, ev(c.x, 0))), y = Math.max(0, Math.min(mh - h, ev(c.y, 0)));
+    return { x: x, y: y, w: w, h: h, full: (w >= mw - 0.5 && h >= mh - 0.5) };
+  };
+
   FM.layerSize = function (layer) {
+    // A cropped media layer's on-screen frame is the CROP size, so the selection box / hit-test / anchor
+    // all wrap the visible crop, not the full source.
+    if ((layer.type === 'video' || layer.type === 'image') && layer.crop) {
+      const cr = FM.cropOf(layer, FM.time);
+      if (cr && cr.w) return { w: cr.w, h: cr.h };
+    }
     if (layer.type === 'text') {
       const c = document.createElement('canvas').getContext('2d');
       c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');

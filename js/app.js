@@ -735,6 +735,7 @@ window.FM = window.FM || {};
   FM.deleteLayer = function (id, _nested) {
     if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // don't leave a dead tracking overlay
     if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
+    if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
     if (FM.groupContext === id && FM.exitGroup) FM.exitGroup(true);   // deleting the group you're inside
     // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
     // each member's media/audio teardown runs through this same path — but refresh/undo commit
@@ -1553,6 +1554,7 @@ window.FM = window.FM || {};
       else if (e.code === 'Escape') {
         e.preventDefault();
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
+        if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
         if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) { FM.pointEdit.stop(); return; }
         if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) { FM.tracker.cancel(); return; }
         if (FM.inspector && FM.inspector.back) FM.inspector.back();
