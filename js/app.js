@@ -906,6 +906,14 @@ window.FM = window.FM || {};
       idMap[entry.snapshot.id] = copy.id;
       return { copy, entry };
     });
+    // Paste at the PLAYHEAD (like AM) instead of back on the source clip's original time.
+    // Anchor the earliest copied clip to the playhead and keep the relative offsets between
+    // clips that were copied together. autoFitDuration (via refreshAll) grows the timeline if
+    // a pasted clip now runs past the end.
+    const base = (typeof FM.snapFrame === 'function') ? FM.snapFrame(FM.time) : FM.time;
+    const minStart = FM.clipboard.reduce((m, e) => Math.min(m, e.snapshot.start || 0), Infinity);
+    const anchor = isFinite(minStart) ? minStart : 0;
+    copies.forEach(({ copy, entry }) => { copy.start = Math.max(0, base + ((entry.snapshot.start || 0) - anchor)); });
     let insertAt = 0;   // paste onto TOP of the z-stack (layers[0] = top), like duplicate/add
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.
