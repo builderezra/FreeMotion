@@ -112,7 +112,7 @@ window.FM = window.FM || {};
     var hint = bar.querySelector('.db-hint');
     if (hint) hint.textContent = FM.drawTool.mode === 'freehand'
       ? 'Draw on the canvas'
-      : (n < 3 ? 'Tap points to build a shape (' + n + ')' : 'Tap Done, or tap the first point (' + n + ')');
+      : (n < 3 ? 'Tap points to build a shape (' + n + ')' : 'Tap Done / press Enter, or tap the first point (' + n + ')');
   }
 
   function buildBar() {
@@ -163,6 +163,13 @@ window.FM = window.FM || {};
       window.addEventListener('pointermove', onMove, true);
       window.addEventListener('pointerup', onUp, true);
       window.addEventListener('resize', function () { if (FM.drawTool.active) syncOverlay(), redraw(); });
+      // Enter finishes the drawing (same as Done); Escape cancels. Capture phase + stopPropagation
+      // so the app's own Enter/Escape shortcuts don't also fire while you're mid-draw.
+      window.addEventListener('keydown', function (e) {
+        if (!FM.drawTool.active) return;
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stop(); }
+      }, true);
     },
   };
 })(window.FM);

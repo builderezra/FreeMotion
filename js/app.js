@@ -117,7 +117,7 @@ window.FM = window.FM || {};
   // shrinks when the furthest clip ends earlier. Runs on every refresh so the timeline never has
   // trailing empty space. Empty project keeps its configured length.
   FM.autoFitDuration = function () {
-    if (!FM.scene.layers.length) return;
+    if (!FM.scene.layers.length) { if (FM.scene.project.duration !== 0) { FM.scene.project.duration = 0; FM.time = 0; } return; }   // empty project = 0s (only as long as its clips)
     let end = 0;
     FM.scene.layers.forEach(l => { const e = (l.start || 0) + (l.duration || 0); if (e > end) end = e; });
     end = Math.max(0.5, Math.round(end * 1000) / 1000);
@@ -1528,10 +1528,15 @@ window.FM = window.FM || {};
       else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
-      // Number keys: 1-5 open the Add-menu tabs; Shift+1/2/3 add Text / Freehand / Vector.
+      // Number keys. With a layer SELECTED: 1..N open its category cards (Color & Fill, Border,
+      // Blending, Move & Transform, …) — the badge on each card shows its key. With NOTHING selected:
+      // 1-5 open the Add-menu tabs. Shift+1/2/3 always add Text / Freehand / Vector.
       else if (/^Digit[1-9]$/.test(e.code) && !mod) {
         const n = parseInt(e.code.slice(5), 10);
         if (e.shiftKey) { if (n <= 3 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }
+        else if (FM.scene.selectedId && FM.inspector && FM.inspector.openCategoryByIndex) {
+          if (FM.inspector.openCategoryByIndex(n)) e.preventDefault();
+        }
         else if (n <= 5 && FM.addMenu && FM.addMenu.openTab) { e.preventDefault(); FM.addMenu.openTab(FM.addMenu.TAB_KEYS[n - 1]); }
       }
       // Esc: step BACK a page (effects → grid → deselect), not straight to closed. Also bails out of

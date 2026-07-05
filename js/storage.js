@@ -288,7 +288,7 @@ window.FM = window.FM || {};
         idx.unshift({ id: id, name: legacy.project.name || 'My project', modified: Date.now(), width: legacy.project.width, height: legacy.project.height, duration: legacy.project.duration, layers: (legacy.layers || []).length, thumb: null });
         try { localStorage.removeItem(SCENE_KEY); } catch (e) {}
       } else {
-        idx.unshift({ id: id, name: 'My project', modified: Date.now(), width: 1080, height: 1920, duration: 10, thumb: null });
+        idx.unshift({ id: id, name: 'My project', modified: Date.now(), width: 1080, height: 1920, duration: 0, thumb: null });
       }
       this.saveIndex(idx);
     },

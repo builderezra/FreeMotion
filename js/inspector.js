@@ -739,7 +739,8 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       if (cat.key === 'effects') card.classList.add('cat-card-fx');   // PC: Effects is the big full-width card
-      card.innerHTML = '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
+      // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
+      card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') + '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
         view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh();
@@ -1526,6 +1527,14 @@ window.FM = window.FM || {};
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
     openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh(); },
+    // Number keys 1..N (a layer selected): open the Nth category card in the grid's order.
+    openCategoryByIndex(i) {
+      const layer = FM.selectedLayer(FM.scene); if (!layer) return false;
+      const cat = catsFor(layer)[i - 1]; if (!cat) return false;
+      if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return true; }
+      view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; this.refresh();
+      return true;
+    },
     // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
     // grid → deselect. Returns true if it did something. (AM: Esc doesn't nuke the layer outright.)
     back() {

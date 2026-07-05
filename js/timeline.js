@@ -162,7 +162,11 @@ window.FM = window.FM || {};
 
   // Pixels per second within the clip LANE. Fit-to-viewport at zoom 1; scaled by `zoom`.
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
-  function pxPerSec() { return (laneViewW() / FM.scene.project.duration) * zoom; }
+  // Rendering scale duration: the real project duration, but floored to a small scaffold when the
+  // project is EMPTY (0s) so the ruler/lanes still lay out (no divide-by-zero) — the stored duration
+  // stays 0 so the total/export is 0 and there's no dead space once clips exist.
+  function viewDur() { const d = FM.scene.project.duration; return d > 0.001 ? d : 5; }
+  function pxPerSec() { return (laneViewW() / viewDur()) * zoom; }
   // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
   // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
@@ -171,7 +175,7 @@ window.FM = window.FM || {};
     HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || HEAD_W;
     recomputePad();
     if (!innerEl) return;
-    const content = FM.scene.project.duration * pxPerSec();
+    const content = viewDur() * pxPerSec();
     innerEl.style.width = (window.innerWidth + content) + 'px';
   }
 
@@ -186,7 +190,7 @@ window.FM = window.FM || {};
   // timecode MM:SS:FF for a given time (frame-accurate)
   function tc(t) { const f = fps(); const tot = Math.round(t * f); const ff = tot % f; const s = Math.floor(tot / f); const mm = Math.floor(s / 60); const ss = s % 60; const p2 = n => (n < 10 ? '0' : '') + n; return p2(mm) + ':' + p2(ss) + ':' + p2(ff); }
   function buildRuler() {
-    const dur = FM.scene.project.duration, pps = pxPerSec(), f = fps();
+    const dur = viewDur(), pps = pxPerSec(), f = fps();
     // FRAME NOTCHES: a fine tick per frame (thinned so they stay >=5px apart; denser as you zoom in).
     const frameW = pps / f;
     let frameStep = 1; while (frameW * frameStep < 5) frameStep *= (frameStep < 5 ? 5 : 2);

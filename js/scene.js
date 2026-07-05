@@ -196,7 +196,7 @@ window.FM = window.FM || {};
   /* ---- factories ---- */
   function newScene() {
     return {
-      project: { name: 'Untitled', width: 1080, height: 1920, fps: 30, duration: 10, background: '#000000' },
+      project: { name: 'Untitled', width: 1080, height: 1920, fps: 30, duration: 0, background: '#000000' },
       layers: [],
       selectedId: null,
       version: 1,
