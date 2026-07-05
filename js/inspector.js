@@ -533,11 +533,11 @@ window.FM = window.FM || {};
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
   ];
 
-  // Alight Motion labels its element category after the layer kind ("Edit Shape" / "Edit Text").
+  // Alight Motion labels its element category after the layer kind. AM calls it "Edit Shape" for
+  // shapes AND for media (photo/video) — where it's a Size editor — and "Edit Text" for text.
   function elementLabel(layer) {
     if (layer.type === 'text' || layer.type === 'caption') return 'Edit Text';
-    if (layer.shape || layer.type === 'shape') return 'Edit Shape';
-    return 'Element Properties';
+    return 'Edit Shape';
   }
 
   const FONTS = ['Inter, sans-serif', 'Helvetica, Arial, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Verdana, sans-serif', 'Trebuchet MS, sans-serif', 'Palatino, serif', 'Comic Sans MS, cursive'];
@@ -714,7 +714,9 @@ window.FM = window.FM || {};
     if (layer.type === 'video') {
       const m = FM.media.get(layer.id);
       const audioOnly = m && (!m.width || !m.height);   // mp3/wav ride the video path with a 0×0 picture
-      return CATEGORIES.filter(c => c.key !== 'element' && c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && !(audioOnly && (c.key === 'color' || c.key === 'border')));
+      // Real video keeps Edit Shape (the AM Size editor); audio-only has no picture to size, so it,
+      // colour and border are all hidden for it.
+      return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && !(audioOnly && (c.key === 'color' || c.key === 'border' || c.key === 'element')));
     }
     return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
   }
@@ -725,7 +727,7 @@ window.FM = window.FM || {};
   function viewAllowed(layer, v) {
     if (!layer || v === 'home') return true;
     if (v === 'speed' || v === 'volume') return layer.type === 'video';
-    if (v === 'element') return layer.type !== 'video' && layer.type !== 'camera' && layer.type !== 'group';
+    if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
     if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
@@ -979,6 +981,97 @@ window.FM = window.FM || {};
     strip.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; } setVal(drag.v + (e.clientX - drag.x) * scrub); if (onChange) onChange(); });
     strip.addEventListener('pointerup', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
     return strip;
+  }
+
+  // ===== AM "Edit Shape" for media (photo/video) = a Size editor =====
+  // Pixel Width/Height with an aspect-ratio lock and a size-from-edge/center origin toggle (the two
+  // controls AM shows top-right), plus a keyframe + easing rail. Size is the layer's SCALE expressed
+  // in pixels: on-screen w = intrinsicW × scale × scaleX. Aspect-locked drives uniform `scale`;
+  // free drives scaleX / scaleY independently. Both are session tools (like the MT mode), not saved.
+  let _szLock = true, _szEdge = false;
+  const ES_ICONS = {
+    center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="12" cy="12" r="2.3" fill="currentColor" stroke="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/></svg>',
+    edge:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><circle cx="6.6" cy="6.6" r="2" fill="currentColor" stroke="none"/><path d="M11 6.6h9M6.6 11v9"/></svg>',
+  };
+  function mediaSizePanel(layer, body) {
+    const sz0 = FM.layerSize(layer);
+    if (!sz0.w || !sz0.h) { body.appendChild(el('div', 'insp-hint', 'This clip has no picture to resize.')); return; }
+    const S_MAX = 40;
+    const clampScale = s => Math.max(0.02, Math.min(S_MAX, s));
+
+    const panel = el('div', 'mt-panel es-media');
+
+    // top-right toggles: aspect-ratio lock + size origin (edge vs center)
+    const top = el('div', 'es-toprow');
+    const aspectBtn = el('button', 'es-toggle' + (_szLock ? ' on' : ''));
+    aspectBtn.innerHTML = MT_ICONS.link;
+    aspectBtn.title = _szLock ? 'Aspect Ratio Locked — resize proportionally' : 'Resize Freely — Width & Height independent';
+    aspectBtn.addEventListener('click', () => { _szLock = !_szLock; if (FM.toast) FM.toast(_szLock ? 'Aspect Ratio Locked' : 'Resize Freely'); FM.inspector.refresh(); });
+    const originBtn = el('button', 'es-toggle' + (_szEdge ? '' : ' on'));
+    originBtn.innerHTML = _szEdge ? ES_ICONS.edge : ES_ICONS.center;
+    originBtn.title = _szEdge ? 'Size from edge — the top-left corner stays put' : 'Size from center — the anchor stays put';
+    originBtn.addEventListener('click', () => { _szEdge = !_szEdge; if (FM.toast) FM.toast(_szEdge ? 'Size from edge' : 'Size from center'); FM.inspector.refresh(); });
+    top.appendChild(aspectBtn); top.appendChild(originBtn);
+    panel.appendChild(top);
+
+    const row = el('div', 'es-body');
+    // left rail — keyframe + easing (keyframes the size = scale / scaleX / scaleY)
+    const left = el('div', 'mt-rail mt-rail-left');
+    const SK = ['scale', 'scaleX', 'scaleY'];
+    const anim = SK.some(k => FM.isAnimated(layer.transform[k]));
+    const onHere = SK.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+    const kfBtn = el('button', 'mt-kf' + (anim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
+    kfBtn.title = onHere ? 'Remove size keyframe at playhead' : 'Keyframe the size at the playhead';
+    kfBtn.addEventListener('click', () => {
+      const keys = _szLock ? ['scale'] : SK;
+      keys.forEach(k => { if (layer.transform[k] == null) layer.transform[k] = 1; });
+      const has = keys.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));   // add unless already there → then remove
+      keys.forEach(k => { const kh = FM.hasKeyframeAt(layer.transform[k], FM.time); if ((!has && !kh) || (has && kh)) FM.toggleKeyframe(layer, k, FM.time); });
+      FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH();
+    });
+    left.appendChild(kfBtn);
+    const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
+    easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, 'scale'); });
+    left.appendChild(easeBtn);
+    row.appendChild(left);
+
+    // center — Width / Height pixel boxes
+    const getX = () => sz0.w * mtEval(layer, 'scale') * mtEval(layer, 'scaleX');
+    const getY = () => sz0.h * mtEval(layer, 'scale') * mtEval(layer, 'scaleY');
+    let boxX, boxY;
+    const syncAll = () => { if (boxX) boxX._refresh(); if (boxY) boxY._refresh(); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); };
+    function edgeCompensate(oldX, oldY) {   // keep the top-left corner fixed (grow toward bottom-right)
+      const ax = layer.transform.anchorX != null ? FM.evalProp(layer.transform.anchorX, FM.time) : 0.5;
+      const ay = layer.transform.anchorY != null ? FM.evalProp(layer.transform.anchorY, FM.time) : 0.5;
+      const dX = (getX() - oldX) * ax, dY = (getY() - oldY) * ay;
+      if (dX) mtSet(layer, 'x', Math.round(mtEval(layer, 'x') + dX));
+      if (dY) mtSet(layer, 'y', Math.round(mtEval(layer, 'y') + dY));
+    }
+    function resize(axis, V) {
+      V = Math.max(1, V);
+      const s = mtEval(layer, 'scale'), sx = mtEval(layer, 'scaleX'), sy = mtEval(layer, 'scaleY');
+      const oldX = sz0.w * s * sx, oldY = sz0.h * s * sy;
+      if (_szLock) {   // uniform: drive `scale` so the chosen dimension hits V; the other follows
+        const base = axis === 'x' ? (sz0.w * sx) : (sz0.h * sy);
+        mtSet(layer, 'scale', clampScale(V / base));
+      } else if (axis === 'x') {
+        if (layer.transform.scaleX == null) layer.transform.scaleX = 1;
+        mtSet(layer, 'scaleX', clampScale((V / sz0.w) / s));
+      } else {
+        if (layer.transform.scaleY == null) layer.transform.scaleY = 1;
+        mtSet(layer, 'scaleY', clampScale((V / sz0.h) / s));
+      }
+      if (_szEdge) edgeCompensate(oldX, oldY);
+    }
+    boxX = mtVBox('Width', getX, v => resize('x', v), { dp: 0, min: 1, onScrub: syncAll });
+    boxY = mtVBox('Height', getY, v => resize('y', v), { dp: 0, min: 1, onScrub: syncAll });
+    const center = el('div', 'mt-center');
+    const boxes = el('div', 'es-boxes'); boxes.appendChild(boxX); boxes.appendChild(boxY);
+    center.appendChild(boxes);
+    if (anim) center.appendChild(el('div', 'insp-hint', 'Size is keyframed — it animates between keyframes along the easing curve.'));
+    row.appendChild(center);
+    panel.appendChild(row);
+    body.appendChild(panel);
   }
 
   function moveTransformPanel(layer) {
@@ -1471,54 +1564,14 @@ window.FM = window.FM || {};
           }
         }
       }
-      // Motion blur — averages sub-frames across the shutter; smears moving/rotating layers.
-      if (!layer.motionBlur) layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
-      const mb = layer.motionBlur;
-      body.appendChild(checkRow('Motion blur', mb.enabled, v => { mb.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
-      if (mb.enabled) {
-        body.appendChild(rangeRow('Shutter', () => mb.shutter, v => { mb.shutter = Math.max(0.05, v); }, 0.1, 2, 0.05));
-        body.appendChild(rangeRow('Samples', () => mb.samples, v => { mb.samples = Math.max(2, Math.round(v)); }, 2, 24, 1));
+      if (layer.type === 'video' || layer.type === 'image') {
+        // Media has no path/points to edit — AM's "Edit Shape" for a photo/video is the SIZE editor.
+        mediaSizePanel(layer, body);
       }
-
-      // Wiggle — procedural position jitter (no keyframes; great for handheld/shake looks).
-      if (!layer.wiggle) layer.wiggle = { enabled: false, amp: 12, freq: 2 };
-      const wg = layer.wiggle;
-      body.appendChild(checkRow('Wiggle', wg.enabled, v => { wg.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
-      if (wg.enabled) {
-        body.appendChild(rangeRow('Wiggle amount', () => wg.amp, v => { wg.amp = Math.max(0, v); }, 0, 200, 1));
-        body.appendChild(rangeRow('Wiggle speed', () => wg.freq, v => { wg.freq = Math.max(0.1, v); }, 0.1, 12, 0.1));
-      }
-
-      // Vector mask — clip this layer to a shape (rect / ellipse / polygon), optionally inverted.
-      const maskOn = !!(layer.mask && layer.mask.enabled);
-      body.appendChild(checkRow('Mask', maskOn, v => {
-        if (v) {
-          const sz = FM.layerSize(layer);
-          layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: Math.round((sz.w || 300) * 0.7), h: Math.round((sz.h || 300) * 0.7), sides: 5, feather: 0, invert: false };
-        } else if (layer.mask) { layer.mask.enabled = false; }
-        FM.requestRender(); FM.inspector.refresh();
-      }));
-      if (maskOn) {
-        const mk = layer.mask, sz = FM.layerSize(layer);
-        const maxW = Math.round(Math.max(400, (sz.w || 400) * 2)), maxH = Math.round(Math.max(400, (sz.h || 400) * 2));
-        const mr = el('div', 'prop-row'); mr.appendChild(el('label', null, 'Mask shape'));
-        const msel = document.createElement('select');
-        [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['polygon', 'Polygon']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === mk.shape) o.selected = true; msel.appendChild(o); });
-        msel.addEventListener('change', () => { mk.shape = msel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-        mr.appendChild(msel); body.appendChild(mr);
-        body.appendChild(rangeRow('Mask X', () => mk.x || 0, v => { mk.x = v; }, -maxW, maxW, 1));
-        body.appendChild(rangeRow('Mask Y', () => mk.y || 0, v => { mk.y = v; }, -maxH, maxH, 1));
-        body.appendChild(rangeRow('Mask width', () => mk.w, v => { mk.w = Math.max(2, v); }, 2, maxW, 1));
-        body.appendChild(rangeRow('Mask height', () => mk.h, v => { mk.h = Math.max(2, v); }, 2, maxH, 1));
-        if (mk.shape === 'polygon') body.appendChild(rangeRow('Mask sides', () => mk.sides || 5, v => { mk.sides = Math.max(3, Math.round(v)); }, 3, 12, 1));
-        body.appendChild(rangeRow('Feather', () => mk.feather || 0, v => { mk.feather = Math.max(0, v); }, 0, 200, 1));
-        body.appendChild(checkRow('Invert mask', !!mk.invert, v => { mk.invert = v; FM.requestRender(); }));
-      }
-      body.appendChild(textRow('Start (s)', round(layer.start, 2), v => { layer.start = Math.max(0, parseFloat(v) || 0); FM.requestRender(); FM.timeline.rebuild(); }, 'number'));
-      body.appendChild(textRow('Duration (s)', round(layer.duration, 2), v => { layer.duration = Math.max(0.1, parseFloat(v) || 0.1); FM.requestRender(); FM.timeline.rebuild(); }, 'number'));
-      // (The old video Volume/Fade/Speed/Reverse rows were removed — video uses the dedicated Volume &
-      // Speed panels from the quick-row, and that legacy Volume slider was NOT keyframe-aware: it would
-      // overwrite a {kf} volume with a number and destroy the animation. Video never opens 'element' now.)
+      // (Motion blur, Wiggle, Mask and the Start/Duration rows were removed from Edit Shape to match
+      // Alight Motion — none of those live in AM's Edit Shape. Any layer that still carries those
+      // fields from an older save keeps rendering them; there's just no longer UI to add them here.
+      // Timing is set on the timeline; masking lives in Blending (mask modes) and masking groups.)
     }
   }
 
@@ -1607,7 +1660,8 @@ window.FM = window.FM || {};
         root.appendChild(bodyEl);
       } else {
         const cat = CATEGORIES.find(c => c.key === view);
-        const back = el('button', 'cat-back', '‹  ' + (cat ? cat.label : 'Back'));
+        const backLabel = (view === 'element') ? elementLabel(layer) : (cat ? cat.label : 'Back');
+        const back = el('button', 'cat-back', '‹  ' + backLabel);
         back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');

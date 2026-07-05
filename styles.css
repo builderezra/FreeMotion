@@ -178,6 +178,14 @@ body {
 .mt-vbox-lab { font-size: 11px; color: #7d8ca5; }
 .mt-link { width: 32px !important; height: 32px !important; align-self: center; margin-top: 4px; flex: none; }
 .mt-link.on { color: var(--accent); border-color: rgba(41,217,187,.5); }
+/* Edit Shape (media) = Size editor: the two AM top-right toggles + Width/Height boxes. */
+.es-media { flex-direction: column; gap: 8px; }
+.es-toprow { display: flex; justify-content: flex-end; gap: 8px; }
+.es-toggle { width: 42px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
+.es-toggle svg { width: 20px; height: 20px; }
+.es-toggle.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px rgba(41,217,187,.45); }
+.es-body { display: flex; gap: 9px; align-items: stretch; }
+.es-boxes { display: flex; gap: 10px; }
 .mt-control { flex: 1; min-height: 124px; display: flex; flex-direction: column; gap: 8px; }
 .mt-control-dual { gap: 14px; justify-content: center; }
 /* 2D move trackpad */
