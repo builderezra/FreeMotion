@@ -859,6 +859,7 @@ window.FM = window.FM || {};
         const at = anim && p.kf.some(k => Math.abs(k.t - FM.time) < 1e-3);
         kfBtn.textContent = at ? '◆' : '◇';
         kfBtn.classList.toggle('on', !!anim);
+        kfBtn.classList.toggle('here', !!at);   // amber when the playhead is on a keyframe (press = delete)
         kfBtn.title = anim ? (p.kf.length + ' colour keyframe' + (p.kf.length === 1 ? '' : 's') + ' — tap to ' + (at ? 'remove one here' : 'add one here')) : 'Animate colour: add a keyframe at the playhead';
       };
       paintKf();

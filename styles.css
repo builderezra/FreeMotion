@@ -167,7 +167,9 @@ body {
 .mt-rail button.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px rgba(41,217,187,.45); }
 .mt-kf { font-size: 15px; line-height: 1; }
 .mt-kf.active { color: var(--accent); }
-.mt-kf.here { color: var(--accent); background: rgba(41,217,187,.20); border-color: rgba(41,217,187,.5); }
+/* Playhead sits ON an existing keyframe → amber (var(--kf)), same signal as every other kf button:
+   pressing now DELETES that keyframe. Otherwise pressing adds one. */
+.mt-kf.here { color: var(--kf); background: rgba(255,206,74,.16); border-color: var(--kf); }
 .mt-center { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .mt-values { display: flex; gap: 8px; align-items: flex-start; justify-content: center; }
 .mt-vbox { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -418,6 +420,7 @@ body {
 .fx-ease svg { width: 16px; height: 16px; }
 .fx-ease:hover { color: var(--accent); background: var(--panel-2); }
 .fill-kf.on { color: var(--accent); }
+.fill-kf.here { color: var(--kf); }   /* on an existing colour keyframe → amber (press to delete) */
 .fill-kf:hover { background: var(--panel-2); }
 .swatch-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-bottom: 13px; }
 .swatch-cell { aspect-ratio: 1; border-radius: 7px; border: 1px solid rgba(255,255,255,.09); cursor: pointer; padding: 0; }

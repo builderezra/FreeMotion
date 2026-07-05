@@ -103,18 +103,25 @@ window.FM = window.FM || {};
    * truth so preview + export read keyframed volume the same way. */
   FM.layerVolume = function (layer, t) { return layer.muted ? 0 : (layer.volume == null ? 1 : evalProp(layer.volume, t)); };
 
+  // Returns true when it INSERTED a new keyframe (vs updated one already at `t`) so callers can
+  // refresh the timeline once — this is what makes an auto-keyed dot appear instead of staying
+  // "invisible". New keyframes default to LINEAR easing (a straight graph), not ease-in-out.
   function upsertKeyframe(p, t, v) {
     const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
-    if (hit) { hit.v = v; }
-    else { p.kf.push({ t: t, v: v, e: 'easeInOut' }); p.kf.sort((a, b) => a.t - b.t); }
-    return p;
+    if (hit) { hit.v = v; return false; }
+    p.kf.push({ t: t, v: v, e: 'linear' }); p.kf.sort((a, b) => a.t - b.t);
+    return true;
   }
+  // A keyframe was just auto-inserted on an already-animated prop (dragging/scrubbing at a new
+  // playhead time) — redraw the timeline so its dot shows immediately. Only interactive setters call
+  // this (tracker/AI write kf arrays directly), so it never fires inside a tight batch loop.
+  function kfInserted() { if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); }
 
   /* Set a transform value at the given time. If the prop is already keyframed, this
    * inserts/updates a keyframe at `time`; otherwise it sets the static value. */
   function setTransform(layer, key, value, time) {
     const p = layer.transform[key];
-    if (isAnimated(p)) upsertKeyframe(p, time, value);
+    if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else layer.transform[key] = value;
   }
   FM.setTransform = setTransform;
@@ -124,7 +131,7 @@ window.FM = window.FM || {};
     let p = layer.transform[key];
     if (!isAnimated(p)) {
       const cur = (typeof p === 'number') ? p : 0;
-      layer.transform[key] = { kf: [{ t: time, v: cur, e: 'easeInOut' }] };
+      layer.transform[key] = { kf: [{ t: time, v: cur, e: 'linear' }] };
       return true;
     }
     const hit = p.kf.find(k => Math.abs(k.t - time) < 1e-3);
@@ -160,7 +167,7 @@ window.FM = window.FM || {};
    * params), so effect parameters / future props are keyframe-able just like transform. */
   FM.setProp = function (container, key, value, time) {
     const p = container[key];
-    if (isAnimated(p)) upsertKeyframe(p, time, value);
+    if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else container[key] = value;
   };
   FM.toggleProp = function (container, key, time, dflt) {
@@ -168,7 +175,7 @@ window.FM = window.FM || {};
     if (!isAnimated(p)) {
       // numbers AND strings (colour props like layer.fill) seed from the current static value
       const cur = (typeof p === 'number' || typeof p === 'string') ? p : (dflt != null ? dflt : 0);
-      container[key] = { kf: [{ t: time, v: cur, e: 'easeInOut' }] };
+      container[key] = { kf: [{ t: time, v: cur, e: 'linear' }] };
       return true;
     }
     const hit = p.kf.find(k => Math.abs(k.t - time) < 1e-3);
