@@ -2519,8 +2519,10 @@ window.FM = window.FM || {};
       const lines = String(textSrc).split('\n'), lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
       lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
     } else {
-      const m = FM.media.get(layer.id), sz = FM.layerSize ? FM.layerSize(layer) : { w: W, h: H };
-      const w = (m && m.width) || sz.w, h = (m && m.height) || sz.h;
+      // footprint = the VISIBLE frame (crop), not the full source — else Copy Background on a cropped
+      // clip covers the whole frame instead of just the crop.
+      const cr = FM.cropOf ? FM.cropOf(layer, t) : null, sz = FM.layerSize ? FM.layerSize(layer) : { w: W, h: H };
+      const w = (cr && cr.w) || sz.w, h = (cr && cr.h) || sz.h;
       a.fillRect(-w * tr.anchorX, -h * tr.anchorY, w, h);
     }
     a.setTransform(1, 0, 0, 1, 0, 0);

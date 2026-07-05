@@ -1015,7 +1015,7 @@ window.FM = window.FM || {};
   FM._inspectorCropToggles = cropToggles;   // the inspector header uses this to place the toggles top-right
 
   function mediaSizePanel(layer, body) {
-    const m = ensureCrop(layer);
+    const m = cropMediaOf(layer);   // read-only — don't stamp a crop onto the layer just for viewing
     if (!m) { body.appendChild(el('div', 'insp-hint', 'This clip has no picture to crop.')); return; }
     const MW = m.width, MH = m.height;
     const CK = ['w', 'h', 'x', 'y'];
@@ -1026,11 +1026,12 @@ window.FM = window.FM || {};
 
     // left rail — keyframe the crop + easing curve
     const left = el('div', 'mt-rail mt-rail-left');
-    const anim = CK.some(k => FM.isAnimated(layer.crop[k]));
-    const onHere = CK.some(k => FM.hasKeyframeAt(layer.crop[k], FM.time));
+    const anim = !!layer.crop && CK.some(k => FM.isAnimated(layer.crop[k]));
+    const onHere = !!layer.crop && CK.some(k => FM.hasKeyframeAt(layer.crop[k], FM.time));
     const kfBtn = el('button', 'mt-kf' + (anim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
     kfBtn.title = onHere ? 'Remove crop keyframe at playhead' : 'Keyframe the crop at the playhead';
     kfBtn.addEventListener('click', () => {
+      ensureCrop(layer);
       CK.forEach(k => { if (layer.crop[k] == null) layer.crop[k] = def(k); });
       const has = CK.some(k => FM.hasKeyframeAt(layer.crop[k], FM.time));   // add unless already there → then remove
       CK.forEach(k => { const kh = FM.hasKeyframeAt(layer.crop[k], FM.time); if ((!has && !kh) || (has && kh)) FM.toggleProp(layer.crop, k, FM.time, def(k)); });
@@ -1048,6 +1049,7 @@ window.FM = window.FM || {};
     let boxW, boxH;
     const syncAll = () => { if (boxW) boxW._refresh(); if (boxH) boxH._refresh(); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); };
     function resizeCrop(axis, V) {
+      ensureCrop(layer);
       const c = cur(); let nw = c.w, nh = c.h;
       if (axis === 'w') { nw = Math.max(1, Math.min(MW, Math.round(V))); if (_szLock) nh = Math.max(1, Math.min(MH, Math.round(nw * (c.h / c.w)))); }
       else { nh = Math.max(1, Math.min(MH, Math.round(V))); if (_szLock) nw = Math.max(1, Math.min(MW, Math.round(nh * (c.w / c.h)))); }

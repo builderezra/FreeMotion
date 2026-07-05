@@ -153,6 +153,9 @@ window.FM = window.FM || {};
   function cancel() { const l = layer(); if (l) l._cropEditing = false; teardown(); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.inspector) FM.inspector.refresh(); }
   function teardown() {
     active = null; drag = null;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    window.removeEventListener('pointermove', onMove, true);
+    window.removeEventListener('pointerup', onUp, true);
     if (overlay && overlay.parentElement) overlay.parentElement.removeChild(overlay); overlay = null;
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
     document.body.classList.remove('cropping');
