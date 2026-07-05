@@ -650,7 +650,30 @@ window.FM = window.FM || {};
     });
   }
 
+  // ---- inertial scrubbing: a flick keeps gliding after you let go, decelerating to a stop ----
+  let momentumRAF = 0;
+  function stopMomentum() { if (momentumRAF) { cancelAnimationFrame(momentumRAF); momentumRAF = 0; } }
+  function startMomentum(vTimePerMs) {   // vTimePerMs = project-seconds per ms at release
+    stopMomentum();
+    let v = vTimePerMs;
+    if (!isFinite(v) || Math.abs(v) < 4e-5) return;     // too gentle to bother → just settle
+    v = Math.max(-0.022, Math.min(0.022, v));           // clamp: a hard flick glides a few seconds, no more
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(48, now - last); last = now;
+      v *= Math.pow(0.9, dt / 16.67);                   // friction ~0.9/frame → glides then eases to a stop
+      let t = FM.time + v * dt;
+      const dur = FM.scene.project.duration;
+      if (t <= 0) { t = 0; v = 0; } else if (t >= dur) { t = dur; v = 0; }
+      FM.setTime(t, true);                              // no per-frame snap → smooth glide
+      if (Math.abs(v) > 5e-4) momentumRAF = requestAnimationFrame(step);   // stop once it's imperceptible
+      else { momentumRAF = 0; FM.setTime(FM.time); }    // settle onto the exact frame
+    };
+    momentumRAF = requestAnimationFrame(step);
+  }
+
   function beginScrub(e) {
+    stopMomentum();                                     // a fresh grab kills any in-flight glide
     dragging = true;
     innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
     if (FM.playing) FM.pause();
@@ -748,8 +771,8 @@ window.FM = window.FM || {};
       // mouse down + wheel), not the scroll event — during playback the playhead's own auto-scroll
       // rewrites scrollLeft every frame, so user scrolls get swallowed by the feedback guard above.
       if (timelineEl) {
-        timelineEl.addEventListener('pointerdown', () => { if (FM.playing) FM.pause(); }, true);
-        timelineEl.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.metaKey && FM.playing) FM.pause(); }, { passive: true });
+        timelineEl.addEventListener('pointerdown', () => { stopMomentum(); if (FM.playing) FM.pause(); }, true);   // any grab kills a glide + pauses
+        timelineEl.addEventListener('wheel', (e) => { stopMomentum(); if (!e.ctrlKey && !e.metaKey && FM.playing) FM.pause(); }, { passive: true });
       }
       // two-finger PINCH zoom — tracked on window in CAPTURE phase so clip/ruler stopPropagation can't hide it
       const pdist = () => { const p = [...pointers.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
@@ -900,16 +923,27 @@ window.FM = window.FM || {};
             timelineEl.scrollTop = scrub.startScrollTop - dy;                                  // vertical pan
           } else if (Math.abs(dx) > 3) {
             scrub.moved = true;
+            // sample velocity for the release fling (event timeStamp = true input time). time moves
+            // at −1/pps per screen-px, so timeVel = −(px/ms)/pps.
+            const now = e.timeStamp || performance.now(), ddt = now - (scrub.lastT || now);
+            if (ddt > 0) { const vx = (e.clientX - (scrub.lastX != null ? scrub.lastX : e.clientX)) / ddt; scrub.vTime = (scrub.vTime || 0) * 0.35 + (-vx / pxPerSec()) * 0.65; }
+            scrub.lastX = e.clientX; scrub.lastT = now;
             FM.setTime(snapT(scrub.baseTime - dx / pxPerSec()));                               // horizontal grab-and-slide
           }
         }
       });
-      window.addEventListener('pointerup', () => {
+      window.addEventListener('pointerup', (e) => {
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
         if (dragging && scrub && !scrub.moved) {
           // A TAP on the timeline (ruler OR empty lane) NEVER seeks — only a horizontal DRAG scrubs.
           // Tapping off any clip just deselects (revealing the Add menu / dropping the phone sheet).
           if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+        } else if (dragging && scrub && scrub.axis === 'x' && scrub.moved && !FM.playing) {
+          // released a horizontal grab → keep gliding with the release velocity (momentum), unless the
+          // finger had already STOPPED before lifting (last move >90ms ago = a deliberate settle, no fling).
+          const upT = (e && e.timeStamp) || performance.now();
+          const fresh = (upT - (scrub.lastT || 0)) < 90;
+          startMomentum(fresh ? (scrub.vTime || 0) : 0);
         }
         dragging = false; scrub = null;
         if (clipTap) {
@@ -1017,5 +1051,6 @@ window.FM = window.FM || {};
       if (zl) zl.textContent = (Math.round(zoom * 10) / 10) + '×';
     },
     zoomBy(f, anchorTime) { this.setZoom(zoom * f, anchorTime); },
+    stopMomentum() { stopMomentum(); },
   };
 })(window.FM);

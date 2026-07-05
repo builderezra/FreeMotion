@@ -346,8 +346,8 @@ window.FM = window.FM || {};
   // Quantize to the project frame grid — EVERYTHING user-placed (playhead, keyframes, markers,
   // splits) lives on an exact frame, like AM. Playback itself stays smooth (tick bypasses setTime).
   FM.snapFrame = function (t) { const f = FM.scene.project.fps || 30; return Math.round(t * f) / f; };
-  FM.setTime = function (t) {
-    if (!FM.playing) t = FM.snapFrame(t);
+  FM.setTime = function (t, noSnap) {
+    if (!FM.playing && !noSnap) t = FM.snapFrame(t);   // momentum glide passes noSnap for a smooth ride; it snaps on settle
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
     if (!FM.playing) FM.seekVideosToTime();
     render();
@@ -430,6 +430,7 @@ window.FM = window.FM || {};
 
   FM.play = function () {
     if (FM.playing) return;
+    if (FM.timeline && FM.timeline.stopMomentum) FM.timeline.stopMomentum();   // don't fight a timeline glide
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
     lastTs = 0;
@@ -1579,12 +1580,10 @@ window.FM = window.FM || {};
         if (keepAtDown) return;                                                             // tapped a control / self-managing area
         if (Math.abs(e.clientX - dx) > 6 || Math.abs(e.clientY - dy) > 6) return;           // a drag, not a tap
         if (!FM.scene || (!FM.scene.selectedId && !(FM.scene.selectedIds && FM.scene.selectedIds.length))) return;
-        // PC: clicking off the panel steps BACK a page (effects → grid → deselect) so you can dismiss
-        // the open sub-menu by clicking anywhere but the inspector. Phone keeps the plain deselect
-        // (tap-empty drops the whole sheet).
-        const desktop = !window.matchMedia('(max-width: 700px)').matches;
-        if (desktop && FM.inspector && FM.inspector.back) FM.inspector.back();
-        else FM.selectLayer(null);                                                          // empty background → deselect
+        // Clicking anywhere off the inspector CLOSES it — deselect straight back to the Add menu so the
+        // panel visibly clears (no matter how deep you were, e.g. the Effects sub-menu). Esc is the
+        // gentler step-back (effects → grid → deselect).
+        FM.selectLayer(null);
       }, true);
     })();
   }
