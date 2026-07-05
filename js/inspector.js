@@ -364,7 +364,7 @@ window.FM = window.FM || {};
       } else { FM.inspector.refresh(); }
     }
     const rowW = () => row.getBoundingClientRect().width || 300;
-    const armDist = () => 46;
+    const armDist = () => 34;   // red panel "armed" this early — well before the commit point
     function moveSwipe(e) {
       const wrap = row._wrap || row;
       let dx = e.clientX - sx;
@@ -384,8 +384,9 @@ window.FM = window.FM || {};
     }
     function endSwipe() {
       const wrap = row._wrap || row, w = rowW();
-      // commit on a decent pull OR a quick left flick — makes it EASY (a flick past 32px deletes)
-      const commit = swDx < -w * 0.4 || (swVx < -0.5 && swDx < -32);
+      // EASY commit: a short pull (~18% of width, capped at 56px — the armed point) deletes, and
+      // any real left flick deletes almost immediately. No need to drag it halfway across anymore.
+      const commit = swDx < -Math.min(56, w * 0.18) || (swVx < -0.28 && swDx < -20);
       if (commit) {
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (_) {} }
         wrap.style.transition = 'transform .19s cubic-bezier(.4,0,.2,1)';
@@ -416,6 +417,10 @@ window.FM = window.FM || {};
       else hold = setTimeout(() => { if (mode === null) beginReorder(); }, 280);
     });
     head.addEventListener('pointermove', e => {
+      // If the mouse button is UP but we still think we're dragging, the pointerup was swallowed
+      // (capture lost / DOM rebuilt). End the gesture NOW so the row doesn't keep swiping when the
+      // cursor drifts back over it. (Same guard the Move/Transform + effect sliders use.)
+      if (down && e.pointerType === 'mouse' && e.buttons === 0) { finish(e); return; }
       if (!down) return;   // a mouse fires pointermove on plain HOVER (no button) — ignore it, else the row swipes itself away as the cursor passes over
       if (mode === null) {
         const dx = e.clientX - sx, dy = e.clientY - sy;
