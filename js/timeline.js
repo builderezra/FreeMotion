@@ -162,11 +162,15 @@ window.FM = window.FM || {};
 
   // Pixels per second within the clip LANE. Fit-to-viewport at zoom 1; scaled by `zoom`.
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
-  // Rendering scale duration: the real project duration, but floored to a small scaffold when the
-  // project is EMPTY (0s) so the ruler/lanes still lay out (no divide-by-zero) — the stored duration
-  // stays 0 so the total/export is 0 and there's no dead space once clips exist.
-  function viewDur() { const d = FM.scene.project.duration; return d > 0.001 ? d : 5; }
-  function pxPerSec() { return (laneViewW() / viewDur()) * zoom; }
+  // The REAL project duration drives the ruler extent + scrollable width. 0 = a genuinely empty,
+  // zero-length timeline (no phantom scaffold, nothing to scroll).
+  function viewDur() { return Math.max(0, FM.scene.project.duration || 0); }
+  // FIXED pixels-per-second — the time scale does NOT depend on the project length. So a 1-second clip
+  // is always physically 1 second wide (and STAYS that width when you trim it), a 5s clip is 5× wider,
+  // and an empty project has zero width. No fit-to-viewport rescaling (which sprang trimmed clips back
+  // to full width) and no divide-by-zero. ~SPAN_AT_ZOOM1 seconds fill the lane at zoom 1; zoom scales it.
+  const SPAN_AT_ZOOM1 = 5;
+  function pxPerSec() { return (laneViewW() / SPAN_AT_ZOOM1) * zoom; }
   // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
   // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
@@ -995,6 +999,9 @@ window.FM = window.FM || {};
       // Keep every animated prop in sync with its layer's loopMode so newly-keyframed props inherit
       // the loop setting instead of silently freezing at their last keyframe.
       FM.scene.layers.forEach(l => { if (l.loopMode && l.loopMode !== 'none') FM.animatedProps(l).forEach(p => { p.loopMode = l.loopMode; }); });
+      // Recompute the project length from the clips on EVERY rebuild — the timeline is drawn right
+      // afterwards, so its length can never be stale no matter which edit triggered the rebuild.
+      if (FM.autoFitDuration) FM.autoFitDuration();
       applyInnerWidth();
       buildRuler();
       buildTracks();

@@ -117,12 +117,14 @@ window.FM = window.FM || {};
   // shrinks when the furthest clip ends earlier. Runs on every refresh so the timeline never has
   // trailing empty space. Empty project keeps its configured length.
   FM.autoFitDuration = function () {
-    if (!FM.scene.layers.length) { if (FM.scene.project.duration !== 0) { FM.scene.project.duration = 0; FM.time = 0; } return; }   // empty project = 0s (only as long as its clips)
+    // SINGLE SOURCE OF TRUTH for project length: the timeline is only ever as long as its clips —
+    // the furthest clip end, or exactly 0 when there are no clips. No minimum/floor, so a 1s clip
+    // makes a 1s timeline and an empty project is a true 0s timeline.
     let end = 0;
     FM.scene.layers.forEach(l => { const e = (l.start || 0) + (l.duration || 0); if (e > end) end = e; });
-    end = Math.max(0.5, Math.round(end * 1000) / 1000);
+    end = Math.max(0, Math.round(end * 1000) / 1000);
     if (FM.scene.project.duration !== end) FM.scene.project.duration = end;
-    if (FM.time > end) FM.time = end;   // clamp the playhead to the new end
+    if (FM.time > end) FM.time = end;   // never leave the playhead past the (possibly shorter) end
   };
 
   function refreshAll() {
