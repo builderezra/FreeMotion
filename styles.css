@@ -523,7 +523,14 @@ body {
 .fx-grip { width: 22px; flex: none; text-align: center; color: var(--text-dim); font-size: 14px; cursor: grab; line-height: 1; touch-action: none; }   /* the drag handle owns its gesture (no pan-y scroll hijack on touch) */
 .fx-row.fx-dragging { z-index: 6; box-shadow: 0 10px 24px rgba(0,0,0,.45); border-color: var(--accent); opacity: .97; }
 .fx-row.fx-dragging .fx-grip { cursor: grabbing; color: var(--accent); }
-.fx-row.fx-swipe-armed { border-color: #e5484d; background: rgba(229,72,77,.16); }
+.fx-row.fx-swipe-armed { border-color: #e5484d; }
+/* iOS-style swipe-to-delete: an opaque wrapper slides left over a red DELETE panel */
+.fx-del-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 20px; background: linear-gradient(90deg, #a52428, #e5484d); color: #fff; border-radius: 10px; }
+.fx-del-ico { display: flex; transition: transform .13s cubic-bezier(.34,1.56,.64,1); }
+.fx-del-ico svg { width: 21px; height: 21px; }
+.fx-row.fx-swipe-armed .fx-del-ico { transform: scale(1.3); }
+.fx-swipe-wrap { position: relative; z-index: 1; background: var(--panel-2); will-change: transform; }
+.fx-row.fx-off .fx-swipe-wrap { background: var(--panel-2); }
 .fx-disc { background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer; width: 20px; padding: 0; }
 .fx-row .fx-name { font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; }
 .fx-spacer { flex: 1; }

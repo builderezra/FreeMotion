@@ -322,6 +322,7 @@ window.FM = window.FM || {};
   // (Replaces the old ▴▾ arrow buttons.) touch-action:pan-y lets the sheet still scroll vertically.
   function attachFxGestures(row, head, layer, fx, idx) {
     let sx = 0, sy = 0, mode = null, hold = null, rows = null, rects = null, slotH = 0, toIdx = idx, down = false;
+    let swVx = 0, swLastX = 0, swLastT = 0, swDx = 0, wasArmed = false;   // swipe velocity + state
     row._g = { moved: false };
     const clearHold = () => { if (hold) { clearTimeout(hold); hold = null; } };
     function beginReorder() {
@@ -362,24 +363,51 @@ window.FM = window.FM || {};
         layer.effects.splice(Math.max(0, Math.min(layer.effects.length, toIdx)), 0, m); afterFx();
       } else { FM.inspector.refresh(); }
     }
+    const rowW = () => row.getBoundingClientRect().width || 300;
+    const armDist = () => 46;
     function moveSwipe(e) {
-      const dx = Math.min(0, e.clientX - sx);
-      row.style.transform = 'translateX(' + dx + 'px)';
-      row.classList.toggle('fx-swipe-armed', dx < -70);
+      const wrap = row._wrap || row;
+      let dx = e.clientX - sx;
+      // rubber-band: only a whisper of give to the right (nothing to reveal there); soft resistance
+      // once you swipe past ~60% so it feels springy, not like it hit a wall.
+      if (dx > 0) dx = dx * 0.16;
+      const soft = rowW() * 0.6;
+      if (dx < -soft) dx = -soft - (Math.abs(dx) - soft) * 0.4;
+      wrap.style.transform = 'translateX(' + dx + 'px)';
+      const armed = dx < -armDist();
+      if (armed !== wasArmed) { wasArmed = armed; if (armed && navigator.vibrate) { try { navigator.vibrate(9); } catch (_) {} } }
+      row.classList.toggle('fx-swipe-armed', armed);
+      // velocity (px/ms), smoothed a touch so a single jittery sample can't misfire a flick
+      const now = e.timeStamp || performance.now(), dt = now - swLastT;
+      if (dt > 0) swVx = swVx * 0.4 + ((e.clientX - swLastX) / dt) * 0.6;
+      swLastX = e.clientX; swLastT = now; swDx = dx;
     }
-    function endSwipe(e) {
-      if (e.clientX - sx < -70) {
-        row.style.transition = 'transform .14s, opacity .14s'; row.style.transform = 'translateX(-100%)'; row.style.opacity = '0';
-        setTimeout(() => { const i = layer.effects ? layer.effects.indexOf(fx) : -1; if (i >= 0) { layer.effects.splice(i, 1); afterFx(); } }, 130);   // delete the right fx by reference (#16)
+    function endSwipe() {
+      const wrap = row._wrap || row, w = rowW();
+      // commit on a decent pull OR a quick left flick — makes it EASY (a flick past 32px deletes)
+      const commit = swDx < -w * 0.4 || (swVx < -0.5 && swDx < -32);
+      if (commit) {
+        if (navigator.vibrate) { try { navigator.vibrate(12); } catch (_) {} }
+        wrap.style.transition = 'transform .19s cubic-bezier(.4,0,.2,1)';
+        wrap.style.transform = 'translateX(-' + (w + 12) + 'px)';
+        // collapse the row's height so the list closes the gap smoothly, THEN splice + rebuild
+        row.style.height = row.offsetHeight + 'px'; row.style.overflow = 'hidden';
+        void row.offsetHeight;                                   // reflow so the height transition runs
+        row.style.transition = 'height .2s ease, opacity .2s ease, margin .2s ease';
+        row.style.height = '0px'; row.style.opacity = '0'; row.style.marginTop = '0px'; row.style.marginBottom = '0px';
+        setTimeout(() => { const i = layer.effects ? layer.effects.indexOf(fx) : -1; if (i >= 0) { layer.effects.splice(i, 1); afterFx(); } else { FM.inspector.refresh(); } }, 210);
       } else {
-        row.style.transition = 'transform .14s'; row.style.transform = ''; row.classList.remove('fx-swipe-armed');
-        setTimeout(() => { row.style.transition = ''; row._g.moved = false; }, 200);   // clear so the next tap isn't swallowed (#17)
+        wrap.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';   // spring back
+        wrap.style.transform = 'translateX(0px)';
+        row.classList.remove('fx-swipe-armed'); wasArmed = false;
+        setTimeout(() => { wrap.style.transition = ''; row._g.moved = false; }, 300);
       }
     }
     head.addEventListener('pointerdown', e => {
       if (e.target.closest('button')) return;                       // let eye / disc / etc. work
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       sx = e.clientX; sy = e.clientY; mode = null; toIdx = idx; row._g.moved = false; down = true;
+      swVx = 0; swDx = 0; wasArmed = false; swLastX = e.clientX; swLastT = e.timeStamp || performance.now();
       try { head.setPointerCapture(e.pointerId); } catch (_) {}
       // The grip (touch-action:none) is the reliable drag handle on touch — start reorder immediately.
       // Elsewhere on the row, a still-finger press-hold also reorders (works on desktop; on a phone a
@@ -438,8 +466,12 @@ window.FM = window.FM || {};
       eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterFx(); });
       head.appendChild(eye);
     }
-    row.appendChild(head);
-    attachFxGestures(row, head, layer, fx, idx);   // swipe-left = delete · press-hold + drag = reorder
+    // Swipe-to-delete (iOS-style): a red DELETE panel sits behind an opaque wrapper that slides left
+    // to reveal it. The wrapper holds the head (+ body) so the whole row travels as one.
+    const delBg = el('div', 'fx-del-bg');
+    delBg.innerHTML = '<span class="fx-del-ico">' + svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6') + '</span>';
+    const wrap = el('div', 'fx-swipe-wrap');
+    wrap.appendChild(head);
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       reg.params.forEach(p => {
@@ -448,8 +480,12 @@ window.FM = window.FM || {};
         else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
       });
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
-      row.appendChild(body);
+      wrap.appendChild(body);
     }
+    row.appendChild(delBg);
+    row.appendChild(wrap);
+    row._wrap = wrap; row._delBg = delBg;
+    attachFxGestures(row, head, layer, fx, idx);   // swipe-left = delete · press-hold + drag = reorder
     return row;
   }
 
