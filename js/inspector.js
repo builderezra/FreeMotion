@@ -756,6 +756,9 @@ window.FM = window.FM || {};
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') + '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
+        // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard
+        // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
+        if (cat.key === 'element' && layer.type === 'text' && FM.textEdit) { FM.textEdit.start(layer.id); return; }
         view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
       });
       (i < 3 ? top : bot).appendChild(card);

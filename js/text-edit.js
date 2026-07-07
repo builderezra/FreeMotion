@@ -130,10 +130,16 @@ window.FM = window.FM || {};
 
   // ---- keyboard docking (the one thing crop-tool didn't need) --------------
   function onViewport() {
-    if (!dock) return;
     const vv = window.visualViewport;
+    // iOS scrolls the whole page up when the keyboard opens, dragging position:fixed elements with it.
+    // Re-pin the top toolbar to the top of the VISIBLE (visual) viewport, and the dock just above the
+    // keyboard, so neither gets shoved off-screen.
     const gap = vv ? Math.max(0, (window.innerHeight - vv.height - vv.offsetTop)) : 0;
-    dock.style.bottom = gap + 'px';
+    if (bar) bar.style.top = (vv ? vv.offsetTop : 0) + 'px';
+    if (dock) dock.style.bottom = gap + 'px';
+    // Lift the canvas above the keyboard + docked field so the text you're typing stays visible.
+    const stage = document.getElementById('stage');
+    if (stage) stage.style.paddingBottom = (gap + 118) + 'px';
     positionPop();
   }
 
@@ -165,6 +171,7 @@ window.FM = window.FM || {};
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
     if (dock && dock.parentElement) dock.parentElement.removeChild(dock); dock = null;
     input = null;
+    const stage = document.getElementById('stage'); if (stage) stage.style.paddingBottom = '';   // drop the keyboard-lift
     document.body.classList.remove('text-editing');
     window.removeEventListener('resize', onViewport);
     if (window.visualViewport) { window.visualViewport.removeEventListener('resize', onViewport); window.visualViewport.removeEventListener('scroll', onViewport); }

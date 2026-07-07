@@ -443,6 +443,7 @@ body {
 .te-open { width: 100%; margin-bottom: 6px; }
 /* Text-edit is a full-screen takeover (like AM): hide the inspector grid + timeline so nothing pokes
  * through under the editor. The te-bar covers the top bar; the canvas fills the space between. */
+body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the keyboard opens */
 body.text-editing #inspector-panel,
 body.text-editing #timeline-panel { display: none !important; }
 /* Collapse the inspector's side column so the canvas fills the width, and pad the stage so the canvas
