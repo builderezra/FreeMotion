@@ -2411,11 +2411,17 @@ window.FM = window.FM || {};
     const c2 = s2 ? [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6] : [p2[0], p2[1]];
     return [(p1[0] + 3 * c1[0] + 3 * c2[0] + p2[0]) / 8, (p1[1] + 3 * c1[1] + 3 * c2[1] + p2[1]) / 8];
   };
-  // Is this layer a POINT shape (edited via Edit Points)? Library shapes + drawn/converted paths.
-  // Parametric kinds (rect, ellipse, polygon, star, line, arc, pie, semicircle, ring) are NOT —
-  // they keep their parametric Edit Shape and never grow messy point sets.
+  // Decorative/symmetric shapes built from MANY repeated sub-elements (leaves, spokes, rays,
+  // perforations). Point-editing 32–84 handles would be pointless + messy, so they resize like a
+  // normal shape instead of offering Edit Points.
+  const NON_POINT_POLYS = { snowflake: 1, laurel: 1, wreath: 1, stamp: 1, sun: 1 };
+  // Is this layer a POINT shape (edited via Edit Points)? Organic/iconographic library shapes where
+  // every point is a meaningful bend, plus drawn/converted paths. Parametric kinds (rect, ellipse,
+  // polygon, star, line, arc, pie, semicircle, ring) and the dense decorative shapes above are NOT.
   FM.isPointShape = function (layer) {
-    return !!layer && layer.type === 'shape' && (layer.shape === 'path' || !!FM.SHAPE_POLYS[layer.shape]);
+    if (!layer || layer.type !== 'shape') return false;
+    if (layer.shape === 'path') return true;
+    return !!FM.SHAPE_POLYS[layer.shape] && !NON_POINT_POLYS[layer.shape];
   };
 
   // Trace a shape layer's outline into ctx (beginPath + geometry only — caller fills/strokes).
