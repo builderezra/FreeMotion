@@ -149,8 +149,12 @@ window.FM = window.FM || {};
 
   function onDocDown(e) {
     if (!active) return;
-    if (pop && (pop.contains(e.target) || (bar && bar.contains(e.target)))) return;
-    if (pop) closePop();
+    if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) return;   // the eyedropper owns canvas taps
+    const t = e.target;
+    if ((bar && bar.contains(t)) || (dock && dock.contains(t)) || (pop && pop.contains(t))) return;   // tap inside the editor UI
+    e.preventDefault(); e.stopPropagation();
+    if (pop) { closePop(); return; }   // an open sub-popover closes first…
+    commit();                          // …otherwise tapping off the editor commits + returns to the grid
   }
 
   function teardown() {
