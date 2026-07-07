@@ -1355,6 +1355,54 @@ window.FM = window.FM || {};
     return panel;
   }
 
+  // Advanced text options — everything AM's focused text bar leaves out. Surfaced as the editor's "Aa"
+  // sheet (FM._textExtras) so all text controls live WITH text editing, not scattered. Outline lives in
+  // Border & Shadow; text fill lives in Color & Fill — this is Style / Spacing / Line height / Curve /
+  // Animate / Captions only. `rerender` rebuilds the host (the inspector, or the editor's Aa popover).
+  function buildTextExtras(layer, body, rerender) {
+    rerender = rerender || function () { FM.inspector.refresh(); };
+    const styr = el('div', 'prop-row'); styr.appendChild(el('label', null, 'Style'));
+    const sseg = el('div', 'seg');
+    const bB = el('button', 'seg-btn' + (layer.bold ? ' on' : ''), 'B'); bB.style.fontWeight = '700';
+    bB.addEventListener('click', () => { layer.bold = !layer.bold; bB.classList.toggle('on', layer.bold); FM.requestRender(); commitH(); });
+    const iB = el('button', 'seg-btn' + (layer.italic ? ' on' : ''), 'I'); iB.style.fontStyle = 'italic';
+    iB.addEventListener('click', () => { layer.italic = !layer.italic; iB.classList.toggle('on', layer.italic); FM.requestRender(); commitH(); });
+    sseg.append(bB, iB); styr.appendChild(sseg); body.appendChild(styr);
+    if (layer.letterSpacing == null) layer.letterSpacing = 0;
+    if (layer.lineHeight == null) layer.lineHeight = 1.15;
+    body.appendChild(rangeRow('Spacing', () => layer.letterSpacing, v => { layer.letterSpacing = v; }, -10, 60, 1));
+    body.appendChild(rangeRow('Line height', () => layer.lineHeight, v => { layer.lineHeight = v; }, 0.8, 2.5, 0.05));
+    body.appendChild(rangeRow('Curve', () => layer.textCurve || 0, v => { layer.textCurve = v; }, -180, 180, 1));
+    if (!layer.textAnim) layer.textAnim = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+    const an = layer.textAnim;
+    const ar2 = el('div', 'prop-row'); ar2.appendChild(el('label', null, 'Animate'));
+    const asel = document.createElement('select');
+    [['none', 'None'], ['fade', 'Fade in'], ['fade-up', 'Fade up'], ['typewriter', 'Typewriter'], ['pop', 'Pop'], ['slide', 'Slide in']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === an.preset) o.selected = true; asel.appendChild(o); });
+    asel.addEventListener('change', () => { an.preset = asel.value; FM.requestRender(); commitH(); rerender(); });
+    ar2.appendChild(asel); body.appendChild(ar2);
+    if (an.preset !== 'none') {
+      const ur = el('div', 'prop-row'); ur.appendChild(el('label', null, 'By'));
+      const usel = document.createElement('select');
+      [['char', 'Character'], ['word', 'Word'], ['line', 'Line']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === an.unit) o.selected = true; usel.appendChild(o); });
+      usel.addEventListener('change', () => { an.unit = usel.value; FM.requestRender(); commitH(); });
+      ur.appendChild(usel); body.appendChild(ur);
+      body.appendChild(rangeRow('Duration in (s)', () => an.durIn, v => { an.durIn = Math.max(0, v); }, 0, 3, 0.05));
+      body.appendChild(rangeRow('Stagger (s)', () => an.stagger, v => { an.stagger = Math.max(0, v); }, 0, 0.3, 0.01));
+      body.appendChild(rangeRow('Fade out (s)', () => an.durOut, v => { an.durOut = Math.max(0, v); }, 0, 3, 0.05));
+    }
+    if (layer.captions && layer.captions.length) {
+      body.appendChild(el('div', 'cap-title', 'Captions'));
+      const capBox = el('div', 'cap-list'); body.appendChild(capBox);
+      if (FM.captionsEditor) FM.captionsEditor.mount(capBox, layer);
+      body.appendChild(checkRow('Caption background', !!layer.captionBg, v => { layer.captionBg = v; FM.requestRender(); }));
+    } else {
+      const capBtn = el('button', 'btn cap-make', '+ Use as caption track');
+      capBtn.addEventListener('click', () => { layer.captions = [{ start: 0, end: 2, text: layer.text || 'Caption' }]; layer.text = ''; FM.requestRender(); commitH(); rerender(); });
+      body.appendChild(capBtn);
+    }
+  }
+  FM._textExtras = buildTextExtras;
+
   function buildCategory(key, layer, body) {
     if (key === 'transform') {
       body.appendChild(moveTransformPanel(layer));
@@ -1516,6 +1564,17 @@ window.FM = window.FM || {};
         bc.appendChild(colorField(() => stk.color || '#ffffff', v => { stk.color = v; }));
         body.appendChild(bc);
       }
+      if (layer.type === 'text') {   // text OUTLINE moved here from Edit Text (it's a border)
+        if (!layer.stroke) layer.stroke = { enabled: false, width: 6, color: '#000000' };
+        const stk = layer.stroke;
+        body.appendChild(checkRow('Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+        if (stk.enabled) {
+          body.appendChild(rangeRow('Outline width', () => stk.width, v => { stk.width = v; }, 0, 40, 1));
+          const sr = el('div', 'prop-row'); sr.appendChild(el('label', null, 'Outline color'));
+          sr.appendChild(colorField(() => stk.color || '#000000', v => { stk.color = v; }));
+          body.appendChild(sr);
+        }
+      }
       if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 8, dy: 8, color: '#000000' };
       const sh = layer.shadow;
       body.appendChild(checkRow('Drop shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); }));
@@ -1551,62 +1610,11 @@ window.FM = window.FM || {};
         }
       })();
       if (layer.type === 'text') {
-        // AM-style focused text editing (text-edit.js): the text string, Font, Size and Align live in
-        // the full-screen text-edit mode — tapping here opens it. The advanced typography below
-        // (Style / Spacing / Line height / Curve / Outline / Animate / Captions) stays in the inspector,
-        // exactly as AM keeps those out of its focused text toolbar.
-        const teBtn = el('button', 'btn te-open', '✎ Edit text');
-        teBtn.addEventListener('click', () => { if (FM.textEdit) FM.textEdit.start(layer.id); });
-        body.appendChild(teBtn);
-        const styr = el('div', 'prop-row'); styr.appendChild(el('label', null, 'Style'));
-        const sseg = el('div', 'seg');
-        const bB = el('button', 'seg-btn' + (layer.bold ? ' on' : ''), 'B'); bB.style.fontWeight = '700';
-        bB.addEventListener('click', () => { layer.bold = !layer.bold; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-        const iB = el('button', 'seg-btn' + (layer.italic ? ' on' : ''), 'I'); iB.style.fontStyle = 'italic';
-        iB.addEventListener('click', () => { layer.italic = !layer.italic; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-        sseg.append(bB, iB); styr.appendChild(sseg); body.appendChild(styr);
-        if (layer.letterSpacing == null) layer.letterSpacing = 0;
-        if (layer.lineHeight == null) layer.lineHeight = 1.15;
-        body.appendChild(rangeRow('Spacing', () => layer.letterSpacing, v => { layer.letterSpacing = v; }, -10, 60, 1));
-        body.appendChild(rangeRow('Line height', () => layer.lineHeight, v => { layer.lineHeight = v; }, 0.8, 2.5, 0.05));
-        body.appendChild(rangeRow('Curve', () => layer.textCurve || 0, v => { layer.textCurve = v; }, -180, 180, 1));
-        if (!layer.stroke) layer.stroke = { enabled: false, width: 6, color: '#000000' };
-        const stk = layer.stroke;
-        body.appendChild(checkRow('Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
-        if (stk.enabled) {
-          body.appendChild(rangeRow('Outline width', () => stk.width, v => { stk.width = v; }, 0, 40, 1));
-          const sr = el('div', 'prop-row'); sr.appendChild(el('label', null, 'Outline color'));
-          sr.appendChild(colorField(() => stk.color || '#000000', v => { stk.color = v; }));
-          body.appendChild(sr);
-        }
-        // Text fill (solid / gradient) now lives in "Color & Fill" — Edit Text is content + outline + animation.
-        if (!layer.textAnim) layer.textAnim = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
-        const an = layer.textAnim;
-        const ar2 = el('div', 'prop-row'); ar2.appendChild(el('label', null, 'Animate'));
-        const asel = document.createElement('select');
-        [['none', 'None'], ['fade', 'Fade in'], ['fade-up', 'Fade up'], ['typewriter', 'Typewriter'], ['pop', 'Pop'], ['slide', 'Slide in']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === an.preset) o.selected = true; asel.appendChild(o); });
-        asel.addEventListener('change', () => { an.preset = asel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-        ar2.appendChild(asel); body.appendChild(ar2);
-        if (an.preset !== 'none') {
-          const ur = el('div', 'prop-row'); ur.appendChild(el('label', null, 'By'));
-          const usel = document.createElement('select');
-          [['char', 'Character'], ['word', 'Word'], ['line', 'Line']].forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === an.unit) o.selected = true; usel.appendChild(o); });
-          usel.addEventListener('change', () => { an.unit = usel.value; FM.requestRender(); commitH(); });
-          ur.appendChild(usel); body.appendChild(ur);
-          body.appendChild(rangeRow('Duration in (s)', () => an.durIn, v => { an.durIn = Math.max(0, v); }, 0, 3, 0.05));
-          body.appendChild(rangeRow('Stagger (s)', () => an.stagger, v => { an.stagger = Math.max(0, v); }, 0, 0.3, 0.01));
-          body.appendChild(rangeRow('Fade out (s)', () => an.durOut, v => { an.durOut = Math.max(0, v); }, 0, 3, 0.05));
-        }
-        if (layer.captions && layer.captions.length) {
-          body.appendChild(el('div', 'cap-title', 'Captions'));
-          const capBox = el('div', 'cap-list'); body.appendChild(capBox);
-          if (FM.captionsEditor) FM.captionsEditor.mount(capBox, layer);
-          body.appendChild(checkRow('Caption background', !!layer.captionBg, v => { layer.captionBg = v; FM.requestRender(); }));
-        } else {
-          const capBtn = el('button', 'btn cap-make', '+ Use as caption track');
-          capBtn.addEventListener('click', () => { layer.captions = [{ start: 0, end: 2, text: layer.text || 'Caption' }]; layer.text = ''; FM.inspector.refresh(); FM.requestRender(); commitH(); });
-          body.appendChild(capBtn);
-        }
+        // "Edit Text" IS the focused editor (text-edit.js) — refresh()'s interception launches it over
+        // the category grid, so this element body normally never renders. It stays as a graceful
+        // fallback (and the exact same controls are the editor's "Aa" sheet). Outline moved to Border &
+        // Shadow; text fill lives in Color & Fill.
+        buildTextExtras(layer, body);
       }
       if (layer.type === 'shape' && FM.isPointShape && FM.isPointShape(layer)) {
         // ===== Edit Points (AM) — point shapes replace Edit Shape with this =====
@@ -1698,6 +1706,15 @@ window.FM = window.FM || {};
       if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      // "Edit Text" IS the focused editor: opening the text element category launches the full-screen
+      // text-edit mode OVER the grid, then leaves the inspector on the grid so ✓/Esc lands back on the
+      // category list (Color & Fill, Border & Shadow, Effects, …) — not a one-off popup. Adding text
+      // uses the same editor as a shortcut (app.js addTextLayer).
+      if (view === 'element' && layer.type === 'text' && FM.textEdit) {
+        view = 'home';
+        const tid = layer.id;
+        if (!FM.textEdit.isActive() || FM.textEdit.layerId() !== tid) setTimeout(() => { if (FM.textEdit && (!FM.textEdit.isActive() || FM.textEdit.layerId() !== tid) && FM.scene.layers.some(l => l.id === tid)) FM.textEdit.start(tid); }, 0);
+      }
       // Embedded Edit-Points lifecycle: the overlay lives exactly as long as the Edit Points view —
       // leaving the view (back / other category / other layer / deselect) tears it down.
       if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded() && (view !== 'element' || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.stop();

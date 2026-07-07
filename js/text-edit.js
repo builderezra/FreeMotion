@@ -10,7 +10,7 @@ window.FM = window.FM || {};
   'use strict';
 
   let active = null;                 // { layerId, prevText }
-  let bar = null, dock = null, input = null, pop = null, popKind = '';
+  let bar = null, dock = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
 
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
 
@@ -48,7 +48,7 @@ window.FM = window.FM || {};
   }
 
   // ---- transient sub-popover (font rail / size slider / colour) ------------
-  function closePop() { if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); }
+  function closePop() { if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; popBtn = null; popBuild = null; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); }
   function positionPop() { if (!pop || !bar) return; const r = bar.getBoundingClientRect(); pop.style.top = (r.bottom + 6) + 'px'; }
   function openPop(kind, build, btn) {
     if (popKind === kind) { closePop(); return; }
@@ -56,8 +56,17 @@ window.FM = window.FM || {};
     pop = elc('div', 'te-pop te-pop-' + kind);
     build(pop);
     document.body.appendChild(pop);
-    popKind = kind;
+    popKind = kind; popBtn = btn || null; popBuild = build;
     if (btn) btn.classList.add('on');
+    positionPop();
+  }
+  // Rebuild the open popover in place (a control inside it changed and its sub-rows need re-rendering).
+  function rebuildPop() {
+    if (!pop || !popBuild) return;
+    if (pop.parentElement) pop.parentElement.removeChild(pop);
+    pop = elc('div', 'te-pop te-pop-' + popKind);
+    popBuild(pop);
+    document.body.appendChild(pop);
     positionPop();
   }
 
@@ -105,6 +114,16 @@ window.FM = window.FM || {};
       wrap.addEventListener('click', () => setTimeout(updateBarLabels, 0));
     }
     host.appendChild(wrap);
+  }
+
+  // "Aa" sheet — the text options AM keeps out of the top bar (Style / Spacing / Line height / Curve /
+  // Animate / Captions). Reuses the inspector's builder so there's one source of truth.
+  function buildExtrasPop(host) {
+    const l = layer(); if (!l) return;
+    if (!FM._textExtras) { host.appendChild(elc('div', 'te-extras-empty', 'No extra options')); return; }
+    const inner = elc('div', 'te-extras-inner');
+    FM._textExtras(l, inner, rebuildPop);   // rebuildPop re-renders this sheet when a sub-control toggles
+    host.appendChild(inner);
   }
 
   // ---- keyboard docking (the one thing crop-tool didn't need) --------------
@@ -165,13 +184,15 @@ window.FM = window.FM || {};
       const fontBtn = elc('button', 'te-btn te-font', '<span class="te-font-lbl"></span><span class="te-caret">▾</span>'); fontBtn.type = 'button';
       const sizeBtn = elc('button', 'te-btn te-size', '<span class="te-size-lbl"></span><span class="te-size-unit">pt</span><span class="te-caret">▾</span>'); sizeBtn.type = 'button';
       const colorBtn = elc('button', 'te-btn te-color', '<span class="te-swatch"></span>'); colorBtn.type = 'button'; colorBtn.title = 'Colour';
+      const extrasBtn = elc('button', 'te-btn te-extras', 'Aa'); extrasBtn.type = 'button'; extrasBtn.title = 'Text options (style, spacing, animation…)';
       const doneBtn = elc('button', 'te-btn te-done', '✓'); doneBtn.type = 'button'; doneBtn.title = 'Done';
-      bar.append(alignBtn, fontBtn, sizeBtn, colorBtn, doneBtn);
+      bar.append(alignBtn, fontBtn, sizeBtn, colorBtn, extrasBtn, doneBtn);
       document.body.appendChild(bar);
       alignBtn.addEventListener('click', () => { closePop(); cycleAlign(); });
       fontBtn.addEventListener('click', () => openPop('font', buildFontRail, fontBtn));
       sizeBtn.addEventListener('click', () => openPop('size', buildSizePop, sizeBtn));
       colorBtn.addEventListener('click', () => openPop('color', buildColorPop, colorBtn));
+      extrasBtn.addEventListener('click', () => openPop('extras', buildExtrasPop, extrasBtn));
       // guard mousedown so tapping a bar button doesn't blur/close the keyboard mid-edit
       bar.addEventListener('mousedown', e => { if (e.target !== input) e.preventDefault(); });
       doneBtn.addEventListener('click', commit);
