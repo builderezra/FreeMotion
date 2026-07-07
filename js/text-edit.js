@@ -109,7 +109,9 @@ window.FM = window.FM || {};
     const l = layer(); if (!l) return;
     const wrap = elc('div', 'te-color-wrap');
     if (FM._colorField && FM._fillGet && FM._fillSet) {
-      wrap.appendChild(FM._colorField(() => FM._fillGet(l), v => FM._fillSet(l, v)));
+      // Fetch the layer FRESH on each read/write — an undo/redo while the colour popover is open
+      // swaps FM.scene.layers, so a captured `l` would write to a stale (detached) layer object.
+      wrap.appendChild(FM._colorField(() => { const c = layer(); return c ? FM._fillGet(c) : '#ffffff'; }, v => { const c = layer(); if (c) FM._fillSet(c, v); }));
       wrap.addEventListener('input', updateBarLabels);
       wrap.addEventListener('click', () => setTimeout(updateBarLabels, 0));
     }
@@ -179,6 +181,9 @@ window.FM = window.FM || {};
       if (active) teardown();
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
       if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
+      // Close higher z-index overlays so the editor (z:80) isn't shadowed by them.
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       if (FM.selectLayer) FM.selectLayer(l.id);
       active = { layerId: layerId, prevText: l.text };
 

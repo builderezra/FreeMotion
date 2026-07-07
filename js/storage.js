@@ -560,9 +560,10 @@ window.FM = window.FM || {};
       try {
         const db = await openDB();
         for (const f of pending) {
-          _fontReg.add(f.id);   // mark first so a missing/broken blob isn't re-fetched every load
           const rec = await idbGet(db, 'font:' + f.id);
-          if (rec && rec.file && await registerFace(f.family, rec.file)) any = true;
+          // Only mark as registered on SUCCESS — otherwise a transiently-failed load (e.g. IDB not
+          // ready yet) would be skipped forever. A permanently-broken blob just re-reads IDB each boot.
+          if (rec && rec.file && await registerFace(f.family, rec.file)) { _fontReg.add(f.id); any = true; }
         }
         db.close();
       } catch (e) {}

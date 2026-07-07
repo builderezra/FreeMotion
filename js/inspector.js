@@ -1397,7 +1397,14 @@ window.FM = window.FM || {};
       body.appendChild(checkRow('Caption background', !!layer.captionBg, v => { layer.captionBg = v; FM.requestRender(); }));
     } else {
       const capBtn = el('button', 'btn cap-make', '+ Use as caption track');
-      capBtn.addEventListener('click', () => { layer.captions = [{ start: 0, end: 2, text: layer.text || 'Caption' }]; layer.text = ''; FM.requestRender(); commitH(); rerender(); });
+      capBtn.addEventListener('click', () => {
+        // Commit + close the focused text editor first, so the caption captures what's actually typed
+        // and the editor's textarea can't write the old text back over the now-empty layer.text.
+        if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.layerId() === layer.id) FM.textEdit.stop();
+        layer.captions = [{ start: 0, end: 2, text: layer.text || 'Caption' }]; layer.text = '';
+        FM.requestRender(); commitH();
+        if (FM.inspector) FM.inspector.refresh();
+      });
       body.appendChild(capBtn);
     }
   }

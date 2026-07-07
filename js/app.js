@@ -741,6 +741,7 @@ window.FM = window.FM || {};
     if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // don't leave a dead tracking overlay
     if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
     if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
+    if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.layerId() === id) FM.textEdit.stop();   // don't leave a dead text editor over a deleted layer
     if (FM.groupContext === id && FM.exitGroup) FM.exitGroup(true);   // deleting the group you're inside
     // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
     // each member's media/audio teardown runs through this same path — but refresh/undo commit

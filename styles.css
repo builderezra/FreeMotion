@@ -445,10 +445,10 @@ body {
  * through under the editor. The te-bar covers the top bar; the canvas fills the space between. */
 body.text-editing #inspector-panel,
 body.text-editing #timeline-panel { display: none !important; }
-/* The mobile grid pins the stage to a fixed row and hands the rest to the timeline/inspector; with
- * those hidden, collapse the app to a single full-height row so the canvas can fill the screen, then
- * pad the stage so the canvas centres between the top toolbar and the docked text field. */
-body.text-editing #app { grid-template-rows: 1fr !important; }
+/* Collapse the inspector's side column so the canvas fills the width, and pad the stage so the canvas
+ * centres between the top toolbar and the docked text field. The #app ROW collapse is mobile-only
+ * (in the max-width:700px block) — applying it on desktop would nuke the top bar + timeline layout. */
+body.text-editing #main { grid-template-columns: 1fr !important; }
 body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
@@ -1003,6 +1003,9 @@ input[type=range]::-webkit-slider-thumb {
   /* Preview is a FIXED window (doesn't resize with the comp aspect); the timeline gets the rest. */
   :root { --stage-h: 40vh; }
   #app { grid-template-rows: auto var(--stage-h) 1fr; grid-template-columns: minmax(0, 1fr); }
+  /* Text-edit full-screen takeover (mobile): with the inspector grid + timeline hidden, give the whole
+   * height to the stage so the canvas fills the screen. Desktop keeps its 3-row layout. */
+  body.text-editing #app { grid-template-rows: 1fr !important; }
   #canvas-wrap { max-width: 98%; max-height: 95%; }   /* contain in the stage with a small float margin (AM) */
   #stage { box-shadow: inset 0 -1px 0 var(--line); }
   #topbar { overflow-x: auto; overflow-y: hidden; gap: 8px; padding: 7px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
