@@ -141,7 +141,16 @@ window.FM = window.FM || {};
     hex.addEventListener('input', () => { let v = hex.value.trim(); if (v && v[0] !== '#') v = '#' + v; if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) apply(v); });
     hex.addEventListener('blur', () => { hex.value = normHex(getVal()); });
     hex.addEventListener('change', commitColor);
-    wrap.append(sw, hex); cont.appendChild(wrap);
+    wrap.append(sw, hex);
+    // Eyedropper — sample a colour straight off the rendered frame (works on iOS, unlike EyeDropper()).
+    if (FM.eyedropper) {
+      const drop = el('button', 'eyedrop-btn');
+      drop.type = 'button'; drop.title = 'Pick a colour from the video';
+      drop.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3a2.1 2.1 0 0 1 0 3l-1.5 1.5 2 2L9 20l-5 1 1-5 10.5-10.5-1.5-1.5A2.1 2.1 0 0 1 16 2.5"/><path d="M14.5 6.5l3 3"/></svg>';
+      drop.addEventListener('click', () => FM.eyedropper.pick(c => { apply(c); hex.value = normHex(c); commitColor(); FM.inspector.refresh(); }));
+      wrap.appendChild(drop);
+    }
+    cont.appendChild(wrap);
     // recently-used colour swatches
     if (FM.recentColors && FM.recentColors.length) {
       const rec = el('div', 'color-recents');

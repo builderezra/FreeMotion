@@ -1575,6 +1575,7 @@ window.FM = window.FM || {};
       else if (e.code === 'Escape') {
         e.preventDefault();
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
+        if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) { FM.eyedropper.stop(); return; }
         if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
         // standalone point-edit closes on Esc; EMBEDDED Edit Points is a view — inspector.back()
         // steps out of it (the refresh guard tears the overlay down with the view)
