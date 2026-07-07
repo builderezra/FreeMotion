@@ -1552,7 +1552,21 @@ window.FM = window.FM || {};
         const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, 'Font'));
         const fsel = document.createElement('select');
         FONTS.forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f.split(',')[0]; if (f === layer.fontFamily) o.selected = true; fsel.appendChild(o); });
-        fsel.addEventListener('change', () => { layer.fontFamily = fsel.value; FM.requestRender(); commitH(); });
+        const myFonts = (FM.fonts ? FM.fonts.list() : []);
+        if (myFonts.length) {
+          const og = document.createElement('optgroup'); og.label = 'My fonts';
+          myFonts.forEach(cf => { const o = document.createElement('option'); o.value = cf.css; o.textContent = cf.name; if (cf.css === layer.fontFamily) o.selected = true; og.appendChild(o); });
+          fsel.appendChild(og);
+        }
+        if (FM.fonts) { const o = document.createElement('option'); o.value = '__import_font__'; o.textContent = '＋ Import font…'; fsel.appendChild(o); }
+        fsel.addEventListener('change', () => {
+          if (fsel.value === '__import_font__') {
+            fsel.value = layer.fontFamily;   // revert; the real switch happens only on a successful import
+            FM.fonts.pick(rec => { layer.fontFamily = rec.css; FM.requestRender(); commitH(); FM.inspector.refresh(); });
+            return;
+          }
+          layer.fontFamily = fsel.value; FM.requestRender(); commitH();
+        });
         fr.appendChild(fsel); body.appendChild(fr);
         body.appendChild(textRow('Size', layer.fontSize, v => { const n = parseFloat(v); if (!isNaN(n) && n > 0) { layer.fontSize = n; FM.requestRender(); } }, 'number'));
         const ar = el('div', 'prop-row'); ar.appendChild(el('label', null, 'Align'));

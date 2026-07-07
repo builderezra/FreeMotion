@@ -81,6 +81,7 @@ window.FM = window.FM || {};
 
     async load() {
       if (FM.projects) FM.projects.migrate();   // legacy single-project fm.scene → indexed project (one-time)
+      if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
       let scene = readJSON(curKey(), null);
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       FM.scene.project = scene.project;
@@ -143,7 +144,18 @@ window.FM = window.FM || {};
         if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
       }
     }
-    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media };
+    // Embed the custom fonts the text layers actually use, so the project still renders correctly when
+    // the .fmotion.json is opened on another device (fonts are otherwise a device-local library).
+    const fonts = {};
+    if (FM.fonts) {
+      const used = new Set(scene.layers.filter(l => l.type === 'text' && l.fontFamily).map(l => l.fontFamily));
+      for (const f of FM.fonts.list()) {
+        if (!used.has(f.css)) continue;
+        const file = await FM.fonts.getFile(f.id);
+        if (file && file.size <= FONT_EMBED_LIMIT) { const durl = await fileToDataURL(file); if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl }; }
+      }
+    }
+    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts };
   };
 
   FM.storage.applyScene = async function (obj) {
@@ -158,6 +170,7 @@ window.FM = window.FM || {};
     FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
+    if (FM.fonts && obj.fonts) await FM.fonts.applyEmbedded(obj.fonts);   // register any fonts carried in the file
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
         const md = obj.media[id], nid = re.map[id];
@@ -403,7 +416,7 @@ window.FM = window.FM || {};
         const db = await openDB();
         const candidates = [];
         for (const k of await idbKeys(db)) {
-          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0)) continue;
+          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0)) continue;
           if (!keep.has(k)) candidates.push(k);
         }
         if (candidates.length) {
@@ -514,6 +527,97 @@ window.FM = window.FM || {};
       if (FM.history) FM.history.commit();
       FM.storage.autosave();
       return true;
+    },
+  };
+
+  // ================= Custom fonts (global library) =================
+  // Imported TTF/OTF/WOFF files live in a global index (fm.fonts) + blobs in IDB under 'font:<id>',
+  // mirroring templates/elements. Each is registered once via the FontFace API so canvas text can use
+  // it, and survives reload. Fonts are GLOBAL — imported once, they appear in every project's picker.
+  // A text layer references a font by its generated `css` token ('FMF<id>, sans-serif'); the token is
+  // machine-generated (alnum only), so splicing it straight into ctx.font carries no injection risk.
+  const FONT_INDEX = 'fm.fonts', FONT_EMBED_LIMIT = 4 * 1024 * 1024;
+  const _fontReg = new Set();   // ids already handed to document.fonts (keeps rehydrate idempotent)
+  function fontFileOk(file) {
+    if (!file) return false;
+    const n = (file.name || '').toLowerCase();
+    return /\.(ttf|otf|woff2?|ttc)$/.test(n) || /^font\//.test(file.type || '') || (file.type || '').indexOf('font') >= 0;
+  }
+  async function registerFace(family, file) {
+    if (!file || !window.FontFace) return false;
+    try { const ff = new FontFace(family, await file.arrayBuffer()); await ff.load(); document.fonts.add(ff); return true; }
+    catch (e) { return false; }
+  }
+
+  FM.fonts = {
+    list() { return readJSON(FONT_INDEX, []); },
+    // Register every imported font not already live. Idempotent — safe on each boot / project switch;
+    // only unregistered ids touch IDB. Re-renders once the faces are ready so canvas text reflows.
+    async rehydrateAll() {
+      const pending = this.list().filter(f => f && f.id && !_fontReg.has(f.id));
+      if (!pending.length) return;
+      let any = false;
+      try {
+        const db = await openDB();
+        for (const f of pending) {
+          _fontReg.add(f.id);   // mark first so a missing/broken blob isn't re-fetched every load
+          const rec = await idbGet(db, 'font:' + f.id);
+          if (rec && rec.file && await registerFace(f.family, rec.file)) any = true;
+        }
+        db.close();
+      } catch (e) {}
+      if (any && FM.requestRender) FM.requestRender();
+    },
+    async getFile(id) { try { const db = await openDB(); const r = await idbGet(db, 'font:' + id); db.close(); return r && r.file ? r.file : null; } catch (e) { return null; } },
+    // Import a font File: validate → register → persist (IDB blob + index). Returns the record (with
+    // .css to drop straight onto layer.fontFamily) or null on failure.
+    async import(file) {
+      if (!fontFileOk(file)) { if (FM.toast) FM.toast('Pick a .ttf, .otf or .woff font file'); return null; }
+      const id = newId('f');
+      const family = 'FMF' + id.replace(/[^a-z0-9]/gi, '');
+      const css = family + ', sans-serif';
+      if (!await registerFace(family, file)) { if (FM.toast) FM.toast("Couldn't read that font file"); return null; }
+      _fontReg.add(id);
+      try { const db = await openDB(); await idbPut(db, 'font:' + id, { file: file }); db.close(); } catch (e) {}
+      const name = ((file.name || 'Custom font').replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'Custom font';
+      const idx = this.list(); idx.push({ id: id, name: name, family: family, css: css }); writeJSON(FONT_INDEX, idx);
+      if (FM.requestRender) FM.requestRender();
+      if (FM.toast) FM.toast('Font “' + name + '” added');
+      return { id: id, name: name, family: family, css: css };
+    },
+    async remove(id) {
+      writeJSON(FONT_INDEX, this.list().filter(f => f.id !== id));
+      try { const db = await openDB(); await idbDel(db, 'font:' + id); db.close(); } catch (e) {}
+    },
+    // Open a file picker and import the chosen font; calls back with the new record on success.
+    pick(onDone) {
+      const input = document.createElement('input'); input.type = 'file';
+      input.accept = '.ttf,.otf,.woff,.woff2,.ttc,font/*'; input.style.display = 'none';
+      input.addEventListener('change', async () => {
+        const file = input.files && input.files[0]; input.remove();
+        if (!file) return;
+        const rec = await this.import(file);
+        if (rec && onDone) onDone(rec);
+      });
+      document.body.appendChild(input); input.click();
+    },
+    // Register fonts embedded in an imported .fmotion.json so its text renders on this device too.
+    // Adds only fonts the library doesn't already have, keyed by their (stable) family token.
+    async applyEmbedded(fontsObj) {
+      if (!fontsObj) return;
+      const idx = this.list();
+      const haveFam = new Set(idx.map(f => f.family));
+      for (const key of Object.keys(fontsObj)) {
+        const fd = fontsObj[key];
+        if (!fd || !fd.family || haveFam.has(fd.family)) continue;
+        const file = await dataURLToFile(fd.dataURL, fd.name || 'font');   // rejects non-data: URLs
+        if (!file || !await registerFace(fd.family, file)) continue;
+        const nid = newId('f'); _fontReg.add(nid);
+        try { const db = await openDB(); await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
+        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
+        haveFam.add(fd.family);
+      }
+      writeJSON(FONT_INDEX, idx);
     },
   };
 
