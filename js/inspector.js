@@ -1130,7 +1130,7 @@ window.FM = window.FM || {};
     });
     pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     center.appendChild(pad);
-    center.appendChild(el('div', 'insp-hint', 'Tap a point on the canvas to select it · tap a hollow ring to add one · double-tap to delete'));
+    center.appendChild(el('div', 'insp-hint', 'Tap a point to select it · on a curve point, drag its handles to shape the curve · tap a hollow ring to add a point · double-tap to delete'));
 
     // stroke still belongs to the shape (open drawings need their line width here)
     if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };

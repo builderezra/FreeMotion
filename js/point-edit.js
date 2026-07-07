@@ -110,6 +110,38 @@ window.FM = window.FM || {};
         g.strokeStyle = 'rgba(41,217,187,.9)'; g.lineWidth = 1.25;
       });
     });
+    // tangent HANDLES for the selected SMOOTH point — drag either end to shape the curve (AM)
+    if (sel) {
+      const ss = subs[sel.si], sp = ss && ss[sel.pi];
+      if (sp && sp[2] === 1) {
+        const cc = FM.pointCtrl(ss, sel.pi, l.closed !== false);
+        const pP = map(sp), oP = map(cc.out), iP = map(cc.in);
+        g.strokeStyle = 'rgba(41,217,187,.75)'; g.lineWidth = 1.3;
+        g.beginPath(); g.moveTo(iP[0], iP[1]); g.lineTo(pP[0], pP[1]); g.lineTo(oP[0], oP[1]); g.stroke();
+        [oP, iP].forEach(hp => {
+          g.beginPath(); g.arc(hp[0], hp[1], 5, 0, 6.2832);
+          g.fillStyle = '#0c1016'; g.fill();
+          g.strokeStyle = '#29d9bb'; g.lineWidth = 1.6; g.stroke();
+        });
+      }
+    }
+  }
+  // A tangent handle of the SELECTED smooth point (out/in), if the pointer is on it (and not on the
+  // point itself — the point wins when they overlap, so you can still drag short-handle points).
+  function nearestHandle(e) {
+    if (!sel) return null;
+    const l = layer(); if (!l) return null;
+    const ss = subsOf(l)[sel.si], sp = ss && ss[sel.pi];
+    if (!sp || sp[2] !== 1) return null;
+    const pt = evtToCanvas(e), thr = 13 / dispScale();
+    const pc = toCanvas(l, sp[0], sp[1]);
+    if (Math.hypot(pc.x - pt.x, pc.y - pt.y) < 10 / dispScale()) return null;
+    const cc = FM.pointCtrl(ss, sel.pi, l.closed !== false);
+    const oC = toCanvas(l, cc.out[0], cc.out[1]), iC = toCanvas(l, cc.in[0], cc.in[1]);
+    const dO = Math.hypot(oC.x - pt.x, oC.y - pt.y), dI = Math.hypot(iC.x - pt.x, iC.y - pt.y);
+    if (dO <= thr && dO <= dI) return 'out';
+    if (dI <= thr) return 'in';
+    return null;
   }
 
   function nearest(e) {
@@ -151,6 +183,14 @@ window.FM = window.FM || {};
 
   function onDown(e) {
     const l = layer(); if (!l) return;
+    // a tangent handle of the selected point takes priority over selecting another point
+    const hnd = nearestHandle(e);
+    if (hnd) {
+      e.preventDefault(); e.stopPropagation();
+      drag = { si: sel.si, pi: sel.pi, handle: hnd };
+      overlay.setPointerCapture && overlay.setPointerCapture(e.pointerId);
+      return;
+    }
     const hit = nearest(e);
     if (!hit) return;
     e.preventDefault(); e.stopPropagation();
@@ -186,8 +226,15 @@ window.FM = window.FM || {};
     e.preventDefault();
     const pt = evtToCanvas(e);
     const loc = toLocal(l, pt.x, pt.y);
-    const pts = subsOf(l)[drag.si];
-    if (pts && pts[drag.pi]) { pts[drag.pi][0] = loc.u; pts[drag.pi][1] = loc.v; FM.requestRender(); notify('move'); }
+    const pts = subsOf(l)[drag.si], p = pts && pts[drag.pi];
+    if (!p) return;
+    if (drag.handle) {   // drag a tangent handle → symmetric manual handle (stored as the OUT offset)
+      let hx = loc.u - p[0], hy = loc.v - p[1];
+      if (drag.handle === 'in') { hx = -hx; hy = -hy; }
+      p[2] = 1; p[3] = hx; p[4] = hy; p.length = 5;
+      FM.requestRender(); notify('move'); return;
+    }
+    p[0] = loc.u; p[1] = loc.v; FM.requestRender(); notify('move');
   }
   function onUp() { if (drag) { drag = null; if (FM.history) FM.history.commit(); notify('sel'); } }
 
@@ -220,7 +267,7 @@ window.FM = window.FM || {};
     setSelSmooth(smooth) {
       const l = layer(); if (!l || !sel) return;
       const pts = subsOf(l)[sel.si]; const p = pts && pts[sel.pi]; if (!p) return;
-      if (smooth) p[2] = 1; else p.length = 2;
+      if (smooth) { p[2] = 1; p.length = 3; } else p.length = 2;   // Curve → smooth (resets any manual handle to auto); Corner → hard
       FM.requestRender(); draw(); if (FM.history) FM.history.commit(); notify('sel');
     },
     delSel() { if (sel) delPoint(sel.si, sel.pi); },

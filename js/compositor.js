@@ -2381,19 +2381,29 @@ window.FM = window.FM || {};
   // (Catmull-Rom → cubic bezier); no flag → a hard corner (straight lineTo). `map` converts a
   // normalized [u,v] into destination coords, so the compositor, thumbnails and the point-editor
   // overlay all draw the exact same curve.
+  // A point's OUT / IN bezier control points (in the point's own [u,v] space). A CORNER point's
+  // controls both sit on the point (straight lines). A SMOOTH point either carries a MANUAL symmetric
+  // tangent handle ([u,v,1,hx,hy] → out = p+h, in = p−h) that the user dragged, or falls back to the
+  // AUTO Catmull-Rom tangent (p_next − p_prev)/6. Single source of truth for rendering + the editor.
+  FM.pointCtrl = function (pts, i, closed) {
+    const n = pts.length;
+    const get = k => closed ? pts[((k % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, k))];
+    const p = get(i);
+    if (p[2] !== 1) return { out: [p[0], p[1]], in: [p[0], p[1]], corner: true };
+    if (p.length >= 5) { const hx = p[3], hy = p[4]; return { out: [p[0] + hx, p[1] + hy], in: [p[0] - hx, p[1] - hy], manual: true }; }
+    const a = get(i - 1), b = get(i + 1);
+    const tx = (b[0] - a[0]) / 6, ty = (b[1] - a[1]) / 6;
+    return { out: [p[0] + tx, p[1] + ty], in: [p[0] - tx, p[1] - ty] };
+  };
   FM.buildSubPath = function (ctx, pts, closed, map) {
     const n = pts.length; if (!n) return;
     const M = map || (p => p);
-    const get = i => closed ? pts[((i % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, i))];
     const q0 = M(pts[0]); ctx.moveTo(q0[0], q0[1]);
     const segs = closed ? n : n - 1;
     for (let i = 0; i < segs; i++) {
-      const p1 = get(i), p2 = get(i + 1);
-      const s1 = p1[2] === 1, s2 = p2[2] === 1;
-      if (!s1 && !s2) { const q = M(p2); ctx.lineTo(q[0], q[1]); continue; }
-      const p0 = get(i - 1), p3 = get(i + 2);
-      const c1 = s1 ? [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6] : [p1[0], p1[1]];
-      const c2 = s2 ? [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6] : [p2[0], p2[1]];
+      const p1 = pts[i], p2 = closed ? pts[(i + 1) % n] : pts[i + 1];
+      if (p1[2] !== 1 && p2[2] !== 1) { const q = M(p2); ctx.lineTo(q[0], q[1]); continue; }
+      const c1 = FM.pointCtrl(pts, i, closed).out, c2 = FM.pointCtrl(pts, i + 1, closed).in;
       const m1 = M(c1), m2 = M(c2), q2 = M(p2);
       ctx.bezierCurveTo(m1[0], m1[1], m2[0], m2[1], q2[0], q2[1]);
     }
@@ -2404,11 +2414,8 @@ window.FM = window.FM || {};
     const n = pts.length;
     const get = k => closed ? pts[((k % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, k))];
     const p1 = get(i), p2 = get(i + 1);
-    const s1 = p1[2] === 1, s2 = p2[2] === 1;
-    if (!s1 && !s2) return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
-    const p0 = get(i - 1), p3 = get(i + 2);
-    const c1 = s1 ? [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6] : [p1[0], p1[1]];
-    const c2 = s2 ? [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6] : [p2[0], p2[1]];
+    if (p1[2] !== 1 && p2[2] !== 1) return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+    const c1 = FM.pointCtrl(pts, i, closed).out, c2 = FM.pointCtrl(pts, i + 1, closed).in;
     return [(p1[0] + 3 * c1[0] + 3 * c2[0] + p2[0]) / 8, (p1[1] + 3 * c1[1] + 3 * c2[1] + p2[1]) / 8];
   };
   // Decorative/symmetric shapes built from MANY repeated sub-elements (leaves, spokes, rays,
@@ -2492,8 +2499,8 @@ window.FM = window.FM || {};
   // traceShapePath exactly, library kinds hand over their polygon data.
   FM.shapeToPoints = function (layer) {
     const kind = layer.shape || 'rect';
-    // clone must PRESERVE the smooth flag (p[2]) or every curve point degrades to a corner
-    const clone = a => a.map(pl => pl.map(p => (p[2] === 1 ? [p[0], p[1], 1] : [p[0], p[1]])));
+    // clone must PRESERVE the smooth flag (p[2]) AND any manual tangent handle (p[3],p[4])
+    const clone = a => a.map(pl => pl.map(p => p.slice()));
     const PI = Math.PI;
     if (FM.SHAPE_POLYS[kind]) return { subs: clone(FM.SHAPE_POLYS[kind]), closed: !OPEN_POLY[kind] };
     if (kind === 'path') return { subs: clone(layer.subs || (layer.points ? [layer.points] : [])), closed: layer.closed !== false };
