@@ -374,6 +374,11 @@ body {
 
 /* Point editor overlay */
 #pe-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
+/* Edit Points panel (AM): curve/corner/delete rail + X/Y + move-point trackpad */
+.pep-btn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
+.pep-btn svg { width: 21px; height: 21px; }
+.pep-btn.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px rgba(41,217,187,.45); }
+.pep-btn.pep-del:hover { color: #e77; border-color: rgba(230,110,110,.5); }
 #crop-overlay { position: absolute; z-index: 44; touch-action: none; cursor: crosshair; }
 #crop-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }
 #crop-bar .cb-hint { font-size: 12px; color: var(--text-faint); margin-right: 4px; }

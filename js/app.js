@@ -1557,7 +1557,9 @@ window.FM = window.FM || {};
         e.preventDefault();
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
         if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
-        if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) { FM.pointEdit.stop(); return; }
+        // standalone point-edit closes on Esc; EMBEDDED Edit Points is a view — inspector.back()
+        // steps out of it (the refresh guard tears the overlay down with the view)
+        if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive() && !FM.pointEdit.isEmbedded()) { FM.pointEdit.stop(); return; }
         if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) { FM.tracker.cancel(); return; }
         if (FM.inspector && FM.inspector.back) FM.inspector.back();
       }

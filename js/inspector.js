@@ -533,10 +533,12 @@ window.FM = window.FM || {};
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
   ];
 
-  // Alight Motion labels its element category after the layer kind. AM calls it "Edit Shape" for
-  // shapes AND for media (photo/video) — where it's a Size editor — and "Edit Text" for text.
+  // Alight Motion labels its element category after the layer kind: "Edit Text" for text,
+  // "Edit Points" for point shapes (library shapes + drawn paths — every bend is a point),
+  // "Edit Shape" for parametric shapes (rect/ellipse/…) and media (where it's the crop editor).
   function elementLabel(layer) {
     if (layer.type === 'text' || layer.type === 'caption') return 'Edit Text';
+    if (FM.isPointShape && FM.isPointShape(layer)) return 'Edit Points';
     return 'Edit Shape';
   }
 
@@ -1086,6 +1088,70 @@ window.FM = window.FM || {};
     body.appendChild(panel);
   }
 
+  // ===== AM "Edit Points" panel — edits the point selected on the canvas overlay =====
+  // Tap a point on the canvas to select it (green); drag it there, or nudge it here with the X/Y
+  // boxes / trackpad. Tap a hollow ring to ADD a point on the curve; ⊖ (or double-tap) deletes.
+  // Curve/Corner set whether the outline flows through the point or bends hard at it.
+  const PEP_ICONS = {
+    curve: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 17c5-10 13-10 18 0"/><circle cx="12" cy="9.5" r="2.2" fill="currentColor" stroke="none"/></svg>',
+    corner: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 12 7l8 11"/><rect x="9.8" y="4.8" width="4.4" height="4.4" fill="currentColor" stroke="none"/></svg>',
+    del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/></svg>',
+  };
+  function editPointsTools(layer, body) {
+    const pe = FM.pointEdit;
+    const panel = el('div', 'mt-panel pep-panel');
+
+    // left rail — curve / corner / delete for the selected point
+    const left = el('div', 'mt-rail mt-rail-left');
+    const curveBtn = el('button', 'pep-btn'); curveBtn.innerHTML = PEP_ICONS.curve; curveBtn.title = 'Curve — the outline flows smoothly through this point';
+    const cornerBtn = el('button', 'pep-btn'); cornerBtn.innerHTML = PEP_ICONS.corner; cornerBtn.title = 'Corner — the outline bends hard at this point';
+    const delBtn = el('button', 'pep-btn pep-del'); delBtn.innerHTML = PEP_ICONS.del; delBtn.title = 'Delete this point (double-tapping it on the canvas works too)';
+    curveBtn.addEventListener('click', () => { pe.setSelSmooth(true); });
+    cornerBtn.addEventListener('click', () => { pe.setSelSmooth(false); });
+    delBtn.addEventListener('click', () => { pe.delSel(); });
+    left.append(curveBtn, cornerBtn, delBtn);
+    panel.appendChild(left);
+
+    // center — X/Y of the selected point (project px) + trackpad
+    const center = el('div', 'mt-center');
+    const values = el('div', 'mt-values');
+    const bx = mtVBox('X', () => { const s = pe.getSel(); return s ? s.x : 0; }, v => { const s = pe.getSel(); if (s) pe.setSelPos(v, s.y); }, { dp: 1, scrub: 1 });
+    const by = mtVBox('Y', () => { const s = pe.getSel(); return s ? s.y : 0; }, v => { const s = pe.getSel(); if (s) pe.setSelPos(s.x, v); }, { dp: 1, scrub: 1 });
+    values.append(bx, by); center.appendChild(values);
+    const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move point'));
+    const sens = ((FM.scene.project.width || 1080) / 300);
+    let pd = null;
+    pad.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    pad.addEventListener('pointermove', e => {
+      if (!pd) return;
+      if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; pe.commit(); return; }
+      pe.moveSel((e.clientX - pd.x) * sens, (e.clientY - pd.y) * sens);
+      pd = { x: e.clientX, y: e.clientY };
+    });
+    pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
+    center.appendChild(pad);
+    center.appendChild(el('div', 'insp-hint', 'Tap a point on the canvas to select it · tap a hollow ring to add one · double-tap to delete'));
+
+    // stroke still belongs to the shape (open drawings need their line width here)
+    if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
+    const stk = layer.stroke;
+    if (layer.shape === 'path' && !layer.closed) {
+      center.appendChild(rangeRow('Line width', () => stk.width, v => { stk.width = Math.max(1, v); }, 1, 60, 1));
+    }
+    panel.appendChild(center);
+    body.appendChild(panel);
+
+    // live sync: selection change re-tints the rail; moves refresh the value boxes
+    const paint = () => {
+      const s = pe.getSel();
+      curveBtn.classList.toggle('on', !!(s && s.smooth));
+      cornerBtn.classList.toggle('on', !!(s && !s.smooth));
+      bx._refresh(); by._refresh();
+    };
+    paint();
+    pe.onChange(kind => { if (!document.body.contains(panel)) return; if (kind === 'move') { bx._refresh(); by._refresh(); } else paint(); });
+  }
+
   function moveTransformPanel(layer) {
     const mode = MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
     const panel = el('div', 'mt-panel');
@@ -1538,25 +1604,22 @@ window.FM = window.FM || {};
           body.appendChild(capBtn);
         }
       }
-      if (layer.type === 'shape') {
+      if (layer.type === 'shape' && FM.isPointShape && FM.isPointShape(layer)) {
+        // ===== Edit Points (AM) — point shapes replace Edit Shape with this =====
+        // Auto-enter point editing: overlay on the canvas + this panel edits the selected point.
+        if (FM.pointEdit && (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.start(layer.id, { embedded: true });
+        editPointsTools(layer, body);
+      } else if (layer.type === 'shape') {
+        // ===== Edit Shape — parametric kinds (rect/ellipse/polygon/…): sliders, no point sets =====
         const P = FM.scene.project;
         const kr = el('div', 'prop-row'); kr.appendChild(el('label', null, 'Shape'));
         const ksel = document.createElement('select');
-        const baseKinds = [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['triangle', 'Triangle'], ['star', 'Star'], ['heart', 'Heart'], ['plus', 'Plus'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring'], ['arrow', 'Arrow'], ['chevron', 'Chevron'], ['trapezoid', 'Trapezoid'], ['parallelogram', 'Parallelogram']]
+        const baseKinds = [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['star', 'Star'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring']]
           .concat(Object.keys(FM.SHAPE_POLYS || {}).map(k => [k, k.charAt(0).toUpperCase() + k.slice(1)]));
         baseKinds.forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-        // a drawn path keeps its 'path' kind (not in the dropdown) — swapping kinds would discard its points
-        if (layer.shape !== 'path') { kr.appendChild(ksel); body.appendChild(kr); }
-        // Edit points — every shape becomes an editable path (drag vertices to reshape it)
-        if (FM.pointEdit) {
-          const pe = el('button', 'btn pe-btn', FM.pointEdit.isActive() ? 'Editing points…' : '✎ Edit points');
-          pe.disabled = FM.pointEdit.isActive();
-          pe.title = layer.shape === 'path' ? 'Drag the shape’s points on the canvas' : 'Converts this shape to an editable path, then drag its points on the canvas';
-          pe.addEventListener('click', () => FM.pointEdit.start(layer.id));
-          body.appendChild(pe);
-        }
-        const openStroke = (layer.shape === 'line' || layer.shape === 'arc' || layer.shape === 'spiral' || (layer.shape === 'path' && !layer.closed));   // stroked, never filled
+        kr.appendChild(ksel); body.appendChild(kr);
+        const openStroke = (layer.shape === 'line' || layer.shape === 'arc');   // stroked, never filled
         // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));
@@ -1622,6 +1685,7 @@ window.FM = window.FM || {};
         // Clearing lastLayerId means re-selecting a layer (even the SAME one) reopens at the category
         // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
         lastLayerId = null;
+        if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded()) FM.pointEdit.stop();   // deselect ends Edit Points
         if (title) title.textContent = 'Add';
         if (FM.addMenu) FM.addMenu.render(root, { variant: 'panel' });
         else root.appendChild(el('div', 'empty', 'Select a layer to edit it.'));
@@ -1630,6 +1694,9 @@ window.FM = window.FM || {};
       if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      // Embedded Edit-Points lifecycle: the overlay lives exactly as long as the Edit Points view —
+      // leaving the view (back / other category / other layer / deselect) tears it down.
+      if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded() && (view !== 'element' || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.stop();
       // The old header row (thumbnail + name + duplicate + delete) is gone: the thumbnail lives on
       // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
       // now the top-bar name field. So the inspector goes straight to the actions.

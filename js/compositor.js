@@ -2235,91 +2235,188 @@ window.FM = window.FM || {};
   // Every entry is an ARRAY OF POLYGONS in normalized [0,1] space (multi-polygon shapes like the
   // sun's rays are several subpaths of one fill). Generated once at load; traceShapePath scales
   // them into the layer's box, and point editing converts them straight into editable paths.
+  // Every shape is authored SPARSELY, with a point at each real bend/joint — built for point editing.
+  // A point is [x, y] (CORNER — hard bend) or [x, y, 1] (SMOOTH — the curve flows through it,
+  // Catmull-Rom). So a circle is 8 curve points, an elbow is one corner point, a fingertip is one
+  // smooth point — no more 20-point sampled arcs that were a mess to edit.
   FM.SHAPE_POLYS = (function () {
-    const arc = (cx, cy, rx, ry, a0, a1, n) => { const o = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; o.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); } return o; };
-    const rot = (pts, cx, cy, ang) => pts.map(([x, y]) => { const dx = x - cx, dy = y - cy, c = Math.cos(ang), s = Math.sin(ang); return [cx + dx * c - dy * s, cy + dx * s + dy * c]; });
-    const bez = (p0, p1, p2, p3, n) => { const o = []; for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; o.push([u*u*u*p0[0] + 3*u*u*t*p1[0] + 3*u*t*t*p2[0] + t*t*t*p3[0], u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1]]); } return o; };
     const PI = Math.PI, T = PI * 2;
+    const r4 = v => Math.round(v * 1e4) / 1e4;
+    // Sparse arc: n SEGMENTS (n+1 points), all smooth except (optionally) the two ends.
+    const arcS = (cx, cy, rx, ry, a0, a1, n, endsCorner) => {
+      const o = [];
+      for (let i = 0; i <= n; i++) {
+        const a = a0 + (a1 - a0) * i / n;
+        const p = [r4(cx + rx * Math.cos(a)), r4(cy + ry * Math.sin(a))];
+        if (!(endsCorner && (i === 0 || i === n))) p.push(1);
+        o.push(p);
+      }
+      return o;
+    };
+    // A full circle/ellipse as 8 smooth points (no duplicate closing point).
+    const circleS = (cx, cy, rx, ry, n) => {
+      n = n || 8; const o = [];
+      for (let i = 0; i < n; i++) { const a = -PI / 2 + i * T / n; o.push([r4(cx + rx * Math.cos(a)), r4(cy + ry * Math.sin(a)), 1]); }
+      return o;
+    };
+    const rot = (pts, cx, cy, ang) => pts.map(p => {
+      const dx = p[0] - cx, dy = p[1] - cy, c = Math.cos(ang), s = Math.sin(ang);
+      const q = [r4(cx + dx * c - dy * s), r4(cy + dx * s + dy * c)];
+      if (p[2]) q.push(1);
+      return q;
+    });
     const S = {};
+    // — page 1 stragglers (point-editable polygonal kinds; parametric rect/ellipse/etc stay parametric) —
+    S.triangle = [[[0.5,0],[1,1],[0,1]]];
+    S.heart = [[[0.5,0.95],[0.03,0.44,1],[0.18,0.065,1],[0.5,0.30],[0.82,0.065,1],[0.97,0.44,1]]];
+    S.plus = [[[0.33,0],[0.67,0],[0.67,0.33],[1,0.33],[1,0.67],[0.67,0.67],[0.67,1],[0.33,1],[0.33,0.67],[0,0.67],[0,0.33],[0.33,0.33]]];
+    S.arrow = [[[0,0.3],[0.55,0.3],[0.55,0],[1,0.5],[0.55,1],[0.55,0.7],[0,0.7]]];
+    S.chevron = [[[0,0],[0.55,0],[1,0.5],[0.55,1],[0,1],[0.45,0.5]]];
+    S.trapezoid = [[[0.22,0],[0.78,0],[1,1],[0,1]]];
+    S.parallelogram = [[[0.28,0],[1,0],[0.72,1],[0,1]]];
     // — page 2 —
-    S.speech = [[[0.1,0.06],[0.9,0.06],[0.97,0.14],[0.97,0.66],[0.9,0.74],[0.42,0.74],[0.16,0.95],[0.22,0.74],[0.1,0.74],[0.03,0.66],[0.03,0.14]]];
-    S.moon = [arc(0.5,0.5,0.47,0.47,-PI*0.62,PI*0.62,22).concat(arc(0.72,0.5,0.34,0.4,PI*0.55,-PI*0.55,20))];
-    (function(){ const spoke=[[0.47,0.06],[0.53,0.06],[0.53,0.94],[0.47,0.94]], stub=(y,dir)=>[[0.5,y],[0.5+0.14*dir,y-0.1],[0.5+0.17*dir,y-0.06],[0.53*0+0.5+0.03*dir,y+0.045]]; const polys=[]; for(let k=0;k<3;k++){ const a=k*PI/3; polys.push(rot(spoke,0.5,0.5,a)); [[0.16,1],[0.16,-1],[0.84,1],[0.84,-1]].forEach(([y,d])=>polys.push(rot(stub(y,d),0.5,0.5,a))); } S.snowflake=polys; })();
-    S.shield = [[[0.5,0.02],[0.94,0.14]].concat(arc(0.5,0.14,0.44,0.62,0,PI/2,12)).concat([[0.5,0.98]]).concat(arc(0.5,0.14,0.44,0.62,PI/2,PI,12)).concat([[0.06,0.14]])];
+    S.speech = [[[0.1,0.06,1],[0.9,0.06,1],[0.97,0.14,1],[0.97,0.66,1],[0.9,0.74,1],[0.42,0.74],[0.16,0.95],[0.22,0.74],[0.1,0.74,1],[0.03,0.66,1],[0.03,0.14,1]]];
+    // crescent moon: hand-authored outline (horn → outer bulge → horn → concave inner edge) —
+    // the old two-overlapping-arcs version self-intersected and filled as a thin sliver
+    S.moon = [[[0.34,0.08],[0.665,0.075,1],[0.86,0.24,1],[0.935,0.50,1],[0.86,0.76,1],[0.665,0.925,1],[0.34,0.92],[0.55,0.83,1],[0.68,0.62,1],[0.68,0.38,1],[0.55,0.17,1]]];
+    (function(){ const spoke=[[0.47,0.06],[0.53,0.06],[0.53,0.94],[0.47,0.94]], stub=(y,dir)=>[[0.5,y],[0.5+0.14*dir,y-0.1],[0.5+0.17*dir,y-0.06],[0.5+0.03*dir,y+0.045]]; const polys=[]; for(let k=0;k<3;k++){ const a=k*PI/3; polys.push(rot(spoke,0.5,0.5,a)); [[0.16,1],[0.16,-1],[0.84,1],[0.84,-1]].forEach(([y,d])=>polys.push(rot(stub(y,d),0.5,0.5,a))); } S.snowflake=polys; })();
+    S.shield = [[[0.5,0.02],[0.94,0.14]].concat(arcS(0.5,0.14,0.44,0.62,0,PI/2,3,true).slice(1)).concat([[0.5,0.98]]).concat(arcS(0.5,0.14,0.44,0.62,PI/2,PI,3,true).slice(1))];
     S.check = [[[0.05,0.55],[0.2,0.4],[0.38,0.58],[0.8,0.12],[0.95,0.26],[0.38,0.88]]];
-    S.droplet = [[[0.5,0.02],[0.68,0.32]].concat(arc(0.5,0.62,0.32,0.34,-PI*0.3,PI*1.3,24)).concat([[0.32,0.32]])];
-    S.cloud = [arc(0.26,0.58,0.17,0.17,PI*0.5,PI*1.36,12).concat(arc(0.48,0.42,0.2,0.2,PI,PI*1.95,14)).concat(arc(0.72,0.56,0.17,0.17,PI*1.42,PI*2.5,12))];
+    S.droplet = [[[0.5,0.02]].concat(arcS(0.5,0.62,0.32,0.34,-PI*0.3,PI*1.3,6,false))];
+    S.cloud = [arcS(0.26,0.58,0.17,0.17,PI*0.5,PI*1.36,3,true).concat(arcS(0.48,0.42,0.2,0.2,PI,PI*1.95,3,true)).concat(arcS(0.72,0.56,0.17,0.17,PI*1.42,PI*2.5,3,true))];
     S.play = [[[0.12,0.06],[0.94,0.5],[0.12,0.94]]];
-    (function(){ const o=[]; const turns=2.6,N=110; for(let i=0;i<=N;i++){const f=i/N,a=f*turns*T,r=0.04+f*0.44;o.push([0.5+r*Math.cos(a),0.5+r*Math.sin(a)]);} S.spiral=[o]; })();
-    (function(){ const o=[]; for(let i=0;i<8;i++){const a=-PI/2+i*PI/4,r=(i%2===0)?0.48:0.13;o.push([0.5+r*Math.cos(a),0.5+r*Math.sin(a)]);} S.sparkle=[o]; })();
+    (function(){ const o=[]; const turns=2.6,N=26; for(let i=0;i<=N;i++){const f=i/N,a=f*turns*T,r=0.04+f*0.44;o.push([r4(0.5+r*Math.cos(a)),r4(0.5+r*Math.sin(a)),1]);} S.spiral=[o]; })();
+    (function(){ const o=[]; for(let i=0;i<8;i++){const a=-PI/2+i*PI/4,r=(i%2===0)?0.48:0.13;o.push([r4(0.5+r*Math.cos(a)),r4(0.5+r*Math.sin(a))]);} S.sparkle=[o]; })();
     S.bolt = [[[0.62,0.02],[0.2,0.56],[0.44,0.56],[0.36,0.98],[0.8,0.42],[0.55,0.42]]];
-    S.puzzle = [[[0.1,0.3],[0.431,0.3]].concat(arc(0.5,0.19,0.13,0.13,2.13,7.29,16)).concat([[0.569,0.3],[0.9,0.3],[0.9,0.5]]).concat(arc(0.9,0.62,-0.12,0.12,-PI/2,PI/2,10)).concat([[0.9,0.74],[0.9,0.95],[0.1,0.95]])];
-    S.pushpin = [arc(0.5,0.3,0.26,0.26,PI*0.9,PI*2.1,20).concat([[0.62,0.55],[0.54,0.6],[0.5,0.97],[0.46,0.6],[0.38,0.55]])];
+    S.puzzle = [[[0.1,0.3],[0.431,0.3]].concat(arcS(0.5,0.19,0.13,0.13,2.13,7.29,4,true).slice(1)).concat([[0.9,0.3],[0.9,0.5]]).concat(arcS(0.9,0.62,-0.12,0.12,-PI/2,PI/2,3,true).slice(1)).concat([[0.9,0.95],[0.1,0.95]])];
+    S.pushpin = [arcS(0.5,0.3,0.26,0.26,PI*0.9,PI*2.1,5,true).concat([[0.62,0.55],[0.54,0.6],[0.5,0.97],[0.46,0.6],[0.38,0.55]])];
     // — page 3 —
     S.flag = [[[0.14,0.02],[0.22,0.02],[0.22,0.12],[0.9,0.2],[0.68,0.34],[0.9,0.48],[0.22,0.42],[0.22,0.98],[0.14,0.98]]];
-    // thumbs-up 👍: cuff + palm; curved thumb rising to a rounded tip; four arc-rounded finger
-    // ends scalloped down the right edge (reads as a hand, not a mitten)
-    S.thumbsup = (function () {
-      const cuff = [[0.03,0.54],[0.19,0.54],[0.19,0.95],[0.03,0.95]];
-      let p = [[0.23,0.95],[0.23,0.58]];
-      p = p.concat(bez([0.23,0.58],[0.24,0.5],[0.28,0.42],[0.33,0.3],8));
-      p = p.concat(bez([0.33,0.3],[0.36,0.2],[0.38,0.12],[0.45,0.09],8));
-      p = p.concat(bez([0.45,0.09],[0.53,0.06],[0.58,0.12],[0.56,0.2],8));
-      p = p.concat(bez([0.56,0.2],[0.55,0.28],[0.51,0.36],[0.5,0.42],8));
-      p.push([0.62,0.42],[0.88,0.42]);
-      p = p.concat(arc(0.88,0.485,0.065,0.065,-PI/2,PI/2,6));
-      p.push([0.8,0.55],[0.86,0.55]);
-      p = p.concat(arc(0.86,0.615,0.065,0.065,-PI/2,PI/2,6));
-      p.push([0.78,0.68],[0.84,0.68]);
-      p = p.concat(arc(0.84,0.74,0.06,0.06,-PI/2,PI/2,6));
-      p.push([0.76,0.8],[0.8,0.8]);
-      p = p.concat(arc(0.8,0.86,0.055,0.055,-PI/2,PI/2,6));
-      p.push([0.5,0.95]);
-      return [cuff, p];
-    })();
-    S.paperplane = [[[0.04,0.5],[0.96,0.08],[0.62,0.92],[0.46,0.62],[0.96,0.08],[0.46,0.62],[0.3,0.56]]];
+    // thumbs-up 👍: wrist cuff + palm, smooth thumb sweep to a round tip, four scalloped fingers —
+    // each fingertip is ONE smooth point, each knuckle/notch a corner.
+    S.thumbsup = [
+      [[0.03,0.54],[0.19,0.54],[0.19,0.95],[0.03,0.95]],
+      [[0.23,0.95],[0.23,0.58],
+       [0.27,0.44,1],[0.335,0.30,1],[0.38,0.14,1],[0.46,0.075,1],[0.545,0.10,1],[0.555,0.19,1],[0.51,0.34,1],
+       [0.50,0.42],[0.88,0.42],[0.945,0.485,1],[0.88,0.55],[0.86,0.55],[0.925,0.615,1],[0.86,0.68],
+       [0.84,0.68],[0.90,0.74,1],[0.84,0.80],[0.80,0.80],[0.855,0.86,1],[0.80,0.92],[0.5,0.95]],
+    ];
+    S.paperplane = [[[0.04,0.5],[0.96,0.08],[0.62,0.92],[0.46,0.62],[0.3,0.56]]];
     S.house = [[[0.5,0.04],[0.96,0.44],[0.86,0.44],[0.86,0.96],[0.6,0.96],[0.6,0.66],[0.4,0.66],[0.4,0.96],[0.14,0.96],[0.14,0.44],[0.04,0.44]]];
-    (function(){ const polys=[[[0.55,0.98],[0.50,0.98],[0.365,0.06],[0.415,0.05]]]; const sa=Math.atan2(-0.9,-0.14); for(let i=0;i<6;i++){ const f=0.15+i*0.14, cx=0.525-0.14*f, cy=0.98-0.9*f; [[1,sa+0.7],[-1,sa-0.7]].forEach(([sgn,ang])=>{ const lx=cx+sgn*0.078, ly=cy-sgn*0.012; polys.push(rot(arc(lx,ly,0.095,0.034,0,T,10),lx,ly,ang)); }); } S.laurel=polys; })();
+    (function(){ const polys=[[[0.55,0.98],[0.50,0.98],[0.365,0.06],[0.415,0.05]]]; const sa=Math.atan2(-0.9,-0.14); for(let i=0;i<6;i++){ const f=0.15+i*0.14, cx=0.525-0.14*f, cy=0.98-0.9*f; [[1,sa+0.7],[-1,sa-0.7]].forEach(([sgn,ang])=>{ const lx=cx+sgn*0.078, ly=cy-sgn*0.012; polys.push(rot(circleS(lx,ly,0.095,0.034,6),lx,ly,ang)); }); } S.laurel=polys; })();
     S.bookmark = [[[0.22,0.02],[0.78,0.02],[0.78,0.96],[0.5,0.72],[0.22,0.96]]];
-    // pointing hand (☞): rounded thumb hump on top, long index finger with an arc-rounded tip,
-    // three arc-rounded curled fingers, smooth bezier palm heel back to the wrist
-    S.pointhand = (function () {
-      let p = [[0.03,0.42],[0.2,0.38]];
-      p = p.concat(bez([0.2,0.38],[0.26,0.24],[0.34,0.2],[0.4,0.26],8));
-      p = p.concat(bez([0.4,0.26],[0.44,0.3],[0.43,0.36],[0.4,0.41],6));
-      p.push([0.88,0.41]);
-      p = p.concat(arc(0.88,0.47,0.06,0.06,-PI/2,PI/2,8));
-      p.push([0.56,0.53],[0.72,0.55]);
-      p = p.concat(arc(0.72,0.605,0.055,0.055,-PI/2,PI/2,6));
-      p.push([0.54,0.66],[0.69,0.68]);
-      p = p.concat(arc(0.69,0.73,0.05,0.05,-PI/2,PI/2,6));
-      p.push([0.52,0.78],[0.64,0.8]);
-      p = p.concat(arc(0.64,0.85,0.05,0.05,-PI/2,PI/2,6));
-      p.push([0.4,0.92],[0.2,0.9]);
-      p = p.concat(bez([0.2,0.9],[0.08,0.86],[0.03,0.72],[0.03,0.42],10));
-      return [p];
-    })();
-    S.flame = [bez([0.52,0.02],[0.72,0.22],[0.6,0.3],[0.76,0.42],10).concat(bez([0.76,0.42],[0.9,0.54],[0.84,0.78],[0.64,0.88],12)).concat(arc(0.48,0.76,0.2,0.14,PI*0.25,PI*0.85,8)).concat(bez([0.3,0.84],[0.12,0.72],[0.16,0.5],[0.3,0.38],12)).concat(bez([0.3,0.38],[0.42,0.3],[0.34,0.2],[0.52,0.02],10))];
+    // pointing hand (☞): smooth thumb hump, long index with one smooth tip, three curled fingers,
+    // smooth heel back to the wrist.
+    S.pointhand = [[
+      [0.06,0.44],[0.21,0.40],
+      [0.265,0.28,1],[0.345,0.255,1],[0.395,0.31,1],
+      [0.395,0.425],
+      [0.88,0.425],[0.945,0.4775,1],[0.88,0.53],
+      [0.55,0.53],
+      [0.71,0.55],[0.765,0.6,1],[0.71,0.65],
+      [0.53,0.65],
+      [0.68,0.67],[0.73,0.7175,1],[0.68,0.765],
+      [0.51,0.765],
+      [0.63,0.785],[0.6775,0.83,1],[0.63,0.875],
+      [0.40,0.895],[0.22,0.875],
+      [0.115,0.81,1],[0.065,0.665,1],
+    ]];
+    S.flame = [[[0.60,0.03],[0.625,0.155,1],[0.565,0.27,1],[0.71,0.40,1],[0.815,0.575,1],[0.765,0.76,1],[0.60,0.89,1],[0.43,0.90,1],[0.27,0.83,1],[0.195,0.665,1],[0.245,0.50,1],[0.36,0.38,1],[0.475,0.245,1],[0.535,0.115,1]]];
     S.banner = [[[0.02,0.24],[0.98,0.24],[0.86,0.5],[0.98,0.76],[0.02,0.76],[0.14,0.5]]];
-    (function(){ const polys=[]; const N=14, a0=PI*1.61, a1=PI*3.39; for(let i=0;i<N;i++){ const a=a0+i*(a1-a0)/(N-1); const cx=0.5+0.38*Math.cos(a), cy=0.52+0.38*Math.sin(a); polys.push(rot(arc(cx,cy,0.088,0.033,0,T,8),cx,cy,a+PI/2)); } S.wreath=polys; })();
+    (function(){ const polys=[]; const N=14, a0=PI*1.61, a1=PI*3.39; for(let i=0;i<N;i++){ const a=a0+i*(a1-a0)/(N-1); const cx=0.5+0.38*Math.cos(a), cy=0.52+0.38*Math.sin(a); polys.push(rot(circleS(cx,cy,0.088,0.033,6),cx,cy,a+PI/2)); } S.wreath=polys; })();
     S.diamond = [[[0.5,0.02],[0.92,0.5],[0.5,0.98],[0.08,0.5]]];
     S.plane = [[[0.5,0.04],[0.58,0.12],[0.58,0.34],[0.98,0.58],[0.98,0.68],[0.58,0.56],[0.58,0.78],[0.72,0.9],[0.72,0.97],[0.5,0.9],[0.28,0.97],[0.28,0.9],[0.42,0.78],[0.42,0.56],[0.02,0.68],[0.02,0.58],[0.42,0.34],[0.42,0.12]]];
-    S.umbrella = [arc(0.5,0.52,0.47,0.44,PI,T,26).concat([[0.86,0.55],[0.78,0.48],[0.68,0.55],[0.6,0.48],[0.54,0.53],[0.54,0.84]]).concat(arc(0.44,0.84,0.1,0.1,0,PI,8)).concat([[0.28,0.84],[0.28,0.8],[0.4,0.8]]).concat(arc(0.44,0.84,0.02,0.02,PI,0,4)).concat([[0.46,0.53],[0.4,0.48],[0.31,0.55],[0.22,0.48],[0.13,0.55]])];
-    S.bomb = [arc(0.44,0.62,0.36,0.36,0,T,26),[[0.6,0.28],[0.72,0.14],[0.8,0.2],[0.68,0.36]],[[0.78,0.06],[0.84,0.12],[0.88,0.04],[0.94,0.1],[0.9,0.16],[0.98,0.18],[0.86,0.22],[0.8,0.14]]];
+    S.umbrella = [arcS(0.5,0.52,0.47,0.44,PI,T,4,true)
+      .concat([[0.86,0.55],[0.78,0.48,1],[0.68,0.55],[0.6,0.48,1],[0.54,0.53],[0.54,0.84]])
+      .concat([[0.49,0.93,1],[0.44,0.94,1],[0.39,0.93,1],[0.34,0.84],[0.34,0.80],[0.40,0.86,1],[0.46,0.84],[0.46,0.53]])
+      .concat([[0.4,0.48,1],[0.31,0.55],[0.22,0.48,1],[0.13,0.55]])];
+    S.bomb = [circleS(0.44,0.62,0.36,0.36),[[0.6,0.28],[0.72,0.14],[0.8,0.2],[0.68,0.36]],[[0.78,0.06],[0.84,0.12],[0.88,0.04],[0.94,0.1],[0.9,0.16],[0.98,0.18],[0.86,0.22],[0.8,0.14]]];
     // — page 4 —
     S.boat = [[[0.5,0.02],[0.54,0.02],[0.54,0.62],[0.5,0.62]],[[0.58,0.1],[0.94,0.6],[0.58,0.6]],[[0.46,0.22],[0.46,0.6],[0.1,0.6]],[[0.06,0.68],[0.94,0.68],[0.82,0.94],[0.18,0.94]]];
-    S.magnifier = [arc(0.42,0.42,0.34,0.34,0,T,26).concat([]),[[0.62,0.68],[0.7,0.6],[0.98,0.86],[0.9,0.94]]];
-    S.key = [arc(0.3,0.3,0.24,0.24,0,T,22),[[0.44,0.42],[0.94,0.88],[0.94,0.97],[0.84,0.97],[0.84,0.88],[0.74,0.88],[0.74,0.78],[0.64,0.78],[0.36,0.5]]];
-    (function(){ const polys=[arc(0.5,0.5,0.24,0.24,0,T,24)]; for(let i=0;i<8;i++){ const a=i*PI/4; polys.push(rot([[0.5,0.02],[0.56,0.18],[0.44,0.18]],0.5,0.5,a)); } S.sun=polys; })();
-    S.person = [arc(0.5,0.16,0.13,0.13,0,T,18),[[0.34,0.32],[0.66,0.32],[0.74,0.62],[0.66,0.64],[0.62,0.46],[0.62,0.96],[0.53,0.96],[0.53,0.66],[0.47,0.66],[0.47,0.96],[0.38,0.96],[0.38,0.46],[0.34,0.64],[0.26,0.62]]];
-    S.rocket = [bez([0.5,0.02],[0.68,0.2],[0.66,0.5],[0.62,0.7],14).concat([[0.62,0.7],[0.38,0.7]]).concat(bez([0.38,0.7],[0.34,0.5],[0.32,0.2],[0.5,0.02],14)),[[0.38,0.6],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.6],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
+    S.magnifier = [circleS(0.42,0.42,0.34,0.34),[[0.62,0.68],[0.7,0.6],[0.98,0.86],[0.9,0.94]]];
+    S.key = [circleS(0.3,0.3,0.24,0.24),[[0.44,0.42],[0.94,0.88],[0.94,0.97],[0.84,0.97],[0.84,0.88],[0.74,0.88],[0.74,0.78],[0.64,0.78],[0.36,0.5]]];
+    (function(){ const polys=[circleS(0.5,0.5,0.24,0.24)]; for(let i=0;i<8;i++){ const a=i*PI/4; polys.push(rot([[0.5,0.02],[0.56,0.18],[0.44,0.18]],0.5,0.5,a)); } S.sun=polys; })();
+    // person: PROPORTIONAL head (was comically big) + a corner point at every joint — shoulders,
+    // elbows, wrists, hips, knees, ankles — with smooth points only for hand/foot tips. Move the
+    // wrist + elbow points and he waves.
+    S.person = [circleS(0.5,0.115,0.095,0.095),[
+      [0.435,0.225],[0.335,0.26],[0.32,0.45],[0.315,0.62],[0.345,0.665,1],[0.375,0.62],[0.385,0.47],[0.395,0.335],
+      [0.405,0.60],[0.415,0.775],[0.42,0.925],[0.445,0.965,1],[0.475,0.93],[0.48,0.775],
+      [0.5,0.635],
+      [0.52,0.775],[0.525,0.93],[0.555,0.965,1],[0.58,0.925],[0.585,0.775],[0.595,0.60],
+      [0.605,0.335],[0.615,0.47],[0.625,0.62],[0.655,0.665,1],[0.685,0.62],[0.68,0.45],[0.665,0.26],[0.565,0.225],
+    ]];
+    S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
     S.envelope = [[[0.03,0.16],[0.97,0.16],[0.5,0.6]],[[0.03,0.24],[0.44,0.56],[0.03,0.84]],[[0.97,0.24],[0.97,0.84],[0.56,0.56]],[[0.1,0.86],[0.46,0.62],[0.5,0.66],[0.54,0.62],[0.9,0.86]]];
-    S.woman = [arc(0.5,0.14,0.12,0.12,0,T,18),[[0.4,0.28],[0.6,0.28],[0.78,0.72],[0.6,0.72],[0.6,0.96],[0.52,0.96],[0.52,0.78],[0.48,0.78],[0.48,0.96],[0.4,0.96],[0.4,0.72],[0.22,0.72]]];
-    S.car = [[[0.2,0.36],[0.34,0.2],[0.68,0.2],[0.82,0.36],[0.96,0.42],[0.98,0.6],[0.9,0.62]].concat(arc(0.78,0.64,0.09,0.09,0,PI,8)).concat([[0.69,0.64],[0.35,0.64]]).concat(arc(0.24,0.64,0.09,0.09,0,PI,8)).concat([[0.15,0.64],[0.02,0.6],[0.04,0.42]])];
-    S.stamp = [(function(){ const pts=[]; const bumps=5,r=0.045; for(let i=0;i<bumps;i++) pts.push(...arc(0.1+ (0.8/(bumps-1))*i,0.08,r,r,PI,0,6)); for(let i=0;i<bumps;i++) pts.push(...arc(0.92,0.1+(0.8/(bumps-1))*i,r,r,-PI/2,PI/2,6)); for(let i=0;i<bumps;i++) pts.push(...arc(0.9-(0.8/(bumps-1))*i,0.92,r,r,0,PI,6)); for(let i=0;i<bumps;i++) pts.push(...arc(0.08,0.9-(0.8/(bumps-1))*i,r,r,PI/2,PI*1.5,6)); return pts; })()];
+    // woman: proportional head, shoulder/elbow/wrist joints on both arms, flared dress, legs with
+    // ankle joints + smooth foot tips.
+    S.woman = [circleS(0.5,0.115,0.09,0.09),[
+      [0.44,0.225],[0.35,0.265],[0.30,0.43],[0.285,0.565],[0.315,0.605,1],[0.36,0.55],[0.385,0.44],[0.415,0.42],
+      [0.245,0.72],[0.435,0.72],[0.44,0.93],[0.4625,0.962,1],[0.485,0.93],[0.49,0.72],
+      [0.51,0.72],[0.515,0.93],[0.5375,0.962,1],[0.56,0.93],[0.565,0.72],[0.755,0.72],
+      [0.585,0.42],[0.615,0.44],[0.64,0.55],[0.685,0.605,1],[0.715,0.565],[0.70,0.43],[0.65,0.265],[0.56,0.225],
+    ]];
+    S.car = [[[0.20,0.36],[0.34,0.20,1],[0.68,0.20,1],[0.82,0.36],[0.96,0.42],[0.98,0.60],[0.90,0.62]]
+      .concat([[0.87,0.64],[0.78,0.73,1],[0.69,0.64]])
+      .concat([[0.35,0.64]])
+      .concat([[0.33,0.64],[0.24,0.73,1],[0.15,0.64]])
+      .concat([[0.02,0.6],[0.04,0.42]])];
+    // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),
+    // with explicit corner points so the outline never overshoots the square
+    S.stamp = [(function(){ const pts=[]; const bumps=4, r=0.05, c0=0.20, span=(0.80-0.20)/(bumps-1);
+      pts.push([0.08,0.08]);
+      for(let i=0;i<bumps;i++){ const x=c0+span*i; pts.push([r4(x-r),0.08],[r4(x),0.125,1],[r4(x+r),0.08]); }
+      pts.push([0.92,0.08]);
+      for(let i=0;i<bumps;i++){ const y=c0+span*i; pts.push([0.92,r4(y-r)],[0.875,r4(y),1],[0.92,r4(y+r)]); }
+      pts.push([0.92,0.92]);
+      for(let i=0;i<bumps;i++){ const x=0.80-span*i; pts.push([r4(x+r),0.92],[r4(x),0.875,1],[r4(x-r),0.92]); }
+      pts.push([0.08,0.92]);
+      for(let i=0;i<bumps;i++){ const y=0.80-span*i; pts.push([0.08,r4(y+r)],[0.125,r4(y),1],[0.08,r4(y-r)]); }
+      return pts; })()];
     return S;
   })();
   const OPEN_POLY = { spiral: 1 };   // data shapes that STROKE their polyline instead of filling
+
+  // Walk one subpath honoring smooth flags: p[2]===1 → the curve flows THROUGH the point
+  // (Catmull-Rom → cubic bezier); no flag → a hard corner (straight lineTo). `map` converts a
+  // normalized [u,v] into destination coords, so the compositor, thumbnails and the point-editor
+  // overlay all draw the exact same curve.
+  FM.buildSubPath = function (ctx, pts, closed, map) {
+    const n = pts.length; if (!n) return;
+    const M = map || (p => p);
+    const get = i => closed ? pts[((i % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, i))];
+    const q0 = M(pts[0]); ctx.moveTo(q0[0], q0[1]);
+    const segs = closed ? n : n - 1;
+    for (let i = 0; i < segs; i++) {
+      const p1 = get(i), p2 = get(i + 1);
+      const s1 = p1[2] === 1, s2 = p2[2] === 1;
+      if (!s1 && !s2) { const q = M(p2); ctx.lineTo(q[0], q[1]); continue; }
+      const p0 = get(i - 1), p3 = get(i + 2);
+      const c1 = s1 ? [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6] : [p1[0], p1[1]];
+      const c2 = s2 ? [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6] : [p2[0], p2[1]];
+      const m1 = M(c1), m2 = M(c2), q2 = M(p2);
+      ctx.bezierCurveTo(m1[0], m1[1], m2[0], m2[1], q2[0], q2[1]);
+    }
+    if (closed) ctx.closePath();
+  };
+  // The on-curve midpoint of segment i→i+1 (for insert rings that sit ON the curve, not the chord).
+  FM.subPathMidpoint = function (pts, i, closed) {
+    const n = pts.length;
+    const get = k => closed ? pts[((k % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, k))];
+    const p1 = get(i), p2 = get(i + 1);
+    const s1 = p1[2] === 1, s2 = p2[2] === 1;
+    if (!s1 && !s2) return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+    const p0 = get(i - 1), p3 = get(i + 2);
+    const c1 = s1 ? [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6] : [p1[0], p1[1]];
+    const c2 = s2 ? [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6] : [p2[0], p2[1]];
+    return [(p1[0] + 3 * c1[0] + 3 * c2[0] + p2[0]) / 8, (p1[1] + 3 * c1[1] + 3 * c2[1] + p2[1]) / 8];
+  };
+  // Is this layer a POINT shape (edited via Edit Points)? Library shapes + drawn/converted paths.
+  // Parametric kinds (rect, ellipse, polygon, star, line, arc, pie, semicircle, ring) are NOT —
+  // they keep their parametric Edit Shape and never grow messy point sets.
+  FM.isPointShape = function (layer) {
+    return !!layer && layer.type === 'shape' && (layer.shape === 'path' || !!FM.SHAPE_POLYS[layer.shape]);
+  };
 
   // Trace a shape layer's outline into ctx (beginPath + geometry only — caller fills/strokes).
   // ONE tracer shared by drawLayer and renderThumb so the two can never drift. Returns 'stroke'
@@ -2327,25 +2424,19 @@ window.FM = window.FM || {};
   FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh) {
     const kind = layer.shape || 'rect';
     const P = (u, v) => [ox + u * sw, oy + v * sh];
-    const poly = pts => {
-      pts.forEach((p, i) => { const q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
-      ctx.closePath();
-    };
     ctx.beginPath();
     const dp = FM.SHAPE_POLYS[kind];
-    if (dp) {   // data-driven library shape: one or more normalized polygons
-      dp.forEach(pl => { pl.forEach((q, i) => { const v = P(q[0], q[1]); if (i === 0) ctx.moveTo(v[0], v[1]); else ctx.lineTo(v[0], v[1]); }); if (!OPEN_POLY[kind]) ctx.closePath(); });
+    if (dp) {   // data-driven library shape: one or more normalized point lists (with smooth flags)
+      dp.forEach(pl => FM.buildSubPath(ctx, pl, !OPEN_POLY[kind], q => P(q[0], q[1])));
       return OPEN_POLY[kind] ? 'stroke' : 'fill';
     }
     if (kind === 'path') {
       // Freehand / vector / converted-shape path. layer.subs = multi-subpath (array of point
-      // arrays); layer.points = single path. All [0,1]-normalized within the box.
+      // arrays); layer.points = single path. All [0,1]-normalized within the box; points may
+      // carry a smooth flag ([u,v,1]) which renders as a curve through the point.
       const subs = layer.subs || (layer.points && layer.points.length ? [layer.points] : []);
       if (!subs.length) return layer.closed ? 'fill' : 'stroke';
-      subs.forEach(pts => {
-        pts.forEach((p, i) => { const q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
-        if (layer.closed) ctx.closePath();
-      });
+      subs.forEach(pts => FM.buildSubPath(ctx, pts, !!layer.closed, p => P(p[0], p[1])));
       return layer.closed ? 'fill' : 'stroke';   // open path (freehand brush) is stroked, never filled
     } else if (kind === 'ellipse') {
       ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
@@ -2363,8 +2454,6 @@ window.FM = window.FM || {};
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.closePath();
-    } else if (kind === 'triangle') {
-      ctx.moveTo(ox + sw / 2, oy); ctx.lineTo(ox + sw, oy + sh); ctx.lineTo(ox, oy + sh); ctx.closePath();
     } else if (kind === 'star') {
       const n = Math.max(3, layer.sides || 5), cx = ox + sw / 2, cy = oy + sh / 2, inr = 0.45;
       for (let i = 0; i < n * 2; i++) {
@@ -2373,14 +2462,6 @@ window.FM = window.FM || {};
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.closePath();
-    } else if (kind === 'heart') {
-      const cx = ox + sw / 2;
-      ctx.moveTo(cx, oy + sh * 0.95);
-      ctx.bezierCurveTo(ox - sw * 0.02, oy + sh * 0.55, ox + sw * 0.12, oy + sh * 0.02, cx, oy + sh * 0.30);
-      ctx.bezierCurveTo(ox + sw * 0.88, oy + sh * 0.02, ox + sw * 1.02, oy + sh * 0.55, cx, oy + sh * 0.95);
-      ctx.closePath();
-    } else if (kind === 'plus') {
-      poly([[0.33, 0], [0.67, 0], [0.67, 0.33], [1, 0.33], [1, 0.67], [0.67, 0.67], [0.67, 1], [0.33, 1], [0.33, 0.67], [0, 0.67], [0, 0.33], [0.33, 0.33]]);
     } else if (kind === 'pie') {
       const cx = ox + sw / 2, cy = oy + sh / 2;
       ctx.moveTo(cx, cy);
@@ -2393,14 +2474,6 @@ window.FM = window.FM || {};
       ctx.ellipse(ox + sw / 2, oy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
       ctx.moveTo(ox + sw / 2 + sw * 0.275, oy + sh / 2);   // new subpath — else stroke() draws an outer→hole connector line
       ctx.ellipse(ox + sw / 2, oy + sh / 2, sw * 0.275, sh * 0.275, 0, 0, Math.PI * 2, true);   // hole (reverse winding)
-    } else if (kind === 'arrow') {
-      poly([[0, 0.3], [0.55, 0.3], [0.55, 0], [1, 0.5], [0.55, 1], [0.55, 0.7], [0, 0.7]]);
-    } else if (kind === 'chevron') {
-      poly([[0, 0], [0.55, 0], [1, 0.5], [0.55, 1], [0, 1], [0.45, 0.5]]);
-    } else if (kind === 'trapezoid') {
-      poly([[0.22, 0], [0.78, 0], [1, 1], [0, 1]]);
-    } else if (kind === 'parallelogram') {
-      poly([[0.28, 0], [1, 0], [0.72, 1], [0, 1]]);
     } else {   // rect
       const r = Math.min(layer.cornerRadius || 0, sw / 2, sh / 2);
       if (r > 0 && ctx.roundRect) ctx.roundRect(ox, oy, sw, sh, r); else ctx.rect(ox, oy, sw, sh);
@@ -2413,34 +2486,21 @@ window.FM = window.FM || {};
   // traceShapePath exactly, library kinds hand over their polygon data.
   FM.shapeToPoints = function (layer) {
     const kind = layer.shape || 'rect';
-    const clone = a => a.map(pl => pl.map(p => [p[0], p[1]]));
-    const ell = (cx, cy, rx, ry, a0, a1, n) => { const o = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; o.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); } return o; };
+    // clone must PRESERVE the smooth flag (p[2]) or every curve point degrades to a corner
+    const clone = a => a.map(pl => pl.map(p => (p[2] === 1 ? [p[0], p[1], 1] : [p[0], p[1]])));
     const PI = Math.PI;
     if (FM.SHAPE_POLYS[kind]) return { subs: clone(FM.SHAPE_POLYS[kind]), closed: !OPEN_POLY[kind] };
     if (kind === 'path') return { subs: clone(layer.subs || (layer.points ? [layer.points] : [])), closed: layer.closed !== false };
-    if (kind === 'ellipse') { const o = ell(0.5, 0.5, 0.5, 0.5, 0, PI * 2, 24); o.pop(); return { subs: [o], closed: true }; }
+    // Parametric kinds below are NOT point shapes in the UI anymore (FM.isPointShape excludes them —
+    // squares/circles/etc stay parametric, no messy point sets). Sparse smooth fallbacks kept only
+    // for any legacy caller.
+    if (kind === 'ellipse') { const o = []; for (let i = 0; i < 8; i++) { const a = -PI / 2 + i * PI / 4; o.push([0.5 + 0.5 * Math.cos(a), 0.5 + 0.5 * Math.sin(a), 1]); } return { subs: [o], closed: true }; }
     if (kind === 'line') return { subs: [[[0, 0.5], [1, 0.5]]], closed: false };
-    if (kind === 'arc') return { subs: [ell(0.5, 0.5, 0.5, 0.5, -PI / 3, PI * 4 / 3, 20)], closed: false };
     if (kind === 'polygon' || kind === 'star') {
       const n = Math.max(3, layer.sides || 5), o = [];
       if (kind === 'polygon') for (let i = 0; i < n; i++) { const a = -PI / 2 + i * 2 * PI / n; o.push([0.5 + 0.5 * Math.cos(a), 0.5 + 0.5 * Math.sin(a)]); }
       else for (let i = 0; i < n * 2; i++) { const a = -PI / 2 + i * PI / n, r = (i % 2 === 0) ? 0.5 : 0.5 * 0.45; o.push([0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a)]); }
       return { subs: [o], closed: true };
-    }
-    if (kind === 'triangle') return { subs: [[[0.5, 0], [1, 1], [0, 1]]], closed: true };
-    if (kind === 'plus') return { subs: [[[0.33, 0], [0.67, 0], [0.67, 0.33], [1, 0.33], [1, 0.67], [0.67, 0.67], [0.67, 1], [0.33, 1], [0.33, 0.67], [0, 0.67], [0, 0.33], [0.33, 0.33]]], closed: true };
-    if (kind === 'arrow') return { subs: [[[0, 0.3], [0.55, 0.3], [0.55, 0], [1, 0.5], [0.55, 1], [0.55, 0.7], [0, 0.7]]], closed: true };
-    if (kind === 'chevron') return { subs: [[[0, 0], [0.55, 0], [1, 0.5], [0.55, 1], [0, 1], [0.45, 0.5]]], closed: true };
-    if (kind === 'trapezoid') return { subs: [[[0.22, 0], [0.78, 0], [1, 1], [0, 1]]], closed: true };
-    if (kind === 'parallelogram') return { subs: [[[0.28, 0], [1, 0], [0.72, 1], [0, 1]]], closed: true };
-    if (kind === 'pie') return { subs: [[[0.5, 0.5]].concat(ell(0.5, 0.5, 0.5, 0.5, -PI / 2, PI, 18))], closed: true };
-    if (kind === 'semicircle') return { subs: [ell(0.5, 0.98, 0.5, 0.96, PI, PI * 2, 16)], closed: true };
-    if (kind === 'ring') { const outer = ell(0.5, 0.5, 0.5, 0.5, 0, PI * 2, 24); outer.pop(); const inner = ell(0.5, 0.5, 0.275, 0.275, PI * 2, 0, 24); inner.pop(); return { subs: [outer, inner], closed: true }; }
-    if (kind === 'heart') {
-      const bz = (p0, p1, p2, p3, n) => { const o = []; for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; o.push([u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0], u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]]); } return o; };
-      const a = bz([0.5, 0.95], [-0.02, 0.55], [0.12, 0.02], [0.5, 0.30], 12), b = bz([0.5, 0.30], [0.88, 0.02], [1.02, 0.55], [0.5, 0.95], 12);
-      a.pop(); b.pop();
-      return { subs: [a.concat(b)], closed: true };
     }
     return { subs: [[[0, 0], [1, 0], [1, 1], [0, 1]]], closed: true };   // rect + fallback
   };
