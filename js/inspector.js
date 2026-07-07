@@ -804,6 +804,9 @@ window.FM = window.FM || {};
   function fillColorKey(layer) { return layer.type === 'text' ? 'color' : 'fill'; }
   function fillColorGet(layer) { return FM.evalProp(layer[fillColorKey(layer)], FM.time) || (layer.type === 'text' ? '#ffffff' : '#3a7bd5'); }
   function fillColorSet(layer, v) { FM.setProp(layer, fillColorKey(layer), v, FM.time); }
+  // Exposed so the AM-style text-edit overlay (text-edit.js) can drive the text fill through the same
+  // keyframe-aware accessors instead of clobbering an animated colour.
+  FM._fillGet = fillColorGet; FM._fillSet = fillColorSet;
   const FILL_SWATCHES = ['#ffffff', '#000000', '#7c4dff', '#8a8f98', '#e53935', '#ff1744', '#ff4dd2', '#ff6e40', '#ffd740', '#00e5c0', '#18c8ff', '#2979ff', '#00c853', '#b0ff57', '#a1887f', '#5d4037'];
 
   // Pick + downscale an image → self-contained data URL on layer.fillImage (keeps localStorage small).
@@ -1548,35 +1551,13 @@ window.FM = window.FM || {};
         }
       })();
       if (layer.type === 'text') {
-        body.appendChild(textRow('Text', layer.text, v => { layer.text = v; FM.requestRender(); }));
-        const fr = el('div', 'prop-row'); fr.appendChild(el('label', null, 'Font'));
-        const fsel = document.createElement('select');
-        FONTS.forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f.split(',')[0]; if (f === layer.fontFamily) o.selected = true; fsel.appendChild(o); });
-        const myFonts = (FM.fonts ? FM.fonts.list() : []);
-        if (myFonts.length) {
-          const og = document.createElement('optgroup'); og.label = 'My fonts';
-          myFonts.forEach(cf => { const o = document.createElement('option'); o.value = cf.css; o.textContent = cf.name; if (cf.css === layer.fontFamily) o.selected = true; og.appendChild(o); });
-          fsel.appendChild(og);
-        }
-        if (FM.fonts) { const o = document.createElement('option'); o.value = '__import_font__'; o.textContent = '＋ Import font…'; fsel.appendChild(o); }
-        fsel.addEventListener('change', () => {
-          if (fsel.value === '__import_font__') {
-            fsel.value = layer.fontFamily;   // revert; the real switch happens only on a successful import
-            FM.fonts.pick(rec => { layer.fontFamily = rec.css; FM.requestRender(); commitH(); FM.inspector.refresh(); });
-            return;
-          }
-          layer.fontFamily = fsel.value; FM.requestRender(); commitH();
-        });
-        fr.appendChild(fsel); body.appendChild(fr);
-        body.appendChild(textRow('Size', layer.fontSize, v => { const n = parseFloat(v); if (!isNaN(n) && n > 0) { layer.fontSize = n; FM.requestRender(); } }, 'number'));
-        const ar = el('div', 'prop-row'); ar.appendChild(el('label', null, 'Align'));
-        const aseg = el('div', 'seg');
-        [['left', 'L'], ['center', 'C'], ['right', 'R']].forEach(pair => {
-          const b = el('button', 'seg-btn' + (layer.align === pair[0] ? ' on' : ''), pair[1]);
-          b.addEventListener('click', () => { layer.align = pair[0]; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-          aseg.appendChild(b);
-        });
-        ar.appendChild(aseg); body.appendChild(ar);
+        // AM-style focused text editing (text-edit.js): the text string, Font, Size and Align live in
+        // the full-screen text-edit mode — tapping here opens it. The advanced typography below
+        // (Style / Spacing / Line height / Curve / Outline / Animate / Captions) stays in the inspector,
+        // exactly as AM keeps those out of its focused text toolbar.
+        const teBtn = el('button', 'btn te-open', '✎ Edit text');
+        teBtn.addEventListener('click', () => { if (FM.textEdit) FM.textEdit.start(layer.id); });
+        body.appendChild(teBtn);
         const styr = el('div', 'prop-row'); styr.appendChild(el('label', null, 'Style'));
         const sseg = el('div', 'seg');
         const bB = el('button', 'seg-btn' + (layer.bold ? ' on' : ''), 'B'); bB.style.fontWeight = '700';

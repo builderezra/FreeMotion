@@ -532,6 +532,9 @@ window.FM = window.FM || {};
     FM.scene.selectedId = layer.id;
     refreshAll();
     if (FM.history) FM.history.commit();
+    // Jump straight into the AM-style focused text editor with the placeholder pre-selected, so the
+    // first keystroke replaces it (matches AM: add text → keyboard up → type).
+    if (FM.textEdit) FM.textEdit.start(layer.id, { selectAll: true });
   };
 
   // Null object: an invisible transform controller. Parent real layers to it and animate the
@@ -1577,6 +1580,7 @@ window.FM = window.FM || {};
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
         if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) { FM.eyedropper.stop(); return; }
         if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
+        if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) { FM.textEdit.stop(); return; }
         // standalone point-edit closes on Esc; EMBEDDED Edit Points is a view — inspector.back()
         // steps out of it (the refresh guard tears the overlay down with the view)
         if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive() && !FM.pointEdit.isEmbedded()) { FM.pointEdit.stop(); return; }

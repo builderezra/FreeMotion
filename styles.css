@@ -394,6 +394,48 @@ body {
 #crop-bar button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; }
 #crop-bar .cb-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }
 #crop-bar .cb-cancel { color: var(--text-dim); }
+
+/* ===== AM-style focused text-edit mode (text-edit.js) ===== */
+.te-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 80; display: flex; align-items: center; gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) 10px 8px; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+.te-btn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 6px 12px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 13.5px; cursor: pointer; }
+.te-btn.on { border-color: var(--accent); background: rgba(41,217,187,.13); color: var(--accent); }
+.te-btn:active { filter: brightness(1.12); }
+.te-align { width: 44px; padding: 6px; }
+.te-align svg { width: 20px; height: 20px; }
+.te-font { flex: 1 1 auto; min-width: 0; justify-content: flex-start; }
+.te-font-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.te-size { flex: 0 0 auto; }
+.te-size-lbl { font-variant-numeric: tabular-nums; font-weight: 600; }
+.te-size-unit { color: var(--text-dim); font-size: 11px; }
+.te-caret { color: var(--text-dim); font-size: 10px; }
+.te-color { padding: 6px 10px; }
+.te-swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(255,255,255,.35); display: block; }
+.te-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 800; font-size: 17px; min-width: 46px; }
+
+.te-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(0,0,0,.4); }
+#te-input { width: 100%; box-sizing: border-box; min-height: 52px; max-height: 30vh; resize: none; padding: 11px 13px;
+  background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text);
+  font-size: 16px; line-height: 1.35; font-family: inherit; outline: none; }
+#te-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(41,217,187,.28); }
+
+.te-pop { position: fixed; left: 8px; right: 8px; z-index: 79; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.55); padding: 10px; }
+.te-font-rail { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px; }
+.te-font-rail::-webkit-scrollbar { display: none; }
+.te-font-card { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 76px; max-width: 108px;
+  padding: 9px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); cursor: pointer; }
+.te-font-card.on { border-color: var(--accent); background: rgba(41,217,187,.13); }
+.te-font-abc { font-size: 26px; line-height: 1; white-space: nowrap; }
+.te-font-name { font-size: 11px; color: var(--text-dim); max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.te-font-import .te-font-abc { color: var(--accent); font-weight: 700; }
+.te-size-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; }
+.te-size-slider { flex: 1 1 auto; accent-color: var(--accent); }
+.te-size-val { min-width: 46px; text-align: right; color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.te-color-wrap { padding: 2px; }
+.te-open { width: 100%; margin-bottom: 6px; }
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
 .pe-btn { width: 100%; margin: 8px 0 2px; }
