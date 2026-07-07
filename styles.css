@@ -441,6 +441,15 @@ body {
 .te-extras-inner .prop-row { margin: 6px 0; }
 .te-extras-empty { color: var(--text-dim); font-size: 13px; padding: 8px; }
 .te-open { width: 100%; margin-bottom: 6px; }
+/* Text-edit is a full-screen takeover (like AM): hide the inspector grid + timeline so nothing pokes
+ * through under the editor. The te-bar covers the top bar; the canvas fills the space between. */
+body.text-editing #inspector-panel,
+body.text-editing #timeline-panel { display: none !important; }
+/* The mobile grid pins the stage to a fixed row and hands the rest to the timeline/inspector; with
+ * those hidden, collapse the app to a single full-height row so the canvas can fill the screen, then
+ * pad the stage so the canvas centres between the top toolbar and the docked text field. */
+body.text-editing #app { grid-template-rows: 1fr !important; }
+body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
 .pe-btn { width: 100%; margin: 8px 0 2px; }
