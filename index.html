@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.73</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.74</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -205,17 +205,16 @@
     <div class="export-card">
       <div class="export-title">Export video</div>
       <label class="field"><span>Resolution</span>
-        <select id="exp-res">
-          <option value="1">Full (project size)</option>
-          <option value="0.5">Half</option>
-          <option value="0.75">75%</option>
-        </select>
+        <select id="exp-res"><!-- options built per-project in showExportDialog (named presets + sizes) --></select>
       </label>
       <label class="field"><span>Frame rate</span>
         <select id="exp-fps">
           <option value="30">30 fps</option>
-          <option value="24">24 fps</option>
-          <option value="60">60 fps</option>
+          <option value="24">24 fps (film)</option>
+          <option value="25">25 fps (PAL)</option>
+          <option value="60">60 fps (smooth)</option>
+          <option value="50">50 fps</option>
+          <option value="12">12 fps</option>
         </select>
       </label>
       <label class="field"><span>Quality</span>
@@ -297,7 +296,7 @@
   <script src="js/contextmenu.js?v=34"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=131"></script>
+  <script src="js/app.js?v=132"></script>
   <script src="js/mobile.js?v=18"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=4"></script>

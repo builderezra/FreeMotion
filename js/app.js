@@ -1133,7 +1133,26 @@ window.FM = window.FM || {};
   }
 
   /* ---------- export ---------- */
-  function showExportDialog() { document.getElementById('export-dialog').classList.remove('hidden'); }
+  function showExportDialog() {
+    // Build resolution presets from THIS project's size. "p" = the shorter side (1080p portrait =
+    // 1080 wide); value stays a SCALE factor so the exporter math is unchanged. Full first, then
+    // each standard rung below the native short side (downscale only — no blurry upscales), each
+    // labelled with its exact output pixels.
+    const P = FM.scene.project, W = P.width, H = P.height, shortSide = Math.min(W, H);
+    const sel = document.getElementById('exp-res');
+    if (sel) {
+      const prev = sel.value;
+      sel.innerHTML = '';
+      const add = (val, label) => { const o = document.createElement('option'); o.value = val; o.textContent = label; sel.appendChild(o); };
+      add(1, 'Full — ' + W + '×' + H);
+      [2160, 1440, 1080, 720, 480, 360].forEach(t => {
+        if (t < shortSide - 1) { const s = t / shortSide; add(s, t + 'p — ' + Math.round(W * s) + '×' + Math.round(H * s)); }
+      });
+      // keep the previous choice if it still exists, else default to Full
+      if (prev && [].some.call(sel.options, o => o.value === prev)) sel.value = prev;
+    }
+    document.getElementById('export-dialog').classList.remove('hidden');
+  }
   function hideExportDialog() { document.getElementById('export-dialog').classList.add('hidden'); }
 
   async function runExport() {
