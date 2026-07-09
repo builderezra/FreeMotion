@@ -671,7 +671,7 @@ window.FM = window.FM || {};
       let t = FM.time + v * dt;
       const dur = FM.scene.project.duration;
       if (t <= 0) { t = 0; v = 0; } else if (t >= dur) { t = dur; v = 0; }
-      FM.setTime(t, true);                              // no per-frame snap → smooth glide
+      FM.scrubTime(t, true);                            // no per-frame snap → smooth glide (coalesced render/seek)
       if (Math.abs(v) > 5e-4) momentumRAF = requestAnimationFrame(step);   // stop once it's imperceptible
       else { momentumRAF = 0; FM.setTime(FM.time); }    // settle onto the exact frame
     };
@@ -771,7 +771,7 @@ window.FM = window.FM || {};
         userScrollAt = performance.now();
         clearTimeout(scrollSettle);
         scrollSettle = setTimeout(() => { userScrollAt = 0; FM.timeline.updatePlayhead(); }, 160);
-        FM.setTime(snapT(Math.max(0, Math.min(FM.scene.project.duration, sL / pxPerSec()))));
+        FM.scrubTime(snapT(Math.max(0, Math.min(FM.scene.project.duration, sL / pxPerSec()))));
       }, { passive: true });
       // Grabbing the timeline while it's PLAYING pauses it (AM). Detected on the raw INPUT (touch/
       // mouse down + wheel), not the scroll event — during playback the playhead's own auto-scroll
@@ -866,7 +866,7 @@ window.FM = window.FM || {};
           if (!clipTap.moved && !scrubIntent && adx < 8 && ady < 8) return;   // still a potential tap / hold
           clipTap.moved = true;
           if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
-          FM.setTime(snapT(clipTap.baseTime - (e.clientX - clipTap.startX) / pxPerSec()));   // relative drag-scrub (scrollLeft-independent)
+          FM.scrubTime(snapT(clipTap.baseTime - (e.clientX - clipTap.startX) / pxPerSec()));   // relative drag-scrub (scrollLeft-independent)
           return;
         }
         if (clipMove) {
@@ -934,7 +934,7 @@ window.FM = window.FM || {};
             const now = e.timeStamp || performance.now(), ddt = now - (scrub.lastT || now);
             if (ddt > 0) { const vx = (e.clientX - (scrub.lastX != null ? scrub.lastX : e.clientX)) / ddt; scrub.vTime = (scrub.vTime || 0) * 0.35 + (-vx / pxPerSec()) * 0.65; }
             scrub.lastX = e.clientX; scrub.lastT = now;
-            FM.setTime(snapT(scrub.baseTime - dx / pxPerSec()));                               // horizontal grab-and-slide
+            FM.scrubTime(snapT(scrub.baseTime - dx / pxPerSec()));                             // horizontal grab-and-slide
           }
         }
       });
@@ -989,7 +989,14 @@ window.FM = window.FM || {};
         clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
-      window.addEventListener('resize', () => { HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || 172; this.rebuild(); });
+      let resizeRebuildTimer = 0;
+      window.addEventListener('resize', () => {
+        HEAD_W = parseInt(getComputedStyle(document.body).getPropertyValue('--head-w'), 10) || 172;   // cheap, keep synchronous so scrub math stays correct mid-resize
+        // iOS fires a resize STORM as the address bar / keyboard slides (dozens of events/sec); each
+        // rebuild() re-rasterizes up-to-8192px filmstrips. Collapse the storm to one trailing rebuild.
+        clearTimeout(resizeRebuildTimer);
+        resizeRebuildTimer = setTimeout(() => FM.timeline.rebuild(), 150);
+      });
     },
 
     rebuild() {

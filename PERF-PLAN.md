@@ -21,7 +21,7 @@ preview, then ship as a version bump.
 
 ## Ship order
 
-### 1. Quick wins (low risk, biggest felt improvement) — do first
+### 1. Quick wins (low risk, biggest felt improvement) — ✅ DONE in v2.84
 - **Fix B — coalesce scrubbing.** Add a scrub variant of `setTime` that sets `FM.time`, updates
   playhead/readout, and calls `FM.requestRender()` (NOT synchronous `render()` at `app.js:355`). Point the
   4 scrub sites (`timeline.js:869,937,774,674`) at it. Throttle `seekVideosToTime()` to pointer-up / ≤1 per

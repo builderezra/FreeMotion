@@ -356,6 +356,24 @@ window.FM = window.FM || {};
     FM.timeline.updatePlayhead();
     updateReadout();
   };
+  // Scrub variant of setTime for high-frequency pointer drags (timeline grab-scrub, scroll-scrub,
+  // momentum). A finger fires pointermove at 60–120Hz; setTime's synchronous render() + video seek
+  // per event is the main scrub lag. Here the heavy work is COALESCED to ≤1 per animation frame:
+  // requestRender() already de-dupes compositor renders, and the video seek is rAF-throttled. Both
+  // read the LATEST FM.time when they fire, so the final frame is always correct. Playhead + readout
+  // stay synchronous (cheap DOM) so the line tracks the finger. Same pattern as the inspector sliders.
+  let videoSeekQueued = false;
+  FM.scrubTime = function (t, noSnap) {
+    if (!FM.playing && !noSnap) t = FM.snapFrame(t);
+    FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
+    if (!FM.playing && !videoSeekQueued) {
+      videoSeekQueued = true;
+      requestAnimationFrame(() => { videoSeekQueued = false; if (!FM.playing) FM.seekVideosToTime(); });
+    }
+    FM.requestRender();
+    FM.timeline.updatePlayhead();
+    updateReadout();
+  };
 
   /* ---------- playback ---------- */
   // Jump the playhead to t and resync video/audio (used by loop + loop-region wrap).

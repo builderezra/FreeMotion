@@ -655,7 +655,7 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     if (!_maskCv) _maskCv = document.createElement('canvas');
-    const off = _maskCv; off.width = W; off.height = H;
+    const off = _maskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
     const octx = off.getContext('2d');
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -699,7 +699,7 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     if (!_mbCv) _mbCv = document.createElement('canvas');
-    const off = _mbCv; off.width = W; off.height = H;
+    const off = _mbCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
     const octx = off.getContext('2d');
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -785,7 +785,11 @@ window.FM = window.FM || {};
     const W = proj.width, H = proj.height;
     if (!_pfA) _pfA = document.createElement('canvas');
     if (!_pfB) _pfB = document.createElement('canvas');
-    _pfA.width = W; _pfA.height = H; _pfB.width = W; _pfB.height = H;
+    // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
+    // the backing buffer (full-res, per effect, per frame). _pfA is cleared below; _pfB is fully overwritten
+    // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
+    if (_pfA.width !== W || _pfA.height !== H) { _pfA.width = W; _pfA.height = H; }
+    if (_pfB.width !== W || _pfB.height !== H) { _pfB.width = W; _pfB.height = H; }
     const actx = _pfA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -1911,7 +1915,8 @@ window.FM = window.FM || {};
     const W = P.width, H = P.height, dd = Math.round(Math.max(0, d));
     if (!_rgbA) _rgbA = document.createElement('canvas');
     if (!_rgbB) _rgbB = document.createElement('canvas');
-    _rgbA.width = W; _rgbA.height = H; _rgbB.width = W; _rgbB.height = H;
+    if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
+    if (_rgbB.width !== W || _rgbB.height !== H) { _rgbB.width = W; _rgbB.height = H; }
     const actx = _rgbA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -1950,7 +1955,8 @@ window.FM = window.FM || {};
     const W = P.width, H = P.height, q = Math.max(2, Math.round(levels));
     if (!_psA) _psA = document.createElement('canvas');
     if (!_psB) _psB = document.createElement('canvas');
-    _psA.width = W; _psA.height = H; _psB.width = W; _psB.height = H;
+    if (_psA.width !== W || _psA.height !== H) { _psA.width = W; _psA.height = H; }
+    if (_psB.width !== W || _psB.height !== H) { _psB.width = W; _psB.height = H; }
     const actx = _psA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -1978,7 +1984,8 @@ window.FM = window.FM || {};
     const W = P.width, H = P.height, am = clamp01(amount), C = hexToRGB(colorHex || '#ff3366');
     if (!_tiA) _tiA = document.createElement('canvas');
     if (!_tiB) _tiB = document.createElement('canvas');
-    _tiA.width = W; _tiA.height = H; _tiB.width = W; _tiB.height = H;
+    if (_tiA.width !== W || _tiA.height !== H) { _tiA.width = W; _tiA.height = H; }
+    if (_tiB.width !== W || _tiB.height !== H) { _tiB.width = W; _tiB.height = H; }
     const actx = _tiA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -2011,7 +2018,8 @@ window.FM = window.FM || {};
     const W = P.width, H = P.height, cut = clamp01(level) * 255;
     if (!_thA) _thA = document.createElement('canvas');
     if (!_thB) _thB = document.createElement('canvas');
-    _thA.width = W; _thA.height = H; _thB.width = W; _thB.height = H;
+    if (_thA.width !== W || _thA.height !== H) { _thA.width = W; _thA.height = H; }
+    if (_thB.width !== W || _thB.height !== H) { _thB.width = W; _thB.height = H; }
     const actx = _thA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -2042,7 +2050,8 @@ window.FM = window.FM || {};
     const W = P.width, H = P.height, am = clamp01(amount), A = hexToRGB(shadowHex || '#241a52'), B = hexToRGB(hiHex || '#ff9e5e');
     if (!_duA) _duA = document.createElement('canvas');
     if (!_duB) _duB = document.createElement('canvas');
-    _duA.width = W; _duA.height = H; _duB.width = W; _duB.height = H;
+    if (_duA.width !== W || _duA.height !== H) { _duA.width = W; _duA.height = H; }
+    if (_duB.width !== W || _duB.height !== H) { _duB.width = W; _duB.height = H; }
     const actx = _duA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -2073,7 +2082,7 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height; mode = Math.round(mode) || 0;
     if (!_miA) _miA = document.createElement('canvas');
-    _miA.width = W; _miA.height = H;
+    if (_miA.width !== W || _miA.height !== H) { _miA.width = W; _miA.height = H; }   // cleared below
     const actx = _miA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -2111,7 +2120,7 @@ window.FM = window.FM || {};
     size = Math.max(1, Math.round(size));
     if (!_pxA) _pxA = document.createElement('canvas');
     if (!_pxS) _pxS = document.createElement('canvas');
-    _pxA.width = W; _pxA.height = H;
+    if (_pxA.width !== W || _pxA.height !== H) { _pxA.width = W; _pxA.height = H; }   // cleared below
     const actx = _pxA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -2932,7 +2941,7 @@ window.FM = window.FM || {};
     if (opacity <= 0) return;
     const P = scene.project, W = P.width, H = P.height;
     if (!_adjCv) _adjCv = document.createElement('canvas');
-    _adjCv.width = W; _adjCv.height = H;
+    if (_adjCv.width !== W || _adjCv.height !== H) { _adjCv.width = W; _adjCv.height = H; }   // cleared below
     const a = _adjCv.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H); a.globalAlpha = 1; a.filter = 'none';
     a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below)
@@ -3011,8 +3020,10 @@ window.FM = window.FM || {};
     const P = scene.project;
     if (!_mgA) _mgA = document.createElement('canvas');
     if (!_mgB) _mgB = document.createElement('canvas');
-    _mgA.width = P.width; _mgA.height = P.height;
-    _mgB.width = P.width; _mgB.height = P.height;
+    // Skip the full-frame realloc when comp dims are unchanged — this fires per group, per frame. _mgA is
+    // cleared just below; _mgB is cleared before its only use (mask branch), so the buffers stay correct.
+    if (_mgA.width !== P.width || _mgA.height !== P.height) { _mgA.width = P.width; _mgA.height = P.height; }
+    if (_mgB.width !== P.width || _mgB.height !== P.height) { _mgB.width = P.width; _mgB.height = P.height; }
     const a = _mgA.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, P.width, P.height);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
@@ -3070,7 +3081,7 @@ window.FM = window.FM || {};
     let target = ctx;
     if (cam) {
       if (!_camCv) _camCv = document.createElement('canvas');
-      _camCv.width = P.width; _camCv.height = P.height;
+      if (_camCv.width !== P.width || _camCv.height !== P.height) { _camCv.width = P.width; _camCv.height = P.height; }   // cleared below
       target = _camCv.getContext('2d');
     }
     target.save();
