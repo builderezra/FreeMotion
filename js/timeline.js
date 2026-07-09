@@ -73,6 +73,8 @@ window.FM = window.FM || {};
     if (FM.isAnimated(layer.speed)) slots.push({ c: layer, k: 'speed' });     // speed-ramp keyframes delete like any other
     if (FM.isAnimated(layer.fill)) slots.push({ c: layer, k: 'fill' });       // colour keyframes delete like any other
     if (FM.isAnimated(layer.color)) slots.push({ c: layer, k: 'color' });
+    if (layer.stroke) ['width', 'color'].forEach(k => slots.push({ c: layer.stroke, k: k }));     // border keyframes
+    if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => slots.push({ c: layer.shadow, k: k }));   // shadow keyframes
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
     slots.forEach(({ c, k }) => {
       const p = c[k];

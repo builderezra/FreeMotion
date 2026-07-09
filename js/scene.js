@@ -164,6 +164,8 @@ window.FM = window.FM || {};
     if (isAnimated(layer.speed)) out.push(layer.speed);     // speed-ramp keyframes show on the clip
     if (isAnimated(layer.fill)) out.push(layer.fill);       // colour keyframes show on the clip
     if (isAnimated(layer.color)) out.push(layer.color);
+    if (layer.stroke) { if (isAnimated(layer.stroke.width)) out.push(layer.stroke.width); if (isAnimated(layer.stroke.color)) out.push(layer.stroke.color); }   // border (keyframeable)
+    if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => { if (isAnimated(layer.shadow[k])) out.push(layer.shadow[k]); });   // shadow (keyframeable)
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
   };

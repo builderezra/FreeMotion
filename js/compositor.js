@@ -384,6 +384,25 @@ window.FM = window.FM || {};
 
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
+  // #rrggbb (or #rgb) + 0..1 alpha → rgba() string, for keyframeable shadow opacity.
+  function rgbaHex(hex, a) {
+    hex = String(hex == null ? '#000' : hex).replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    const r = parseInt(hex.slice(0, 2), 16) || 0, g = parseInt(hex.slice(2, 4), 16) || 0, b = parseInt(hex.slice(4, 6), 16) || 0;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + Math.max(0, Math.min(1, a)) + ')';
+  }
+  // Set the ctx drop-shadow from a layer's (keyframeable) shadow at time t. Alpha (0-100%) folds into
+  // the colour so shadow opacity animates. evalProp passes bare static values through unchanged.
+  function applyShadow(ctx, layer, t) {
+    const sh = layer.shadow;
+    if (!sh || !sh.enabled) return;
+    const a = (sh.alpha == null ? 100 : (FM.evalProp(sh.alpha, t) || 0)) / 100;
+    ctx.shadowColor = rgbaHex(FM.evalProp(sh.color, t) || '#000', a);
+    ctx.shadowBlur = FM.evalProp(sh.blur, t) || 0;
+    ctx.shadowOffsetX = FM.evalProp(sh.dx, t) || 0;
+    ctx.shadowOffsetY = FM.evalProp(sh.dy, t) || 0;
+  }
+
   // ---- TEXT EFFECTS ----
   // Transform a text layer's displayed STRING and letter-spacing BEFORE layout. These live in
   // layer.effects (so they share the same effects list / Add-Effect browser) but are NOT pixel or
@@ -514,7 +533,7 @@ window.FM = window.FM || {};
     const tIn = t - layer.start;                       // seconds since the layer began
     const tToEnd = (layer.start + layer.duration) - t; // seconds until the layer ends
     const baseAlpha = ctx.globalAlpha;                 // layer opacity already applied
-    const stk = layer.stroke, drawStroke = stk && stk.enabled && stk.width > 0;
+    const stk = layer.stroke, sbw = stk ? (FM.evalProp(stk.width, t) || 0) : 0, scol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000', drawStroke = stk && stk.enabled && sbw > 0;
     const prevAlign = ctx.textAlign;
     ctx.textAlign = 'left';
     const grad = FM.layerHasGradient(layer) ? layer.fillGradient : null;   // per-unit gradient sampling
@@ -558,7 +577,7 @@ window.FM = window.FM || {};
           }
           ctx.fillStyle = lerpHex(grad.c0, grad.c1, Math.max(0, Math.min(1, f)));
         }
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = stk.width * 2; ctx.strokeStyle = stk.color || '#000'; ctx.strokeText(u, -wDraw / 2, 0); }
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(u, -wDraw / 2, 0); }
         ctx.fillText(u, -wDraw / 2, 0);
         ctx.restore();
         x += w;
@@ -592,7 +611,7 @@ window.FM = window.FM || {};
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
       ctx.rotate(a);
-      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = stk.width * 2; ctx.strokeStyle = stk.color || '#000'; ctx.strokeText(ch, 0, 0); }
+      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(ch, 0, 0); }
       ctx.fillText(ch, 0, 0);
       ctx.restore();
       s += w + sp;
@@ -2555,7 +2574,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (layer.shadow && layer.shadow.enabled) { const sh = layer.shadow; ctx.shadowColor = sh.color || '#000'; ctx.shadowBlur = sh.blur || 0; ctx.shadowOffsetX = sh.dx || 0; ctx.shadowOffsetY = sh.dy || 0; }
+    applyShadow(ctx, layer, t);
     applyLayerTransform(ctx, layer, t, scene);
     if (!feathered) applyMaskClip(ctx, layer);   // feathered mask already baked into the content plate
     ctx.scale(1 / nscale, 1 / nscale);
@@ -2657,13 +2676,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = effectFilter(layer, t);   // reset automatically by ctx.restore()
-    if (layer.shadow && layer.shadow.enabled) {
-      const sh = layer.shadow;
-      ctx.shadowColor = sh.color || '#000';
-      ctx.shadowBlur = sh.blur || 0;
-      ctx.shadowOffsetX = sh.dx || 0;
-      ctx.shadowOffsetY = sh.dy || 0;
-    }
+    applyShadow(ctx, layer, t);
     applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
 
@@ -2713,7 +2726,10 @@ window.FM = window.FM || {};
         drawAnimatedText(ctx, layer, t, lines, lh, total);
       } else {
         const stk = layer.stroke;
-        const drawStroke = stk && stk.enabled && stk.width > 0;
+        const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
+        const bpos = (stk && stk.position) || 'outside';
+        const bcol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000'; // border colour (keyframeable)
+        const drawStroke = stk && stk.enabled && bw > 0;
         if (FM.layerHasGradient(layer)) {
           const fs = layer.fontSize || 96, align = layer.align || 'center';
           let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, ctx.measureText(l).width); });
@@ -2725,11 +2741,12 @@ window.FM = window.FM || {};
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
           if (drawStroke) {
-            // strokeText centres the line on the glyph edge (half is hidden by the fill drawn on
-            // top), so double the width → the visible OUTSIDE outline ≈ stk.width, matching AM.
+            // strokeText centres on the glyph edge (half hidden by the fill on top). Outside/inside →
+            // double the width so the visible outline ≈ bw; center → native width. (Inside on glyphs
+            // isn't clippable, so it approximates outside — flagged in the inspector as Phase A.)
             ctx.save();
             ctx.lineJoin = 'round'; ctx.miterLimit = 2;
-            ctx.lineWidth = stk.width * 2; ctx.strokeStyle = stk.color || '#000';
+            ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol;
             ctx.strokeText(line, 0, yy);
             ctx.restore();
           }
@@ -2742,12 +2759,27 @@ window.FM = window.FM || {};
       const stk = layer.stroke;
       const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
       if (mode === 'stroke') {   // open kinds (line / arc) are stroked, never filled — Color & Fill IS the line colour
-        ctx.lineWidth = (stk && stk.width) ? stk.width : 8;
-        ctx.strokeStyle = (stk && stk.enabled && stk.color) ? stk.color : (FM.evalProp(layer.fill, t) || '#ffffff');
+        ctx.lineWidth = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
+        ctx.strokeStyle = (stk && stk.enabled && stk.color != null) ? (FM.evalProp(stk.color, t) || '#fff') : (FM.evalProp(layer.fill, t) || '#ffffff');
         ctx.lineCap = 'round'; ctx.stroke();
       } else {
-        paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
-        if (stk && stk.enabled && stk.width > 0) { ctx.lineWidth = stk.width; ctx.strokeStyle = stk.color || '#fff'; ctx.lineJoin = 'round'; ctx.stroke(); }
+        // BORDER (keyframeable, positioned). Canvas stroke() is always centre-aligned, so:
+        // outside = stroke 2× behind the fill (fill overpaints inner half); inside = clip to the shape
+        // then stroke 2× (only inner half shows); center = native width.
+        const bw = (stk && stk.enabled) ? (FM.evalProp(stk.width, t) || 0) : 0;
+        const bcol = stk ? (FM.evalProp(stk.color, t) || '#fff') : '#fff';
+        const bpos = (stk && stk.position) || 'center';
+        if (bw > 0 && bpos === 'outside') {
+          ctx.save(); ctx.lineWidth = bw * 2; ctx.strokeStyle = bcol; ctx.lineJoin = 'round'; ctx.stroke(); ctx.restore();
+          paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
+        } else {
+          paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
+          if (bw > 0) {
+            ctx.save(); ctx.strokeStyle = bcol; ctx.lineJoin = 'round';
+            if (bpos === 'inside') { ctx.clip(); ctx.lineWidth = bw * 2; } else ctx.lineWidth = bw;
+            ctx.stroke(); ctx.restore();
+          }
+        }
       }
     } else {
       const m = FM.media.get(layer.id);
@@ -2944,7 +2976,7 @@ window.FM = window.FM || {};
     if (g.effects && g.effects.some(e => e.enabled !== false)) return true;
     if (g.blendMode && g.blendMode !== 'normal') return true;
     if (g.shadow && g.shadow.enabled) return true;
-    if (g.stroke && g.stroke.enabled && g.stroke.width > 0) return true;   // border around the silhouette
+    if (g.stroke && g.stroke.enabled && (FM.isAnimated(g.stroke.width) || (g.stroke.width || 0) > 0)) return true;   // border around the silhouette
     const cg = g.colorGrade;
     if (cg && ((cg.hue || 0) !== 0 || (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) || (cg.lift || 0) !== 0 || (cg.gamma != null && Math.abs(cg.gamma - 1) > 1e-3) || (cg.gain != null && Math.abs(cg.gain - 1) > 1e-3))) return true;
     const op = g.transform ? FM.evalProp(g.transform.opacity, t) : 1;
@@ -3020,8 +3052,9 @@ window.FM = window.FM || {};
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp.effects = g.effects || [];
     // group BORDER = the existing alpha-outline 'stroke' effect run on the flattened unit
-    if (g.stroke && g.stroke.enabled && g.stroke.width > 0) {
-      tmp.effects = tmp.effects.concat([{ type: 'stroke', enabled: true, params: { width: g.stroke.width, color: g.stroke.color || '#ffffff' } }]);
+    const gbw = (g.stroke && g.stroke.enabled) ? (FM.evalProp(g.stroke.width, t) || 0) : 0;
+    if (gbw > 0) {
+      tmp.effects = tmp.effects.concat([{ type: 'stroke', enabled: true, params: { width: gbw, color: FM.evalProp(g.stroke.color, t) || '#ffffff' } }]);
     }
     tmp.blendMode = g.blendMode || 'normal';
     if (g.shadow) tmp.shadow = g.shadow;

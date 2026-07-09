@@ -434,6 +434,10 @@ body {
 .te-size-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; }
 .te-size-slider { flex: 1 1 auto; accent-color: var(--accent); }
 .te-size-val { min-width: 46px; text-align: right; color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Keyframe-aware colour row (Border/Shadow): ◆ diamond + label + colour picker on one line. */
+.kf-color-row { display: flex; align-items: center; gap: 8px; }
+.kf-color-row > label { flex: 0 0 auto; }
+.kf-color-row .color-field-wrap { flex: 1 1 auto; min-width: 0; }
 .te-color-wrap { padding: 2px; }
 .te-extras { padding: 6px 12px; font-size: 15px; }
 .te-extras .te-caret { display: none; }

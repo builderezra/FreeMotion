@@ -316,6 +316,62 @@ window.FM = window.FM || {};
     return row;
   }
 
+  // Keyframe-aware rows for ANY container+key (border/shadow reuse the fxScrubber diamond machinery so
+  // the ◆ toggles a keyframe, the value animates via FM.evalProp/setProp, and the timeline shows ticks).
+  function afterKf() { commitH(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); FM.inspector.refresh(); }
+  function kfNumRow(container, key, label, min, max, step, dflt, unit) {
+    unit = unit || '';
+    const row = el('div', 'fx-scrub-row');
+    const prec = step >= 1 ? 0 : (step >= 0.1 ? 1 : 2);
+    const read = () => { const c = container[key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : dflt); };
+    const c0 = container[key];
+    const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
+    kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate this';
+    kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
+    row.appendChild(kfb);
+    row.appendChild(el('span', 'fx-scrub-label', label));
+    const strip = el('div', 'fx-scrub'); strip.appendChild(el('div', 'fx-scrub-notch'));
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit;
+    function apply(v, commit) {
+      v = Math.max(min, Math.min(max, Math.round(v / step) * step));
+      FM.setProp(container, key, v, FM.time);
+      valBox.value = v.toFixed(prec) + unit;
+      FM.requestRender();
+      if (commit && FM.history) FM.history.commit();
+    }
+    let drag = null;
+    strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: read() }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
+    const end = () => { if (drag) { const wasAnim = FM.isAnimated(container[key]); drag = null; strip.style.backgroundPositionX = '0px'; if (wasAnim) afterKf(); else if (FM.history) FM.history.commit(); } };
+    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const dx = e.clientX - drag.x; apply(drag.v + dx * ((max - min) / 300), false); strip.style.backgroundPositionX = (-dx) + 'px'; });
+    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
+    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + unit; });
+    valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
+    row.appendChild(strip); row.appendChild(valBox);
+    return row;
+  }
+  function kfColorRow(container, key, label, dflt) {
+    const row = el('div', 'prop-row kf-color-row');
+    const c0 = container[key];
+    const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
+    kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate colour';
+    kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
+    row.appendChild(kfb);
+    row.appendChild(el('label', null, label));
+    row.appendChild(colorField(() => FM.evalProp(container[key], FM.time) || dflt, v => { FM.setProp(container, key, v, FM.time); }));
+    return row;
+  }
+  function segRow(label, options, get, set) {
+    const row = el('div', 'prop-row'); row.appendChild(el('label', null, label));
+    const seg = el('div', 'seg');
+    options.forEach(o => {
+      const b = el('button', 'seg-btn' + (get() === o[0] ? ' on' : ''), o[1]);
+      b.addEventListener('click', () => { set(o[0]); FM.requestRender(); FM.inspector.refresh(); commitH(); });
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+    return row;
+  }
+
   function fxMoreMenu(layer, fx, idx, btn) {
     if (!FM.contextMenu) return;
     const r = btn.getBoundingClientRect();
@@ -1565,35 +1621,35 @@ window.FM = window.FM || {};
         body.appendChild(rangeRow('Gain', () => cg.gain, v => { cg.gain = v; }, 0, 3, 0.02));
       }
     } else if (key === 'border') {
-      if (layer.type === 'group') {   // border = outline traced around the group's composited silhouette
-        if (!layer.stroke) layer.stroke = { enabled: false, width: 6, color: '#ffffff' };
+      // ===== BORDER (AM parity, keyframeable) =====
+      // Reuses layer.stroke as the single border. position = inside/center/outside. For line/arc shapes
+      // stroke is the LINE colour (not a border), so no border UI there. Group border = silhouette
+      // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
+      const openKind = layer.type === 'shape' && ['line', 'arc'].indexOf(layer.shape) >= 0;
+      const canBorder = (layer.type === 'shape' && !openKind) || layer.type === 'text' || layer.type === 'group';
+      if (canBorder) {
+        if (!layer.stroke) layer.stroke = { enabled: false, width: layer.type === 'text' ? 6 : 8, color: layer.type === 'text' ? '#000000' : '#ffffff' };
         const stk = layer.stroke;
-        body.appendChild(checkRow('Border', stk.enabled, v => { stk.enabled = v; FM.requestRender(); }));
-        body.appendChild(rangeRow('Border width', () => stk.width, v => { stk.width = Math.max(1, Math.min(16, v)); }, 1, 16, 1));
-        const bc = el('div', 'prop-row'); bc.appendChild(el('label', null, 'Border color'));
-        bc.appendChild(colorField(() => stk.color || '#ffffff', v => { stk.color = v; }));
-        body.appendChild(bc);
-      }
-      if (layer.type === 'text') {   // text OUTLINE moved here from Edit Text (it's a border)
-        if (!layer.stroke) layer.stroke = { enabled: false, width: 6, color: '#000000' };
-        const stk = layer.stroke;
-        body.appendChild(checkRow('Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+        if (stk.position == null) stk.position = (layer.type === 'text' || layer.type === 'group') ? 'outside' : 'center';
+        body.appendChild(checkRow('Border', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
         if (stk.enabled) {
-          body.appendChild(rangeRow('Outline width', () => stk.width, v => { stk.width = v; }, 0, 40, 1));
-          const sr = el('div', 'prop-row'); sr.appendChild(el('label', null, 'Outline color'));
-          sr.appendChild(colorField(() => stk.color || '#000000', v => { stk.color = v; }));
-          body.appendChild(sr);
+          if (layer.type !== 'group') body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
+          body.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
+          body.appendChild(kfNumRow(stk, 'width', 'Size', 0, 100, 1, 6, ''));
         }
       }
-      if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 8, dy: 8, color: '#000000' };
+      // ===== SHADOW (AM parity, keyframeable) =====
+      if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 8, dy: 8, color: '#000000', alpha: 100 };
       const sh = layer.shadow;
-      body.appendChild(checkRow('Drop shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); }));
-      body.appendChild(rangeRow('Blur', () => sh.blur, v => { sh.blur = v; }, 0, 100, 1));
-      body.appendChild(rangeRow('Offset X', () => sh.dx, v => { sh.dx = v; }, -100, 100, 1));
-      body.appendChild(rangeRow('Offset Y', () => sh.dy, v => { sh.dy = v; }, -100, 100, 1));
-      const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, 'Color'));
-      cr.appendChild(colorField(() => sh.color || '#000000', v => { sh.color = v; }));
-      body.appendChild(cr);
+      if (sh.alpha == null) sh.alpha = 100;
+      body.appendChild(checkRow('Drop shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+      if (sh.enabled) {
+        body.appendChild(kfColorRow(sh, 'color', 'Color', sh.color || '#000000'));
+        body.appendChild(kfNumRow(sh, 'blur', 'Size', 0, 100, 1, 16, ''));
+        body.appendChild(kfNumRow(sh, 'alpha', 'Alpha', 0, 100, 1, 100, '%'));
+        body.appendChild(kfNumRow(sh, 'dx', 'Position X', -200, 200, 1, 8, ''));
+        body.appendChild(kfNumRow(sh, 'dy', 'Position Y', -200, 200, 1, 8, ''));
+      }
     } else if (key === 'element') {
       // (Visible → timeline eye; Parent → Move & Transform. The old Visible/Parent rows were removed
       // here so this "Edit Shape / Edit Text" panel stays focused and fits without scrolling.)
