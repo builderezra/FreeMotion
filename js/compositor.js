@@ -239,6 +239,17 @@ window.FM = window.FM || {};
       { key: 'edge', label: 'Edge', min: 0, max: 1, step: 0.02, def: 0.35 },
     ] },
     { type: 'tunnel', label: 'Tunnel', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    // ---- batch 27: Remove Object — content-aware removal of watermarks/subtitles/logos in a
+    // rectangular region (x/y = top-left as % of comp). Patch = ffmpeg-delogo border interpolation;
+    // Blur/Mosaic obscure instead of reconstructing. x/y/w/h/feather keyframe; mode is a segment.
+    { type: 'touchup', label: 'Remove Object', params: [
+      { key: 'x', label: 'X', min: 0, max: 100, step: 0.5, def: 30, unit: '%' },
+      { key: 'y', label: 'Y', min: 0, max: 100, step: 0.5, def: 40, unit: '%' },
+      { key: 'w', label: 'Width', min: 1, max: 100, step: 0.5, def: 40, unit: '%' },
+      { key: 'h', label: 'Height', min: 1, max: 100, step: 0.5, def: 15, unit: '%' },
+      { key: 'mode', label: 'Fill', def: 0, options: [[0, 'Patch'], [1, 'Blur'], [2, 'Mosaic']] },
+      { key: 'feather', label: 'Feather', min: 0, max: 60, step: 1, def: 12, unit: 'px' },
+    ] },
     // ---- Copy Background: this layer shows a live copy of everything rendered BELOW it, clipped to
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
     // full-screen shape + Copy Background = an adjustment/colour-grade layer you can mask & animate.
@@ -773,7 +784,8 @@ window.FM = window.FM || {};
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
     squeeze: 1, tiles: 1, motionflow: 1,
-    softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1 };
+    softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
+    touchup: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1121,6 +1133,66 @@ window.FM = window.FM || {};
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
     voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE=FM.evalProp(p.edge,t); if(vcE==null)vcE=0.35; vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=d.slice(); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcpx=(vccx+vcH(vccx,vccy,1))*vcG, vcpy=(vccy+vcH(vccx,vccy,2))*vcG; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*0.08){ var vcF=1-vcE*(1-vcEw/(vcG*0.08)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
+    // ---- batch 27: Remove Object — content-aware fill of a rectangular region (watermark/subtitle
+    // removal). Patch = ffmpeg-delogo: each region pixel is the 1/distance-weighted mix of the four
+    // border samples just OUTSIDE the rect — all four channels incl. alpha, so on a transparent plate
+    // it genuinely erases (on opaque video the alpha mix is a no-op). Blur/Mosaic obscure instead.
+    // Feather smoothstep-ramps the edge so the patch doesn't cut hard. Deterministic (no random/time)
+    // so preview and export render identically.
+    touchup: function(d,W,H,p,t){
+      var toX=p.x==null?30:FM.evalProp(p.x,t), toY=p.y==null?40:FM.evalProp(p.y,t);
+      var toW=p.w==null?40:FM.evalProp(p.w,t), toHt=p.h==null?15:FM.evalProp(p.h,t);
+      var rx=Math.round(toX/100*W), ry=Math.round(toY/100*H), rw=Math.round(toW/100*W), rh=Math.round(toHt/100*H);
+      if(rx<0){rw+=rx;rx=0;} if(ry<0){rh+=ry;ry=0;} if(rx+rw>W)rw=W-rx; if(ry+rh>H)rh=H-ry;
+      if(rw<2||rh<2)return;
+      var x1=rx+rw, y1=ry+rh, toM=Math.round(FM.evalProp(p.mode,t)||0);
+      var toF=Math.round(p.feather==null?12:FM.evalProp(p.feather,t)); if(toF<0)toF=0;
+      var toS=d.slice(), tox, toy, toi, toc, tok;
+      // feather weight: 1 = fully patched; smoothstep of distance-to-nearest-region-edge / feather
+      function toK(px,py){ if(toF<=0)return 1; var de=Math.min(px-rx+1,x1-px,py-ry+1,y1-py); if(de>=toF)return 1; var u=de/toF; return u*u*(3-2*u); }
+      if(toM===0){ // Patch (delogo border interpolation)
+        var toLx=rx>0?rx-1:0, toRx=x1<W?x1:W-1, toTr=(ry>0?ry-1:0)*W, toBr=(y1<H?y1:H-1)*W;
+        for(toy=ry;toy<y1;toy++){
+          var toRow=toy*W, toLi=(toRow+toLx)*4, toRi=(toRow+toRx)*4, wt=1/(toy-ry+1), wb=1/(y1-toy);
+          for(tox=rx;tox<x1;tox++){
+            toi=(toRow+tox)*4; tok=toK(tox,toy);
+            var wl=1/(tox-rx+1), wr=1/(x1-tox), toTi=(toTr+tox)*4, toBi=(toBr+tox)*4, ws=wl+wr+wt+wb;
+            for(toc=0;toc<4;toc++){ var tv=(toS[toLi+toc]*wl+toS[toRi+toc]*wr+toS[toTi+toc]*wt+toS[toBi+toc]*wb)/ws;
+              d[toi+toc]=tok>=1?tv:d[toi+toc]+(tv-d[toi+toc])*tok; }
+          }
+        }
+      } else if(toM===1){ // Blur: separable box blur of the region's own content, clamped to the region
+        var toR=Math.max(6,Math.round(Math.min(rw,rh)/8)), toWin=2*toR+1, toN=rw*rh;
+        var toA=new Float32Array(toN*4), toB=new Float32Array(toN*4), s0, s1, s2, s3, ci, oi;
+        for(toy=0;toy<rh;toy++){ var sR=((ry+toy)*W+rx)*4, dR=toy*rw*4; for(tox=0;tox<rw*4;tox++) toA[dR+tox]=toS[sR+tox]; }
+        for(toy=0;toy<rh;toy++){ // horizontal pass → toB
+          var rB=toy*rw; s0=s1=s2=s3=0;
+          for(tox=-toR;tox<=toR;tox++){ var cx=tox<0?0:(tox>=rw?rw-1:tox); ci=(rB+cx)*4; s0+=toA[ci]; s1+=toA[ci+1]; s2+=toA[ci+2]; s3+=toA[ci+3]; }
+          for(tox=0;tox<rw;tox++){ oi=(rB+tox)*4; toB[oi]=s0/toWin; toB[oi+1]=s1/toWin; toB[oi+2]=s2/toWin; toB[oi+3]=s3/toWin;
+            var ax=tox+toR+1; ax=ax>=rw?rw-1:ax; var bx=tox-toR; bx=bx<0?0:bx; var ai=(rB+ax)*4, bi=(rB+bx)*4;
+            s0+=toA[ai]-toA[bi]; s1+=toA[ai+1]-toA[bi+1]; s2+=toA[ai+2]-toA[bi+2]; s3+=toA[ai+3]-toA[bi+3]; }
+        }
+        for(tox=0;tox<rw;tox++){ // vertical pass → toA
+          s0=s1=s2=s3=0;
+          for(toy=-toR;toy<=toR;toy++){ var cy=toy<0?0:(toy>=rh?rh-1:toy); ci=(cy*rw+tox)*4; s0+=toB[ci]; s1+=toB[ci+1]; s2+=toB[ci+2]; s3+=toB[ci+3]; }
+          for(toy=0;toy<rh;toy++){ oi=(toy*rw+tox)*4; toA[oi]=s0/toWin; toA[oi+1]=s1/toWin; toA[oi+2]=s2/toWin; toA[oi+3]=s3/toWin;
+            var ay=toy+toR+1; ay=ay>=rh?rh-1:ay; var by=toy-toR; by=by<0?0:by; var aj=(ay*rw+tox)*4, bj=(by*rw+tox)*4;
+            s0+=toB[aj]-toB[bj]; s1+=toB[aj+1]-toB[bj+1]; s2+=toB[aj+2]-toB[bj+2]; s3+=toB[aj+3]-toB[bj+3]; }
+        }
+        for(toy=0;toy<rh;toy++){ for(tox=0;tox<rw;tox++){ toi=((ry+toy)*W+rx+tox)*4; var ri=(toy*rw+tox)*4; tok=toK(rx+tox,ry+toy);
+          for(toc=0;toc<4;toc++) d[toi+toc]=tok>=1?toA[ri+toc]:d[toi+toc]+(toA[ri+toc]-d[toi+toc])*tok; } }
+      } else { // Mosaic: each block = the average of its own pixels
+        var toBk=Math.max(6,Math.round(Math.min(rw,rh)/8));
+        for(var by0=ry;by0<y1;by0+=toBk){ var bh=Math.min(toBk,y1-by0);
+          for(var bx0=rx;bx0<x1;bx0+=toBk){ var bw=Math.min(toBk,x1-bx0), a0=0, a1=0, a2=0, a3=0, cnt=bw*bh;
+            for(toy=by0;toy<by0+bh;toy++){ var mr=toy*W; for(tox=bx0;tox<bx0+bw;tox++){ toi=(mr+tox)*4; a0+=toS[toi]; a1+=toS[toi+1]; a2+=toS[toi+2]; a3+=toS[toi+3]; } }
+            a0/=cnt; a1/=cnt; a2/=cnt; a3/=cnt;
+            for(toy=by0;toy<by0+bh;toy++){ var mw=toy*W; for(tox=bx0;tox<bx0+bw;tox++){ toi=(mw+tox)*4; tok=toK(tox,toy);
+              if(tok>=1){ d[toi]=a0; d[toi+1]=a1; d[toi+2]=a2; d[toi+3]=a3; }
+              else { d[toi]+=(a0-d[toi])*tok; d[toi+1]+=(a1-d[toi+1])*tok; d[toi+2]+=(a2-d[toi+2])*tok; d[toi+3]+=(a3-d[toi+3])*tok; } } }
+          } }
+      }
+    },
     // Vignette (non-media layers): comp-space radial darkening of the layer's own pixels. Media layers
     // never reach this — they keep their inline clip-bounds vignette in the media draw branch; this fn
     // exists so text/shape/path/group layers stop silently ignoring the effect. (#backlog: vignette no-op)

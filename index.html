@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.86</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v2.87</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -228,7 +228,11 @@
         <select id="exp-range">
           <option value="whole">Whole project</option>
           <option value="loop">Loop region (if set)</option>
+          <option value="clip">Selected clip only</option>
         </select>
+      </label>
+      <label class="field"><span>Hide other layers (export just this clip)</span>
+        <input type="checkbox" id="exp-solo-clip">
       </label>
       <div class="dialog-actions">
         <button id="exp-cancel" class="btn">Cancel</button>
@@ -273,17 +277,18 @@
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/scene.js?v=73"></script>
   <script src="js/media.js?v=28"></script>
-  <script src="js/compositor.js?v=155"></script>
-  <script src="js/fx-registry.js?v=31"></script>
+  <script src="js/compositor.js?v=156"></script>
+  <script src="js/fx-registry.js?v=32"></script>
   <script src="js/timeline.js?v=137"></script>
   <script src="js/addmenu.js?v=9"></script>
-  <script src="js/inspector.js?v=143"></script>
+  <script src="js/inspector.js?v=144"></script>
   <script src="js/fx-browser.js?v=6"></script>
   <script src="js/color-wheel.js?v=52"></script>
   <script src="js/canvas-edit.js?v=37"></script>
   <script src="js/draw-tool.js?v=2"></script>
   <script src="js/point-edit.js?v=4"></script>
   <script src="js/crop-tool.js?v=3"></script>
+  <script src="js/touchup-tool.js?v=1"></script>
   <script src="js/eyedropper.js?v=1"></script>
   <script src="js/text-edit.js?v=5"></script>
   <script src="js/tracker.js?v=2"></script>
@@ -298,7 +303,7 @@
   <script src="js/contextmenu.js?v=34"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=135"></script>
+  <script src="js/app.js?v=136"></script>
   <script src="js/mobile.js?v=18"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=4"></script>

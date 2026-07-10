@@ -1177,6 +1177,16 @@ window.FM = window.FM || {};
       // keep the previous choice if it still exists, else default to Full
       if (prev && [].some.call(sel.options, o => o.value === prev)) sel.value = prev;
     }
+    // 'Selected clip only' and the solo checkbox need a selection — grey them out otherwise
+    const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+    const rangeSel = document.getElementById('exp-range');
+    if (rangeSel) {
+      const clipOpt = [].find.call(rangeSel.options, o => o.value === 'clip');
+      if (clipOpt) clipOpt.disabled = !selLayer;
+      if (!selLayer && rangeSel.value === 'clip') rangeSel.value = 'whole';
+    }
+    const soloCb = document.getElementById('exp-solo-clip');
+    if (soloCb) { if (!selLayer) soloCb.checked = false; soloCb.disabled = !selLayer; }
     document.getElementById('export-dialog').classList.remove('hidden');
   }
   function hideExportDialog() { document.getElementById('export-dialog').classList.add('hidden'); }
@@ -1190,16 +1200,35 @@ window.FM = window.FM || {};
     const qf = (qEl && parseFloat(qEl.value)) || 0.1;
     const P = FM.scene.project;
     const bitrate = Math.min(80e6, Math.round(P.width * scale * P.height * scale * fps * qf));
+    // Resolve the range BEFORE showing the overlay so early exits can bounce back to the dialog.
+    const rangeEl = document.getElementById('exp-range');
+    const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+    let from = null, to = null;
+    if (rangeEl && rangeEl.value === 'clip') {
+      if (!selLayer) { if (FM.toast) FM.toast('Select a clip first, then export', 2200); showExportDialog(); return; }
+      from = Math.max(0, selLayer.start);
+      to = Math.min(P.duration, selLayer.start + selLayer.duration);
+      if (!(to > from)) { if (FM.toast) FM.toast('That clip sits outside the project — nothing to export', 2200); showExportDialog(); return; }
+    } else if (rangeEl && rangeEl.value === 'loop') {
+      if (FM.hasLoopRegion && FM.hasLoopRegion()) { from = P.loopIn; to = P.loopOut; }
+      else if (FM.toast) FM.toast('No region marked — press [ and ] or use the ⋯ menu to mark one; exporting whole project', 2600);
+    }
     const overlay = document.getElementById('export-overlay');
     const bar = document.getElementById('export-bar');
     const status = document.getElementById('export-status');
     overlay.classList.remove('hidden');
     if (FM.playing) FM.pause();
+    // 'Hide other layers' — temporarily solo the selected clip (solo already isolates picture AND
+    // audio at render/export/preview). Restored in finally even on error/cancel; no history commit.
+    const soloCb = document.getElementById('exp-solo-clip');
+    let soloRestore = null;
+    if (soloCb && soloCb.checked && selLayer) {
+      soloRestore = FM.scene.layers.map(l => [l, l.solo]);
+      selLayer.solo = true;
+      if (selLayer.type === 'group' && FM.groupDescendants) FM.groupDescendants(selLayer.id).forEach(l => { l.solo = true; });
+    }
     try {
       const expName = (FM.scene.project.name || 'freemotion-export').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'freemotion-export';
-      const rangeEl = document.getElementById('exp-range');
-      let from = null, to = null;
-      if (rangeEl && rangeEl.value === 'loop' && FM.hasLoopRegion && FM.hasLoopRegion()) { from = P.loopIn; to = P.loopOut; }
       await FM.exporter.run({
         scale, fps, bitrate, name: expName, from, to,
         onProgress(p, what) {
@@ -1215,6 +1244,7 @@ window.FM = window.FM || {};
       else if (e.message === 'CANCELLED') { /* silent */ }
       else { console.error(e); alert('Export failed: ' + e.message); }
     } finally {
+      if (soloRestore) { soloRestore.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); }
       bar.style.width = '0%';
       FM.seekVideosToTime();
     }
@@ -1313,6 +1343,11 @@ window.FM = window.FM || {};
       const r = parentBtn.getBoundingClientRect();
       FM.openParentPicker(sel, Math.max(8, r.right - 220), r.bottom + 4);
     });
+    // Mark / clear the export-loop region at the playhead — shared by the [ ] \ keys and the
+    // ⋯ menu (mobile has no bracket keys, so the menu is the touch path).
+    const markRegionIn = () => { const P = FM.scene.project; P.loopIn = FM.time; if (P.loopOut != null && P.loopOut <= P.loopIn) P.loopOut = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
+    const markRegionOut = () => { const P = FM.scene.project; P.loopOut = FM.time; if (P.loopIn != null && P.loopIn >= P.loopOut) P.loopIn = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
+    const clearRegion = () => { FM.scene.project.loopIn = null; FM.scene.project.loopOut = null; FM.timeline.rebuild(); };
     const moreBtn = document.getElementById('btn-more');
     if (moreBtn) moreBtn.addEventListener('click', () => {
       const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
@@ -1361,6 +1396,9 @@ window.FM = window.FM || {};
         { label: 'Snapping (magnet)', action: () => clickHidden('btn-snap') },
         { label: 'Split clip at playhead', action: () => clickHidden('btn-split') },
         { label: 'Trim project to last clip', action: () => clickHidden('btn-fit') },
+        { label: 'Mark export start', action: markRegionIn },
+        { label: 'Mark export end', action: markRegionOut },
+        { label: 'Clear export marks', action: clearRegion },
         { label: 'Preview speed: ' + cur + '× → ' + nextRate + '×', action: () => { FM.setPreviewRate(nextRate); const pr = document.getElementById('preview-rate'); if (pr) pr.value = String(nextRate); } },
         { label: 'Zoom timeline in', action: () => clickHidden('btn-zoomin') },
         { label: 'Zoom timeline out', action: () => clickHidden('btn-zoomout') },
@@ -1578,9 +1616,9 @@ window.FM = window.FM || {};
       else if (e.code === 'Period') { e.preventDefault(); FM.pause(); FM.setTime(FM.time + 1 / (FM.scene.project.fps || 30)); }
       else if (e.code === 'Home') { e.preventDefault(); FM.pause(); FM.setTime(0); }
       else if (e.code === 'End') { e.preventDefault(); FM.pause(); FM.setTime(FM.scene.project.duration); }
-      else if (e.code === 'BracketLeft') { e.preventDefault(); const P = FM.scene.project; P.loopIn = FM.time; if (P.loopOut != null && P.loopOut <= P.loopIn) P.loopOut = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); }
-      else if (e.code === 'BracketRight') { e.preventDefault(); const P = FM.scene.project; P.loopOut = FM.time; if (P.loopIn != null && P.loopIn >= P.loopOut) P.loopIn = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); }
-      else if (e.code === 'Backslash') { e.preventDefault(); FM.scene.project.loopIn = null; FM.scene.project.loopOut = null; FM.timeline.rebuild(); }
+      else if (e.code === 'BracketLeft') { e.preventDefault(); markRegionIn(); }
+      else if (e.code === 'BracketRight') { e.preventDefault(); markRegionOut(); }
+      else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }
       else if (e.code === 'KeyM') { e.preventDefault(); if (e.repeat) return; if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(); }   // toggle (dedups within 0.12s) + ignore OS autorepeat → no stacked duplicates / undo spam
       else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }

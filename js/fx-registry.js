@@ -73,6 +73,8 @@ window.FM = window.FM || {};
     // batch 26 (AM parity fill-ins)
     softglow: 'color', replacecolor: 'color', spotcolor: 'color', fourcolor: 'color', spectralmap: 'color',
     radialshadow: 'color', voronoi: 'proc', tunnel: 'distort',
+    // batch 27
+    touchup: 'matte',     // Remove Object — content-aware rectangular fill (delogo-style)
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -107,7 +109,7 @@ window.FM = window.FM || {};
   };
 
   // Effects to feature in the carousel (visually interesting ones). Chroma Key + Squeeze lead, like AM.
-  FM.FX_FEATURED = ['chromakey', 'motionflow', 'copybg', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
+  FM.FX_FEATURED = ['chromakey', 'touchup', 'motionflow', 'copybg', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {

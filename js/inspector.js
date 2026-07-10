@@ -290,11 +290,13 @@ window.FM = window.FM || {};
       if (commit && FM.history) FM.history.commit();
     }
     let drag = null;
-    strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: read() }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
+    strip.addEventListener('pointerdown', (e) => { const v = read(); drag = { x: e.clientX, v: v, v0: v }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
     const end = () => { if (drag) { const wasAnim = FM.isAnimated(fx.params[p.key]); drag = null; strip.style.backgroundPositionX = '0px'; if (wasAnim) afterFx(); else if (FM.history) FM.history.commit(); } };   // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
     // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
     // hover would otherwise KEEP scrubbing — the "slider drags itself back when I return" bug.
-    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const dx = e.clientX - drag.x; apply(drag.v + dx * ((p.max - p.min) / 300), false); strip.style.backgroundPositionX = (-dx) + 'px'; });
+    // min/max = a hard wall: re-anchor the drag at the limit so reversing responds instantly (no
+    // overshoot dead zone), and drive the ribbed texture from the VALUE so it freezes at the wall.
+    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const scale = (p.max - p.min) / 300; const raw = drag.v + (e.clientX - drag.x) * scale; const clamped = Math.max(p.min, Math.min(p.max, raw)); if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; } apply(clamped, false); strip.style.backgroundPositionX = (scale > 0 ? -((clamped - drag.v0) / scale) : 0) + 'px'; });
     strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
     valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + (p.unit || ''); });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
@@ -340,9 +342,10 @@ window.FM = window.FM || {};
       if (commit && FM.history) FM.history.commit();
     }
     let drag = null;
-    strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: read() }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
+    strip.addEventListener('pointerdown', (e) => { const v = read(); drag = { x: e.clientX, v: v, v0: v }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
     const end = () => { if (drag) { const wasAnim = FM.isAnimated(container[key]); drag = null; strip.style.backgroundPositionX = '0px'; if (wasAnim) afterKf(); else if (FM.history) FM.history.commit(); } };
-    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const dx = e.clientX - drag.x; apply(drag.v + dx * ((max - min) / 300), false); strip.style.backgroundPositionX = (-dx) + 'px'; });
+    // same wall re-anchor + value-driven texture as fxScrubber (no dead zone past min/max)
+    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const scale = (max - min) / 300; const raw = drag.v + (e.clientX - drag.x) * scale; const clamped = Math.max(min, Math.min(max, raw)); if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; } apply(clamped, false); strip.style.backgroundPositionX = (scale > 0 ? -((clamped - drag.v0) / scale) : 0) + 'px'; });
     strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
     valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + unit; });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
@@ -549,6 +552,13 @@ window.FM = window.FM || {};
         else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
         else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
       });
+      // Remove Object: dragging a box on the canvas beats nudging four % sliders (esp. on a phone)
+      if (fx.type === 'touchup' && FM.touchupTool) {
+        const pick = el('button', 'fx-add-btn', 'Select area on canvas');
+        pick.style.marginTop = '0';   // .fx-ed-body's gap already spaces it
+        pick.addEventListener('click', () => FM.touchupTool.open(layer.id, fx));
+        body.appendChild(pick);
+      }
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
       wrap.appendChild(body);
     }
@@ -1033,7 +1043,7 @@ window.FM = window.FM || {};
     const clamp = v => { if (opts.min != null) v = Math.max(opts.min, v); if (opts.max != null) v = Math.min(opts.max, v); return v; };
     let drag = null;
     val.addEventListener('pointerdown', e => { if (val.isContentEditable) return; drag = { x: e.clientX, v: getVal(), moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-    val.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; if (moved) { commitH(); FM.inspector.refresh(); } return; } const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { setVal(clamp(drag.v + dx * (opts.scrub || 1))); refresh(); if (opts.onScrub) opts.onScrub(); } });
+    val.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; if (moved) { commitH(); FM.inspector.refresh(); } return; } const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { const raw = drag.v + dx * (opts.scrub || 1); const v = clamp(raw); if (v !== raw) { drag.x = e.clientX; drag.v = v; } setVal(v); refresh(); if (opts.onScrub) opts.onScrub(); } });   // re-anchor at min/max: no overshoot dead zone
     val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } else startEdit(); });
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
@@ -1051,7 +1061,7 @@ window.FM = window.FM || {};
     const strip = el('div', 'mt-scrub'); strip.appendChild(el('div', 'mt-scrub-ticks')); strip.appendChild(el('div', 'mt-scrub-mid'));
     let drag = null;
     strip.addEventListener('pointerdown', e => { drag = { x: e.clientX, v: getVal() }; try { strip.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-    strip.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; } setVal(drag.v + (e.clientX - drag.x) * scrub); if (onChange) onChange(); });
+    strip.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; } const raw = drag.v + (e.clientX - drag.x) * scrub; setVal(raw); const got = getVal(); if (Math.abs(got - raw) > 1e-6) { drag.x = e.clientX; drag.v = got; } if (onChange) onChange(); });   // setVal clamps in the caller — re-anchor to the value that actually stuck (no dead zone)
     strip.addEventListener('pointerup', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
     return strip;
   }
