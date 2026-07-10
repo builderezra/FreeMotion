@@ -172,7 +172,7 @@ window.FM = window.FM || {};
     builtins: [
       { name: 'VHS Glitch', builtin: true, effects: [{ type: 'rgbsplit', enabled: true, params: { amount: 7 } }, { type: 'posterize', enabled: true, params: { levels: 4 } }] },
       { name: 'Duotone', builtin: true, effects: [{ type: 'threshold', enabled: true, params: { level: 0.5 } }, { type: 'tint', enabled: true, params: { amount: 1, color: '#19c3ff' } }] },
-      { name: 'Dreamy', builtin: true, effects: [{ type: 'blur', enabled: true, params: { amount: 6 } }, { type: 'brightness', enabled: true, params: { amount: 1.15 } }, { type: 'saturate', enabled: true, params: { amount: 1.25 } }] },
+      { name: 'Dreamy', builtin: true, effects: [{ type: 'blur', enabled: true, params: { radius: 6 } }, { type: 'brightness', enabled: true, params: { amount: 1.15 } }, { type: 'saturate', enabled: true, params: { amount: 1.25 } }] },
       { name: 'Comic', builtin: true, effects: [{ type: 'posterize', enabled: true, params: { levels: 3 } }, { type: 'rgbsplit', enabled: true, params: { amount: 2 } }] }
     ],
     saved() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },

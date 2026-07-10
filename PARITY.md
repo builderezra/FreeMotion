@@ -13,8 +13,8 @@ solo/audio bug, not by the audit. **The ~196 `✅` rows have never been re-verif
 ## Where we stand (as of 2026-07-10)
 
 - **Core:** 87 / 109 done (**80%**)
-- **Common:** 72 / 153 done (47%)
-- **All audited features:** 196 / 342 done (57%)
+- **Common:** 76 / 153 done (50%)
+- **All audited features:** 208 / 342 done (61%)
 - **Remaining core gaps:** 22 (13 partial, 9 missing — and 1 of those, "Watermark on free-tier exports", is N/A by design)
 
 > FreeMotion has a strong core editor (timeline, keyframes + graph editor, groups/masking groups, parenting/camera/null,
@@ -30,7 +30,7 @@ solo/audio bug, not by the audit. **The ~196 `✅` rows have never been re-verif
 
 Legend: ✅ done · 🟡 partial · ❌ missing · ❔ unknown
 
-_Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅ · 62 🟡 · 189 ❌ before the re-audit)
+_Across 342 audited features: 208 ✅ · 52 🟡 · 81 ❌ · 1 ❔_ (was 90 ✅ · 62 🟡 · 189 ❌ before the 2026-07-10 re-audit; v2.86 shipped 13 more)
 
 ## Timeline & playback (tracks, scrub, split, ripple/trim, speed & time-remap, markers, loop region, preview rate)
 
@@ -101,7 +101,7 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | Glow | 🟡 partial | core | Confirmed. FM.EFFECTS 'glow' (compositor.js:39, color:true) → effectFilter emits drop-shadow(0 0 Npx color) at line 177. CSS drop-shadow halo, not luminance-based; no sub-types. |
 | Inner Glow | ✅ done | common | Re-audited 2026-07-10: `innerglow` (radius+intensity+color). |
 | Edge Glow | ✅ done | common | Re-audited 2026-07-10: `edgeglow` in FM.EFFECTS. |
-| Soft Glow | ❌ missing | common | Confirmed absent. |
+| Soft Glow | ✅ done | common | Shipped 2026-07-10 (v2.86): `softglow` — wide low-threshold bloom (bright-pass → separable box blur → screen). compositor.js PIXEL_FX batch 26. |
 | Dark Glow | ✅ done | nice | Re-audited 2026-07-10: `darkglow` in FM.EFFECTS. |
 | Glow Scan | ✅ done | nice | Re-audited 2026-07-10: `glowscan` (speed+width+color). |
 | Light Glow | ✅ done | common | Re-audited 2026-07-10: `lightglow` in FM.EFFECTS. |
@@ -117,14 +117,14 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | Hue Shift | ✅ done | core | Confirmed. FM.EFFECTS 'hue' deg 0-360 (compositor.js:35) → CSS hue-rotate() (line 173), keyframeable; also colorGrade.hue (line 182). Fully functional. |
 | Color Tune (Lift/Gamma/Gain/Offset wheels) | 🟡 partial | common | Re-audited 2026-07-10: unchanged: one HSV wheel + lift/gamma/gain sliders. No four-way Shadows/Mids/Highlights/Offset wheels (the `colorbalance` R/G/B effect partly overlaps). |
 | Color Curves (RGB and per-channel) | ❌ missing | common | Confirmed absent (only easing/text curves, unrelated). |
-| Replace Color | ❌ missing | common | Confirmed absent. |
-| Spot Color | ❌ missing | nice | Confirmed absent. |
+| Replace Color | ✅ done | common | Shipped 2026-07-10 (v2.86): `replacecolor` — hue-window swap (From→To colour, tolerance + soft falloff, sat/val kept). |
+| Spot Color | ✅ done | nice | Shipped 2026-07-10 (v2.86): `spotcolor` — keep one hue, desaturate the rest, soft window edge. |
 | Colorize | 🟡 partial | common | Confirmed. FM.EFFECTS 'tint' (compositor.js:47); drawTint (530+) maps luma→color blended by amount; also in applyPixelFx for adjustment layers (line 961). Simplified 0.299/0.587/0.114 luma, single amount param. |
 | Invert | 🟡 partial | common | Confirmed present and functional. FM.EFFECTS 'invert' (compositor.js:38) → CSS invert() (line 176), keyframeable. 'Partial' only because no per-channel toggle vs AM; the core invert itself fully works. |
 | Gradient Map | 🟡 partial | common | Re-audited 2026-07-10: `gradientmap` ships as a real per-pixel shadows->highlights ramp, but it is still TWO-STOP only, not an arbitrary multi-stop map. (Upgraded from missing.) |
 | Channel Remap (RGB) | ✅ done | nice | Re-audited 2026-07-10: `channelremap` with RGB swap/rotate modes. |
-| Channel Remap (HSV) | ❌ missing | nice | Confirmed absent. |
-| Spectral Map | ❌ missing | nice | Confirmed absent. |
+| Channel Remap (HSV) | ✅ done | nice | Shipped 2026-07-10 (v2.86): `channelremap` gained modes 6 'Hue Invert' and 7 'Swap Sat/Val'. |
+| Spectral Map | ✅ done | nice | Shipped 2026-07-10 (v2.86): `spectralmap` — luma → spectrum sweep (violet shadows → red highlights). |
 | Palette Map | ❌ missing | nice | Confirmed absent. |
 | Hot Color | ✅ done | nice | Re-audited 2026-07-10: ships as `thermal`, labelled 'Hot Color' — was simply mismatched by name. |
 | LUT Import | ❌ missing | common | Confirmed absent. No .cube/.3dl parsing. |
@@ -146,12 +146,12 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | Curl | ✅ done | nice | Re-audited 2026-07-10: `curl` in FM.EFFECTS + POSTFX. |
 | Fractal Warp | ✅ done | nice | Re-audited 2026-07-10: `fractalwarp` in FM.EFFECTS + POSTFX. |
 | Squeeze | ✅ done | nice | Re-audited 2026-07-10: `squeeze` in FM.EFFECTS + POSTFX. |
-| Tunnel | ❌ missing | nice | Confirmed absent. |
+| Tunnel | ✅ done | nice | Shipped 2026-07-10 (v2.86): `tunnel` — radial-inversion warp in WARP_FX, amount-blended. |
 | Spherize | ✅ done | nice | Re-audited 2026-07-10: `sphere3d` is labelled 'Spherize'; `fisheye` also ships. |
 | Kaleidoscope | ✅ done | common | Re-audited 2026-07-10: `kaleidoscope` in FM.EFFECTS + POSTFX (distinct from `mirror`). |
 | Mirror | ✅ done | common | Confirmed. FM.EFFECTS 'mirror' 4 modes (compositor.js:46); drawMirror (626-658) renders mirrored halves; wired as dropdown. POSTFX, works on layers. |
 | RGB Split | ✅ done | common | Confirmed. FM.EFFECTS 'rgbsplit' (compositor.js:43); drawRgbSplit (463-498) per-pixel R/B horizontal shift; also applyPixelFx for adjustment layers (lines 940-953). Keyframeable, wired. |
-| Vignette | ✅ done | core | Confirmed. FM.EFFECTS 'vignette' (compositor.js:40); radial darkening overlay at lines 913-925. NOTE confirmed: applied only inside media draw path, so text/shape layers get no vignette. |
+| Vignette | ✅ done | core | Fixed 2026-07-10 (v2.86): now renders on EVERY layer type. Media keeps its inline clip-bounds draw; text/shape/path/group route through a new PIXEL_FX.vignette (comp-space) instead of silently ignoring the effect. |
 | Sharpen | ✅ done | common | Re-audited 2026-07-10: `sharpen` in FM.EFFECTS + POSTFX. |
 | Unsharp Mask | ✅ done | common | Re-audited 2026-07-10: `unsharpmask` in FM.EFFECTS + POSTFX. |
 | Noise | ✅ done | common | Re-audited 2026-07-10: `noise` ('Noise') is a real pixel-grain effect (distinct from wiggle's `wnoise`). |
@@ -173,11 +173,11 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | 360 Viewer / Reorient Sphere | ❌ missing | nice | Confirmed absent. |
 | Halftone Dots / Lines | ✅ done | nice | Re-audited 2026-07-10: `halftone` + `halftonelines` in FM.EFFECTS + POSTFX. |
 | Clouds / Fractal Ridges | ✅ done | nice | Re-audited 2026-07-10: `clouds` + `fractalridges` in FM.EFFECTS + POSTFX. |
-| Voronoi Cells | ❌ missing | nice | Re-audited 2026-07-10: still absent. Grepped voronoi, cellular — no hits. Cheap to add (generative pixel fn + registry entry). |
+| Voronoi Cells | ✅ done | nice | Shipped 2026-07-10 (v2.86): `voronoi` — jittered-grid stained-glass mosaic (deterministic hash seeds, O(9)/px, Edge darkening). |
 | Radial Rays | ✅ done | nice | Re-audited 2026-07-10: `rays` ('Radial Rays') in FM.EFFECTS + POSTFX. |
 | Rays | ✅ done | nice | Re-audited 2026-07-10: covered by `rays` + `lightglow`. |
 | Long Shadow | ✅ done | nice | Re-audited 2026-07-10: `longshadow` in FM.EFFECTS + POSTFX. |
-| Radial Shadow | ❌ missing | nice | Confirmed absent. |
+| Radial Shadow | ✅ done | nice | Shipped 2026-07-10 (v2.86): `radialshadow` — point-light shadow (Light X/Y + Reach, 10-tap march toward the light). |
 | Smooth Bevel | ✅ done | nice | Re-audited 2026-07-10: `smoothbevel` in FM.EFFECTS + POSTFX. |
 | Raster Extrude | ✅ done | nice | Re-audited 2026-07-10: `rasterextrude` in FM.EFFECTS + POSTFX. |
 | Layer Styles Presets | 🟡 partial | common | Confirmed. FM.fxPresets (inspector.js:160-174) with 4 builtins (VHS Glitch/Duotone/Dreamy/Comic) + localStorage user stacks; UI chips with apply/delete/save (lines 207-227). Covers only implemented effects, not full AM style catalog. |
@@ -294,7 +294,7 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | Transparent / no fill | ❌ missing | common | Confirmed: no fill-off toggle for text; compositor.js:757 always sets fillStyle then fillText. Stroke-only text not achievable. |
 | Stroke / outline with color and width | ✅ done | core | Confirmed inspector.js:531-539 Outline check + width + color; compositor.js:800-809 strokeText with doubled lineWidth before fill (correct outside-stroke). Also in drawAnimatedText:299 and drawArcLine:327. |
 | Drop shadow | ✅ done | core | Re-audited 2026-07-10: rebuilt in v2.83 Border & Shadow: layer.shadow = {enabled,blur,dx,dy,color,alpha}. `alpha` is the opacity control the old note said was missing, and blur/dx/dy/colour/alpha are all keyframeable. |
-| Glow effects (Light Glow, Soft Glow, Dark Glow) | 🟡 partial | common | Confirmed single 'glow' effect (compositor.js:39) rendered as drop-shadow(0 0 r color) at 177. No Light/Soft/Dark variants. |
+| Glow effects (Light Glow, Soft Glow, Dark Glow) | ✅ done | common | Complete as of v2.86: `lightglow` + `darkglow` shipped earlier; `softglow` closes the set (plus `glow`, `innerglow`, `edgeglow`, `glowscan`). |
 | Letter spacing (tracking) control | 🟡 partial | core | Confirmed inspector.js:528 Spacing rangeRow -> layer.letterSpacing; compositor.js:761 ctx.letterSpacing behind 'letterSpacing' in ctx guard. Not keyframeable; no-ops in browsers lacking canvas letterSpacing (see bugs). |
 | Line height (line spacing) control | 🟡 partial | core | Confirmed inspector.js:529 Line height rangeRow; compositor.js:765 lh = fontSize*lineHeight. Wired, not keyframeable (direct field). |
 | Text Spacing effect (random / even spacing animation) | ✅ done | common | Re-audited 2026-07-10: a `textspacing` effect sets st.letterSpacing from `FM.evalProp(p.spacing,t)` — keyframeable. Registered text-only. |
@@ -325,14 +325,14 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | Full-screen palette editor with row rearrangement | ❌ missing | common | Confirmed. No palette editor or rearrangement UI anywhere. |
 | Stroke/outline color (solid color on layer stroke) | ✅ done | core | Confirmed. Shape stroke: inspector.js:589-594 toggle+width+colorField; compositor.js:857 strokeStyle=stk.color. Text outline: inspector.js:533-538 toggle+width+colorField; compositor.js:805 strokeStyle=stk.color. Line shapes use layer.fill as color (inspector.js:576). Wired. |
 | Gradient Map effect (luma-to-gradient color remapping) | 🟡 partial | common | Re-audited 2026-07-10: `gradientmap` ships (luma -> shadows/highlights lerp) but is two-stop only, not an arbitrary multi-stop map. |
-| Four-Color Gradient effect (four individually positioned color points) | ❌ missing | common | Confirmed. No four-color-gradient in FM.EFFECTS or compositor. |
+| Four-Color Gradient effect (four individually positioned color points) | ✅ done | common | Shipped 2026-07-10 (v2.86): `fourcolor` — bilinear blend of 4 corner colours over opaque pixels; registry + inspector gained generic color3/color4 picker support. Corner positions are fixed (not draggable points). |
 | Gradient Overlay effect (two-color overlay on layer opaque areas) | ✅ done | common | Re-audited 2026-07-10: `gradientoverlay` (angle + amount + start/end colours) blended over opaque pixels. |
 | Contour Gradient effect (gradient radiating from layer edges) | ❌ missing | nice | Confirmed. No contour-gradient / edge-radiating effect. |
 | Colorize effect (tint a layer while preserving luminance) | ✅ done | common | Re-audited 2026-07-10: a dedicated `colorize` entry now exists, separate from `tint` (luma x colour, preserves luminance). |
-| Replace Color effect (swap one hue with another) | ❌ missing | common | Confirmed. No replace-color / hue-selective replacement effect. |
-| Spot Color effect (selective color — keep one hue, desaturate rest) | ❌ missing | nice | Confirmed. No spot-color / selective saturation effect. |
+| Replace Color effect (swap one hue with another) | ✅ done | common | Shipped 2026-07-10 (v2.86): `replacecolor` (see Effects section). |
+| Spot Color effect (selective color — keep one hue, desaturate rest) | ✅ done | nice | Shipped 2026-07-10 (v2.86): `spotcolor` (see Effects section). |
 | Palette Map effect (map pixel colors to closest color in a custom palette) | ❌ missing | nice | Confirmed. No palette-map effect. |
-| Spectral Map effect (luminance-to-spectrum color mapping) | ❌ missing | nice | Confirmed. No spectral-map effect. |
+| Spectral Map effect (luminance-to-spectrum color mapping) | ✅ done | nice | Shipped 2026-07-10 (v2.86): `spectralmap` (see Effects section). |
 | Color grading effect presets (saved CC preset stacks) | ✅ done | common | Confirmed. FM.fxPresets (inspector.js:160-174) — 4 builtins + user stacks persisted to localStorage 'fm.fxpresets'; preset chips row (inspector.js:207-229) with apply/delete/save. Wired. |
 | No native project-wide color theme / global swatch system | ✅ done | nice | Confirmed. No project-wide palette/theme system; color is per-layer (fill/color/stroke.color). recentColors is the closest but session-scoped. Matches AM's own absence — correctly treated as 'done by intentional parity'. |
 

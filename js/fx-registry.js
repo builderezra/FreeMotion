@@ -70,6 +70,9 @@ window.FM = window.FM || {};
     squeeze: 'distort', tiles: 'repeat',
     motionflow: 'blur',   // content-aware motion blur (temporal)
     copybg: 'stylize',    // copy the backdrop below into this layer
+    // batch 26 (AM parity fill-ins)
+    softglow: 'color', replacecolor: 'color', spotcolor: 'color', fourcolor: 'color', spectralmap: 'color',
+    radialshadow: 'color', voronoi: 'proc', tunnel: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -123,6 +126,8 @@ window.FM = window.FM || {};
     }
     if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Color',   type: 'color', default: def.defColor  || '#ffffff', keyframable: false });
     if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Color 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: false });
+    if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Color 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: false });
+    if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Color 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: false });
     return out;
   }
 

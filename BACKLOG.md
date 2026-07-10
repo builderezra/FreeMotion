@@ -29,17 +29,17 @@ touch-usable mobile UI (`touch-action:none`, 6 `@media` blocks, bottom-sheet ins
 | Severity | Title | Domain | Detail |
 |---|---|---|---|
 | high | **REGRESSION: the solo button is gone from the UI** | UI | The engine still honours solo — `compositor.js:3097` skips non-soloed layers when drawing, `exporter.js:98` gates the audio mix. But `timeline.js` and `index.html` contain **zero** `th-solo` references (`styles.css` still has 4 orphaned `.th-solo` rules), so no button creates it. The only writer of `layer.solo` is `ai-ops.js:66`. Solo is unreachable from the UI — almost certainly lost in the mobile timeline rebuild. Restore the 'S' button on the track head. **Effort S.** |
-| med | **Solo doesn't silence audio in PREVIEW (but does on export)** | Audio | `solo` appears **zero** times in `js/app.js` and `js/audio-play.js`. Preview gates audio only on `layer.visible === false` (`app.js:432,441,468`; `audio-play.js:49`). But `exporter.js:98-101` *does* gate on `soloActive && !layer.solo`. So you solo a clip, still hear every layer while editing, then the exported MP4 contains only the soloed audio. Preview and export disagree. Fix: mirror the exporter's gate in both preview paths. **Effort S.** |
-| low | **Speed change doesn't re-clamp against remaining source — freezes on last frame** | Timeline | The speed control keeps `span = duration × speed` invariant but never re-checks that `trimStart + span` stays inside the source. For a clip with `trimStart > 0`, slowing it lengthens duration past the available source and the tail freezes on the last decoded frame. Clamp against `(srcDur − trimStart)`. Note speed is now keyframeable, so clamp the *evaluated* value. **Effort S.** |
-| low | **`Dreamy` preset writes the wrong blur param** | Effects | The preset defines `blur {amount: 6}` but the blur effect's key is `radius` (`compositor.js:38`, `def: 6`). The value is ignored and blur silently falls back to its default — which is also 6, masking the bug. If that default ever changes, the preset diverges. Rename to `radius`. **Effort S.** |
 | low | **`overshoot`/`anticipate` easing exist only as stored beziers** | Keyframes | `EASES` keys are `linear, easeIn, easeOut, easeInOut, bounce, elastic, hold` — no `overshoot`/`anticipate`. `evalProp` falls back to `EASES[b.e] \|\| EASES.linear` when a keyframe has no `bez`. Both apply-paths currently write `bez`, so it works today — but a hand-edited, imported, or AI-generated scene silently animates **linear**. The scene model is explicitly meant to be AI-edited, so this is a real data-loss path. Add both to `EASES`. **Effort S.** |
 | low | Curved text collapses multi-line and ignores alignment | Text | `drawArcLine(ctx, lines.join(' '), …)` joins every line into one space-separated string, and `drawArcLine` forces `textAlign='center'`. Multi-line curved text loses its breaks; left/right align is silently dropped. **Effort M.** |
 | low | Gradient fill renders wrong on curved text | Text | With gradient + curve both on, the gradient is built for a flat axis-aligned bbox, then glyphs are rotated along the arc — so the gradient stays fixed in pre-arc space. Build it in arc space or sample per-glyph. **Effort M.** |
 | low | `letterSpacing` silently no-ops where canvas lacks it | Text | Guarded by `'letterSpacing' in ctx`; on browsers without it the Spacing control does nothing while the inspector still presents it as functional. Needs a per-glyph advance fallback. **Effort M.** |
-| low | Vignette is media-only | Effects | The vignette overlay is drawn in exactly one place (`compositor.js:2879`), inside the media/crop branch. Added to a text or shape layer it is tweakable but never renders. Either gate it out of the picker for non-media layers, or move it to a post-rasterization pass. **Effort S.** |
 | low | No guard prevents a camera being parented | Camera | Every layer including the camera gets a `parent` field with no validation; the camera composite reads `cam.transform` directly and never calls `applyParentChain`, so a programmatically/AI-set camera parent is a silent no-op. The UI hides the picker, but the scene model is AI-editable. Add a guard or warning. **Effort S.** |
 | low | Reverse audio uses 2-tap linear sampling — aliasing on sped-up reversed clips | Audio | `reversedBuffer`/`makeClipBuffer` advance by `speed×` per output sample with linear interpolation and no low-pass, so `speed > 1` decimates without anti-aliasing. Consistent between preview and export, so fidelity not correctness. **Effort M.** |
 | low | Per-prop `loopMode` only re-synced when `layer.loopMode !== 'none'` | Keyframes | `rebuild` only pushes `loopMode` onto animated props when it's set, relying on the context-menu having written `'none'` to every prop at click time. A prop animated *after* loop was turned off carries no explicit value. Harmless today (undefined ≡ no-loop) but fragile. Derive loop state from `layer.loopMode` at eval time. **Effort S.** |
+
+**Fixed in v2.85:** solo now silences preview audio (shared `FM.soloSilenced` gate matching the exporter) · export offers the OS share sheet with download fallback · speed clamps against remaining source.
+
+**Fixed in v2.86:** Dreamy preset wrote `amount` instead of `radius` (silently ignored) · vignette was a no-op on text/shape/path/group layers (now renders comp-space on non-media; media keeps its clip-bounds draw) · longshadow smeared shadow from the canvas edge along every diagonal before seeing any content (found by an isolation test of all 154 effects — the other 153 render clean).
 
 **Fixed since June** (were on this list): no responsive layout · no `touch-action:none` · HTML5-DnD layer reorder ·
 reversed-clip audio ignoring previewRate · spacebar firing in contenteditable · adjustment-layer mirror unsupported ·
@@ -49,11 +49,7 @@ solo not gating audio *on export*.
 
 ## ⚡ Quick wins (high value, low effort — do these first)
 
-- [ ] **Share sheet after export** (`navigator.share({files})`, anchor-download fallback) — `exporter.js:11 download()`. Core tier, mobile-first mandate, no library. The single biggest payoff-per-line item on this page. **S**
-- [ ] **Gate preview audio on solo** — mirror `exporter.js:98-101`. See bugs. **S**
-- [ ] **Clamp speed against `(srcDur − trimStart)`** — stops the last-frame freeze. See bugs. **S**
 - [ ] **Add `overshoot`/`anticipate` to `EASES`** — closes a silent data-loss path for imported/AI scenes. **S**
-- [ ] **Fix the `Dreamy` blur param** (`amount` → `radius`). **S**
 - [ ] **Steps + Cyclic easing presets** — `EASES` entries + preset buttons; Steps needs a count param. **S**
 - [ ] **Underline / strike-through text** — only bold/italic exist; manual line under the measured width. **S**
 - [ ] **Stroke-only (transparent-fill) text** — text `fillMode` is `[solid, gradient]` with no `none`, and `fillOpacity` is never read in the text draw path. **S**
@@ -62,21 +58,15 @@ solo not gating audio *on export*.
 
 ## 🎨 Cheap effects — a self-contained pixel fn + one registry entry each
 
-The effect pipeline (`FM.EFFECTS` + `POSTFX`/`PIXEL_FX`/`WARP_FX` + a perf-whitelist line) makes these near-mechanical.
-All verified absent 2026-07-10.
+**Shipped 2026-07-10 (v2.86):** Soft Glow · Replace Color · Spot Color · Four-Color Gradient (with new
+generic color3/color4 picker support) · Spectral Map · Channel Remap HSV modes (Hue Invert, Swap Sat/Val) ·
+Radial Shadow · Tunnel · Voronoi Cells. Turbulent Displace was dropped — the shipped `fractalwarp` IS
+sum-of-sines noise displacement; a second one would be a duplicate.
 
-- [ ] **Soft Glow** — bright-pass → blur → screen composite. **S**
-- [ ] **Replace Color** — HSV distance test + hue swap. **S**
-- [ ] **Spot Color** — keep one hue, desaturate the rest. **S**
-- [ ] **Four-Color Gradient** — bilinear blend of 4 corner colours. **S**
-- [ ] **Spectral Map** — luma → hue sweep. **S**
-- [ ] **Channel Remap (HSV)** — extend the shipped `channelremap` `options[]` with HSV modes. Cheapest of all. **S**
-- [ ] **Radial Shadow** — point-light shadow projection. **S**
-- [ ] **Tunnel** — log-polar coordinate warp. **S**
-- [ ] **Voronoi Cells** — seed points + nearest-cell fill. **S/M**
-- [ ] **Turbulent Displace** — value-noise displacement field. **M**
-- [ ] **Palette Map** — nearest-colour snap (needs a small palette UI). **M**
-- [ ] **Contour Gradient** — needs an edge-distance transform pass first. **M**
+Still open:
+
+- [ ] **Palette Map** — nearest-colour snap (needs a small palette-input UI, not just params). **M**
+- [ ] **Contour Gradient** — needs an edge-distance transform pass before the gradient map. **M**
 - [ ] **Luma matte** — a mask mode that converts the mask layer to luminance-alpha before `destination-in`. Matte compositing is alpha-only today. **S/M**
 
 ## 🧩 Feature gaps (by priority)
