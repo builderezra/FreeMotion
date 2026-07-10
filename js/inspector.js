@@ -1499,6 +1499,15 @@ window.FM = window.FM || {};
           const span = layer.duration * (layer.speed || 1);   // source span is invariant → re-time the clip
           layer.speed = sp;
           layer.duration = Math.max(0.1, span / sp);
+          // Clamp against the source that's actually left, exactly as the trim grips do
+          // (timeline.js: nd = min(nd, (srcDur - trimStart) / sp)). Without this, a clip whose span
+          // already overruns its source — e.g. trimStart moved, or the media was replaced — keeps the
+          // overrun through the re-time and freezes on its last decoded frame for the tail.
+          const mm = FM.media.get(layer.id);
+          const srcDur = (mm && mm.duration) ? mm.duration : Infinity;
+          if (layer.type === 'video' && isFinite(srcDur)) {
+            layer.duration = Math.max(0.1, Math.min(layer.duration, (srcDur - (layer.trimStart || 0)) / sp));
+          }
           const end = layer.start + layer.duration;
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;
         }

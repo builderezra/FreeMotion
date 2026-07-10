@@ -3,8 +3,12 @@
 _Single source of truth: every Alight Motion feature × FreeMotion status. Originally generated 2026-06-23._
 _**Re-audited 2026-07-10** against the actual source (12 domains in parallel, evidence required for every status,
 adversarial refutation of every "missing" claim). **120 of the 251 then-open rows were wrong** — the June matrix had
-gone badly stale across v2.71→v2.84. Only `❌`/`🟡` rows were re-checked: staleness runs one way, a `✅` feature does
-not un-ship._
+gone badly stale across v2.71→v2.84._
+
+_**Caveat on that pass:** it re-checked only the `❌`/`🟡` rows, on the assumption that staleness runs one way and a
+`✅` feature does not un-ship. **That assumption is false.** "Layer solo" was marked ✅ and has since REGRESSED — the
+engine still honours `layer.solo` but the timeline button that set it is gone. Found by accident while fixing the
+solo/audio bug, not by the audit. **The ~196 `✅` rows have never been re-verified and may hide other regressions.**_
 
 ## Where we stand (as of 2026-07-10)
 
@@ -194,7 +198,7 @@ _Across 342 audited features: 196 ✅ · 52 🟡 · 93 ❌ · 1 ❔_ (was 90 ✅
 | Camera object layer | ✅ done | common | Confirmed: addCameraLayer (enforces one camera, toasts otherwise); renderScene renders scene to _camCv then composites through camera x/y/scale/rotation; thumb drawn. |
 | Multi-layer stacking / stacking order | ✅ done | core | Confirmed: renderScene iterates layers high-index-first so layers[0] draws last (top); reorderLayer in app.js; track-head drag in timeline.js. |
 | Layer visibility (eye) and locking | ✅ done | core | Confirmed: timeline th-eye toggles visible, th-lock toggles locked; isLayerVisibleAt gates drawing; locked layers skipped in edit/keyboard ops. |
-| Layer solo | ✅ done | common | Confirmed: timeline th-solo 'S' button toggles layer.solo; renderScene computes soloActive and skips non-solo layers. |
+| Layer solo | 🟡 partial | common | Re-audited 2026-07-10: **REGRESSION.** The engine still honours it — `renderScene` computes `soloActive` and skips non-soloed layers (compositor.js:3097), and exporter.js:98 gates the audio mix the same way. But the timeline's `th-solo` 'S' button is GONE: timeline.js and index.html contain zero `th-solo` references (styles.css still has 4 orphaned `.th-solo` rules). The only writer of `layer.solo` is now `ai-ops.js:66`, so solo is unreachable from the UI. Likely lost in the mobile timeline rebuild. |
 | Layer renaming and color-coding | ✅ done | common | Re-audited 2026-07-10: colour tag is now manual: `FM.setLayerLabel` + a swatch strip in the ⋯ menu, rendered as a `labelColor` stripe on the layer header. The 'no manual colour UI' claim is stale. |
 | Layer grouping | ✅ done | core | Re-audited 2026-07-10: shipped v2.33/v2.38. `FM.addGroup`/`FM.ungroup`/`FM.groupDescendants`; real type==='group' layers; `collectGroupUnits`/`drawGroupUnit` flatten a unit; collapsible group rows in the timeline. |
 | Elements (nested compositions / precomps) | 🟡 partial | common | Re-audited 2026-07-10: `FM.elements` saves a selection and re-inserts it (Elements tab in the add menu), but `insert()` re-IDs layers -> independent COPIES, not a live nested comp. Reusable-asset library yes; true precomp nesting no. |

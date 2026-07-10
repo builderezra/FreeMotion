@@ -3,6 +3,10 @@
 _**Rebuilt 2026-07-10** from a full re-audit of the code (the 2026-06-23 list had gone badly stale: 120 of its 251
 open parity rows were wrong, and 9 of its 12 "quick wins" plus 6 of its 18 bugs were already shipped)._
 
+> ⚠️ The re-audit only re-checked rows marked `❌`/`🟡`, assuming a `✅` feature can't un-ship. **That was wrong** — the
+> solo button regressed (see the first bug below), found by accident rather than by the audit. The ~196 `✅` rows in
+> PARITY.md have never been re-verified. A regression sweep over them is worth one session.
+
 _Top of each list = build next. Effort: S/M/L. When an item ships: flip it to ✅ in PARITY.md, delete it here,
 add a POLISH-LOG.md line, and bump the version in `index.html`._
 
@@ -24,6 +28,7 @@ touch-usable mobile UI (`touch-action:none`, 6 `@media` blocks, bottom-sheet ins
 
 | Severity | Title | Domain | Detail |
 |---|---|---|---|
+| high | **REGRESSION: the solo button is gone from the UI** | UI | The engine still honours solo — `compositor.js:3097` skips non-soloed layers when drawing, `exporter.js:98` gates the audio mix. But `timeline.js` and `index.html` contain **zero** `th-solo` references (`styles.css` still has 4 orphaned `.th-solo` rules), so no button creates it. The only writer of `layer.solo` is `ai-ops.js:66`. Solo is unreachable from the UI — almost certainly lost in the mobile timeline rebuild. Restore the 'S' button on the track head. **Effort S.** |
 | med | **Solo doesn't silence audio in PREVIEW (but does on export)** | Audio | `solo` appears **zero** times in `js/app.js` and `js/audio-play.js`. Preview gates audio only on `layer.visible === false` (`app.js:432,441,468`; `audio-play.js:49`). But `exporter.js:98-101` *does* gate on `soloActive && !layer.solo`. So you solo a clip, still hear every layer while editing, then the exported MP4 contains only the soloed audio. Preview and export disagree. Fix: mirror the exporter's gate in both preview paths. **Effort S.** |
 | low | **Speed change doesn't re-clamp against remaining source — freezes on last frame** | Timeline | The speed control keeps `span = duration × speed` invariant but never re-checks that `trimStart + span` stays inside the source. For a clip with `trimStart > 0`, slowing it lengthens duration past the available source and the tail freezes on the last decoded frame. Clamp against `(srcDur − trimStart)`. Note speed is now keyframeable, so clamp the *evaluated* value. **Effort S.** |
 | low | **`Dreamy` preset writes the wrong blur param** | Effects | The preset defines `blur {amount: 6}` but the blur effect's key is `radius` (`compositor.js:38`, `def: 6`). The value is ignored and blur silently falls back to its default — which is also 6, masking the bug. If that default ever changes, the preset diverges. Rename to `radius`. **Effort S.** |

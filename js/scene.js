@@ -108,6 +108,17 @@ window.FM = window.FM || {};
    * truth so preview + export read keyframed volume the same way. */
   FM.layerVolume = function (layer, t) { return layer.muted ? 0 : (layer.volume == null ? 1 : evalProp(layer.volume, t)); };
 
+  /* Solo suppresses AUDIO, not just picture. compositor.js skips non-soloed layers when drawing, and
+   * exporter.js buildAudioMix skips them in the mix — but the preview audio paths gated only on
+   * `visible`. So soloing a clip left every other layer audible while editing, then the exported file
+   * contained only the soloed audio: preview and export disagreed. Preview now shares this gate.
+   * Preview-only helper — it reads the live FM.scene, whereas the exporter is handed the scene it
+   * is rendering, so it keeps its own inline check. */
+  FM.soloSilenced = function (layer) {
+    const ls = FM.scene && FM.scene.layers;
+    return !!(ls && !layer.solo && ls.some(l => l.solo));
+  };
+
   // Returns true when it INSERTED a new keyframe (vs updated one already at `t`) so callers can
   // refresh the timeline once — this is what makes an auto-keyed dot appear instead of staying
   // "invisible". New keyframes default to LINEAR easing (a straight graph), not ease-in-out.

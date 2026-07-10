@@ -8,13 +8,32 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  function download(buffer, name) {
-    const blob = new Blob([buffer], { type: 'video/mp4' });
+  function download(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  // Hand the finished MP4 to the OS share sheet where we can (Save to Photos / AirDrop / send straight
+  // to an app) — on a phone an <a download> lands the file somewhere awkward, and this IS a mobile-first
+  // PWA. Falls back to the plain download whenever sharing isn't available or isn't permitted:
+  //   • no Web Share for files (desktop Firefox/Chrome, older Safari) → canShare() is false
+  //   • navigator.share needs TRANSIENT ACTIVATION, and a long export can outlive the tap that started
+  //     it → share() rejects with NotAllowedError, so we quietly download instead
+  // AbortError is the one case we do NOT fall back on: the user saw the sheet and dismissed it, so
+  // silently downloading anyway would be the opposite of what they asked for.
+  async function deliver(buffer, name) {
+    const blob = new Blob([buffer], { type: 'video/mp4' });
+    let file = null;
+    try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); return 'shared'; }
+      catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
+    }
+    download(blob, name);
+    return 'downloaded';
   }
 
   function seekVideo(m, time) {
@@ -283,7 +302,7 @@ window.FM = window.FM || {};
       encoder.close();
       if (mix) { try { await encodeAudio(muxer, mix); } catch (e) { console.warn('audio encode failed', e); } }
       muxer.finalize();
-      download(muxer.target.buffer, (opts.name || 'freemotion-export') + '.mp4');
+      await deliver(muxer.target.buffer, (opts.name || 'freemotion-export') + '.mp4');
       } finally {
         // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview

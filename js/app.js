@@ -438,7 +438,11 @@ window.FM = window.FM || {};
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
           const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);   // keyframed volume animates on forward clips
-          m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol));
+          // A soloed layer silences the others' AUDIO too, matching the picture (compositor) and the
+          // exported soundtrack (exporter buildAudioMix). Mute rather than pause so un-soloing resumes
+          // instantly without a re-seek.
+          if (FM.soloSilenced(layer)) { m.el.muted = true; }
+          else { m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol)); }
         } catch (e) {}
       }
     });
@@ -464,7 +468,7 @@ window.FM = window.FM || {};
       if (!layer.reversed) {
         try { m.el.currentTime = local; } catch (e) {}
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
-        m.el.muted = false;
+        m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
         m.el.volume = Math.max(0, Math.min(1, FM.layerVolume(layer, FM.time)));
         m.el.play().catch(() => {});
       }
