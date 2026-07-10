@@ -1485,3 +1485,12 @@ body.drawing #select-box { display: none !important; }
 #trk-bar span { font-size: 12px; color: var(--text-faint); }
 .mt-track.mt-ease { color: var(--text-faint); }
 .mt-track.mt-ease:hover { color: var(--accent); }
+
+/* FX-browser live preview canvases (Phase 2 — js/fx-thumbs.js renders the real effect on a mini scene).
+   The Phase-1 gradient+glyph stays underneath as the instant placeholder AND the fallback if the
+   engine errors: the canvas sits on top at opacity 0 and only fades in once the engine paints it
+   (class 'ready'). Backing store is square 96×96 but both thumb variants are non-square (tile ~62px
+   tall, featured card 150×94) → object-fit:cover so the preview fills either without distortion. */
+.fxb-thumb { position: relative; }
+.fxb-thumb-cv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; opacity: 0; transition: opacity .18s; pointer-events: none; }
+.fxb-thumb-cv.ready { opacity: 1; }

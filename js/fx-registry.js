@@ -95,8 +95,10 @@ window.FM = window.FM || {};
   };
   const CATEGORY_ORDER = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'opacity', 'text', 'threed', 'other'];
 
-  // chromakey/lumakey/vignette only affect media (video/image) layers — never text/shape.
-  const MEDIA_ONLY = { chromakey: 1, lumakey: 1, vignette: 1 };
+  // chromakey/lumakey only affect media (video/image) layers — they run in the media draw path.
+  // (vignette WAS here, but v2.86 gave non-media layers a comp-space PIXEL_FX.vignette, so the
+  // add-flow gate would now block a working effect.)
+  const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
@@ -108,8 +110,9 @@ window.FM = window.FM || {};
     posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1,
   };
 
-  // Effects to feature in the carousel (visually interesting ones). Chroma Key + Squeeze lead, like AM.
-  FM.FX_FEATURED = ['chromakey', 'touchup', 'motionflow', 'copybg', 'squeeze', 'cube3d', 'duotone', 'glow', 'pagecurl', 'rgbsplit', 'pixelate'];
+  // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
+  // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
+  FM.FX_FEATURED = ['touchup', 'voronoi', 'softglow', 'fourcolor', 'spectralmap', 'replacecolor', 'radialshadow', 'tunnel', 'chromakey', 'motionflow', 'copybg', 'squeeze'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {

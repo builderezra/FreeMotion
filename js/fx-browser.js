@@ -16,10 +16,14 @@ window.FM = window.FM || {};
 
   let root, scrollEl, searchInput, _layer, autoTimer = 0, autoPauseUntil = 0;
 
-  // CSS-gradient swatch keyed by category (no image assets — Phase 1).
+  // Category-gradient swatch + glyph (Phase 1) stays as the instant placeholder/fallback; a canvas
+  // fades in over it once FM.fxThumbs live-renders the real effect on a mini scene (Phase 2).
   function thumb(reg) {
     const t = el('div', 'fxb-thumb'); t.dataset.cat = reg.category;
     t.appendChild(el('span', 'fxb-thumb-glyph', (reg.label || '?').slice(0, 1).toUpperCase()));
+    const cv = el('canvas', 'fxb-thumb-cv');
+    t.appendChild(cv);
+    if (FM.fxThumbs) FM.fxThumbs.mount(cv, reg.type); // engine sizes backing store + adds .ready on first paint
     return t;
   }
 
@@ -209,6 +213,6 @@ window.FM = window.FM || {};
       root.classList.remove('hidden');
       rebuild();
     },
-    close: function () { if (!root) return; stopAuto(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); },
+    close: function () { if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); },
   };
 })(window.FM);
