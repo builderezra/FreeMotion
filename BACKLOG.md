@@ -1,95 +1,117 @@
 # FreeMotion — Backlog
 
-_Prioritized gaps + bugs from the 2026-06-23 parity audit. Top of each list = build next. Priority 1 = highest. Effort: S/M/L. When an item ships: move it to ✅ in PARITY.md, delete it here, and add its test to `tests/`._
+_**Rebuilt 2026-07-10** from a full re-audit of the code (the 2026-06-23 list had gone badly stale: 120 of its 251
+open parity rows were wrong, and 9 of its 12 "quick wins" plus 6 of its 18 bugs were already shipped)._
 
-## ⚡ Quick wins (high value, low effort — do these first)
+_Top of each list = build next. Effort: S/M/L. When an item ships: flip it to ✅ in PARITY.md, delete it here,
+add a POLISH-LOG.md line, and bump the version in `index.html`._
 
-- [ ] Add touch-action:none to #preview, .sb-handle, timeline ruler/clips/grips — unblocks touch editing in one CSS edit
-- [ ] Add hue/saturation/color/luminosity to the BLEND map (canvas2D already supports them) — 4 lines for 4 more blend modes
-- [ ] Add overshoot/anticipate to the EASES table so they survive a no-bez/imported scene
-- [ ] Rename Dreamy preset blur param 'amount'→'radius'
-- [ ] Gate audio mixing on solo in audio-play.js + exporter so solo actually isolates audio
-- [ ] Add Color Temperature warm/cool RGB gain to gradeCanvas (Color Tune)
-- [ ] Add 12/25/50 fps options + named 720/1080/1440/2160 resolution presets to the export dialog
-- [ ] Add navigator.share fallback after export so mobile users can share the MP4
-- [ ] Persist FM.recentColors to localStorage so swatches survive reload
-- [ ] Add a real layer.muted flag instead of hijacking volume
-- [ ] Clamp speed-slider span against (srcDur - trimStart) to stop last-frame freeze
-- [ ] Broaden the Space-key guard to skip contenteditable / graph-editor focus
+---
 
-## 🧩 Feature gaps (by priority)
+## ✅ Shipped since the June audit (was listed as missing)
 
-| P | Feature | Domain | Tier | Effort | Status | Why it matters |
-|---|---|---|---|---|---|---|
-| 1 | Responsive layout for phone (~380px) — fixed desktop grid has zero @media queries | UI, gestures & workflow | core | L | missing | App is mandated mobile-first PWA but styles.css has no media queries; 286px inspector + 172px head + topbar overflow at 380px. The single highest-impact gap: the app is currently desktop-only. |
-| 1 | touch-action:none on preview/timeline so drag manipulates layers instead of scrolling the page | UI, gestures & workflow | core | S | missing | Only .cw-canvas/.ge-canvas have touch-action. On any touchscreen, dragging to move/scale/rotate or scrub/trim instead pans the page — on-canvas editing is unusable on touch. Tiny CSS fix, enormous impact. |
-| 1 | Import standalone audio files (music/SFX/voice) | Audio | core | M | missing | file-input accept is video/image only; audio files are silently dropped. A video editor with no music/SFX import is a core hole. Needs an 'audio' layer type + loadAudioFile + draw-as-waveform-strip. |
-| 2 | Layer Z-depth + camera perspective/FOV (true 3D) | Camera & 3D | core | L | missing | transform has no z; camera is flat 2D scale/pan. AM's signature parallax/3D is absent. High value but large (needs perspective projection, possibly WebGL); defer behind mobile+audio. |
-| 2 | Layer grouping / nested compositions (precomps / Elements) | Layers & compositing | core | L | missing | No group/precomp layer type; only transform-parenting. Blocks complex projects and reuse. Core in AM but large architectural change. |
-| 2 | Animated (keyframeable) masks — shape/position/feather over time | Masking & shapes | core | M | missing | layer.mask stored as static numbers; animatedProps never includes mask, so a mask can't track a moving subject. Core masking expectation; route mask props through evalProp + add kf diamonds. |
-| 2 | Pen tool / editable Bezier paths + Edit Points mode | Masking & shapes | core | L | missing | No freeform vector paths or anchor/handle editing; only parametric primitives. A core vector capability in AM; sizeable new tool + layer type. |
-| 2 | Volume keyframe automation | Audio | core | S | missing | Volume is a plain slider with no kf diamond; layer.volume read as scalar. Routing it through toggleProp/evalProp like other props is small and high-value for music sync. |
-| 2 | Masking groups / track matte (alpha & luma clip-to-layer) | Layers & compositing | core | M | missing | No inter-layer clip/track-matte. Common AM compositing technique (clip text to video, alpha mattes). Needs a clipTo field + destination-in pass over the layer below. |
-| 2 | Save to device gallery / Web Share (mobile share sheet) | Export & sharing | core | S | missing | Export only triggers an anchor download; no navigator.share/showSaveFilePicker. On mobile PWA, sharing the result is the whole point. Small add, big mobile payoff. |
-| 2 | Render Alpha Channel (transparent export) | Effects & filters | common | M | missing | avc has no alpha path; can't export overlays/stickers with transparency. Needs WebM/VP8-alpha or PNG-sequence route. |
-| 2 | Time Remapping / speed-ramp keyframes (velocity) | Timeline & playback | common | L | missing | layer.speed is a single static multiplier; no per-clip speed curve. A headline AM feature for slow-mo ramps (explicitly a project goal). Needs a remap sub-track. |
-| 3 | Directional / Zoom / Spin blur variants | Effects & filters | core | M | missing | Only CSS gaussian + transform motion blur. Directional blur is a core stylistic effect; needs a per-pixel/offset-accumulate pass. |
-| 3 | Color Temperature control | Effects & filters | core | S | missing | Core grading control missing (only hue-rotate). Easy: warm/cool RGB gain in gradeCanvas. |
-| 3 | Ripple delete (close gap when clip removed) | Timeline & playback | core | S | partial | deleteLayer just filters; adjacent clips don't shift. Small shift-subsequent-starts pass; common editing expectation. |
-| 3 | Timeline pinch-to-zoom (touch) | Timeline & playback | core | M | partial | Only Ctrl+wheel/buttons/keys; no pinch. Needed for mobile timeline navigation. Multi-pointer handler on the ruler. |
-| 3 | Pinch-to-zoom / two-finger pan on preview canvas | UI, gestures & workflow | core | M | missing | Single-pointer only. Mobile viewport navigation needs two-finger gesture; pointer-cache + scale math. |
-| 3 | Touch-friendly layer reorder (long-press drag, not HTML5 DnD) | UI, gestures & workflow | core | M | partial | Reorder uses HTML5 drag-and-drop which doesn't fire on touch; impossible on phone. Replace with pointer long-press drag. |
-| 3 | Blend modes: add hue/saturation/color/luminosity (canvas2D supports them) | Effects & filters | core | S | partial | 13 of AM's modes; the 4 separable ones are natively supported by canvas GCO and just absent from the BLEND map. Trivial 4-line add. |
-| 3 | Custom font import (TTF/OTF via FontFace) | Text & typography | core | M | missing | Only 10 hardcoded system stacks. FontFace API + file input; brand fonts matter for titles. |
-| 3 | Keyframe animation of color/size/spacing/lineHeight | Text & typography | core | M | partial | These use plain field assignment, no diamonds, so can't animate. Route through setProp/evalProp for animated titles. |
-| 3 | Named resolution presets (720p/1080p/1440p/2160p) per export + more fps (12/25/50) | Export & sharing | core | S | partial | Export offers only relative scale factors; fps list missing 12/25/50. Add named presets + fps options to the export dialog. |
-| 3 | Eyedropper / color sampler | Color, fill & gradients | core | S | missing | No EyeDropper API or canvas sampling. Native EyeDropper() where supported + canvas-pixel fallback. Core color workflow. |
-| 3 | Bounce / Elastic / Steps easing presets | Keyframes & animation | common | S | missing | Only cubic-bezier + hold. Bounce/elastic need real non-bezier easing functions in EASES + preset buttons; steps needs a count param. Popular motion presets. |
-| 3 | Noise / film grain effect | Effects & filters | common | S | missing | wnoise is position jitter only; no pixel grain. Per-pixel additive noise in a POSTFX pass; very common stylistic look. |
-| 3 | Sharpen / Unsharp mask | Effects & filters | common | M | missing | No sharpen at all. Convolution pass; common finishing filter. |
-| 3 | Stereo panning per layer | Audio | common | S | missing | No StereoPannerNode/pan field. Easy add in audio-play.js + exporter mix; standard audio control. |
-| 3 | Independent mute flag (decoupled from volume) + solo silences others | Audio | common | S | partial | Mute hijacks volume; solo doesn't silence non-soloed audio (see bugs). Add a real muted flag and gate audio on solo. Overlaps the solo-audio bug. |
-| 4 | Angular/conic gradient + 3+ stops + keyframeable gradients | Color, fill & gradients | core | M | partial | Only 2-stop linear/radial, not keyframeable. Add conic (createConicGradient), N stops, route through evalProp. |
-| 4 | PNG sequence export (numbered frames) | Export & sharing | common | S | partial | Only single-still snapshot. Loop frame-step + zip; useful for alpha/interchange but niche on mobile. |
-| 4 | Animated GIF export | Export & sharing | common | M | missing | No GIF encoder. Needs gif.js (CDN) or manual LZW; popular for shareable loops. |
-| 4 | Color Curves (RGB + per-channel) | Effects & filters | common | L | missing | Only lift/gamma/gain sliders. Full curve UI + LUT build is sizeable; powerful grading tool. |
-| 4 | Gradient Map effect (multi-stop luma→gradient) | Effects & filters | common | M | missing | Only 2-color duotone. Multi-stop gradient LUT mapped by luma; common stylize. |
-| 4 | Glow variants (Light/Soft/Inner/Edge) — luminance-based | Effects & filters | common | M | missing | Single drop-shadow glow. True luminance-threshold bloom is a signature AM look; multi-pass. |
-| 4 | Distortion family (Swirl/Pinch-Bulge/Wave Warp/Displacement) | Effects & filters | common | L | missing | No pixel-displacement effects at all. Each is a per-pixel remap; a whole family AM has and FM lacks. Batch as one effort. |
-| 4 | Echo Keyframes effect (motion trails) | Keyframes & animation | common | M | missing | No rendered echo/trail. Re-draw layer at N time-offsets with decaying opacity; popular motion design effect. |
-| 4 | Auto-Shake / Random Jitter (true randomised, distinct from deterministic wiggle) | Keyframes & animation | common | S | missing | Wiggle is deterministic. Add seeded-random variants + angle/rotation wiggle; small extension of existing system. |
-| 4 | Scrolling text presets + text animator (per-letter transform) | Text & typography | common | M | missing | Only 5 reveal presets, no scroll/ticker, no AE-style per-unit transform animator. Common for titles/credits. |
-| 4 | Multiple masks per layer + mask opacity/expansion | Masking & shapes | common | M | missing | layer.mask is a single object; no opacity/expansion. Convert to mask array + per-mask params. |
-| 4 | Drawing Progress / trim-path (animated stroke draw-on) | Masking & shapes | common | M | missing | No trim-path. Animate stroke start/end along the shape path; signature logo-reveal effect. |
-| 4 | Audio beat/transient auto-detection + snap-to-beat | Timeline & playback | common | L | missing | Manual markers only; no onset/BPM analysis. Energy-flux onset detection on decoded buffer; great for music edits but heavier. |
-| 4 | Persisted custom swatches palette (recents only today, in-memory) | Color, fill & gradients | common | S | partial | recentColors resets on reload, no manual add/remove. Persist to localStorage + add/remove UI; small. |
-| 4 | Kaleidoscope (radial symmetry with count/rotation) | Effects & filters | common | M | missing | Only 2/4-way mirror. Radial symmetry sampling; popular trippy effect. |
-| 4 | LUT import (.cube) | Effects & filters | common | M | missing | No 3D-LUT parsing. .cube parser + trilinear sample; pro grading interchange. |
-| 5 | Audio FX (reverb/echo/EQ), pitch-independent time-stretch, per-clip loop, crossfade | Audio | common | L | missing | None present (speed changes pitch). Web Audio Convolver/Delay/Biquad + phase-vocoder. Whole audio-DSP suite; lower priority than getting audio import working at all. |
-| 5 | Particle Emitter | Effects & filters | common | L | missing | No particle layer type. Sizeable subsystem; defer. |
-| 5 | Multi-keyframe selection + bulk easing apply; spatial/temporal split; in/out velocity fields | Keyframes & animation | common | L | missing | No marquee/multi-select of keyframes, no spatial path editor. Pro-grade graph editing; lower user-visible payoff for now. |
-| 5 | Platform presets (TikTok/Reels/YT), MOV/HEVC/ProRes, mono audio, bitrate field | Export & sharing | common | M | missing | Single mp4/avc path. Add named presets + a few muxer/codec options; nice-to-have polish. |
-| 5 | 3D system (lights, .obj/.glb import, 3D text extrusion, skew/perspective transform) | Camera & 3D | nice | L | missing | Pure 2D canvas. Full 3D pipeline is out of scope for a no-build 2D-canvas app; document as non-goal unless WebGL rewrite. |
+Groups + masking groups + clipping masks · pen tool / Edit Points / Convert to Outline · freehand + vector drawing ·
+speed ramping (keyframed speed) · volume keyframes + real `muted` flag · audio import + Extract Audio · eyedropper ·
+custom font import (FontFace + IDB) · angular gradients · Elements library · motion tracking · crop tool · captions ·
+Bounce + Elastic easing · layer Z-depth + skew · Copy Background · colour tag picker · timeline pinch-zoom ·
+touch-usable mobile UI (`touch-action:none`, 6 `@media` blocks, bottom-sheet inspector, long-press reorder) ·
+**~180 registered effects** (blurs, glows, warps, faux-3D meshes, halftone, clouds, edges, colour) ·
+19 blend modes · named export resolution presets + 12/25/50 fps.
 
-## 🐞 Bugs (by severity)
+---
+
+## 🐞 Bugs — confirmed still real (verified 2026-07-10)
 
 | Severity | Title | Domain | Detail |
 |---|---|---|---|
-| high | No responsive layout — fixed desktop grid, zero media queries (mobile mandate unmet) | UI, gestures & workflow | styles.css has zero @media queries; #app is a fixed grid (rows 50px/1fr/232px; main cols 1fr/286px; --head-w 172px). At ~380px the topbar buttons, 286px inspector, and 172px head column overflow/clip. The project's own mandate (mobile-first, verify at 380px) is unmet. Add a phone breakpoint that collapses the inspector to a sheet/drawer, shrinks the head column, and wraps/scrolls the topbar. |
-| high | Touch drag on preview/timeline scrolls the page (no touch-action:none) | UI, gestures & workflow | touch-action:none exists ONLY on .cw-canvas/.ge-canvas. #preview, .sb-handle scale/rotate handles, the timeline ruler/clips/grips have no override, so finger-drags pan/zoom the page instead of manipulating layers or scrubbing/trimming. Pointer events fire but default touch gestures are never suppressed — on-canvas editing is unusable on touch. Add touch-action:none to those surfaces. |
-| med | Layer reorder uses HTML5 drag-and-drop, which never fires on touch | UI, gestures & workflow | timeline.js buildHead sets head.draggable=true and relies on dragstart/dragover/drop. HTML5 native DnD does not fire on touch devices, so z-order reordering is impossible on phone/tablet. Replace with a pointer-based long-press-drag for the stated mobile target. |
-| med | Solo does not silence non-soloed audio (preview AND export) | Audio | timeline.js solo sets layer.solo and compositor.js only DRAWS soloed layers, but audio-play.js start() and exporter.js buildAudioMix() gate audio only on type==='video' && visible!==false — they ignore solo. Soloing a clip still plays/mixes every other layer's audio in preview and in the exported MP4, so audible output contradicts what solo implies. Gate audio on the same solo logic as compositing. |
-| low | Vignette is a no-op on text/shape layers (media-only) | Effects & filters | compositor.js renders the vignette overlay only inside the image/video branch of drawLayer. A vignette added to a text/shape layer shows in the inspector and is tweakable but never renders. AM applies it to any layer. Either gate it out of the dropdown for non-media layers or move the draw to a post-rasterization pass. |
-| low | 'Dreamy' built-in preset uses wrong blur param ('amount' vs 'radius') | Effects & filters | inspector.js Dreamy preset defines blur {amount:6}, but the blur effect's key is 'radius' (effectFilter reads v('radius',6)). The amount value is ignored; blur falls back to default radius (also 6, masking the bug). If the default radius ever changes, this preset silently diverges. Rename to 'radius'. |
-| low | Overshoot/Anticipate easing depend entirely on stored bez; EASES table lacks the keys | Keyframes & animation | evalProp falls back to (EASES[b.e]\|\|EASES.linear)(f) when a kf has no bez, and EASES only defines linear/easeIn/easeOut/easeInOut/hold. A kf with e='overshoot'/'anticipate' but no bez animates as LINEAR. Both apply-paths currently also write kf.bez so it works today, but a hand-edited/imported/AI scene JSON would silently lose the curve. Add overshoot/anticipate to EASES (or derive from EASE_PRESETS by name). |
-| low | Speed change doesn't re-clamp duration to remaining source — can freeze on last frame | Timeline & playback | inspector.js speed slider keeps source span invariant (span=duration*speed) but never re-checks trimStart+span stays within source duration (unlike the trim-grip path). For a clip with trimStart>0, reducing speed lengthens duration past available source, freezing on the last decoded frame for the tail. Clamp span against (srcDur - trimStart). |
-| low | Reversed-clip audio ignores previewRate → A/V desync at non-1x preview | Timeline & playback | audio-play.js start() never sets node.playbackRate, and FM.setPreviewRate explicitly skips reversed layers. At preview-rate 0.25/0.5/2/4x the reversed-clip video advances with scaled FM.time but reversed audio always plays at 1x, drifting out of sync. Preview-only, reversed-only, non-1x only; export unaffected. Apply previewRate to the reversed audio node too. |
-| low | Curved text collapses multi-line and ignores alignment | Text & typography | compositor.js calls drawArcLine(ctx, lines.join(' '), ...) when curve!=0, joining all lines into one space-separated line, and drawArcLine forces textAlign='center'. Multi-line curved text loses line breaks and left/right alignment is silently ignored. Render each line on its own arc and honor align. |
-| low | Gradient fill renders incorrectly on curved text | Text & typography | With gradient+curve both on, the gradient fillStyle is built for a flat axis-aligned bbox, then each glyph is translated/rotated along the arc, so the gradient stays fixed in pre-arc space and doesn't follow the curved baseline. Build the gradient in arc space or apply per-glyph. |
-| low | Letter spacing silently does nothing where canvas lacks ctx.letterSpacing | Text & typography | compositor.js guards with 'letterSpacing' in ctx; on browsers without it (older Safari/Firefox) the Spacing control has no effect and there's no per-glyph-advance fallback, while the inspector still presents it as functional. Add a manual per-glyph advance fallback. |
-| low | Reverse audio uses 2-tap linear point sampling — aliasing on sped-up reversed clips | Audio | reversedBuffer and makeClipBuffer advance the source by sp× per output sample with only linear interpolation and no low-pass. For speed>1 this decimates without anti-aliasing, producing harsh HF aliasing. Consistent between preview and export, so a fidelity issue not a correctness break. Add a simple low-pass before downsampling. |
-| low | Adjustment layers can't apply mirror and several geometric/key effects (silent feature divergence) | Layers & compositing | applyAdjustment supports CSS filters + per-pixel posterize/tint/threshold/duotone/rgbsplit/pixelate on the scene below, but mirror is excluded (adjUnsupported={mirror:1}) and chroma/luma key + vignette are wired only into the per-layer media path. An adjustment layer's effect set silently differs from a media layer's. Either disable unsupported effects in the dropdown for adjustment layers or implement them in the adjustment path. |
-| low | Camera rotation/scale can't be edited on-canvas (selection box hidden for camera) | Camera & 3D | canvas-edit.js hides the selection box when the selected layer is a camera, so the scale corner handles and rotate knob never render for a camera. Rotation/zoom are still editable via the inspector and pan works by grabbing the scene, so functionally done but inconsistent with other layers. Likely intentional (AM cameras pan-by-grab) — document or add handles. |
-| low | No guard prevents a camera being parented in scene data (silent no-op) | Camera & 3D | scene.js gives every layer a parent field including the camera, with no validation; the camera composite reads cam.transform directly without applyParentChain, so a programmatically/AI-set camera parent is silently ignored. The scene model is explicitly meant to be AI-edited, so this is a confusing no-op. Add a guard or warning. |
-| low | Per-prop loopMode only re-synced when layer.loopMode is non-'none' on rebuild | Keyframes & animation | timeline.js rebuild only pushes loopMode onto animated props if (l.loopMode && l.loopMode!=='none'), relying on the context-menu action having set every current prop's loopMode='none' at click time. A prop animated after loop was turned off carries no explicit 'none'. Harmless today (undefined behaves as no-loop) but fragile. Derive loop state solely from layer.loopMode at eval time rather than mirroring onto each prop. |
-| low | Spacebar play/pause fires while contenteditable text / graph-editor canvas is focused | UI, gestures & workflow | app.js keydown early-return guard only skips INPUT/SELECT/TEXTAREA. Contenteditable canvas text edit and the graph-editor canvas aren't inputs, so pressing Space there still toggles playback. Broaden the guard to also bail on isContentEditable / known editable targets. |
+| med | **Solo doesn't silence audio in PREVIEW (but does on export)** | Audio | `solo` appears **zero** times in `js/app.js` and `js/audio-play.js`. Preview gates audio only on `layer.visible === false` (`app.js:432,441,468`; `audio-play.js:49`). But `exporter.js:98-101` *does* gate on `soloActive && !layer.solo`. So you solo a clip, still hear every layer while editing, then the exported MP4 contains only the soloed audio. Preview and export disagree. Fix: mirror the exporter's gate in both preview paths. **Effort S.** |
+| low | **Speed change doesn't re-clamp against remaining source — freezes on last frame** | Timeline | The speed control keeps `span = duration × speed` invariant but never re-checks that `trimStart + span` stays inside the source. For a clip with `trimStart > 0`, slowing it lengthens duration past the available source and the tail freezes on the last decoded frame. Clamp against `(srcDur − trimStart)`. Note speed is now keyframeable, so clamp the *evaluated* value. **Effort S.** |
+| low | **`Dreamy` preset writes the wrong blur param** | Effects | The preset defines `blur {amount: 6}` but the blur effect's key is `radius` (`compositor.js:38`, `def: 6`). The value is ignored and blur silently falls back to its default — which is also 6, masking the bug. If that default ever changes, the preset diverges. Rename to `radius`. **Effort S.** |
+| low | **`overshoot`/`anticipate` easing exist only as stored beziers** | Keyframes | `EASES` keys are `linear, easeIn, easeOut, easeInOut, bounce, elastic, hold` — no `overshoot`/`anticipate`. `evalProp` falls back to `EASES[b.e] \|\| EASES.linear` when a keyframe has no `bez`. Both apply-paths currently write `bez`, so it works today — but a hand-edited, imported, or AI-generated scene silently animates **linear**. The scene model is explicitly meant to be AI-edited, so this is a real data-loss path. Add both to `EASES`. **Effort S.** |
+| low | Curved text collapses multi-line and ignores alignment | Text | `drawArcLine(ctx, lines.join(' '), …)` joins every line into one space-separated string, and `drawArcLine` forces `textAlign='center'`. Multi-line curved text loses its breaks; left/right align is silently dropped. **Effort M.** |
+| low | Gradient fill renders wrong on curved text | Text | With gradient + curve both on, the gradient is built for a flat axis-aligned bbox, then glyphs are rotated along the arc — so the gradient stays fixed in pre-arc space. Build it in arc space or sample per-glyph. **Effort M.** |
+| low | `letterSpacing` silently no-ops where canvas lacks it | Text | Guarded by `'letterSpacing' in ctx`; on browsers without it the Spacing control does nothing while the inspector still presents it as functional. Needs a per-glyph advance fallback. **Effort M.** |
+| low | Vignette is media-only | Effects | The vignette overlay is drawn in exactly one place (`compositor.js:2879`), inside the media/crop branch. Added to a text or shape layer it is tweakable but never renders. Either gate it out of the picker for non-media layers, or move it to a post-rasterization pass. **Effort S.** |
+| low | No guard prevents a camera being parented | Camera | Every layer including the camera gets a `parent` field with no validation; the camera composite reads `cam.transform` directly and never calls `applyParentChain`, so a programmatically/AI-set camera parent is a silent no-op. The UI hides the picker, but the scene model is AI-editable. Add a guard or warning. **Effort S.** |
+| low | Reverse audio uses 2-tap linear sampling — aliasing on sped-up reversed clips | Audio | `reversedBuffer`/`makeClipBuffer` advance by `speed×` per output sample with linear interpolation and no low-pass, so `speed > 1` decimates without anti-aliasing. Consistent between preview and export, so fidelity not correctness. **Effort M.** |
+| low | Per-prop `loopMode` only re-synced when `layer.loopMode !== 'none'` | Keyframes | `rebuild` only pushes `loopMode` onto animated props when it's set, relying on the context-menu having written `'none'` to every prop at click time. A prop animated *after* loop was turned off carries no explicit value. Harmless today (undefined ≡ no-loop) but fragile. Derive loop state from `layer.loopMode` at eval time. **Effort S.** |
+
+**Fixed since June** (were on this list): no responsive layout · no `touch-action:none` · HTML5-DnD layer reorder ·
+reversed-clip audio ignoring previewRate · spacebar firing in contenteditable · adjustment-layer mirror unsupported ·
+solo not gating audio *on export*.
+
+---
+
+## ⚡ Quick wins (high value, low effort — do these first)
+
+- [ ] **Share sheet after export** (`navigator.share({files})`, anchor-download fallback) — `exporter.js:11 download()`. Core tier, mobile-first mandate, no library. The single biggest payoff-per-line item on this page. **S**
+- [ ] **Gate preview audio on solo** — mirror `exporter.js:98-101`. See bugs. **S**
+- [ ] **Clamp speed against `(srcDur − trimStart)`** — stops the last-frame freeze. See bugs. **S**
+- [ ] **Add `overshoot`/`anticipate` to `EASES`** — closes a silent data-loss path for imported/AI scenes. **S**
+- [ ] **Fix the `Dreamy` blur param** (`amount` → `radius`). **S**
+- [ ] **Steps + Cyclic easing presets** — `EASES` entries + preset buttons; Steps needs a count param. **S**
+- [ ] **Underline / strike-through text** — only bold/italic exist; manual line under the measured width. **S**
+- [ ] **Stroke-only (transparent-fill) text** — text `fillMode` is `[solid, gradient]` with no `none`, and `fillOpacity` is never read in the text draw path. **S**
+- [ ] **Dedicated ±1-frame transport buttons** — the step logic already exists, it's keyboard-only (`,`/`.`). **S**
+- [ ] **Export: stereo/mono select, direct Mbps field, Max Render Quality** (`latencyMode:'quality'`) — `channels` is hardcoded to 2. Three trivial adds to the export dialog. **S**
+
+## 🎨 Cheap effects — a self-contained pixel fn + one registry entry each
+
+The effect pipeline (`FM.EFFECTS` + `POSTFX`/`PIXEL_FX`/`WARP_FX` + a perf-whitelist line) makes these near-mechanical.
+All verified absent 2026-07-10.
+
+- [ ] **Soft Glow** — bright-pass → blur → screen composite. **S**
+- [ ] **Replace Color** — HSV distance test + hue swap. **S**
+- [ ] **Spot Color** — keep one hue, desaturate the rest. **S**
+- [ ] **Four-Color Gradient** — bilinear blend of 4 corner colours. **S**
+- [ ] **Spectral Map** — luma → hue sweep. **S**
+- [ ] **Channel Remap (HSV)** — extend the shipped `channelremap` `options[]` with HSV modes. Cheapest of all. **S**
+- [ ] **Radial Shadow** — point-light shadow projection. **S**
+- [ ] **Tunnel** — log-polar coordinate warp. **S**
+- [ ] **Voronoi Cells** — seed points + nearest-cell fill. **S/M**
+- [ ] **Turbulent Displace** — value-noise displacement field. **M**
+- [ ] **Palette Map** — nearest-colour snap (needs a small palette UI). **M**
+- [ ] **Contour Gradient** — needs an edge-distance transform pass first. **M**
+- [ ] **Luma matte** — a mask mode that converts the mask layer to luminance-alpha before `destination-in`. Matte compositing is alpha-only today. **S/M**
+
+## 🧩 Feature gaps (by priority)
+
+| P | Feature | Domain | Tier | Effort | Why it matters |
+|---|---|---|---|---|---|
+| 1 | **Downscale the preview canvas** to CSS box × DPR (see `PERF-PLAN.md` Fix A) | Perf | — | M | Not a parity row, but the biggest change to how the app *feels*: the phone renders every frame at 1080×1920 to display it at ~400px. Multiplies the cost of every effect. |
+| 1 | Two-finger pinch / pan on the **preview canvas** | UI | core | M | `canvas-edit.js` has zero multi-pointer handlers. The timeline's pinch code is a directly reusable pattern. Mobile viewport navigation. |
+| 2 | Ripple delete (close the gap when a clip is removed) | Timeline | core | S | `deleteLayer` just filters the array; adjacent clips don't shift. Standard editing expectation. |
+| 2 | Snap to grid + grid overlay | UI | common | S/M | `snapTo` snaps to centre/edges only. Extend it to quantize to a grid step. |
+| 2 | Multi-stop + keyframeable gradients | Color | core | M | Every gradient is 2-stop (`c0`/`c1`) and set directly, never via `setProp`/`evalProp`. Blocks animated gradients and a real Gradient Map. |
+| 2 | Trim-path / Drawing Progress (animated stroke draw-on) | Masking | common | M | Signature logo-reveal effect. Trim start/end params + `lineDashOffset` on the traced path, keyframeable. |
+| 2 | Stereo panning per layer | Audio | common | M | No `StereoPannerNode`. Needs the preview path *and* the OfflineAudioContext export mix. |
+| 3 | Colour Curves (RGB + per-channel) | Effects | common | M/L | The render is a trivial 256-LUT; the work is the curve-editor UI. |
+| 3 | Move Along Path | Masking | common | M | Sample a path layer's points as a position source + optional auto-orient. |
+| 3 | Multiple masks per layer + mask stack | Masking | common | M | `layer.mask` is singular; one mask layer per masking group. Nested masking groups partly work around it. |
+| 3 | Live nested precomps | Layers | common | M/L | `FM.elements` re-IDs layers into independent **copies** — editing the source doesn't update instances. |
+| 3 | Per-clip audio loop · crossfade · mic recording | Audio | common | M | Per-clip `source.loop`; linked fade envelopes; `getUserMedia` + `MediaRecorder`. |
+| 3 | Text: scrolling/ticker presets + AE-style per-unit animator | Text | common | M/L | Only 5 fixed reveal presets; no rotation channel, no free per-unit animator. |
+| 3 | Merge / flatten layers | UI | common | L | Offscreen render of N layers over a time range → a new baked media layer. |
+| 4 | Active/multi-camera + camera cuts | Camera | core | M | `app.js:671` hard-blocks a second camera. Data model + timeline UI; no WebGL needed. |
+| 4 | Independent preview pan/zoom viewport | Camera | common | S/M | Editor navigation currently writes the **camera layer's** transform. Pure editor-space offset/scale. |
+| 4 | PNG sequence export (numbered frames) | Export | common | S/M | Loop the existing frame-step + `toBlob`. Niche on mobile. |
+| 4 | Platform export presets (TikTok / Reels / YouTube) | Export | common | S | Presets just set canvas size + fps + bitrate. |
+| 4 | Stroke Taper · Boolean shape ops | Masking | nice | M / L | Taper needs per-point width in the stroker. Booleans need robust polygon clipping — the one item here that isn't cheap in vanilla JS. |
+| 4 | Keyframe animation of fontSize / spacing / lineHeight | Text | core | M | Colour, outline and shadow are keyframeable now; these still use direct assignment. |
+| 5 | Multi-keyframe marquee select + bulk easing; in/out velocity fields | Keyframes | common | M/L | Bezier math already exists; the work is timeline selection state + inspector UI. |
+| 5 | Audio beat / BPM auto-detection | Audio | common | L | Web Audio onset / energy-flux analysis. Markers already exist to receive the results. |
+| 5 | Particle emitter | Effects | common | L | New layer type + per-frame simulation. |
+| 5 | Pitch shift / pitch-preserving time-stretch | Audio | common | L | Phase-vocoder or WSOLA; no native primitive. |
+| 5 | Reverb · delay · EQ · compressor | Audio | common | M each | Web Audio nodes in preview, but each must be re-implemented in the offline export mix. |
+
+## 🚫 Non-goals / platform-blocked
+
+- **True 3D** — camera FOV/zoom-distance, depth-of-field, fog, scene lighting, `.obj`/`.glb` import, real 3D text.
+  Impractical on a 2D canvas without a WebGL rewrite. The faux-3D mesh effects (`cube3d`, `box3d`, `rasterextrude`,
+  `smoothbevel`) already cover most of the *look*. **Document as a non-goal.**
+- **Animated GIF export** — no native browser GIF encoder. Needs a CDN library (gif.js) or a hand-rolled LZW encoder;
+  the only item that strains the no-npm rule.
+- **Alpha-channel export** — `mp4-muxer` + `avc` have no alpha path. Would need WebM/VP9-alpha muxing.
+- **MOV / ProRes / HEVC** — WebCodecs generally can't encode ProRes at all; the muxer is mp4-only.
+- **Cloud share links** — the app is deliberately local-only (localStorage + IndexedDB, nothing leaves the device).
+- **Watermark on free-tier exports** — N/A by design; there are no tiers.
