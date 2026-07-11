@@ -239,6 +239,32 @@ window.FM = window.FM || {};
       { key: 'edge', label: 'Edge', min: 0, max: 1, step: 0.02, def: 0.35 },
     ] },
     { type: 'tunnel', label: 'Tunnel', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    // ---- batch 28 (more AM Distortion/Warp + Procedural + Color parity) ----
+    { type: 'turbulentdisplace', label: 'Turbulent Displace', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 80, step: 1, def: 30, unit: 'px' },
+      { key: 'scale', label: 'Detail', min: 10, max: 200, step: 1, def: 60 },
+    ] },
+    { type: 'stretchseg', label: 'Stretch Segment', params: [
+      { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'height', label: 'Band', min: 2, max: 100, step: 1, def: 25, unit: '%' },
+      { key: 'amount', label: 'Stretch', min: 0, max: 0.95, step: 0.02, def: 0.6 },
+    ] },
+    { type: 'tileshift', label: 'Tile Shift', params: [
+      { key: 'size', label: 'Tile', min: 8, max: 400, step: 1, def: 120, unit: 'px' },
+      { key: 'amount', label: 'Offset', min: -1, max: 1, step: 0.02, def: 0.5 },
+    ] },
+    { type: 'tilerotate', label: 'Tile Rotate', params: [
+      { key: 'size', label: 'Tile', min: 8, max: 400, step: 1, def: 120, unit: 'px' },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 45, unit: '°' },
+    ] },
+    { type: 'palettemap', label: 'Palette Map', params: [
+      { key: 'count', label: 'Colors', min: 2, max: 8, step: 1, def: 4 },
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+    ] },
+    { type: 'lightning', label: 'Lightning', params: [
+      { key: 'count', label: 'Bolts', min: 1, max: 8, step: 1, def: 3 },
+      { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.02, def: 0.8 },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Color' },
     // ---- batch 27: Remove Object — content-aware removal of watermarks/subtitles/logos in a
     // rectangular region (x/y = top-left as % of comp). Patch = ffmpeg-delogo border interpolation;
     // Blur/Mosaic obscure instead of reconstructing. x/y/w/h/feather keyframe; mode is a segment.
@@ -785,6 +811,7 @@ window.FM = window.FM || {};
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
     squeeze: 1, tiles: 1, motionflow: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
+    turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     touchup: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
@@ -1197,6 +1224,18 @@ window.FM = window.FM || {};
     // never reach this — they keep their inline clip-bounds vignette in the media draw branch; this fn
     // exists so text/shape/path/group layers stop silently ignoring the effect. (#backlog: vignette no-op)
     vignette: function(d,W,H,p,t){ var vgA=FM.evalProp(p.amount,t); if(vgA==null)vgA=0.6; vgA=vgA<0?0:(vgA>1?1:vgA); if(vgA<=0)return; var vgCx=W/2, vgCy=H/2, vgMr=Math.hypot(vgCx,vgCy); for(var vgy=0;vgy<H;vgy++){ var vgRow=vgy*W, vgDy=vgy-vgCy; for(var vgx=0;vgx<W;vgx++){ var vgi=(vgRow+vgx)*4; if(d[vgi+3]===0)continue; var vgR=Math.hypot(vgx-vgCx,vgDy)/vgMr, vgQ=(vgR-0.35)/0.65; if(vgQ<=0)continue; var vgF=1-vgA*Math.pow(vgQ,1.6); if(vgF<0)vgF=0; d[vgi]*=vgF; d[vgi+1]*=vgF; d[vgi+2]*=vgF; } } },
+    // ---- batch 28 (AM parity fill-ins) ----
+    // Palette Map: quantize every pixel to the nearest of a small evenly-spaced palette (posterize in
+    // 3D RGB space → banded, screen-print look). Count = palette steps per axis; Amount blends toward it.
+    palettemap: function(d,W,H,p,t){ var pm_c=FM.evalProp(p.count,t); if(pm_c==null)pm_c=4; pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt=FM.evalProp(p.amount,t); if(pm_amt==null)pm_amt=1; if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return; var pm_step=255/(pm_c-1); for(var pm_i=0;pm_i<d.length;pm_i+=4){ if(d[pm_i+3]===0)continue; var pm_nr=Math.round(d[pm_i]/pm_step)*pm_step, pm_ng=Math.round(d[pm_i+1]/pm_step)*pm_step, pm_nb=Math.round(d[pm_i+2]/pm_step)*pm_step; d[pm_i]+=(pm_nr-d[pm_i])*pm_amt; d[pm_i+1]+=(pm_ng-d[pm_i+1])*pm_amt; d[pm_i+2]+=(pm_nb-d[pm_i+2])*pm_amt; } },
+    // Lightning: procedural bolts — a few jagged vertical paths (deterministic sine-hash jitter, phase
+    // driven by t so they flicker), each drawn as an additive glow that fades with distance. Screen-
+    // composited over the content in the bolt colour. Count/Intensity params; no random (export-safe).
+    lightning: function(d,W,H,p,t){ var lt_n=FM.evalProp(p.count,t); if(lt_n==null)lt_n=3; lt_n=Math.round(lt_n); if(lt_n<1)lt_n=1; if(lt_n>8)lt_n=8; var lt_int=FM.evalProp(p.intensity,t); if(lt_int==null)lt_int=0.8; if(lt_int<0)lt_int=0; if(lt_int>1)lt_int=1; if(lt_int<=0)return; var lt_col=hexToRGB(p.color)||[150,200,255]; var lt_ph=Math.floor(t*8);   // 8 flickers/sec, quantised so a frame's bolt is stable
+      var lt_wid=Math.max(1.5,W*0.006); var lt_b;
+      for(lt_b=0;lt_b<lt_n;lt_b++){ var lt_seed=lt_b*97.13+lt_ph*3.7; var lt_x0=(0.5+0.5*Math.sin(lt_seed*1.7))*W; var lt_prevX=lt_x0; var lt_segs=14, lt_s;
+        for(lt_s=1;lt_s<=lt_segs;lt_s++){ var lt_y=H*lt_s/lt_segs, lt_py=H*(lt_s-1)/lt_segs; var lt_jit=Math.sin(lt_seed+lt_s*2.3)*W*0.06+Math.sin(lt_seed*2.1+lt_s*5.1)*W*0.025; var lt_x=lt_x0+lt_jit+ (lt_s/lt_segs-0.5)*W*0.15*Math.sin(lt_seed*0.9);
+          var lt_steps=Math.ceil(H/lt_segs); var lt_k; for(lt_k=0;lt_k<lt_steps;lt_k++){ var lt_f=lt_k/lt_steps; var lt_cx2=lt_prevX+(lt_x-lt_prevX)*lt_f, lt_cy2=lt_py+(lt_y-lt_py)*lt_f; var lt_ixc=Math.round(lt_cx2); var lt_rad=Math.ceil(lt_wid*2); var lt_ox; for(lt_ox=-lt_rad;lt_ox<=lt_rad;lt_ox++){ var lt_xx=lt_ixc+lt_ox, lt_yy=Math.round(lt_cy2); if(lt_xx<0||lt_xx>=W||lt_yy<0||lt_yy>=H)continue; var lt_dist=Math.abs(lt_ox)/lt_wid; var lt_g=Math.exp(-lt_dist*lt_dist)*lt_int; if(lt_g<=0.004)continue; var lt_i=(lt_yy*W+lt_xx)*4; d[lt_i]=255-(255-d[lt_i])*(1-lt_col[0]/255*lt_g); d[lt_i+1]=255-(255-d[lt_i+1])*(1-lt_col[1]/255*lt_g); d[lt_i+2]=255-(255-d[lt_i+2])*(1-lt_col[2]/255*lt_g); if(d[lt_i+3]<255)d[lt_i+3]=Math.min(255,d[lt_i+3]+lt_g*255); } } lt_prevX=lt_x; } } },
     // ---- batch 21 ----
     faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var lift=26*a, con=1-0.25*a; function ch(v){ v=lift+v*(255-lift)/255; return 128+(v-128)*con; } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b); var nr=cr+(L-cr)*0.15*a+8*a, ng=cg+(L-cg)*0.15*a+2*a, nb=cb+(L-cb)*0.15*a-6*a; d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
     nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*1.3+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*60; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*0.2, gg=L, gb=L*0.2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
@@ -1297,6 +1336,21 @@ window.FM = window.FM || {};
     innerpinch: function(x,y,W,H,cx,cy,maxR,p,t){ var ip_a=FM.evalProp(p.amount,t); if(ip_a===null||ip_a===undefined)ip_a=0.5; if(ip_a<-1)ip_a=-1; if(ip_a>1)ip_a=1; var ip_dx=x-cx, ip_dy=y-cy; var ip_r=Math.hypot(ip_dx,ip_dy); var ip_rad=maxR*0.6; if(ip_rad<=0)return [x,y]; var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8; return [cx+ip_dx*ip_k, cy+ip_dy*ip_k]; },
     // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), AM featured ----
     squeeze: function(x,y,W,H,cx,cy,maxR,p,t){ var sq_k=p.amount==null?0.5:FM.evalProp(p.amount,t); if(sq_k<-1)sq_k=-1; if(sq_k>1)sq_k=1; var sq_f=1-sq_k*Math.sin(Math.PI*y/H); if(sq_f<0.05)sq_f=0.05; return [cx+(x-cx)/sq_f, y]; },
+    // ---- batch 28 (AM Distortion/Warp fill-ins) ----
+    // Turbulent Displace: domain-warped value-noise field pushes each pixel — organic churn, distinct
+    // from fractalwarp's plain sum-of-sines (this warps the noise input by more noise → curlier). t
+    // scrolls the field so it boils over time. Deterministic (no random).
+    turbulentdisplace: function(x,y,W,H,cx,cy,maxR,p,t){ var td_a=FM.evalProp(p.amount,t); if(td_a==null)td_a=30; if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y]; var td_sc=FM.evalProp(p.scale,t); if(td_sc==null)td_sc=60; if(td_sc<10)td_sc=10; var td_ph=t*0.6; function td_n(u,v){ return Math.sin(u)*Math.cos(v*1.3)+Math.sin(u*2.1+v)*0.5+Math.cos(u*0.5-v*1.7)*0.35; } var td_wx=td_n(x/td_sc+td_ph, y/td_sc), td_wy=td_n(x/td_sc, y/td_sc-td_ph*0.8); var td_dx=td_n(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_n(x/td_sc-td_wy, y/td_sc+td_wx+1.7); return [x+td_dx*td_a, y+td_dy*td_a]; },
+    // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
+    // sampled from a THINNER source band (compress in → stretch out), feathered at the edges so it
+    // blends. y/height are % of frame. Outside the band = identity.
+    stretchseg: function(x,y,W,H,cx,cy,maxR,p,t){ var ss_y=FM.evalProp(p.y,t); if(ss_y==null)ss_y=50; var ss_h=FM.evalProp(p.height,t); if(ss_h==null)ss_h=25; var ss_amt=FM.evalProp(p.amount,t); if(ss_amt==null)ss_amt=0.6; if(ss_amt<0)ss_amt=0; if(ss_amt>0.95)ss_amt=0.95; var ss_cy=H*ss_y/100, ss_half=H*ss_h/200; if(ss_half<1)return [x,y]; var ss_d=y-ss_cy; if(ss_d<-ss_half||ss_d>ss_half)return [x,y]; var ss_f=1-ss_amt; var ss_sy=ss_cy+ss_d*ss_f; return [x, ss_sy]; },
+    // Tile Shift: chop into square tiles, offset alternate ROWS sideways (and alt columns down) by a
+    // fraction of the tile — the classic sliced/glitch-tile displacement. Samples wrap via the source.
+    tileshift: function(x,y,W,H,cx,cy,maxR,p,t){ var ts_sz=FM.evalProp(p.size,t); if(ts_sz==null)ts_sz=120; if(ts_sz<8)ts_sz=8; var ts_off=FM.evalProp(p.amount,t); if(ts_off==null)ts_off=0.5; var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
+    // Tile Rotate: chop into tiles, spin each tile's CONTENT about its own centre by Angle (× a subtle
+    // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
+    tilerotate: function(x,y,W,H,cx,cy,maxR,p,t){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
   };
 
   // ================== CANVAS_FX: 3D solids + Move/Transform ==================

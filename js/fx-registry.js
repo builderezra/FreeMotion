@@ -75,6 +75,9 @@ window.FM = window.FM || {};
     radialshadow: 'color', voronoi: 'proc', tunnel: 'distort',
     // batch 27
     touchup: 'matte',     // Remove Object — content-aware rectangular fill (delogo-style)
+    // batch 28 (more AM Distortion/Warp + Procedural + Color parity)
+    turbulentdisplace: 'distort', stretchseg: 'distort', tileshift: 'distort', tilerotate: 'distort',
+    palettemap: 'color', lightning: 'proc',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -112,7 +115,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['touchup', 'voronoi', 'softglow', 'fourcolor', 'spectralmap', 'replacecolor', 'radialshadow', 'tunnel', 'chromakey', 'motionflow', 'copybg', 'squeeze'];
+  FM.FX_FEATURED = ['lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift', 'touchup', 'voronoi', 'softglow', 'fourcolor', 'spectralmap', 'radialshadow'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {

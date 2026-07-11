@@ -65,7 +65,6 @@ sum-of-sines noise displacement; a second one would be a duplicate.
 
 Still open:
 
-- [ ] **Palette Map** — nearest-colour snap (needs a small palette-input UI, not just params). **M**
 - [ ] **Contour Gradient** — needs an edge-distance transform pass before the gradient map. **M**
 - [ ] **Luma matte** — a mask mode that converts the mask layer to luminance-alpha before `destination-in`. Matte compositing is alpha-only today. **S/M**
 
