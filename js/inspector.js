@@ -259,7 +259,67 @@ window.FM = window.FM || {};
     remove(name) { this._write(this.list().filter(p => p.name !== name)); },
   };
 
-  // AM signature control: a horizontal tick strip you drag to scrub a value, + an editable value box.
+  // ===== AM-style ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
+  // A FINITE ruler of tick notches (one per TICK px) scrolls under the fixed green centre line.
+  // Notches are REAL snap points: a drag lands on min + n*q (like timeline frame-snap — typed values
+  // in the box stay free-form), and the ruler physically ends at min/max so a drag can never leave
+  // the range. White marker lines flag notable values: the min/max walls, midpoint, zero, the
+  // param's default, and every 45° for angle params.
+  const TICK = 7;   // px of drag = one notch; keep in sync with the 7px gradient period in styles.css
+  function tickQuantum(min, max, step, unit) {
+    // Notch quantum q: the param's step, unless that means >120 notches — then coarsen to a "nice"
+    // 1/2/5×10^k giving ≤100 notches. q is always an integer multiple of step so snaps stay legal.
+    const span = max - min;
+    if (!(step > 0)) step = span > 0 ? span / 100 : 1;
+    if (!(span > 0) || span / step <= 120) return step;
+    const legal = q => { const m = q / step; return m >= 1 - 1e-6 && Math.abs(m - Math.round(m)) < 1e-6; };
+    const snap = q => Math.round(q / step) * step;
+    if (unit === '°') { for (const q of [1, 5, 15, 45]) if (legal(q) && span / q <= 120) return snap(q); }   // divisors of 45 keep the 45° landmarks landable
+    for (let k = -3; k <= 6; k++) for (const m of [1, 2, 5]) { const q = m * Math.pow(10, k); if (legal(q) && span / q <= 100) return snap(q); }
+    return Math.ceil(span / 100 / step) * step;
+  }
+  // o: { min, max, step, unit, dflt, read(), apply(v), release() }. Returns the strip; strip._sync(v)
+  // re-scrolls the ruler (call after a typed value).
+  function tickStrip(o) {
+    const strip = el('div', 'fx-scrub');
+    const q = tickQuantum(o.min, o.max, o.step, o.unit);
+    const ruler = el('div', 'fx-scrub-ticks');
+    ruler.style.width = ((o.max - o.min) / q) * TICK + 'px';
+    const marks = [];
+    const mark = (v, isEnd) => {
+      if (v == null || isNaN(v) || v < o.min - 1e-9 || v > o.max + 1e-9) return;
+      for (let i = 0; i < marks.length; i++) if (Math.abs(marks[i].v - v) < q / 2) { if (isEnd) marks[i].end = true; return; }   // de-dup coinciding markers
+      marks.push({ v: v, end: !!isEnd });
+    };
+    mark(o.min, true); mark(o.max, true);                       // the walls
+    mark((o.min + o.max) / 2);                                  // midpoint
+    if (o.min < 0 && o.max > 0) mark(0);
+    mark(o.dflt);                                               // the param's default
+    if (o.unit === '°') for (let a = Math.ceil(o.min / 45) * 45; a <= o.max + 1e-9; a += 45) mark(a);
+    marks.forEach(m => { const d = el('div', 'fx-scrub-mark' + (m.end ? ' end' : '')); d.style.left = ((m.v - o.min) / q) * TICK + 'px'; ruler.appendChild(d); });
+    strip.appendChild(ruler); strip.appendChild(el('div', 'fx-scrub-notch'));
+    const sync = v => { ruler.style.transform = 'translateX(' + (-((v - o.min) / q) * TICK) + 'px)'; };
+    sync(o.read());
+    let drag = null;
+    strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: o.read(), last: null }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
+    const end = () => { if (drag) { drag = null; o.release(); } };
+    // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
+    // hover would otherwise KEEP scrubbing. min/max = a hard wall: re-anchor the drag at the limit so
+    // reversing responds instantly (no overshoot dead zone); the ruler is finite so it can't scroll past.
+    strip.addEventListener('pointermove', (e) => {
+      if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end();
+      const raw = drag.v + (e.clientX - drag.x) * q / TICK;
+      const clamped = Math.max(o.min, Math.min(o.max, raw));
+      if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; }
+      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((clamped - o.min) / q) * q));   // land ON a notch (the grid can overshoot an off-grid max)
+      if (v !== drag.last) { drag.last = v; o.apply(v); sync(v); }
+    });
+    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
+    strip._sync = sync;
+    return strip;
+  }
+
+  // AM signature control: the ruler scrubber + an editable value box.
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
     const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : 2);
@@ -280,7 +340,6 @@ window.FM = window.FM || {};
       row.appendChild(eb);
     }
     row.appendChild(el('span', 'fx-scrub-label', p.label));
-    const strip = el('div', 'fx-scrub'); strip.appendChild(el('div', 'fx-scrub-notch'));
     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || '');
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
@@ -289,16 +348,13 @@ window.FM = window.FM || {};
       FM.requestRender();
       if (commit && FM.history) FM.history.commit();
     }
-    let drag = null;
-    strip.addEventListener('pointerdown', (e) => { const v = read(); drag = { x: e.clientX, v: v, v0: v }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
-    const end = () => { if (drag) { const wasAnim = FM.isAnimated(fx.params[p.key]); drag = null; strip.style.backgroundPositionX = '0px'; if (wasAnim) afterFx(); else if (FM.history) FM.history.commit(); } };   // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
-    // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
-    // hover would otherwise KEEP scrubbing — the "slider drags itself back when I return" bug.
-    // min/max = a hard wall: re-anchor the drag at the limit so reversing responds instantly (no
-    // overshoot dead zone), and drive the ribbed texture from the VALUE so it freezes at the wall.
-    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const scale = (p.max - p.min) / 300; const raw = drag.v + (e.clientX - drag.x) * scale; const clamped = Math.max(p.min, Math.min(p.max, raw)); if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; } apply(clamped, false); strip.style.backgroundPositionX = (scale > 0 ? -((clamped - drag.v0) / scale) : 0) + 'px'; });
-    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + (p.unit || ''); });
+    const strip = tickStrip({
+      min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read,
+      apply: v => apply(v, false),
+      // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
+      release: () => { if (FM.isAnimated(fx.params[p.key])) afterFx(); else if (FM.history) FM.history.commit(); },
+    });
+    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + (p.unit || ''); });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
     row.appendChild(strip); row.appendChild(valBox);
     return row;
@@ -332,7 +388,6 @@ window.FM = window.FM || {};
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
-    const strip = el('div', 'fx-scrub'); strip.appendChild(el('div', 'fx-scrub-notch'));
     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit;
     function apply(v, commit) {
       v = Math.max(min, Math.min(max, Math.round(v / step) * step));
@@ -341,13 +396,12 @@ window.FM = window.FM || {};
       FM.requestRender();
       if (commit && FM.history) FM.history.commit();
     }
-    let drag = null;
-    strip.addEventListener('pointerdown', (e) => { const v = read(); drag = { x: e.clientX, v: v, v0: v }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
-    const end = () => { if (drag) { const wasAnim = FM.isAnimated(container[key]); drag = null; strip.style.backgroundPositionX = '0px'; if (wasAnim) afterKf(); else if (FM.history) FM.history.commit(); } };
-    // same wall re-anchor + value-driven texture as fxScrubber (no dead zone past min/max)
-    strip.addEventListener('pointermove', (e) => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end(); const scale = (max - min) / 300; const raw = drag.v + (e.clientX - drag.x) * scale; const clamped = Math.max(min, Math.min(max, raw)); if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; } apply(clamped, false); strip.style.backgroundPositionX = (scale > 0 ? -((clamped - drag.v0) / scale) : 0) + 'px'; });
-    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) apply(v, true); else valBox.value = read().toFixed(prec) + unit; });
+    const strip = tickStrip({
+      min: min, max: max, step: step, unit: unit, dflt: dflt, read: read,
+      apply: v => apply(v, false),
+      release: () => { if (FM.isAnimated(container[key])) afterKf(); else if (FM.history) FM.history.commit(); },
+    });
+    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + unit; });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
     row.appendChild(strip); row.appendChild(valBox);
     return row;

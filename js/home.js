@@ -160,6 +160,7 @@ window.FM = window.FM || {};
       if (!root) return;
       if (FM.pause) FM.pause(); else FM.playing = false;   // silence playback under the overlay (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // home always shows the top-level project
+      if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
       FM.projects.touchCurrent(true);   // fresh thumbnail for the card
       tab = 'projects';
       render();

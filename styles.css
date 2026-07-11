@@ -209,7 +209,9 @@ body {
 .mt-dial-knob { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #fff; transform: translate(-50%,-50%); box-shadow: 0 1px 4px rgba(0,0,0,.55); }
 .mt-dial-read { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: var(--accent); pointer-events: none; }
 /* horizontal tick scrubber */
-.mt-scrub { position: relative; height: 92px; border-radius: 10px; background: var(--panel-2); overflow: hidden; touch-action: none; cursor: ew-resize; background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.09) 0 1px, transparent 1px 9px); }
+.mt-scrub { position: relative; height: 92px; border-radius: 10px; background: var(--panel-2); overflow: hidden; touch-action: none; cursor: ew-resize;   /* static ruler texture matching .fx-scrub (this strip doesn't scroll — its drag has no min/max) */
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.3) 0 1px, transparent 1px 35px), repeating-linear-gradient(90deg, rgba(255,255,255,.14) 0 1px, transparent 1px 7px);
+  background-size: auto 44%, auto 24%; background-position: center; background-repeat: repeat-x; }
 .mt-control-dual .mt-scrub { height: 66px; }
 .mt-scrub-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--accent); transform: translateX(-50%); }
 .mt-scrub-ticks { display: none; }
@@ -646,15 +648,25 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fx-mv.dis { opacity: .25; pointer-events: none; }
 .fx-row.fx-off .fx-name { opacity: .45; }
 .fx-ed-body { padding: 4px 11px 13px; display: flex; flex-direction: column; gap: 11px; border-top: 1px solid var(--line-soft); }
-/* value scrubber (AM signature) */
-.fx-scrub-row { display: flex; align-items: center; gap: 8px; }
+/* value scrubber (AM signature): a FINITE tick ruler (.fx-scrub-ticks — width + scroll set by JS,
+   one notch per 7px = TICK in inspector.js) slides under the fixed green centre line. The ruler
+   physically ends at min/max, so the wall is visible. White .fx-scrub-mark lines = notable values.
+   Two lines like AM (◆ ease label … value / full-width ruler): the 286px panel leaves a one-line
+   strip only ~23px wide — unusable. order:2 wraps the strip onto its own line. */
+.fx-scrub-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fx-scrub-row > .fx-scrub-label { flex: 1; }
 .fx-kf { width: 20px; height: 20px; background: none; border: none; color: #4a5468; cursor: pointer; font-size: 11px; flex: none; padding: 0; }
 .fx-kf.active { color: var(--accent); }
 .fx-kf.here { color: var(--kf); }
 .fx-kf-spacer { width: 20px; flex: none; }
 .fx-scrub-label { font-size: 12px; color: var(--text-dim); min-width: 72px; }
-.fx-scrub { flex: 1; height: 34px; border-radius: 8px; background-color: var(--panel-3); position: relative; cursor: ew-resize; overflow: hidden; touch-action: none;
-  background-image: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 9px); }
+.fx-scrub { flex: 1 1 100%; order: 2; height: 38px; border-radius: 8px; background-color: var(--panel-3); position: relative; cursor: ew-resize; overflow: hidden; touch-action: none; }
+.fx-scrub-ticks { position: absolute; left: 50%; top: 0; bottom: 0; pointer-events: none; will-change: transform;
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.5) 0 1px, transparent 1px 35px),   /* every 5th notch: taller + brighter */
+    repeating-linear-gradient(90deg, rgba(255,255,255,.28) 0 1px, transparent 1px 7px);
+  background-size: auto 58%, auto 30%; background-position: 0 center; background-repeat: repeat-x; }
+.fx-scrub-mark { position: absolute; top: 10px; bottom: 10px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.8); border-radius: 1px; }   /* midpoint / zero / default / 45° */
+.fx-scrub-mark.end { top: 6px; bottom: 6px; background: #fff; }   /* min & max — the wall */
 .fx-scrub-notch { position: absolute; left: 50%; top: 5px; bottom: 5px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
 .fx-scrub-val { width: 62px; flex: none; text-align: center; background: var(--panel-3); border: 1px solid var(--line); border-radius: 7px; color: var(--text); font-size: 12px; height: 30px; font-variant-numeric: tabular-nums; }
 /* segmented sub-mode */

@@ -120,6 +120,7 @@ window.FM = window.FM || {};
 
     // Enter pick mode: overlay captures ONE tap → seed point + adjustable box, then Track/Cancel.
     pick(layer) {
+      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
       if (!layer || layer.type !== 'video') { if (FM.toast) FM.toast('Motion tracking works on a video/clip layer'); return; }
       if (layer.parent) { if (FM.toast) FM.toast('Un-parent this layer first — tracking can’t account for a parent’s motion', 3500); return; }
       const m = FM.media.get(layer.id);

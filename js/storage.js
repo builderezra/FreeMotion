@@ -331,6 +331,7 @@ window.FM = window.FM || {};
       // drop the outgoing project's media from the in-memory registry (blobs stay in IDB)
       FM.scene.layers.forEach(l => { if (FM.media.get(l.id)) FM.media.remove(l.id); });
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
+      if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
       const ok = await FM.storage.load();
       if (!ok) { FM.scene.project = Object.assign(FM.newScene().project, { name: (this.list().find(p => p.id === id) || {}).name || 'Untitled' }); if (FM.refreshAll) FM.refreshAll(); }

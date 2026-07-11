@@ -257,16 +257,15 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Project reset', 1200);
   };
 
-  // ===== Canvas (preview) zoom — view-only, never affects export. Scales #canvas-wrap (the selection
-  // overlay lives inside it, so handles stay aligned; pointer mapping is rect-based, so it stays correct). =====
-  FM.canvasZoom = 1;
+  // ===== Canvas (preview) zoom — view-only, never affects export. FM.viewport (canvas-edit.js) is
+  // the single owner of the #canvas-wrap transform (zoom + pan); this is just the stepped-zoom API
+  // the view-bar buttons use. Writing the transform here too would clobber the viewport's pan. =====
+  FM.canvasZoom = 1;   // mirror of FM.viewport.scale, kept in step by viewport.apply()
   const CZOOMS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8];
   FM.setCanvasZoom = function (z) {
-    FM.canvasZoom = Math.max(0.25, Math.min(8, z));
-    const wrap = document.getElementById('canvas-wrap');
-    if (wrap) wrap.style.transform = Math.abs(FM.canvasZoom - 1) < 1e-3 ? '' : 'scale(' + FM.canvasZoom + ')';
-    const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = Math.round(FM.canvasZoom * 100) + '%';
-    if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
+    z = Math.max(0.25, Math.min(8, z));
+    if (FM.viewport) { FM.viewport.scale = z; FM.viewport.apply(); }
+    else FM.canvasZoom = z;
   };
   FM.zoomCanvasStep = function (dir) {
     let i = CZOOMS.findIndex(v => v >= FM.canvasZoom - 1e-3);
@@ -1455,7 +1454,7 @@ window.FM = window.FM || {};
       const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open
     });
     const vbFit = document.getElementById('vb-fit');
-    if (vbFit) vbFit.addEventListener('click', () => FM.setCanvasZoom(1));
+    if (vbFit) vbFit.addEventListener('click', () => { if (FM.viewport) FM.viewport.reset(); else FM.setCanvasZoom(1); });   // fit = 100% AND re-centred (clears the pan too)
     const vbGrid = document.getElementById('vb-grid');
     if (vbGrid) vbGrid.addEventListener('click', () => { FM.showGuides = !FM.showGuides; vbGrid.classList.toggle('on', FM.showGuides); render(); });
     const vbLayers = document.getElementById('vb-layers');
@@ -1529,7 +1528,15 @@ window.FM = window.FM || {};
     }
     const canvasBtn = document.getElementById('btn-canvas');
     if (canvasBtn && cvDialog) {
-      canvasBtn.addEventListener('click', () => { cvDetect(); cvUpdate(); cvDialog.classList.remove('hidden'); });
+      canvasBtn.addEventListener('click', () => {
+        cvDetect(); cvUpdate();
+        // refresh the preview-zoom readout on open (phone reaches here too, via m-settings → btn-canvas)
+        const cz = document.getElementById('cv-zoom');
+        if (cz) cz.textContent = Math.round((FM.viewport ? FM.viewport.scale : 1) * 100) + '%';
+        cvDialog.classList.remove('hidden');
+      });
+      const cvReset = document.getElementById('cv-resetview');
+      if (cvReset) cvReset.addEventListener('click', () => { if (FM.viewport) FM.viewport.reset(); });   // apply() refreshes cv-zoom
       document.querySelectorAll('.aspect-chip').forEach(chip => chip.addEventListener('click', () => { cvAspect = chip.dataset.aspect; cvUpdate(); }));
       document.getElementById('cv-res').addEventListener('change', cvUpdate);
       document.getElementById('cv-cancel').addEventListener('click', () => cvDialog.classList.add('hidden'));

@@ -150,6 +150,25 @@ window.FM = window.FM || {};
     FM.fxRegistry.byCategory(cat.key).forEach(reg => grid.appendChild(tile(reg, null)));
     const scroller = el('div', 'fxb-catview-scroll'); scroller.appendChild(grid);
     view.appendChild(scroller);
+    // Prev/next category arrows pinned under the list — page through every category in place
+    // instead of Back → pick → Back → pick. Wraps at the ends. (Ezra)
+    const cats = FM.fxRegistry.categories();
+    const ci = Math.max(0, cats.findIndex(c => c.key === cat.key));
+    const prev = cats[(ci - 1 + cats.length) % cats.length];
+    const next = cats[(ci + 1) % cats.length];
+    const nav = el('div', 'fxb-catnav');
+    nav.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel-2, rgba(16,20,28,.96));';
+    const go = (target) => { view.remove(); openCategory(target); };
+    const mkBtn = (label, target) => {
+      const b = el('button', 'fxb-back', label);
+      b.style.cssText = 'flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      b.addEventListener('click', () => go(target));
+      return b;
+    };
+    nav.appendChild(mkBtn('‹ ' + prev.label, prev));
+    nav.appendChild(el('span', 'fxb-catnav-pos', (ci + 1) + '/' + cats.length)).style.cssText = 'color:var(--text-dim);font-size:11px;flex:none;';
+    nav.appendChild(mkBtn(next.label + ' ›', next));
+    view.appendChild(nav);
     root.appendChild(view);
   }
 

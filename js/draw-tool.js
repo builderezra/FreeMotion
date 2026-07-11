@@ -134,6 +134,7 @@ window.FM = window.FM || {};
   }
 
   FM.startDraw = function (mode) {
+    if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
     if (!overlay) FM.drawTools && FM.drawTools.init();
     if (!overlay) return;
     FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false;

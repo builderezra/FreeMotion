@@ -166,6 +166,7 @@ window.FM = window.FM || {};
   FM.cropTool = {
     isActive() { return !!active; },
     start(layerId) {
+      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
       const l = FM.scene.layers.find(x => x.id === layerId);
       const m = l && FM.media ? FM.media.get(l.id) : null;
       if (!l || !m || !m.width || !m.height) { if (FM.toast) FM.toast('Nothing to crop'); return; }

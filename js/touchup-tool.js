@@ -158,6 +158,7 @@ window.FM = window.FM || {};
   FM.touchupTool = {
     isOpen() { return !!active; },
     open(layerId, fxRef) {
+      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
       if (active) FM.touchupTool.close();
       const l = FM.scene.layers.find(x => x.id === layerId);
       if (!l || !fxRef || !fxRef.params) return;

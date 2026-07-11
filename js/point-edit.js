@@ -274,6 +274,7 @@ window.FM = window.FM || {};
     commit() { if (FM.history) FM.history.commit(); },
 
     start(layerId, opts) {
+      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
       if (active && active.layerId === layerId) return;   // already editing this layer
       if (active) this.stop();
       const l = FM.scene.layers.find(x => x.id === layerId);

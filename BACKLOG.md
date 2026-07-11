@@ -69,6 +69,8 @@ Still open:
 - [ ] **Contour Gradient** — needs an edge-distance transform pass before the gradient map. **M**
 - [ ] **Luma matte** — a mask mode that converts the mask layer to luminance-alpha before `destination-in`. Matte compositing is alpha-only today. **S/M**
 
+- [ ] **Box-tool overlays under a zoomed viewport** — crop/touch-up/point-edit/tracker/draw overlays are children of the transformed #canvas-wrap and lay out in screen px, so at viewport zoom ≠ 1 they render scale× off (values written are correct — input maps through getBoundingClientRect). v2.92 sidesteps it by resetting the view when a tool opens; the real fix is dividing each tool's dispScale-derived sizes by FM.viewport.scale (one-ish line each — see canvas-edit's localScale()). Would let you zoom in first, then draw a precise touch-up box. **S/M**
+
 ## 🧩 Feature gaps (by priority)
 
 | P | Feature | Domain | Tier | Effort | Why it matters |

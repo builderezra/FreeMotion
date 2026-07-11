@@ -19,7 +19,7 @@ window.FM = window.FM || {};
   }
   function showGuides(gx, gy) {
     if (!guideV || !guideH) return;
-    const ds = dispScale();
+    const ds = localScale();
     if (gx == null) { guideV.style.display = 'none'; } else { guideV.style.display = 'block'; guideV.style.left = (gx * ds) + 'px'; }
     if (gy == null) { guideH.style.display = 'none'; } else { guideH.style.display = 'block'; guideH.style.top = (gy * ds) + 'px'; }
   }
@@ -28,6 +28,31 @@ window.FM = window.FM || {};
     const r = canvas.getBoundingClientRect();
     return r.width / canvas.width || 1;
   }
+  // wrap-LOCAL px per project px: the selection box / guides are children of #canvas-wrap, which the
+  // viewport CSS-scales — their style.left/width lay out in UNscaled space, so the viewport scale in
+  // the bounding rect must be divided back out (using dispScale() raw would double-apply the zoom).
+  function localScale() {
+    return dispScale() / ((FM.viewport && FM.viewport.scale) || 1);
+  }
+
+  // ---- viewport: pan/zoom of the PREVIEW itself ("grab the whole player" when nothing is selected).
+  // Pure runtime view state — never written to FM.scene, never in history, never persisted. Reset from
+  // the canvas dialog (cv-resetview), the view bar's fit button, Home, and on project switch.
+  FM.viewport = {
+    x: 0, y: 0, scale: 1,
+    apply() {
+      const w = wrap || document.getElementById('canvas-wrap');
+      if (!w) return;
+      w.style.transformOrigin = 'center center';
+      w.style.transform = this.isDefault() ? '' : 'translate(' + this.x + 'px,' + this.y + 'px) scale(' + this.scale + ')';
+      FM.canvasZoom = this.scale;   // keep the legacy zoom readers (vb-zoom +/− steps) in step
+      const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = Math.round(this.scale * 100) + '%';
+      const cz = document.getElementById('cv-zoom'); if (cz) cz.textContent = Math.round(this.scale * 100) + '%';
+      update();
+    },
+    reset() { this.x = 0; this.y = 0; this.scale = 1; this.apply(); },
+    isDefault() { return !this.x && !this.y && Math.abs(this.scale - 1) < 1e-3; },
+  };
 
   function eventToProject(e) {
     const r = canvas.getBoundingClientRect();
@@ -88,9 +113,52 @@ window.FM = window.FM || {};
     return null;
   }
 
+  // Does the tap point hit the SELECTED layer (its member bounds if it's a group)? Used only for
+  // tap-off-to-deselect — never for picking a different layer.
+  function hitSelected(l, px, py) {
+    const t = FM.time;
+    if (l.type === 'group') {
+      if (!FM.groupBounds) return false;
+      const gb = FM.groupBounds(l, FM.scene, t);
+      return !!gb && px >= gb.x - gb.w / 2 && px <= gb.x + gb.w / 2 && py >= gb.y - gb.h / 2 && py <= gb.y + gb.h / 2;
+    }
+    if (!l.visible || !FM.isLayerVisibleAt(l, t)) return false;   // not on screen right now → a tap can't be "on" it
+    return hitTest(l, px, py, t);
+  }
+
   // ---- drag start ----
+  // Two-finger pinch state (phones): pointer cache on #preview, same pattern as the timeline's pinch.
+  const vpPtrs = new Map();
+  let vpPinch = null;
+  function finishDrag() {   // commit an in-flight drag (second finger landed / pointer lost)
+    if (!drag) return;
+    const d = drag; drag = null;
+    showGuides(null, null);
+    if (!d.moved || d.mode === 'viewpan') return;   // viewport pan is view-only — never in history
+    if (FM.inspector) FM.inspector.refresh();
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();
+  }
+
   function startMove(e) {
     if (e.button !== 0) return;
+    if (e.pointerType === 'touch') {
+      vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (vpPtrs.size === 2) {
+        // second finger → pinch the VIEWPORT (zoom + pan) and cancel the single-finger drag so the
+        // two never fight (a real layer move commits first, so undo still captures it).
+        e.preventDefault();
+        finishDrag();
+        const q = [...vpPtrs.values()];
+        vpPinch = {
+          dist: Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y) || 1,
+          midX: (q[0].x + q[1].x) / 2, midY: (q[0].y + q[1].y) / 2,
+          scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y,
+        };
+        return;
+      }
+      if (vpPtrs.size > 2) return;   // ignore extra fingers
+    }
     const p = eventToProject(e);
     const sel = FM.selectedLayer(FM.scene);
     if (sel && sel.type === 'camera') {   // camera selected → dragging anywhere pans the view (grab-the-scene)
@@ -98,20 +166,18 @@ window.FM = window.FM || {};
       drag = { mode: 'campan', layer: sel, startP: p, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
       return;
     }
-    const layer = topHit(p.x, p.y);
-    if (!layer) {
-      // Tap empty canvas → deselect. On PC this reveals the Add menu in the inspector; on phone it
-      // drops the inspector sheet back to just the timeline + the green (+) (AM behaviour).
-      if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+    if (sel) {
+      // A layer is selected: the press NEVER re-selects via topHit — wherever the finger lands, a drag
+      // moves the SELECTED layer only. A stationary tap resolves on release (onUp): tap OFF the layer
+      // deselects; re-tap ON it reopens the phone inspector sheet.
+      e.preventDefault();
+      drag = { mode: 'move', layer: sel, startP: p, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time), fromSelected: true };
       return;
     }
+    // NOTHING selected: a tap selects what's under it (resolved on release, so a drag never selects);
+    // a DRAG grabs the whole player — pans FM.viewport (view-only; reset via canvas dialog / home).
     e.preventDefault();
-    if (FM.scene.selectedId !== layer.id) FM.selectLayer(layer.id);
-    // Re-tapping the ALREADY-selected layer must still reopen the phone inspector sheet if it was
-    // swiped/grab-closed (the layer stays selected, so selectLayer short-circuits and the mobile
-    // open() wrapper never fires). Open it directly.
-    else if (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.mobile.open) FM.mobile.open();
-    drag = { mode: 'move', layer: layer, startP: p, startX: FM.evalProp(layer.transform.x, FM.time), startY: FM.evalProp(layer.transform.y, FM.time) };
+    drag = { mode: 'viewpan', startP: p, sx: e.clientX, sy: e.clientY, vx: FM.viewport.x, vy: FM.viewport.y };
   }
 
   function startHandle(role) {
@@ -131,15 +197,36 @@ window.FM = window.FM || {};
 
   // ---- drag move / end ----
   function onMove(e) {
+    if (e.pointerType === 'touch' && vpPtrs.has(e.pointerId)) {
+      vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (vpPinch && vpPtrs.size === 2) {   // pinch: distance ratio → zoom, midpoint delta → pan
+        if (e.cancelable) e.preventDefault();
+        const q = [...vpPtrs.values()];
+        const d = Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y);
+        FM.viewport.scale = Math.max(0.2, Math.min(8, vpPinch.scale * (d / vpPinch.dist)));
+        FM.viewport.x = vpPinch.x + ((q[0].x + q[1].x) / 2 - vpPinch.midX);
+        FM.viewport.y = vpPinch.y + ((q[0].y + q[1].y) / 2 - vpPinch.midY);
+        FM.viewport.apply();
+        return;
+      }
+    }
     if (!drag) return;
+    if (drag.mode === 'viewpan') {   // grab the whole player: screen-px pan (translate sits before scale)
+      const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+      if (!drag.moved) { if (Math.hypot(dx, dy) < 4) return; drag.moved = true; }
+      FM.viewport.x = drag.vx + dx; FM.viewport.y = drag.vy + dy;
+      FM.viewport.apply();
+      return;
+    }
+    if (drag.mode === 'move' && drag.layer.locked) return;   // locked layer: press may tap-deselect, never move
     const p = eventToProject(e);
     const L = drag.layer;
     if (!drag.moved) {
-      // ignore sub-threshold jitter so a tap-to-select isn't treated as a move (no no-op undo spam).
+      // ignore sub-threshold jitter so a tap isn't treated as a move (no no-op undo spam).
       // move/campan have startP; scale/rotate (handle grabs) don't and are always intentional.
       if (drag.startP) {
         const ds = dispScale(), dpx = Math.hypot((p.x - drag.startP.x) * ds, (p.y - drag.startP.y) * ds);
-        if (dpx < 3) return;
+        if (dpx < 4) return;
       }
       drag.moved = true;
     }
@@ -171,12 +258,28 @@ window.FM = window.FM || {};
     update();
   }
 
-  function onUp() {
+  function onUp(e) {
+    if (e && vpPtrs.has(e.pointerId)) { vpPtrs.delete(e.pointerId); if (vpPtrs.size < 2) vpPinch = null; }
     if (!drag) return;
-    const moved = drag.moved;
+    const d = drag;
     drag = null;
     showGuides(null, null);
-    if (!moved) return;   // a pure tap-select already refreshed via selectLayer — don't push a no-op undo snapshot
+    if (!d.moved) {
+      // stationary tap (≤ threshold) — resolve the selection intent now that we know it wasn't a drag
+      if (d.mode === 'viewpan') {
+        const hit = topHit(d.startP.x, d.startP.y);
+        if (hit) FM.selectLayer(hit.id);   // tap-to-select, exactly as before (drags never select)
+        else if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+      } else if (d.mode === 'move' && d.fromSelected) {
+        if (hitSelected(d.layer, d.startP.x, d.startP.y)) {
+          // Re-tapping the ALREADY-selected layer must still reopen the phone inspector sheet if it
+          // was swiped/grab-closed (selection unchanged, so the mobile open() wrapper never fires).
+          if (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.mobile.open) FM.mobile.open();
+        } else FM.selectLayer(null);   // tap OFF the selected layer → deselect (nothing moved)
+      }
+      return;   // no undo snapshot — nothing changed
+    }
+    if (d.mode === 'viewpan') return;   // view-only — never touches the scene or history
     if (FM.inspector) FM.inspector.refresh();  // sync number fields once, after the drag
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();
@@ -186,7 +289,15 @@ window.FM = window.FM || {};
   let wheelCommit = null;
   function onWheel(e) {
     const sel = FM.selectedLayer(FM.scene);
-    if (!sel || sel.type !== 'camera') return;   // only steers the camera, otherwise leave the page alone
+    if (!sel) {
+      // nothing selected → the wheel zooms the VIEWPORT about the canvas centre (view-only, no undo)
+      e.preventDefault();
+      const v = FM.viewport;
+      v.scale = Math.max(0.2, Math.min(8, v.scale * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+      v.apply();
+      return;
+    }
+    if (sel.type !== 'camera') return;   // a layer is selected → only the camera steers, leave the page alone
     e.preventDefault();
     const P = FM.scene.project, cx = P.width / 2, cy = P.height / 2, pc = eventToProject(e);
     const zoom = FM.evalProp(sel.transform.scale, FM.time) || 1;
@@ -207,12 +318,15 @@ window.FM = window.FM || {};
     if (!box) return;
     const layer = FM.selectedLayer(FM.scene);
     const t = FM.time;
+    // grab cursor = "you're holding the player" (nothing selected → viewport pan; camera → scene pan)
+    const cur = (!layer || layer.type === 'camera') ? 'grab' : 'default';
+    if (canvas && canvas.style.cursor !== cur) canvas.style.cursor = cur;
     if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) { box.style.display = 'none'; return; }   // camera pans globally — no box
     const tr = layer.transform;
     const sc = FM.evalProp(tr.scale, t);
     const cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
     const rot = FM.evalProp(tr.rotation, t);
-    const s = layerSize(layer), ds = dispScale();
+    const s = layerSize(layer), ds = localScale();
     // Match the compositor's effective non-uniform scale + skew so the box and its corner handles hug
     // the rendered layer (was a uniform-scale, skew-less box that drifted off stretched/skewed layers). (#9,#12)
     const scX = sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);
@@ -273,6 +387,7 @@ window.FM = window.FM || {};
       canvas.addEventListener('wheel', onWheel, { passive: false });
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);   // lost touches must release pinch fingers + drags
       window.addEventListener('resize', update);
     },
     update: update,
