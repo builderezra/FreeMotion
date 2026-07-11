@@ -108,6 +108,21 @@ window.FM = window.FM || {};
    * truth so preview + export read keyframed volume the same way. */
   FM.layerVolume = function (layer, t) { return layer.muted ? 0 : (layer.volume == null ? 1 : evalProp(layer.volume, t)); };
 
+  /* Random vivid fill for freshly spawned shapes: any hue, but saturation 65-90% and lightness
+   * 45-62% so it always reads as a colour (never mud, near-black or washed-out white) on the dark UI.
+   * Math.random is fine here — the value is chosen ONCE at creation and stored on the layer, so
+   * preview and export stay identical. */
+  FM.randomFill = function () {
+    const h = Math.random() * 360, s = 0.65 + Math.random() * 0.25, l = 0.45 + Math.random() * 0.17;
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = x; b = 0; } else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; } else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; } else { r = c; g = 0; b = x; }
+    const hex = v => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+    return '#' + hex(r) + hex(g) + hex(b);
+  };
+
   /* Solo suppresses AUDIO, not just picture. compositor.js skips non-soloed layers when drawing, and
    * exporter.js buildAudioMix skips them in the mix — but the preview audio paths gated only on
    * `visible`. So soloing a clip left every other layer audible while editing, then the exported file
@@ -282,7 +297,10 @@ window.FM = window.FM || {};
       base.shape = props.shape || 'rect';      // rect | ellipse | line | polygon
       base.shapeW = props.shapeW || 400;
       base.shapeH = props.shapeH || 300;
-      base.fill = props.fill || '#3a7bd5';
+      // No fill given → a random VIVID colour per spawn (random hue, sat/light kept in a range that
+      // never lands on mud or near-black). Only creation-time: saved/imported/template/AI layers all
+      // pass their stored fill and are untouched, and duplicates clone the source layer directly.
+      base.fill = props.fill || FM.randomFill();
       base.stroke = { enabled: false, width: 8, color: '#ffffff' };
       base.cornerRadius = 0;
       base.sides = 5;
