@@ -1286,8 +1286,15 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.reset();
     if (FM.storage) FM.storage.load().then(restored => {
       if (restored && FM.history) FM.history.reset();
-      // Land on the AM-style home screen (project browser); the restored project sits behind it.
-      if (FM.home) { FM.home.init(); FM.home.open(); }
+      if (FM.home) {
+        FM.home.init();
+        // Land on the home screen ONLY if that's where the user last was. A refresh (or the
+        // version-label force-update, which reloads on a fresh URL) drops them straight back into
+        // the project they were editing — home.js writes 'fm.view' on every open/close. The
+        // restored-project guard keeps a deleted/first-boot project from opening an empty editor.
+        let lastView = null; try { lastView = localStorage.getItem('fm.view'); } catch (e) {}
+        if (!(restored && lastView === 'editor')) FM.home.open();
+      }
       if (FM.projects) FM.projects.pruneOrphans();   // boot sweep of orphaned media blobs
     });
     // ‹ crumb pill exits the Edit Group view

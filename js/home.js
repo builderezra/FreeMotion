@@ -165,6 +165,9 @@ window.FM = window.FM || {};
       render();
       root.classList.remove('hidden');
       document.body.classList.add('home-open');
+      // Remember which screen the user is on, so a refresh / force-update reload puts them back
+      // there instead of always landing on the project browser (the boot path reads this).
+      try { localStorage.setItem('fm.view', 'home'); } catch (e) {}
     },
     close() {
       if (!root) return;
@@ -172,6 +175,7 @@ window.FM = window.FM || {};
       document.getElementById('hm-dialog').classList.add('hidden');
       document.body.classList.remove('home-open');
       if (FM.requestRender) FM.requestRender();
+      try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
     },
     isOpen() { return root && !root.classList.contains('hidden'); },
   };
