@@ -78,6 +78,8 @@ window.FM = window.FM || {};
     // batch 28 (more AM Distortion/Warp + Procedural + Color parity)
     turbulentdisplace: 'distort', stretchseg: 'distort', tileshift: 'distort', tilerotate: 'distort',
     palettemap: 'color', lightning: 'proc',
+    // batch 29 (layer-referencing displacement)
+    displacemap: 'distort', polardisplace: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -115,7 +117,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift', 'touchup', 'voronoi', 'softglow', 'fourcolor', 'spectralmap', 'radialshadow'];
+  FM.FX_FEATURED = ['displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift', 'touchup', 'voronoi', 'softglow', 'fourcolor'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {
@@ -132,6 +134,9 @@ window.FM = window.FM || {};
     } else if (def.param) {
       out.push({ key: def.param, label: def.label, type: 'range', min: def.min, max: def.max, step: def.step, default: def.def, unit: def.unit || '', keyframable: true });
     }
+    // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
+    // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
+    if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false });
     if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Color',   type: 'color', default: def.defColor  || '#ffffff', keyframable: false });
     if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Color 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: false });
     if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Color 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: false });

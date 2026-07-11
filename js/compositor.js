@@ -265,6 +265,16 @@ window.FM = window.FM || {};
       { key: 'count', label: 'Bolts', min: 1, max: 8, step: 1, def: 3 },
       { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.02, def: 0.8 },
     ], color: true, defColor: '#96c8ff', colorLabel: 'Color' },
+    // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
+    // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
+    { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
+      { key: 'amount', label: 'Amount', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
+      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance']] },
+    ] },
+    { type: 'polardisplace', label: 'Polar Displacement', layer: true, layerLabel: 'Map layer', params: [
+      { key: 'radius', label: 'Radius', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
+      { key: 'angle', label: 'Twist', min: -180, max: 180, step: 1, def: 30, unit: '°' },
+    ] },
     // ---- batch 27: Remove Object — content-aware removal of watermarks/subtitles/logos in a
     // rectangular region (x/y = top-left as % of comp). Patch = ffmpeg-delogo border interpolation;
     // Blur/Mosaic obscure instead of reconstructing. x/y/w/h/feather keyframe; mode is a segment.
@@ -812,6 +822,7 @@ window.FM = window.FM || {};
     squeeze: 1, tiles: 1, motionflow: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
+    displacemap: 1, polardisplace: 1,
     touchup: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
@@ -825,6 +836,9 @@ window.FM = window.FM || {};
     if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#ff3366', fx);
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
+    // displacement maps: warp by another layer's pixels (own render path — needs the map image)
+    if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
+    if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
     if (PIXEL_FX[fx.type]) return drawPixelEffect(ctx, layer, t, scene, fx, PIXEL_FX[fx.type]);
     // generic geometric warps
@@ -1280,6 +1294,87 @@ window.FM = window.FM || {};
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
     ctx.drawImage(_wpB, 0, 0);
+    ctx.restore();
+  }
+
+  // ---- Displacement Map (batch 29): warp the layer by ANOTHER layer's pixels. Unlike WARP_FX (a pure
+  // coordinate function), this needs a second rendered image — the "map" — so it has its own render
+  // path: render the target clean, render the chosen map layer, then push each pixel by the map's
+  // colour there. `_dispDepth` guards against two maps referencing each other into an infinite loop. ----
+  let _dspA = null, _dspB = null, _dspM = null, _dispDepth = 0;
+  function drawDisplaceEffect(ctx, layer, t, scene, fx, polar) {
+    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    if (!_dspA) _dspA = document.createElement('canvas');
+    if (!_dspB) _dspB = document.createElement('canvas');
+    if (!_dspM) _dspM = document.createElement('canvas');
+    if (_dspA.width !== W || _dspA.height !== H) { _dspA.width = W; _dspA.height = H; }
+    if (_dspB.width !== W || _dspB.height !== H) { _dspB.width = W; _dspB.height = H; }
+    if (_dspM.width !== W || _dspM.height !== H) { _dspM.width = W; _dspM.height = H; }
+    // 1) target layer, clean (this fx stripped) — the pixels we resample from
+    const actx = _dspA.getContext('2d');
+    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    drawLayer(actx, tmp, t, scene);
+    const src = actx.getImageData(0, 0, W, H).data;
+    // 2) the MAP: the chosen layer rendered at full opacity (its own displace fx stripped so two maps
+    // can't recurse), or — when no layer is picked — the target's OWN pixels (self-displace by luma).
+    const srcId = fx.params && fx.params.source;
+    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    let map = src;
+    if (mapLayer && _dispDepth < 3) {
+      const mctx = _dspM.getContext('2d');
+      mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, W, H);
+      mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+      const mtmp = Object.assign({}, mapLayer, { blendMode: 'normal', effects: (mapLayer.effects || []).filter(e => e.type !== 'displacemap' && e.type !== 'polardisplace'), transform: Object.assign({}, mapLayer.transform, { opacity: 1 }) });
+      _dispDepth++;
+      try { drawLayer(mctx, mtmp, t, scene); } finally { _dispDepth--; }
+      map = mctx.getImageData(0, 0, W, H).data;
+    }
+    const bctx = _dspB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+    const pr = fx.params || {};
+    if (!polar) {
+      const amt = FM.evalProp(pr.amount, t); const amount = (amt == null ? 40 : amt);
+      const chan = Math.round(FM.evalProp(pr.channel, t) || 0);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const mi = (y * W + x) * 4; let dxn = 0, dyn = 0;
+          if (map[mi + 3] !== 0) {
+            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
+          }
+          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+    } else {
+      const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt);
+      const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;
+      const cx = W / 2, cy = H / 2;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const mi = (y * W + x) * 4;
+          const dx = x - cx, dy = y - cy; let r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+          if (map[mi + 3] !== 0) { r += (map[mi] / 255 - 0.5) * 2 * radius; a += (map[mi + 1] / 255 - 0.5) * 2 * angAmt; }   // Red→radius, Green→angle
+          let sx = (cx + Math.cos(a) * r) | 0, sy = (cy + Math.sin(a) * r) | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+    }
+    bctx.putImageData(outImg, 0, 0);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    ctx.drawImage(_dspB, 0, 0);
     ctx.restore();
   }
 

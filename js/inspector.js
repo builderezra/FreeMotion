@@ -612,6 +612,18 @@ window.FM = window.FM || {};
         if (p.type === 'range') body.appendChild(fxScrubber(fx, p, layer, idx));
         else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
         else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
+        else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp
+          const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label || 'Source'));
+          const sel = document.createElement('select');
+          const o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'This layer (self)'; sel.appendChild(o0);
+          (FM.scene.layers || []).forEach(l => {
+            if (l.id === layer.id || l.type === 'camera' || l.type === 'null') return;   // self / non-visual can't be a map
+            const op = document.createElement('option'); op.value = l.id; op.textContent = l.name || l.type; sel.appendChild(op);
+          });
+          sel.value = fx.params[p.key] || '';   // stale id (deleted layer) falls back to '' → self-displace
+          sel.addEventListener('change', () => { fx.params[p.key] = sel.value; FM.requestRender(); if (FM.history) FM.history.commit(); });
+          cr.appendChild(sel); body.appendChild(cr);
+        }
       });
       // Remove Object: dragging a box on the canvas beats nudging four % sliders (esp. on a phone)
       if (fx.type === 'touchup' && FM.touchupTool) {
