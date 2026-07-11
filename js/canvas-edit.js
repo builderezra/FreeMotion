@@ -267,9 +267,8 @@ window.FM = window.FM || {};
     if (!d.moved) {
       // stationary tap (≤ threshold) — resolve the selection intent now that we know it wasn't a drag
       if (d.mode === 'viewpan') {
-        const hit = topHit(d.startP.x, d.startP.y);
-        if (hit) FM.selectLayer(hit.id);   // tap-to-select, exactly as before (drags never select)
-        else if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+        // Nothing selected → the canvas NEVER selects (Ezra): it's purely the player surface —
+        // tap does nothing, drag pans, pinch/wheel zooms. Layers are picked from the timeline.
       } else if (d.mode === 'move' && d.fromSelected) {
         if (hitSelected(d.layer, d.startP.x, d.startP.y)) {
           // Re-tapping the ALREADY-selected layer must still reopen the phone inspector sheet if it
