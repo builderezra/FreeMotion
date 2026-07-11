@@ -2902,9 +2902,22 @@ window.FM = window.FM || {};
       const ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;   // top-left of the shape box (anchor-relative)
       const stk = layer.stroke;
       const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
-      if (mode === 'stroke') {   // open kinds (line / arc) are stroked, never filled — Color & Fill IS the line colour
-        ctx.lineWidth = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
-        ctx.strokeStyle = (stk && stk.enabled && stk.color != null) ? (FM.evalProp(stk.color, t) || '#fff') : (FM.evalProp(layer.fill, t) || '#ffffff');
+      if (mode === 'stroke') {   // open kinds (line / arc / freehand) are stroked, never filled — Color & Fill IS the line colour
+        const lw = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
+        // Border on an open path = an outline hugging the line from BEHIND: a 2× under-stroke in the
+        // border colour, then the drawing's own colour on top (same trick as a filled shape's
+        // 'outside' border, where the fill overpaints the inner half). It used to swap the single
+        // stroke to the border colour — the border painted OVER the whole drawing and the shadow
+        // followed the border instead of the artwork.
+        if (stk && stk.enabled && stk.color != null) {
+          ctx.save();
+          ctx.lineWidth = lw * 2; ctx.strokeStyle = FM.evalProp(stk.color, t) || '#fff';
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+          ctx.restore();
+          ctx.shadowColor = 'transparent';   // the under-stroke already cast the silhouette shadow — don't double it
+        }
+        ctx.lineWidth = lw;
+        ctx.strokeStyle = FM.evalProp(layer.fill, t) || '#ffffff';
         ctx.lineCap = 'round'; ctx.stroke();
       } else {
         // BORDER (keyframeable, positioned). Canvas stroke() is always centre-aligned, so:

@@ -520,8 +520,15 @@ window.FM = window.FM || {};
     const head = el('div', 'fx-head');
     const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
     const name = el('span', 'fx-name', reg.label);
-    // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it
-    const toggle = () => { if (row._g && row._g.moved) { row._g.moved = false; return; } fx._expanded = !expanded; FM.inspector.refresh(); };
+    // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it.
+    // ACCORDION (like Blending & Opacity): opening one effect closes every other, so exactly one
+    // editor is ever open — no more scrolling past three expanded stacks to reach the fourth.
+    const toggle = () => {
+      if (row._g && row._g.moved) { row._g.moved = false; return; }
+      (layer.effects || []).forEach(e => { if (e !== fx) e._expanded = false; });
+      fx._expanded = !expanded;
+      FM.inspector.refresh();
+    };
     // Tap ANYWHERE on the row header to open/close the editor — not just the ▸ arrow. The action
     // buttons (eye / ⋯ / delete) keep their own behaviour; the disc + name + empty space all toggle.
     head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });

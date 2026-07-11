@@ -45,6 +45,8 @@ window.FM = window.FM || {};
       return;
     }
     if (!layer.effects) layer.effects = [];
+    layer.effects.forEach(e => { e._expanded = false; });   // accordion: the newcomer is the one open editor
+    inst._expanded = true;                                    // land with the new effect's controls ready to tweak
     layer.effects.push(inst);             // <- exactly one entry
     pushRecent(id);
     FM.fxBrowser.close();

@@ -1670,7 +1670,11 @@ window.FM = window.FM || {};
     (function deselectOnEmptyTap() {
       const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel,' +
         ' #ctx-menu, #shortcuts-overlay, #export-overlay, #export-dialog, #canvas-dialog, #add-sheet,' +
-        ' #topbar, #topbar-m, .sb-handle, button, input, select, textarea, label, a, option, [contenteditable]';
+        ' #topbar, #topbar-m, .sb-handle, button, input, select, textarea, label, a, option, [contenteditable],' +
+        // full-screen TOOL overlays: the eyedropper's sample tap and the crop/touch-up box drags land on
+        // these, and without them here that tap read as "empty background" → deselect → the open colour
+        // picker / effect panel vanished mid-pick (the "colour picker closes my menu" bug)
+        ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar';
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
