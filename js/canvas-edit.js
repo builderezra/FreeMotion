@@ -74,8 +74,35 @@ window.FM = window.FM || {};
     return { w: m ? m.width : 100, h: m ? m.height : 100 };
   }
 
+  // Accumulated PARENT transform of a layer (same root→leaf walk as the compositor's applyParentChain):
+  // world = T + R(rot)·s·(parent-local). Without this, a parented layer's hit region / selection box /
+  // drag mapping all sat at its raw local coords — detached from where the compositor actually drew it.
+  function parentXform(layer, t) {
+    const out = { x: 0, y: 0, rot: 0, s: 1 };
+    if (!layer.parent) return out;
+    const chain = [], seen = new Set([layer.id]);
+    let pid = layer.parent;
+    while (pid && !seen.has(pid)) { seen.add(pid); const pl = FM.scene.layers.find(l => l.id === pid); if (!pl) break; chain.push(pl); pid = pl.parent; }
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const tr = chain[i].transform;
+      const px = FM.evalProp(tr.x, t) || 0, py = FM.evalProp(tr.y, t) || 0;
+      const pr = (FM.evalProp(tr.rotation, t) || 0) * Math.PI / 180;
+      const ps = FM.evalProp(tr.scale, t) || 1;
+      const c = Math.cos(out.rot), si = Math.sin(out.rot);
+      out.x += out.s * (c * px - si * py);
+      out.y += out.s * (si * px + c * py);
+      out.rot += pr; out.s *= ps;
+    }
+    return out;
+  }
+  function worldToParentLocal(pt, px, py) {   // invert parentXform for a point
+    const dx = px - pt.x, dy = py - pt.y, c = Math.cos(-pt.rot), si = Math.sin(-pt.rot);
+    return { x: (dx * c - dy * si) / pt.s, y: (dx * si + dy * c) / pt.s };
+  }
+
   function hitTest(layer, px, py, t) {
     const tr = layer.transform;
+    if (layer.parent) { const q = worldToParentLocal(parentXform(layer, t), px, py); px = q.x; py = q.y; }
     const cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
     const sc = FM.evalProp(tr.scale, t) || 1e-6;
     // Invert the compositor's full transform (translate → rotate → non-uniform scale → skew) so a
@@ -195,6 +222,20 @@ window.FM = window.FM || {};
       drag = { mode: 'move', pointerId: e.pointerId, layer: sel, startP: p, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time), fromSelected: true,
                tx: FM.alignTargets ? FM.alignTargets(sel, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width],
                ty: FM.alignTargets ? FM.alignTargets(sel, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height] };
+      if (sel.parent) { drag.pxf = parentXform(sel, FM.time); drag.tx = []; drag.ty = []; }   // parented: deltas map through the parent frame; world snap targets don't apply to local coords
+      if (sel.type === 'group' && FM.groupBounds) {
+        // a group's x/y is an OFFSET, not a position — snap its visible BOUNDS CENTRE to the
+        // composition targets instead (offset 0 snapping to "centre 540" was meaningless)
+        const gb = FM.groupBounds(sel, FM.scene, FM.time);
+        if (gb) {
+          drag.boundsOffX = gb.x - drag.startX; drag.boundsOffY = gb.y - drag.startY;
+          const P2 = FM.scene.project;
+          const kx = (sel.transform.x && sel.transform.x.kf) ? sel.transform.x.kf.map(k => k.v + drag.boundsOffX) : [];
+          const ky = (sel.transform.y && sel.transform.y.kf) ? sel.transform.y.kf.map(k => k.v + drag.boundsOffY) : [];
+          drag.tx = [P2.width / 2, 0, P2.width].concat(kx);    // kf OFFSETS shifted into bounds-centre space
+          drag.ty = [P2.height / 2, 0, P2.height].concat(ky);
+        }
+      }
       return;
     }
     // NOTHING selected: a tap selects what's under it (resolved on release, so a drag never selects);
@@ -218,11 +259,25 @@ window.FM = window.FM || {};
       }
       if (FM.playing) FM.pause();   // scale/rotate during playback used a stale centre + drifted keyframes
       const p = eventToProject(e);
-      const cx = FM.evalProp(layer.transform.x, FM.time), cy = FM.evalProp(layer.transform.y, FM.time);
+      let cx = FM.evalProp(layer.transform.x, FM.time), cy = FM.evalProp(layer.transform.y, FM.time);
+      let pivot = null;
+      if (layer.parent) { const w = parentXform(layer, FM.time); const c = Math.cos(w.rot), si = Math.sin(w.rot); const wx = w.x + w.s * (c * cx - si * cy), wy = w.y + w.s * (si * cx + c * cy); cx = wx; cy = wy; }   // measure the gesture about the layer's WORLD position
+      if (layer.type === 'group' && FM.groupBounds) {
+        // GROUPS: pivot about the visible BOUNDS CENTRE, not the group's transform origin — the
+        // origin is (0,0) = the project's top-left corner, so rotating/scaling about it flung the
+        // members clear off-frame. Each move compensates x/y so the box turns/scales in place.
+        const gb = FM.groupBounds(layer, FM.scene, FM.time);
+        if (gb) {
+          pivot = { cx: gb.x, cy: gb.y,
+                    g0x: FM.evalProp(layer.transform.x, FM.time) || 0,
+                    g0y: FM.evalProp(layer.transform.y, FM.time) || 0 };
+          cx = gb.x; cy = gb.y;   // finger distance/angle are measured from what the user SEES
+        }
+      }
       if (role === 'scale') {
-        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, startScale: FM.evalProp(layer.transform.scale, FM.time) || 0.0001, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
+        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: FM.evalProp(layer.transform.scale, FM.time) || 0.0001, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
       } else {
-        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
+        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
       }
     };
   }
@@ -276,23 +331,44 @@ window.FM = window.FM || {};
       FM.requestRender(); update(); return;
     }
     if (drag.mode === 'move') {
-      let nx = drag.startX + (p.x - drag.startP.x);
-      let ny = drag.startY + (p.y - drag.startP.y);
+      let ddx = p.x - drag.startP.x, ddy = p.y - drag.startP.y;
+      if (drag.pxf) {   // parented layer: a world-space finger delta lands in the PARENT's frame (un-rotate, un-scale)
+        const c = Math.cos(-drag.pxf.rot), si = Math.sin(-drag.pxf.rot);
+        const rx = (ddx * c - ddy * si) / drag.pxf.s, ry = (ddx * si + ddy * c) / drag.pxf.s;
+        ddx = rx; ddy = ry;
+      }
+      let nx = drag.startX + ddx;
+      let ny = drag.startY + ddy;
       const thr = 14 / dispScale();
       // snap to centre / edges AND this layer's keyframe positions — from the GRAB-time snapshot
-      // (live targets tracked the drag itself and ratcheted it in ~14px steps)
-      const sx = snapTo(nx, drag.tx || [FM.scene.project.width / 2, 0, FM.scene.project.width], thr);
-      const sy = snapTo(ny, drag.ty || [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
-      nx = sx.v; ny = sy.v;
+      // (live targets tracked the drag itself and ratcheted it in ~14px steps). Groups snap their
+      // visible bounds centre (offX/offY translate between the offset and what the user sees).
+      const offX = drag.boundsOffX || 0, offY = drag.boundsOffY || 0;
+      const sx = snapTo(nx + offX, drag.tx || [FM.scene.project.width / 2, 0, FM.scene.project.width], thr);
+      const sy = snapTo(ny + offY, drag.ty || [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
+      nx = sx.v - offX; ny = sy.v - offY;
       showGuides(sx.hit ? sx.target : null, sy.hit ? sy.target : null);
       // shiftTransform (not setTransform): a canvas drag moves the WHOLE animation, never adds a keyframe
       FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
       FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
     } else if (drag.mode === 'scale') {
-      const s = drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist);
-      FM.shiftTransform(L, 'scale', Math.max(0.02, Math.round(s * 1000) / 1000), FM.time);
+      const s = Math.max(0.02, Math.round(drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist) * 1000) / 1000);
+      if (drag.pivot) {
+        // scale about the bounds centre C: members sit at G + s·m, so G' = C + (s/s0)·(G0 − C)
+        const k = s / drag.startScale, pv = drag.pivot;
+        FM.shiftTransform(L, 'x', Math.round(pv.cx + k * (pv.g0x - pv.cx)), FM.time);
+        FM.shiftTransform(L, 'y', Math.round(pv.cy + k * (pv.g0y - pv.cy)), FM.time);
+      }
+      FM.shiftTransform(L, 'scale', s, FM.time);
     } else if (drag.mode === 'rotate') {
       const deg = drag.startRot + (Math.atan2(p.y - drag.cy, p.x - drag.cx) - drag.startAngle) * 180 / Math.PI;
+      if (drag.pivot) {
+        // rotate about the bounds centre C: G' = C + R(Δ)·(G0 − C), so the visible box turns in place
+        const d = (deg - drag.startRot) * Math.PI / 180, pv = drag.pivot;
+        const c = Math.cos(d), si = Math.sin(d), vx = pv.g0x - pv.cx, vy = pv.g0y - pv.cy;
+        FM.shiftTransform(L, 'x', Math.round(pv.cx + c * vx - si * vy), FM.time);
+        FM.shiftTransform(L, 'y', Math.round(pv.cy + si * vx + c * vy), FM.time);
+      }
       FM.shiftTransform(L, 'rotation', Math.round(deg * 10) / 10, FM.time);
     }
     FM.requestRender();
@@ -374,9 +450,15 @@ window.FM = window.FM || {};
     if (canvas && canvas.style.cursor !== cur) canvas.style.cursor = cur;
     if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) { box.style.display = 'none'; return; }   // camera pans globally — no box
     const tr = layer.transform;
-    const sc = FM.evalProp(tr.scale, t);
-    const cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
-    const rot = FM.evalProp(tr.rotation, t);
+    let sc = FM.evalProp(tr.scale, t);
+    let cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
+    let rot = FM.evalProp(tr.rotation, t);
+    if (layer.parent) {   // parented: the box must sit where the COMPOSITOR draws the layer (world), not at its raw local coords
+      const w = parentXform(layer, t);
+      const c = Math.cos(w.rot), si = Math.sin(w.rot);
+      const wx = w.x + w.s * (c * cx - si * cy), wy = w.y + w.s * (si * cx + c * cy);
+      cx = wx; cy = wy; rot += w.rot * 180 / Math.PI; sc *= w.s;
+    }
     const s = layerSize(layer), ds = localScale();
     // Match the compositor's effective non-uniform scale + skew so the box and its corner handles hug
     // the rendered layer (was a uniform-scale, skew-less box that drifted off stretched/skewed layers). (#9,#12)
