@@ -157,6 +157,17 @@ window.FM = window.FM || {};
   }
   FM.setTransform = setTransform;
 
+  /* Set a transform prop to `value` at `time` WITHOUT adding a keyframe: for an animated prop, shift
+   * EVERY keyframe by the delta so the whole animation moves as one and its timing is untouched (this
+   * is what canvas dragging uses — Ezra wants a canvas drag to reposition the whole thing, never to
+   * drop a stray keyframe at the playhead the way Move & Transform deliberately does). */
+  FM.shiftTransform = function (layer, key, value, time) {
+    const p = layer.transform[key];
+    if (!isAnimated(p)) { layer.transform[key] = value; return; }
+    const delta = value - evalProp(p, time);
+    if (delta) p.kf.forEach(k => { k.v += delta; });
+  };
+
   /* Toggle a keyframe for a transform prop at `time`. Converts static<->animated. */
   function toggleKeyframe(layer, key, time) {
     let p = layer.transform[key];

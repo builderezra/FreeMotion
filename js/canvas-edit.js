@@ -233,8 +233,8 @@ window.FM = window.FM || {};
     if (drag.mode === 'campan') {   // pan the camera so the grabbed scene point follows the cursor
       const nx = drag.startX - (p.x - drag.startP.x) / drag.zoom;
       const ny = drag.startY - (p.y - drag.startP.y) / drag.zoom;
-      FM.setTransform(L, 'x', Math.round(nx), FM.time);
-      FM.setTransform(L, 'y', Math.round(ny), FM.time);
+      FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
+      FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
       FM.requestRender(); update(); return;
     }
     if (drag.mode === 'move') {
@@ -246,14 +246,15 @@ window.FM = window.FM || {};
       const sy = snapTo(ny, FM.alignTargets ? FM.alignTargets(L, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
       nx = sx.v; ny = sy.v;
       showGuides(sx.hit ? sx.target : null, sy.hit ? sy.target : null);
-      FM.setTransform(L, 'x', Math.round(nx), FM.time);
-      FM.setTransform(L, 'y', Math.round(ny), FM.time);
+      // shiftTransform (not setTransform): a canvas drag moves the WHOLE animation, never adds a keyframe
+      FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
+      FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
     } else if (drag.mode === 'scale') {
       const s = drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist);
-      FM.setTransform(L, 'scale', Math.max(0.02, Math.round(s * 1000) / 1000), FM.time);
+      FM.shiftTransform(L, 'scale', Math.max(0.02, Math.round(s * 1000) / 1000), FM.time);
     } else if (drag.mode === 'rotate') {
       const deg = drag.startRot + (Math.atan2(p.y - drag.cy, p.x - drag.cx) - drag.startAngle) * 180 / Math.PI;
-      FM.setTransform(L, 'rotation', Math.round(deg * 10) / 10, FM.time);
+      FM.shiftTransform(L, 'rotation', Math.round(deg * 10) / 10, FM.time);
     }
     FM.requestRender();
     update();
