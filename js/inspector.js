@@ -306,9 +306,11 @@ window.FM = window.FM || {};
     // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
     // hover would otherwise KEEP scrubbing. min/max = a hard wall: re-anchor the drag at the limit so
     // reversing responds instantly (no overshoot dead zone); the ruler is finite so it can't scroll past.
+    // REVERSED (AM): you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
+    // slides under the fixed centre line), drag RIGHT to lower it. So the delta is (drag.x − clientX).
     strip.addEventListener('pointermove', (e) => {
       if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end();
-      const raw = drag.v + (e.clientX - drag.x) * q / TICK;
+      const raw = drag.v + (drag.x - e.clientX) * q / TICK;
       const clamped = Math.max(o.min, Math.min(o.max, raw));
       if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; }
       const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((clamped - o.min) / q) * q));   // land ON a notch (the grid can overshoot an off-grid max)
