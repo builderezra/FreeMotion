@@ -374,49 +374,93 @@ window.FM = window.FM || {};
     document.body.classList.toggle('sel-multi', sel.size >= 2);
   }
 
+  // Shared insertion-line element (a bright bar shown between rows during a reorder drag).
+  let _dropLine = null;
+  function dropLine() {
+    if (!_dropLine) { _dropLine = document.createElement('div'); _dropLine.className = 'reorder-dropline'; document.body.appendChild(_dropLine); }
+    return _dropLine;
+  }
+
   // ≡ drag handle at each row's RIGHT edge (AM): press + drag vertically to reorder layers.
-  // Pointer-based, so it works with mouse AND touch (the old HTML5 head-drag was desktop-only).
+  // Pointer-based (mouse AND touch). Upgrades over the old single-row drag:
+  //  • auto-scrolls the layer list when you drag to the top/bottom edge (no stop-scroll-regrab)
+  //  • shows an insertion LINE at the exact drop gap instead of just tinting a row
+  //  • drags the WHOLE multi-selection together when the grabbed layer is part of it (not in AM — ours)
   function buildDragHandle(row, layer, index) {
     const h = document.createElement('button');
     h.className = 'row-drag';
-    h.title = 'Drag to reorder';
+    h.title = 'Drag to reorder (multiple if selected)';
     h.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
     h.addEventListener('contextmenu', e => e.preventDefault());
     h.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
       try { h.setPointerCapture(e.pointerId); } catch (_) {}
-      const startY = e.clientY;
-      let over = null, moved = false;
+
+      // if the grabbed layer is inside the current multi-selection, move the whole set together
+      const sel = FM.selectionIds ? FM.selectionIds() : [];
+      const groupIds = (sel.length > 1 && sel.indexOf(layer.id) >= 0) ? sel.slice() : [layer.id];
+      const groupSet = {}; groupIds.forEach(id => { groupSet[id] = 1; });
+      const movingRows = [].slice.call(tracksEl.querySelectorAll('.track-row')).filter(r => {
+        const hd = r.querySelector('.track-head'); const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
+        return L && groupSet[L.id];
+      });
+
+      const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
+      const line = dropLine();
+      let moved = false, dropBeforeId, autoRAF = 0, lastEv = e;
+
+      function resolveDrop(clientY) {   // → { beforeId, y }  (beforeId null = drop at the very bottom)
+        // EXCLUDE the rows being dragged — their translateY moves their bounding box under the finger,
+        // which would otherwise make the dragged row pick ITSELF as the drop target.
+        const rows = [].slice.call(tracksEl.querySelectorAll('.track-row')).filter(r => movingRows.indexOf(r) < 0);
+        for (let i = 0; i < rows.length; i++) {
+          const rc = rows[i].getBoundingClientRect();
+          if (clientY < rc.top + rc.height / 2) {
+            const hd = rows[i].querySelector('.track-head'); const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
+            return { beforeId: L ? L.id : null, y: rc.top };
+          }
+        }
+        const last = rows[rows.length - 1];
+        return { beforeId: null, y: last ? last.getBoundingClientRect().bottom : 0 };
+      }
+      function showLine(clientY) {
+        const info = resolveDrop(clientY); dropBeforeId = info.beforeId;
+        const tr = tracksEl.getBoundingClientRect(), vr = timelineEl.getBoundingClientRect();
+        line.style.display = 'block';
+        line.style.left = tr.left + 'px'; line.style.width = tr.width + 'px';
+        line.style.top = (Math.max(vr.top, Math.min(vr.bottom, info.y)) - 1) + 'px';   // clamp into the visible list
+      }
+      function followFinger() { row.style.transform = 'translateY(' + ((lastEv.clientY - startY) + (timelineEl.scrollTop - startScroll)) + 'px)'; }
+      function autoScroll() {
+        autoRAF = 0; if (!moved) return;
+        const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY, EDGE = 46;
+        let dv = 0;
+        if (y < vr.top + EDGE) dv = -Math.ceil((vr.top + EDGE - y) / EDGE * 15);
+        else if (y > vr.bottom - EDGE) dv = Math.ceil((y - (vr.bottom - EDGE)) / EDGE * 15);
+        if (dv) {
+          const b = timelineEl.scrollTop; timelineEl.scrollTop += dv;
+          if (timelineEl.scrollTop !== b) { followFinger(); showLine(y); }
+          autoRAF = requestAnimationFrame(autoScroll);
+        }
+      }
       const move = (ev) => {
+        lastEv = ev;
         if (!moved && Math.abs(ev.clientY - startY) < 4) return;
         moved = true;
-        row.classList.add('row-dragging');
-        row.style.transform = 'translateY(' + (ev.clientY - startY) + 'px)';
-        if (over) over.classList.remove('drop-target');
-        row.style.pointerEvents = 'none';   // let elementFromPoint see the row underneath
-        const el2 = document.elementFromPoint(ev.clientX, ev.clientY);
-        row.style.pointerEvents = '';
-        const r2 = el2 && el2.closest ? el2.closest('.track-row') : null;
-        over = (r2 && r2 !== row) ? r2 : null;
-        if (over) over.classList.add('drop-target');
+        movingRows.forEach(r => r.classList.add(r === row ? 'row-dragging' : 'row-moving'));
+        followFinger(); showLine(ev.clientY);
+        const vr = timelineEl.getBoundingClientRect();
+        if ((ev.clientY < vr.top + 46 || ev.clientY > vr.bottom - 46) && !autoRAF) autoRAF = requestAnimationFrame(autoScroll);
       };
       const up = () => {
-        h.removeEventListener('pointermove', move);
-        h.removeEventListener('pointerup', up);
-        h.removeEventListener('pointercancel', up);
-        row.classList.remove('row-dragging');
-        row.style.transform = '';
-        if (over) {
-          const hd = over.querySelector('.track-head');
-          over.classList.remove('drop-target');
-          const to = hd ? parseInt(hd.dataset.idx, 10) : NaN;
-          if (moved && !isNaN(to) && FM.reorderLayer) FM.reorderLayer(index, to);
-        }
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+        if (autoRAF) cancelAnimationFrame(autoRAF);
+        movingRows.forEach(r => { r.classList.remove('row-dragging', 'row-moving'); r.style.transform = ''; });
+        line.style.display = 'none';
+        if (moved && dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId);
       };
-      h.addEventListener('pointermove', move);
-      h.addEventListener('pointerup', up);
-      h.addEventListener('pointercancel', up);
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
     });
     return h;
   }

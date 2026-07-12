@@ -35,7 +35,10 @@ window.FM = window.FM || {};
   }
 
   function projectCard(p) {
-    const card = el('button', 'hm-card' + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
+    // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
+    // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
+    const card = el('div', 'hm-card' + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
+    card.setAttribute('role', 'button'); card.tabIndex = 0;
     const th = el('div', 'hm-thumb');
     // Thumbnails now live in IndexedDB (out of the autosave-hot index) — load async, placeholder first.
     const ph = el('span', 'hm-thumb-empty', '▶'); th.appendChild(ph);
@@ -104,7 +107,8 @@ window.FM = window.FM || {};
   }
 
   function templateCard(t) {
-    const card = el('button', 'hm-card');
+    const card = el('div', 'hm-card');   // div not button — same nested-button fix as projectCard
+    card.setAttribute('role', 'button'); card.tabIndex = 0;
     const th = el('div', 'hm-thumb');
     if (t.thumb) { const img = document.createElement('img'); img.src = t.thumb; img.alt = ''; th.appendChild(img); }
     else th.appendChild(el('span', 'hm-thumb-empty', '❖'));

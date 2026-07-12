@@ -1144,6 +1144,30 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // Move one OR several layers (by id) so they sit, as a contiguous block in their existing top-to-
+  // bottom order, immediately BEFORE beforeId (or at the very bottom when beforeId is null). Used by
+  // the timeline reorder drag — handles single- and multi-layer drags through one path.
+  FM.moveLayers = function (ids, beforeId) {
+    const arr = FM.scene.layers;
+    const set = {}; ids.forEach(id => { set[id] = 1; });
+    const moving = arr.filter(l => set[l.id]);          // preserves current order
+    if (!moving.length) return;
+    let rest = arr.filter(l => !set[l.id]);
+    // if the drop target is itself a moving layer, slide down to the next layer that's staying put
+    let at = rest.length;
+    if (beforeId && !set[beforeId]) { const i = rest.findIndex(l => l.id === beforeId); if (i >= 0) at = i; }
+    else if (beforeId && set[beforeId]) {
+      const origIdx = arr.findIndex(l => l.id === beforeId);
+      for (let j = origIdx; j < arr.length; j++) { if (!set[arr[j].id]) { const i = rest.findIndex(l => l.id === arr[j].id); if (i >= 0) { at = i; } break; } }
+    }
+    const result = rest.slice(0, at).concat(moving, rest.slice(at));
+    if (result.length !== arr.length) return;           // safety: never drop/duplicate a layer
+    if (result.every((l, i) => l === arr[i])) return;   // dropped back where it was → no-op, no undo entry
+    arr.length = 0; Array.prototype.push.apply(arr, result);
+    refreshAll();
+    if (FM.history) FM.history.commit();
+  };
+
   /* ---------- import ---------- */
   async function handleFiles(files) {
     for (const file of files) {
