@@ -19,6 +19,7 @@ window.FM = window.FM || {};
   }
   function showGuides(gx, gy) {
     if (!guideV || !guideH) return;
+    clearTimeout(_alignHide);   // an M&T auto-hide timer must never blank the guides mid-canvas-drag
     const ds = localScale();
     if (gx == null) { guideV.style.display = 'none'; } else { guideV.style.display = 'block'; guideV.style.left = (gx * ds) + 'px'; }
     if (gy == null) { guideH.style.display = 'none'; } else { guideH.style.display = 'block'; guideH.style.top = (gy * ds) + 'px'; }
@@ -45,6 +46,9 @@ window.FM = window.FM || {};
       if (!w) return;
       w.style.transformOrigin = 'center center';
       w.style.transform = this.isDefault() ? '' : 'translate(' + this.x + 'px,' + this.y + 'px) scale(' + this.scale + ')';
+      // counter-scale the selection handles: they're children of the scaled wrap, so at 0.2× zoom a
+      // 10px handle (+ its touch pad) shrank to fingertip-impossible; at 8× it covered small layers
+      w.style.setProperty('--vz', String(1 / (this.scale || 1)));
       FM.canvasZoom = this.scale;   // keep the legacy zoom readers (vb-zoom +/− steps) in step
       const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = Math.round(this.scale * 100) + '%';
       const cz = document.getElementById('cv-zoom'); if (cz) cz.textContent = Math.round(this.scale * 100) + '%';
@@ -140,30 +144,45 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   }
 
+  // Screen position of the wrap's transform-origin ('center center') with NO transform applied:
+  // current rect centre minus the current translate. Anchor for finger-fixed pinch/wheel zoom math.
+  function vpOriginScreen() {
+    const w = wrap || document.getElementById('canvas-wrap');
+    const r = w.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - FM.viewport.x, y: r.top + r.height / 2 - FM.viewport.y };
+  }
+
+  function startPinch() {
+    const q = [...vpPtrs.values()];
+    vpPinch = {
+      dist: Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y) || 1,
+      midX: (q[0].x + q[1].x) / 2, midY: (q[0].y + q[1].y) / 2,
+      scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y,
+      u: vpOriginScreen(),   // transform-origin in screen space → keeps the content UNDER the fingers
+    };
+  }
+
   function startMove(e) {
     if (e.button !== 0) return;
     if (e.pointerType === 'touch') {
+      if (vpPtrs.size >= 2 && !vpPtrs.has(e.pointerId)) return;   // a THIRD finger must not join (it froze the pinch and made zoom jump on lift)
       vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (vpPtrs.size === 2) {
         // second finger → pinch the VIEWPORT (zoom + pan) and cancel the single-finger drag so the
         // two never fight (a real layer move commits first, so undo still captures it).
         e.preventDefault();
         finishDrag();
-        const q = [...vpPtrs.values()];
-        vpPinch = {
-          dist: Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y) || 1,
-          midX: (q[0].x + q[1].x) / 2, midY: (q[0].y + q[1].y) / 2,
-          scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y,
-        };
+        startPinch();
         return;
       }
-      if (vpPtrs.size > 2) return;   // ignore extra fingers
     }
+    if (drag) return;   // a drag from ANOTHER pointer is in flight — a stray finger must not hijack it
+    if (FM.playing) FM.pause();   // editing while playing shifted animated layers by their own motion
     const p = eventToProject(e);
     const sel = FM.selectedLayer(FM.scene);
     if (sel && sel.type === 'camera') {   // camera selected → dragging anywhere pans the view (grab-the-scene)
       e.preventDefault();
-      drag = { mode: 'campan', layer: sel, startP: p, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
+      drag = { mode: 'campan', pointerId: e.pointerId, layer: sel, startP: p, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
       return;
     }
     if (sel) {
@@ -171,26 +190,39 @@ window.FM = window.FM || {};
       // moves the SELECTED layer only. A stationary tap resolves on release (onUp): tap OFF the layer
       // deselects; re-tap ON it reopens the phone inspector sheet.
       e.preventDefault();
-      drag = { mode: 'move', layer: sel, startP: p, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time), fromSelected: true };
+      // snapshot the align targets at GRAB time: recomputing per move fed the layer's own live-shifting
+      // keyframe values back in as targets, so slow drags ratcheted in ~14px steps (self-snap)
+      drag = { mode: 'move', pointerId: e.pointerId, layer: sel, startP: p, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time), fromSelected: true,
+               tx: FM.alignTargets ? FM.alignTargets(sel, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width],
+               ty: FM.alignTargets ? FM.alignTargets(sel, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height] };
       return;
     }
     // NOTHING selected: a tap selects what's under it (resolved on release, so a drag never selects);
     // a DRAG grabs the whole player — pans FM.viewport (view-only; reset via canvas dialog / home).
     e.preventDefault();
-    drag = { mode: 'viewpan', startP: p, sx: e.clientX, sy: e.clientY, vx: FM.viewport.x, vy: FM.viewport.y };
+    drag = { mode: 'viewpan', pointerId: e.pointerId, startP: p, sx: e.clientX, sy: e.clientY, vx: FM.viewport.x, vy: FM.viewport.y };
   }
 
   function startHandle(role) {
     return function (e) {
       e.preventDefault(); e.stopPropagation();
       const layer = FM.selectedLayer(FM.scene);
-      if (!layer) return;
+      if (!layer || layer.locked) return;   // lock means LOCKED — scale/rotate too, not just move
+      if (drag) return;                     // another pointer's drag is live — don't overwrite it
+      if (e.pointerType === 'touch') {
+        // register in the pinch pointer cache like body touches — otherwise handle-finger + canvas-finger
+        // silently became two independent drags instead of a pinch
+        if (vpPtrs.size >= 2 && !vpPtrs.has(e.pointerId)) return;
+        vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (vpPtrs.size === 2) { finishDrag(); startPinch(); return; }
+      }
+      if (FM.playing) FM.pause();   // scale/rotate during playback used a stale centre + drifted keyframes
       const p = eventToProject(e);
       const cx = FM.evalProp(layer.transform.x, FM.time), cy = FM.evalProp(layer.transform.y, FM.time);
       if (role === 'scale') {
-        drag = { mode: 'scale', layer: layer, cx: cx, cy: cy, startScale: FM.evalProp(layer.transform.scale, FM.time) || 0.0001, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
+        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, startScale: FM.evalProp(layer.transform.scale, FM.time) || 0.0001, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
       } else {
-        drag = { mode: 'rotate', layer: layer, cx: cx, cy: cy, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
+        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
       }
     };
   }
@@ -199,18 +231,24 @@ window.FM = window.FM || {};
   function onMove(e) {
     if (e.pointerType === 'touch' && vpPtrs.has(e.pointerId)) {
       vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (vpPinch && vpPtrs.size === 2) {   // pinch: distance ratio → zoom, midpoint delta → pan
+      if (vpPinch && vpPtrs.size === 2) {
         if (e.cancelable) e.preventDefault();
         const q = [...vpPtrs.values()];
         const d = Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y);
-        FM.viewport.scale = Math.max(0.2, Math.min(8, vpPinch.scale * (d / vpPinch.dist)));
-        FM.viewport.x = vpPinch.x + ((q[0].x + q[1].x) / 2 - vpPinch.midX);
-        FM.viewport.y = vpPinch.y + ((q[0].y + q[1].y) / 2 - vpPinch.midY);
+        const s1 = Math.max(0.2, Math.min(8, vpPinch.scale * (d / vpPinch.dist)));
+        // FINGER-ANCHORED zoom: keep the scene point that was under the finger midpoint UNDER the
+        // midpoint (zooming about the canvas centre made content slide out from under the fingers).
+        // screen(Q) = u + t + s·(Q − u)  ⇒  t' = mid − u − (s'/s0)·(mid0 − u − t0)
+        const midX = (q[0].x + q[1].x) / 2, midY = (q[0].y + q[1].y) / 2, u = vpPinch.u;
+        FM.viewport.scale = s1;
+        FM.viewport.x = midX - u.x - (s1 / vpPinch.scale) * (vpPinch.midX - u.x - vpPinch.x);
+        FM.viewport.y = midY - u.y - (s1 / vpPinch.scale) * (vpPinch.midY - u.y - vpPinch.y);
         FM.viewport.apply();
         return;
       }
     }
     if (!drag) return;
+    if (drag.pointerId != null && e.pointerId != null && e.pointerId !== drag.pointerId) return;   // only the OWNING pointer drives a drag
     if (drag.mode === 'viewpan') {   // grab the whole player: screen-px pan (translate sits before scale)
       const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
       if (!drag.moved) { if (Math.hypot(dx, dy) < 4) return; drag.moved = true; }
@@ -241,9 +279,10 @@ window.FM = window.FM || {};
       let nx = drag.startX + (p.x - drag.startP.x);
       let ny = drag.startY + (p.y - drag.startP.y);
       const thr = 14 / dispScale();
-      // snap to centre / edges AND this layer's own keyframe positions (shared with Move & Transform)
-      const sx = snapTo(nx, FM.alignTargets ? FM.alignTargets(L, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width], thr);
-      const sy = snapTo(ny, FM.alignTargets ? FM.alignTargets(L, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
+      // snap to centre / edges AND this layer's keyframe positions — from the GRAB-time snapshot
+      // (live targets tracked the drag itself and ratcheted it in ~14px steps)
+      const sx = snapTo(nx, drag.tx || [FM.scene.project.width / 2, 0, FM.scene.project.width], thr);
+      const sy = snapTo(ny, drag.ty || [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
       nx = sx.v; ny = sy.v;
       showGuides(sx.hit ? sx.target : null, sy.hit ? sy.target : null);
       // shiftTransform (not setTransform): a canvas drag moves the WHOLE animation, never adds a keyframe
@@ -266,6 +305,7 @@ window.FM = window.FM || {};
   function onUp(e) {
     if (e && vpPtrs.has(e.pointerId)) { vpPtrs.delete(e.pointerId); if (vpPtrs.size < 2) vpPinch = null; }
     if (!drag) return;
+    if (drag.pointerId != null && e && e.pointerId != null && e.pointerId !== drag.pointerId) return;   // another finger lifting must not end this drag
     const d = drag;
     drag = null;
     showGuides(null, null);
@@ -294,11 +334,18 @@ window.FM = window.FM || {};
   function onWheel(e) {
     const sel = FM.selectedLayer(FM.scene);
     if (!sel) {
-      // nothing selected → the wheel zooms the VIEWPORT about the canvas centre (view-only, no undo)
+      // nothing selected → the wheel zooms the VIEWPORT about the CURSOR (the point under the pointer
+      // stays put — same anchored math as the pinch; view-only, no undo)
       e.preventDefault();
       const v = FM.viewport;
-      v.scale = Math.max(0.2, Math.min(8, v.scale * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
-      v.apply();
+      const s0 = v.scale, s1 = Math.max(0.2, Math.min(8, s0 * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+      if (s1 !== s0) {
+        const u = vpOriginScreen();
+        v.x = e.clientX - u.x - (s1 / s0) * (e.clientX - u.x - v.x);
+        v.y = e.clientY - u.y - (s1 / s0) * (e.clientY - u.y - v.y);
+        v.scale = s1;
+        v.apply();
+      }
       return;
     }
     if (sel.type !== 'camera') return;   // a layer is selected → only the camera steers, leave the page alone

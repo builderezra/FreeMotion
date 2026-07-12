@@ -154,6 +154,7 @@ body {
   position: absolute; width: 10px; height: 10px; box-sizing: border-box;
   background: #fff; border: 1px solid var(--accent); border-radius: 2px;
   pointer-events: auto; box-shadow: 0 1px 2px rgba(0,0,0,.45);
+  scale: var(--vz, 1);   /* counter the viewport zoom: handles stay finger-sized at 0.2× and don't swallow small layers at 8× */
 }
 /* Enlarge the TOUCH target without moving the visible 10px dot — a fingertip is ~40px, so on a ~380px
    phone the bare handle is ~4x too small and taps land on the canvas (move/deselect) instead of resize. */

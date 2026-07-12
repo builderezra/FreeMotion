@@ -164,6 +164,14 @@ window.FM = window.FM || {};
   FM.shiftTransform = function (layer, key, value, time) {
     const p = layer.transform[key];
     if (!isAnimated(p)) { layer.transform[key] = value; return; }
+    if (key === 'scale' || key === 'scaleX' || key === 'scaleY') {
+      // scale is MULTIPLICATIVE: an additive delta pushes other keyframes negative (mirrored render)
+      // — e.g. kfs 0.5→2.0, drag the 2.0 end down to 0.3: additive would make the first kf −1.2.
+      const cur = evalProp(p, time) || 1e-6;
+      const ratio = value / cur;
+      if (ratio !== 1 && isFinite(ratio)) p.kf.forEach(k => { k.v *= ratio; });
+      return;
+    }
     const delta = value - evalProp(p, time);
     if (delta) p.kf.forEach(k => { k.v += delta; });
   };
