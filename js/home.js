@@ -8,6 +8,8 @@ window.FM = window.FM || {};
   'use strict';
 
   let root = null, grid = null, tab = 'projects';
+  let selectMode = false;                 // multi-select for bulk delete / duplicate (projects tab only)
+  const selected = new Set();             // ids ticked while in select mode
 
   function el(tag, cls, text) {
     const d = document.createElement(tag);
@@ -33,11 +35,13 @@ window.FM = window.FM || {};
   }
 
   function projectCard(p) {
-    const card = el('button', 'hm-card');
+    const card = el('button', 'hm-card' + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
     const th = el('div', 'hm-thumb');
-    if (p.thumb) { const img = document.createElement('img'); img.src = p.thumb; img.alt = ''; th.appendChild(img); }
-    else th.appendChild(el('span', 'hm-thumb-empty', '▶'));
+    // Thumbnails now live in IndexedDB (out of the autosave-hot index) — load async, placeholder first.
+    const ph = el('span', 'hm-thumb-empty', '▶'); th.appendChild(ph);
+    FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
     if (p.id === FM.projects.currentId()) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
+    if (selectMode) th.appendChild(el('span', 'hm-check' + (selected.has(p.id) ? ' on' : ''), selected.has(p.id) ? '✓' : ''));
     const name = el('div', 'hm-name', p.name || 'Untitled');
     const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.duration || 0) + 's', (p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : null), ago(p.modified)].filter(Boolean).join(' · '));
     const more = el('button', 'hm-card-more', '⋯');
@@ -47,7 +51,8 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Open', action: () => openProject(p.id) },
         { label: 'Rename…', action: () => { const n = prompt('Project name:', p.name); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
-        { label: 'Duplicate', action: async () => { await FM.projects.duplicate(p.id); render(); } },
+        { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); await FM.projects.duplicate(p.id); render(); } },
+        { label: 'Select…', action: () => { enterSelect(p.id); } },
         { label: 'Save as template…', action: async () => {
           const n = prompt('Template name:', p.name || 'My template'); if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
@@ -61,9 +66,41 @@ window.FM = window.FM || {};
         } },
       ]);
     });
-    card.appendChild(th); card.appendChild(name); card.appendChild(meta); card.appendChild(more);
-    card.addEventListener('click', () => openProject(p.id));
+    card.appendChild(th); card.appendChild(name); card.appendChild(meta);
+    if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
+    card.addEventListener('click', () => { if (selectMode) toggleSel(p.id); else openProject(p.id); });
     return card;
+  }
+
+  function toggleSel(id) { if (selected.has(id)) selected.delete(id); else selected.add(id); renderSelBar(); render(); }
+  function enterSelect(preId) { selectMode = true; selected.clear(); if (preId) selected.add(preId); render(); }
+  function exitSelect() { selectMode = false; selected.clear(); const b = document.getElementById('hm-selbar'); if (b) b.remove(); render(); }
+
+  // Bottom action bar shown while selecting: Delete (n) · Duplicate (n) · Select all · Cancel.
+  function renderSelBar() {
+    let bar = document.getElementById('hm-selbar');
+    if (!selectMode) { if (bar) bar.remove(); return; }
+    if (!bar) { bar = el('div', 'hm-selbar'); bar.id = 'hm-selbar'; root.appendChild(bar); }
+    bar.innerHTML = '';
+    const n = selected.size;
+    const count = el('span', 'hm-selcount', n + ' selected');
+    const all = el('button', 'hm-selbtn', 'Select all');
+    all.addEventListener('click', () => { FM.projects.list().forEach(p => selected.add(p.id)); renderSelBar(); render(); });
+    const dup = el('button', 'hm-selbtn', 'Duplicate');
+    dup.disabled = !n;
+    dup.addEventListener('click', async () => { if (!n) return; const ids = [...selected]; if (FM.toast) FM.toast('Duplicating ' + ids.length + '…'); for (const id of ids) await FM.projects.duplicate(id); exitSelect(); });
+    const del = el('button', 'hm-selbtn danger', 'Delete');
+    del.disabled = !n;
+    del.addEventListener('click', async () => {
+      if (!n) return; const ids = [...selected];
+      if (!confirm('Delete ' + ids.length + ' project' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
+      if (FM.toast) FM.toast('Deleting ' + ids.length + '…');
+      for (const id of ids) await FM.projects.remove(id);
+      exitSelect();
+    });
+    const cancel = el('button', 'hm-selbtn', 'Cancel');
+    cancel.addEventListener('click', exitSelect);
+    bar.appendChild(count); bar.appendChild(el('span', 'hm-selspacer')); bar.appendChild(all); bar.appendChild(dup); bar.appendChild(del); bar.appendChild(cancel);
   }
 
   function templateCard(t) {
@@ -101,18 +138,32 @@ window.FM = window.FM || {};
 
   function render() {
     if (!grid) return;
+    if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
     grid.innerHTML = '';
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    // header Select toggle (built once, kept in sync)
+    const selBtn = document.getElementById('hm-select-btn');
+    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = tab === 'projects' ? '' : 'none'; }
     if (tab === 'projects') {
       // most recently EDITED first — the project you just worked on is always the front card
       const list = FM.projects.list().slice().sort((a, b) => (b.modified || 0) - (a.modified || 0));
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.'));
+      // gentle housekeeping nudge on a big library (thumbs are out of the hot path now, so this is
+      // informational — never a "you must delete to fix lag" like some other editors)
+      const h = FM.projects.health && FM.projects.health();
+      if (h && h.level !== 'ok' && !selectMode) {
+        const msg = h.level === 'full'
+          ? 'You have ' + h.count + ' projects. Things still run fast — but tap Select to tidy up any you don’t need.'
+          : 'You have ' + h.count + ' projects. Tap Select to bulk-delete or duplicate.';
+        grid.appendChild(el('div', 'hm-note', msg));
+      }
       list.forEach(p => grid.appendChild(projectCard(p)));
     } else {
       const list = FM.templates.list();
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No templates yet. On a project card, tap ⋯ → “Save as template…”.'));
       list.forEach(t => grid.appendChild(templateCard(t)));
     }
+    renderSelBar();
   }
 
   function newProjectDialog() {
@@ -131,6 +182,13 @@ window.FM = window.FM || {};
       grid = root.querySelector('.hm-grid');
       root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
       document.getElementById('hm-new').addEventListener('click', newProjectDialog);
+      // "Select" toggle in the top bar → enter/leave multi-select (bulk delete / duplicate)
+      const top = root.querySelector('.hm-top');
+      if (top && !document.getElementById('hm-select-btn')) {
+        const sb = el('button', 'hm-select-btn', 'Select'); sb.id = 'hm-select-btn';
+        sb.addEventListener('click', () => { if (selectMode) exitSelect(); else enterSelect(); });
+        top.insertBefore(sb, top.querySelector('.hm-more'));
+      }
       // top-right ⋯: file-level actions that used to live behind the editor's back arrow
       root.querySelector('.hm-more').addEventListener('click', (ev) => {
         const r = ev.currentTarget.getBoundingClientRect();
@@ -162,7 +220,10 @@ window.FM = window.FM || {};
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // home always shows the top-level project
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
       FM.projects.touchCurrent(true);   // fresh thumbnail for the card
+      if (selectMode) { selectMode = false; selected.clear(); }
       tab = 'projects';
+      // one-time: lift legacy inline thumbs out of the index into IDB, then re-render so cards refill
+      if (FM.projects.migrateThumbs) FM.projects.migrateThumbs().then(() => { if (root && !root.classList.contains('hidden')) render(); });
       render();
       root.classList.remove('hidden');
       document.body.classList.add('home-open');

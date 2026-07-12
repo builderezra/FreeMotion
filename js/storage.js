@@ -274,8 +274,42 @@ window.FM = window.FM || {};
     } catch (e) { return null; }
   }
 
+  // Thumbnails live in IndexedDB (key 'thumb:<id>'), NOT in the fm.projects index. The index is
+  // re-parsed + rewritten on EVERY autosave (~0.6s while editing); an inline ~8KB JPEG per project
+  // made that a multi-MB serialize at a few hundred projects — the "gets laggy, delete some" problem.
+  // Out of the index, each entry is ~150 bytes, so hundreds of projects stay snappy. (STORE 'media' is
+  // keyed by layer id like 'l_…'; 'thumb:p_…' can't collide.)
+  function putThumb(id, url) { openDB().then(db => idbPut(db, 'thumb:' + id, url).then(() => db.close())).catch(() => {}); }
+  function delThumb(db, id) { return idbDel(db, 'thumb:' + id); }
+
   FM.projects = {
     list() { return readJSON(PROJ_INDEX, []); },
+    // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
+    async getThumb(id) {
+      try { const db = await openDB(); const v = await idbGet(db, 'thumb:' + id); db.close(); if (v) return v; } catch (e) {}
+      const e = this.list().find(p => p.id === id);
+      return (e && e.thumb) || null;
+    },
+    // One-time sweep: lift every inline thumb out of the index into IDB, then null it. Runs once (guarded)
+    // so existing users' indexes shrink immediately instead of only as each project is next opened.
+    async migrateThumbs() {
+      try { if (localStorage.getItem('fm.thumbsMigrated')) return; } catch (e) { return; }
+      const idx = this.list(); let moved = false;
+      try {
+        const db = await openDB();
+        for (const p of idx) { if (p.thumb) { await idbPut(db, 'thumb:' + p.id, p.thumb); p.thumb = null; moved = true; } }
+        db.close();
+      } catch (e) {}
+      if (moved) this.saveIndex(idx);
+      try { localStorage.setItem('fm.thumbsMigrated', '1'); } catch (e) {}
+    },
+    // Rough storage-health read for the home screen. Now that thumbs are out of the hot path the app
+    // stays fast far longer, but a very large library still means a big IndexedDB + slower home render,
+    // so surface a gentle nudge (never a blocker). level: 'ok' | 'busy' | 'full'.
+    health() {
+      const n = this.list().length;
+      return { count: n, level: n >= 120 ? 'full' : n >= 60 ? 'busy' : 'ok' };
+    },
     saveIndex(arr) { writeJSON(PROJ_INDEX, arr); },
     currentId() { return curId(); },
     // One-time: fold the legacy single fm.scene autosave into the project index.
@@ -316,7 +350,7 @@ window.FM = window.FM || {};
       e.width = P.width; e.height = P.height; e.duration = P.duration;
       e.layers = FM.scene.layers.length;
       const now = Date.now();
-      if (forceThumb || (now - thumbTimer > 12000 && !FM.playing)) { thumbTimer = now; const t = makeThumb(); if (t) e.thumb = t; }
+      if (forceThumb || (now - thumbTimer > 12000 && !FM.playing)) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
       this.saveIndex(idx);
     },
     // Switch the editor to another project (stash current first).
@@ -368,10 +402,11 @@ window.FM = window.FM || {};
           const rec = await idbGet(db, oldId);
           if (rec) await idbPut(db, re.map[oldId], rec);
         }
+        const th = await idbGet(db, 'thumb:' + id); if (th) await idbPut(db, 'thumb:' + nid, th);   // copy the card thumbnail too
         db.close();
       } catch (e) {}
       const idx = this.list();
-      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length }));
+      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length, thumb: null }));
       this.saveIndex(idx);
       FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
     },
@@ -387,6 +422,7 @@ window.FM = window.FM || {};
       try {
         const db = await openDB();
         if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) await idbDel(db, l.id);
+        await delThumb(db, id);
         db.close();
       } catch (e) {}
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
@@ -454,7 +490,7 @@ window.FM = window.FM || {};
         db.close();
       } catch (e) { return false; }
       const idx = this.list();
-      const card = this.cardFor(id);
+      const card = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB
       idx.unshift({ id: tid, name: name, width: pack.project.width, height: pack.project.height, duration: pack.project.duration, thumb: card });
       writeJSON(TPL_INDEX, idx);
       return true;
