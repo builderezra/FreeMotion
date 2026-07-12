@@ -168,6 +168,15 @@ window.FM = window.FM || {};
     if (delta) p.kf.forEach(k => { k.v += delta; });
   };
 
+  /* Slide a layer's WHOLE animation along the timeline: shift every keyframe's TIME by `delta` seconds
+   * (transform, effect params, volume/speed/fill/stroke/shadow). Keyframe times are absolute project
+   * time (evalProp is fed the raw playhead), so moving a clip in time must retime its keyframes or the
+   * motion is left behind at the old time. (Ezra: moving a layer must move its keyframes with it.) */
+  FM.shiftLayerKeyframes = function (layer, delta) {
+    if (!delta) return;
+    FM.animatedProps(layer).forEach(p => p.kf.forEach(k => { k.t += delta; }));
+  };
+
   /* Toggle a keyframe for a transform prop at `time`. Converts static<->animated. */
   function toggleKeyframe(layer, key, time) {
     let p = layer.transform[key];

@@ -1008,6 +1008,12 @@ window.FM = window.FM || {};
         if (clipMove) {
           const cm = clipMove; clipMove = null; hideSnap();
           if (cm.moved) {
+            // Moving a clip in time carries its whole animation with it: retime every keyframe by the
+            // same delta (keyframe times are absolute project time, so they'd otherwise be left behind).
+            if (FM.shiftLayerKeyframes) {
+              FM.shiftLayerKeyframes(cm.layer, cm.layer.start - cm.origStart);
+              (cm.group || []).forEach(g => FM.shiftLayerKeyframes(g.layer, g.layer.start - g.origStart));
+            }
             if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips (grows or shrinks)
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           }
