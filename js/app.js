@@ -1144,6 +1144,24 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // Alignment snap targets for one axis, shared by canvas dragging AND the Move & Transform scrubbers:
+  // the composition centre + both edges, PLUS every value this layer already holds at its OTHER
+  // keyframes — so you can re-align it to a position it was at earlier (AM behaviour). De-duped.
+  FM.alignTargets = function (layer, axis) {
+    const P = FM.scene.project;
+    const out = axis === 'x' ? [P.width / 2, 0, P.width] : [P.height / 2, 0, P.height];
+    const p = layer && layer.transform && layer.transform[axis];
+    if (p && p.kf) p.kf.forEach(k => { if (out.indexOf(k.v) < 0) out.push(k.v); });
+    return out;
+  };
+  // Snap a value to the nearest align target within `thr` (project px). Returns {v,hit,target}.
+  FM.snapAxis = function (layer, axis, v, thr) {
+    const targets = FM.alignTargets(layer, axis);
+    let best = null, bd = (thr == null ? 8 : thr);
+    for (let i = 0; i < targets.length; i++) { const d = Math.abs(v - targets[i]); if (d <= bd) { bd = d; best = targets[i]; } }
+    return best == null ? { v: v, hit: false } : { v: best, hit: true, target: best };
+  };
+
   // Move one OR several layers (by id) so they sit, as a contiguous block in their existing top-to-
   // bottom order, immediately BEFORE beforeId (or at the very bottom when beforeId is null). Used by
   // the timeline reorder drag — handles single- and multi-layer drags through one path.

@@ -431,7 +431,10 @@ window.FM = window.FM || {};
         line.style.left = tr.left + 'px'; line.style.width = tr.width + 'px';
         line.style.top = (Math.max(vr.top, Math.min(vr.bottom, info.y)) - 1) + 'px';   // clamp into the visible list
       }
-      function followFinger() { row.style.transform = 'translateY(' + ((lastEv.clientY - startY) + (timelineEl.scrollTop - startScroll)) + 'px)'; }
+      function followFinger() {   // carry EVERY dragged row with the finger (multi-drag is now visible, not just the primary)
+        const dy = (lastEv.clientY - startY) + (timelineEl.scrollTop - startScroll);
+        movingRows.forEach(r => { r.style.transform = 'translateY(' + dy + 'px)'; });
+      }
       function autoScroll() {
         autoRAF = 0; if (!moved) return;
         const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY, EDGE = 46;
@@ -448,7 +451,7 @@ window.FM = window.FM || {};
         lastEv = ev;
         if (!moved && Math.abs(ev.clientY - startY) < 4) return;
         moved = true;
-        movingRows.forEach(r => r.classList.add(r === row ? 'row-dragging' : 'row-moving'));
+        movingRows.forEach(r => r.classList.add('row-dragging'));   // all grabbed rows lift together
         followFinger(); showLine(ev.clientY);
         const vr = timelineEl.getBoundingClientRect();
         if ((ev.clientY < vr.top + 46 || ev.clientY > vr.bottom - 46) && !autoRAF) autoRAF = requestAnimationFrame(autoScroll);

@@ -1105,6 +1105,15 @@ window.FM = window.FM || {};
 
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
   function mtSet(layer, key, v) { FM.setTransform(layer, key, v, FM.time); FM.requestRender(); if (FM.timeline) FM.timeline.updatePlayhead(); }
+  // X/Y setter that SNAPS to the shared align targets (centre / edges / this layer's keyframe
+  // positions) so Move & Transform keeps things aligned just like canvas dragging, and flashes the
+  // matching guide line on the canvas so you can see the snap. (Ezra)
+  function mtSetXY(layer, key, v) {
+    let target = null;
+    if (FM.snapAxis) { const s = FM.snapAxis(layer, key, v, 8); v = s.v; if (s.hit) target = s.target; }
+    if (FM.showAlignGuide) FM.showAlignGuide(key === 'x' ? target : null, key === 'y' ? target : null);
+    mtSet(layer, key, Math.round(v));
+  }
 
   // A value box: shows the number (drag horizontally to scrub, tap to type) + a label beneath.
   function mtVBox(labelText, getVal, setVal, opts) {
@@ -1355,8 +1364,8 @@ window.FM = window.FM || {};
     center.appendChild(values); center.appendChild(control);
 
     if (mode === 'move') {
-      const bx = mtVBox('X', () => mtEval(layer, 'x'), v => mtSet(layer, 'x', Math.round(v)), { dp: 1, scrub: 1 });
-      const by = mtVBox('Y', () => mtEval(layer, 'y'), v => mtSet(layer, 'y', Math.round(v)), { dp: 1, scrub: 1 });
+      const bx = mtVBox('X', () => mtEval(layer, 'x'), v => mtSetXY(layer, 'x', v), { dp: 1, scrub: 1 });
+      const by = mtVBox('Y', () => mtEval(layer, 'y'), v => mtSetXY(layer, 'y', v), { dp: 1, scrub: 1 });
       const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2 });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
       // 2D trackpad

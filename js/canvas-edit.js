@@ -240,9 +240,10 @@ window.FM = window.FM || {};
     if (drag.mode === 'move') {
       let nx = drag.startX + (p.x - drag.startP.x);
       let ny = drag.startY + (p.y - drag.startP.y);
-      const P = FM.scene.project, thr = 14 / dispScale();
-      const sx = snapTo(nx, [P.width / 2, 0, P.width], thr);
-      const sy = snapTo(ny, [P.height / 2, 0, P.height], thr);
+      const thr = 14 / dispScale();
+      // snap to centre / edges AND this layer's own keyframe positions (shared with Move & Transform)
+      const sx = snapTo(nx, FM.alignTargets ? FM.alignTargets(L, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width], thr);
+      const sy = snapTo(ny, FM.alignTargets ? FM.alignTargets(L, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
       nx = sx.v; ny = sy.v;
       showGuides(sx.hit ? sx.target : null, sy.hit ? sy.target : null);
       FM.setTransform(L, 'x', Math.round(nx), FM.time);
@@ -256,6 +257,9 @@ window.FM = window.FM || {};
     }
     FM.requestRender();
     update();
+    // keep the Move & Transform value boxes tracking the canvas drag LIVE (they used to only catch up
+    // on release, so a canvas drag looked like it wasn't touching the M&T numbers). (Ezra)
+    if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
   }
 
   function onUp(e) {
@@ -360,6 +364,15 @@ window.FM = window.FM || {};
     }
     box.style.transform = tf;
   }
+
+  // Show the alignment guide lines from OUTSIDE a canvas drag (used by Move & Transform when its X/Y
+  // scrub snaps to an align target). Auto-hides shortly after the last snap so it never lingers.
+  let _alignHide = 0;
+  FM.showAlignGuide = function (gx, gy) {
+    showGuides(gx, gy);
+    clearTimeout(_alignHide);
+    if (gx != null || gy != null) _alignHide = setTimeout(() => showGuides(null, null), 650);
+  };
 
   FM.canvasEdit = {
     init() {
