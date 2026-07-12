@@ -1456,13 +1456,11 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .row-drag { position: sticky; right: 5px; margin-left: auto; align-self: center; flex: none; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0; background: rgba(13, 17, 25, .78); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); cursor: grab; z-index: 6; touch-action: none; }
 .row-drag svg { width: 15px; height: 15px; }
 .row-drag:active { cursor: grabbing; color: var(--accent); }
-.track-row.row-dragging { z-index: 30; position: relative; box-shadow: 0 8px 22px rgba(0,0,0,.55); }
+.track-row.row-dragging { z-index: 30; position: relative; box-shadow: 0 8px 22px rgba(0,0,0,.55); transition: none; }
 .track-row.row-dragging .track-head, .track-row.row-dragging .track-lane { background: var(--panel-3); }
+.track-row.row-part { transition: transform 150ms cubic-bezier(.2, .7, .3, 1); }   /* rows GLIDE apart to open the drop gap (iOS reorder feel) */
 .track-row.row-moving { opacity: .45; }   /* other layers being carried along in a multi-drag */
 .track-row.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* insertion line between rows during a reorder drag — shows exactly where the layer(s) will land */
-.reorder-dropline { position: fixed; height: 2px; background: var(--accent); border-radius: 2px; box-shadow: 0 0 8px var(--accent); pointer-events: none; z-index: 9999; display: none; }
-.reorder-dropline::before { content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .track-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 
 /* ---- Add-menu horizontal paging (AM: swipe sideways) ---- */

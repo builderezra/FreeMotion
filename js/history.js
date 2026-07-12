@@ -38,8 +38,10 @@ window.FM = window.FM || {};
     reset() { stack.length = 0; index = -1; this.commit(); },
     commit() {
       if (suppress) return;
+      const s = snap();
+      if (index >= 0 && stack[index] === s) return;   // identical to the current state → a no-op action can never add a stray undo step
       stack.splice(index + 1);          // drop redo tail
-      stack.push(snap());
+      stack.push(s);
       index = stack.length - 1;
       if (stack.length > 120) { stack.shift(); index--; }
       if (FM.storage) FM.storage.autosave();

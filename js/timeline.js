@@ -374,18 +374,14 @@ window.FM = window.FM || {};
     document.body.classList.toggle('sel-multi', sel.size >= 2);
   }
 
-  // Shared insertion-line element (a bright bar shown between rows during a reorder drag).
-  let _dropLine = null;
-  function dropLine() {
-    if (!_dropLine) { _dropLine = document.createElement('div'); _dropLine.className = 'reorder-dropline'; document.body.appendChild(_dropLine); }
-    return _dropLine;
-  }
-
   // ≡ drag handle at each row's RIGHT edge (AM): press + drag vertically to reorder layers.
-  // Pointer-based (mouse AND touch). Upgrades over the old single-row drag:
-  //  • auto-scrolls the layer list when you drag to the top/bottom edge (no stop-scroll-regrab)
-  //  • shows an insertion LINE at the exact drop gap instead of just tinting a row
-  //  • drags the WHOLE multi-selection together when the grabbed layer is part of it (not in AM — ours)
+  // Pointer-based (mouse AND touch). iOS-style reorder:
+  //  • rows PART to open a real gap where the drop will land (animated), instead of just a line
+  //  • a multi-selection stacks into one tight block under the finger and drops as a unit
+  //  • auto-scrolls (time-based, eased, capped) when you drag to the top/bottom edge
+  //  • drop target + row shifts are computed from NATURAL geometry snapshotted at grab time,
+  //    so the parting transforms can never feed back into the hit-testing and oscillate
+  //  • survives a mid-drag rebuild (autosave/playback): re-acquires its rows by layer id
   function buildDragHandle(row, layer, index) {
     const h = document.createElement('button');
     h.className = 'row-drag';
@@ -401,40 +397,49 @@ window.FM = window.FM || {};
       const sel = FM.selectionIds ? FM.selectionIds() : [];
       const groupIds = (sel.length > 1 && sel.indexOf(layer.id) >= 0) ? sel.slice() : [layer.id];
       const groupSet = {}; groupIds.forEach(id => { groupSet[id] = 1; });
-      const movingRows = [].slice.call(tracksEl.querySelectorAll('.track-row')).filter(r => {
-        const hd = r.querySelector('.track-head'); const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
-        return L && groupSet[L.id];
-      });
 
       const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
-      const line = dropLine();
       const EDGE = 44;   // px zone at the list's top/bottom that arms auto-scroll during a reorder drag
       let moved = false, dropBeforeId, autoRAF = 0, lastEv = e, scrollAcc = 0, lastT = 0;
 
-      function resolveDrop(clientY) {   // → { beforeId, y }  (beforeId null = drop at the very bottom)
-        // EXCLUDE the rows being dragged — their translateY moves their bounding box under the finger,
-        // which would otherwise make the dragged row pick ITSELF as the drop target.
-        const rows = [].slice.call(tracksEl.querySelectorAll('.track-row')).filter(r => movingRows.indexOf(r) < 0);
-        for (let i = 0; i < rows.length; i++) {
-          const rc = rows[i].getBoundingClientRect();
-          if (clientY < rc.top + rc.height / 2) {
-            const hd = rows[i].querySelector('.track-head'); const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
-            return { beforeId: L ? L.id : null, y: rc.top };
-          }
-        }
-        const last = rows[rows.length - 1];
-        return { beforeId: null, y: last ? last.getBoundingClientRect().bottom : 0 };
+      // NATURAL geometry model — snapshotted at grab (no transforms exist yet), in CONTENT coordinates
+      // (viewport top + scrollTop), so it stays valid through auto-scroll and row transforms.
+      let statics = [], dragged = [], slotH = 43, blockH = 43, listTop = 0, grabOffset = 0, lastGap = -1;
+      function acquire() {
+        const sc = timelineEl.scrollTop;
+        const all = [].slice.call(tracksEl.querySelectorAll('.track-row')).map(r => {
+          const hd = r.querySelector('.track-head'); const L = hd && FM.scene.layers[parseInt(hd.dataset.idx, 10)];
+          return { id: L ? L.id : null, el: r, top: r.getBoundingClientRect().top + sc };
+        });
+        if (!all.length) { statics = []; dragged = []; return; }
+        slotH = all.length > 1 ? (all[1].top - all[0].top) : (all[0].el.getBoundingClientRect().height + 1);
+        listTop = all[0].top;
+        statics = all.filter(r => !groupSet[r.id]);
+        dragged = all.filter(r => groupSet[r.id]);
+        blockH = Math.max(1, dragged.length) * slotH;
+        const prim = dragged.find(d => d.id === layer.id) || dragged[0];
+        grabOffset = prim ? (startY + startScroll) - prim.top : 0;   // where in the primary row the finger grabbed
+        dragged.forEach(d => d.el.classList.add('row-dragging'));
+        statics.forEach(s => s.el.classList.add('row-part'));        // transitioned: rows glide apart/together
       }
-      function showLine(clientY) {
-        const info = resolveDrop(clientY); dropBeforeId = info.beforeId;
-        const tr = tracksEl.getBoundingClientRect(), vr = timelineEl.getBoundingClientRect();
-        line.style.display = 'block';
-        line.style.left = tr.left + 'px'; line.style.width = tr.width + 'px';
-        line.style.top = (Math.max(vr.top, Math.min(vr.bottom, info.y)) - 1) + 'px';   // clamp into the visible list
-      }
-      function followFinger() {   // carry EVERY dragged row with the finger (multi-drag is now visible, not just the primary)
-        const dy = (lastEv.clientY - startY) + (timelineEl.scrollTop - startScroll);
-        movingRows.forEach(r => { r.style.transform = 'translateY(' + dy + 'px)'; });
+      function layout() {   // position the block under the finger, open the gap, resolve the drop target
+        if (!dragged.length || !dragged[0].el.isConnected) { acquire(); if (!dragged.length) return; }   // mid-drag rebuild → re-grab fresh rows
+        const sc = timelineEl.scrollTop;
+        const pi = Math.max(0, dragged.findIndex(d => d.id === layer.id));
+        // the grabbed layer stays under the finger; the rest of the selection stacks tight around it
+        let blockTop = (lastEv.clientY + sc) - grabOffset - pi * slotH;
+        const maxTop = listTop + (statics.length + dragged.length) * slotH - blockH;
+        blockTop = Math.max(listTop - slotH * 0.4, Math.min(maxTop + slotH * 0.4, blockTop));   // soft clamp to the list
+        // gap index from the block's position on GAPLESS coordinates — independent of the gap itself, so no feedback
+        const g = Math.max(0, Math.min(statics.length, Math.round((blockTop - listTop) / slotH)));
+        dropBeforeId = statics[g] ? statics[g].id : null;
+        if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
+        dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
+        statics.forEach((s, j) => {
+          const target = listTop + j * slotH + (j >= g ? blockH : 0);   // packed layout with the gap open at g
+          const shift = target - s.top;
+          s.el.style.transform = shift ? ('translateY(' + shift + 'px)') : '';
+        });
       }
       function autoScroll(now) {
         autoRAF = 0; if (!moved) return;
@@ -454,27 +459,30 @@ window.FM = window.FM || {};
         if (step) {
           scrollAcc -= step;
           const b = timelineEl.scrollTop; timelineEl.scrollTop = b + step;
-          if (timelineEl.scrollTop !== b) { followFinger(); showLine(y); }
+          if (timelineEl.scrollTop !== b) layout();
         }
         autoRAF = requestAnimationFrame(autoScroll);
       }
       const move = (ev) => {
         lastEv = ev;
         if (!moved && Math.abs(ev.clientY - startY) < 4) return;
-        moved = true;
-        movingRows.forEach(r => r.classList.add('row-dragging'));   // all grabbed rows lift together
-        followFinger(); showLine(ev.clientY);
+        if (!moved) { moved = true; acquire(); }
+        layout();
         const vr = timelineEl.getBoundingClientRect();
         if ((ev.clientY < vr.top + EDGE || ev.clientY > vr.bottom - EDGE) && !autoRAF) { lastT = 0; autoRAF = requestAnimationFrame(autoScroll); }
       };
-      const up = () => {
-        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+      const cleanup = () => {
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', abort);
         if (autoRAF) cancelAnimationFrame(autoRAF);
-        movingRows.forEach(r => { r.classList.remove('row-dragging', 'row-moving'); r.style.transform = ''; });
-        line.style.display = 'none';
+        // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
+        [].slice.call(tracksEl.querySelectorAll('.track-row')).forEach(r => { r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = ''; });
+      };
+      const up = () => {
+        cleanup();
         if (moved && dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId);
       };
-      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+      const abort = () => cleanup();   // pointercancel (browser stole the gesture) = never apply the move
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', abort);
     });
     return h;
   }
