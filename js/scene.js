@@ -401,6 +401,27 @@ window.FM = window.FM || {};
     const a = c.tab[i0], b = c.tab[Math.min(c.tab.length - 1, i0 + 1)];
     return a + (b - a) * f;
   };
+  /* Numeric playback rate of a layer at project time t. An ANIMATED speed prop is an OBJECT — raw
+   * `layer.speed || 1` arithmetic on it silently yields NaN (which once collapsed the whole timeline
+   * via a trim). Every call site that needs a number must come through here. */
+  FM.speedAt = function (layer, t) {
+    const sp = layer.speed;
+    if (!isAnimated(sp)) return sp || 1;
+    return Math.max(0.05, evalProp(sp, t == null ? (FM.time || 0) : t) || 1);
+  };
+  /* Longest clip duration whose consumed source stays within availSrc source-seconds.
+   * Static speed: plain division (old behaviour). Ramped: bisect the monotonic advance integral. */
+  FM.maxDurForSource = function (layer, availSrc, hint) {
+    if (!isAnimated(layer.speed)) return availSrc / (layer.speed || 1);
+    let hi = Math.max(0.1, hint || layer.duration || 1);
+    const save = layer.duration;
+    layer.duration = hi;                                 // the integral table must span the probe range
+    if (FM.layerSourceAdvance(layer, hi) <= availSrc) { layer.duration = save; return hi; }
+    let lo = 0;
+    for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (FM.layerSourceAdvance(layer, mid) > availSrc) hi = mid; else lo = mid; }
+    layer.duration = save;
+    return Math.max(0.1, lo);
+  };
   FM.layerLocalTime = function (layer, t) {
     if (t < layer.start || t >= layer.start + layer.duration) return null;
     const into = t - layer.start;                       // seconds into the clip

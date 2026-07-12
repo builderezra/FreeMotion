@@ -87,7 +87,12 @@ window.FM = window.FM || {};
       }
       return out;
     }
-    const sp = layer.speed || 1;                          // source advances sp× per output sample
+    // source advances sp× per output sample. A RAMPED speed prop is an object (raw arithmetic = NaN
+    // = broken export audio); approximate it with the clip's average rate so audio spans the clip and
+    // stays synced at the endpoints (per-sample ramp resampling isn't worth the complexity here).
+    const sp = FM.isAnimated && FM.isAnimated(layer.speed)
+      ? FM.layerSourceAdvance(layer, layer.duration) / Math.max(0.01, layer.duration)
+      : (layer.speed || 1);
     const lenSec = Math.min(layer.duration, availSec / sp); // timeline seconds this clip fills
     const lenSamples = Math.max(1, Math.floor(lenSec * sr));
     const out = oac.createBuffer(ab.numberOfChannels, lenSamples, sr);

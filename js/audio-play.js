@@ -21,7 +21,10 @@ window.FM = window.FM || {};
   // clip's timeline duration; source is read at speed× rate from the end backward.
   function reversedBuffer(audioCtx, ab, layer) {
     const sr = ab.sampleRate;
-    const sp = layer.speed || 1;
+    // ramped speed is an object → raw arithmetic = NaN buffers; use the clip's average rate (matches exporter)
+    const sp = FM.isAnimated && FM.isAnimated(layer.speed)
+      ? FM.layerSourceAdvance(layer, layer.duration) / Math.max(0.01, layer.duration)
+      : (layer.speed || 1);
     const startSample = Math.floor(layer.trimStart * sr);
     const availSec = Math.max(0, ab.duration - layer.trimStart);
     const lenSec = Math.min(layer.duration, availSec / sp);

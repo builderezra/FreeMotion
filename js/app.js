@@ -984,7 +984,8 @@ window.FM = window.FM || {};
     // length doesn't diverge from the visible duration). Keeps transform/keyframes/effects/masks.
     if (nrec.kind === 'video' && nrec.duration) {
       layer.trimStart = Math.max(0, Math.min(layer.trimStart || 0, nrec.duration - 0.05));
-      const avail = (nrec.duration - layer.trimStart) / (layer.speed || 1);
+      // FM.maxDurForSource, not raw division: an animated speed prop is an object (÷object = NaN)
+      const avail = FM.maxDurForSource ? FM.maxDurForSource(layer, nrec.duration - layer.trimStart) : (nrec.duration - layer.trimStart) / (layer.speed || 1);
       layer.duration = Math.max(0.1, Math.min(layer.duration, avail));
     }
     return true;
@@ -1083,9 +1084,9 @@ window.FM = window.FM || {};
         if (layer.reversed) { if (FM.ensureReverseCache) await FM.ensureReverseCache(layer); } else if (FM.maybeClearCache) FM.maybeClearCache(layer);
         FM.timeline.rebuild(); FM.requestRender(); FM.seekVideosToTime(); if (FM.history) FM.history.commit();
       } });
-      if (Math.abs((layer.speed || 1) - 1) > 1e-3) {
+      if (FM.isAnimated(layer.speed) || Math.abs((layer.speed || 1) - 1) > 1e-3) {   // ramped speed is an object — offer reset for it too
         items.push({ label: 'Reset speed (1×)', action: () => {
-          const span = layer.duration * (layer.speed || 1);
+          const span = FM.isAnimated(layer.speed) ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (layer.speed || 1);
           layer.speed = 1; layer.duration = span;
           const end = layer.start + layer.duration;
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;

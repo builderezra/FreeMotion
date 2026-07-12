@@ -39,7 +39,35 @@ window.FM = window.FM || {};
   let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
+  let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
+  const stripCache = new Map();    // layerId -> {key, canvas}: rendered filmstrip/waveform reuse across rebuilds
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
+
+  // Abandon any in-flight clip/trim/keyframe gesture and RESTORE its pre-gesture values. Pinch-start
+  // and pointercancel must never leave a half-applied edit in the scene (a moved clip whose keyframes
+  // never followed, a half-trim, a mid-drag keyframe time) — that state would ride silently into the
+  // next history.commit and autosave.
+  function abortGestures() {
+    const had = clipMove || trimDrag || kfDrag;
+    if (clipMove) {
+      clipMove.layer.start = clipMove.origStart;
+      (clipMove.group || []).forEach(g => { g.layer.start = g.origStart; });
+      clipMove = null;
+    }
+    if (trimDrag) {
+      const L = trimDrag.layer;
+      L.start = trimDrag.start; L.duration = trimDrag.dur;
+      if (L.type === 'video') L.trimStart = trimDrag.trim;
+      trimDrag = null;
+    }
+    if (kfDrag) {
+      if (kfDrag.orig) kfDrag.kfs.forEach((k, i) => { k.t = kfDrag.orig[i]; });
+      if (kfDrag.holdTimer) clearTimeout(kfDrag.holdTimer);
+      kfDrag = null;
+    }
+    if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }   // orphaned hold timer could grab the WRONG clip later
+    if (had) { hideSnap(); FM.timeline.rebuild(); FM.requestRender(); }
+  }
 
   // Snap a proposed clip start so the clip's start OR end lands on 0 / playhead / another clip edge.
   // Returns { v: snapped start, snapped: bool, guide: alignment time for the guide line }.
@@ -205,6 +233,9 @@ window.FM = window.FM || {};
     const majStep = nice.find(s => s * pps >= 88) || nice[nice.length - 1];
     let html = '';
     const totalFrames = Math.ceil(dur * f);
+    // Hard-cap the notch count: a long project at fine zoom otherwise emits tens of thousands of
+    // absolutely-positioned divs via innerHTML on EVERY rebuild (every tap) — an iPhone killer.
+    while (totalFrames / frameStep > 1500) frameStep *= 2;
     for (let fr = 0; fr <= totalFrames; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     // Major ticks are LINES only — no numbers. The single centred timecode pill is the only readout
     // (Ezra: "I only want the numbers on the little counter in the middle").
@@ -345,7 +376,7 @@ window.FM = window.FM || {};
       const want = new Set();
       for (let i = lo; i <= hi; i++) { const L = FM.scene.layers[i]; if (L && !preSel.has(L.id)) want.add(L.id); }
       let changed = false;
-      gestureAdded.forEach(id => { if (!want.has(id)) { if (isSelected(id)) FM.toggleSelect(id, false); changed = true; } });   // backtracked past → unselect
+      gestureAdded.forEach(id => { if (!want.has(id)) { if (isSelected(id)) FM.toggleSelect(id, true); changed = true; } });   // backtracked past → unselect (true = SILENT: no mid-gesture rebuild storm)
       want.forEach(id => { if (!gestureAdded.has(id)) { if (!isSelected(id)) FM.toggleSelect(id, true); changed = true; } });
       if (!changed) return;
       gestureAdded = want;
@@ -424,6 +455,9 @@ window.FM = window.FM || {};
       }
       function layout() {   // position the block under the finger, open the gap, resolve the drop target
         if (!dragged.length || !dragged[0].el.isConnected) { acquire(); if (!dragged.length) return; }   // mid-drag rebuild → re-grab fresh rows
+        // phone SOLO view: the selected layer is the only visible row — there is nowhere to drop, and
+        // resolving against zero statics used to silently send the layer to the BOTTOM of the stack
+        if (!statics.length) { dropBeforeId = undefined; return; }
         const sc = timelineEl.scrollTop;
         const pi = Math.max(0, dragged.findIndex(d => d.id === layer.id));
         // the grabbed layer stays under the finger; the rest of the selection stacks tight around it
@@ -507,19 +541,20 @@ window.FM = window.FM || {};
     clabel.className = 'clip-label';
     clabel.textContent = layer.name;
     clip.appendChild(clabel);
-    if (layer.speed && Math.abs(layer.speed - 1) > 1e-3) {
+    const rampSpeed = FM.isAnimated(layer.speed);   // animated speed is an OBJECT — never do arithmetic on it raw
+    if (rampSpeed || (layer.speed && Math.abs(layer.speed - 1) > 1e-3)) {
       const sb = document.createElement('span');
       sb.className = 'clip-speed';
-      sb.textContent = (Number.isInteger(layer.speed) ? layer.speed : +layer.speed.toFixed(2)) + '×';
+      sb.textContent = rampSpeed ? '⚡ramp' : (Number.isInteger(layer.speed) ? layer.speed : +layer.speed.toFixed(2)) + '×';
       clip.appendChild(sb);
     }
     if (layer.type === 'video') {
       const m = FM.media.get(layer.id);
       // trimmed-source indicator: a striped edge where there's more source beyond the trim
       if (m && isFinite(m.duration)) {
-        const sp = layer.speed || 1;
+        const srcSpan = rampSpeed ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (layer.speed || 1);
         if (layer.trimStart > 0.03) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim l' }));
-        if (layer.trimStart + layer.duration * sp < m.duration - 0.05) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim r' }));
+        if (layer.trimStart + srcSpan < m.duration - 0.05) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim r' }));
       }
     }
     // AM: video + image clips show a FILMSTRIP of frames on the bar (distinct frames for video; the
@@ -528,29 +563,47 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m && m.el) {
         const hasPicture = layer.type === 'image' || (m.width > 0 && m.height > 0);
+        // Cap the backing width: duration*pps is unbounded (long clip × deep zoom) and a canvas wider
+        // than ~16384px renders BLANK on iOS Safari. CSS keeps the clip full-width; only the off-screen
+        // backing buffer is capped (slightly lower-res at extreme zoom, but actually visible). (#9)
+        const stripW = Math.min(8192, Math.max(2, Math.round(Math.max(8, layer.duration * pps))));
         if (hasPicture) {
-          const strip = document.createElement('canvas');
-          strip.className = 'clip-filmstrip';
-          // Cap the backing width: duration*pps is unbounded (long clip × deep zoom) and a canvas wider
-          // than ~16384px renders BLANK on iOS Safari. CSS keeps the clip full-width; only the off-screen
-          // backing buffer is capped (slightly lower-res at extreme zoom, but actually visible). (#9)
-          strip.width = Math.min(8192, Math.max(2, Math.round(Math.max(8, layer.duration * pps))));
-          strip.height = 32;
-          if (m.stripFrames && m.stripFrames.length) {
-            drawFilmstrip(strip, m.stripFrames, m);
-          } else if (m.stripFrames === undefined && !m._stripPending && !FM.playing && FM.buildClipStrip) {
-            m._stripPending = true;   // build ONCE; m.stripFrames is then set (even to []) so this never re-fires
-            FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; FM.timeline.rebuild(); });
+          // CACHE the rendered strip (module map, keyed by LAYER id — layers can share one media
+          // record, so caching on the record would let clips steal each other's canvas). rebuild fires
+          // on every tap/selection/keyframe edit, and re-allocating + re-blitting a ~1MB canvas per
+          // video clip each time is what churns iOS Safari's canvas memory. During a pinch reuse the
+          // cached strip at ANY width (CSS stretches it; the pinch-end rebuild re-crisps it).
+          const sKey = stripW + '|' + (layer.trimStart || 0) + '|' + layer.duration + '|' + (m.stripFrames ? m.stripFrames.length : -1);
+          const hit = stripCache.get(layer.id);
+          let strip = (hit && (hit.key === sKey || pinch)) ? hit.canvas : null;
+          if (!strip) {
+            strip = document.createElement('canvas');
+            strip.className = 'clip-filmstrip';
+            strip.width = stripW; strip.height = 32;
+            if (m.stripFrames && m.stripFrames.length) {
+              drawFilmstrip(strip, m.stripFrames, m);
+              stripCache.set(layer.id, { key: sKey, canvas: strip });
+              if (stripCache.size > 40) stripCache.delete(stripCache.keys().next().value);   // bounded
+            } else if (m.stripFrames === undefined && !m._stripPending && !FM.playing && FM.buildClipStrip) {
+              m._stripPending = true;   // build ONCE; m.stripFrames is then set (even to []) so this never re-fires
+              FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; FM.timeline.rebuild(); });
+            }
           }
           clip.appendChild(strip);
         } else if (m.file) {
           // a video with NO picture (used purely for audio) → waveform, not a black filmstrip
           if (m.waveform && m.waveform.length) {
-            const wc = document.createElement('canvas');
-            wc.className = 'clip-wave';
-            wc.width = Math.min(8192, Math.max(2, Math.round(Math.max(8, layer.duration * pps))));   // cap backing width — iOS blanks canvases wider than ~16384px (#9)
-            wc.height = 32;
-            drawWaveform(wc, m.waveform);
+            const wKey = 'w' + stripW + '|' + m.waveform.length;
+            const whit = stripCache.get('w' + layer.id);
+            let wc = (whit && (whit.key === wKey || pinch)) ? whit.canvas : null;
+            if (!wc) {
+              wc = document.createElement('canvas');
+              wc.className = 'clip-wave';
+              wc.width = stripW; wc.height = 32;
+              drawWaveform(wc, m.waveform);
+              stripCache.set('w' + layer.id, { key: wKey, canvas: wc });
+              if (stripCache.size > 40) stripCache.delete(stripCache.keys().next().value);
+            }
             clip.appendChild(wc);
           } else if (!m._wfPending && !m.waveform) {
             FM.getWaveform(m).then(() => { FM.timeline.rebuild(); });
@@ -575,9 +628,18 @@ window.FM = window.FM || {};
           // clipTap intact and let it scrub. (Fixes the phone fixed-centre playhead "moves over clips".)
           const armHold = () => {
             clipTap.holdTimer = setTimeout(() => {
-              if (!clipTap || clipTap.moved) return;
+              // clipTap.layer check: a pinch once orphaned this timer, and a fast follow-up tap on a
+              // DIFFERENT clip then made the stale closure grab the wrong layer. Never fire cross-clip.
+              if (!clipTap || clipTap.moved || clipTap.layer !== layer) return;
               if (performance.now() - clipTap.lastMoveAt > 150) {
-                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: [] };
+                // carry the whole multi-selection, exactly like the desktop mouse path — a touch
+                // hold-move on one selected clip must not silently break the others' relative sync
+                let group = [];
+                const selIds = FM.selectionIds ? FM.selectionIds() : [];
+                if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
+                  group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
+                }
+                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: group };
                 clipTap = null;
                 if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
               } else {
@@ -644,7 +706,19 @@ window.FM = window.FM || {};
           e.stopPropagation(); e.preventDefault();
           const kfs = [];
           FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => { if (Math.abs(kf.t - tt) < 1e-3) kfs.push(kf); }));
-          kfDrag = { layer: layer, kfs: kfs, dot: dot };
+          // orig: pre-drag times, so pinch-start/pointercancel can RESTORE instead of half-applying
+          kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t) };
+          // iOS Safari never fires contextmenu on long-press, so give touch its own press-and-hold
+          // route into the easing menu (mouse keeps right-click; both share openKfMenu)
+          if (e.pointerType !== 'mouse') {
+            kfDrag.holdTimer = setTimeout(() => {
+              if (!kfDrag || kfDrag.dot !== dot || kfDrag.moved) return;
+              kfDrag = null;
+              if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+              const r = dot.getBoundingClientRect();
+              openKfMenu(r.left + r.width / 2, r.top - 8);
+            }, 450);
+          }
           if (FM.playing) FM.pause();
         });
         dot.addEventListener('dblclick', (e) => {
@@ -652,8 +726,7 @@ window.FM = window.FM || {};
           deleteKeyframesAt(layer, tt);
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
         });
-        dot.addEventListener('contextmenu', (e) => {
-          e.preventDefault(); e.stopPropagation();
+        const openKfMenu = (mx, my) => {
           if (!FM.contextMenu || !FM.EASE_PRESETS) return;
           const items = Object.keys(FM.EASE_PRESETS).map(key => ({
             label: EASE_LABELS[key] || key,
@@ -686,9 +759,17 @@ window.FM = window.FM || {};
           items.push({ sep: true });
           items.push({ label: 'Copy keyframe', action: () => copyKfAt(layer, tt) });
           if (FM.kfClipboard && FM.kfClipboard.length) items.push({ label: 'Paste keyframe at playhead', action: () => pasteKfAtPlayhead() });
-          FM.contextMenu.show(e.clientX, e.clientY, items);
-        });
-        dot.title = 'Drag to retime · right-click for easing · double-click to delete';
+          // dblclick never reaches touch (the dot's pointerdown preventDefault suppresses it), so the
+          // long-press menu is also the phone's route to DELETE
+          items.push({ sep: true });
+          items.push({ label: 'Delete keyframe', danger: true, action: () => {
+            deleteKeyframesAt(layer, tt);
+            FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
+          } });
+          FM.contextMenu.show(mx, my, items);
+        };
+        dot.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); openKfMenu(e.clientX, e.clientY); });
+        dot.title = 'Drag to retime · hold or right-click for easing/delete · double-click to delete';
         lane.appendChild(dot);
       });
     }
@@ -758,23 +839,30 @@ window.FM = window.FM || {};
     if (!trimDrag) return;
     const fps = FM.scene.project.fps || 30, pps = pxPerSec();
     let dt = Math.round((((clientX - trimDrag.startX) + (timelineEl.scrollLeft - trimDrag.startScroll)) / pps) * fps) / fps;
-    const L = trimDrag.layer, sp = L.speed || 1;
+    // CRITICAL: an animated speed prop is an OBJECT — the old `L.speed || 1` divided by it → NaN
+    // durations that collapsed the whole timeline. Ramped speed goes through the integral instead.
+    const L = trimDrag.layer, ramped = FM.isAnimated(L.speed), sp = ramped ? 1 : (L.speed || 1);
     const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
     const se = snapEdge(L, movingEdge, pps);
     if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); } else hideSnap();
     if (trimDrag.edge === 'right') {
       let nd = Math.max(0.1, trimDrag.dur + dt);
-      if (L.type === 'video' && isFinite(trimDrag.srcDur)) nd = Math.min(nd, (trimDrag.srcDur - L.trimStart) / sp);
+      if (L.type === 'video' && isFinite(trimDrag.srcDur)) nd = Math.min(nd, FM.maxDurForSource(L, trimDrag.srcDur - L.trimStart, nd));
       L.duration = nd;
     } else {
       let delta = dt;
       if (trimDrag.start + delta < 0) delta = -trimDrag.start;
       if (trimDrag.dur - delta < 0.1) delta = trimDrag.dur - 0.1;
-      if (L.type === 'video' && trimDrag.trim + delta * sp < 0) delta = -trimDrag.trim / sp;
+      const spL = ramped ? FM.speedAt(L, trimDrag.start + delta) : sp;   // local source rate at the new head
+      if (L.type === 'video' && trimDrag.trim + delta * spL < 0) delta = -trimDrag.trim / spL;
       L.start = trimDrag.start + delta;
       L.duration = trimDrag.dur - delta;
-      if (L.type === 'video') L.trimStart = trimDrag.trim + delta * sp;
+      if (L.type === 'video') L.trimStart = trimDrag.trim + delta * spL;
     }
+    // belt-and-braces: a non-finite number must NEVER reach the scene (it cascades into every layout)
+    if (!isFinite(L.duration) || L.duration < 0.1) L.duration = trimDrag.dur;
+    if (!isFinite(L.start)) L.start = trimDrag.start;
+    if (L.trimStart != null && !isFinite(L.trimStart)) L.trimStart = trimDrag.trim;
     const pps2 = pxPerSec();
     const clipEl = tracksEl.querySelector('.clip[data-id="' + L.id + '"]');
     if (clipEl) { clipEl.style.left = (PAD + L.start * pps2) + 'px'; clipEl.style.width = Math.max(8, L.duration * pps2) + 'px'; }
@@ -852,14 +940,27 @@ window.FM = window.FM || {};
       window.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch' || !timelineEl || !(e.target instanceof Node) || !timelineEl.contains(e.target)) return;
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (pointers.size === 2) { dragging = false; scrub = null; clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; hideSnap(); pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
+        // abortGestures (not raw nulls): restore half-applied clip/trim/kf edits AND clear the
+        // orphaned hold timer that could otherwise grab the WRONG clip on a later tap
+        if (pointers.size === 2) { dragging = false; scrub = null; abortGestures(); pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
       }, true);
       window.addEventListener('pointermove', (e) => {
         if (!pointers.has(e.pointerId)) return;
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (pinch && pointers.size === 2) { if (e.cancelable) e.preventDefault(); FM.timeline.setZoom(pinch.startZoom * (pdist() / Math.max(1, pinch.startDist)), pinch.anchorTime); }
+        if (pinch && pointers.size === 2) {
+          if (e.cancelable) e.preventDefault();
+          // rAF-throttle: setZoom triggers a FULL rebuild (ruler + tracks + filmstrips) — running it
+          // per pointermove (60-120Hz) froze the pinch on phones. One zoom application per frame;
+          // cached strips are stretch-reused mid-pinch and the pinch-end rebuild re-crisps them.
+          pinch.targetZ = pinch.startZoom * (pdist() / Math.max(1, pinch.startDist));
+          if (!pinch.raf) pinch.raf = requestAnimationFrame(() => { if (pinch) { pinch.raf = 0; FM.timeline.setZoom(pinch.targetZ, pinch.anchorTime); } });
+        }
       }, true);
-      const endPtr = (e) => { if (!pointers.has(e.pointerId)) return; pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; };
+      const endPtr = (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.delete(e.pointerId);
+        if (pointers.size < 2 && pinch) { if (pinch.raf) cancelAnimationFrame(pinch.raf); pinch = null; FM.timeline.rebuild(); }   // crisp final strips
+      };
       window.addEventListener('pointerup', endPtr, true);
       window.addEventListener('pointercancel', endPtr, true);
       snaplineEl = document.createElement('div'); snaplineEl.id = 'tl-snapline'; snaplineEl.className = 'hidden';
@@ -981,6 +1082,10 @@ window.FM = window.FM || {};
           const fps = FM.scene.project.fps || 30;
           let nt = Math.round(timeFromX(e.clientX) * fps) / fps;
           nt = Math.max(0, Math.min(FM.scene.project.duration, nt));
+          if (!kfDrag.moved && kfDrag.orig && Math.abs(nt - kfDrag.orig[0]) > 0.5 / pxPerSec() * 6) {
+            kfDrag.moved = true;   // a real drag — cancel the pending touch long-press (easing menu)
+            if (kfDrag.holdTimer) { clearTimeout(kfDrag.holdTimer); kfDrag.holdTimer = null; }
+          }
           kfDrag.kfs.forEach(kf => { kf.t = nt; });
           kfDrag.dot.style.left = (PAD + nt * pxPerSec()) + 'px';
           FM.requestRender();
@@ -1036,7 +1141,9 @@ window.FM = window.FM || {};
             if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips (grows or shrinks)
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           }
-          // else: a plain click already SELECTED the clip on pointerdown — never seek/scroll the timeline.
+          // else: a plain click already SELECTED the clip on pointerdown — never seek/scroll the
+          // timeline. Flush any rebuild that was deferred while the (unmoved) grab was active.
+          else if (rebuildPending) FM.timeline.rebuild();
           return;
         }
         if (trimDrag) {
@@ -1046,6 +1153,7 @@ window.FM = window.FM || {};
           return;
         }
         if (kfDrag) {
+          if (kfDrag.holdTimer) clearTimeout(kfDrag.holdTimer);
           const layer = kfDrag.layer;
           // Re-sort every animated prop (transform AND effect params) so evalProp stays correct
           // after a keyframe is dragged past a neighbour in time, dropping any keyframe the drag
@@ -1057,8 +1165,8 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointercancel', () => {
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
-        if (clipTap && clipTap.holdTimer) clearTimeout(clipTap.holdTimer);
-        clipTap = null; clipMove = null; trimDrag = null; kfDrag = null; dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
+        abortGestures();   // RESTORE half-applied clip/trim/kf edits — never leave them in the scene
+        dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       let resizeRebuildTimer = 0;
@@ -1073,6 +1181,12 @@ window.FM = window.FM || {};
 
     rebuild() {
       if (!tracksEl) return;
+      // A rebuild mid-gesture rips the DOM out from under an active drag (frozen kf-dot, wiped
+      // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
+      // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
+      const ae = document.activeElement;
+      if (clipMove || trimDrag || kfDrag || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }
+      rebuildPending = false;
       // Preserve the vertical scroll across the DOM rebuild — buildTracks empties the container, which
       // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
       // glitch). The browser clamps if the content is now shorter (mobile solo / collapsed group).

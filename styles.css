@@ -931,6 +931,7 @@ input[type=range]::-webkit-slider-thumb {
   border-top: 8px solid #eaf0f8;
 }
 .kf-dot { position: absolute; top: 13px; width: 11px; height: 11px; background: #ffffff; transform: translateX(-5.5px) rotate(45deg); z-index: 6; box-shadow: 0 0 0 1px rgba(0,0,0,.55); cursor: ew-resize; }
+.kf-dot::after { content: ''; position: absolute; inset: -12px; }   /* invisible ~35px touch pad — the 11px diamond alone is untappable on a phone */
 .kf-dot.ease-linear { background: #ffffff; }      /* linear */
 .kf-dot.ease-smooth { background: var(--accent); } /* ease in/out */
 .kf-dot.ease-back { background: var(--kf); }       /* overshoot / anticipate */
