@@ -408,7 +408,8 @@ window.FM = window.FM || {};
 
       const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
       const line = dropLine();
-      let moved = false, dropBeforeId, autoRAF = 0, lastEv = e;
+      const EDGE = 44;   // px zone at the list's top/bottom that arms auto-scroll during a reorder drag
+      let moved = false, dropBeforeId, autoRAF = 0, lastEv = e, scrollAcc = 0, lastT = 0;
 
       function resolveDrop(clientY) {   // → { beforeId, y }  (beforeId null = drop at the very bottom)
         // EXCLUDE the rows being dragged — their translateY moves their bounding box under the finger,
@@ -435,17 +436,27 @@ window.FM = window.FM || {};
         const dy = (lastEv.clientY - startY) + (timelineEl.scrollTop - startScroll);
         movingRows.forEach(r => { r.style.transform = 'translateY(' + dy + 'px)'; });
       }
-      function autoScroll() {
+      function autoScroll(now) {
         autoRAF = 0; if (!moved) return;
-        const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY, EDGE = 46;
-        let dv = 0;
-        if (y < vr.top + EDGE) dv = -Math.ceil((vr.top + EDGE - y) / EDGE * 15);
-        else if (y > vr.bottom - EDGE) dv = Math.ceil((y - (vr.bottom - EDGE)) / EDGE * 15);
-        if (dv) {
-          const b = timelineEl.scrollTop; timelineEl.scrollTop += dv;
+        const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY;
+        let dir = 0, depth = 0;
+        if (y < vr.top + EDGE) { dir = -1; depth = (vr.top + EDGE - y) / EDGE; }
+        else if (y > vr.bottom - EDGE) { dir = 1; depth = (y - (vr.bottom - EDGE)) / EDGE; }
+        if (!dir) { lastT = 0; scrollAcc = 0; return; }   // finger left the edge zone → stop (move() re-arms it)
+        // TIME-based, EASED, capped: gentle creep right at the edge, quicker only as you push deeper in — and
+        // the same real speed on 60Hz and 120Hz screens (was 15px/FRAME ≈ 900–1800px/s and impossible to control).
+        depth = Math.min(1, depth); depth *= depth;                       // ease-in
+        const t = now || performance.now();
+        const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0.016;    // seconds this frame (clamped for stalls)
+        lastT = t;
+        scrollAcc += dir * 520 * depth * dt;                             // 520 px/SECOND top speed
+        const step = Math.trunc(scrollAcc);                              // apply whole px, keep the sub-px remainder
+        if (step) {
+          scrollAcc -= step;
+          const b = timelineEl.scrollTop; timelineEl.scrollTop = b + step;
           if (timelineEl.scrollTop !== b) { followFinger(); showLine(y); }
-          autoRAF = requestAnimationFrame(autoScroll);
         }
+        autoRAF = requestAnimationFrame(autoScroll);
       }
       const move = (ev) => {
         lastEv = ev;
@@ -454,7 +465,7 @@ window.FM = window.FM || {};
         movingRows.forEach(r => r.classList.add('row-dragging'));   // all grabbed rows lift together
         followFinger(); showLine(ev.clientY);
         const vr = timelineEl.getBoundingClientRect();
-        if ((ev.clientY < vr.top + 46 || ev.clientY > vr.bottom - 46) && !autoRAF) autoRAF = requestAnimationFrame(autoScroll);
+        if ((ev.clientY < vr.top + EDGE || ev.clientY > vr.bottom - EDGE) && !autoRAF) { lastT = 0; autoRAF = requestAnimationFrame(autoScroll); }
       };
       const up = () => {
         h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
