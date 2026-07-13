@@ -531,19 +531,31 @@ window.FM = window.FM || {};
         const vr = timelineEl.getBoundingClientRect();
         if ((ev.clientY < vr.top + EDGE || ev.clientY > vr.bottom - EDGE) && !autoRAF) { lastT = 0; autoRAF = requestAnimationFrame(autoScroll); }
       };
+      const unlisten = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', abort); if (autoRAF) cancelAnimationFrame(autoRAF); };
       const cleanup = () => {
-        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', abort);
-        if (autoRAF) cancelAnimationFrame(autoRAF);
         reorderActive = false;
         // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
         [].slice.call(tracksEl.querySelectorAll('.track-row')).forEach(r => { r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = ''; });
         if (rebuildPending) FM.timeline.rebuild();   // flush anything deferred while we held the DOM
       };
       const up = () => {
+        unlisten();
+        // SETTLE: glide the lifted block into its slot (the .row-part 150ms transition) before the
+        // DOM reorders underneath — dropping used to teleport everything into place. (iOS feel)
+        if (moved && dragged.length && dragged[0].el.isConnected) {
+          const g = Math.max(0, lastGap);
+          const targetTop = listTop + g * slotH;   // the open gap's top, in the same content coords as layout()
+          dragged.forEach((d, k) => {
+            d.el.classList.add('row-part');        // row-part's transition outranks row-dragging's none
+            d.el.style.transform = 'translateY(' + (targetTop + k * slotH - d.top) + 'px)';
+          });
+          setTimeout(() => { cleanup(); if (dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId); }, 160);
+          return;
+        }
         cleanup();
         if (moved && dropBeforeId !== undefined && FM.moveLayers) FM.moveLayers(groupIds, dropBeforeId);
       };
-      const abort = () => cleanup();   // pointercancel (browser stole the gesture) = never apply the move
+      const abort = () => { unlisten(); cleanup(); };   // pointercancel (browser stole the gesture) = never apply the move
       h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', abort);
     });
     return h;
