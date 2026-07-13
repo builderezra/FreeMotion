@@ -46,6 +46,7 @@ window.FM = window.FM || {};
   // window listeners registered once (avoid per-mount leaks)
   window.addEventListener('pointermove', e => { if (dragging) fromEvent(e); });
   window.addEventListener('pointerup', () => { if (dragging) { dragging = false; if (FM.history) FM.history.commit(); } });
+  window.addEventListener('pointercancel', () => { if (dragging) { dragging = false; if (FM.history) FM.history.commit(); } });   // commit an OS-cancelled drag — the change is already in the scene, it must reach undo/autosave
 
   FM.colorWheel = {
     mount(container, layer) {

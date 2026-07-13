@@ -129,6 +129,7 @@ window.FM = window.FM || {};
   }
   window.addEventListener('pointermove', e => { if (dragHandle === null || !cur.kfs.length || !canvas) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); bez[dragHandle * 2] = g.x; bez[dragHandle * 2 + 1] = g.y; applyBez(bez); });
   window.addEventListener('pointerup', () => { if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); } });
+  window.addEventListener('pointercancel', () => { if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); } });   // an OS-cancelled touch must not leave the NEXT touch silently rewriting the curve
 
   // Build the editor as an INLINE element (no full-screen overlay) so it sits in the same Move &
   // Transform bottom-sheet, exactly like Alight Motion. The inspector renders this as a sub-view and

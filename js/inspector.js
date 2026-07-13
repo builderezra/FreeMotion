@@ -555,16 +555,17 @@ window.FM = window.FM || {};
       if (mode === 'swipe') { moveSwipe(e); e.preventDefault(); }
       else if (mode === 'reorder') { moveReorder(e); e.preventDefault(); }
     });
-    const finish = e => {
+    const finish = (e, aborted) => {
       if (!down) return;   // ignore stray pointerup/cancel from hover when we never started (mouse) (#swipe)
       down = false;
       clearHold();
       try { head.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (aborted) { swDx = 0; swVx = 0; }   // pointercancel = the OS stole the gesture — it must NEVER count as a completed swipe-delete
       if (mode === 'swipe') endSwipe(e); else if (mode === 'reorder') endReorder();
       mode = null;
     };
     head.addEventListener('pointerup', finish);
-    head.addEventListener('pointercancel', finish);
+    head.addEventListener('pointercancel', e => finish(e, true));
   }
 
   // One effect row (AM): collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
@@ -710,7 +711,11 @@ window.FM = window.FM || {};
 
   // Apply the chosen style categories from a copied layer snapshot `src` onto `target`.
   function applyStyle(target, src, cats) {
-    const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
+    // keyframe times are ABSOLUTE project time — pasted animation must be re-anchored from the
+    // source clip's start to the target's, or it lands entirely outside the target's window
+    const dt = (typeof src.start === 'number' && typeof target.start === 'number') ? (target.start - src.start) : 0;
+    const shiftKfs = (v) => { if (v && typeof v === 'object') { if (Array.isArray(v.kf)) v.kf.forEach(k => { k.t += dt; }); Object.keys(v).forEach(k => shiftKfs(v[k])); } return v; };
+    const clone = v => (v == null ? v : (dt ? shiftKfs(JSON.parse(JSON.stringify(v))) : JSON.parse(JSON.stringify(v))));
     if (cats.color) {
       // clone: fill/color can be KEYFRAME OBJECTS now — pasting onto several layers must not share one
       if (src.color != null) target.color = clone(src.color);
@@ -804,7 +809,9 @@ window.FM = window.FM || {};
     const isVideo = layer.type === 'video';
     if (isVideo) row.appendChild(qbtn('Speed — slow-mo / reverse', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => goCat('speed')));
     // trim START to playhead (drop everything before the playhead)
-    row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onClip }, () => {
+    // disabled state is evaluated at BUILD, but the panel doesn't rebuild on scrub — leave the
+    // buttons live and guard inside each handler with the CURRENT playhead instead
+    row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', {}, () => {
       const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
       layer.start = FM.time; layer.duration -= cut;
       // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
@@ -813,9 +820,9 @@ window.FM = window.FM || {};
       after();
     }));
     // split at playhead
-    row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onClip }, () => { FM.splitLayer(layer.id); }));
+    row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', {}, () => { if (FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4) FM.splitLayer(layer.id); }));
     // trim END to playhead (drop everything after the playhead)
-    row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { disabled: !onClip }, () => {
+    row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', {}, () => {
       const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
       layer.duration = nd; after();
     }));
@@ -1381,7 +1388,9 @@ window.FM = window.FM || {};
     const kfBtn = el('button', 'mt-kf' + (anyAnim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
     kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
     kfBtn.addEventListener('click', () => {
-      const add = !onHere;
+      // recompute at CLICK time — the build-time value goes stale the moment the playhead scrubs
+      // (the panel isn't rebuilt on scrub), which made the diamond silently no-op or delete
+      const add = !props.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
       // Add: only the mode's primary channels + any extra channel already in use (animated or
       // moved off its default). Remove: every channel, so stray keyframes can always be cleaned up.
       const usable = add
