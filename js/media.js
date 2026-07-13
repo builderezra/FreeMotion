@@ -60,7 +60,7 @@ window.FM = window.FM || {};
           finish();
         }
       }, { once: true });
-      el.addEventListener('error', () => reject(new Error('Could not load video: ' + file.name)), { once: true });
+      el.addEventListener('error', () => { try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load video: ' + file.name)); }, { once: true });   // failed imports must not pin the whole file blob for the page lifetime
     });
   };
 
@@ -70,7 +70,7 @@ window.FM = window.FM || {};
       const url = URL.createObjectURL(file);
       const el = new Image();
       el.onload = () => resolve({ kind: 'image', el, url, file, width: el.naturalWidth, height: el.naturalHeight });
-      el.onerror = () => reject(new Error('Could not load image: ' + file.name));
+      el.onerror = () => { try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load image: ' + file.name)); };
       el.src = url;
     });
   };
@@ -78,15 +78,16 @@ window.FM = window.FM || {};
   /* Decode a file's audio track into an AudioBuffer (used by the exporter for
    * mixing / reversing). Returns null if the file has no decodable audio. */
   FM.decodeAudio = async function (file) {
+    let ctx = null;
     try {
       const buf = await file.arrayBuffer();
       const AC = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AC();
-      const audio = await ctx.decodeAudioData(buf.slice(0));
-      ctx.close();
-      return audio;
+      ctx = new AC();
+      return await ctx.decodeAudioData(buf.slice(0));
     } catch (e) {
-      return null;
+      return null;   // no decodable audio track (screen recordings etc.)
+    } finally {
+      if (ctx) { try { ctx.close(); } catch (e2) {} }   // iOS caps live AudioContexts (~4) — a leak per silent video eventually kills ALL audio
     }
   };
 

@@ -21,7 +21,11 @@ window.FM = window.FM || {};
     try { id = localStorage.getItem(CUR_KEY); } catch (e) {}
     return id;
   }
-  function curKey() { return 'fm.proj.' + (curId() || 'default'); }
+  // boundId pins THIS TAB to the project it loaded — curKey used to re-read fm.currentProject from
+  // localStorage at every write, so a second tab opening another project made this tab's next
+  // autosave overwrite THAT project's doc with this tab's scene.
+  let boundId = null;
+  function curKey() { return 'fm.proj.' + (boundId || curId() || 'default'); }
 
   // The autosaved scene document. selectedIds is persisted too so a multi-layer selection survives a
   // reload/undo instead of silently collapsing to one layer (align/distribute act on the whole set). (#20)
@@ -52,9 +56,14 @@ window.FM = window.FM || {};
 
   FM.storage = {
     async save() {
-      try { localStorage.setItem(curKey(), JSON.stringify(sceneDoc(), FM.jsonReplacer)); _quotaWarned = false; }
+      let sceneOk = false;
+      try { localStorage.setItem(curKey(), JSON.stringify(sceneDoc(), FM.jsonReplacer)); sceneOk = true; }
       catch (e) { warnQuota(e); }   // a quota failure shouldn't block the IDB media save below
+      const warnedBefore = _quotaWarned;
       if (FM.projects) FM.projects.touchCurrent();
+      // reset the once-flag only when EVERYTHING wrote — resetting after the scene write alone made
+      // a failing index write re-toast "Storage full" every 600ms forever
+      if (sceneOk && !(_quotaWarned && !warnedBefore)) _quotaWarned = false;
       try {
         const db = await openDB();
         for (const layer of FM.scene.layers) {
@@ -81,6 +90,7 @@ window.FM = window.FM || {};
 
     async load() {
       if (FM.projects) FM.projects.migrate();   // legacy single-project fm.scene → indexed project (one-time)
+      boundId = curId();                        // pin every future save in this tab to the project being loaded
       if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
       let scene = readJSON(curKey(), null);
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
@@ -94,12 +104,14 @@ window.FM = window.FM || {};
         const db = await openDB();
         for (const layer of FM.scene.layers) {
           if (layer.type === 'text') continue;
-          const rec = await idbGet(db, layer.id);
-          if (rec && rec.file) {
-            const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
-            FM.media.set(layer.id, loaded);
-            if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
-          }
+          try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
+            const rec = await idbGet(db, layer.id);
+            if (rec && rec.file) {
+              const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
+              FM.media.set(layer.id, loaded);
+              if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
+            }
+          } catch (le) { /* this layer's media failed to decode — keep restoring the rest */ }
         }
         db.close();
       } catch (e) { /* media restore failed — scene structure still loads */ }
@@ -389,12 +401,18 @@ window.FM = window.FM || {};
       return id;
     },
     async duplicate(id) {
+      if (id === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
       const doc = readJSON('fm.proj.' + id, null); if (!doc) return;
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       const src = this.list().find(p => p.id === id) || {};
       const re = reIdLayers(doc.layers || []);
       const nid = newId('p');
       writeJSON('fm.proj.' + nid, { project: JSON.parse(JSON.stringify(doc.project)), layers: re.layers, selectedId: null, selectedIds: [] });
+      // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
+      // strand an invisible doc that no home card showed and pruneOrphans then gutted
+      const idx = this.list();
+      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length, thumb: null }));
+      this.saveIndex(idx);
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
       try {
         const db = await openDB();
@@ -405,9 +423,6 @@ window.FM = window.FM || {};
         const th = await idbGet(db, 'thumb:' + id); if (th) await idbPut(db, 'thumb:' + nid, th);   // copy the card thumbnail too
         db.close();
       } catch (e) {}
-      const idx = this.list();
-      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length, thumb: null }));
-      this.saveIndex(idx);
       FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
     },
     rename(id, name) {
@@ -443,9 +458,16 @@ window.FM = window.FM || {};
     async pruneOrphans() {
       try {
         if (FM._mediaBusy) return;   // media writes in flight — sweep again next boot
+        const projIds = new Set();   // EVERY stored project doc — scanned from localStorage, not just the index (an unindexed doc's media must never be mass-deleted)
         const collectKeep = () => {
           const keep = new Set();
-          this.list().forEach(p => { const d = readJSON('fm.proj.' + p.id, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id)); });
+          for (let i = 0; i < localStorage.length; i++) {
+            const lk = localStorage.key(i);
+            if (lk && lk.indexOf('fm.proj.') === 0) {
+              projIds.add(lk.slice(8));
+              const d = readJSON(lk, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id));
+            }
+          }
           FM.scene.layers.forEach(l => keep.add(l.id));
           return keep;
         };
@@ -454,6 +476,9 @@ window.FM = window.FM || {};
         const candidates = [];
         for (const k of await idbKeys(db)) {
           if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0)) continue;
+          // project-card thumbnails are keyed 'thumb:<projectId>' — they were being treated as
+          // orphans and wiped at EVERY boot; only a deleted project's thumb is really an orphan
+          if (typeof k === 'string' && k.indexOf('thumb:') === 0) { if (projIds.has(k.slice(6))) continue; candidates.push(k); continue; }
           if (!keep.has(k)) candidates.push(k);
         }
         if (candidates.length) {
