@@ -40,6 +40,7 @@ window.FM = window.FM || {};
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
+  let reorderActive = false;       // a ≡ reorder drag is in flight (its listeners live on the captured handle — a rebuild would kill it)
   const stripCache = new Map();    // layerId -> {key, canvas}: rendered filmstrip/waveform reuse across rebuilds
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
 
@@ -71,11 +72,13 @@ window.FM = window.FM || {};
 
   // Snap a proposed clip start so the clip's start OR end lands on 0 / playhead / another clip edge.
   // Returns { v: snapped start, snapped: bool, guide: alignment time for the guide line }.
-  function snapStart(layer, ns, pps) {
+  function snapStart(layer, ns, pps, excl) {
     if (!snapping) return { v: ns, snapped: false, guide: 0 };   // clip start may go NEGATIVE (AM: drag past 0); floor applied by the caller
     const snapPx = 7, dur = layer.duration;
     const starts = [0, FM.time], ends = [FM.time];
-    FM.scene.layers.forEach(l => { if (l.id !== layer.id) { starts.push(l.start, l.start + l.duration); ends.push(l.start, l.start + l.duration); } });
+    // excl: every layer riding in the SAME drag — a co-dragged clip's edge is a moving target that
+    // feeds back through the group-delta and ratchets the whole selection along in snap-sized steps
+    FM.scene.layers.forEach(l => { if (l.id !== layer.id && !(excl && excl[l.id])) { starts.push(l.start, l.start + l.duration); ends.push(l.start, l.start + l.duration); } });
     (FM.scene.project.markers || []).forEach(mk => { starts.push(mk.t); ends.push(mk.t); });
     let best = ns, bestD = snapPx / pps, snapped = false, guide = 0;
     starts.forEach(c => { if (Math.abs(ns - c) < bestD) { bestD = Math.abs(ns - c); best = c; snapped = true; guide = c; } });
@@ -239,7 +242,9 @@ window.FM = window.FM || {};
     for (let fr = 0; fr <= totalFrames; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     // Major ticks are LINES only — no numbers. The single centred timecode pill is the only readout
     // (Ezra: "I only want the numbers on the little counter in the middle").
-    for (let t = 0; t <= dur + 1e-6; t += majStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"></div>'; }
+    let tickStep = majStep;   // cap the major ticks too — a long project at deep zoom emitted thousands (same iPhone killer as the notches)
+    while (dur / tickStep > 800) tickStep *= 2;
+    for (let t = 0; t <= dur + 1e-6; t += tickStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     rulerEl.innerHTML = html;
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
@@ -337,7 +342,7 @@ window.FM = window.FM || {};
       if (e.target.closest('.th-eye') || e.target.closest('.th-chevron')) return;   // buttons stay buttons
       lpStart = { x: e.clientX, y: e.clientY };
       clearTimeout(lpTimer);
-      lpTimer = setTimeout(() => { lpTimer = null; beginPaintSelect(layer); }, 380);
+      lpTimer = setTimeout(() => { lpTimer = null; if (!head.isConnected) return; beginPaintSelect(layer); }, 380);   // a mid-press rebuild detaches the head — its up/cancel can then never clear this timer (phantom select-mode)
     });
     head.addEventListener('pointermove', (e) => {
       if (lpTimer && lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 10) { clearTimeout(lpTimer); lpTimer = null; }
@@ -421,12 +426,25 @@ window.FM = window.FM || {};
     h.addEventListener('contextmenu', e => e.preventDefault());
     h.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (layer.locked) return;   // locked layers keep their z-order too
       e.preventDefault(); e.stopPropagation();
       try { h.setPointerCapture(e.pointerId); } catch (_) {}
+      reorderActive = true;   // defers rebuilds (a rebuild would destroy this captured handle → dead drag + zombie autoscroll) and blocks pinch-start
 
       // if the grabbed layer is inside the current multi-selection, move the whole set together
       const sel = FM.selectionIds ? FM.selectionIds() : [];
-      const groupIds = (sel.length > 1 && sel.indexOf(layer.id) >= 0) ? sel.slice() : [layer.id];
+      let groupIds = (sel.length > 1 && sel.indexOf(layer.id) >= 0) ? sel.slice() : [layer.id];
+      // a GROUP row carries its members with it — the members' array slots are what actually
+      // renders (the unit draws at the bottom-most member), so moving only the group layer was a lie
+      if (FM.groupDescendants) {
+        const expand = [];
+        groupIds.forEach(id => {
+          expand.push(id);
+          const l = FM.layerById(FM.scene, id);
+          if (l && l.type === 'group') FM.groupDescendants(id).forEach(m => { if (expand.indexOf(m.id) < 0) expand.push(m.id); });
+        });
+        groupIds = expand;
+      }
       const groupSet = {}; groupIds.forEach(id => { groupSet[id] = 1; });
 
       const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
@@ -466,7 +484,15 @@ window.FM = window.FM || {};
         blockTop = Math.max(listTop - slotH * 0.4, Math.min(maxTop + slotH * 0.4, blockTop));   // soft clamp to the list
         // gap index from the block's position on GAPLESS coordinates — independent of the gap itself, so no feedback
         const g = Math.max(0, Math.min(statics.length, Math.round((blockTop - listTop) / slotH)));
-        dropBeforeId = statics[g] ? statics[g].id : null;
+        // bottom slot: inside Edit Group the view shows ONLY the group's members, so "very bottom"
+        // must mean the bottom of the GROUP (before whatever follows its last member in the full
+        // stack) — a raw null sent the member to the bottom of the entire project.
+        let bottomBefore = null;
+        if (FM.groupContext && statics.length) {
+          const idx = FM.scene.layers.findIndex(l => l.id === statics[statics.length - 1].id);
+          for (let i2 = idx + 1; i2 < FM.scene.layers.length; i2++) { if (!groupSet[FM.scene.layers[i2].id]) { bottomBefore = FM.scene.layers[i2].id; break; } }
+        }
+        dropBeforeId = statics[g] ? statics[g].id : bottomBefore;
         if (g !== lastGap) { lastGap = g; try { if (navigator.vibrate) navigator.vibrate(5); } catch (_) {} }   // tick on Android; iOS ignores
         dragged.forEach((d, k) => { d.el.style.transform = 'translateY(' + (blockTop + k * slotH - d.top) + 'px)'; });
         statics.forEach((s, j) => {
@@ -508,8 +534,10 @@ window.FM = window.FM || {};
       const cleanup = () => {
         h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', abort);
         if (autoRAF) cancelAnimationFrame(autoRAF);
+        reorderActive = false;
         // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
         [].slice.call(tracksEl.querySelectorAll('.track-row')).forEach(r => { r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = ''; });
+        if (rebuildPending) FM.timeline.rebuild();   // flush anything deferred while we held the DOM
       };
       const up = () => {
         cleanup();
@@ -614,13 +642,14 @@ window.FM = window.FM || {};
     clip.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       if (e.button !== 0) return;
+      if (pinch) return;   // a pinch already owns both fingers — its second finger must not spawn a clipTap that later "taps" a random clip
       if (e.shiftKey || e.metaKey || e.ctrlKey) { FM.toggleSelect(layer.id); return; }   // multi-select, no drag
       const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
       if (isTouch) {
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
         clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now() };
-        if (FM.scene.selectedId === layer.id) {
+        if (FM.scene.selectedId === layer.id && !layer.locked) {
           // Press-and-HOLD (finger settled) on a selected clip grabs it to move in time. But a finger
           // that is still travelling is a SCRUB, not a hold — a slow "drag the line over the clips to
           // find a spot" gesture emits continuous pointermoves and may cover <8px in the first 350ms.
@@ -663,7 +692,8 @@ window.FM = window.FM || {};
       } else {
         FM.selectLayer(layer.id);
       }
-      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group };
+      if (layer.locked) return;   // locked: selectable, never movable in time
+      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked) };
       innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
       if (FM.playing) FM.pause();
     });
@@ -675,6 +705,9 @@ window.FM = window.FM || {};
       grip.title = 'Trim ' + edge + ' edge';
       grip.addEventListener('pointerdown', (e) => {
         e.stopPropagation(); e.preventDefault();
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (layer.locked || pinch) return;   // locked: no trims; pinch fingers never start a trim
+        try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // keep the drag alive if the mouse leaves the window
         const m = FM.media.get(layer.id);
         trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type };
         FM.selectLayer(layer.id);
@@ -704,6 +737,9 @@ window.FM = window.FM || {};
         dot.title = 'Drag to retime · double-click to delete';
         dot.addEventListener('pointerdown', (e) => {
           e.stopPropagation(); e.preventDefault();
+          if (e.pointerType === 'mouse' && e.button !== 0) return;   // right-click is the MENU, never a drag
+          if (layer.locked || pinch) return;
+          try { dot.setPointerCapture(e.pointerId); } catch (_) {}   // survive a release outside the window
           const kfs = [];
           FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => { if (Math.abs(kf.t - tt) < 1e-3) kfs.push(kf); }));
           // orig: pre-drag times, so pinch-start/pointercancel can RESTORE instead of half-applying
@@ -941,8 +977,9 @@ window.FM = window.FM || {};
         if (e.pointerType !== 'touch' || !timelineEl || !(e.target instanceof Node) || !timelineEl.contains(e.target)) return;
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         // abortGestures (not raw nulls): restore half-applied clip/trim/kf edits AND clear the
-        // orphaned hold timer that could otherwise grab the WRONG clip on a later tap
-        if (pointers.size === 2) { dragging = false; scrub = null; abortGestures(); pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
+        // orphaned hold timer that could otherwise grab the WRONG clip on a later tap.
+        // A ≡ reorder drag OWNS its finger: a second thumb must not convert it into a pinch.
+        if (pointers.size === 2 && !reorderActive) { dragging = false; scrub = null; abortGestures(); pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
       }, true);
       window.addEventListener('pointermove', (e) => {
         if (!pointers.has(e.pointerId)) return;
@@ -971,6 +1008,7 @@ window.FM = window.FM || {};
       // Fixed-centre playhead → scrub is a RELATIVE grab-and-slide for BOTH mouse and touch (the line
       // stays put, the content moves under it). A click without a drag seeks to where it was clicked.
       const onDown = (e, fromLane) => {
+        if (pinch) return;   // a pinch's second finger must not spawn a scrub whose release "taps" and deselects
         // baseTime = the playhead time RIGHT NOW. The scrub slides relative to it, so it never depends
         // on timelineEl.scrollLeft (which can decouple from the playhead after a manual horizontal scroll
         // or a resize-clamp — and a tiny tap-jitter then computed (0 - dx)/pps → 0 = jump to START).
@@ -1040,20 +1078,23 @@ window.FM = window.FM || {};
           const dx = e.clientX - clipMove.startX;
           if (!clipMove.moved && Math.abs(dx) < 4) return;   // movement threshold: distinguish click from drag
           clipMove.moved = true;
-          // dragging a GROUP bar drags its members' time too (attach descendants once, lazily —
-          // they then ride the existing multi-selection move mechanism below)
-          if (clipMove.layer.type === 'group' && !clipMove._grpInit) {
+          // dragging a GROUP bar drags its members' time too — the primary's AND any group riding
+          // in the multi-selection (a secondary group used to move its bar and abandon its members)
+          if (!clipMove._grpInit) {
             clipMove._grpInit = true;
             if (!clipMove.group) clipMove.group = [];
-            const have = new Set(clipMove.group.map(g => g.layer.id));
-            (FM.groupDescendants ? FM.groupDescendants(clipMove.layer.id) : []).forEach(l => { if (!have.has(l.id)) clipMove.group.push({ layer: l, origStart: l.start }); });
+            const have = new Set(clipMove.group.map(g => g.layer.id)); have.add(clipMove.layer.id);
+            const expandGrp = (gid) => (FM.groupDescendants ? FM.groupDescendants(gid) : []).forEach(l => { if (!have.has(l.id)) { have.add(l.id); clipMove.group.push({ layer: l, origStart: l.start }); } });
+            if (clipMove.layer.type === 'group') expandGrp(clipMove.layer.id);
+            clipMove.group.slice().forEach(g => { if (g.layer.type === 'group') expandGrp(g.layer.id); });
+            clipMove._excl = {}; clipMove._excl[clipMove.layer.id] = 1; clipMove.group.forEach(g => { clipMove._excl[g.layer.id] = 1; });
           }
           const pps = pxPerSec();
           // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
           // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
           const floor = -(clipMove.layer.duration - 0.1);
           const raw = Math.max(floor, clipMove.origStart + dx / pps);
-          const sr = e.shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps);   // Shift bypasses snap
+          const sr = e.shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl);   // Shift bypasses snap; co-dragged clips excluded (feedback ratchet)
           clipMove.layer.start = Math.max(floor, sr.v);
           if (sr.snapped) showSnap(sr.guide); else hideSnap();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
@@ -1086,6 +1127,7 @@ window.FM = window.FM || {};
             kfDrag.moved = true;   // a real drag — cancel the pending touch long-press (easing menu)
             if (kfDrag.holdTimer) { clearTimeout(kfDrag.holdTimer); kfDrag.holdTimer = null; }
           }
+          if (!kfDrag.moved) return;   // sub-threshold jitter must NOT retime (it nudged keyframes a frame while the long-press menu was arming)
           kfDrag.kfs.forEach(kf => { kf.t = nt; });
           kfDrag.dot.style.left = (PAD + nt * pxPerSec()) + 'px';
           FM.requestRender();
@@ -1097,6 +1139,7 @@ window.FM = window.FM || {};
           // otherwise it's a horizontal grab-scrub (the primary action, so it wins ties).
           if (!scrub.axis && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) scrub.axis = (Math.abs(dy) > Math.abs(dx) + 4) ? 'y' : 'x';
           if (scrub.axis === 'y') {
+            scrub.moved = true;   // a vertical PAN is not a tap — releasing it must never deselect (it wiped painted multi-selections)
             timelineEl.scrollTop = scrub.startScrollTop - dy;                                  // vertical pan
           } else if (Math.abs(dx) > 3) {
             scrub.moved = true;
@@ -1126,7 +1169,9 @@ window.FM = window.FM || {};
         if (clipTap) {
           const ct = clipTap; clipTap = null;
           if (ct.holdTimer) clearTimeout(ct.holdTimer);
-          if (!ct.moved) FM.selectLayer(ct.layer.id);   // a deliberate tap selects (opens the property menu)
+          // a deliberate tap selects (opens the property menu); in select-mode it TOGGLES membership
+          // like head taps do — the big clip bar collapsing a painted multi-selection was maddening
+          if (!ct.moved) { if (FM.selectMode && FM.toggleSelect) { FM.toggleSelect(ct.layer.id); FM.refreshAll(); } else FM.selectLayer(ct.layer.id); }
           return;
         }
         if (clipMove) {
@@ -1185,7 +1230,7 @@ window.FM = window.FM || {};
       // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
       // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
       const ae = document.activeElement;
-      if (clipMove || trimDrag || kfDrag || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }
+      if (clipMove || trimDrag || kfDrag || reorderActive || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }
       rebuildPending = false;
       // Preserve the vertical scroll across the DOM rebuild — buildTracks empties the container, which
       // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
