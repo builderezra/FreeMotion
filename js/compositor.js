@@ -563,7 +563,7 @@ window.FM = window.FM || {};
       if (prot) ctx.rotate(prot);
       accumRot += prot;
       const ps = FM.evalProp(ptr.scale, t);
-      if (ps !== 1) ctx.scale(ps, ps);
+      if (ps !== 1) { const cps = Math.max(0.001, ps); ctx.scale(cps, cps); }   // clamp like the layer's own scale — an overshoot ease through 0/negative flipped every child for a frame
     }
     return accumRot;
   }
@@ -849,34 +849,41 @@ window.FM = window.FM || {};
   // Generic per-pixel effect: render the layer clean to an offscreen (this fx removed so the rest still
   // compose), run a pixel function over the ImageData, then draw it back with the layer's opacity/blend.
   // Each pixel fn mutates `d` (RGBA bytes) in place; gets (d, W, H, P) where P = evaluated params.
-  let _pfA = null, _pfB = null;
+  // Scratch buffers are a DEPTH-INDEXED pool: stacking two pixel effects re-enters this function
+  // (the inner drawLayer renders the remaining effects), and a single shared pair made the inner
+  // call clear/draw the OUTER call's workspace — a ghost of the un-effected layer under the result.
+  const _pfPool = [];
+  let _pfDepth = 0;
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
-    if (!_pfA) _pfA = document.createElement('canvas');
-    if (!_pfB) _pfB = document.createElement('canvas');
-    // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
-    // the backing buffer (full-res, per effect, per frame). _pfA is cleared below; _pfB is fully overwritten
-    // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
-    if (_pfA.width !== W || _pfA.height !== H) { _pfA.width = W; _pfA.height = H; }
-    if (_pfB.width !== W || _pfB.height !== H) { _pfB.width = W; _pfB.height = H; }
-    const actx = _pfA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
-    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-    drawLayer(actx, tmp, t, scene);
-    const img = actx.getImageData(0, 0, W, H);
-    fn(img.data, W, H, fx.params || {}, t);
-    _pfB.getContext('2d').putImageData(img, 0, 0);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = opacity;
-    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
-    ctx.filter = 'none';
-    ctx.drawImage(_pfB, 0, 0);
-    ctx.restore();
+    const d = _pfDepth++;
+    try {
+      if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const pA = _pfPool[d].A, pB = _pfPool[d].B;
+      // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
+      // the backing buffer (full-res, per effect, per frame). A is cleared below; B is fully overwritten
+      // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
+      if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }
+      if (pB.width !== W || pB.height !== H) { pB.width = W; pB.height = H; }
+      const actx = pA.getContext('2d');
+      actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(actx, tmp, t, scene);
+      const img = actx.getImageData(0, 0, W, H);
+      fn(img.data, W, H, fx.params || {}, t);
+      pB.getContext('2d').putImageData(img, 0, 0);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(pB, 0, 0);
+      ctx.restore();
+    } finally { _pfDepth--; }
   }
 
   // Per-pixel effect functions. Each mutates the RGBA byte array in place. Read params via FM.evalProp.
@@ -1481,7 +1488,10 @@ window.FM = window.FM || {};
     const W = proj.width, H = proj.height;
     if (!_cfA) _cfA = document.createElement('canvas');
     if (!_cfB) _cfB = document.createElement('canvas');
-    _cfA.width = W; _cfA.height = H; _cfB.width = W; _cfB.height = H;
+    // resize only on change — assigning .width even to the same value frees+reallocates the ~8MB
+    // backing store, and this runs per canvas-effect per FRAME (wiggle/3D/tiles… = constant churn)
+    if (_cfA.width !== W || _cfA.height !== H) { _cfA.width = W; _cfA.height = H; }
+    if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     const actx = _cfA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -3109,7 +3119,7 @@ window.FM = window.FM || {};
         // Render from the pre-decoded frame cache: reversed clips always; forward clips when
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
-        const slow = (layer.speed || 1) < 1;
+        const slow = (FM.speedAt ? FM.speedAt(layer, t) : (layer.speed || 1)) < 1;   // ramped speed is an object — raw compare was always false, so frame-blend never engaged on ramps
         if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
@@ -3170,14 +3180,23 @@ window.FM = window.FM || {};
           // Sample the crop sub-rect (cr.x,cr.y,cr.w,cr.h) of the full source into the frame box (cw×ch)
           // at 1:1 density — shrinking the frame shows LESS of the media, it doesn't scale the content.
           if (cr.full) ctx.drawImage(src, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
-          else ctx.drawImage(src, cr.x, cr.y, cr.w, cr.h, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
+          else {
+            // cr is in FULL source pixels, but src may be a DOWNSCALED cache bitmap (reversed /
+            // frame-blend frames are capped ~960px) — scale the sample rect to src's real density
+            const sw = src.videoWidth || src.naturalWidth || src.width || 0;
+            const sh = src.videoHeight || src.naturalHeight || src.height || 0;
+            const kx = (m && m.width && sw) ? sw / m.width : 1, ky = (m && m.height && sh) ? sh / m.height : 1;
+            ctx.drawImage(src, cr.x * kx, cr.y * ky, cr.w * kx, cr.h * ky, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
+          }
         } catch (e) { /* frame not ready */ }
         // vignette: radial darkening over the clip's (cropped) bounds (not a CSS filter)
         const vig = layer.effects && layer.effects.find(e => e.type === 'vignette' && e.enabled !== false);
         if (vig) {
           const amt = clamp01(vig.params && vig.params.amount != null ? FM.evalProp(vig.params.amount, t) : 0.6);
-          // Darken as a flat source-over overlay regardless of the layer's blend mode/opacity.
-          ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+          // Flat source-over overlay regardless of blend mode — but it FOLLOWS the layer's opacity
+          // (a fading clip used to leave its vignette ring floating at full strength).
+          ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = clamp01(FM.evalProp(layer.transform.opacity, t));
           const gx = -cw * tr.anchorX + cw / 2, gy = -ch * tr.anchorY + ch / 2, rad = Math.hypot(cw, ch) / 2;
           const grad = ctx.createRadialGradient(gx, gy, rad * 0.45, gx, gy, rad);
           grad.addColorStop(0, 'rgba(0,0,0,0)');
