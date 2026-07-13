@@ -407,6 +407,11 @@ window.FM = window.FM || {};
 
   // Scroll to zoom the camera around the cursor (the scene point under the pointer stays put).
   let wheelCommit = null;
+  // history.undo/redo call this first: a camera zoom's trailing 400ms commit hadn't landed yet, so a
+  // quick Cmd+Z stepped over BOTH the zoom and the previous edit. Flushing commits the zoom first.
+  FM.flushPendingCommit = function () {
+    if (wheelCommit) { clearTimeout(wheelCommit); wheelCommit = null; if (FM.history) FM.history.commit(); }
+  };
   function onWheel(e) {
     const sel = FM.selectedLayer(FM.scene);
     if (!sel) {

@@ -521,7 +521,7 @@ window.FM = window.FM || {};
       const pack = await this.getPack(tid); if (!pack) return false;
       const re = reIdLayers(pack.layers);
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
-      re.layers.forEach(l => { l.start = (l.start || 0) - t0 + FM.time; });
+      re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
       FM.scene.layers = re.layers.concat(FM.scene.layers);
       await hydratePack(re.layers, pack.media, re.map);
       if (FM.refreshAll) FM.refreshAll();
@@ -555,7 +555,7 @@ window.FM = window.FM || {};
       if (!pack) return false;
       const re = reIdLayers(pack.layers);
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
-      re.layers.forEach(l => { l.start = (l.start || 0) - t0 + FM.time; });
+      re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
       FM.scene.layers = re.layers.concat(FM.scene.layers);
       await hydratePack(re.layers, pack.media, re.map);
       FM.scene.selectedId = re.layers[0] ? re.layers[0].id : FM.scene.selectedId;

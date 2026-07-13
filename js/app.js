@@ -774,8 +774,9 @@ window.FM = window.FM || {};
     const m = FM.media.get(id);
     if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); }   // stop a deleted forward clip's native audio (#6)
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
-    FM.media.remove(id);
-    if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id);   // drop its blob from IndexedDB
+    // Deliberately KEEP the media registry entry and its IndexedDB blob: undo restores the layer's
+    // JSON only, so destroying media here made an undone delete come back permanently BLANK (the
+    // worst kind of data loss). Truly orphaned blobs are reaped by the boot-time pruneOrphans sweep.
     if (_nested) return;   // outermost call finishes the teardown below exactly once (#r7)
     // A deleted clip's synthesized (reversed) audio plays from a flat node list not keyed by layer, so
     // it keeps sounding after the clip is gone. Rebuild the active nodes from the post-delete layer set.
@@ -941,7 +942,11 @@ window.FM = window.FM || {};
     const base = (typeof FM.snapFrame === 'function') ? FM.snapFrame(FM.time) : FM.time;
     const minStart = FM.clipboard.reduce((m, e) => Math.min(m, e.snapshot.start || 0), Infinity);
     const anchor = isFinite(minStart) ? minStart : 0;
-    copies.forEach(({ copy, entry }) => { copy.start = Math.max(0, base + ((entry.snapshot.start || 0) - anchor)); });
+    copies.forEach(({ copy, entry }) => {
+      const orig = entry.snapshot.start || 0;
+      copy.start = Math.max(0, base + (orig - anchor));
+      if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(copy, copy.start - orig);   // keyframes are absolute time — pasted animation must ride to the playhead
+    });
     let insertAt = 0;   // paste onto TOP of the z-stack (layers[0] = top), like duplicate/add
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.

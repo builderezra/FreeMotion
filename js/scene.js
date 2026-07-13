@@ -87,7 +87,7 @@ window.FM = window.FM || {};
     for (let i = 0; i < kf.length - 1; i++) {
       const a = kf[i], b = kf[i + 1];
       if (t >= a.t && t <= b.t) {
-        if (b.e === 'hold') return a.v;
+        if (b.e === 'hold') return (t >= b.t) ? b.v : a.v;   // AT the hold keyframe the step has happened — returning a.v made snap-to-keyframe land on the OLD value
         const span = b.t - a.t;
         let f = span <= 0 ? 1 : (t - a.t) / span;
         // Resolve the easing: a custom bez, then a named EASES function, then a named EASE_PRESETS
@@ -151,6 +151,9 @@ window.FM = window.FM || {};
   /* Set a transform value at the given time. If the prop is already keyframed, this
    * inserts/updates a keyframe at `time`; otherwise it sets the static value. */
   function setTransform(layer, key, value, time) {
+    // editing a value while PLAYING sprayed a keyframe per pointermove at the advancing playhead —
+    // any interactive write pauses playback first (canvas drags already do; this covers the inspector)
+    if (FM.playing && FM.pause) FM.pause();
     const p = layer.transform[key];
     if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else layer.transform[key] = value;
@@ -167,7 +170,12 @@ window.FM = window.FM || {};
     if (key === 'scale' || key === 'scaleX' || key === 'scaleY') {
       // scale is MULTIPLICATIVE: an additive delta pushes other keyframes negative (mirrored render)
       // — e.g. kfs 0.5→2.0, drag the 2.0 end down to 0.3: additive would make the first kf −1.2.
-      const cur = evalProp(p, time) || 1e-6;
+      const cur = evalProp(p, time);
+      if (Math.abs(cur) < 1e-3) {   // at ~zero (a pop-in's first keyframe) the ratio explodes → shift additively instead
+        const d = value - cur;
+        if (d) p.kf.forEach(k => { k.v += d; });
+        return;
+      }
       const ratio = value / cur;
       if (ratio !== 1 && isFinite(ratio)) p.kf.forEach(k => { k.v *= ratio; });
       return;
@@ -219,6 +227,7 @@ window.FM = window.FM || {};
     if (isAnimated(layer.fill)) out.push(layer.fill);       // colour keyframes show on the clip
     if (isAnimated(layer.color)) out.push(layer.color);
     if (layer.stroke) { if (isAnimated(layer.stroke.width)) out.push(layer.stroke.width); if (isAnimated(layer.stroke.color)) out.push(layer.stroke.color); }   // border (keyframeable)
+    if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => { if (isAnimated(layer.crop[k])) out.push(layer.crop[k]); });   // crop keyframes — omitting them left crop animation behind on clip moves and undeletable
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => { if (isAnimated(layer.shadow[k])) out.push(layer.shadow[k]); });   // shadow (keyframeable)
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
@@ -227,6 +236,7 @@ window.FM = window.FM || {};
   /* Generic versions of the above that target ANY container object + key (e.g. an effect's
    * params), so effect parameters / future props are keyframe-able just like transform. */
   FM.setProp = function (container, key, value, time) {
+    if (FM.playing && FM.pause) FM.pause();   // same rule as setTransform: live edits pause playback
     const p = container[key];
     if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else container[key] = value;

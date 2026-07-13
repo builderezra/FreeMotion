@@ -652,7 +652,7 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke) {
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     const chars = Array.from(line);
     // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
     // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
@@ -664,7 +664,6 @@ window.FM = window.FM || {};
     const tw = widths.reduce((a, b) => a + b, 0) + sp * Math.max(0, chars.length - 1);
     if (tw <= 0) { if (prevLS != null) ctx.letterSpacing = prevLS; return; }
     const ac = curveDeg * Math.PI / 180, R = tw / Math.abs(ac), sign = curveDeg >= 0 ? 1 : -1;
-    const stk = layer.stroke;
     const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     let s = 0;
@@ -3030,7 +3029,7 @@ window.FM = window.FM || {};
           ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(total + fs) / 2, w: maxW, h: total + fs }, t);
         }
         const curve = layer.textCurve || 0;
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke);   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol);   // text on a curve
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
           if (drawStroke) {

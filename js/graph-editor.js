@@ -90,7 +90,7 @@ window.FM = window.FM || {};
     props.forEach(k => {
       const kf = getProp(k).kf;
       let idx = kf.findIndex(x => x.t >= t - 1e-3);
-      if (idx < 1) idx = (t <= kf[0].t) ? 1 : kf.length - 1;
+      if (idx < 1) idx = (t <= kf[0].t + 1e-3) ? 1 : kf.length - 1;   // epsilon on the fallback too — a playhead a hair past kf[0] used to select the LAST segment
       if (idx > kf.length - 1) idx = kf.length - 1;
       keys.push(k); kfs.push(kf[idx]);
     });
