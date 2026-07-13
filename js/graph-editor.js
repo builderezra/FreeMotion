@@ -125,7 +125,7 @@ window.FM = window.FM || {};
   function toGraph(e) {
     const r = canvas.getBoundingClientRect(), W = canvas.width, H = canvas.height;
     const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
-    return { x: Math.max(0, Math.min(1, (px - PAD) / (W - 2 * PAD))), y: Math.max(-1, Math.min(2, ((H - PAD) - py) / (H - 2 * PAD))) };
+    return { x: Math.max(0, Math.min(1, (px - PAD) / (W - 2 * PAD))), y: Math.max(-0.4, Math.min(1.4, ((H - PAD) - py) / (H - 2 * PAD))) };   // clamp to the DRAWABLE band — a handle at y≈1.8 vanished off-canvas and became ungrabbable
   }
   window.addEventListener('pointermove', e => { if (dragHandle === null || !cur.kfs.length || !canvas) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); bez[dragHandle * 2] = g.x; bez[dragHandle * 2 + 1] = g.y; applyBez(bez); });
   window.addEventListener('pointerup', () => { if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); } });

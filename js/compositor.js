@@ -2476,8 +2476,13 @@ window.FM = window.FM || {};
     if (!src) return null;
     let rec = _fillImg[layer.id];
     if (!rec || rec.src !== src) {
+      // bounded: entries were never evicted, so deleted layers / swapped fills / old projects kept
+      // their decoded Images (plus multi-MB data-URL strings) reachable for the whole session
+      const keys = Object.keys(_fillImg);
+      if (keys.length > 40) delete _fillImg[keys[0]];
       rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false };
       rec.img.onload = () => { rec.ready = true; FM.requestRender(); };
+      rec.img.onerror = () => { rec.failed = true; };   // corrupt data URL → placeholder, no endless retry
       rec.img.src = src;
     }
     return rec.ready ? rec.img : null;

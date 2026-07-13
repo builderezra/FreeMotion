@@ -178,7 +178,7 @@ window.FM = window.FM || {};
     saved() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
     list() { return this.builtins.concat(this.saved()); },
     _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { } },
-    save(name, effects) { if (!name) return; const arr = this.saved().filter(p => p.name !== name); arr.push({ name: name, effects: JSON.parse(JSON.stringify(effects || [])) }); this._write(arr); },
+    save(name, effects) { if (!name) return; const arr = this.saved().filter(p => p.name !== name); arr.push({ name: name, effects: JSON.parse(JSON.stringify(effects || [], FM.jsonReplacer)) }); this._write(arr); },   // jsonReplacer strips _expanded etc. from presets
     get(name) { return this.list().find(p => p.name === name); },
     remove(name) { this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
   };
@@ -656,7 +656,7 @@ window.FM = window.FM || {};
     // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)
     const tools = el('div', 'fx-stack-tools');
     const cp = el('button', 'fx-act', 'Copy'); cp.disabled = !(layer.effects && layer.effects.length);
-    cp.addEventListener('click', () => { FM.effectClipboard = JSON.parse(JSON.stringify(layer.effects || [])); if (FM.toast) FM.toast('Copied ' + FM.effectClipboard.length + ' effect(s)'); FM.inspector.refresh(); });
+    cp.addEventListener('click', () => { FM.effectClipboard = JSON.parse(JSON.stringify(layer.effects || [], FM.jsonReplacer)); if (FM.toast) FM.toast('Copied ' + FM.effectClipboard.length + ' effect(s)'); FM.inspector.refresh(); });
     const pa = el('button', 'fx-act', 'Paste'); pa.disabled = !(FM.effectClipboard && FM.effectClipboard.length);
     pa.addEventListener('click', () => { if (!FM.effectClipboard || !FM.effectClipboard.length) return; if (!layer.effects) layer.effects = []; FM.effectClipboard.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); afterFx(); });
     const sv = el('button', 'fx-act', 'Save preset…'); sv.disabled = !(layer.effects && layer.effects.length);
@@ -1164,7 +1164,8 @@ window.FM = window.FM || {};
   // X/Y setter that SNAPS to the shared align targets (centre / edges / this layer's keyframe
   // positions) so Move & Transform keeps things aligned just like canvas dragging, and flashes the
   // matching guide line on the canvas so you can see the snap. (Ezra)
-  function mtSetXY(layer, key, v) {
+  function mtSetXY(layer, key, v, typed) {
+    if (typed) { mtSet(layer, key, v); return; }   // a TYPED value is exact — snapping/rounding silently rewrote it (545 became 540)
     let target = null;
     if (FM.snapAxis) { const s = FM.snapAxis(layer, key, v, 8); v = s.v; if (s.hit) target = s.target; }
     if (FM.showAlignGuide) FM.showAlignGuide(key === 'x' ? target : null, key === 'y' ? target : null);
@@ -1188,7 +1189,7 @@ window.FM = window.FM || {};
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
       const r = document.createRange(); r.selectNodeContents(val); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-      const finish = commit => { val.removeEventListener('blur', onBlur); val.removeEventListener('keydown', onKey); val.contentEditable = 'false'; val.classList.remove('editing'); if (commit) { const n = parseFloat(val.textContent); if (!isNaN(n)) { setVal(clamp(n)); commitH(); } } refresh(); FM.inspector.refresh(); };
+      const finish = commit => { val.removeEventListener('blur', onBlur); val.removeEventListener('keydown', onKey); val.contentEditable = 'false'; val.classList.remove('editing'); if (commit) { const n = parseFloat(val.textContent); if (!isNaN(n)) { setVal(clamp(n), true); commitH(); } } refresh(); FM.inspector.refresh(); };
       const onBlur = () => finish(true);
       const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); val.blur(); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
       val.addEventListener('blur', onBlur); val.addEventListener('keydown', onKey);
@@ -1370,7 +1371,11 @@ window.FM = window.FM || {};
       bx._refresh(); by._refresh();
     };
     paint();
-    pe.onChange(kind => { if (!document.body.contains(panel)) return; if (kind === 'move') { bx._refresh(); by._refresh(); } else paint(); });
+    // one live listener, not one per refresh: every inspector refresh rebuilds this panel, and the
+    // stale closures (each pinning detached DOM) accumulated in point-edit's callback list all session
+    if (FM._peChangeFn && pe.offChange) pe.offChange(FM._peChangeFn);
+    FM._peChangeFn = kind => { if (!document.body.contains(panel)) return; if (kind === 'move') { bx._refresh(); by._refresh(); } else paint(); };
+    pe.onChange(FM._peChangeFn);
   }
 
   function moveTransformPanel(layer) {
@@ -1422,8 +1427,8 @@ window.FM = window.FM || {};
     center.appendChild(values); center.appendChild(control);
 
     if (mode === 'move') {
-      const bx = mtVBox('X', () => mtEval(layer, 'x'), v => mtSetXY(layer, 'x', v), { dp: 1, scrub: 1 });
-      const by = mtVBox('Y', () => mtEval(layer, 'y'), v => mtSetXY(layer, 'y', v), { dp: 1, scrub: 1 });
+      const bx = mtVBox('X', () => mtEval(layer, 'x'), (v, typed) => mtSetXY(layer, 'x', v, typed), { dp: 1, scrub: 1 });
+      const by = mtVBox('Y', () => mtEval(layer, 'y'), (v, typed) => mtSetXY(layer, 'y', v, typed), { dp: 1, scrub: 1 });
       const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2 });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
       // 2D trackpad

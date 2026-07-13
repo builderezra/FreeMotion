@@ -1139,16 +1139,8 @@ window.FM = window.FM || {};
 
   /* ---------- layers live in the timeline now (AM-style); this is a thin alias ---------- */
   FM.layersPanel = { refresh() { if (FM.timeline) FM.timeline.rebuild(); } };
-  // Reorder layers (called by the timeline track-head drag). from/to are array indices.
-  FM.reorderLayer = function (from, to) {
-    if (from == null || to == null || from === to) return;
-    const arr = FM.scene.layers;
-    if (from < 0 || from >= arr.length || to < 0 || to >= arr.length) return;
-    const [moved] = arr.splice(from, 1);
-    arr.splice(to, 0, moved);
-    refreshAll();
-    if (FM.history) FM.history.commit();
-  };
+  // (the old index-based FM.reorderLayer is gone — FM.moveLayers below is the one reorder entry
+  // point: id-based, group-aware, no-op-guarded, used by the ≡ drag and the multi-select bar)
 
   // Alignment snap targets for one axis, shared by canvas dragging AND the Move & Transform scrubbers:
   // the composition centre + both edges, PLUS every value this layer already holds at its OTHER
