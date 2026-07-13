@@ -809,7 +809,7 @@ window.FM = window.FM || {};
       layer.start = FM.time; layer.duration -= cut;
       // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
       // the source tail, so the kept (later) span keeps the same trimStart — matches splitLayer. (#12)
-      if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + cut * (layer.speed || 1);
+      if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, cut) : cut * (layer.speed || 1));   // ramp-safe: animated speed is an object (raw × = NaN)
       after();
     }));
     // split at playhead
@@ -824,8 +824,14 @@ window.FM = window.FM || {};
     return row;
   }
 
+  // Multi-select bar (AM): Group leads; then trim/split/delete acting on EVERY selected clip; then
+  // TIMELINE alignment — moves clips in time only (canvas position untouched), keyframes ride along.
+  // (The old canvas align/distribute buttons lived here — Ezra: gone, this is about the timeline.)
   function alignRow() {
-    const n = FM.selectionIds().length;
+    const ids = FM.selectionIds();
+    const n = ids.length;
+    const layers = ids.map(id => FM.layerById(FM.scene, id)).filter(Boolean);
+    const rowOrder = FM.scene.layers.filter(l => ids.indexOf(l.id) >= 0);   // top→bottom as shown in the timeline
     const wrap = el('div', 'align-row');
     // Group the multi-selection (AM) — the headline action for a multi-select, so it leads.
     const grp = el('button', 'fx-add-btn', '⧉ Group ' + n + ' layers');
@@ -837,20 +843,63 @@ window.FM = window.FM || {};
       ]); else FM.groupSelection();
     });
     wrap.appendChild(grp);
-    wrap.appendChild(el('div', 'align-label', 'Align ' + n + ' layers'));
+    const done = () => { FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); };
+    // move a clip in time: keyframes are absolute, so they must ride along (same rule as clip-drag v3.01)
+    const setStart = (l, ns) => { const d = ns - l.start; if (!d) return; l.start = ns; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); };
+
+    // ---- clip actions on the whole selection (AM bottom-left) ----
+    wrap.appendChild(el('div', 'align-label', 'Edit ' + n + ' clips'));
     const bar = el('div', 'quick-row');
-    function ab(title, icon, fn) { const b = el('button', 'qr-btn'); b.title = title; b.innerHTML = svgIcon(icon); b.addEventListener('click', fn); bar.appendChild(b); }
-    ab('Align left', 'M4 4v16M8 9h9M8 15h5', () => FM.alignLayers('left'));
-    ab('Align centre (H)', 'M12 4v16M7 9h10M9 15h6', () => FM.alignLayers('hcenter'));
-    ab('Align right', 'M20 4v16M7 9h9M12 15h5', () => FM.alignLayers('right'));
-    ab('Align top', 'M4 4h16M9 8v9M15 8v5', () => FM.alignLayers('top'));
-    ab('Align middle (V)', 'M4 12h16M9 7v10M15 9v6', () => FM.alignLayers('vcenter'));
-    ab('Align bottom', 'M4 20h16M9 7v9M15 12v5', () => FM.alignLayers('bottom'));
-    if (n >= 3) {
-      ab('Distribute horizontally', 'M4 4v16M20 4v16M12 9v6', () => FM.distributeLayers('h'));
-      ab('Distribute vertically', 'M4 4h16M4 20h16M9 12h6', () => FM.distributeLayers('v'));
-    }
+    function ab(title, icon, opts, fn) { const b = el('button', 'qr-btn' + (opts.danger ? ' qr-danger' : '')); b.title = title; b.innerHTML = svgIcon(icon); if (opts.disabled) b.disabled = true; b.addEventListener('click', fn); bar.appendChild(b); }
+    const inside = l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4;
+    const onAny = layers.some(inside);
+    ab('Trim starts to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onAny }, () => {
+      layers.forEach(l => {
+        if (!inside(l)) return;
+        const cut = FM.time - l.start;
+        l.start = FM.time; l.duration -= cut;
+        if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+      });
+      done();
+    });
+    ab('Split all at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onAny }, async () => {
+      for (const l of layers) { if (inside(l)) await FM.splitLayer(l.id); }   // sequential: splitLayer clones media safely one at a time
+      done();
+    });
+    ab('Trim ends to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { disabled: !onAny }, () => {
+      layers.forEach(l => { if (inside(l)) l.duration = FM.time - l.start; });
+      done();
+    });
+    ab('Delete ' + n + ' layers', 'M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6', { danger: true }, () => {
+      ids.forEach(id => FM.deleteLayer(id, true));   // _nested: one teardown + ONE undo step for the whole set
+      if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      FM.selectMode = false;
+      FM.refreshAll();
+      if (FM.history) FM.history.commit();
+    });
     wrap.appendChild(bar);
+
+    // ---- timeline alignment (AM bottom-right): time only, never canvas position ----
+    wrap.appendChild(el('div', 'align-label', 'Align on timeline'));
+    const tbar = el('div', 'quick-row');
+    function tb(title, icon, fn) { const b = el('button', 'qr-btn'); b.title = title; b.innerHTML = svgIcon(icon); b.addEventListener('click', fn); tbar.appendChild(b); }
+    tb('Start together — all clips begin at the same time', 'M5 4v16M9 7h10M9 12h7M9 17h11', () => {
+      const s0 = Math.min.apply(null, layers.map(l => l.start));
+      layers.forEach(l => setStart(l, s0));
+      done();
+    });
+    tb('One after another — each clip starts where the previous ends', 'M3 6h6M9 12h6M15 18h6', () => {
+      let t = Math.min.apply(null, layers.map(l => l.start));
+      rowOrder.forEach(l => { setStart(l, t); t += l.duration; });
+      done();
+    });
+    tb('End together — all clips finish at the same time', 'M19 4v16M5 7h10M8 12h7M4 17h11', () => {
+      const e0 = Math.max.apply(null, layers.map(l => l.start + l.duration));
+      layers.forEach(l => setStart(l, e0 - l.duration));
+      done();
+    });
+    wrap.appendChild(tbar);
     return wrap;
   }
 
@@ -1891,8 +1940,11 @@ window.FM = window.FM || {};
       // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
       // now the top-bar name field. So the inspector goes straight to the actions.
       if (view === 'home') {
-        root.appendChild(quickRow(layer));
-        if (FM.selectionIds && FM.selectionIds().length >= 2) root.appendChild(alignRow());
+        const multi = FM.selectionIds && FM.selectionIds().length >= 2;
+        // multi-select: the multi bar's trim/split/delete act on the WHOLE selection — showing the
+        // single-layer quick row above it too was a confusing near-duplicate (it hit only the primary)
+        if (!multi) root.appendChild(quickRow(layer));
+        else root.appendChild(alignRow());
         root.appendChild(categoryGrid(layer));
       } else if (view === 'transform' && FM._mtEasing && FM.buildEasingEditor) {
         // Easing curve editor — an INLINE sub-view of Move & Transform (same sheet), not a screen.

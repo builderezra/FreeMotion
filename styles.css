@@ -885,6 +885,8 @@ input[type=range]::-webkit-slider-thumb {
 .clip-speed { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 9.5px; font-weight: 700; line-height: 1; padding: 2px 4px; border-radius: 4px; background: rgba(0,0,0,.55); color: #fff; letter-spacing: .3px; pointer-events: none; }
 .quick-row { display: flex; gap: 8px; padding: 6px 2px 10px; }
 .qr-btn { flex: 1; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text-dim); cursor: pointer; }
+.qr-btn.qr-danger { color: #ff6b7a; border-color: rgba(255, 107, 122, .35); }   /* delete-selection button reads as destructive */
+.qr-btn:disabled { opacity: .35; cursor: default; }
 .qr-btn svg { width: 18px; height: 18px; }
 .qr-btn:hover { background: var(--panel-3); color: var(--text); }
 .qr-btn.on { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
