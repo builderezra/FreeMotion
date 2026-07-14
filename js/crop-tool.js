@@ -156,6 +156,7 @@ window.FM = window.FM || {};
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     window.removeEventListener('pointermove', onMove, true);
     window.removeEventListener('pointerup', onUp, true);
+    window.removeEventListener('pointercancel', onUp, true);
     if (overlay && overlay.parentElement) overlay.parentElement.removeChild(overlay); overlay = null;
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
     document.body.classList.remove('cropping');
@@ -165,7 +166,9 @@ window.FM = window.FM || {};
 
   FM.cropTool = {
     isActive() { return !!active; },
+    layerId() { return active ? active.layerId : null; },
     start(layerId) {
+      if (active) this.stop();   // re-entry guard (like text-edit/point-edit/touch-up) — reopening crop used to orphan the old overlay + leave the old layer's _cropEditing stuck true
       if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
       const l = FM.scene.layers.find(x => x.id === layerId);
       const m = l && FM.media ? FM.media.get(l.id) : null;
@@ -183,6 +186,7 @@ window.FM = window.FM || {};
       overlay.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove, true);
       window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onUp, true);   // OS-cancelled crop-box drag ends the drag cleanly
       window.addEventListener('resize', onResize);
       bar = document.createElement('div'); bar.id = 'crop-bar';
       bar.innerHTML = '<span class="cb-hint">Drag to crop</span><button class="cb-reset" type="button">Reset</button><button class="cb-cancel" type="button">Cancel</button><button class="cb-done" type="button">Done</button>';

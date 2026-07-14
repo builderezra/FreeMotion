@@ -63,6 +63,7 @@ window.FM = window.FM || {};
     if (raf) cancelAnimationFrame(raf), raf = 0;
     window.removeEventListener('pointermove', move, true);
     window.removeEventListener('pointerup', up, true);
+    window.removeEventListener('pointercancel', stop, true);
     if (overlay) overlay.remove(); overlay = null;
     if (loupe) loupe.remove(); loupe = null; lctx = null;
     if (bar) bar.remove(); bar = null;
@@ -90,6 +91,7 @@ window.FM = window.FM || {};
       overlay.addEventListener('pointerdown', down);
       window.addEventListener('pointermove', move, true);
       window.addEventListener('pointerup', up, true);
+      window.addEventListener('pointercancel', stop, true);   // OS-cancelled sample ABORTS (no colour committed) + stops the loupe/rAF leak
       document.body.classList.add('sampling');
       if (FM.toast) FM.toast('Tap the video to pick a colour', 2200);
       tick();

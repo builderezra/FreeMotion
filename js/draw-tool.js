@@ -163,6 +163,7 @@ window.FM = window.FM || {};
       overlay.addEventListener('pointerdown', onDown, true);
       window.addEventListener('pointermove', onMove, true);
       window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onUp, true);   // OS-cancelled stroke finalizes like a normal release instead of being silently lost
       window.addEventListener('resize', function () { if (FM.drawTool.active) syncOverlay(), redraw(); });
       // Enter finishes the drawing (same as Done); Escape cancels. Capture phase + stopPropagation
       // so the app's own Enter/Escape shortcuts don't also fire while you're mid-draw.

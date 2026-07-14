@@ -36,8 +36,10 @@ window.FM = window.FM || {};
       });
       menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');
       const r = menu.getBoundingClientRect();
-      if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 6) + 'px';
-      if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 6) + 'px';
+      if (r.right > window.innerWidth) menu.style.left = Math.max(6, window.innerWidth - r.width - 6) + 'px';
+      // Math.max(6,…): a menu TALLER than the viewport pushed top NEGATIVE, clipping its first items
+      // off the top with no way to reach them — clamp to 6 and let CSS max-height/overflow scroll it.
+      if (r.bottom > window.innerHeight) menu.style.top = Math.max(6, window.innerHeight - r.height - 6) + 'px';
     },
     hide() { if (menu) menu.classList.add('hidden'); },
   };

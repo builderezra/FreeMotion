@@ -725,6 +725,9 @@ window.FM = window.FM || {};
 
   FM.selectLayer = function (id) {
     FM.selectMode = false;   // single-select anywhere (canvas/clip/head) exits multi-select mode (#r8)
+    // Selecting a DIFFERENT layer must close the crop tool — it has no rAF loop and never self-closes,
+    // so it stayed bound to the old layer (composited uncropped) while the inspector showed the new one.
+    if (FM.cropTool && FM.cropTool.isActive() && FM.cropTool.layerId && FM.cropTool.layerId() !== id) FM.cropTool.stop();
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
     FM.layersPanel.refresh();
@@ -754,6 +757,12 @@ window.FM = window.FM || {};
   // Delete every layer in the selection set (one history step).
   FM.deleteSelected = function () {
     const sel = FM.selectionIds(); if (!sel.length) return;
+    // Tear down any open overlay tool first (deleteLayer already does) — Delete during crop/point-edit
+    // otherwise orphaned the overlay and left its "Done" button dead over a deleted layer.
+    if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
+    if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
+    if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+    if (FM.touchupTool && FM.touchupTool.isOpen && FM.touchupTool.isOpen()) FM.touchupTool.close();
     // Cascade groups → their members (mirror deleteLayer) — deleting a group row must not leave its
     // members behind pointing at a dead parent id.
     const set = new Set(sel);
@@ -1732,6 +1741,7 @@ window.FM = window.FM || {};
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
         if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) { FM.eyedropper.stop(); return; }
         if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
+        if (FM.touchupTool && FM.touchupTool.isOpen && FM.touchupTool.isOpen()) { FM.touchupTool.close(); return; }
         if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) { FM.textEdit.stop(); return; }
         // standalone point-edit closes on Esc; EMBEDDED Edit Points is a view — inspector.back()
         // steps out of it (the refresh guard tears the overlay down with the view)

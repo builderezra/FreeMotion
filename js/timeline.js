@@ -427,6 +427,7 @@ window.FM = window.FM || {};
     h.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (layer.locked) return;   // locked layers keep their z-order too
+      if (reorderActive) return;  // a prior drop is still settling (150ms) — its deferred moveLayers would otherwise wipe this one
       e.preventDefault(); e.stopPropagation();
       try { h.setPointerCapture(e.pointerId); } catch (_) {}
       reorderActive = true;   // defers rebuilds (a rebuild would destroy this captured handle → dead drag + zombie autoscroll) and blocks pinch-start

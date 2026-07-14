@@ -1186,6 +1186,7 @@ window.FM = window.FM || {};
     val.addEventListener('pointerdown', e => { if (val.isContentEditable) return; drag = { x: e.clientX, v: getVal(), moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
     val.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; if (moved) { commitH(); FM.inspector.refresh(); } return; } const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { const raw = drag.v + dx * (opts.scrub || 1); const v = clamp(raw); if (v !== raw) { drag.x = e.clientX; drag.v = v; } setVal(v); refresh(); if (opts.onScrub) opts.onScrub(); } });   // re-anchor at min/max: no overshoot dead zone
     val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } else startEdit(); });
+    val.addEventListener('pointercancel', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
       const r = document.createRange(); r.selectNodeContents(val); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
@@ -1204,6 +1205,7 @@ window.FM = window.FM || {};
     strip.addEventListener('pointerdown', e => { drag = { x: e.clientX, v: getVal() }; try { strip.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
     strip.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; } const raw = drag.v + (e.clientX - drag.x) * scrub; setVal(raw); const got = getVal(); if (Math.abs(got - raw) > 1e-6) { drag.x = e.clientX; drag.v = got; } if (onChange) onChange(); });   // setVal clamps in the caller — re-anchor to the value that actually stuck (no dead zone)
     strip.addEventListener('pointerup', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
+    strip.addEventListener('pointercancel', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
     return strip;
   }
 
@@ -1351,6 +1353,7 @@ window.FM = window.FM || {};
       pd = { x: e.clientX, y: e.clientY };
     });
     pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
+    pad.addEventListener('pointercancel', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     center.appendChild(pad);
     center.appendChild(el('div', 'insp-hint', 'Tap a point to select it · on a curve point, drag its handles to shape the curve · tap a hollow ring to add a point · double-tap to delete'));
 
@@ -1438,6 +1441,7 @@ window.FM = window.FM || {};
       pad.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y') }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       pad.addEventListener('pointermove', e => { if (!pd) return; if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; } mtSet(layer, 'x', Math.round(pd.ix + (e.clientX - pd.x) * sens)); mtSet(layer, 'y', Math.round(pd.iy + (e.clientY - pd.y) * sens)); refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); });
       pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      pad.addEventListener('pointercancel', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(pad);
     } else if (mode === 'rotate') {
       const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5 });
@@ -1453,6 +1457,7 @@ window.FM = window.FM || {};
       // knob past the ±180° seam (9 o'clock) advances smoothly instead of snapping a full turn. (#3)
       ring.addEventListener('pointermove', e => { if (!rd) return; if (e.pointerType === 'mouse' && e.buttons === 0) { rd = null; commitH(); return; } const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a; mtSet(layer, 'rotation', Math.round(rd.v + rd.acc)); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
       ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      ring.addEventListener('pointercancel', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(dial);
     } else if (mode === 'scale') {
       const sz = FM.layerSize(layer);
