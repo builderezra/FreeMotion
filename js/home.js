@@ -17,6 +17,11 @@ window.FM = window.FM || {};
     if (text != null) d.textContent = text;
     return d;
   }
+  // role=button divs don't synthesise a click from Enter/Space like a real <button> — wire it so the
+  // cards are keyboard-activatable (they announce as buttons to screen readers but did nothing on Enter).
+  function keyActivate(elm) {
+    elm.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); elm.click(); } });
+  }
   function ago(ts) {
     if (!ts) return '';
     const s = Math.max(1, (Date.now() - ts) / 1000);
@@ -38,7 +43,8 @@ window.FM = window.FM || {};
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
     const card = el('div', 'hm-card' + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
-    card.setAttribute('role', 'button'); card.tabIndex = 0;
+    card.setAttribute('role', 'button'); card.tabIndex = 0; card.dataset.pid = p.id;
+    card.setAttribute('aria-label', (p.name || 'Untitled') + ' — open project');
     const th = el('div', 'hm-thumb');
     // Thumbnails now live in IndexedDB (out of the autosave-hot index) — load async, placeholder first.
     const ph = el('span', 'hm-thumb-empty', '▶'); th.appendChild(ph);
@@ -48,6 +54,7 @@ window.FM = window.FM || {};
     const name = el('div', 'hm-name', p.name || 'Untitled');
     const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.duration || 0) + 's', (p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : null), ago(p.modified)].filter(Boolean).join(' · '));
     const more = el('button', 'hm-card-more', '⋯');
+    more.setAttribute('aria-label', 'Project actions');
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const r = more.getBoundingClientRect();
@@ -61,7 +68,14 @@ window.FM = window.FM || {};
           const ok = await FM.templates.save(n.trim(), p.id);
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
         } },
-        { label: 'Export project file', action: async () => { await openProject(p.id, true); FM.storage.exportFile(); } },
+        // export WITHOUT permanently switching to it — serialize, then switch back to the project
+        // that was open (the ⋯ export used to silently move the OPEN badge to the exported project)
+        { label: 'Export project file', action: async () => {
+          const prev = FM.projects.currentId();
+          await openProject(p.id, true);
+          await FM.storage.exportFile();
+          if (prev && prev !== p.id) { await FM.projects.open(prev); render(); }
+        } },
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
           if (!confirm('Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.')) return;
@@ -72,10 +86,23 @@ window.FM = window.FM || {};
     card.appendChild(th); card.appendChild(name); card.appendChild(meta);
     if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
     card.addEventListener('click', () => { if (selectMode) toggleSel(p.id); else openProject(p.id); });
+    keyActivate(card);
     return card;
   }
 
-  function toggleSel(id) { if (selected.has(id)) selected.delete(id); else selected.add(id); renderSelBar(); render(); }
+  function toggleSel(id) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    // update the tapped card IN PLACE — a full render() rebuilt the whole grid and re-fetched every
+    // thumbnail from IndexedDB per tick (each card flashing its ▶ placeholder) on a big library
+    const card = grid && grid.querySelector('.hm-card[data-pid="' + id + '"]');
+    if (card) {
+      const on = selected.has(id);
+      card.classList.toggle('hm-sel', on);
+      const chk = card.querySelector('.hm-check');
+      if (chk) { chk.classList.toggle('on', on); chk.textContent = on ? '✓' : ''; }
+    }
+    renderSelBar();
+  }
   function enterSelect(preId) { selectMode = true; selected.clear(); if (preId) selected.add(preId); render(); }
   function exitSelect() { selectMode = false; selected.clear(); const b = document.getElementById('hm-selbar'); if (b) b.remove(); render(); }
 
@@ -95,9 +122,14 @@ window.FM = window.FM || {};
     const del = el('button', 'hm-selbtn danger', 'Delete');
     del.disabled = !n;
     del.addEventListener('click', async () => {
-      if (!n) return; const ids = [...selected];
+      if (!n) return; let ids = [...selected];
       if (!confirm('Delete ' + ids.length + ' project' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
       if (FM.toast) FM.toast('Deleting ' + ids.length + '…');
+      // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
+      // refreshAll) whenever it deletes the open one, so deleting it first made every other doomed
+      // project get fully opened in turn — order it last so that expensive switch happens once.
+      const cur = FM.projects.currentId();
+      ids = ids.sort((a, b) => (a === cur ? 1 : 0) - (b === cur ? 1 : 0));
       for (const id of ids) await FM.projects.remove(id);
       exitSelect();
     });
@@ -125,6 +157,7 @@ window.FM = window.FM || {};
         { label: 'Delete template…', danger: true, action: async () => { if (!confirm('Delete template "' + t.name + '"?')) return; await FM.templates.remove(t.id); render(); } },
       ]);
     });
+    more.setAttribute('aria-label', 'Template actions');
     card.appendChild(more);
     async function use() {
       if (FM.toast) FM.toast('Creating project…');
@@ -132,12 +165,18 @@ window.FM = window.FM || {};
       if (ok) FM.home.close(); else if (FM.toast) FM.toast('Could not load that template');
     }
     card.addEventListener('click', use);
+    keyActivate(card);
     return card;
   }
 
+  let _opening = false;
   async function openProject(id, keepOpen) {
-    if (id !== FM.projects.currentId()) await FM.projects.open(id);
-    if (!keepOpen) FM.home.close();
+    if (_opening) return;   // ignore a second card tap while the first project's media is still decoding (two overlapping open() loads leaked media + raced refreshAll)
+    _opening = true;
+    try {
+      if (id !== FM.projects.currentId()) await FM.projects.open(id);
+      if (!keepOpen) FM.home.close();
+    } finally { _opening = false; }
   }
 
   function render() {
@@ -197,7 +236,7 @@ window.FM = window.FM || {};
       root.querySelector('.hm-more').addEventListener('click', (ev) => {
         const r = ev.currentTarget.getBoundingClientRect();
         FM.contextMenu.show(Math.min(r.left, window.innerWidth - 220), r.bottom + 4, [
-          { label: 'Import project file…', action: () => { FM.storage.importFile(); setTimeout(() => FM.home.close(), 400); } },
+          { label: 'Import project file…', action: () => { FM.storage.importFile(() => FM.home.close()); } },   // close on SUCCESS, not a blind 400ms timer (which dumped you into the editor even if you cancelled the picker)
           { label: 'Save frame (PNG)', action: () => FM.snapshotPNG() },
           { label: 'Shortcuts', action: () => { FM.home.close(); FM.shortcuts.toggle(); } },
         ]);

@@ -213,7 +213,7 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Project file saved');
   };
 
-  FM.storage.importFile = function () {
+  FM.storage.importFile = function (onDone) {   // onDone runs ONLY on a successful import (not on picker-cancel)
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json'; input.style.display = 'none';
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0]; input.remove();
@@ -224,7 +224,7 @@ window.FM = window.FM || {};
         // Import into a NEW project — never overwrite whatever happens to be open. (#r1)
         if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
         const ok = await FM.storage.applyScene(obj);
-        if (ok) { if (FM.history) FM.history.reset(); FM.storage.save(); if (FM.projects) FM.projects.touchCurrent(true); if (FM.toast) FM.toast('Project imported'); }
+        if (ok) { if (FM.history) FM.history.reset(); FM.storage.save(); if (FM.projects) FM.projects.touchCurrent(true); if (FM.toast) FM.toast('Project imported'); if (onDone) onDone(); }
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
     });
     document.body.appendChild(input); input.click();

@@ -53,20 +53,20 @@ window.FM = window.FM || {};
         var now = e.timeStamp, ddt = now - lastT; if (ddt > 0) vy = (e.clientY - lastY) / ddt; lastY = e.clientY; lastT = now;
         panel.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
       }
-      function settle(e) {
+      function settle(e, aborted) {
         if (!active || (e && e.pointerId !== pid)) return;
         var wasClaimed = claimed; active = false; claimed = false;
         try { panel.releasePointerCapture(pid); } catch (_) {}
         panel.style.transition = '';
         panel.style.transform = '';
-        if (!wasClaimed) return;
+        if (!wasClaimed || aborted) return;   // pointercancel = the OS stole the gesture → snap back, NEVER dismiss/deselect
         panel._swiped = true;
         if ((lastY - startY) > 0.33 * h || vy > 0.5) dismiss();      // far enough OR fast flick → close
       }
       panel.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove, { passive: false });
       window.addEventListener('pointerup', settle);
-      window.addEventListener('pointercancel', settle);
+      window.addEventListener('pointercancel', e => settle(e, true));
     }
 
     btn.addEventListener('click', toggle);
