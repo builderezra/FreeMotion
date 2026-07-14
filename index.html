@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.18</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.19</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -306,7 +306,7 @@
   <script src="js/contextmenu.js?v=34"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=145"></script>
+  <script src="js/app.js?v=146"></script>
   <script src="js/mobile.js?v=20"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=4"></script>
@@ -341,6 +341,9 @@
         el.title = 'Tap to force-update to the very latest build';
         el.addEventListener('click', function () {
           el.textContent = '…';
+          // Flush the pending 600ms-debounced autosave FIRST — tapping this within ~0.6s of an edit
+          // then navigated away and lost that edit (nothing flushes on unload).
+          try { if (window.FM && FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
           // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
           // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
           var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };

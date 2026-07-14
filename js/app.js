@@ -125,6 +125,11 @@ window.FM = window.FM || {};
     end = Math.max(0, Math.round(end * 1000) / 1000);
     if (FM.scene.project.duration !== end) FM.scene.project.duration = end;
     if (FM.time > end) FM.time = end;   // never leave the playhead past the (possibly shorter) end
+    // Clamp/clear a now-stale loop region: a loopIn past the new end made the playback tick wrap to a
+    // point beyond the timeline every frame → a frozen infinite-wrap loop (100% CPU, no progress).
+    const P = FM.scene.project;
+    if (P.loopOut != null && P.loopOut > end) P.loopOut = end;
+    if (P.loopIn != null && P.loopIn >= end - 0.01) { P.loopIn = null; P.loopOut = null; }
   };
 
   function refreshAll() {
@@ -396,8 +401,9 @@ window.FM = window.FM || {};
     const dt = (ts - lastTs) / 1000;
     lastTs = ts;
     let nt = FM.time + dt * (FM.previewRate || 1);
-    // loop-region wrap (takes priority over end-of-timeline when looping)
-    if (FM.loop && FM.hasLoopRegion() && nt >= FM.scene.project.loopOut) {
+    // loop-region wrap (takes priority over end-of-timeline when looping). Guard the wrap TARGET:
+    // a stale loopIn at/after the end would re-fire this branch every frame with no progress (hang).
+    if (FM.loop && FM.hasLoopRegion() && nt >= FM.scene.project.loopOut && FM.scene.project.loopIn < FM.scene.project.duration) {
       wrapTo(FM.scene.project.loopIn); rafId = requestAnimationFrame(tick); return;
     }
     if (nt >= FM.scene.project.duration) {
