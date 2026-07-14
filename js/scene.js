@@ -473,6 +473,18 @@ window.FM = window.FM || {};
     return Math.max(0, Math.min(1, g));
   };
 
+  // TRUE if any group ancestor is hidden (no time-window check) — audio/export gate a clip on this
+  // so a clip inside a hidden group is silent, not just invisible. Cycle-safe; only groups gate.
+  FM.groupHidden = function (layer) {
+    let pid = layer.parent, hops = 0;
+    while (pid && hops++ < 64) {
+      const p = FM.scene && FM.scene.layers.find(l => l.id === pid);
+      if (!p) break;
+      if (p.type === 'group' && !p.visible) return true;
+      pid = p.parent;
+    }
+    return false;
+  };
   FM.isLayerVisibleAt = function (layer, t) {
     if (!(layer.visible && t >= layer.start && t < layer.start + layer.duration)) return false;
     // A hidden GROUP hides all its descendants — render, audio and export all share this gate.

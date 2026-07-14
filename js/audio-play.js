@@ -59,7 +59,8 @@ window.FM = window.FM || {};
         const buf = reversedBuffer(audioCtx, m.audioBuffer, layer);
         const node = audioCtx.createBufferSource();
         node.buffer = buf;
-        node.playbackRate.value = FM.previewRate || 1;   // reversed audio must follow the preview speed (start() is re-run on rate change)
+        const pr = FM.previewRate || 1;
+        node.playbackRate.value = pr;   // reversed audio must follow the preview speed (start() is re-run on rate change)
         const gain = audioCtx.createGain();
         const vol = FM.layerVolume(layer, FM.time);   // static level for non-animated clips
         const clipDur = layer.duration;
@@ -100,7 +101,7 @@ window.FM = window.FM || {};
           gain.gain.value = vol;
         }
         node.connect(gain).connect(audioCtx.destination);
-        if (into <= 0) { node.start(when - into, 0); active.push(node); }          // clip starts later
+        if (into <= 0) { node.start(when - into / pr, 0); active.push(node); }     // clip starts later — delay is REAL time, so scale the scene-second gap by the preview rate (was 2s late at 2×)
         else if (into < buf.duration) { node.start(when, into); active.push(node); } // mid-clip
         else { try { node.disconnect(); } catch (e) {} }                            // source exhausted → silence
       });

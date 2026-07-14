@@ -36,6 +36,7 @@ window.FM = window.FM || {};
     if (rec.frameCache && rec.frameCache.fps === fps && !!rec.frameCache.scaled === scaled) return Promise.resolve(rec.frameCache);
     if (rec._building) return rec._building;
     rec._building = (async function () {
+      try {
       const el = rec.el, dur = rec.duration || 0;
       // A full 1080x1920 bitmap is ~8MB; a reversed/slow clip can need hundreds of frames → multiple GB,
       // which OOM-kills mobile Safari. On the preview path, downscale the longest side to maxDim and cap
@@ -71,8 +72,8 @@ window.FM = window.FM || {};
       el.muted = wasMuted;
       try { el.currentTime = wasTime; } catch (e) {}
       rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur, scaled: scaled, w: tw, h: th };
-      rec._building = null;
       return rec.frameCache;
+      } finally { rec._building = null; }   // clear on THROW too — a mid-build media swap left this a permanently-rejected promise, so reverse/slow-mo never got a cache again
     })();
     return rec._building;
   };

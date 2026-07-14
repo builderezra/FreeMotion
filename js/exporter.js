@@ -39,7 +39,9 @@ window.FM = window.FM || {};
   function seekVideo(m, time) {
     return new Promise(res => {
       const el = m.el;
+      if (!el || el.error || el.readyState === 0) { res(); return; }   // undecodable / not ready → seek can never fire; don't burn 1500ms × every frame (export looked hung for 20+ min)
       const target = Math.min(Math.max(time, 0), Math.max(0, (m.duration || 0) - 0.001));
+      if (Math.abs(el.currentTime - target) < 1e-4) { res(); return; }  // already on the frame (a no-op seek to a clamped-frozen last frame emits no 'seeked')
       let done = false;
       const finish = () => { if (done) return; done = true; el.removeEventListener('seeked', finish); res(); };
       el.addEventListener('seeked', finish);
@@ -122,7 +124,7 @@ window.FM = window.FM || {};
     const soloActive = scene.layers.some(l => l.solo);   // mirror the compositor's solo gate so the exported soundtrack matches the soloed picture (#14)
     let any = false;
     for (const layer of scene.layers) {
-      if (layer.type !== 'video' || layer.visible === false || (soloActive && !layer.solo)) continue;   // hidden / solo-suppressed layers are silent
+      if (layer.type !== 'video' || layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo)) continue;   // hidden (incl. inside a hidden GROUP) / solo-suppressed layers are silent — mirror the compositor's picture gate
       const m = FM.media.get(layer.id);
       if (!m || !m.file) continue;
       if (m.audioBuffer === undefined) m.audioBuffer = await FM.decodeAudio(m.file);
@@ -214,6 +216,7 @@ window.FM = window.FM || {};
   async function prepareCaches(scene, fps, onStatus) {
     const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
     for (const layer of scene.layers) {
+      if (FM._exportCancel) break;   // Cancel during the (potentially minutes-long) decode phase — was only checked in the encode loop, so Cancel did nothing here
       if (layer.type !== 'video' || layer.visible === false) continue;
       const needs = layer.reversed || (layer.frameBlend && (layer.speed || 1) < 1);
       if (!needs) continue;
@@ -221,7 +224,13 @@ window.FM = window.FM || {};
       if (!m || !m.el) continue;
       // Export must be pixel-exact: discard a downscaled PREVIEW cache (scaled) and rebuild at full res.
       if (m.frameCache && (m.frameCache.fps !== fps || m.frameCache.scaled)) FM.clearFrameCache(m);
-      if (!m.frameCache) { if (onStatus) onStatus('Decoding frames…'); await FM.buildFrameCache(m, fps); }
+      // maxBytes ceiling: a monolithic full-res cache (up to 900 × ~8MB = several GB for a long 1080p/4K
+      // reverse clip) OOM-killed mobile Safari. Cap total bytes → long clips lose temporal resolution
+      // (frames spread across the clip via effFps) instead of crashing; resolution stays full. (#13)
+      if (!m.frameCache) {
+        if (onStatus) onStatus('Decoding frames…');
+        await FM.buildFrameCache(m, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); }, { maxBytes: 1610612736 });
+      }
       built.push(m);
     }
     return built;
