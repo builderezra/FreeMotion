@@ -52,7 +52,7 @@ window.FM = window.FM || {};
     }
     if (!res.ok) {
       if ((res.status === 429 || res.status >= 500) && attempt < 5 && !state.abort) {
-        var ra = Number(res.headers.get('retry-after')) || (2 ** attempt);
+        var ra = Math.min(30, Number(res.headers.get('retry-after')) || (2 ** attempt));   // clamp: a huge server Retry-After froze the panel for minutes
         await sleep(ra * 1000 + Math.random() * 400);
         var m = res.status === 529 ? MODELS.build : model;   // overloaded → drop a tier
         return call(m, system, messages, tool, Object.assign({}, opts, { attempt: attempt + 1 }));
@@ -237,10 +237,13 @@ window.FM = window.FM || {};
     if (!lb || state.running) return;
     var task = (lb.tasks || []).filter(Boolean).find(function (t) { return t.id === taskId; });
     if (!task) return;
-    state.running = true; state.dry = lb.dry;
+    state.running = true; state.dry = lb.dry; state.abort = false;   // reset the sticky abort (a prior Cancel otherwise disabled retries for every later reroll)
     var P = panel(), M = FM.aiManifest;
+    // SNAPSHOT before removing the task's layers — if the model call fails OR returns no ops, the old
+    // content must come back (it used to be deleted first, then permanently lost while the UI lied "kept").
+    var prevLayers = FM.scene.layers.slice();
+    var prevRefMap = Object.assign({}, lb.refMap);
     try {
-      // remove the layers this task currently owns, and free their ref handles
       var ids = (task.refs || []).map(function (r) { return lb.refMap[r]; }).filter(Boolean);
       FM.scene.layers = FM.scene.layers.filter(function (l) { return ids.indexOf(l.id) < 0; });
       (task.refs || []).forEach(function (r) { delete lb.refMap[r]; });
@@ -249,10 +252,12 @@ window.FM = window.FM || {};
       var r = await call(MODELS.build, M.systemPrompts.build, [um(taskTail(task, lb.intent))], M.tools.ops,
         { maxTokens: 2048, mock: { taskId: task.id, nonce: rerollNonce++ }, dryDelay: 260 });
       var log = FM.aiOps.applyOps((r.out && r.out.ops) || [], lb.refMap);
+      if (!log.appliedCount) throw new Error('empty');   // no replacement built → restore the original rather than wipe the task
       FM.refreshAll();
       if (FM.history) FM.history.commit();
       P.row(task.id, task.label, 'done', log.appliedCount, 'Builder · Haiku', true);
     } catch (e) {
+      FM.scene.layers = prevLayers; lb.refMap = prevRefMap;   // restore — the reroll genuinely kept the content now
       FM.refreshAll();
       P.row(task.id, task.label, 'done', null, 're-roll failed — kept', true);
     } finally {
@@ -268,9 +273,9 @@ window.FM = window.FM || {};
     var lb = FM.ai._lastBuild;
     var dry = !!(FM.ai.DRY_RUN || (lb && lb.dry));
     var P = panel();
-    if (!dry && !FM.aiKey.has()) { P.error && P.error('Add an API key to refine a scene.'); return; }
+    if (!dry && !FM.aiKey.has()) { if (FM.toast) FM.toast('Add an API key to refine a scene'); return; }   // toast, not P.error — P.error wiped the whole done bar down to a lone Back button
     if (!FM.scene.layers.length) return;
-    state.running = true; state.dry = dry;
+    state.running = true; state.dry = dry; state.abort = false;   // clear a sticky abort from a prior Cancel
     var M = FM.aiManifest;
     var refMap = (lb && lb.refMap) || {};
     var intent = (lb && lb.intent) || {};

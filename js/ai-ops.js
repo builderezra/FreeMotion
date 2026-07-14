@@ -178,6 +178,13 @@ window.FM = window.FM || {};
             layer.captions = (Array.isArray(o.segments) ? o.segments : []).slice(0, 60).map(function (s) {
               return { start: clamp(num(s && s.start, 0), 0, 600), end: clamp(num(s && s.end, 1), 0, 600), text: str(s && s.text, 300) || '' };
             }).filter(function (s) { return s.end > s.start; });
+            // a caption TRACK must span all its segments (createLayer defaulted it to min(5,dur), so a
+            // 20s caption run was truncated to a dead 5s box). Cover the furthest segment end / the comp.
+            if (o.duration == null) {
+              var capEnd = layer.captions.reduce(function (m, s) { return Math.max(m, s.end); }, 0);
+              layer.duration = Math.max(layer.duration, capEnd - layer.start, P.duration || 0, 0.05);
+              P.duration = Math.max(P.duration || 0, layer.start + layer.duration);
+            }
             ok(o.op, ref); break;
           }
 
