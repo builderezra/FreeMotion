@@ -14,7 +14,7 @@ window.FM = window.FM || {};
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
   function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); }
 
-  let root, scrollEl, searchInput, _layer, autoTimer = 0, autoPauseUntil = 0;
+  let root, scrollEl, searchInput, _layer, autoTimer = 0, autoPauseUntil = 0, _searchDebounce = 0;
 
   // Category-gradient swatch + glyph (Phase 1) stays as the instant placeholder/fallback; a canvas
   // fades in over it once FM.fxThumbs live-renders the real effect on a mini scene (Phase 2).
@@ -141,8 +141,12 @@ window.FM = window.FM || {};
 
   function openCategory(cat) {
     const view = el('div', 'fxb-catview');
+    // pause the featured auto-scroll + its thumbnail ticker while a full-cover category view is open
+    // (they were repainting invisibly underneath)
+    _catDepth++; stopAuto();
+    const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
     const top = el('div', 'fxb-catview-top');
-    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', () => view.remove());
+    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
     top.appendChild(back);
     top.appendChild(el('div', 'fxb-catview-title', cat.label));
     view.appendChild(top);
@@ -188,15 +192,29 @@ window.FM = window.FM || {};
     return grid;
   }
 
+  let _featRow = null, _catDepth = 0;
   function rebuild() {
     scrollEl.innerHTML = '';
     const q = (searchInput.value || '').trim();
     if (q) { scrollEl.appendChild(buildSearchResults(q)); stopAuto(); return; }
     const feat = buildFeatured();
     scrollEl.appendChild(feat.sec);
-    scrollEl.appendChild(buildPaged(rebuild));
+    scrollEl.appendChild(buildPaged(rerenderPaged));   // star toggles do a LIGHT paged rerender (below), not a full rebuild
     scrollEl.appendChild(buildCategories());
-    startAuto(feat.row);
+    _featRow = feat.row;
+    if (!_catDepth) startAuto(feat.row);
+  }
+  // Toggling a ★ only needs the Recents/Favourites section rebuilt — a full rebuild() reset the pager
+  // to page 1 AND restarted the featured carousel from the left. Replace just that section, keep the page.
+  function rerenderPaged() {
+    const oldPager = scrollEl.querySelector('.fxb-pager');
+    const oldSec = oldPager && oldPager.closest('.fxb-section');
+    if (!oldSec) { rebuild(); return; }
+    const pageIdx = Math.round(oldPager.scrollLeft / Math.max(1, oldPager.clientWidth));
+    const fresh = buildPaged(rerenderPaged);
+    oldSec.replaceWith(fresh);
+    const np = fresh.querySelector('.fxb-pager');
+    if (np && pageIdx > 0) np.scrollLeft = pageIdx * np.clientWidth;
   }
 
   // tiny monotonic clock (Date.now is fine in app runtime, just not in workflow sandbox)
@@ -223,7 +241,7 @@ window.FM = window.FM || {};
       root.querySelector('.fxb-close').addEventListener('click', () => FM.fxBrowser.close());
       const searchBtn = root.querySelector('.fxb-search-btn');
       searchBtn.addEventListener('click', () => { searchInput.classList.toggle('hidden'); if (!searchInput.classList.contains('hidden')) searchInput.focus(); else { searchInput.value = ''; rebuild(); } });
-      searchInput.addEventListener('input', rebuild);
+      searchInput.addEventListener('input', () => { clearTimeout(_searchDebounce); _searchDebounce = setTimeout(rebuild, 120); });   // debounce: every keystroke tore down + rebuilt the whole result grid, re-mounting a canvas per match
     },
     open: function (layer) {
       if (!root) FM.fxBrowser.init();
