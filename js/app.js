@@ -537,6 +537,7 @@ window.FM = window.FM || {};
     }
     scene.layers.unshift(layer);
     scene.selectedId = layer.id;
+    scene.selectedIds = [layer.id];
     // Composition grows to fit: the first clip sets the length; later clips extend it.
     if (first) P.duration = layer.start + layer.duration;
     else P.duration = Math.max(P.duration, layer.start + layer.duration);
@@ -551,6 +552,7 @@ window.FM = window.FM || {};
     const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), start: FM.time, duration: 5 });
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
+    FM.scene.selectedIds = [layer.id];
     refreshAll();
     if (FM.history) FM.history.commit();
     // Jump straight into the AM-style focused text editor with the placeholder pre-selected, so the
@@ -562,7 +564,7 @@ window.FM = window.FM || {};
   // null to drive the whole rig (AM-style). Drawn as nothing; selectable via the timeline/canvas.
   FM.addNullLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('null', { name: 'Null', x: P.width / 2, y: P.height / 2, duration: P.duration });
+    const layer = FM.makeLayer('null', { name: 'Null', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });   // empty project (dur 0) → a usable 5s so the layer actually renders
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
@@ -672,7 +674,7 @@ window.FM = window.FM || {};
   FM.addCameraLayer = function () {
     const P = FM.scene.project;
     if (FM.scene.layers.some(l => l.type === 'camera')) { if (FM.toast) FM.toast('Scene already has a camera'); return; }
-    const layer = FM.makeLayer('camera', { name: 'Camera', x: P.width / 2, y: P.height / 2, duration: P.duration });
+    const layer = FM.makeLayer('camera', { name: 'Camera', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
@@ -683,7 +685,7 @@ window.FM = window.FM || {};
   // Adjustment layer: an effect layer that grades/filters everything beneath it (AM-style).
   FM.addAdjustmentLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('adjustment', { name: 'Adjustment', x: P.width / 2, y: P.height / 2, duration: P.duration });
+    const layer = FM.makeLayer('adjustment', { name: 'Adjustment', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });
     layer.effects = [{ type: 'brightness', enabled: true, params: { amount: 1.15 } }, { type: 'saturate', enabled: true, params: { amount: 1.35 } }];
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
@@ -694,14 +696,16 @@ window.FM = window.FM || {};
 
   FM.addCaptionLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('text', { name: 'Captions', x: P.width / 2, y: Math.round(P.height * 0.82), fontSize: Math.round(P.height / 22), duration: P.duration });
-    const seg = Math.max(0.5, Math.min(2.5, P.duration / 2));
-    layer.captions = [{ start: 0, end: Math.min(seg, P.duration), text: 'First caption' }];
-    if (P.duration > seg + 0.3) layer.captions.push({ start: seg, end: Math.min(P.duration, seg * 2), text: 'Second caption' });   // only if there's room (no zero-length segment on tiny projects)
+    const dur = P.duration || 5;   // empty project → a usable 5s track (was duration 0 = invisible)
+    const layer = FM.makeLayer('text', { name: 'Captions', x: P.width / 2, y: Math.round(P.height * 0.82), fontSize: Math.round(P.height / 22), duration: dur });
+    const seg = Math.max(0.5, Math.min(2.5, dur / 2));
+    layer.captions = [{ start: 0, end: Math.min(seg, dur), text: 'First caption' }];
+    if (dur > seg + 0.3) layer.captions.push({ start: seg, end: Math.min(dur, seg * 2), text: 'Second caption' });   // only if there's room (no zero-length segment on tiny projects)
     layer.text = '';
     layer.captionBg = true;
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
+    FM.scene.selectedIds = [layer.id];
     refreshAll();
     if (FM.history) FM.history.commit();
   };
@@ -728,8 +732,7 @@ window.FM = window.FM || {};
     const ids = FM.scene.layers.map(l => l.id);
     FM.scene.selectedIds = ids;
     FM.scene.selectedId = ids.length ? ids[0] : null;
-    FM.inspector.refresh(); FM.timeline.rebuild();
-    if (FM.canvasEdit) FM.canvasEdit.update();
+    FM.refreshAll();   // FM.* so the multi-select chrome (Group button, sel-multi class, top bar) syncs
   };
 
   // Shift/Cmd-click: add or remove a layer from the selection set.
@@ -739,16 +742,21 @@ window.FM = window.FM || {};
     else { ids.push(id); FM.scene.selectedId = id; }
     FM.scene.selectedIds = ids;
     if (silent) return;   // paint-select updates mid-gesture — a rebuild here would detach the pointer's target
-    FM.inspector.refresh();
-    FM.timeline.rebuild();
-    if (FM.canvasEdit) FM.canvasEdit.update();
+    FM.refreshAll();   // sync the multi-select chrome (was inspector+timeline only → Group button/sel-multi never appeared)
   };
 
   // Delete every layer in the selection set (one history step).
   FM.deleteSelected = function () {
-    const ids = FM.selectionIds(); if (!ids.length) return;
-    ids.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); } FM.media.remove(id); if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(id); });
-    FM.scene.layers = FM.scene.layers.filter(l => !ids.includes(l.id));
+    const sel = FM.selectionIds(); if (!sel.length) return;
+    // Cascade groups → their members (mirror deleteLayer) — deleting a group row must not leave its
+    // members behind pointing at a dead parent id.
+    const set = new Set(sel);
+    sel.forEach(id => { const l = FM.layerById(FM.scene, id); if (l && l.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(m => set.add(m.id)); });
+    // Stop native/synth audio + drop the (rebuildable) frame cache — but DON'T destroy the media
+    // registry entry or its IDB blob: undo restores the layer JSON, and a wiped blob = permanently
+    // blank clip + lost footage (same fix as deleteLayer). Orphans are reaped by the boot sweep.
+    set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); } });
+    FM.scene.layers = FM.scene.layers.filter(l => !set.has(l.id));
     FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
     // Keyboard Delete/Backspace routes here; mirror deleteLayer's reversed-audio rebuild so a deleted
@@ -781,7 +789,11 @@ window.FM = window.FM || {};
     // A deleted clip's synthesized (reversed) audio plays from a flat node list not keyed by layer, so
     // it keeps sounding after the clip is gone. Rebuild the active nodes from the post-delete layer set.
     if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
-    if (FM.scene.selectedId === id) FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
+    // VALIDATE, don't just compare to id: deleting a group cascades to its members, so selectedId may
+    // point at a now-deleted DESCENDANT (not id itself) — a phone zombie edit-mode on a dead layer.
+    if (!FM.layerById(FM.scene, FM.scene.selectedId)) FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
+    FM.scene.selectedIds = (FM.scene.selectedIds || []).filter(sid => FM.layerById(FM.scene, sid));
+    if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
     FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)
     if (FM.history) FM.history.commit();
   };
@@ -887,28 +899,42 @@ window.FM = window.FM || {};
     if (m && !layer.reversed && !(layer.frameBlend && (layer.speed || 1) < 1)) FM.clearFrameCache(m);
   };
 
+  // Give a cloned layer its OWN fresh media element (never alias the source's — a shared <video>
+  // would double-seek). Shared by duplicate / split.
+  async function reloadMediaTo(srcId, dstId) {
+    const rec = FM.media.get(srcId);
+    if (!rec || !rec.file || (rec.kind !== 'video' && rec.kind !== 'image')) return;
+    let nrec = null;
+    try { nrec = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file); } catch (e) { nrec = null; }
+    if (nrec && nrec !== rec) {
+      FM.media.set(dstId, nrec);
+      if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
+    }
+  }
+
   FM.duplicateLayer = async function (id, inPlace) {
     const src = FM.layerById(FM.scene, id);
     if (!src) return;
     const copy = FM.cloneLayer(src, !!inPlace);   // inPlace → exact copy at same position (no offset/" copy")
-    if (src.type !== 'text') {
-      const rec = FM.media.get(id);
-      if (rec && rec.file) {
-        let nrec = null;
-        try {
-          if (rec.kind === 'video') nrec = await FM.loadVideoFile(rec.file);
-          else if (rec.kind === 'image') nrec = await FM.loadImageFile(rec.file);
-        } catch (e) { nrec = null; }
-        if (nrec && nrec !== rec) {                       // only use a FRESH rec — never alias the source's
-          FM.media.set(copy.id, nrec);
-          if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
-        }
+    await reloadMediaTo(id, copy.id);
+    const inserts = [copy];
+    if (src.type === 'group' && FM.groupDescendants) {
+      // a group is just a parent link — duplicating ONLY the group row made an empty invisible group.
+      // Clone its whole subtree with fresh ids and remap parents through an idMap (like pasteClipboard).
+      const idMap = {}; idMap[src.id] = copy.id;
+      for (const d of FM.groupDescendants(id)) {
+        const dc = FM.cloneLayer(d, true);   // plain copy — the group offset already moved the block
+        idMap[d.id] = dc.id;
+        await reloadMediaTo(d.id, dc.id);
+        inserts.push(dc);
       }
+      inserts.forEach(l => { if (l.parent && idMap[l.parent]) l.parent = idMap[l.parent]; });
     }
     const idx = FM.scene.layers.findIndex(l => l.id === id);
-    FM.scene.layers.splice(Math.max(0, idx), 0, copy);
+    FM.scene.layers.splice(Math.max(0, idx), 0, ...inserts);
     FM.scene.selectedId = copy.id;
-    refreshAll();
+    FM.scene.selectedIds = [copy.id];   // keep the selection SET in sync — a stale selectedIds made Delete hit the original
+    FM.refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
     if (FM.storage && FM.storage.save) FM.storage.save();   // persist the duplicated layer's media blob immediately
@@ -1046,24 +1072,25 @@ window.FM = window.FM || {};
       B.captions = orig.map(c => ({ ...c, start: c.start - into, end: c.end - into })).filter(c => c.end > 0.01).map(c => ({ ...c, start: Math.max(0, c.start) }));
       layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...c, end: Math.min(c.end, into) }));
     }
-    if (layer.type !== 'text') {
-      const rec = FM.media.get(id);
-      if (rec && rec.file) {
-        let nrec = null;
-        try {
-          if (rec.kind === 'video') nrec = await FM.loadVideoFile(rec.file);
-          else if (rec.kind === 'image') nrec = await FM.loadImageFile(rec.file);
-        } catch (e) { nrec = null; }
-        if (nrec && nrec !== rec) {                       // fresh rec only — never alias A's media
-          FM.media.set(B.id, nrec);
-          if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
-        }
-      }
-    }
+    // DIVIDE keyframes at the split (times are absolute): A keeps t ≤ split, B keeps t ≥ split, each
+    // getting a boundary keyframe holding the interpolated value so the motion is seamless. Without
+    // this both halves owned the FULL set → stray diamonds drawn outside each clip's window.
+    const splitAnimated = (lyr, keepLeft) => {
+      FM.animatedProps(lyr).forEach(p => {
+        const v = FM.evalProp(p, t);
+        p.kf = p.kf.filter(k => keepLeft ? k.t <= t + 1e-4 : k.t >= t - 1e-4);
+        if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) p.kf.push({ t: t, v: v, e: 'linear' });
+        p.kf.sort((a, b) => a.t - b.t);
+      });
+    };
+    splitAnimated(layer, true); splitAnimated(B, false);
+    if (layer.type !== 'text') await reloadMediaTo(id, B.id);
     const idx = FM.scene.layers.findIndex(l => l.id === id);
+    if (idx < 0) return;   // A was deleted/undone during the await — never insert an orphaned half
     FM.scene.layers.splice(idx + 1, 0, B);
     FM.scene.selectedId = B.id;
-    refreshAll();
+    FM.scene.selectedIds = [B.id];
+    FM.refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
   };
@@ -1644,6 +1671,10 @@ window.FM = window.FM || {};
         if (FM.selectAll) FM.selectAll();
         return;
       }
+      // Any OTHER modifier combo is the browser's / OS's (⌘S save, ⌘M minimise, ⌘←/→): the handled
+      // combos above all return, so reaching here with a modifier held means we must NOT hijack the
+      // bare-key chain below (⌘S was silently splitting the clip, ⌘M dropping a marker).
+      if (mod) return;
       if (inEdit) return;
       if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }
