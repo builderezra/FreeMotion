@@ -36,7 +36,7 @@ window.FM = window.FM || {};
   function setNumericPath(layer, path, value) {
     if (path.indexOf('transform.') === 0) {
       var k = path.slice(10);
-      if (!(k in TRANSFORM_RANGE)) return false;
+      if (!Object.prototype.hasOwnProperty.call(TRANSFORM_RANGE, k)) return false;   // hasOwnProperty, not `in`: inherited prototype keys (constructor, __proto__…) must not pass the whitelist
       var r = TRANSFORM_RANGE[k], n = num(value, null);
       if (n == null) return false;
       layer.transform[k] = r ? clamp(n, r[0], r[1]) : n;
@@ -316,7 +316,7 @@ window.FM = window.FM || {};
             var container = null, key = null, range = null;
             if (typeof o.path === 'string' && o.path.indexOf('transform.') === 0) {
               key = o.path.slice(10);
-              if (!(key in TRANSFORM_RANGE)) { drop(o.op, ref, 'bad transform path'); break; }
+              if (!Object.prototype.hasOwnProperty.call(TRANSFORM_RANGE, key)) { drop(o.op, ref, 'bad transform path'); break; }
               container = layer.transform; range = TRANSFORM_RANGE[key];
             } else if (typeof o.path === 'string' && o.path.indexOf('effect:') === 0) {
               var pr = o.path.split(':'); var fxi = parseInt(pr[1], 10); var pkey = pr[2];

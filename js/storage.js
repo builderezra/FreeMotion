@@ -170,8 +170,33 @@ window.FM = window.FM || {};
     return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts };
   };
 
+  // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
+  // width/height 16000 allocates ~1GB per canvas (main + ghost + ~10 compositor buffers) → OOM-crashes
+  // mobile Safari on open, AND (being autosaved as current) crashes again on every relaunch = a brick.
+  // ai-ops already clamps AI-set dims to [16,7680]; the human-import path must too.
+  function clampProjectDims(p) {
+    if (!p) return;
+    const ev = n => Math.max(16, Math.min(7680, Math.round((+n || 0) / 2) * 2));
+    if (p.width != null) p.width = ev(p.width) || 1080;
+    if (p.height != null) p.height = ev(p.height) || 1920;
+    if (!(p.width >= 16)) p.width = 1080;
+    if (!(p.height >= 16)) p.height = 1920;
+    p.fps = [24, 25, 30, 50, 60].indexOf(+p.fps) >= 0 ? +p.fps : 30;
+    p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
+  }
+  // An imported layer.fillImage flows straight to img.src / CSS url() on the first render — an external
+  // URL there is a zero-click tracking beacon / LAN-probe (SSRF). Only a data:image/ URL is safe (the
+  // same rule dataURLToFile enforces for embedded media). Strip anything else.
+  function sanitizeImportedLayers(layers) {
+    (layers || []).forEach(l => {
+      if (l && l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
+    });
+  }
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
+    if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
+    clampProjectDims(obj.project);
+    sanitizeImportedLayers(obj.layers);
     // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
     // reusing them would collide with that project in the SHARED IDB media store (the old
     // "drop stale media" loop here actively deleted the other project's blobs). Fresh ids need
@@ -393,6 +418,7 @@ window.FM = window.FM || {};
       fresh.project.name = opts.name || 'Untitled';
       if (opts.width) fresh.project.width = opts.width;
       if (opts.height) fresh.project.height = opts.height;
+      clampProjectDims(fresh.project);   // opts can come from an untrusted import (importFile passes obj.project.width/height straight through)
       writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] });
       const idx = this.list();
       idx.unshift({ id: id, name: fresh.project.name, modified: Date.now(), width: fresh.project.width, height: fresh.project.height, duration: fresh.project.duration, thumb: null });
