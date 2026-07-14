@@ -832,9 +832,11 @@ window.FM = window.FM || {};
     if (fx.type === 'pixelate') return drawPixelate(ctx, layer, t, scene, FM.evalProp(p.size, t) || 1, fx);
     if (fx.type === 'posterize') return drawPosterize(ctx, layer, t, scene, FM.evalProp(p.levels, t) || 5, fx);
     if (fx.type === 'mirror') return drawMirror(ctx, layer, t, scene, p.mode || 0, fx);
-    if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#ff3366', fx);
-    if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, FM.evalProp(p.level, t), fx);
-    if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
+    // fall back to the CATALOG default when a param is absent (older project / imported node): a raw
+    // evalProp(undefined) returns 0, so Threshold at level 0 turned every pixel solid white, etc.
+    if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, p.amount == null ? 0.5 : FM.evalProp(p.amount, t), p.color || '#ff3366', fx);
+    if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, p.level == null ? 0.5 : FM.evalProp(p.level, t), fx);
+    if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
@@ -1264,43 +1266,49 @@ window.FM = window.FM || {};
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
   // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
-  let _wpA = null, _wpB = null;
+  // Depth-indexed pool (like _pfPool): stacking two warps re-enters this fn (the inner warp runs
+  // inside the outer's drawLayer). Shared singletons made the inner pass composite onto the SAME
+  // canvas the outer then read as its source → an un-warped ghost of the layer bled through.
+  const _wpPool = [];
+  let _wpDepth = 0;
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
     const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
-    if (!_wpA) _wpA = document.createElement('canvas');
-    if (!_wpB) _wpB = document.createElement('canvas');
-    // dims-changed guard (same as _pfA/_pfB): _wpA is cleared below, _wpB fully overwritten by putImageData
-    if (_wpA.width !== W || _wpA.height !== H) { _wpA.width = W; _wpA.height = H; }
-    if (_wpB.width !== W || _wpB.height !== H) { _wpB.width = W; _wpB.height = H; }
-    const actx = _wpA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
-    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-    drawLayer(actx, tmp, t, scene);
-    const src = actx.getImageData(0, 0, W, H).data;
-    const bctx = _wpB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
-    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t);
-        let sx = m[0] | 0, sy = m[1] | 0;
-        if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-        if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-        const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-        o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    const d = _wpDepth++;
+    try {
+      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const wA = _wpPool[d].A, wB = _wpPool[d].B;
+      if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
+      if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
+      const actx = wA.getContext('2d');
+      actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(actx, tmp, t, scene);
+      const src = actx.getImageData(0, 0, W, H).data;
+      const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+      const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t);
+          let sx = m[0] | 0, sy = m[1] | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+          if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
       }
-    }
-    bctx.putImageData(outImg, 0, 0);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = opacity;
-    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
-    ctx.filter = 'none';
-    ctx.drawImage(_wpB, 0, 0);
-    ctx.restore();
+      bctx.putImageData(outImg, 0, 0);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(wB, 0, 0);
+      ctx.restore();
+    } finally { _wpDepth--; }
   }
 
   // ---- Displacement Map (batch 29): warp the layer by ANOTHER layer's pixels. Unlike WARP_FX (a pure
@@ -1500,9 +1508,11 @@ window.FM = window.FM || {};
     let bbox = null;
     if (CFX_NO_BBOX[fx.type]) bbox = { x: 0, y: 0, w: W, h: H };   // fn ignores it — full frame stands in
     else try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
-    // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases
+    // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases.
+    // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
+    // frame — the exact churn line 1500's guard avoids for A); the clearRect does the reset either way.
     const bctx = _cfB.getContext('2d');
-    _cfB.width = W; _cfB.height = H;
+    if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer.start || 0), layer);   // layer = temporal-cache key (motionflow)
@@ -3174,11 +3184,15 @@ window.FM = window.FM || {};
         let keyed = false;
         if (ck && src) {
           const p = ck.params || {};
-          src = chromaKey(src, w, h, p.color || '#00ff00', p.tolerance != null ? p.tolerance : 0.3, ctx.filter); keyed = true;
+          // evalProp, not the raw prop: a KEYFRAMED tolerance is an object → tol*441 = NaN → dist<NaN
+          // is always false → the key silently does nothing the moment you animate it
+          const tol = p.tolerance == null ? 0.3 : FM.evalProp(p.tolerance, t);
+          src = chromaKey(src, w, h, p.color || '#00ff00', tol, ctx.filter); keyed = true;
         }
         if (lk && src) {
           const p = lk.params || {};
-          src = lumaKey(src, w, h, p.threshold != null ? p.threshold : 0.25, keyed ? 'none' : ctx.filter); keyed = true;
+          const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : ctx.filter); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {
