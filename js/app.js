@@ -1150,6 +1150,11 @@ window.FM = window.FM || {};
         } });
       }
     }
+    if (layer.type === 'video') {   // audio-only clips import as kind:'video' too, so this covers both
+      items.push({ sep: true });
+      if (FM.downloadLayerAudio) items.push({ label: 'Save audio as WAV…', action: () => FM.downloadLayerAudio(layer) });
+      if (FM.removeVocals) items.push({ label: 'Remove vocals (karaoke)', action: () => FM.removeVocals(layer) });
+    }
     // grouping + reusable saves
     const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
     items.push({ sep: true });
