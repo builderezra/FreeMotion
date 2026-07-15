@@ -72,9 +72,10 @@ window.FM = window.FM || {};
         // that was open (the ⋯ export used to silently move the OPEN badge to the exported project)
         { label: 'Export project file', action: async () => {
           const prev = FM.projects.currentId();
-          await openProject(p.id, true);
+          const ok = await openProject(p.id, true);
+          if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }   // switch was skipped (another open in flight): exporting now would serialize the WRONG scene
           await FM.storage.exportFile();
-          if (prev && prev !== p.id) { await FM.projects.open(prev); render(); }
+          if (prev && prev !== p.id) { await openProject(prev, true); render(); }
         } },
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
@@ -171,11 +172,12 @@ window.FM = window.FM || {};
 
   let _opening = false;
   async function openProject(id, keepOpen) {
-    if (_opening) return;   // ignore a second card tap while the first project's media is still decoding (two overlapping open() loads leaked media + raced refreshAll)
+    if (_opening) return false;   // ignore a second card tap while the first project's media is still decoding (two overlapping open() loads leaked media + raced refreshAll)
     _opening = true;
     try {
       if (id !== FM.projects.currentId()) await FM.projects.open(id);
       if (!keepOpen) FM.home.close();
+      return true;   // callers (e.g. Export) need to know the switch actually happened, not got skipped
     } finally { _opening = false; }
   }
 

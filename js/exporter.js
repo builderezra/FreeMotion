@@ -218,7 +218,7 @@ window.FM = window.FM || {};
     for (const layer of scene.layers) {
       if (FM._exportCancel) break;   // Cancel during the (potentially minutes-long) decode phase — was only checked in the encode loop, so Cancel did nothing here
       if (layer.type !== 'video' || layer.visible === false) continue;
-      const needs = layer.reversed || (layer.frameBlend && (layer.speed || 1) < 1);
+      const needs = layer.reversed || (layer.frameBlend && (FM.isAnimated(layer.speed) || (layer.speed || 1) < 1));   // animated speed is an object — else a ramped frame-blend clip bakes in the stutter on export
       if (!needs) continue;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) continue;

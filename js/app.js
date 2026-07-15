@@ -86,7 +86,7 @@ window.FM = window.FM || {};
     const tot = Math.round(FM.time * f), ff = tot % f, s = Math.floor(tot / f), m = Math.floor(s / 60), sec = s % 60;
     const p2 = n => (n < 10 ? '0' : '') + n;
     readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
-    const d = FM.scene.project.duration, mm = Math.floor(d / 60), ss = Math.round(d % 60);
+    const ds = Math.round(FM.scene.project.duration), mm = Math.floor(ds / 60), ss = ds % 60;   // round to whole seconds FIRST, else 119.7s → 1:60 instead of 2:00
     readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + 'total ' + mm + ':' + String(ss).padStart(2, '0');
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
@@ -514,7 +514,7 @@ window.FM = window.FM || {};
   // Ensure reversed + frame-blend clips are decoded before playback starts, then play.
   FM.requestPlay = async function () {
     const needCache = FM.scene.layers.filter(l => l.type === 'video' && FM.media.get(l.id) &&
-      (l.reversed || (l.frameBlend && (l.speed || 1) < 1)));
+      (l.reversed || (l.frameBlend && (FM.isAnimated(l.speed) || (l.speed || 1) < 1))));   // animated speed is an OBJECT — (obj||1)<1 is NaN<1=false, so a ramped frame-blend clip was never cached
     for (const l of needCache) {
       const m = FM.media.get(l.id);
       if (!m.frameCache) await FM.ensureReverseCache(l);            // frames for video
@@ -957,7 +957,7 @@ window.FM = window.FM || {};
   // Release a clip's decoded frame cache when neither reverse nor frame-blend-slow needs it anymore.
   FM.maybeClearCache = function (layer) {
     const m = FM.media.get(layer.id);
-    if (m && !layer.reversed && !(layer.frameBlend && (layer.speed || 1) < 1)) FM.clearFrameCache(m);
+    if (m && !layer.reversed && !(layer.frameBlend && (FM.isAnimated(layer.speed) || (layer.speed || 1) < 1))) FM.clearFrameCache(m);   // keep the cache a ramped frame-blend clip still needs (animated speed is an object)
   };
 
   // Give a cloned layer its OWN fresh media element (never alias the source's — a shared <video>

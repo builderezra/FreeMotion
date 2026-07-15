@@ -108,6 +108,11 @@ window.FM = window.FM || {};
       nl.name = (layer.name || 'Audio') + ' (no vocals)';
       nl.start = layer.start;
       nl.duration = layer.duration;
+      // The WAV is the FULL source track, so the twin must share the original's source→timeline mapping
+      // (trim / speed / reverse) or the instrumental drifts out of sync with the muted picture.
+      nl.trimStart = layer.trimStart || 0;
+      nl.reversed = !!layer.reversed;
+      nl.speed = FM.isAnimated(layer.speed) ? JSON.parse(JSON.stringify(layer.speed)) : layer.speed;   // deep-clone the ramp so the two layers don't share one {kf} array
       if (nl.transform) nl.transform.opacity = 0;   // audio-only twin — no picture
     }
     layer.muted = true;   // hear the karaoke, not the original

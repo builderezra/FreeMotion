@@ -123,17 +123,26 @@ window.FM = window.FM || {};
   // CURRENTLY SELECTED layer. Path-keying survives the source prop reverting to static and lets
   // you copy on one layer and paste onto another.
   function propKey(layer, p) {
+    // Must cover EVERY slot FM.animatedProps exposes (i.e. everything that draws a diamond), or Copy
+    // keyframe silently drops it — delete already handles all of these, so copy/paste must too.
     if (layer.volume === p) return 'volume';
+    if (layer.fill === p) return 'fill';
+    if (layer.color === p) return 'color';
+    if (layer.speed === p) return 'speed';
     for (const k of Object.keys(layer.transform)) if (layer.transform[k] === p) return 'transform.' + k;
     if (layer.crop) for (const k of ['x', 'y', 'w', 'h']) if (layer.crop[k] === p) return 'crop.' + k;
+    if (layer.stroke) { if (layer.stroke.width === p) return 'stroke.width'; if (layer.stroke.color === p) return 'stroke.color'; }
+    if (layer.shadow) for (const k of ['blur', 'dx', 'dy', 'alpha', 'color']) if (layer.shadow[k] === p) return 'shadow.' + k;
     const fx = layer.effects || [];
     for (let i = 0; i < fx.length; i++) { const params = fx[i].params || {}; for (const k of Object.keys(params)) if (params[k] === p) return 'effect.' + i + '.' + k; }
     return null;
   }
   function resolveSlot(layer, key) {
-    if (key === 'volume') return { c: layer, k: 'volume' };
+    if (key === 'volume' || key === 'fill' || key === 'color' || key === 'speed') return { c: layer, k: key };
     if (key.indexOf('transform.') === 0) return { c: layer.transform, k: key.slice(10) };
-    if (key.indexOf('crop.') === 0) return layer.crop ? { c: layer.crop, k: key.slice(5) } : null;   // null-guard: pasting a crop kf onto a crop-less layer (text/shape) must skip, not crash
+    if (key.indexOf('crop.') === 0) return layer.crop ? { c: layer.crop, k: key.slice(5) } : null;   // null-guard: pasting onto a layer lacking this container must skip, not crash
+    if (key.indexOf('stroke.') === 0) return layer.stroke ? { c: layer.stroke, k: key.slice(7) } : null;
+    if (key.indexOf('shadow.') === 0) return layer.shadow ? { c: layer.shadow, k: key.slice(7) } : null;
     const m = key.match(/^effect\.(\d+)\.(.+)$/);
     if (m) { const fx = (layer.effects || [])[parseInt(m[1], 10)]; if (fx && fx.params) return { c: fx.params, k: m[2] }; }
     return null;

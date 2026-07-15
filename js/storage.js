@@ -120,7 +120,7 @@ window.FM = window.FM || {};
       if (FM.seekVideosToTime) FM.seekVideosToTime();
       // reversed / frame-blend-slow clips render from the frame cache — rebuild it so they don't
       // show forward-direction frames when scrubbing before the first play.
-      FM.scene.layers.forEach(l => { if (l.type === 'video' && (l.reversed || (l.frameBlend && (l.speed || 1) < 1)) && FM.ensureReverseCache) FM.ensureReverseCache(l); });
+      FM.scene.layers.forEach(l => { if (l.type === 'video' && (l.reversed || (l.frameBlend && (FM.isAnimated(l.speed) || (l.speed || 1) < 1))) && FM.ensureReverseCache) FM.ensureReverseCache(l); });   // ramped speed is an object → isAnimated, else (obj||1)<1 is false and slow-mo dies on reload
       return true;
     },
 
@@ -401,7 +401,7 @@ window.FM = window.FM || {};
     // Keep the index card for the current project fresh (called from every autosave — cheap; the
     // thumbnail re-render is throttled and skipped mid-playback).
     touchCurrent(forceThumb) {
-      const id = curId(); if (!id) return;
+      const id = boundId || curId(); if (!id) return;   // THIS tab's project, not the shared fm.currentProject — else a 2nd tab makes us stamp its card/thumbnail with our scene
       const idx = this.list();
       const e = idx.find(p => p.id === id); if (!e) return;
       const P = FM.scene.project;
@@ -417,7 +417,7 @@ window.FM = window.FM || {};
     // here — rendering an arbitrary time later would draw the wrong video frame). The pin flag lives on
     // the project doc, so touchCurrent() stops auto-overwriting it. Returns false if nothing to capture.
     pinThumbnail() {
-      const id = curId(); if (!id) return false;
+      const id = boundId || curId(); if (!id) return false;   // pin the thumbnail to THIS tab's project (see touchCurrent)
       const t = makeThumb(); if (!t) return false;
       const idx = this.list(); const e = idx.find(p => p.id === id);
       if (e) { e.thumb = null; this.saveIndex(idx); }

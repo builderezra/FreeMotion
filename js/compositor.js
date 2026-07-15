@@ -2241,6 +2241,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
+    if (ctx.canvas === _rgbA) ctx.clearRect(0, 0, W, H);   // two stacked RGB Splits: clear our own scratch so B replaces, not double-composites (see drawTint)
     ctx.drawImage(_rgbB, 0, 0);
     ctx.restore();
   }
@@ -2269,6 +2270,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
+    if (ctx.canvas === _psA) ctx.clearRect(0, 0, W, H);   // two stacked Posterizes: clear our own scratch so B replaces, not double-composites (see drawTint)
     ctx.drawImage(_psB, 0, 0);
     ctx.restore();
   }
@@ -2303,6 +2305,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
+    if (ctx.canvas === _tiA) ctx.clearRect(0, 0, W, H);   // two stacked Tints: ctx IS our scratch A (holds the clean layer) → clear so B replaces instead of double-compositing the edges
     ctx.drawImage(_tiB, 0, 0);
     ctx.restore();
   }
@@ -2335,6 +2338,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
+    if (ctx.canvas === _thA) ctx.clearRect(0, 0, W, H);   // two stacked Thresholds: clear our own scratch so B replaces, not double-composites (see drawTint)
     ctx.drawImage(_thB, 0, 0);
     ctx.restore();
   }
@@ -2369,6 +2373,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
+    if (ctx.canvas === _duA) ctx.clearRect(0, 0, W, H);   // two stacked Duotones: clear our own scratch so B replaces, not double-composites (see drawTint)
     ctx.drawImage(_duB, 0, 0);
     ctx.restore();
   }
