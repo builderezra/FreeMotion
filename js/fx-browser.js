@@ -74,12 +74,21 @@ window.FM = window.FM || {};
     const sec = el('div', 'fxb-section');
     sec.appendChild(el('div', 'fxb-sec-title', 'Featured'));
     const row = el('div', 'fxb-featured');
-    (FM.FX_FEATURED || []).map(id => FM.fxRegistry.get(id)).filter(Boolean).forEach(reg => {
+    const regs = (FM.FX_FEATURED || []).map(id => FM.fxRegistry.get(id)).filter(Boolean);
+    const addCard = reg => {
       const card = el('button', 'fxb-card'); card.title = reg.label;
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
       card.addEventListener('click', () => addEffect(reg.id));
       row.appendChild(card);
+    };
+    regs.forEach(addCard);
+    if (regs.length > 2) regs.forEach(addCard);   // a second identical set → seamless INFINITE loop (no dead-end wall at the right edge)
+    // Keep scrollLeft inside the first set: crossing into the duplicate jumps back by one set-width,
+    // which is invisible because the two halves are pixel-identical. Fixes "hits a wall and stops".
+    row.addEventListener('scroll', () => {
+      const half = row.scrollWidth / 2;
+      if (half > 4 && row.scrollLeft >= half) row.scrollLeft -= half;
     });
     // pause auto-scroll while the user is touching it
     row.addEventListener('pointerdown', () => { autoPauseUntil = perfNow() + 3000; });
@@ -225,10 +234,10 @@ window.FM = window.FM || {};
     autoTimer = setInterval(() => {
       if (!row || !row.isConnected) { stopAuto(); return; }
       if (perfNow() < autoPauseUntil) return;
-      const max = row.scrollWidth - row.clientWidth;
-      if (max <= 2) return;
+      if (row.scrollWidth - row.clientWidth <= 2) return;
+      const half = row.scrollWidth / 2;
       let next = row.scrollLeft + 1.2;
-      if (next >= max) next = 0;
+      if (half > 4 && next >= half) next -= half;   // wrap across the duplicate set — seamless (identical halves), no jump-to-start flicker
       row.scrollLeft = next;
     }, 30);
   }
@@ -239,6 +248,9 @@ window.FM = window.FM || {};
       scrollEl = root.querySelector('.fxb-scroll');
       searchInput = root.querySelector('.fxb-search-input');
       root.querySelector('.fxb-close').addEventListener('click', () => FM.fxBrowser.close());
+      // Click the backdrop (outside the centred panel, on PC) → close. The panel's own clicks have
+      // target inside .fxb-top / .fxb-scroll etc., so only a hit on the root backdrop itself closes.
+      root.addEventListener('pointerdown', (e) => { if (e.target === root) FM.fxBrowser.close(); });
       const searchBtn = root.querySelector('.fxb-search-btn');
       searchBtn.addEventListener('click', () => { searchInput.classList.toggle('hidden'); if (!searchInput.classList.contains('hidden')) searchInput.focus(); else { searchInput.value = ''; rebuild(); } });
       searchInput.addEventListener('input', () => { clearTimeout(_searchDebounce); _searchDebounce = setTimeout(rebuild, 120); });   // debounce: every keystroke tore down + rebuilt the whole result grid, re-mounting a canvas per match

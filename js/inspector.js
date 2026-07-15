@@ -1686,7 +1686,6 @@ window.FM = window.FM || {};
         if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
         FM.requestRender(); FM.seekVideosToTime();
       }));
-      body.appendChild(el('div', 'insp-hint', 'Frame blend interpolates new in-between frames so slowed-down clips look fluid instead of stuttery.'));
       body.appendChild(checkRow('Reverse (video + audio)', layer.reversed, async v => {
         layer.reversed = v; FM.timeline.rebuild();
         if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);

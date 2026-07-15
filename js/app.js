@@ -1014,7 +1014,9 @@ window.FM = window.FM || {};
     });
     return FM.clipboard.length;
   };
-  FM.pasteClipboard = async function () {
+  // insertIndex: z-position to drop the pasted layers at (0 = top, layers.length = bottom).
+  // Omitted → top, matching duplicate/add. The ⧉ Paste-Layer split-button's arrow passes a chosen index.
+  FM.pasteClipboard = async function (insertIndex) {
     if (!FM.clipboard || !FM.clipboard.length) return;
     const idMap = {};
     const copies = FM.clipboard.map(entry => {
@@ -1034,7 +1036,7 @@ window.FM = window.FM || {};
       copy.start = Math.max(0, base + (orig - anchor));
       if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(copy, copy.start - orig);   // keyframes are absolute time — pasted animation must ride to the playhead
     });
-    let insertAt = 0;   // paste onto TOP of the z-stack (layers[0] = top), like duplicate/add
+    let insertAt = (typeof insertIndex === 'number' && insertIndex >= 0) ? Math.min(insertIndex, FM.scene.layers.length) : 0;   // TOP of the z-stack by default (layers[0] = top)
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.
       if (copy.parent) {
@@ -1634,6 +1636,14 @@ window.FM = window.FM || {};
       const hasClip = !!(FM.clipboard && FM.clipboard.length);
       const hasStyle = !!(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot);
       const selN = FM.selectionIds ? FM.selectionIds().length : 0;
+      // The ▸ arrow on Paste Layer opens a position picker so you can drop the copy ABOVE a chosen
+      // layer (or top / bottom) instead of always on top. (Ezra)
+      const openPastePos = () => {
+        const items = [{ label: 'On top', action: () => FM.pasteClipboard(0) }];
+        FM.scene.layers.forEach((L, i) => items.push({ label: 'Above: ' + (L.name || L.type || 'layer'), action: () => FM.pasteClipboard(i) }));
+        items.push({ label: 'At the bottom', action: () => FM.pasteClipboard(FM.scene.layers.length) });
+        FM.contextMenu.show(Math.max(8, r.right - 220), r.bottom + 4, items);
+      };
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
         { label: 'Group Selection', disabled: selN < 2, action: () => FM.groupSelection() },
@@ -1642,18 +1652,35 @@ window.FM = window.FM || {};
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
         { label: 'Save Preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
         { label: 'Save Selection as Element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
-        { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); } },
+        { label: 'Paste Layer', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); }, arrow: hasClip, arrowTitle: 'Choose where to paste', arrowAction: openPastePos },
         { label: 'Paste Style…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },
       ]);
     });
     // ⛶ → toggle AM's right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).
     const amFitBtn = document.getElementById('btn-amfit');
     const viewBar = document.getElementById('view-bar');
-    if (amFitBtn && viewBar) amFitBtn.addEventListener('click', () => {
-      const open = viewBar.classList.toggle('hidden') === false;
-      amFitBtn.classList.toggle('active', open);
-      const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open
-    });
+    if (amFitBtn && viewBar) {
+      // TAP = toggle the view popup (grid · camera · zoom %). HOLD = review play (preview from here,
+      // playhead snaps back on stop). A long-press flag swallows the trailing click so the popup
+      // doesn't also toggle. (Ezra: review play lives on this far-right button, not its own.)
+      let vbLp = null, vbLpFired = false, vbDown = null;
+      amFitBtn.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        vbDown = { x: e.clientX, y: e.clientY }; vbLpFired = false;
+        clearTimeout(vbLp);
+        vbLp = setTimeout(() => { vbLp = null; vbLpFired = true; if (navigator.vibrate) { try { navigator.vibrate(12); } catch (er) {} } if (FM.toast) FM.toast('Review play — playhead returns here on stop', 1400); FM.reviewPlay(); }, 550);
+      });
+      amFitBtn.addEventListener('pointermove', (e) => { if (vbDown && Math.hypot(e.clientX - vbDown.x, e.clientY - vbDown.y) > 8) { clearTimeout(vbLp); vbLp = null; } });
+      const vbLpEnd = () => { clearTimeout(vbLp); vbLp = null; vbDown = null; };
+      amFitBtn.addEventListener('pointerup', vbLpEnd);
+      amFitBtn.addEventListener('pointercancel', vbLpEnd);
+      amFitBtn.addEventListener('click', () => {
+        if (vbLpFired) { vbLpFired = false; return; }   // the hold already fired review play
+        const open = viewBar.classList.toggle('hidden') === false;
+        amFitBtn.classList.toggle('active', open);
+        const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open
+      });
+    }
     const vbFit = document.getElementById('vb-fit');
     if (vbFit) vbFit.addEventListener('click', () => { if (FM.viewport) FM.viewport.reset(); else FM.setCanvasZoom(1); });   // fit = 100% AND re-centred (clears the pan too)
     const vbGrid = document.getElementById('vb-grid');
@@ -1692,8 +1719,6 @@ window.FM = window.FM || {};
     playBtn.addEventListener('pointerup', playLpEnd);
     playBtn.addEventListener('pointercancel', playLpEnd);
     playBtn.addEventListener('click', () => { if (playLpFired) { playLpFired = false; return; } FM.togglePlay(); });
-    const reviewBtn = document.getElementById('btn-review');
-    if (reviewBtn) reviewBtn.addEventListener('click', () => FM.reviewPlay());
     // Skip ◀ / ▶| step to the PREVIOUS / NEXT snap point (benchmark or selected-clip edge), falling back
     // to the project start / end when there's nothing closer.
     document.getElementById('btn-tostart').addEventListener('click', () => {
@@ -1733,7 +1758,9 @@ window.FM = window.FM || {};
     // canvas-size / aspect-ratio dialog (AM-style)
     let cvAspect = '9:16';
     const cvDialog = document.getElementById('canvas-dialog');
+    const cvClampDim = v => Math.max(16, Math.min(7680, Math.round((parseInt(v, 10) || 16) / 2) * 2));   // even, sane bounds (matches import clamp)
     function cvCompute() {
+      if (cvAspect === 'custom') return { w: cvClampDim(document.getElementById('cv-cw').value), h: cvClampDim(document.getElementById('cv-ch').value) };
       const base = parseInt(document.getElementById('cv-res').value, 10) || 1080;
       const pr = cvAspect.split(':').map(Number), a = pr[0], b = pr[1];
       let w, h;
@@ -1741,6 +1768,9 @@ window.FM = window.FM || {};
       return { w: Math.round(w / 2) * 2, h: Math.round(h / 2) * 2 };
     }
     function cvUpdate() {
+      const custom = cvAspect === 'custom';
+      const resRow = document.getElementById('cv-res-row'); if (resRow) resRow.classList.toggle('hidden', custom);
+      const csRow = document.getElementById('cv-custom-size'); if (csRow) csRow.classList.toggle('hidden', !custom);
       const s = cvCompute();
       document.getElementById('cv-size').textContent = s.w + ' × ' + s.h;
       document.querySelectorAll('.aspect-chip').forEach(c => c.classList.toggle('on', c.dataset.aspect === cvAspect));
@@ -1754,22 +1784,34 @@ window.FM = window.FM || {};
     }
     const canvasBtn = document.getElementById('btn-canvas');
     if (canvasBtn && cvDialog) {
+      const fpsSel = document.getElementById('cv-fps');
+      const fpsNum = document.getElementById('cv-fps-num');
+      const fpsCustomRow = document.getElementById('cv-custom-fps');
+      const FPS_PRESETS = ['24', '25', '30', '50', '60'];
       canvasBtn.addEventListener('click', () => {
-        cvDetect(); cvUpdate();
-        // refresh the preview-zoom readout on open (phone reaches here too, via m-settings → btn-canvas)
-        const cz = document.getElementById('cv-zoom');
-        if (cz) cz.textContent = Math.round((FM.viewport ? FM.viewport.scale : 1) * 100) + '%';
+        cvDetect();
+        // seed the custom W/H inputs from the live project so switching to Custom starts sensible
+        const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
+        if (cw) cw.value = FM.scene.project.width; if (ch) ch.value = FM.scene.project.height;
+        // sync the fps control to the live project (a non-preset fps opens as Custom)
+        const cur = String(FM.scene.project.fps || 30);
+        if (fpsSel) {
+          if (FPS_PRESETS.indexOf(cur) >= 0) { fpsSel.value = cur; if (fpsCustomRow) fpsCustomRow.classList.add('hidden'); }
+          else { fpsSel.value = 'custom'; if (fpsNum) fpsNum.value = cur; if (fpsCustomRow) fpsCustomRow.classList.remove('hidden'); }
+        }
+        cvUpdate();
         cvDialog.classList.remove('hidden');
       });
-      const cvReset = document.getElementById('cv-resetview');
-      if (cvReset) cvReset.addEventListener('click', () => { if (FM.viewport) FM.viewport.reset(); });   // apply() refreshes cv-zoom
       document.querySelectorAll('.aspect-chip').forEach(chip => chip.addEventListener('click', () => { cvAspect = chip.dataset.aspect; cvUpdate(); }));
       document.getElementById('cv-res').addEventListener('change', cvUpdate);
+      ['cv-cw', 'cv-ch'].forEach(id => { const inp = document.getElementById(id); if (inp) inp.addEventListener('input', cvUpdate); });
+      if (fpsSel) fpsSel.addEventListener('change', () => { if (fpsCustomRow) fpsCustomRow.classList.toggle('hidden', fpsSel.value !== 'custom'); });
       document.getElementById('cv-cancel').addEventListener('click', () => cvDialog.classList.add('hidden'));
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
-        FM.scene.project.fps = parseInt(document.getElementById('cv-fps').value, 10) || 30;
+        const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
+        FM.scene.project.fps = Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30));
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
         cvDialog.classList.add('hidden');

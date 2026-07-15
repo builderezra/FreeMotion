@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=181">
+<link rel="stylesheet" href="styles.css?v=182">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.27</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.28</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -94,7 +94,6 @@
            Left: undo · redo · jump-to-start.  Right: jump-to-end · layer-menu · fit. -->
       <div id="transport">
         <div class="t-side t-left">
-          <span class="tbtn tbtn-spacer" aria-hidden="true"></span><!-- balances the far-right review button so ▶ stays dead-centre -->
           <button id="btn-undo" class="tbtn" title="Undo (Cmd+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v0"/></svg></button>
           <button id="btn-redo" class="tbtn" title="Redo (Cmd+Shift+Z)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v0"/></svg></button>
           <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="5" y2="19"/><polygon points="20 5 9 12 20 19 20 5"/></svg></button>
@@ -103,8 +102,7 @@
         <div class="t-side t-right">
           <button id="btn-toend" class="tbtn" title="Skip to next benchmark / clip edge"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 5 15 12 4 19 4 5"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
-          <button id="btn-amfit" class="tbtn" title="View options (grid · camera · zoom)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
-          <button id="btn-review" class="tbtn" title="Review play — preview from here, then jump back to where you are"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/><path d="M4 5v6h6" stroke-width="2"/><path d="M4 11a8 8 0 0 1 8-6"/></svg></button>
+          <button id="btn-amfit" class="tbtn" title="View options (grid · camera · zoom) · hold to review-play"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
         </div>
       </div>
       <!-- AM-style centred timecode pill, below the transport. -->
@@ -255,8 +253,9 @@
         <button class="aspect-chip" data-aspect="4:5"><span class="ac-frame ac-45"></span>4:5</button>
         <button class="aspect-chip" data-aspect="1:1"><span class="ac-frame ac-11"></span>1:1</button>
         <button class="aspect-chip" data-aspect="4:3"><span class="ac-frame ac-43"></span>4:3</button>
+        <button class="aspect-chip" data-aspect="custom"><span class="ac-frame ac-custom"></span>Custom</button>
       </div>
-      <label class="field"><span>Resolution</span>
+      <label class="field" id="cv-res-row"><span>Resolution</span>
         <select id="cv-res">
           <option value="720">720p</option>
           <option value="1080" selected>1080p (FHD)</option>
@@ -264,16 +263,19 @@
           <option value="2160">2160p (4K)</option>
         </select>
       </label>
+      <div class="field hidden" id="cv-custom-size"><span>Width × Height</span><span style="display:flex;align-items:center;gap:6px"><input id="cv-cw" type="number" min="16" max="7680" step="2" value="1080" class="cv-num"><span>×</span><input id="cv-ch" type="number" min="16" max="7680" step="2" value="1920" class="cv-num"></span></div>
       <label class="field"><span>Frame rate</span>
         <select id="cv-fps">
           <option value="24">24 fps</option>
+          <option value="25">25 fps</option>
           <option value="30" selected>30 fps</option>
+          <option value="50">50 fps</option>
           <option value="60">60 fps</option>
+          <option value="custom">Custom…</option>
         </select>
       </label>
+      <div class="field hidden" id="cv-custom-fps"><span>Custom fps</span><input id="cv-fps-num" type="number" min="1" max="120" step="1" value="30" class="cv-num"></div>
       <div class="field"><span>Size</span><span id="cv-size" class="cv-size">1080 × 1920</span></div>
-      <!-- Preview pan/zoom ("grab the player" when nothing is selected) — view-only, its reset lives here -->
-      <div class="field"><span>Preview zoom</span><span style="display:flex;align-items:center;gap:10px"><span id="cv-zoom" class="cv-size">100%</span><button id="cv-resetview" class="btn" type="button">Reset view</button></span></div>
       <div class="dialog-actions">
         <button id="cv-cancel" class="btn">Cancel</button>
         <button id="cv-go" class="btn btn-accent">Apply</button>
@@ -289,8 +291,8 @@
   <script src="js/fx-thumbs.js?v=2"></script>
   <script src="js/timeline.js?v=150"></script>
   <script src="js/addmenu.js?v=10"></script>
-  <script src="js/inspector.js?v=155"></script>
-  <script src="js/fx-browser.js?v=11"></script>
+  <script src="js/inspector.js?v=156"></script>
+  <script src="js/fx-browser.js?v=12"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=44"></script>
   <script src="js/draw-tool.js?v=4"></script>
@@ -308,10 +310,10 @@
   <script src="js/graph-editor.js?v=107"></script>
   <script src="js/exporter.js?v=83"></script>
   <script src="js/sample.js?v=9"></script>
-  <script src="js/contextmenu.js?v=35"></script>
+  <script src="js/contextmenu.js?v=36"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=152"></script>
+  <script src="js/app.js?v=153"></script>
   <script src="js/audio-tools.js?v=2"></script>
   <script src="js/mobile.js?v=21"></script>
   <script src="js/ai-manifest.js?v=3"></script>

@@ -30,8 +30,20 @@ window.FM = window.FM || {};
           });
           menu.appendChild(row); return;
         }
-        const b = document.createElement('div'); b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : ''); b.textContent = it.label;
-        if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
+        const b = document.createElement('div'); b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '');
+        if (it.arrow && !it.disabled) {
+          // split button: the label runs the main action; the ▸ chevron runs arrowAction (which usually
+          // opens a follow-up menu — it does its own show(), so we don't hide first)
+          b.classList.add('ctx-split');
+          const lab = document.createElement('span'); lab.className = 'ctx-split-label'; lab.textContent = it.label;
+          lab.addEventListener('click', (e) => { e.stopPropagation(); FM.contextMenu.hide(); it.action(); });
+          const arr = document.createElement('button'); arr.className = 'ctx-split-arrow'; arr.type = 'button'; arr.textContent = '▸'; arr.title = it.arrowTitle || 'More…';
+          arr.addEventListener('click', (e) => { e.stopPropagation(); it.arrowAction(); });
+          b.appendChild(lab); b.appendChild(arr);
+        } else {
+          b.textContent = it.label;
+          if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
+        }
         menu.appendChild(b);
       });
       menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');
