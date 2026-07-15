@@ -815,8 +815,17 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .tbtn:hover { background: rgba(255,255,255,.07); }
+.tbtn-spacer { pointer-events: none; visibility: hidden; }   /* balances the far-right review button so ▶ stays centred */
 .tco { width: 21px; height: 21px; display: block; flex: 0 0 auto; }
+.tbtn-play { position: relative; }
 .tbtn-play .tco { width: 25px; height: 25px; }   /* play reads as the focal control */
+/* loop-on-hold indicator: a small ↻ badge on the play button while loop mode is armed */
+#btn-play.loop-on { color: var(--accent); }
+#btn-play.loop-on::after {
+  content: "↻"; position: absolute; right: 0; bottom: -2px;
+  font-size: 11px; line-height: 1; color: var(--accent); font-weight: 700;
+  text-shadow: 0 0 3px var(--panel), 0 0 3px var(--panel);
+}
 .prate { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); height: 30px; border-radius: 6px; font-size: 11.5px; padding: 0 4px; cursor: pointer; }
 .tbtn.active { color: var(--accent); }
 #time-readout { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 12px; margin-left: 2px; }
@@ -839,6 +848,9 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .notch { position: absolute; top: 0; height: 6px; width: 0; border-left: 1px solid var(--line-soft); opacity: .5; pointer-events: none; }
 .tl-marker { position: absolute; top: 0; width: 0; height: 0; margin-left: -5px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--kf); z-index: 3; }
 .tl-marker::after { content: ""; position: absolute; left: -0.5px; top: 7px; width: 1px; height: 320px; background: rgba(255,206,74,.35); }
+/* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
+.tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
+.tl-marker.thumb::after { left: -0.5px; background: rgba(41,217,187,.4); }
 .marker-edit { position: absolute; top: 1px; transform: translateX(-50%); width: 88px; z-index: 12; background: var(--panel-3); border: 1px solid var(--kf); color: var(--text); border-radius: 5px; padding: 1px 5px; font-size: 11px; }
 #tl-tracks { position: relative; }
 

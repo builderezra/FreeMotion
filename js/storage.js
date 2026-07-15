@@ -409,8 +409,22 @@ window.FM = window.FM || {};
       e.width = P.width; e.height = P.height; e.duration = P.duration;
       e.layers = FM.scene.layers.length;
       const now = Date.now();
-      if (forceThumb || (now - thumbTimer > 12000 && !FM.playing)) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
+      // A pinned thumbnail (user chose a specific frame) is never auto-overwritten by the periodic capture.
+      if (!P.thumbPinned && (forceThumb || (now - thumbTimer > 12000 && !FM.playing))) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
       this.saveIndex(idx);
+    },
+    // Capture the current frame NOW as the card thumbnail (the video is correctly seeked at the playhead
+    // here — rendering an arbitrary time later would draw the wrong video frame). The pin flag lives on
+    // the project doc, so touchCurrent() stops auto-overwriting it. Returns false if nothing to capture.
+    pinThumbnail() {
+      const id = curId(); if (!id) return false;
+      const t = makeThumb(); if (!t) return false;
+      const idx = this.list(); const e = idx.find(p => p.id === id);
+      if (e) { e.thumb = null; this.saveIndex(idx); }
+      putThumb(id, t);
+      thumbTimer = Date.now();   // don't let a same-tick autosave race a fresh capture
+      if (FM.scene && FM.scene.project) FM.scene.project.thumbPinned = true;   // touchCurrent() now leaves it alone
+      return true;
     },
     // Switch the editor to another project (stash current first).
     async open(id) {

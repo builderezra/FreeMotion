@@ -251,7 +251,9 @@ window.FM = window.FM || {};
     rulerEl.innerHTML = html;
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
-      el.className = 'tl-marker'; el.style.left = (PAD + mk.t * pps) + 'px'; el.title = (mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's  (double-click to rename)';
+      el.className = 'tl-marker' + (mk.thumb ? ' thumb' : '');   // the pinned thumbnail-frame marker is a smaller distinct pin
+      el.style.left = (PAD + mk.t * pps) + 'px';
+      el.title = mk.thumb ? ('Thumbnail frame @ ' + mk.t.toFixed(2) + 's') : ((mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's  (double-click to rename)');
       el.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         const input = document.createElement('input');

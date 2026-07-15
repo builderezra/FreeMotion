@@ -311,11 +311,39 @@ window.FM = window.FM || {};
     const t = FM.time;
     // "already here?" = SAME FRAME only (was 0.12s ≈ 3-4 frames — adding a benchmark on the very
     // next frame used to delete the previous one instead)
-    const near = P.markers.find(m => Math.abs(m.t - t) < 0.5 / (P.fps || 30));
+    const near = P.markers.find(m => !m.thumb && Math.abs(m.t - t) < 0.5 / (P.fps || 30));   // never let a benchmark tap eat the thumbnail-frame marker (they can share a frame)
     if (near) { P.markers = P.markers.filter(m => m !== near); if (FM.toast) FM.toast('Benchmark removed', 1000); }
     else { P.markers.push({ t: FM.snapFrame(t), label: 'Benchmark' }); if (FM.toast) FM.toast('Benchmark added', 1000); }   // markers live on exact frames
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();
+  };
+
+  // Hold the timecode → pin the CURRENT frame as the project's card thumbnail (captured now, while the
+  // video is correctly seeked here), and drop a distinct smaller "thumbnail" marker. Persisted + pinned
+  // so the periodic autosave thumbnail no longer overwrites it with a random frame.
+  FM.setThumbnailFrame = function () {
+    if (FM.playing) FM.pause();
+    if (!FM.projects || !FM.projects.pinThumbnail) { if (FM.toast) FM.toast('Thumbnail not available here'); return; }
+    const P = FM.scene.project; if (!P.markers) P.markers = [];
+    const t = FM.snapFrame(FM.time);
+    // Hold again ON the already-pinned frame → UNPIN (back to the automatic thumbnail).
+    const existing = P.markers.find(m => m.thumb);
+    if (existing && Math.abs(existing.t - t) < 0.5 / (P.fps || 30)) {
+      P.markers = P.markers.filter(m => !m.thumb);
+      P.thumbPinned = false;
+      if (FM.projects.touchCurrent) FM.projects.touchCurrent(true);   // regenerate an auto thumbnail now
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.history) FM.history.commit();
+      if (FM.toast) FM.toast('Thumbnail unpinned — back to automatic', 1500);
+      return;
+    }
+    if (!FM.projects.pinThumbnail()) { if (FM.toast) FM.toast('Could not capture this frame'); return; }
+    P.markers = P.markers.filter(m => !m.thumb);   // only one thumbnail marker at a time
+    P.markers.push({ t: t, label: 'Thumbnail', thumb: true });
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+    if (FM.toast) FM.toast('★ This frame is now the project thumbnail', 1600);
   };
 
   // Ordered snap points the skip buttons step between: project start/end, every benchmark, and — when a
@@ -505,9 +533,27 @@ window.FM = window.FM || {};
       if (m && m.el && m.el.pause) { try { m.el.pause(); m.el.muted = true; } catch (e) {} }
     });
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>';   // play icon
+    // Review play: any stop (button, space, end-of-timeline) returns the playhead to where review
+    // started, so previewing never loses your working position.
+    if (FM._reviewing) {
+      FM._reviewing = false;
+      const back = FM._reviewFrom; FM._reviewFrom = null;
+      if (back != null && FM.setTime) FM.setTime(back);
+    }
   };
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };
+
+  // Review play (▶ at the far right of the transport): preview from the current frame, then snap back
+  // to it when you stop — "play without moving the playhead". A second press stops + restores.
+  FM.reviewPlay = function () {
+    if (FM.playing) { FM.pause(); return; }
+    FM._reviewFrom = FM.snapFrame ? FM.snapFrame(FM.time) : FM.time;
+    FM._reviewing = true;
+    // if playback never actually starts (a cache decode rejects), clear the flags so a later unrelated
+    // pause() can't apply this stale review-origin and yank the playhead.
+    Promise.resolve(FM.requestPlay()).catch(() => { FM._reviewing = false; FM._reviewFrom = null; });
+  };
 
   // Re-anchor live audio to the current scene state mid-playback. Forward clips reconcile every frame
   // in tick(); reversed clips synthesize their audio once in audioPlay.start(), so a volume / mute /
@@ -1399,9 +1445,23 @@ window.FM = window.FM || {};
     // Tap the timecode → drop / remove a benchmark at the playhead. Double-tap → type an exact time.
     // (A short timer distinguishes the two so a double-tap doesn't also leave a stray benchmark.)
     readoutEl.style.cursor = 'pointer';
-    readoutEl.title = 'Tap to add / remove a benchmark here · double-click to type a time';
+    readoutEl.title = 'Tap: benchmark · double-click: type a time · hold: set this frame as the project thumbnail';
     let tcTapTimer = null;
+    // HOLD the timecode → pin the current frame as the project thumbnail (suppresses the trailing tap so
+    // it doesn't also drop a benchmark).
+    let tcLp = null, tcLpFired = false, tcDown = null;
+    readoutEl.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      tcDown = { x: e.clientX, y: e.clientY }; tcLpFired = false;
+      clearTimeout(tcLp);
+      tcLp = setTimeout(() => { tcLp = null; tcLpFired = true; if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; } if (FM.setThumbnailFrame) FM.setThumbnailFrame(); }, 550);
+    });
+    readoutEl.addEventListener('pointermove', (e) => { if (tcDown && Math.hypot(e.clientX - tcDown.x, e.clientY - tcDown.y) > 8) { clearTimeout(tcLp); tcLp = null; } });
+    const tcLpEnd = () => { clearTimeout(tcLp); tcLp = null; tcDown = null; };
+    readoutEl.addEventListener('pointerup', tcLpEnd);
+    readoutEl.addEventListener('pointercancel', tcLpEnd);
     readoutEl.addEventListener('click', () => {
+      if (tcLpFired) { tcLpFired = false; return; }   // the hold already handled this press
       if (tcTapTimer) return;                       // second click of a double-tap → ignore here
       tcTapTimer = setTimeout(() => { tcTapTimer = null; FM.toggleMarkerAtPlayhead(); }, 240);
     });
@@ -1608,7 +1668,32 @@ window.FM = window.FM || {};
     if (vbZout) vbZout.addEventListener('click', () => FM.zoomCanvasStep(-1));
 
     // transport
-    document.getElementById('btn-play').addEventListener('click', () => FM.togglePlay());
+    // Play button: tap = play/pause · HOLD = toggle loop mode (whole-timeline repeat). The long-press
+    // sets a flag so the trailing click doesn't also toggle playback.
+    const playBtn = document.getElementById('btn-play');
+    const syncLoopUI = () => {
+      const lb = document.getElementById('btn-loop'); if (lb) lb.classList.toggle('active', !!FM.loop);
+      if (playBtn) playBtn.classList.toggle('loop-on', !!FM.loop);
+    };
+    let playLp = null, playLpFired = false, playDown = null;
+    playBtn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      playDown = { x: e.clientX, y: e.clientY }; playLpFired = false;
+      clearTimeout(playLp);
+      playLp = setTimeout(() => {
+        playLp = null; playLpFired = true;
+        FM.loop = !FM.loop; syncLoopUI();
+        if (navigator.vibrate) { try { navigator.vibrate(12); } catch (er) {} }
+        if (FM.toast) FM.toast(FM.loop ? 'Loop ON — playback repeats start-to-end' : 'Loop off', 1500);
+      }, 550);
+    });
+    playBtn.addEventListener('pointermove', (e) => { if (playDown && Math.hypot(e.clientX - playDown.x, e.clientY - playDown.y) > 8) { clearTimeout(playLp); playLp = null; } });
+    const playLpEnd = () => { clearTimeout(playLp); playLp = null; playDown = null; };
+    playBtn.addEventListener('pointerup', playLpEnd);
+    playBtn.addEventListener('pointercancel', playLpEnd);
+    playBtn.addEventListener('click', () => { if (playLpFired) { playLpFired = false; return; } FM.togglePlay(); });
+    const reviewBtn = document.getElementById('btn-review');
+    if (reviewBtn) reviewBtn.addEventListener('click', () => FM.reviewPlay());
     // Skip ◀ / ▶| step to the PREVIOUS / NEXT snap point (benchmark or selected-clip edge), falling back
     // to the project start / end when there's nothing closer.
     document.getElementById('btn-tostart').addEventListener('click', () => {
@@ -1623,7 +1708,7 @@ window.FM = window.FM || {};
       FM.pause(); FM.setTime(next != null ? next : FM.scene.project.duration);
     });
     const loopBtn = document.getElementById('btn-loop');
-    if (loopBtn) loopBtn.addEventListener('click', () => { FM.loop = !FM.loop; loopBtn.classList.toggle('active', FM.loop); });
+    if (loopBtn) loopBtn.addEventListener('click', () => { FM.loop = !FM.loop; syncLoopUI(); });
     const splitBtn = document.getElementById('btn-split');
     if (splitBtn) splitBtn.addEventListener('click', () => { if (FM.scene.selectedId) FM.splitLayer(FM.scene.selectedId); });
     const pn = document.getElementById('proj-name');
