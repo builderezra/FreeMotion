@@ -36,7 +36,9 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: 50px 1fr 232px;
+  /* timeline height is a var so the drag-resizer + wide-screen media queries can grow it; the middle
+     row (1fr) absorbs the rest. Mobile overrides these rows entirely (see the phone breakpoint). */
+  grid-template-rows: 50px 1fr var(--tl-h, 232px);
   grid-template-columns: minmax(0, 1fr);   /* cap the single column at the viewport so the 1080px canvas can't blow the layout wider than the screen */
   height: 100vh;
   width: 100%;
@@ -763,7 +765,35 @@ input[type=range]::-webkit-slider-thumb {
   /* 3 rows: transport · centred timecode pill · timeline. (Was 40px 1fr — adding the timecode as a
      grid child with only 2 rows dumped it into the 1fr row, ballooning it and squashing the timeline.) */
   display: grid; grid-template-rows: 40px 26px 1fr;
-  position: relative;   /* anchors the fixed-centre #tl-centerline (phone) */
+  position: relative;   /* anchors the fixed-centre #tl-centerline (phone) + the drag-resizer */
+}
+/* Drag the top edge of the timeline up/down to resize it (desktop). Straddles the panel's top border;
+   a pill appears on hover / during the drag. Persisted to localStorage, restored on load. */
+#tl-resizer {
+  /* sits ABOVE the panel's top border (y=0); ends at +1px so it clears the 34px transport buttons
+     that start ~y=3px — otherwise pressing a button's top sliver started a resize drag instead */
+  position: absolute; top: -5px; left: 0; right: 0; height: 6px;
+  cursor: ns-resize; z-index: 30; touch-action: none;
+}
+#tl-resizer::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 44px; height: 3px; border-radius: 2px; background: var(--line);
+  opacity: 0; transition: opacity .15s, background .15s;
+}
+#tl-resizer:hover::after, body.tl-resizing #tl-resizer::after { opacity: 1; background: var(--accent); }
+body.tl-resizing { cursor: ns-resize; user-select: none; }
+
+/* Bigger screens have room to spare: give the timeline real height (it felt squished at a fixed 232px),
+   widen the inspector so property controls / the shape grid breathe, and cluster the transport instead
+   of flinging its 7 buttons to the far corners of a wide monitor. Small laptops (<1100px) are untouched. */
+@media (min-width: 1100px) {
+  :root { --tl-h: clamp(232px, 30vh, 300px); }
+  #main { grid-template-columns: minmax(0, 1fr) clamp(286px, 22vw, 340px); }
+  #transport { max-width: 780px; margin-inline: auto; width: 100%; box-sizing: border-box; }
+}
+@media (min-width: 1600px) {
+  :root { --tl-h: clamp(300px, 33vh, 460px); }
+  #main { grid-template-columns: minmax(0, 1fr) clamp(320px, 20vw, 380px); }
 }
 /* AM transport: all 7 controls spread evenly across the FULL row width (play lands in the middle as the
    4th of 7). The side groups are display:contents so every button is a direct flex child + spreads. */
@@ -1024,6 +1054,7 @@ input[type=range]::-webkit-slider-thumb {
   /* Preview is a FIXED window (doesn't resize with the comp aspect); the timeline gets the rest. */
   :root { --stage-h: 40vh; }
   #app { grid-template-rows: auto var(--stage-h) 1fr; grid-template-columns: minmax(0, 1fr); }
+  #tl-resizer { display: none; }   /* desktop-only: the phone timeline sizing is driven by --stage-h, not a drag handle */
   /* Text-edit full-screen takeover (mobile): with the inspector grid + timeline hidden, give the whole
    * height to the stage so the canvas fills the screen. Desktop keeps its 3-row layout. */
   body.text-editing #app { grid-template-rows: 1fr !important; }
@@ -1107,13 +1138,14 @@ input[type=range]::-webkit-slider-thumb {
   body.m-editing #insp-grab { display: none; }        /* docked panel, not a dismissable sheet */
   body.m-editing #inspector { padding-top: 12px; }
 
-  /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete */
-  #clip-name-m, #m-dup, #m-del, #m-group { display: none; }
+  /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
+  #clip-name-m, #m-dup, #m-del, #m-group, #m-more { display: none; }
   body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export { display: none; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
-  body.m-editing #m-dup, body.m-editing #m-del { display: flex; }
+  body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
   /* multi-select (long-press a layer's header): Group + bin appear beside the export slot */
   body.sel-multi #m-group, body.sel-multi #m-del { display: flex; }
+  body.sel-multi #m-dup, body.sel-multi #m-more { display: none; }   /* the ⋯ clip menu is single-clip only */
   body.sel-multi #m-settings { display: none; }
   #m-del:active .m-ico { color: #ff6b6b; }
 }

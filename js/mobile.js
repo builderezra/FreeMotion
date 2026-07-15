@@ -106,6 +106,14 @@ window.FM = window.FM || {};
       clipNameM.addEventListener('change', function () { if (FM.history) FM.history.commit(); });
     }
     if (mDup) mDup.addEventListener('click', function () { var L = curLayer(); if (L && FM.duplicateLayer) FM.duplicateLayer(L.id); });
+    // ⋯ More — the full clip menu (split, lock, reverse, replace media, reset, loop, blend, parent…),
+    // the same set desktop reaches by right-clicking a clip. Anchored under the button, right-aligned.
+    var mMore = document.getElementById('m-more');
+    if (mMore) mMore.addEventListener('click', function () {
+      var L = curLayer(); if (!L || !FM.contextMenu || !FM.layerMenuItems) return;
+      var r = mMore.getBoundingClientRect();
+      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.layerMenuItems(L));
+    });
     if (mDel) mDel.addEventListener('click', function () {
       var ids = FM.selectionIds ? FM.selectionIds() : [];
       if (ids.length > 1 && FM.deleteSelected) { FM.deleteSelected(); return; }   // select-mode: delete the whole set

@@ -834,7 +834,7 @@ window.FM = window.FM || {};
     if (fx.type === 'mirror') return drawMirror(ctx, layer, t, scene, p.mode || 0, fx);
     // fall back to the CATALOG default when a param is absent (older project / imported node): a raw
     // evalProp(undefined) returns 0, so Threshold at level 0 turned every pixel solid white, etc.
-    if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, p.amount == null ? 0.5 : FM.evalProp(p.amount, t), p.color || '#ff3366', fx);
+    if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#ff3366', fx);   // catalog def is 1 (matches the inspector slider + a fresh makeInstance)
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, p.level == null ? 0.5 : FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
@@ -2487,9 +2487,16 @@ window.FM = window.FM || {};
     let rec = _fillImg[layer.id];
     if (!rec || rec.src !== src) {
       // bounded: entries were never evicted, so deleted layers / swapped fills / old projects kept
-      // their decoded Images (plus multi-MB data-URL strings) reachable for the whole session
+      // their decoded Images (plus multi-MB data-URL strings) reachable for the whole session.
+      // Evict only a DEAD entry (its layer left the scene) — never keys[0], which is the next live
+      // layer about to be drawn: FIFO eviction chased the draw pointer and thrashed every fill to the
+      // blue placeholder + re-decoded every image every frame once a project had >40 media fills.
       const keys = Object.keys(_fillImg);
-      if (keys.length > 40) delete _fillImg[keys[0]];
+      if (keys.length > 40) {
+        const live = new Set((FM.scene && FM.scene.layers || []).map(l => l.id));   // flat array incl. group children
+        const dead = keys.find(k => !live.has(k) && k !== layer.id);
+        if (dead) delete _fillImg[dead];
+      }
       rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false };
       rec.img.onload = () => { rec.ready = true; FM.requestRender(); };
       rec.img.onerror = () => { rec.failed = true; };   // corrupt data URL → placeholder, no endless retry
@@ -3256,13 +3263,13 @@ window.FM = window.FM || {};
       const q = Math.max(2, Math.round(FM.evalProp(p.levels, t) || 5)), step = 255 / (q - 1);
       for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
     } else if (fx.type === 'threshold') {
-      const cut = clamp01(FM.evalProp(p.level, t)) * 255;
+      const cut = clamp01(p.level == null ? 0.5 : FM.evalProp(p.level, t)) * 255;   // catalog-default fallback (mirror the per-layer drawFx path) — a params-less threshold used to blow the frame solid white
       for (let i = 0; i < d.length; i += 4) { const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) >= cut ? 255 : 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
     } else if (fx.type === 'tint') {
-      const am = clamp01(FM.evalProp(p.amount, t)), C = hexToRGB(p.color || '#ff3366');
+      const am = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t)), C = hexToRGB(p.color || '#ff3366');
       for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255; d[i] += (l * C[0] - d[i]) * am; d[i + 1] += (l * C[1] - d[i + 1]) * am; d[i + 2] += (l * C[2] - d[i + 2]) * am; }
     } else if (fx.type === 'duotone') {
-      const am = clamp01(FM.evalProp(p.amount, t)), A = hexToRGB(p.color || '#241a52'), B = hexToRGB(p.color2 || '#ff9e5e');
+      const am = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t)), A = hexToRGB(p.color || '#241a52'), B = hexToRGB(p.color2 || '#ff9e5e');
       for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255; d[i] += ((A[0] + (B[0] - A[0]) * l) - d[i]) * am; d[i + 1] += ((A[1] + (B[1] - A[1]) * l) - d[i + 1]) * am; d[i + 2] += ((A[2] + (B[2] - A[2]) * l) - d[i + 2]) * am; }
     }
   }

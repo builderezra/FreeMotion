@@ -1088,14 +1088,23 @@ window.FM = window.FM || {};
       layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...c, end: Math.min(c.end, into) }));
     }
     // DIVIDE keyframes at the split (times are absolute): A keeps t ≤ split, B keeps t ≥ split, each
-    // getting a boundary keyframe holding the interpolated value so the motion is seamless. Without
-    // this both halves owned the FULL set → stray diamonds drawn outside each clip's window.
+    // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless
+    // (the interior easing of a split segment is a close approximation, not bit-exact). Without this
+    // both halves owned the FULL set → stray diamonds drawn outside each clip's window.
     const splitAnimated = (lyr, keepLeft) => {
       FM.animatedProps(lyr).forEach(p => {
+        // A looping prop (cycle/ping-pong) intentionally keeps its keyframes in a short span and
+        // repeats them across the whole clip — dividing it kills the loop. Leave looping props whole.
+        if (p.loopMode && p.loopMode !== 'none' && p.kf.length >= 2) return;
         const v = FM.evalProp(p, t);
+        const b = p.kf.find(k => k.t >= t - 1e-9);   // segment-END keyframe bracketing the split: its ease governs the segment we're cutting
         p.kf = p.kf.filter(k => keepLeft ? k.t <= t + 1e-4 : k.t >= t - 1e-4);
-        if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) p.kf.push({ t: t, v: v, e: 'linear' });
-        p.kf.sort((a, b) => a.t - b.t);
+        if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) {
+          const nk = { t: t, v: v, e: (b && b.e) || 'linear' };   // inherit the cut segment's easing, not hardcoded linear
+          if (b && b.bez) nk.bez = b.bez.slice();
+          p.kf.push(nk);
+        }
+        p.kf.sort((k1, k2) => k1.t - k2.t);
       });
     };
     splitAnimated(layer, true); splitAnimated(B, false);
@@ -1332,11 +1341,56 @@ window.FM = window.FM || {};
   }
 
   /* ---------- init ---------- */
+  // Desktop timeline resizer: drag the top edge of #timeline-panel to trade height between the stage
+  // and the timeline. Writes --tl-h on <html> (inline wins over the responsive stylesheet default),
+  // clamped so neither the stage nor the timeline can collapse, and persisted across sessions.
+  function setupTimelineResizer() {
+    const rez = document.getElementById('tl-resizer');
+    if (!rez) return;
+    const root = document.documentElement;
+    const isPhone = () => window.matchMedia('(max-width: 700px)').matches;
+    const clampH = (h) => Math.max(160, Math.min(Math.round(window.innerHeight * 0.72), h));
+    let saved = 0;
+    try { saved = parseInt(localStorage.getItem('fm_tl_h') || '', 10) || 0; } catch (_) {}
+    if (saved && !isPhone()) root.style.setProperty('--tl-h', clampH(saved) + 'px');
+    let dragging = false, startY = 0, startH = 0;
+    rez.addEventListener('pointerdown', (e) => {
+      if (isPhone()) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      dragging = true; startY = e.clientY;
+      const panel = document.getElementById('timeline-panel');
+      startH = panel ? panel.getBoundingClientRect().height : 232;
+      document.body.classList.add('tl-resizing');
+      try { rez.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    rez.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const h = clampH(startH + (startY - e.clientY));   // drag UP → taller timeline
+      root.style.setProperty('--tl-h', h + 'px');         // pure CSS-grid resize — no timeline reflow needed (height doesn't touch clip-x / pps math)
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false; document.body.classList.remove('tl-resizing');
+      const cur = getComputedStyle(root).getPropertyValue('--tl-h').trim();
+      try { if (cur) localStorage.setItem('fm_tl_h', parseInt(cur, 10) || 232); } catch (_) {}
+    };
+    rez.addEventListener('pointerup', end);
+    rez.addEventListener('pointercancel', end);
+    // window shrank below a stored height → re-clamp so the timeline can't exceed the viewport
+    window.addEventListener('resize', () => {
+      if (isPhone()) return;
+      const cur = parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10);
+      if (cur) { const c = clampH(cur); if (c !== cur) root.style.setProperty('--tl-h', c + 'px'); }
+    });
+  }
+
   function init() {
     canvas = document.getElementById('preview');
     ctx = canvas.getContext('2d');
     readoutEl = document.getElementById('time-readout');
     dropHint = document.getElementById('drop-hint');
+    setupTimelineResizer();
     // Tap the timecode → drop / remove a benchmark at the playhead. Double-tap → type an exact time.
     // (A short timer distinguishes the two so a double-tap doesn't also leave a stray benchmark.)
     readoutEl.style.cursor = 'pointer';

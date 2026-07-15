@@ -105,6 +105,7 @@ window.FM = window.FM || {};
     if (FM.isAnimated(layer.fill)) slots.push({ c: layer, k: 'fill' });       // colour keyframes delete like any other
     if (FM.isAnimated(layer.color)) slots.push({ c: layer, k: 'color' });
     if (layer.stroke) ['width', 'color'].forEach(k => slots.push({ c: layer.stroke, k: k }));     // border keyframes
+    if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => slots.push({ c: layer.crop, k: k }));       // crop keyframes (they draw diamonds via animatedProps — must be deletable too)
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => slots.push({ c: layer.shadow, k: k }));   // shadow keyframes
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
     slots.forEach(({ c, k }) => {
@@ -124,6 +125,7 @@ window.FM = window.FM || {};
   function propKey(layer, p) {
     if (layer.volume === p) return 'volume';
     for (const k of Object.keys(layer.transform)) if (layer.transform[k] === p) return 'transform.' + k;
+    if (layer.crop) for (const k of ['x', 'y', 'w', 'h']) if (layer.crop[k] === p) return 'crop.' + k;
     const fx = layer.effects || [];
     for (let i = 0; i < fx.length; i++) { const params = fx[i].params || {}; for (const k of Object.keys(params)) if (params[k] === p) return 'effect.' + i + '.' + k; }
     return null;
@@ -131,6 +133,7 @@ window.FM = window.FM || {};
   function resolveSlot(layer, key) {
     if (key === 'volume') return { c: layer, k: 'volume' };
     if (key.indexOf('transform.') === 0) return { c: layer.transform, k: key.slice(10) };
+    if (key.indexOf('crop.') === 0) return layer.crop ? { c: layer.crop, k: key.slice(5) } : null;   // null-guard: pasting a crop kf onto a crop-less layer (text/shape) must skip, not crash
     const m = key.match(/^effect\.(\d+)\.(.+)$/);
     if (m) { const fx = (layer.effects || [])[parseInt(m[1], 10)]; if (fx && fx.params) return { c: fx.params, k: m[2] }; }
     return null;
@@ -370,13 +373,31 @@ window.FM = window.FM || {};
     const anchorIdx = FM.scene.layers.indexOf(layer);
     const preSel = new Set(FM.selectionIds ? FM.selectionIds() : []);   // includes the anchor (added above)
     let gestureAdded = new Set();
+    let lastEv = null, autoRAF = 0, scrollAcc = 0, lastT = 0;
+    const EDGE = 44;   // px zone at the list's top/bottom that arms auto-scroll while painting
     const stopScroll = ev => ev.preventDefault();   // keep the browser from panning instead of painting
-    const move = (ev) => {
-      const el2 = document.elementFromPoint(ev.clientX, ev.clientY);
-      const hd = el2 && el2.closest ? el2.closest('.track-head') : null;
-      if (!hd) return;
-      const curIdx = parseInt(hd.dataset.idx, 10);
-      if (isNaN(curIdx) || anchorIdx < 0) return;
+
+    // Which layer row sits at this viewport Y? DRIFT-TOLERANT: uses the row whose vertical band
+    // contains Y (not elementFromPoint), so sliding sideways onto a clip lane keeps painting; and
+    // when the finger is past the top/bottom of the list it CLAMPS to the nearest row so an
+    // auto-scroll drag keeps extending the range instead of stalling.
+    function rowIdxAtY(clientY) {
+      const heads = tracksEl.querySelectorAll('.track-head');
+      if (!heads.length) return null;
+      let bestIdx = null, bestDist = Infinity;
+      for (const hd of heads) {
+        const idx = parseInt(hd.dataset.idx, 10);
+        if (isNaN(idx)) continue;
+        const r = hd.getBoundingClientRect();
+        if (clientY >= r.top && clientY <= r.bottom) return idx;   // direct hit
+        const d = clientY < r.top ? r.top - clientY : clientY - r.bottom;
+        if (d < bestDist) { bestDist = d; bestIdx = idx; }
+      }
+      return bestIdx;
+    }
+    function paintAt(clientY) {
+      const curIdx = rowIdxAtY(clientY);
+      if (curIdx == null || anchorIdx < 0) return;
       const lo = Math.min(anchorIdx, curIdx), hi = Math.max(anchorIdx, curIdx);
       const want = new Set();
       for (let i = lo; i <= hi; i++) { const L = FM.scene.layers[i]; if (L && !preSel.has(L.id)) want.add(L.id); }
@@ -387,12 +408,45 @@ window.FM = window.FM || {};
       gestureAdded = want;
       syncPaintClasses();
       if (navigator.vibrate) { try { navigator.vibrate(5); } catch (_) {} }
+    }
+    // The list scrolls WITH you when you keep dragging into the top/bottom edge — same eased,
+    // time-based, capped feel as the reorder handle. As rows scroll under the finger we re-paint,
+    // so the selection keeps extending to whatever's newly on screen.
+    function edgeScroll(now) {
+      autoRAF = 0;
+      if (!lastEv || !timelineEl) return;
+      const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY;
+      let dir = 0, depth = 0;
+      if (y < vr.top + EDGE) { dir = -1; depth = (vr.top + EDGE - y) / EDGE; }
+      else if (y > vr.bottom - EDGE) { dir = 1; depth = (y - (vr.bottom - EDGE)) / EDGE; }
+      if (!dir) { lastT = 0; scrollAcc = 0; return; }   // finger left the edge zone → stop (move() re-arms it)
+      depth = Math.min(1, depth); depth *= depth;                       // ease-in
+      const t = now || performance.now();
+      const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0.016;    // seconds this frame (clamped for stalls)
+      lastT = t;
+      scrollAcc += dir * 520 * depth * dt;                             // 520 px/SECOND top speed
+      const step = Math.trunc(scrollAcc);
+      if (step) {
+        scrollAcc -= step;
+        const max = Math.max(0, timelineEl.scrollHeight - timelineEl.clientHeight);
+        const b = timelineEl.scrollTop;
+        timelineEl.scrollTop = Math.max(0, Math.min(max, b + step));
+        if (timelineEl.scrollTop !== b) paintAt(y);   // new rows scrolled under the finger → paint them
+      }
+      autoRAF = requestAnimationFrame(edgeScroll);
+    }
+    const move = (ev) => {
+      lastEv = ev;
+      paintAt(ev.clientY);
+      const vr = timelineEl ? timelineEl.getBoundingClientRect() : null;
+      if (vr && (ev.clientY < vr.top + EDGE || ev.clientY > vr.bottom - EDGE) && !autoRAF) { lastT = 0; autoRAF = requestAnimationFrame(edgeScroll); }
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
       window.removeEventListener('touchmove', stopScroll);
+      if (autoRAF) { cancelAnimationFrame(autoRAF); autoRAF = 0; }
       lpFiredAt = Date.now();   // swallow the trailing click wherever it lands
       FM.refreshAll();
     };

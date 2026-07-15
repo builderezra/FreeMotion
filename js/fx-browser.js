@@ -162,7 +162,7 @@ window.FM = window.FM || {};
     const next = cats[(ci + 1) % cats.length];
     const nav = el('div', 'fxb-catnav');
     nav.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel-2, rgba(16,20,28,.96));';
-    const go = (target) => { view.remove(); openCategory(target); };
+    const go = (target) => { view.remove(); _catDepth--; openCategory(target); };   // balance the depth: openCategory re-increments, so a nav nets zero (else each arrow leaked +1 and froze the Featured auto-scroll forever)
     const mkBtn = (label, target) => {
       const b = el('button', 'fxb-back', label);
       b.style.cssText = 'flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
@@ -252,6 +252,6 @@ window.FM = window.FM || {};
       root.classList.remove('hidden');
       rebuild();
     },
-    close: function () { if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); },
+    close: function () { if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
   };
 })(window.FM);

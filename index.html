@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=179">
+<link rel="stylesheet" href="styles.css?v=180">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.23</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.24</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -55,6 +55,7 @@
       <button id="m-group" class="m-tbtn" aria-label="Group selected layers"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
       <button id="m-dup" class="m-tbtn" aria-label="Duplicate layer"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h11v11H9zM5 15H4V4h11v1"/></svg></button>
       <button id="m-del" class="m-tbtn" aria-label="Delete layer"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
+      <button id="m-more" class="m-tbtn" aria-label="More clip options"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
     </header>
 
     <div id="main">
@@ -87,6 +88,8 @@
     </div>
 
     <footer id="timeline-panel">
+      <!-- Desktop: drag this top edge to resize the timeline vs. the stage (persisted). Hidden on phone. -->
+      <div id="tl-resizer" title="Drag to resize the timeline" aria-label="Resize timeline"></div>
       <!-- Alight Motion transport: PLAY dead-centre, 3 controls each side revolving around it.
            Left: undo · redo · jump-to-start.  Right: jump-to-end · layer-menu · fit. -->
       <div id="transport">
@@ -277,15 +280,15 @@
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/scene.js?v=80"></script>
+  <script src="js/scene.js?v=81"></script>
   <script src="js/media.js?v=29"></script>
-  <script src="js/compositor.js?v=163"></script>
+  <script src="js/compositor.js?v=164"></script>
   <script src="js/fx-registry.js?v=35"></script>
   <script src="js/fx-thumbs.js?v=2"></script>
-  <script src="js/timeline.js?v=147"></script>
+  <script src="js/timeline.js?v=148"></script>
   <script src="js/addmenu.js?v=10"></script>
   <script src="js/inspector.js?v=155"></script>
-  <script src="js/fx-browser.js?v=10"></script>
+  <script src="js/fx-browser.js?v=11"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=44"></script>
   <script src="js/draw-tool.js?v=4"></script>
@@ -298,7 +301,7 @@
   <script src="js/frames.js?v=15"></script>
   <script src="js/audio-play.js?v=57"></script>
   <script src="js/history.js?v=23"></script>
-  <script src="js/storage.js?v=67"></script>
+  <script src="js/storage.js?v=68"></script>
   <script src="js/home.js?v=10"></script>
   <script src="js/graph-editor.js?v=107"></script>
   <script src="js/exporter.js?v=82"></script>
@@ -306,8 +309,8 @@
   <script src="js/contextmenu.js?v=35"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=147"></script>
-  <script src="js/mobile.js?v=20"></script>
+  <script src="js/app.js?v=148"></script>
+  <script src="js/mobile.js?v=21"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=6"></script>
   <script src="js/ai-key.js?v=1"></script>

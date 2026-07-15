@@ -152,8 +152,10 @@ window.FM = window.FM || {};
    * inserts/updates a keyframe at `time`; otherwise it sets the static value. */
   function setTransform(layer, key, value, time) {
     // editing a value while PLAYING sprayed a keyframe per pointermove at the advancing playhead —
-    // any interactive write pauses playback first (canvas drags already do; this covers the inspector)
-    if (FM.playing && FM.pause) FM.pause();
+    // any interactive write pauses playback first (canvas drags already do; this covers the inspector).
+    // pause() re-snaps FM.time to the frame grid, so re-snap the (already-captured) `time` too or the
+    // keyframe lands ~half a frame off the now-snapped playhead (undeletable + duplicate on next edit).
+    if (FM.playing && FM.pause) { FM.pause(); if (FM.snapFrame) time = FM.snapFrame(time); }
     const p = layer.transform[key];
     if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else layer.transform[key] = value;
@@ -236,7 +238,7 @@ window.FM = window.FM || {};
   /* Generic versions of the above that target ANY container object + key (e.g. an effect's
    * params), so effect parameters / future props are keyframe-able just like transform. */
   FM.setProp = function (container, key, value, time) {
-    if (FM.playing && FM.pause) FM.pause();   // same rule as setTransform: live edits pause playback
+    if (FM.playing && FM.pause) { FM.pause(); if (FM.snapFrame) time = FM.snapFrame(time); }   // same rule as setTransform: live edits pause + re-snap the captured time to the frame grid
     const p = container[key];
     if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else container[key] = value;

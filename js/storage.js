@@ -187,9 +187,31 @@ window.FM = window.FM || {};
   // An imported layer.fillImage flows straight to img.src / CSS url() on the first render — an external
   // URL there is a zero-click tracking beacon / LAN-probe (SSRF). Only a data:image/ URL is safe (the
   // same rule dataURLToFile enforces for embedded media). Strip anything else.
+  //
+  // Colour fields (labelColor, clipColor, gradient stops) are interpolated RAW into CSS strings on
+  // render — `stripe.style.background = layer.labelColor` (timeline) and `'…-gradient(…,'+c0+','+c1+')'`
+  // (inspector fill preview). A value like `url(http://evil/x)` there is the same zero-click beacon.
+  // Canvas colour props (fill/color/stroke — fillStyle/addColorStop) are NOT a fetch vector, so only
+  // the CSS-reaching fields are validated. Accept hex / rgb() / hsl() / a bare colour name; reject rest.
+  function safeColor(v) {
+    if (typeof v !== 'string') return false;
+    const s = v.trim();
+    if (!s || s.length > 32) return false;
+    if (/^#[0-9a-f]{3,8}$/i.test(s)) return true;                        // #rgb / #rrggbb / #rrggbbaa
+    if (/^(rgb|hsl)a?\(\s*[0-9.,%\s/deg]+\)$/i.test(s)) return true;     // rgb()/rgba()/hsl()/hsla() — numerics + separators only (no url(), no nested fn)
+    if (/^[a-z]{3,20}$/i.test(s)) return true;                          // named colour (transparent, red, …)
+    return false;
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
-      if (l && l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
+      if (!l) return;
+      if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
+      if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
+      if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
+      if (l.fillGradient) {
+        if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
+        if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';
+      }
     });
   }
   FM.storage.applyScene = async function (obj) {
