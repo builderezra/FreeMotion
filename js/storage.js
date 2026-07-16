@@ -211,6 +211,10 @@ window.FM = window.FM || {};
       if (l.fillGradient) {
         if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
         if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';
+        // angle + type are interpolated raw into a CSS gradient string (inspector fill preview) — a
+        // crafted angle could close the gradient and inject url(http://…): coerce to a number / whitelist.
+        l.fillGradient.angle = Math.max(0, Math.min(360, +l.fillGradient.angle || 0));
+        if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';
       }
     });
   }

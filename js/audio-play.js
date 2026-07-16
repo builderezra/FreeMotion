@@ -50,6 +50,7 @@ window.FM = window.FM || {};
       const when = audioCtx.currentTime;
       FM.scene.layers.forEach(layer => {
         if (layer.type !== 'video' || !layer.reversed || layer.visible === false) return;
+        if (FM.groupHidden && FM.groupHidden(layer)) return;   // a clip inside a hidden group is silent in preview too (matches picture + export)
         if (FM.soloSilenced(layer)) return;   // solo suppresses reversed-clip audio too (matches picture + export)
         const m = FM.media.get(layer.id);
         if (!m || !m.audioBuffer) return;            // decoded ahead of time in requestPlay

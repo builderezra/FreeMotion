@@ -1108,10 +1108,13 @@ window.FM = window.FM || {};
         const P = FM.scene.project; if (!P.markers) P.markers = [];
         const t = timeFromX(e.clientX);
         const near = P.markers.find(m => Math.abs(m.t - t) < 10 / pxPerSec());
+        // Removing the thumbnail-frame marker must also UNPIN it — else P.thumbPinned stays true and the
+        // card thumbnail freezes forever (auto-regen is gated on !thumbPinned).
+        const unpinIf = (was) => { if (was) { P.thumbPinned = false; if (FM.projects && FM.projects.touchCurrent) FM.projects.touchCurrent(true); } };
         const items = near
-          ? [{ label: 'Remove marker', danger: true, action: () => { P.markers = P.markers.filter(m => m !== near); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }]
+          ? [{ label: near.thumb ? 'Remove thumbnail pin' : 'Remove marker', danger: true, action: () => { const wasThumb = !!near.thumb; P.markers = P.markers.filter(m => m !== near); unpinIf(wasThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }]
           : [{ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }];   // markers live on exact frames
-        if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { P.markers = []; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
+        if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { const hadThumb = P.markers.some(m => m.thumb); P.markers = []; unpinIf(hadThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         FM.contextMenu.show(e.clientX, e.clientY, items);
       });
       // (scrub/deselect on the lanes is handled by the #timeline pointerdown above)
@@ -1314,9 +1317,11 @@ window.FM = window.FM || {};
       // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
       // glitch). The browser clamps if the content is now shorter (mobile solo / collapsed group).
       const sTop = timelineEl ? timelineEl.scrollTop : 0;
-      // Keep every animated prop in sync with its layer's loopMode so newly-keyframed props inherit
-      // the loop setting instead of silently freezing at their last keyframe.
-      FM.scene.layers.forEach(l => { if (l.loopMode && l.loopMode !== 'none') FM.animatedProps(l).forEach(p => { p.loopMode = l.loopMode; }); });
+      // Newly-keyframed props (loopMode still undefined) INHERIT the layer's loopMode so they don't
+      // freeze at their last keyframe — but initialize-only: an explicit per-prop loop set in the graph
+      // editor must NOT be clobbered back to the layer value on every rebuild. (The clip-menu Loop toggle
+      // still writes all props explicitly, so it keeps working.)
+      FM.scene.layers.forEach(l => { if (l.loopMode && l.loopMode !== 'none') FM.animatedProps(l).forEach(p => { if (p.loopMode == null) p.loopMode = l.loopMode; }); });
       // Recompute the project length from the clips on EVERY rebuild — the timeline is drawn right
       // afterwards, so its length can never be stale no matter which edit triggered the rebuild.
       if (FM.autoFitDuration) FM.autoFitDuration();

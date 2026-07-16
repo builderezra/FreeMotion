@@ -435,7 +435,7 @@ window.FM = window.FM || {};
       wrapTo(FM.scene.project.loopIn); rafId = requestAnimationFrame(tick); return;
     }
     if (nt >= FM.scene.project.duration) {
-      if (FM.loop) {
+      if (FM.loop && FM.scene.project.duration > 0) {   // an empty timeline (duration 0) must fall through to pause, else the wrap spins forever at 100% CPU
         wrapTo(FM.hasLoopRegion() ? FM.scene.project.loopIn : 0);
         rafId = requestAnimationFrame(tick);
         return;
@@ -977,6 +977,7 @@ window.FM = window.FM || {};
   FM.duplicateLayer = async function (id, inPlace) {
     const src = FM.layerById(FM.scene, id);
     if (!src) return;
+    if (src.type === 'camera') { if (FM.toast) FM.toast('Scene already has a camera'); return; }   // single-camera invariant — a 2nd (offset) camera would hijack the view
     const copy = FM.cloneLayer(src, !!inPlace);   // inPlace → exact copy at same position (no offset/" copy")
     await reloadMediaTo(id, copy.id);
     const inserts = [copy];
@@ -1112,6 +1113,7 @@ window.FM = window.FM || {};
   FM.splitLayer = async function (id) {
     const layer = FM.layerById(FM.scene, id);
     if (!layer) return;
+    if (['video', 'image', 'text', 'shape'].indexOf(layer.type) < 0) return;   // only real clips split — a camera/group/null/adjustment split would spawn a phantom duplicate
     const t = FM.time, end = layer.start + layer.duration;
     if (t <= layer.start + 0.02 || t >= end - 0.02) return;   // playhead must be inside the clip
     const into = t - layer.start;
@@ -1795,11 +1797,21 @@ window.FM = window.FM || {};
       document.querySelectorAll('.aspect-chip').forEach(c => c.classList.toggle('on', c.dataset.aspect === cvAspect));
     }
     function cvDetect() {
-      const r = FM.scene.project.width / FM.scene.project.height;
-      const map = { '16:9': 16 / 9, '9:16': 9 / 16, '4:5': 4 / 5, '1:1': 1, '4:3': 4 / 3 };
-      let best = '9:16', bd = 1e9;
-      Object.keys(map).forEach(k => { const d = Math.abs(map[k] - r); if (d < bd) { bd = d; best = k; } });
-      cvAspect = best;
+      // Pick a preset ONLY when it exactly reproduces the current W×H (and sync cv-res to it); otherwise
+      // fall back to Custom so reopening + Apply preserves a custom/non-preset size instead of silently
+      // snapping the project to a different resolution.
+      const W = FM.scene.project.width, H = FM.scene.project.height;
+      const resSel = document.getElementById('cv-res');
+      const aspects = ['16:9', '9:16', '4:5', '1:1', '4:3'];
+      for (const asp of aspects) {
+        const pr = asp.split(':').map(Number), a = pr[0], b = pr[1];
+        for (const base of [720, 1080, 1440, 2160]) {
+          let w, h;
+          if (a >= b) { h = base; w = base * a / b; } else { w = base; h = base * b / a; }
+          if (Math.round(w / 2) * 2 === W && Math.round(h / 2) * 2 === H) { cvAspect = asp; if (resSel) resSel.value = String(base); return; }
+        }
+      }
+      cvAspect = 'custom';
     }
     const canvasBtn = document.getElementById('btn-canvas');
     if (canvasBtn && cvDialog) {
