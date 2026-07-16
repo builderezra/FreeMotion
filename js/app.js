@@ -540,6 +540,7 @@ window.FM = window.FM || {};
       const back = FM._reviewFrom; FM._reviewFrom = null;
       if (back != null && FM.setTime) FM.setTime(back);
     }
+    if (FM.syncReviewButton) FM.syncReviewButton();   // revert the far-right button from ■ Stop back to the view icon
   };
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };
@@ -1661,21 +1662,38 @@ window.FM = window.FM || {};
     const viewBar = document.getElementById('view-bar');
     if (amFitBtn && viewBar) {
       // TAP = toggle the view popup (grid · camera · zoom %). HOLD = review play (preview from here,
-      // playhead snaps back on stop). A long-press flag swallows the trailing click so the popup
-      // doesn't also toggle. (Ezra: review play lives on this far-right button, not its own.)
+      // playhead snaps back on stop). While review IS running the button becomes a ■ STOP icon and a
+      // single TAP stops it (no need to hold again). (Ezra: review play lives on this far-right button.)
+      const AMFIT_VIEW_SVG = amFitBtn.innerHTML;
+      const AMFIT_STOP_SVG = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>';
+      const setReviewIcon = (active) => {
+        if (amFitBtn.classList.contains('reviewing') === !!active) return;   // idempotent: only touch the DOM on a real state change
+        amFitBtn.classList.toggle('reviewing', !!active);
+        amFitBtn.innerHTML = active ? AMFIT_STOP_SVG : AMFIT_VIEW_SVG;
+        amFitBtn.title = active ? 'Stop review play' : 'View options (grid · camera · zoom) · hold to review-play';
+      };
+      FM.syncReviewButton = () => setReviewIcon(!!FM._reviewing);   // called from FM.pause when review ends (end-of-timeline, spacebar, project switch…)
       let vbLp = null, vbLpFired = false, vbDown = null;
       amFitBtn.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         vbDown = { x: e.clientX, y: e.clientY }; vbLpFired = false;
         clearTimeout(vbLp);
-        vbLp = setTimeout(() => { vbLp = null; vbLpFired = true; if (navigator.vibrate) { try { navigator.vibrate(12); } catch (er) {} } if (FM.toast) FM.toast('Review play — playhead returns here on stop', 1400); FM.reviewPlay(); }, 550);
+        vbLp = setTimeout(() => {
+          vbLp = null; vbLpFired = true;
+          if (navigator.vibrate) { try { navigator.vibrate(12); } catch (er) {} }
+          const wasReviewing = FM._reviewing;
+          FM.reviewPlay();                                    // toggles: starts review, or stops if already reviewing
+          FM.syncReviewButton();
+          if (FM.toast) FM.toast(FM._reviewing ? 'Review play — playhead returns here on stop' : (wasReviewing ? 'Review stopped' : ''), 1400);
+        }, 550);
       });
       amFitBtn.addEventListener('pointermove', (e) => { if (vbDown && Math.hypot(e.clientX - vbDown.x, e.clientY - vbDown.y) > 8) { clearTimeout(vbLp); vbLp = null; } });
       const vbLpEnd = () => { clearTimeout(vbLp); vbLp = null; vbDown = null; };
       amFitBtn.addEventListener('pointerup', vbLpEnd);
       amFitBtn.addEventListener('pointercancel', vbLpEnd);
       amFitBtn.addEventListener('click', () => {
-        if (vbLpFired) { vbLpFired = false; return; }   // the hold already fired review play
+        if (vbLpFired) { vbLpFired = false; return; }   // the hold already handled it (started/stopped review)
+        if (FM._reviewing) { FM.pause(); return; }       // reviewing → a plain TAP stops it (no popup); FM.pause reverts the icon
         const open = viewBar.classList.toggle('hidden') === false;
         amFitBtn.classList.toggle('active', open);
         const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open

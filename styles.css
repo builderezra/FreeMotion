@@ -819,6 +819,8 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .tco { width: 21px; height: 21px; display: block; flex: 0 0 auto; }
 .tbtn-play { position: relative; }
 .tbtn-play .tco { width: 25px; height: 25px; }   /* play reads as the focal control */
+/* the far-right view button turns into an accent ■ Stop while review play is running */
+#btn-amfit.reviewing { color: var(--accent); }
 /* loop-on-hold indicator: a small ↻ badge on the play button while loop mode is armed */
 #btn-play.loop-on { color: var(--accent); }
 #btn-play.loop-on::after {
