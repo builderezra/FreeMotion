@@ -926,15 +926,20 @@ window.FM = window.FM || {};
       // colour and border are all hidden for it.
       return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && !(audioOnly && (c.key === 'color' || c.key === 'border' || c.key === 'element')));
     }
+    // shape / text / image get Speed + Volume cards too (AM parity). Speed re-times the clip like it
+    // does for video; Volume shows but is DISABLED when the layer has no audio (categoryGrid greys it).
+    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup');
     return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
   }
+  function layerHasAudio(layer) { return !!layer && layer.type === 'video'; }   // only the video/audio path carries sound — shapes/text/images/groups don't
 
   // Is `v` a category this layer can actually show? Guards against unreachable views — e.g. the timeline
   // dbl-click calling openCategory('element') on a VIDEO (which rendered a stale duplicate Volume slider
   // that DESTROYED keyframed volume), or a persisted 'volume'/'speed' view after a media replace.
   function viewAllowed(layer, v) {
     if (!layer || v === 'home') return true;
-    if (v === 'speed' || v === 'volume') return layer.type === 'video';
+    if (v === 'speed') return ['video', 'shape', 'text', 'image'].indexOf(layer.type) >= 0;
+    if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
     if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
@@ -949,9 +954,12 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       if (cat.key === 'effects') card.classList.add('cat-card-fx');   // PC: Effects is the big full-width card
+      const volDisabled = cat.key === 'volume' && !layerHasAudio(layer);   // Volume card shows on shapes/text but can't do anything with no audio
+      if (volDisabled) card.classList.add('cat-card-disabled');
       // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') + '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
+        if (volDisabled) { if (FM.toast) FM.toast('This layer has no audio', 1200); return; }   // pressing Volume on a no-audio layer does nothing (Ezra)
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
         // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard
         // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
@@ -1680,17 +1688,21 @@ window.FM = window.FM || {};
       if (spAnim) spCenter.appendChild(el('div', 'insp-hint', 'Speed is keyframed (ramp): the clip length stays fixed while playback speeds up and slows down along the curve — use the curve button to shape the easing.'));
       spRow.appendChild(spCenter);
       body.appendChild(spRow);
-      if (layer.frameBlend == null) layer.frameBlend = false;
-      body.appendChild(checkRow('Smooth slow-motion (frame blend)', layer.frameBlend, async v => {
-        layer.frameBlend = v;
-        if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
-        FM.requestRender(); FM.seekVideosToTime();
-      }));
-      body.appendChild(checkRow('Reverse (video + audio)', layer.reversed, async v => {
-        layer.reversed = v; FM.timeline.rebuild();
-        if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
-        FM.requestRender(); FM.seekVideosToTime();
-      }));
+      // Frame blend + Reverse are about VIDEO frames/audio — a shape/text/image has neither, so its
+      // speed panel is just the Speed % (which re-times the clip). Video keeps both toggles.
+      if (layer.type === 'video') {
+        if (layer.frameBlend == null) layer.frameBlend = false;
+        body.appendChild(checkRow('Smooth slow-motion (frame blend)', layer.frameBlend, async v => {
+          layer.frameBlend = v;
+          if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
+          FM.requestRender(); FM.seekVideosToTime();
+        }));
+        body.appendChild(checkRow('Reverse (video + audio)', layer.reversed, async v => {
+          layer.reversed = v; FM.timeline.rebuild();
+          if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
+          FM.requestRender(); FM.seekVideosToTime();
+        }));
+      }
     } else if (key === 'blend') {
       // AM layout: opacity slider on top, then blend CATEGORIES as expandable rows — each opens a
       // dropdown of the modes in that family (one per family for now; more land as AM refs arrive).
