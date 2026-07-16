@@ -1582,8 +1582,14 @@ window.FM = window.FM || {};
     const tools = el('div', 'vol-tools');
     const wavBtn = el('button', 'vol-tool-btn', 'Save audio as WAV…');
     wavBtn.addEventListener('click', () => { if (FM.downloadLayerAudio) FM.downloadLayerAudio(layer); });
-    const karBtn = el('button', 'vol-tool-btn', 'Remove vocals (karaoke)');
-    karBtn.addEventListener('click', () => { if (FM.removeVocals) FM.removeVocals(layer); });
+    // Karaoke is a TOGGLE: the label + state follow whether an instrumental track is live, and it can be
+    // flipped off from either the source clip or the karaoke track itself.
+    const kState = FM.karaokeState ? FM.karaokeState(layer) : 'off';
+    const karBtn = el('button', 'vol-tool-btn' + (kState === 'off' ? '' : ' on'),
+      kState === 'off' ? 'Remove vocals (karaoke)' : 'Restore vocals');
+    karBtn.title = kState === 'twin' ? 'This is the karaoke track — restore the original vocals'
+      : kState === 'on' ? 'Vocals are removed — press to restore' : 'Mute the vocals and add an instrumental track (stereo only)';
+    karBtn.addEventListener('click', async () => { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); if (FM.inspector) FM.inspector.refresh(); });
     tools.append(wavBtn, karBtn);
     control.appendChild(tools);
 

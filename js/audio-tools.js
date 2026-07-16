@@ -87,10 +87,38 @@ window.FM = window.FM || {};
     return await octx.startRendering();
   }
 
-  /* Karaoke: add a vocals-removed copy of the clip's audio as its own layer and mute the original,
-   * so you hear only the instrumental. Non-destructive — the original clip is untouched but silenced. */
-  FM.removeVocals = async function (layer) {
+  // ---- Karaoke state. The instrumental rides as its own track tagged `karaokeOf: <sourceId>`, so the
+  // whole thing is a reversible TOGGLE: nothing is baked into the source clip. ----
+  FM.karaokeTwinOf = function (layer) {
+    if (!layer || !FM.scene) return null;
+    return FM.scene.layers.find(l => l.karaokeOf === layer.id) || null;
+  };
+  /* 'twin' = this layer IS the karaoke track · 'on' = it has one · 'off' = none. */
+  FM.karaokeState = function (layer) {
+    if (!layer) return 'off';
+    if (layer.karaokeOf) return 'twin';
+    return FM.karaokeTwinOf(layer) ? 'on' : 'off';
+  };
+
+  /* Karaoke TOGGLE — never permanent.
+   *   OFF → ON : add a vocals-removed track (tagged karaokeOf) and mute the source.
+   *   ON  → OFF: drop that track and unmute the source. Works pressed from EITHER layer. */
+  FM.toggleKaraoke = async function (layer) {
     if (!layer) return;
+    const restore = (srcId, twinId) => {
+      const src = srcId ? FM.layerById(FM.scene, srcId) : null;
+      if (src) src.muted = false;
+      if (FM.deleteLayer) FM.deleteLayer(twinId);   // keeps the media blob (undo-safe); prune reaps it later
+      if (src) { FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id]; }
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.history) FM.history.commit();
+      if (FM.toast) FM.toast('Vocals restored');
+    };
+    if (layer.karaokeOf) return restore(layer.karaokeOf, layer.id);        // pressed ON the karaoke track
+    const existing = FM.karaokeTwinOf(layer);
+    if (existing) return restore(layer.id, existing.id);                    // pressed on the source, karaoke is on
+
+    // OFF → ON
     const ab = await layerAudioBuffer(layer);
     if (!ab) { if (FM.toast) FM.toast('This clip has no audio'); return; }
     if (ab.numberOfChannels < 2) { if (FM.toast) FM.toast('Vocal removal needs a STEREO track — this one is mono'); return; }
@@ -106,6 +134,7 @@ window.FM = window.FM || {};
     const nl = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     if (nl) {
       nl.name = (layer.name || 'Audio') + ' (no vocals)';
+      nl.karaokeOf = layer.id;   // the link that makes this a toggle (and survives save/reload)
       nl.start = layer.start;
       nl.duration = layer.duration;
       // The WAV is the FULL source track, so the twin must share the original's source→timeline mapping
@@ -118,6 +147,7 @@ window.FM = window.FM || {};
     layer.muted = true;   // hear the karaoke, not the original
     if (FM.refreshAll) FM.refreshAll();
     if (FM.history) FM.history.commit();
-    if (FM.toast) FM.toast('Vocals removed — original muted, karaoke track added');
+    if (FM.toast) FM.toast('Vocals removed — press again to restore');
   };
+  FM.removeVocals = FM.toggleKaraoke;   // back-compat alias
 })(window.FM);
