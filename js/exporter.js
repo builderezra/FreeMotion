@@ -123,6 +123,7 @@ window.FM = window.FM || {};
     const oac = new OAC(channels, length, sampleRate);
     const soloActive = scene.layers.some(l => l.solo);   // mirror the compositor's solo gate so the exported soundtrack matches the soloed picture (#14)
     let any = false;
+    const chains = [];   // disposed only AFTER startRendering() resolves — dispose() stops the LFO oscillators, and an offline render that hasn't run yet would lose them
     for (const layer of scene.layers) {
       if (layer.type !== 'video' || layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo)) continue;   // hidden (incl. inside a hidden GROUP) / solo-suppressed layers are silent — mirror the compositor's picture gate
       const m = FM.media.get(layer.id);
@@ -166,11 +167,35 @@ window.FM = window.FM || {};
       } else {
         gain.gain.value = vol;
       }
-      node.connect(gain).connect(oac.destination);
+      // Audio effects: node -> gain -> chain -> destination. Each clip gets its OWN chain (they are
+      // stateful node graphs). Best-effort like the rest of export audio: a chain that throws falls back
+      // to the dry gain -> destination path for this clip rather than aborting the whole export.
+      let chain = null;
+      try { chain = FM.buildAudioFxChain ? FM.buildAudioFxChain(oac, layer, from) : null; }
+      catch (e) { console.warn('audio fx chain failed', layer.id, e); chain = null; }
+      if (chain) {
+        try {
+          // schedule() computes ctxTime = sceneTime − fromScene, and OUTPUT time 0 is `from` (the export
+          // range start, NOT this clip's start) — so passing the EXPORT range makes ctxTime === output
+          // time. Passing oStart would shift every clip's automation later by (oStart − from).
+          chain.schedule(from, to);
+          gain.connect(chain.input);
+          chain.output.connect(oac.destination);
+          chains.push(chain);
+        } catch (e) {
+          console.warn('audio fx chain failed', layer.id, e);
+          try { gain.disconnect(); } catch (e2) {}
+          try { chain.dispose(); } catch (e2) {}
+          chain = null;
+        }
+      }
+      if (!chain) gain.connect(oac.destination);
+      node.connect(gain);
       node.start(oStart - from, oStart - layer.start, oEnd - oStart);   // when-in-range, offset-into-clip, play-len
     }
     if (!any) return null;
     const rendered = await oac.startRendering();
+    chains.forEach(c => { try { c.dispose(); } catch (e) {} });
     return { audioBuffer: rendered, sampleRate, channels };
   }
 

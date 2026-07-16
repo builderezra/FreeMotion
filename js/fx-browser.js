@@ -165,7 +165,7 @@ window.FM = window.FM || {};
     const go = (target) => { view.remove(); _catDepth--; openCategory(target); };   // balance the depth: openCategory re-increments, so a nav nets zero (else each arrow leaked +1 and froze the Featured auto-scroll forever)
     const mkBtn = (label, target) => {
       const b = el('button', 'fxb-back', label);
-      b.style.cssText = 'flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      b.style.cssText = 'flex:1;min-height:40px;padding:0 10px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';   // .fxb-back has no padding, so these paged to ~19px tall — under the thumb minimum, and a near-miss lands on the nav div, which has no handler
       b.addEventListener('click', () => go(target));
       return b;
     };

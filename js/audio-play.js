@@ -7,13 +7,22 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  let ac = null;
   let active = [];   // live AudioBufferSourceNodes
+  let chains = [];   // audio-effect chains built for this playback pass
 
-  function ctx() {
-    if (!ac) { const AC = window.AudioContext || window.webkitAudioContext; ac = new AC(); }
-    if (ac.state === 'suspended') ac.resume();
-    return ac;
+  // iOS caps live AudioContexts (~4) — audio-fx.js owns THE one; never construct another here.
+  // Guarded like every other audio-fx entry point: without that file, preview stays silent, not broken.
+  function ctx() { return FM.audioCtx ? FM.audioCtx() : null; }
+
+  // Everything that decides whether a clip makes sound, minus the context — so start() can answer
+  // "does this project need audio at all?" without creating one.
+  function audible(layer) {
+    if (layer.type !== 'video' || !layer.reversed || layer.visible === false) return false;
+    if (FM.groupHidden && FM.groupHidden(layer)) return false;   // a clip inside a hidden group is silent in preview too (matches picture + export)
+    if (FM.soloSilenced(layer)) return false;   // solo suppresses reversed-clip audio too (matches picture + export)
+    const m = FM.media.get(layer.id);
+    if (!m || !m.audioBuffer) return false;     // decoded ahead of time in requestPlay
+    return FM.time < layer.start + layer.duration;   // already past this clip
   }
 
   // Build a reversed buffer for the trimmed clip region, honoring clip speed
@@ -46,16 +55,13 @@ window.FM = window.FM || {};
     // Start reversed-audio for every reversed clip, aligned to the current playhead.
     start() {
       this.stop();
+      const due = FM.scene.layers.filter(audible);
+      if (!due.length) return;          // nothing to play: don't spend a context on it
       const audioCtx = ctx();
+      if (!audioCtx) return;
       const when = audioCtx.currentTime;
-      FM.scene.layers.forEach(layer => {
-        if (layer.type !== 'video' || !layer.reversed || layer.visible === false) return;
-        if (FM.groupHidden && FM.groupHidden(layer)) return;   // a clip inside a hidden group is silent in preview too (matches picture + export)
-        if (FM.soloSilenced(layer)) return;   // solo suppresses reversed-clip audio too (matches picture + export)
+      due.forEach(layer => {
         const m = FM.media.get(layer.id);
-        if (!m || !m.audioBuffer) return;            // decoded ahead of time in requestPlay
-        const clipEnd = layer.start + layer.duration;
-        if (FM.time >= clipEnd) return;              // already past this clip
         const into = FM.time - layer.start;          // seconds into the clip at the playhead
         const buf = reversedBuffer(audioCtx, m.audioBuffer, layer);
         const node = audioCtx.createBufferSource();
@@ -101,15 +107,34 @@ window.FM = window.FM || {};
         } else {
           gain.gain.value = vol;
         }
-        node.connect(gain).connect(audioCtx.destination);
+        // Audio effects sit AFTER the volume/fade envelope, matching the exporter's clip mix order.
+        const chain = FM.buildAudioFxChain ? FM.buildAudioFxChain(audioCtx, layer) : null;
+        node.connect(gain);
+        if (chain) {
+          gain.connect(chain.input);
+          chain.output.connect(audioCtx.destination);
+          chain.applyAt(FM.time);
+          chains.push(chain);
+        } else {
+          gain.connect(audioCtx.destination);
+        }
         if (into <= 0) { node.start(when - into / pr, 0); active.push(node); }     // clip starts later — delay is REAL time, so scale the scene-second gap by the preview rate (was 2s late at 2×)
         else if (into < buf.duration) { node.start(when, into); active.push(node); } // mid-clip
-        else { try { node.disconnect(); } catch (e) {} }                            // source exhausted → silence
+        else {                                                                       // source exhausted → silence
+          try { node.disconnect(); } catch (e) {}
+          if (chain) { const i = chains.indexOf(chain); if (i >= 0) chains.splice(i, 1); try { chain.dispose(); } catch (e) {} }
+        }
       });
     },
     stop() {
       active.forEach(n => { try { n.stop(); n.disconnect(); } catch (e) {} });
       active = [];
+      chains.forEach(c => { try { c.dispose(); } catch (e) {} });
+      chains = [];
+    },
+    // Keyframed audio-effect params on a reversed clip animate from the rAF tick, like forward clips.
+    applyAt(sceneTime) {
+      for (let i = 0; i < chains.length; i++) chains[i].applyAt(sceneTime);
     },
   };
 })(window.FM);

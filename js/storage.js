@@ -202,9 +202,58 @@ window.FM = window.FM || {};
     if (/^[a-z]{3,20}$/i.test(s)) return true;                          // named colour (transparent, red, …)
     return false;
   }
+  // An imported layer.audioFx entry drives two untrusted paths: .type reaches the DOM as a label and
+  // FM.buildAudioFxChain as a builder key, and .params reach AudioParams. Nothing from the file is
+  // trusted: the type is whitelisted against the registry and the params are REBUILT from the registry
+  // schema (file values are only ever adopted after a range check), so an unknown key can't survive.
+  const AFX_MAX = 16, AFX_MAX_KF = 200;
+  // own-property only: EASES/EASE_PRESETS are plain literals, so a bare [e] lookup lets 'toString' /
+  // 'constructor' pass the whitelist — scene.js then calls it unbound and every eval goes NaN.
+  const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  function easeOk(e) { return typeof e === 'string' && (hasOwn(FM.EASES, e) || hasOwn(FM.EASE_PRESETS, e)); }
+  function safeKfProp(p, min, max) {
+    if (!p || typeof p !== 'object' || !Array.isArray(p.kf)) return null;
+    const kf = [];
+    p.kf.slice(0, AFX_MAX_KF).forEach(k => {
+      if (!k || typeof k !== 'object') return;
+      const t = +k.t, v = +k.v;
+      if (!isFinite(t) || t < 0 || !isFinite(v)) return;
+      const o = { t: Math.min(3600, t), v: Math.max(min, Math.min(max, v)), e: easeOk(k.e) ? k.e : 'linear' };
+      if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(n => isFinite(+n))) o.bez = k.bez.map(Number);
+      kf.push(o);
+    });
+    if (!kf.length) return null;
+    kf.sort((a, b) => a.t - b.t);
+    const out = { kf: kf };
+    if (['cycle', 'pingpong'].indexOf(p.loopMode) >= 0 && kf.length >= 2) out.loopMode = p.loopMode;
+    return out;
+  }
+  function sanitizeAudioFx(l) {
+    if (l.audioFx == null) return;
+    // No registry (script failed to load) = no way to whitelist a type — drop rather than trust the file.
+    if (!Array.isArray(l.audioFx) || !FM.audioFxRegistry) { delete l.audioFx; return; }
+    l.audioFx = l.audioFx.slice(0, AFX_MAX).map(f => {
+      if (!f || typeof f !== 'object') return null;
+      const def = FM.audioFxRegistry.get(f.type);
+      if (!def) return null;
+      const params = {};
+      FM.audioFxRegistry.paramsOf(f.type).forEach(pd => {
+        const v = f.params && typeof f.params === 'object' ? f.params[pd.key] : undefined;
+        if (typeof v === 'number' && isFinite(v)) params[pd.key] = Math.max(pd.min, Math.min(pd.max, v));
+        else {
+          const kfp = pd.keyframable !== false ? safeKfProp(v, pd.min, pd.max) : null;
+          params[pd.key] = kfp || pd.def;
+        }
+      });
+      // enabled !== false is the engine's own "on" test (layerHasAudioFx / buildAudioFxChain); an
+      // omitted flag must stay ON, so absence — not falsiness — is what decides the boolean.
+      return { type: def.type, enabled: f.enabled !== false, params: params };
+    }).filter(Boolean);
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
+      sanitizeAudioFx(l);
       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
       if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
       if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
@@ -289,7 +338,7 @@ window.FM = window.FM || {};
   // Deep-clone layers and re-id them (fresh ids + parent remap) so inserting a pack twice — or
   // into a project that already has those ids — can never collide with existing layers/media.
   function reIdLayers(layers) {
-    const map = {};
+    const map = Object.create(null);   // null-proto: an imported layer.parent of 'constructor' would otherwise "remap" to a prototype function
     const out = JSON.parse(JSON.stringify(layers, FM.jsonReplacer));
     out.forEach(l => { map[l.id] = newId('l'); l.id = map[l.id]; });
     out.forEach(l => { if (l.parent) l.parent = map[l.parent] || null; });
@@ -439,8 +488,15 @@ window.FM = window.FM || {};
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
       FM.storage.flushSync(); this.touchCurrent(true);
-      // drop the outgoing project's media from the in-memory registry (blobs stay in IDB)
-      FM.scene.layers.forEach(l => { if (FM.media.get(l.id)) FM.media.remove(l.id); });
+      // drop the outgoing project's media from the in-memory registry (blobs stay in IDB). The audio
+      // graph must go with it: media.remove only revokes the URL, so a rec carrying a live effect chain
+      // would leave its LFOs running on the shared AudioContext with no reference left to stop them.
+      FM.scene.layers.forEach(l => {
+        const m = FM.media.get(l.id);
+        if (!m) return;
+        if (FM.dropAudioGraph) FM.dropAudioGraph(m);
+        FM.media.remove(l.id);
+      });
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;

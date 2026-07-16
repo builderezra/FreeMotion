@@ -25,6 +25,7 @@ window.FM = window.FM || {};
    * A property is either a plain number (static) or { kf: [{t, v, e}] } (keyframed),
    * where t = seconds, v = value, e = easing name applied on the segment ENTERING this kf.
    */
+  const hasOwn = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
   const EASES = {
     linear:    t => t,
     easeIn:    t => t * t,
@@ -93,9 +94,13 @@ window.FM = window.FM || {};
         // Resolve the easing: a custom bez, then a named EASES function, then a named EASE_PRESETS
         // bezier (overshoot/anticipate live ONLY in EASE_PRESETS — without this they fell back to
         // linear, so the graph editor's Overshoot preset produced straight-line motion).
+        // hasOwnProperty, not a bare index: a plain-object lookup walks the prototype chain, so an
+        // imported keyframe easing of 'toString' resolved to Object.prototype.toString — truthy, called
+        // unbound, returning a string, and the lerp below went NaN. Only audioFx keyframes are ease-
+        // validated on import, so this site is the backstop for every other prop.
         if (b.bez) f = bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);
-        else if (EASES[b.e]) f = EASES[b.e](f);
-        else if (FM.EASE_PRESETS[b.e]) { const z = FM.EASE_PRESETS[b.e]; f = bezierAt(z[0], z[1], z[2], z[3], f); }
+        else if (hasOwn(EASES, b.e)) f = EASES[b.e](f);
+        else if (hasOwn(FM.EASE_PRESETS, b.e)) { const z = FM.EASE_PRESETS[b.e]; f = bezierAt(z[0], z[1], z[2], z[3], f); }
         if (typeof a.v === 'string' || typeof b.v === 'string') return lerpHexKf(a.v, b.v, f);   // colour keyframes
         return a.v + (b.v - a.v) * f;
       }
@@ -219,8 +224,8 @@ window.FM = window.FM || {};
   }
   FM.hasKeyframeAt = hasKeyframeAt;
 
-  /* Every animated prop container ({kf:[…]}) on a layer — transform props plus effect params —
-   * so the timeline can show/drag/delete effect-parameter keyframes alongside transform ones. */
+  /* Every animated prop container ({kf:[…]}) on a layer — transform props plus visual/audio effect
+   * params — so the timeline can show/drag/delete effect-parameter keyframes alongside transform ones. */
   FM.animatedProps = function (layer) {
     const out = [];
     Object.keys(layer.transform).forEach(k => { if (isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
@@ -232,6 +237,7 @@ window.FM = window.FM || {};
     if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => { if (isAnimated(layer.crop[k])) out.push(layer.crop[k]); });   // crop keyframes — omitting them left crop animation behind on clip moves and undeletable
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => { if (isAnimated(layer.shadow[k])) out.push(layer.shadow[k]); });   // shadow (keyframeable)
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
+    (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
   };
 

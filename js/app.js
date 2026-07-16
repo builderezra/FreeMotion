@@ -238,12 +238,28 @@ window.FM = window.FM || {};
   }
   FM.syncTopBar = syncTopBar;
 
+  // A media rec being DESTROYED (not deleted-with-undo) can't use audioFxLive.release(): that hands the
+  // element through to the speakers on purpose, so a restored layer isn't silent. Nothing restores this
+  // rec, so the chain — and the LFOs its modulated effects are running — must go with it.
+  // Full teardown for a media rec that is being DESTROYED (project switch / reset / media replace) —
+  // unlike audioFxLive.release(), which leaves _mes passing through because a deleted layer's rec
+  // survives for undo. Exported: storage.open() drops the outgoing project's recs the same way, and
+  // without this their LFOs keep running on the one shared AudioContext forever.
+  function dropAudioGraph(m) {
+    if (!m || !FM.audioFxLive) return;
+    if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
+    if (m._mes) { try { m._mes.disconnect(); } catch (e) {} m._mes = null; }
+    m._afxSig = '';
+  }
+  FM.dropAudioGraph = dropAudioGraph;
+
   // Wipe the project back to a blank composition (drops all layers, media, markers, history).
   // Destructive + not undoable, so call sites confirm first.
   FM.resetProject = function () {
     if (FM.pause) FM.pause();
     (FM.scene.layers || []).forEach(l => {
       const m = FM.media.get(l.id); if (m && FM.clearFrameCache) FM.clearFrameCache(m);
+      dropAudioGraph(m);
       if (FM.media.remove) FM.media.remove(l.id);
       if (FM.storage && FM.storage.removeMedia) { try { FM.storage.removeMedia(l.id); } catch (e) {} }
     });
@@ -479,6 +495,7 @@ window.FM = window.FM || {};
         } catch (e) {}
       }
     });
+    if (FM.audioFxLive) FM.audioFxLive.applyAt(FM.time);   // keyframed audio-effect params follow the playhead
     render();
     FM.timeline.updatePlayhead();
     updateReadout();
@@ -491,6 +508,8 @@ window.FM = window.FM || {};
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
     lastTs = 0;
+    // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
+    if (FM.audioFxLive) { FM.audioFxLive.resume(); FM.audioFxLive.syncAll(); }
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
@@ -561,6 +580,9 @@ window.FM = window.FM || {};
   // fade / visibility / delete change needs that rebuilt to be heard. No-op unless something is playing
   // AND a reversed clip exists (so the common forward-only case stays free). (#6,#7,#8)
   FM.reconcileAudio = function () {
+    // Routing follows the scene whether or not anything is playing, and whether or not a reversed clip
+    // exists — so it runs ahead of both guards below. It self-skips layers with no audio effects.
+    if (FM.audioFxLive) FM.audioFxLive.syncAll();
     if (!FM.playing || !FM.audioPlay) return;
     if (!FM.scene.layers.some(l => l.type === 'video' && l.reversed)) return;
     FM.audioPlay.start();
@@ -817,7 +839,7 @@ window.FM = window.FM || {};
     // Stop native/synth audio + drop the (rebuildable) frame cache — but DON'T destroy the media
     // registry entry or its IDB blob: undo restores the layer JSON, and a wiped blob = permanently
     // blank clip + lost footage (same fix as deleteLayer). Orphans are reaped by the boot sweep.
-    set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); } });
+    set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.audioFxLive) FM.audioFxLive.release(id); } });
     FM.scene.layers = FM.scene.layers.filter(l => !set.has(l.id));
     FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
@@ -842,7 +864,7 @@ window.FM = window.FM || {};
       FM.scene.layers.filter(l => l.parent === id).forEach(child => FM.deleteLayer(child.id, true));
     }
     const m = FM.media.get(id);
-    if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); }   // stop a deleted forward clip's native audio (#6)
+    if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.audioFxLive) FM.audioFxLive.release(id); }   // stop a deleted forward clip's native audio (#6)
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
     // Deliberately KEEP the media registry entry and its IndexedDB blob: undo restores the layer's
     // JSON only, so destroying media here made an undone delete come back permanently BLANK (the
@@ -1073,6 +1095,7 @@ window.FM = window.FM || {};
     if (!layer || !nrec) return false;
     const old = FM.media.get(id);
     if (old && FM.clearFrameCache) FM.clearFrameCache(old);
+    dropAudioGraph(old);   // the new rec brings a new element, so the old source node has nothing left to feed
     FM.media.set(id, nrec);
     layer.type = nrec.kind;                          // video ↔ image as needed
     if (nrec.kind === 'video' && nrec.el) nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });

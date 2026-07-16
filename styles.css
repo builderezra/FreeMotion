@@ -1598,3 +1598,31 @@ body.drawing #select-box { display: none !important; }
 .fxb-thumb { position: relative; }
 .fxb-thumb-cv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; opacity: 0; transition: opacity .18s; pointer-events: none; }
 .fxb-thumb-cv.ready { opacity: 1; }
+
+/* ---- Add Audio Effect browser: sibling of #fx-browser, glyph tiles instead of canvas thumbs ---- */
+#afx-browser { position: fixed; inset: 0; z-index: 160; background: var(--panel, #10141d); display: flex; flex-direction: column; }
+#afx-browser.hidden { display: none; }
+/* No canvas here — the swatch is a flat category tint carrying one stroke glyph. */
+.afxb-thumb { background: linear-gradient(135deg, rgba(148,163,184,.28), rgba(100,116,139,.18)); color: rgba(255,255,255,.94); }
+.afxb-thumb[data-cat="eq"] { background: linear-gradient(135deg, rgba(106,141,255,.42), rgba(177,140,255,.24)); }
+.afxb-thumb[data-cat="space"] { background: linear-gradient(135deg, rgba(0,210,255,.4), rgba(41,217,187,.24)); }
+.afxb-thumb[data-cat="dyn"] { background: linear-gradient(135deg, rgba(255,206,74,.4), rgba(255,132,66,.24)); }
+.afxb-thumb[data-cat="char"] { background: linear-gradient(135deg, rgba(255,94,158,.4), rgba(196,113,255,.24)); }
+.afxb-glyph { width: 30px; height: 30px; }
+.fxb-card .afxb-glyph { width: 42px; height: 42px; }
+.afxb-banner[data-cat="eq"] { background: linear-gradient(120deg, rgba(106,141,255,.32), rgba(177,140,255,.18)); }
+.afxb-banner[data-cat="space"] { background: linear-gradient(120deg, rgba(0,210,255,.3), rgba(41,217,187,.18)); }
+.afxb-banner[data-cat="dyn"] { background: linear-gradient(120deg, rgba(255,206,74,.3), rgba(255,132,66,.18)); }
+.afxb-banner[data-cat="char"] { background: linear-gradient(120deg, rgba(255,94,158,.3), rgba(196,113,255,.2)); }
+.afxb-catnav { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel-2, rgba(16,20,28,.96)); }
+.afxb-catnav-btn { flex: 1; min-height: 40px; padding: 0 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.afxb-catnav-pos { color: var(--text-dim); font-size: 11px; flex: none; }
+@media (min-width: 701px) {
+  #afx-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
+  #afx-browser .fxb-top, #afx-browser .fxb-search-input { width: min(680px, 94vw); }
+  #afx-browser .fxb-top { border-bottom: none; }
+  #afx-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
+  /* Panel + nav are one card here: the panel's own 18px gap would split them apart. */
+  #afx-browser .fxb-catview-scroll { margin-bottom: 0; border-bottom: none; border-radius: 16px 16px 0 0; }
+  #afx-browser .afxb-catnav { width: min(680px, 94vw); border: 1px solid var(--line); border-radius: 0 0 16px 16px; margin-bottom: 18px; }
+}

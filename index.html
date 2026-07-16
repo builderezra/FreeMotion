@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=187">
+<link rel="stylesheet" href="styles.css?v=188">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.35</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.36</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -195,6 +195,17 @@
     <div class="fxb-scroll"></div>
   </div>
 
+  <!-- Full-screen Add-Audio-Effect browser: same shape as #fx-browser, built by audio-fx-browser.js. -->
+  <div id="afx-browser" class="hidden">
+    <div class="fxb-top">
+      <button class="fxb-close" aria-label="Close">✕</button>
+      <div class="fxb-title">Add Audio Effect</div>
+      <button class="fxb-search-btn" aria-label="Search audio effects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+    </div>
+    <input class="fxb-search-input hidden" type="text" placeholder="Search audio effects…" spellcheck="false">
+    <div class="fxb-scroll"></div>
+  </div>
+
   <div id="export-overlay" class="hidden">
     <div class="export-card">
       <div class="export-title">Exporting</div>
@@ -284,15 +295,15 @@
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/scene.js?v=81"></script>
+  <script src="js/scene.js?v=83"></script>
   <script src="js/media.js?v=29"></script>
   <script src="js/compositor.js?v=165"></script>
   <script src="js/fx-registry.js?v=35"></script>
   <script src="js/fx-thumbs.js?v=2"></script>
   <script src="js/timeline.js?v=151"></script>
   <script src="js/addmenu.js?v=10"></script>
-  <script src="js/inspector.js?v=159"></script>
-  <script src="js/fx-browser.js?v=13"></script>
+  <script src="js/inspector.js?v=161"></script>
+  <script src="js/fx-browser.js?v=14"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=44"></script>
   <script src="js/draw-tool.js?v=4"></script>
@@ -303,17 +314,20 @@
   <script src="js/text-edit.js?v=5"></script>
   <script src="js/tracker.js?v=3"></script>
   <script src="js/frames.js?v=15"></script>
-  <script src="js/audio-play.js?v=58"></script>
+  <script src="js/audio-fx.js?v=1"></script>
+  <script src="js/audio-play.js?v=59"></script>
+  <script src="js/audio-fx-live.js?v=1"></script>
+  <script src="js/audio-fx-browser.js?v=2"></script>
   <script src="js/history.js?v=23"></script>
-  <script src="js/storage.js?v=71"></script>
+  <script src="js/storage.js?v=73"></script>
   <script src="js/home.js?v=11"></script>
   <script src="js/graph-editor.js?v=107"></script>
-  <script src="js/exporter.js?v=83"></script>
+  <script src="js/exporter.js?v=84"></script>
   <script src="js/sample.js?v=9"></script>
   <script src="js/contextmenu.js?v=37"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=157"></script>
+  <script src="js/app.js?v=159"></script>
   <script src="js/audio-tools.js?v=3"></script>
   <script src="js/mobile.js?v=21"></script>
   <script src="js/ai-manifest.js?v=3"></script>

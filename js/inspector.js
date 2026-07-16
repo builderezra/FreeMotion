@@ -444,7 +444,11 @@ window.FM = window.FM || {};
 
   // Gestures on an effect row: SWIPE LEFT to delete, PRESS-HOLD then drag up/down to reorder.
   // (Replaces the old ▴▾ arrow buttons.) touch-action:pan-y lets the sheet still scroll vertically.
-  function attachFxGestures(row, head, layer, fx, idx) {
+  // `stack` lets the audio-effect list reuse this: it names the array the gesture edits and the
+  // commit that follows. Omitted = the visual stack (layer.effects + afterFx).
+  function attachFxGestures(row, head, layer, fx, idx, stack) {
+    const listOf = () => (stack ? stack.list(layer) : layer.effects);
+    const after = stack ? stack.after : afterFx;
     let sx = 0, sy = 0, mode = null, hold = null, rows = null, rects = null, slotH = 0, toIdx = idx, down = false;
     let swVx = 0, swLastX = 0, swLastT = 0, swDx = 0, wasArmed = false;   // swipe velocity + state
     row._g = { moved: false };
@@ -481,10 +485,11 @@ window.FM = window.FM || {};
     function endReorder() {
       if (rows) rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; });
       row.classList.remove('fx-dragging'); row.style.transform = '';
-      const from = layer.effects ? layer.effects.indexOf(fx) : -1;   // by object, never a stale index (#16)
+      const list = listOf();
+      const from = list ? list.indexOf(fx) : -1;   // by object, never a stale index (#16)
       if (from >= 0 && toIdx !== from) {
-        const m = layer.effects.splice(from, 1)[0];
-        layer.effects.splice(Math.max(0, Math.min(layer.effects.length, toIdx)), 0, m); afterFx();
+        const m = list.splice(from, 1)[0];
+        list.splice(Math.max(0, Math.min(list.length, toIdx)), 0, m); after();
       } else { FM.inspector.refresh(); }
     }
     const rowW = () => row.getBoundingClientRect().width || 300;
@@ -520,7 +525,7 @@ window.FM = window.FM || {};
         void row.offsetHeight;                                   // reflow so the height transition runs
         row.style.transition = 'height .2s ease, opacity .2s ease, margin .2s ease';
         row.style.height = '0px'; row.style.opacity = '0'; row.style.marginTop = '0px'; row.style.marginBottom = '0px';
-        setTimeout(() => { const i = layer.effects ? layer.effects.indexOf(fx) : -1; if (i >= 0) { layer.effects.splice(i, 1); afterFx(); } else { FM.inspector.refresh(); } }, 210);
+        setTimeout(() => { const list = listOf(); const i = list ? list.indexOf(fx) : -1; if (i >= 0) { list.splice(i, 1); after(); } else { FM.inspector.refresh(); } }, 210);
       } else {
         wrap.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';   // spring back
         wrap.style.transform = 'translateX(0px)';
@@ -666,6 +671,116 @@ window.FM = window.FM || {};
     return s;
   }
 
+  // ===== Audio effects — the same stack UI as visual effects, over layer.audioFx =====
+  // Audio changes nothing on the canvas, so the commit re-syncs the live graph instead of re-rendering.
+  function afterAudioFx() {
+    FM.inspector.refresh();
+    if (FM.reconcileAudio) FM.reconcileAudio();
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();
+  }
+  const AFX_STACK = { list: l => l.audioFx, after: afterAudioFx };
+
+  // audio-fx.js param descriptors carry `def` and no `type`; fxScrubber reads `default` and dispatches
+  // on `type`. Bridge them rather than teaching either side about the other.
+  function afxParam(p) {
+    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable };
+  }
+
+  // undefined numberOfChannels = not decoded yet = UNKNOWN. Only a decoded 1-channel buffer warns.
+  function layerIsMono(layer) {
+    const m = FM.media.get(layer.id), b = m && m.audioBuffer;
+    return !!(b && b.numberOfChannels < 2);
+  }
+  // Centre-cancel needs a stereo source. The two effects fail DIFFERENTLY on mono, so they get their own
+  // warnings: Stereo Width lands on a genuine no-op, but Vocal Remove has nothing to cancel and leaves
+  // only its low-passed bass-keep path — i.e. it guts the clip rather than ignoring it.
+  const AFX_MONO_HINT = {
+    width: 'This clip’s audio is mono — there’s no stereo image to widen, so this effect does nothing.',
+    vocalremove: 'This clip’s audio is mono — there’s no centred vocal to cancel, so this leaves only the deep bass and the clip comes back muffled. Needs a stereo track.',
+  };
+
+  function audioFxMoreMenu(layer, fx, idx, btn) {
+    if (!FM.contextMenu) return;
+    const r = btn.getBoundingClientRect();
+    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, [
+      { label: 'Reset', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterAudioFx(); } } },
+      { label: 'Duplicate', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { layer.audioFx.splice(idx + 1, 0, inst); afterAudioFx(); } } },
+      { sep: true },
+      { label: 'Delete', danger: true, action: () => { layer.audioFx.splice(idx, 1); afterAudioFx(); } },
+    ]);
+  }
+
+  function audioFxRow(layer, fx, idx) {
+    const reg = FM.audioFxRegistry.get(fx.type) || { label: fx.type, params: [] };
+    const expanded = !!fx._expanded, off = fx.enabled === false;
+    const row = el('div', 'fx-row' + (off ? ' fx-off' : '') + (expanded ? ' fx-open' : ''));
+    const head = el('div', 'fx-head');
+    const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
+    const name = el('span', 'fx-name', reg.label);
+    const toggle = () => {
+      if (row._g && row._g.moved) { row._g.moved = false; return; }
+      (layer.audioFx || []).forEach(e => { if (e !== fx) e._expanded = false; });   // accordion: exactly one editor open
+      fx._expanded = !expanded;
+      FM.inspector.refresh();
+    };
+    head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
+    if (!expanded && (layer.audioFx || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));
+    head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
+    if (expanded) {
+      const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
+      more.addEventListener('click', (ev) => audioFxMoreMenu(layer, fx, idx, ev.currentTarget));
+      const del = el('button', 'fx-icon-btn fx-del'); del.title = 'Delete effect'; del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
+      del.addEventListener('click', () => { layer.audioFx.splice(idx, 1); afterAudioFx(); });
+      head.appendChild(more); head.appendChild(del);
+    } else {
+      const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : '')); eye.title = off ? 'Effect off — enable' : 'Effect on — disable';
+      eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterAudioFx(); });
+      head.appendChild(eye);
+    }
+    const delBg = el('div', 'fx-del-bg');
+    delBg.innerHTML = '<span class="fx-del-ico">' + svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6') + '</span>';
+    const wrap = el('div', 'fx-swipe-wrap');
+    wrap.appendChild(head);
+    if (expanded) {
+      const body = el('div', 'fx-ed-body');
+      if (AFX_MONO_HINT[fx.type] && layerIsMono(layer)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
+      reg.params.forEach(p => body.appendChild(fxScrubber(fx, afxParam(p), layer, idx)));
+      if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+      wrap.appendChild(body);
+    }
+    row.appendChild(delBg);
+    row.appendChild(wrap);
+    row._wrap = wrap; row._delBg = delBg;
+    attachFxGestures(row, head, layer, fx, idx, AFX_STACK);
+    return row;
+  }
+
+  function audioFxSection(layer) {
+    const s = section('Audio Effects');
+    const list = el('div', 'fx-list');
+    (layer.audioFx || []).forEach((fx, idx) => list.appendChild(audioFxRow(layer, fx, idx)));
+    s.appendChild(list);
+    if (!(layer.audioFx && layer.audioFx.length)) s.appendChild(el('div', 'insp-hint', 'No audio effects yet — add one to shape this clip’s sound.'));
+    const add = el('button', 'fx-add-btn', '+ Add Audio Effect');
+    add.addEventListener('click', () => { if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer); });
+    s.appendChild(add);
+    const tools = el('div', 'fx-stack-tools');
+    const cp = el('button', 'fx-act', 'Copy'); cp.disabled = !(layer.audioFx && layer.audioFx.length);
+    cp.addEventListener('click', () => { FM.audioFxClipboard = JSON.parse(JSON.stringify(layer.audioFx || [], FM.jsonReplacer)); if (FM.toast) FM.toast('Copied ' + FM.audioFxClipboard.length + ' audio effect(s)'); FM.inspector.refresh(); });
+    const pa = el('button', 'fx-act', 'Paste'); pa.disabled = !(FM.audioFxClipboard && FM.audioFxClipboard.length);
+    pa.addEventListener('click', () => {
+      if (!FM.audioFxClipboard || !FM.audioFxClipboard.length) return;
+      if (!layer.audioFx) layer.audioFx = [];
+      FM.audioFxClipboard.forEach(e => layer.audioFx.push(JSON.parse(JSON.stringify(e))));
+      afterAudioFx();
+    });
+    tools.appendChild(cp); tools.appendChild(pa);
+    s.appendChild(tools);
+    return s;
+  }
+
   // ===== Alight Motion property-category model =====
   let view = 'home';
   let lastLayerId = null;
@@ -678,6 +793,7 @@ window.FM = window.FM || {};
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
     { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },          // video only
     { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },   // video only
+    { key: 'audiofx', label: 'Audio Effects', icon: 'M2 12h3l2.5-7 3 18 3-13 2.5 9 2-7h4' },   // video only
     { key: 'element', label: 'Element Properties', icon: 'M4 9h7v7H4zM15 6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M16 14l4 6h-8z' },
     { key: 'editgroup', label: 'Edit Group', icon: 'M4 4h7v7H4zM13 13h7v7h-7zM13 7.5h3.5a1 1 0 0 1 1 1V12M11 16.5H7.5a1 1 0 0 1-1-1V12' },   // group only — opens the group's own timeline
     { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
@@ -928,8 +1044,8 @@ window.FM = window.FM || {};
     }
     // shape / text / image get Speed + Volume cards too (AM parity). Speed re-times the clip like it
     // does for video; Volume shows but is DISABLED when the layer has no audio (categoryGrid greys it).
-    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup');
-    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
+    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup' && c.key !== 'audiofx');
+    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && c.key !== 'audiofx');
   }
   function layerHasAudio(layer) { return !!layer && layer.type === 'video'; }   // only the video/audio path carries sound — shapes/text/images/groups don't
 
@@ -940,6 +1056,7 @@ window.FM = window.FM || {};
     if (!layer || v === 'home') return true;
     if (v === 'speed') return ['video', 'shape', 'text', 'image'].indexOf(layer.type) >= 0;
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
+    if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
     if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
     if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
@@ -1590,7 +1707,10 @@ window.FM = window.FM || {};
     karBtn.title = kState === 'twin' ? 'This is the karaoke track — restore the original vocals'
       : kState === 'on' ? 'Vocals are removed — press to restore' : 'Mute the vocals and add an instrumental track (stereo only)';
     karBtn.addEventListener('click', async () => { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); if (FM.inspector) FM.inspector.refresh(); });
-    tools.append(wavBtn, karBtn);
+    const afxBtn = el('button', 'vol-tool-btn' + (FM.layerHasAudioFx && FM.layerHasAudioFx(layer) ? ' on' : ''), 'Audio effects…');
+    afxBtn.title = 'Reverb, EQ, delay and more for this clip';
+    afxBtn.addEventListener('click', () => FM.inspector.openCategory('audiofx'));
+    tools.append(wavBtn, karBtn, afxBtn);
     control.appendChild(tools);
 
     panel.append(left, center);
@@ -1796,6 +1916,10 @@ window.FM = window.FM || {};
       body.appendChild(pwrap);
     } else if (key === 'effects') {
       const s = effectsSection(layer);
+      const h4 = s.querySelector('h4'); if (h4) h4.remove();
+      body.appendChild(s);
+    } else if (key === 'audiofx') {
+      const s = audioFxSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
       body.appendChild(s);
     } else if (key === 'color') {
@@ -2019,6 +2143,16 @@ window.FM = window.FM || {};
         // Per-parameter easing for ANY effect — inline sub-view of the Effects panel.
         const info = FM._fxEasing, fx = layer.effects[info.fxIdx];
         const back = el('button', 'cat-back', '‹  Effects');
+        back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
+        root.appendChild(back);
+        const bodyEl = el('div', 'cat-body');
+        bodyEl.appendChild(FM.buildEasingEditorFor(layer, k => fx.params[k], [info.key], info.label || info.key));
+        root.appendChild(bodyEl);
+      } else if (view === 'audiofx' && FM._fxEasing && FM.buildEasingEditorFor && (layer.audioFx || [])[FM._fxEasing.fxIdx]) {
+        // Per-parameter easing for an audio effect — inline sub-view of the Audio Effects panel.
+        // FM._fxEasing is shared with the visual stack: the two views are mutually exclusive.
+        const info = FM._fxEasing, fx = layer.audioFx[info.fxIdx];
+        const back = el('button', 'cat-back', '‹  Audio Effects');
         back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');
