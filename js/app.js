@@ -352,7 +352,7 @@ window.FM = window.FM || {};
   FM.timelineSnapPoints = function () {
     const P = FM.scene.project;
     const pts = [0, P.duration];
-    (P.markers || []).forEach(m => { if (m.t >= 0 && m.t <= P.duration) pts.push(m.t); });
+    (P.markers || []).forEach(m => { if (!m.thumb && m.t >= 0 && m.t <= P.duration) pts.push(m.t); });   // the thumbnail-frame pin is not a benchmark — skip buttons never land on it
     const sel = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
     if (sel) {
       pts.push(Math.max(0, sel.start)); pts.push(Math.min(P.duration, sel.start + sel.duration));
@@ -1199,11 +1199,8 @@ window.FM = window.FM || {};
         } });
       }
     }
-    if (layer.type === 'video') {   // audio-only clips import as kind:'video' too, so this covers both
-      items.push({ sep: true });
-      if (FM.downloadLayerAudio) items.push({ label: 'Save audio as WAV…', action: () => FM.downloadLayerAudio(layer) });
-      if (FM.removeVocals) items.push({ label: 'Remove vocals (karaoke)', action: () => FM.removeVocals(layer) });
-    }
+    // (Save audio as WAV / Remove vocals moved into the Volume section — discoverable there, and the
+    //  ⋯ menu path was easy to miss on PC.)
     // grouping + reusable saves
     const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
     items.push({ sep: true });

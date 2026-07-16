@@ -1578,6 +1578,15 @@ window.FM = window.FM || {};
     control.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fmax, 0.1));
     control.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fmax, 0.1));
 
+    // Audio tools live WITH the Volume section (the ⋯ menu path was easy to miss on PC).
+    const tools = el('div', 'vol-tools');
+    const wavBtn = el('button', 'vol-tool-btn', 'Save audio as WAV…');
+    wavBtn.addEventListener('click', () => { if (FM.downloadLayerAudio) FM.downloadLayerAudio(layer); });
+    const karBtn = el('button', 'vol-tool-btn', 'Remove vocals (karaoke)');
+    karBtn.addEventListener('click', () => { if (FM.removeVocals) FM.removeVocals(layer); });
+    tools.append(wavBtn, karBtn);
+    control.appendChild(tools);
+
     panel.append(left, center);
     // follow the playhead when volume is keyframed
     FM.inspector.syncTransform = () => { if (!document.contains(panel)) return; sync(); };

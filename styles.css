@@ -239,6 +239,10 @@ body {
 .vol-panel .mt-center { gap: 12px; }
 .vol-control { display: flex; flex-direction: column; gap: 11px; width: 100%; }
 .vol-slider-row { display: flex; align-items: center; gap: 11px; }
+.vol-tools { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 11px; border-top: 1px solid var(--line); }
+.vol-tool-btn { width: 100%; padding: 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; }
+.vol-tool-btn:hover { border-color: var(--accent); }
+.vol-tool-btn:active { transform: translateY(1px); }
 .vol-mute { width: 38px; height: 38px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: #b8c4d6; cursor: pointer; }
 .vol-mute svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .vol-mute:hover { color: var(--accent); border-color: rgba(41,217,187,.5); }
@@ -858,7 +862,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .tl-marker::after { content: ""; position: absolute; left: -0.5px; top: 7px; width: 1px; height: 320px; background: rgba(255,206,74,.35); }
 /* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
-.tl-marker.thumb::after { left: -0.5px; background: rgba(41,217,187,.4); }
+.tl-marker.thumb::after { left: -0.5px; height: 9px; background: rgba(41,217,187,.55); }   /* SHORT stub, not a full-height line — it's a pin, not a benchmark ruler line */
 .marker-edit { position: absolute; top: 1px; transform: translateX(-50%); width: 88px; z-index: 12; background: var(--panel-3); border: 1px solid var(--kf); color: var(--text); border-radius: 5px; padding: 1px 5px; font-size: 11px; }
 #tl-tracks { position: relative; }
 
