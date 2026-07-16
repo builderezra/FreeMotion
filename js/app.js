@@ -1640,10 +1640,14 @@ window.FM = window.FM || {};
       // The ▸ arrow on Paste Layer opens a position picker so you can drop the copy ABOVE a chosen
       // layer (or top / bottom) instead of always on top. (Ezra)
       const openPastePos = () => {
-        const items = [{ label: 'On top', action: () => FM.pasteClipboard(0) }];
-        FM.scene.layers.forEach((L, i) => items.push({ label: 'Above: ' + (L.name || L.type || 'layer'), action: () => FM.pasteClipboard(i) }));
-        items.push({ label: 'At the bottom', action: () => FM.pasteClipboard(FM.scene.layers.length) });
-        FM.contextMenu.show(Math.max(8, r.right - 220), r.bottom + 4, items);
+        const mkThumb = (L) => { const cv = document.createElement('canvas'); cv.className = 'ctx-thumb'; cv.width = 38; cv.height = 24; if (FM.renderThumb) { try { FM.renderThumb(L, cv); } catch (e) {} } return cv; };
+        const mkGlyph = (g) => { const s = document.createElement('span'); s.className = 'ctx-thumb ctx-thumb-glyph'; s.textContent = g; return s; };
+        const items = [{ label: 'On top', iconEl: mkGlyph('⤒'), action: () => FM.pasteClipboard(0) }];
+        // each layer shows its own thumbnail (same preview as the timeline row's far-left), so you can
+        // SEE which layer you're pasting above, not just read a name
+        FM.scene.layers.forEach((L, i) => items.push({ label: 'Above: ' + (L.name || L.type || 'layer'), iconEl: mkThumb(L), action: () => FM.pasteClipboard(i) }));
+        items.push({ label: 'At the bottom', iconEl: mkGlyph('⤓'), action: () => FM.pasteClipboard(FM.scene.layers.length) });
+        FM.contextMenu.show(Math.max(8, r.right - 240), r.bottom + 4, items);
       };
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },

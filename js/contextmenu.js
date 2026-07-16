@@ -40,6 +40,14 @@ window.FM = window.FM || {};
           const arr = document.createElement('button'); arr.className = 'ctx-split-arrow'; arr.type = 'button'; arr.textContent = '▸'; arr.title = it.arrowTitle || 'More…';
           arr.addEventListener('click', (e) => { e.stopPropagation(); it.arrowAction(); });
           b.appendChild(lab); b.appendChild(arr);
+        } else if (it.iconEl) {
+          // item with a leading icon/thumbnail node (e.g. the Paste-Layer position picker shows each
+          // layer's own thumbnail, matching the timeline row's left preview)
+          b.classList.add('ctx-item-icon');
+          b.appendChild(it.iconEl);
+          const lab = document.createElement('span'); lab.className = 'ctx-icon-label'; lab.textContent = it.label;
+          b.appendChild(lab);
+          if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
         } else {
           b.textContent = it.label;
           if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
