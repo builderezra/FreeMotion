@@ -2862,6 +2862,60 @@ window.FM = window.FM || {};
     return { subs: [[[0, 0], [1, 0], [1, 1], [0, 1]]], closed: true };   // rect + fallback
   };
 
+  // Outline length in PIXELS for Trim Paths — sums segment lengths from FM.shapeToPoints mapped into
+  // the shape's (ox,oy,sw,sh) box. Smooth (curved) segments are subdivided into a fine polyline via
+  // the SAME control points buildSubPath renders with, so the measure matches the drawn stroke; the
+  // sub-pixel error of the approximation is invisible against the stroke width. Pure — caches nothing.
+  // Length of a shape's drawn outline, in pixels. Measured by tracing the SAME path traceShapePath draws
+  // into a proxy that only accumulates segment length — so trim reveals the right fraction for EVERY kind,
+  // including arc/pie/semicircle/ring whose shapeToPoints is a bounding-rect fallback, and the measure can
+  // never drift from what is rendered. (An earlier shapeToPoints-based measure returned the rect perimeter
+  // for those four, so a half-trimmed ring showed an arbitrary fraction.)
+  function shapeOutlineLenPx(layer, ox, oy, sw, sh) {
+    let L = 0, cx = 0, cy = 0, sx = 0, sy = 0, has = false;
+    const seg = (x, y) => { if (has) L += Math.hypot(x - cx, y - cy); cx = x; cy = y; has = true; };
+    const M = {
+      beginPath() { has = false; },
+      moveTo(x, y) { cx = x; cy = y; sx = x; sy = y; has = true; },
+      lineTo(x, y) { seg(x, y); },
+      closePath() { if (has) L += Math.hypot(sx - cx, sy - cy); cx = sx; cy = sy; },
+      bezierCurveTo(x1, y1, x2, y2, x, y) {
+        const px = cx, py = cy;
+        for (let s = 1; s <= 16; s++) { const u = s / 16, m = 1 - u;
+          seg(m*m*m*px + 3*m*m*u*x1 + 3*m*u*u*x2 + u*u*u*x, m*m*m*py + 3*m*m*u*y1 + 3*m*u*u*y2 + u*u*u*y); }
+      },
+      quadraticCurveTo(x1, y1, x, y) {
+        const px = cx, py = cy;
+        for (let s = 1; s <= 16; s++) { const u = s / 16, m = 1 - u;
+          seg(m*m*px + 2*m*u*x1 + u*u*x, m*m*py + 2*m*u*y1 + u*u*y); }
+      },
+      ellipse(x, y, rx, ry, rot, a0, a1, ccw) {
+        const co = Math.cos(rot || 0), si = Math.sin(rot || 0);
+        const at = a => { const c = Math.cos(a), s = Math.sin(a); return [x + rx * c * co - ry * s * si, y + rx * c * si + ry * s * co]; };
+        let span = a1 - a0;
+        if (ccw) { if (span > 0) span -= 2 * Math.PI; } else { if (span < 0) span += 2 * Math.PI; }
+        const p0 = at(a0); seg(p0[0], p0[1]);   // canvas draws an implicit line from the current point to the arc start (= a pie's radius)
+        const steps = Math.max(8, Math.ceil(Math.abs(span) / (Math.PI / 32)));
+        for (let s = 1; s <= steps; s++) { const p = at(a0 + span * s / steps); seg(p[0], p[1]); }
+      },
+      arc(x, y, r, a0, a1, ccw) { M.ellipse(x, y, r, r, 0, a0, a1, ccw); },
+      rect(x, y, w, h) { M.moveTo(x, y); seg(x + w, y); seg(x + w, y + h); seg(x, y + h); M.closePath(); },
+      roundRect(x, y, w, h, r) { r = Math.max(0, Math.min(+r || 0, w / 2, h / 2)); L += Math.max(0, 2 * (w + h) - 8 * r + 2 * Math.PI * r); cx = x; cy = y; sx = x; sy = y; has = true; },
+    };
+    try { FM.traceShapePath(M, layer, ox, oy, sw, sh); } catch (e) { return 0; }
+    return isFinite(L) ? L : 0;
+  }
+
+  // Guard a canvas dash pattern: EVERY entry must be finite and >=0 — a NaN/negative entry makes
+  // setLineDash THROW, which would kill the whole frame. Returns a safe array, or null = "no dash"
+  // (solid stroke) when the pattern is empty/all-zero/invalid.
+  function safeDash(pat) {
+    if (!pat || !pat.length) return null;
+    let allZero = true;
+    for (let i = 0; i < pat.length; i++) { const v = pat[i]; if (!isFinite(v) || v < 0) return null; if (v > 0) allZero = false; }
+    return allZero ? null : pat;
+  }
+
   let _blendMaskCv = null;
   // Content-space motion blur: render the layer at a NEUTRAL transform (centered, no rotation/scale/
   // skew/parent), run the optical-flow blur in that transform-free space, then composite with the
@@ -3086,43 +3140,129 @@ window.FM = window.FM || {};
       const sw = layer.shapeW || 400, sh = layer.shapeH || 300;
       const ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;   // top-left of the shape box (anchor-relative)
       const stk = layer.stroke;
-      const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
-      if (mode === 'stroke') {   // open kinds (line / arc / freehand) are stroked, never filled — Color & Fill IS the line colour
-        const lw = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
-        // Border on an open path = an outline hugging the line from BEHIND: a 2× under-stroke in the
-        // border colour, then the drawing's own colour on top (same trick as a filled shape's
-        // 'outside' border, where the fill overpaints the inner half). It used to swap the single
-        // stroke to the border colour — the border painted OVER the whole drawing and the shadow
-        // followed the border instead of the artwork.
-        if (stk && stk.enabled && stk.color != null) {
-          ctx.save();
-          ctx.lineWidth = lw * 2; ctx.strokeStyle = FM.evalProp(stk.color, t) || '#fff';
-          ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
-          ctx.restore();
-          ctx.shadowColor = 'transparent';   // the under-stroke already cast the silhouette shadow — don't double it
-        }
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = FM.evalProp(layer.fill, t) || '#ffffff';
-        ctx.lineCap = 'round'; ctx.stroke();
-      } else {
-        // BORDER (keyframeable, positioned). Canvas stroke() is always centre-aligned, so:
-        // outside = stroke 2× behind the fill (fill overpaints inner half); inside = clip to the shape
-        // then stroke 2× (only inner half shows); center = native width.
-        const bw = (stk && stk.enabled) ? (FM.evalProp(stk.width, t) || 0) : 0;
-        const bcol = stk ? (FM.evalProp(stk.color, t) || '#fff') : '#fff';
-        const bpos = (stk && stk.position) || 'center';
-        if (bw > 0 && bpos === 'outside') {
-          ctx.save(); ctx.lineWidth = bw * 2; ctx.strokeStyle = bcol; ctx.lineJoin = 'round'; ctx.stroke(); ctx.restore();
-          paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
-        } else {
-          paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
-          if (bw > 0) {
-            ctx.save(); ctx.strokeStyle = bcol; ctx.lineJoin = 'round';
-            if (bpos === 'inside') { ctx.clip(); ctx.lineWidth = bw * 2; } else ctx.lineWidth = bw;
-            ctx.stroke(); ctx.restore();
+
+      // ---- Trim Paths + dashed stroke: build the ONE dash pattern that shapes the BORDER stroke ----
+      // (the FILL is never touched — AE parity). Trim windows the stroke to the [start,end] fraction of
+      // the outline length via a single-period dash (visibleLen on, rest off) rotated by `offset`; a
+      // plain stroke.dash is marching-ants. The two share one setLineDash, so an ACTIVELY-windowing trim
+      // OWNS it (overrides the dash); a full trim (end−start≥1) falls through to the dash, an empty trim
+      // hides the stroke. Canvas restarts the dash phase at every subpath (moveTo) → on a multi-subpath
+      // shape trim applies PER SUBPATH (AE's "Trim Multiple Shapes: Individually"). start>end WRAPS.
+      let strokeDash = null, strokeDashOff = 0, skipStroke = false;
+      const _trim = layer.trimPath;
+      if (_trim && _trim.enabled) {
+        const L = shapeOutlineLenPx(layer, ox, oy, sw, sh);
+        if (L > 0) {   // empty path → no-op (trim leaves the layer as-is)
+          const s = clamp01(FM.evalProp(_trim.start, t));
+          const e = clamp01(FM.evalProp(_trim.end, t));
+          const off = FM.evalProp(_trim.offset, t); const offN = isFinite(off) ? off : 0;
+          let frac = e - s; if (frac < 0) frac += 1;   // start>end wraps: [start,1]+[0,end] = one arc on the loop
+          if (frac <= 1e-4) skipStroke = true;         // empty window → draw no stroke (fill still paints)
+          else if (frac < 1 - 1e-4) {
+            const vis = frac * L;
+            strokeDash = safeDash([vis, L - vis]);
+            strokeDashOff = -((s + offN) * L);          // start the visible run at (start+offset) along the outline
+            if (!isFinite(strokeDashOff)) strokeDashOff = 0;
           }
+          // frac≈1 → fully drawn: leave strokeDash null so an actual stroke.dash (below) can still apply
         }
       }
+      const _dash = stk && stk.dash;
+      if (!strokeDash && !skipStroke && _dash && _dash.enabled) {
+        const dl = FM.evalProp(_dash.length, t), dg = FM.evalProp(_dash.gap, t), doff = FM.evalProp(_dash.offset, t);
+        strokeDash = safeDash([dl, dg]);   // raw values in: a NaN/negative length or gap → null → solid (never invisible/throw)
+        strokeDashOff = isFinite(doff) ? -doff : 0;   // +offset marches the ants forward
+      }
+      const applyDash = () => {
+        if (strokeDash) { ctx.setLineDash(strokeDash); ctx.lineDashOffset = strokeDashOff; }
+        else { ctx.setLineDash([]); ctx.lineDashOffset = 0; }
+      };
+
+      // ---- Repeater: draw the shape (fill+stroke, INCLUDING trim/dash) `copies` times. Copy i gets a
+      // cumulative extra transform — translate (i·offset), rotate (i·rot) & scale (scale^i) about the
+      // repeater anchor — and alpha ×opacity^i. Drawn back-to-front (i=copies−1 first) so copy 0 sits on
+      // top (AE "Composite: Below"). Absent/disabled → exactly one undistorted copy = today's render.
+      let copies = 1, rOffX = 0, rOffY = 0, rRot = 0, rScl = 1, rOpac = 1, pvx = 0, pvy = 0;
+      const _rep = layer.repeater;
+      if (_rep && _rep.enabled) {
+        let c = FM.evalProp(_rep.copies, t); c = isFinite(c) ? Math.round(c) : 1;
+        copies = Math.max(1, Math.min(50, c));   // cap for perf/safety
+        rOffX = FM.evalProp(_rep.offsetX, t); rOffX = isFinite(rOffX) ? rOffX : 0;
+        rOffY = FM.evalProp(_rep.offsetY, t); rOffY = isFinite(rOffY) ? rOffY : 0;
+        const rr = FM.evalProp(_rep.rotation, t); rRot = (isFinite(rr) ? rr : 0) * Math.PI / 180;
+        rScl = FM.evalProp(_rep.scale, t); rScl = isFinite(rScl) ? rScl : 1;
+        rOpac = FM.evalProp(_rep.opacity, t); rOpac = clamp01(isFinite(rOpac) ? rOpac : 1);
+        const aX = _rep.anchorX != null ? _rep.anchorX : 0.5, aY = _rep.anchorY != null ? _rep.anchorY : 0.5;
+        pvx = ox + aX * sw; pvy = oy + aY * sh;   // rotate/scale pivot, in shape-local px
+      }
+
+      // Trace + fill + border for ONE copy in the CURRENT ctx transform (re-traced per copy so the
+      // per-copy scale/rotate is baked into the geometry, and effects/mask/blend wrap the whole layer).
+      const drawUnit = () => {
+        const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
+        if (mode === 'stroke') {   // open kinds (line / arc / freehand) are stroked, never filled — Color & Fill IS the line colour
+          if (skipStroke) return;   // trim window empty → nothing to draw
+          const lw = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
+          // Border on an open path = an outline hugging the line from BEHIND: a 2× under-stroke in the
+          // border colour, then the drawing's own colour on top (same trick as a filled shape's
+          // 'outside' border, where the fill overpaints the inner half). Both strokes share the dash so
+          // trim/dash keep the line + its border aligned.
+          if (stk && stk.enabled && stk.color != null) {
+            ctx.save();
+            applyDash();
+            ctx.lineWidth = lw * 2; ctx.strokeStyle = FM.evalProp(stk.color, t) || '#fff';
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+            ctx.restore();
+            ctx.shadowColor = 'transparent';   // the under-stroke already cast the silhouette shadow — don't double it
+          }
+          ctx.save();
+          applyDash();
+          ctx.lineWidth = lw;
+          ctx.strokeStyle = FM.evalProp(layer.fill, t) || '#ffffff';
+          ctx.lineCap = 'round'; ctx.stroke();
+          ctx.restore();
+        } else {
+          // BORDER (keyframeable, positioned). Canvas stroke() is always centre-aligned, so:
+          // outside = stroke 2× behind the fill (fill overpaints inner half); inside = clip to the shape
+          // then stroke 2× (only inner half shows); center = native width.
+          const bw = (stk && stk.enabled) ? (FM.evalProp(stk.width, t) || 0) : 0;
+          const bcol = stk ? (FM.evalProp(stk.color, t) || '#fff') : '#fff';
+          const bpos = (stk && stk.position) || 'center';
+          const drawBorder = bw > 0 && !skipStroke;   // trim-empty hides the border stroke; fill still paints
+          if (drawBorder && bpos === 'outside') {
+            ctx.save(); applyDash(); ctx.lineWidth = bw * 2; ctx.strokeStyle = bcol; ctx.lineJoin = 'round'; ctx.stroke(); ctx.restore();
+            paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
+          } else {
+            paintFillInPath(ctx, layer, t, ox, oy, sw, sh);
+            if (drawBorder) {
+              ctx.save(); applyDash(); ctx.strokeStyle = bcol; ctx.lineJoin = 'round';
+              if (bpos === 'inside') { ctx.clip(); ctx.lineWidth = bw * 2; } else ctx.lineWidth = bw;
+              ctx.stroke(); ctx.restore();
+            }
+          }
+        }
+      };
+
+      if (copies <= 1) {
+        drawUnit();   // no repeater → identical to the original single draw
+      } else {
+        const baseA = ctx.globalAlpha;
+        for (let i = copies - 1; i >= 0; i--) {   // back-to-front: copy 0 (undistorted) drawn last = on top
+          ctx.save();
+          const a = baseA * Math.pow(rOpac, i);
+          ctx.globalAlpha = isFinite(a) ? clamp01(a) : 0;
+          if (i !== 0) {   // copy 0 is the base copy — no extra transform
+            const sc = Math.pow(rScl, i);
+            ctx.translate(pvx + i * rOffX, pvy + i * rOffY);
+            if (rRot) ctx.rotate(i * rRot);
+            if (isFinite(sc) && sc !== 1) ctx.scale(sc, sc);
+            ctx.translate(-pvx, -pvy);
+          }
+          drawUnit();
+          ctx.restore();
+        }
+      }
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;   // never leak the dash pattern to the next layer
     } else {
       const m = FM.media.get(layer.id);
       if (m && m.el) {

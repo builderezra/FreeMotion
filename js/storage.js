@@ -250,10 +250,45 @@ window.FM = window.FM || {};
       return { type: def.type, enabled: f.enabled !== false, params: params };
     }).filter(Boolean);
   }
+  // A number in [min,max], OR a validated animated prop, OR the default. Same untrusted-file discipline
+  // as sanitizeAudioFx: file values are only adopted after a range/keyframe check.
+  function numOrKf(v, min, max, def, keyframable) {
+    if (typeof v === 'number' && isFinite(v)) return Math.max(min, Math.min(max, v));
+    if (keyframable) { const kfp = safeKfProp(v, min, max); if (kfp) return kfp; }
+    return def;
+  }
+  // Trim Path / dashed stroke / Repeater are drawn straight into canvas path + transform + setLineDash —
+  // a NaN/Infinity would throw and kill the frame, and copies feeds a render loop (uncapped = DoS). Rebuild
+  // each from its schema, keeping ONLY known keys, exactly like the audioFx/gradient hardening above.
+  function sanitizeTrimRepeater(l) {
+    if (l.trimPath != null) {
+      const t = l.trimPath;
+      if (typeof t !== 'object') delete l.trimPath;
+      else l.trimPath = { enabled: t.enabled === true, start: numOrKf(t.start, 0, 1, 0, true), end: numOrKf(t.end, 0, 1, 1, true), offset: numOrKf(t.offset, 0, 1, 0, true) };
+    }
+    if (l.stroke && l.stroke.dash != null) {
+      const d = l.stroke.dash;
+      if (typeof d !== 'object') delete l.stroke.dash;
+      else l.stroke.dash = { enabled: d.enabled === true, length: numOrKf(d.length, 0, 4000, 12, false), gap: numOrKf(d.gap, 0, 4000, 8, false), offset: numOrKf(d.offset, -1e6, 1e6, 0, true) };
+    }
+    if (l.repeater != null) {
+      const r = l.repeater;
+      if (typeof r !== 'object') delete l.repeater;
+      else l.repeater = {
+        enabled: r.enabled === true,
+        copies: numOrKf(r.copies, 1, 50, 3, true),
+        offsetX: numOrKf(r.offsetX, -10000, 10000, 40, true), offsetY: numOrKf(r.offsetY, -10000, 10000, 0, true),
+        rotation: numOrKf(r.rotation, -3600, 3600, 0, true), scale: numOrKf(r.scale, 0, 10, 1, true),
+        opacity: numOrKf(r.opacity, 0, 1, 1, true),
+        anchorX: numOrKf(r.anchorX, 0, 1, 0.5, false), anchorY: numOrKf(r.anchorY, 0, 1, 0.5, false),
+      };
+    }
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
       sanitizeAudioFx(l);
+      sanitizeTrimRepeater(l);
       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
       if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
       if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour

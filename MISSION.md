@@ -37,7 +37,10 @@ NOT add a "you still need to push" reminder.
 
 ## Order of attack (dependency + regression-risk ordered)
 1. **Audio-reactive animation** — envelope (overall/bass/mid/treble) → bake keyframes; expose
-   `FM.audioEnvelope` for the audio-drive behavior (#4 depends on it). — STATUS: PENDING
+   `FM.audioEnvelope` for the audio-drive behavior (#4 depends on it). — STATUS: DONE (v3.37, commit 50fea33).
+   `js/audio-react.js`: `FM.audioEnvelope(layer,opts)→{times,values0..1}`, `FM.audioReact.bake(layer,opts)`,
+   `FM.audioReact.openSheet(layer)`. Entry point = "Audio → keyframes…" in inspector vol-tools. #4 audio-drive
+   reads `FM.audioEnvelope`. Band cache = `m._audioBandCache` (underscore, unsaved).
 2. **Trim Paths + animated/dashed strokes + Repeater** — stroke draw-on (path length + dashoffset),
    marching dashes, shape repeater with per-copy transform. — STATUS: PENDING
 3. **Transparent + GIF + image-sequence export** — self-written GIF encoder (no dep), PNG/frame

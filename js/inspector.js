@@ -408,6 +408,38 @@ window.FM = window.FM || {};
     row.appendChild(strip); row.appendChild(valBox);
     return row;
   }
+  // kfNumRow's twin for props the compositor reads as a 0..1 fraction but users think of as 0..100%:
+  // disp is the display-per-stored factor (100 = show a 0..1 value as a percent). min/max/step/dflt/unit
+  // are all in DISPLAY units; the stored keyframe value stays a clean fraction so the engine reads 0..1.
+  function kfScaledRow(container, key, label, min, max, step, dflt, unit, disp) {
+    unit = unit || ''; disp = disp || 1;
+    const row = el('div', 'fx-scrub-row');
+    const prec = step >= 1 ? 0 : (step >= 0.1 ? 1 : 2);
+    const read = () => { const c = container[key]; return (FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : dflt / disp)) * disp; };
+    const c0 = container[key];
+    const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
+    kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate this';
+    kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt / disp); afterKf(); });
+    row.appendChild(kfb);
+    row.appendChild(el('span', 'fx-scrub-label', label));
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit;
+    function apply(v, commit) {
+      v = Math.max(min, Math.min(max, Math.round(v / step) * step));
+      FM.setProp(container, key, v / disp, FM.time);
+      valBox.value = v.toFixed(prec) + unit;
+      FM.requestRender();
+      if (commit && FM.history) FM.history.commit();
+    }
+    const strip = tickStrip({
+      min: min, max: max, step: step, unit: unit, dflt: dflt, read: read,
+      apply: v => apply(v, false),
+      release: () => { if (FM.isAnimated(container[key])) afterKf(); else if (FM.history) FM.history.commit(); },
+    });
+    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + unit; });
+    valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
+    row.appendChild(strip); row.appendChild(valBox);
+    return row;
+  }
   function kfColorRow(container, key, label, dflt) {
     const row = el('div', 'prop-row kf-color-row');
     const c0 = container[key];
@@ -1962,6 +1994,41 @@ window.FM = window.FM || {};
           body.appendChild(kfNumRow(stk, 'width', 'Size', 0, 100, 1, 6, ''));
         }
       }
+      // ===== TRIM PATH + DASHES (shape only) — both act on the STROKE, so they sit with the border.
+      // Trim windows the stroke to a [start,end] fraction of its length (animate End 0→100% = the classic
+      // draw-on); dashes pattern it (animate Offset = marching ants). line/arc shapes have no Border toggle
+      // but ALWAYS stroke, so hasStroke covers them and skips the "turn on Border" hint. Stored 0..1.
+      if (layer.type === 'shape') {
+        const hasStroke = openKind || (layer.stroke && layer.stroke.enabled);
+        const tp0 = layer.trimPath;
+        body.appendChild(checkRow('Trim path', !!(tp0 && tp0.enabled), v => {
+          if (v) { if (!layer.trimPath) layer.trimPath = { enabled: true, start: 0, end: 1, offset: 0 }; else layer.trimPath.enabled = true; }
+          else if (layer.trimPath) layer.trimPath.enabled = false;
+          FM.requestRender(); FM.inspector.refresh();
+        }));
+        if (layer.trimPath && layer.trimPath.enabled) {
+          const tp = layer.trimPath;
+          body.appendChild(kfScaledRow(tp, 'start', 'Start', 0, 100, 1, 0, '%', 100));
+          body.appendChild(kfScaledRow(tp, 'end', 'End', 0, 100, 1, 100, '%', 100));
+          body.appendChild(kfScaledRow(tp, 'offset', 'Offset', 0, 100, 1, 0, '%', 100));
+          body.appendChild(el('div', 'insp-hint', hasStroke ? 'Keyframe End 0→100% to draw the stroke on.' : 'Trim shows on the stroke — turn on Border above.'));
+        }
+        // Dashes live inside the stroke object (created lazily on first enable).
+        if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
+        const dstroke = layer.stroke;
+        body.appendChild(checkRow('Dashes', !!(dstroke.dash && dstroke.dash.enabled), v => {
+          if (v) { if (!dstroke.dash) dstroke.dash = { enabled: true, length: 12, gap: 8, offset: 0 }; else dstroke.dash.enabled = true; }
+          else if (dstroke.dash) dstroke.dash.enabled = false;
+          FM.requestRender(); FM.inspector.refresh();
+        }));
+        if (dstroke.dash && dstroke.dash.enabled) {
+          const dh = dstroke.dash;
+          body.appendChild(rangeRow('Length', () => dh.length, v => { dh.length = Math.max(0, v); }, 0, 100, 1));
+          body.appendChild(rangeRow('Gap', () => dh.gap, v => { dh.gap = Math.max(0, v); }, 0, 100, 1));
+          body.appendChild(kfNumRow(dh, 'offset', 'Offset', -200, 200, 1, 0, ''));
+          if (!hasStroke) body.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Border above.'));
+        }
+      }
       // ===== SHADOW (AM parity, keyframeable) =====
       if (!layer.shadow) layer.shadow = { enabled: false, blur: 16, dx: 8, dy: 8, color: '#000000', alpha: 100 };
       const sh = layer.shadow;
@@ -1973,6 +2040,26 @@ window.FM = window.FM || {};
         body.appendChild(kfNumRow(sh, 'alpha', 'Alpha', 0, 100, 1, 100, '%'));
         body.appendChild(kfNumRow(sh, 'dx', 'Position X', -200, 200, 1, 8, ''));
         body.appendChild(kfNumRow(sh, 'dy', 'Position Y', -200, 200, 1, 8, ''));
+      }
+      // ===== REPEATER (shape only) — draws the shape (fill+stroke, incl. trim/dash) `copies` times, each
+      // copy a cumulative step further (offset/rotate/scale) with an optional per-copy opacity falloff.
+      // Its own block since it multiplies the WHOLE shape, not just the outline.
+      if (layer.type === 'shape') {
+        const rp0 = layer.repeater;
+        body.appendChild(checkRow('Repeater', !!(rp0 && rp0.enabled), v => {
+          if (v) { if (!layer.repeater) layer.repeater = { enabled: true, copies: 3, offsetX: 40, offsetY: 0, rotation: 0, scale: 1, opacity: 1, anchorX: 0.5, anchorY: 0.5 }; else layer.repeater.enabled = true; }
+          else if (layer.repeater) layer.repeater.enabled = false;
+          FM.requestRender(); FM.inspector.refresh();
+        }));
+        if (layer.repeater && layer.repeater.enabled) {
+          const rp = layer.repeater;
+          body.appendChild(kfNumRow(rp, 'copies', 'Copies', 1, 50, 1, 3, ''));
+          body.appendChild(kfNumRow(rp, 'offsetX', 'Offset X', -500, 500, 1, 40, ''));
+          body.appendChild(kfNumRow(rp, 'offsetY', 'Offset Y', -500, 500, 1, 0, ''));
+          body.appendChild(kfNumRow(rp, 'rotation', 'Rotation', -360, 360, 1, 0, '°'));
+          body.appendChild(kfNumRow(rp, 'scale', 'Scale', 0.1, 2, 0.01, 1, ''));
+          body.appendChild(kfScaledRow(rp, 'opacity', 'Opacity falloff', 0, 100, 1, 100, '%', 100));
+        }
       }
     } else if (key === 'element') {
       // (Visible → timeline eye; Parent → Move & Transform. The old Visible/Parent rows were removed
