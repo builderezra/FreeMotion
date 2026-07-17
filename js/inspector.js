@@ -1710,7 +1710,10 @@ window.FM = window.FM || {};
     const afxBtn = el('button', 'vol-tool-btn' + (FM.layerHasAudioFx && FM.layerHasAudioFx(layer) ? ' on' : ''), 'Audio effects…');
     afxBtn.title = 'Reverb, EQ, delay and more for this clip';
     afxBtn.addEventListener('click', () => FM.inspector.openCategory('audiofx'));
-    tools.append(wavBtn, karBtn, afxBtn);
+    const arBtn = el('button', 'vol-tool-btn', 'Audio → keyframes…');
+    arBtn.title = 'Drive scale, opacity, rotation or position from this clip’s loudness';
+    arBtn.addEventListener('click', () => { if (FM.audioReact) FM.audioReact.openSheet(layer); });
+    tools.append(wavBtn, karBtn, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);
