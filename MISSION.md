@@ -49,7 +49,11 @@ NOT add a "you still need to push" reminder.
    `storage.sanitizeTrimRepeater`. Shapes only. KNOWN: multi-subpath (ring) trim fraction approximate
    (per-subpath setLineDash), monotonic + reaches full — acceptable.
 3. **Transparent + GIF + image-sequence export** — self-written GIF encoder (no dep), PNG/frame
-   sequence in a zip, transparent frames; true alpha video is browser-flaky, note it. — STATUS: PENDING
+   sequence in a zip, transparent frames; true alpha video is browser-flaky, note it. — STATUS: DONE (v3.39,
+   commit 69ca347). `js/gif-encode.js` (FM.gifEncoder.create→addFrame/finish), `js/zip-write.js`
+   (FM.zipWrite.create→add/finish), `FM.exporter.runGif`/`runFrames`. Dialog #exp-format + #exp-transparent.
+   GIF caps longest side 640px; runFrames caps 900 frames / 2GB (FRAMES_TOO_BIG). REMINDER: bump ?v AFTER
+   the last edit to a file — I cached a stale exporter.js and it hung.
 4. **Behaviors (expressions, packaged)** — property modifiers: Wiggle / Loop / Bounce-Overshoot /
    Follow (link to another layer/prop) / Audio-drive (reads #1's envelope). Sandbox on import. — STATUS: PENDING
 5. **Particles / emitters** — new emitter layer: rate/lifetime/gravity/spread/size+opacity over
