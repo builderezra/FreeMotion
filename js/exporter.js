@@ -350,5 +350,125 @@ window.FM = window.FM || {};
         FM._exporting = false;
       }
     },
+
+    // Animated GIF via FM.gifEncoder (from-scratch encoder). Same deterministic frame-stepping as run(),
+    // but no audio (GIF has none) and no muxer. GIFs balloon fast, so the longest side is capped at
+    // maxWidth (default 640) unless scale asks for smaller. Transparent = null the project background so
+    // the encoder's per-frame transparent index shows through (renderScene clears to transparent first).
+    async runGif(opts) {
+      if (!FM.gifEncoder) throw new Error('NO_GIF_ENCODER');
+      const scene = FM.scene, P = scene.project;
+      const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
+      let outW = Math.max(1, Math.round(P.width * scale));
+      let outH = Math.max(1, Math.round(P.height * scale));
+      const cap = opts.maxWidth || 640;                 // longest-side ceiling — GIF size/colors are expensive
+      const longest = Math.max(outW, outH);
+      if (longest > cap) {
+        const k = cap / longest;
+        outW = Math.max(1, Math.round(outW * k));
+        outH = Math.max(1, Math.round(outH * k));
+      }
+      const start = (opts.from != null) ? Math.max(0, opts.from) : 0;
+      const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
+      const totalFrames = Math.max(1, Math.round((end - start) * fps));
+      FM._exportCancel = false;
+
+      const projCanvas = document.createElement('canvas');
+      projCanvas.width = P.width; projCanvas.height = P.height;
+      const projCtx = projCanvas.getContext('2d');
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = outW; outCanvas.height = outH;
+      const outCtx = outCanvas.getContext('2d', { willReadFrequently: true });
+
+      // smooth slow-mo / reverse: build frame caches at the export fps so the GIF matches preview
+      let exportCaches = [];
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
+
+      const transparent = !!opts.transparent;
+      const savedBg = P.background;
+      FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
+      try {
+        if (transparent) P.background = null;   // covers both normal + camera paths (both guard on P.background)
+        const gif = FM.gifEncoder.create(outW, outH, { transparent, dither: !!opts.dither, loop: true });
+        const delayMs = 1000 / fps;
+        for (let f = 0; f < totalFrames; f++) {
+          if (FM._exportCancel) throw new Error('CANCELLED');
+          const t = start + f / fps;
+          await seekAllVideos(scene, t);
+          FM.renderScene(projCtx, scene, t);
+          outCtx.clearRect(0, 0, outW, outH);
+          outCtx.drawImage(projCanvas, 0, 0, outW, outH);
+          const data = outCtx.getImageData(0, 0, outW, outH).data;
+          gif.addFrame(data, delayMs);   // streaming: encoder appends this frame now, retains no pixels
+          if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'gif');
+          await new Promise(r => setTimeout(r, 0));   // yield so the Cancel tap can land between frames
+        }
+        const blob = gif.finish();
+        download(blob, (opts.name || 'freemotion-export') + '.gif');
+      } finally {
+        if (transparent) P.background = savedBg;
+        exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        FM._exporting = false;
+      }
+    },
+
+    // PNG image sequence zipped via FM.zipWrite (store-only). Same frame loop; each frame is a PNG (with
+    // alpha when transparent) added to the zip as name_NNNN.png. No audio. Honors cancel + FM._exporting.
+    async runFrames(opts) {
+      if (!FM.zipWrite) throw new Error('NO_ZIP_WRITER');
+      const scene = FM.scene, P = scene.project;
+      const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
+      const outW = Math.max(1, Math.round(P.width * scale));
+      const outH = Math.max(1, Math.round(P.height * scale));
+      const start = (opts.from != null) ? Math.max(0, opts.from) : 0;
+      const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
+      const totalFrames = Math.max(1, Math.round((end - start) * fps));
+      // A PNG sequence is store-only zipped in memory (every frame's bytes are held until finish()), so a
+      // long/high-res run can reach GBs and OOM the tab — especially mobile Safari. Fail fast with a clear
+      // message instead of crashing: cap the frame count AND the projected uncompressed pixel budget.
+      const estBytesPerFrame = outW * outH * 4;   // upper bound (real PNG is smaller, but photographic frames get close)
+      if (totalFrames > 900 || totalFrames * estBytesPerFrame > 2 * 1024 * 1024 * 1024) {
+        throw new Error('FRAMES_TOO_BIG');   // caller message: shorten the range, drop the fps, or lower the resolution
+      }
+      FM._exportCancel = false;
+
+      const projCanvas = document.createElement('canvas');
+      projCanvas.width = P.width; projCanvas.height = P.height;
+      const projCtx = projCanvas.getContext('2d');
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = outW; outCanvas.height = outH;
+      const outCtx = outCanvas.getContext('2d');
+
+      let exportCaches = [];
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
+
+      const transparent = !!opts.transparent;
+      const savedBg = P.background;
+      FM._exporting = true;
+      try {
+        if (transparent) P.background = null;   // so exported PNGs carry alpha
+        const zip = FM.zipWrite.create();
+        const base = opts.name || 'freemotion-export';
+        for (let f = 0; f < totalFrames; f++) {
+          if (FM._exportCancel) throw new Error('CANCELLED');
+          const t = start + f / fps;
+          await seekAllVideos(scene, t);
+          FM.renderScene(projCtx, scene, t);
+          outCtx.clearRect(0, 0, outW, outH);
+          outCtx.drawImage(projCanvas, 0, 0, outW, outH);
+          const blob = await new Promise(res => outCanvas.toBlob(res, 'image/png'));
+          const buf = new Uint8Array(await blob.arrayBuffer());
+          const idx = String(f).padStart(4, '0');
+          zip.add(base + '_' + idx + '.png', buf);
+          if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'frames');
+        }
+        const zipBlob = zip.finish();
+        download(zipBlob, base + '_frames.zip');
+      } finally {
+        if (transparent) P.background = savedBg;
+        exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        FM._exporting = false;
+      }
+    },
   };
 })(window.FM);

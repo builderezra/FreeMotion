@@ -42,7 +42,12 @@ NOT add a "you still need to push" reminder.
    `FM.audioReact.openSheet(layer)`. Entry point = "Audio → keyframes…" in inspector vol-tools. #4 audio-drive
    reads `FM.audioEnvelope`. Band cache = `m._audioBandCache` (underscore, unsaved).
 2. **Trim Paths + animated/dashed strokes + Repeater** — stroke draw-on (path length + dashoffset),
-   marching dashes, shape repeater with per-copy transform. — STATUS: PENDING
+   marching dashes, shape repeater with per-copy transform. — STATUS: DONE (v3.38, commit c4d376f).
+   `layer.trimPath{enabled,start,end,offset}`, `layer.stroke.dash{enabled,length,gap,offset}`,
+   `layer.repeater{enabled,copies,offsetX,offsetY,rotation,scale,opacity,anchorX,anchorY}`. Compositor:
+   `shapeOutlineLenPx` = measuring-context proxy over `FM.traceShapePath`. In `FM.animatedProps` +
+   `storage.sanitizeTrimRepeater`. Shapes only. KNOWN: multi-subpath (ring) trim fraction approximate
+   (per-subpath setLineDash), monotonic + reaches full — acceptable.
 3. **Transparent + GIF + image-sequence export** — self-written GIF encoder (no dep), PNG/frame
    sequence in a zip, transparent frames; true alpha video is browser-flaky, note it. — STATUS: PENDING
 4. **Behaviors (expressions, packaged)** — property modifiers: Wiggle / Loop / Bounce-Overshoot /

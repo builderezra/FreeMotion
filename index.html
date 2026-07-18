@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=189">
+<link rel="stylesheet" href="styles.css?v=190">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.38</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.39</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -218,6 +218,13 @@
   <div id="export-dialog" class="hidden">
     <div class="export-card">
       <div class="export-title">Export video</div>
+      <label class="field"><span>Format</span>
+        <select id="exp-format">
+          <option value="mp4">MP4 video</option>
+          <option value="gif">Animated GIF</option>
+          <option value="frames">PNG frames (ZIP)</option>
+        </select>
+      </label>
       <label class="field"><span>Resolution</span>
         <select id="exp-res"><!-- options built per-project in showExportDialog (named presets + sizes) --></select>
       </label>
@@ -248,6 +255,10 @@
       <label class="field"><span>Hide other layers (export just this clip)</span>
         <input type="checkbox" id="exp-solo-clip">
       </label>
+      <label class="field" id="exp-transparent-field"><span>Transparent background</span>
+        <input type="checkbox" id="exp-transparent">
+      </label>
+      <div class="export-note hidden" id="exp-gif-note">GIF caps size (max 640px) and colours (256 per frame).</div>
       <div class="dialog-actions">
         <button id="exp-cancel" class="btn">Cancel</button>
         <button id="exp-go" class="btn btn-accent">Export MP4</button>
@@ -322,12 +333,14 @@
   <script src="js/storage.js?v=74"></script>
   <script src="js/home.js?v=11"></script>
   <script src="js/graph-editor.js?v=107"></script>
-  <script src="js/exporter.js?v=84"></script>
+  <script src="js/gif-encode.js?v=1"></script>
+  <script src="js/zip-write.js?v=1"></script>
+  <script src="js/exporter.js?v=86"></script>
   <script src="js/sample.js?v=9"></script>
   <script src="js/contextmenu.js?v=37"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=159"></script>
+  <script src="js/app.js?v=160"></script>
   <script src="js/audio-tools.js?v=3"></script>
   <script src="js/audio-react.js?v=1"></script>
   <script src="js/mobile.js?v=21"></script>

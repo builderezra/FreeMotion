@@ -1353,9 +1353,25 @@ window.FM = window.FM || {};
     }
     const soloCb = document.getElementById('exp-solo-clip');
     if (soloCb) { if (!selLayer) soloCb.checked = false; soloCb.disabled = !selLayer; }
+    syncExportFormat();
     document.getElementById('export-dialog').classList.remove('hidden');
   }
   function hideExportDialog() { document.getElementById('export-dialog').classList.add('hidden'); }
+
+  // Format picker → button label + transparent toggle + GIF note. MP4 can't carry alpha, so the
+  // transparent checkbox is only available (and only shown) for GIF / PNG frames.
+  function syncExportFormat() {
+    const fmt = (document.getElementById('exp-format') || {}).value || 'mp4';
+    const alphaOk = fmt === 'gif' || fmt === 'frames';
+    const tField = document.getElementById('exp-transparent-field');
+    const tCb = document.getElementById('exp-transparent');
+    if (tField) tField.classList.toggle('hidden', !alphaOk);
+    if (tCb) { tCb.disabled = !alphaOk; if (!alphaOk) tCb.checked = false; }
+    const note = document.getElementById('exp-gif-note');
+    if (note) note.classList.toggle('hidden', fmt !== 'gif');
+    const go = document.getElementById('exp-go');
+    if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames' : 'Export MP4');
+  }
 
   async function runExport() {
     hideExportDialog();
@@ -1393,21 +1409,30 @@ window.FM = window.FM || {};
       selLayer.solo = true;
       if (selLayer.type === 'group' && FM.groupDescendants) FM.groupDescendants(selLayer.id).forEach(l => { l.solo = true; });
     }
+    const fmt = (document.getElementById('exp-format') || {}).value || 'mp4';
+    const tCb = document.getElementById('exp-transparent');
+    const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));
     try {
       const expName = (FM.scene.project.name || 'freemotion-export').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'freemotion-export';
-      await FM.exporter.run({
-        scale, fps, bitrate, name: expName, from, to,
-        onProgress(p, what) {
-          bar.style.width = Math.round(p * 100) + '%';
-          status.textContent = 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
-        },
-      });
+      const onProgress = (p, what) => {
+        bar.style.width = Math.round(p * 100) + '%';
+        status.textContent = 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
+      };
+      if (fmt === 'gif') {
+        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, onProgress });
+      } else if (fmt === 'frames') {
+        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', onProgress });
+      } else {
+        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, onProgress });
+      }
       status.textContent = 'Done — saved to your Downloads.';
       setTimeout(() => overlay.classList.add('hidden'), 900);
     } catch (e) {
       overlay.classList.add('hidden');
       if (e.message === 'NO_WEBCODECS') alert('Export needs the WebCodecs video encoder. Please open FreeMotion in Google Chrome.');
       else if (e.message === 'CANCELLED') { /* silent */ }
+      else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
+      else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
       else { console.error(e); alert('Export failed: ' + e.message); }
     } finally {
       if (soloRestore) { soloRestore.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); }
@@ -1875,6 +1900,7 @@ window.FM = window.FM || {};
     // export dialog
     document.getElementById('exp-cancel').addEventListener('click', hideExportDialog);
     document.getElementById('exp-go').addEventListener('click', runExport);
+    { const ef = document.getElementById('exp-format'); if (ef) ef.addEventListener('change', syncExportFormat); }
     document.getElementById('export-cancel').addEventListener('click', () => { FM._exportCancel = true; });
 
     // drag + drop
