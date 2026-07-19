@@ -761,6 +761,52 @@ window.FM = window.FM || {};
     ctx.restore();
   }
 
+  // Pen masks (layer.masks): a reveal window in PROJECT/CANVAS pixel space applied to the layer's
+  // final rasterized plate (frame space — NOT the layer's local transform space). Modeled on
+  // drawFeatheredMaskLayer: render the layer to an offscreen plate (pen masks removed to avoid
+  // recursion; legacy layer.mask + effects + motion blur KEPT so they bake in FIRST — legacy before
+  // pen, per contract), keep only the pixels inside FM.buildMaskAlpha's coverage (destination-in),
+  // then blit at the layer's real opacity + blend. A layer with no enabled pen mask never reaches
+  // here (the drawLayer guard skips it), so byte-identical for legacy projects.
+  function hasPenMask(layer) {
+    return typeof FM.buildMaskAlpha === 'function' && layer.masks && layer.masks.length &&
+      layer.masks.some(function (m) { return m && m.enabled; });
+  }
+  let _penMaskCv = null;
+  function drawPenMaskLayer(ctx, layer, t, scene) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = P.width, H = P.height;
+    let maskCanvas = null;
+    try { maskCanvas = FM.buildMaskAlpha(layer, t, W, H); } catch (e) { maskCanvas = null; }
+    // No drawable coverage (all masks empty / off) → render the layer as if it had none.
+    if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: null }), t, scene); return; }
+    if (!_penMaskCv) _penMaskCv = document.createElement('canvas');
+    const off = _penMaskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
+    const octx = off.getContext('2d');
+    octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
+    octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
+    // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
+    const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    drawLayer(octx, tmp, t, scene);
+    // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
+    octx.save();
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.globalAlpha = 1; octx.globalCompositeOperation = 'destination-in'; octx.filter = 'none';
+    try { octx.drawImage(maskCanvas, 0, 0); } catch (e) {}
+    octx.restore();
+    octx.globalCompositeOperation = 'source-over';
+    // 3) blit onto the main canvas with the layer's real opacity + blend
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    try { ctx.drawImage(off, 0, 0); } catch (e) {}
+    ctx.restore();
+  }
+
   // Motion blur: average K sub-frame renders across the shutter window. A moving/rotating layer
   // smears along its motion; a static layer is unchanged. Each sample draws at 1/K opacity.
   // NOTE: this blurs the layer's TRANSFORM motion (pan/scale/rotate). It does NOT smear a video
@@ -3151,6 +3197,10 @@ window.FM = window.FM || {};
       ctx.restore();
       return;
     }
+    // Pen masks (layer.masks) wrap the layer's whole rasterized plate — outermost of the per-layer
+    // passes (effects / motion blur / legacy mask all bake into the plate first). Checked here so a
+    // layer WITH pen masks routes through the offscreen path; a layer WITHOUT is untouched below.
+    if (scene && hasPenMask(layer)) { drawPenMaskLayer(ctx, layer, t, scene); return; }
     // Per-pixel post-process effects compose in ARRAY ORDER: the last one in the stack is the
     // outermost pass, rendered over a clean copy of the layer with that effect removed (recursing
     // inward through the rest). So effect[0] is applied first (innermost), effect[n] last (outermost).
@@ -3570,6 +3620,13 @@ window.FM = window.FM || {};
         a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, W, H);    // upscale → blocky
         a.imageSmoothingEnabled = true;
       }
+    }
+    // A pen mask on an ADJUSTMENT layer makes it a LOCAL grade: keep only the masked region of the graded
+    // snapshot, so the ungraded frame below shows through everywhere else. drawLayer's pen-mask branch never
+    // runs for adjustments (they return early and grade via this path), so it's applied here on the snapshot.
+    if (scene && typeof hasPenMask === 'function' && hasPenMask(layer)) {
+      const mc = FM.buildMaskAlpha(layer, t, W, H);
+      if (mc) { a.globalCompositeOperation = 'destination-in'; try { a.drawImage(mc, 0, 0); } catch (e) {} a.globalCompositeOperation = 'source-over'; }
     }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);

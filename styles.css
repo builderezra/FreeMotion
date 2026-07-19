@@ -1658,3 +1658,14 @@ body.drawing #select-box { display: none !important; }
 .be-pick-btn:hover { border-color: var(--accent); }
 /* Audio-drive band picker reuses the effects segment button (~30px) — bump it to the 40px touch minimum. */
 .be-row .fx-seg-btn { min-height: 40px; padding: 11px 4px; }
+
+/* ===== Pen masks (layer.masks) — reveal windows under Blending & Opacity ===== */
+.mask-block { margin-top: 6px; }
+.mask-item { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; margin: 8px 0; background: var(--panel-2); }
+.mask-item.mask-off { opacity: .55; }
+.mask-item-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.mask-item-head .fx-icon-btn, .mask-item-head .kf-btn { width: 40px; height: 40px; }   /* 40px tap targets on phone */
+.mask-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.mask-edit-btn { width: 100%; min-height: 40px; margin-top: 8px; padding: 10px; background: var(--panel-3); border: 1px solid var(--line); border-radius: 9px; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; }
+.mask-edit-btn:hover { border-color: var(--accent); }
+.mask-item .seg-btn { min-height: 40px; }

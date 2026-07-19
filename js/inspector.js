@@ -847,6 +847,82 @@ window.FM = window.FM || {};
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>';
   }
 
+  // ===== PEN MASKS (layer.masks) — a reveal window drawn on the layer plate in project pixel space =====
+  // A NEW, separate system from the legacy single layer.mask. Absent/empty layer.masks renders exactly as
+  // today. Only pixel-rasterizing layers get the UI (camera/null/group are excluded — a group flattens
+  // separately). The path is EITHER a static pts array or an animated { kf } so a moving reveal keyframes.
+  function maskableLayer(layer) { return ['shape', 'text', 'image', 'video', 'adjustment'].indexOf(layer.type) >= 0; }
+  function clonePts(pts) { return (Array.isArray(pts) ? pts : []).map(p => Array.isArray(p) ? p.slice() : p); }
+  // Fallback mask object matching the CONTRACT default shape, used only if FM.masks.make is not loaded yet.
+  function makeMaskFallback() {
+    const id = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    return { id: id, enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [] };
+  }
+  // Path keyframe toggle. Seeds/inserts vertex-safe pts via FM.evalMaskPath (numeric FM.evalProp would NaN
+  // an array), so it never relies on lerping a pts array. Removing the last kf reverts to a static path.
+  function toggleMaskPathKf(mask, t) {
+    const p = mask.path;
+    if (!FM.isAnimated(p)) {
+      const pts = FM.evalMaskPath ? FM.evalMaskPath(mask, t) : (Array.isArray(p) ? p : []);
+      mask.path = { kf: [{ t: t, v: clonePts(pts), e: 'linear' }] };
+      return;
+    }
+    const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
+    if (hit) { p.kf = p.kf.filter(k => k !== hit); if (!p.kf.length) mask.path = clonePts(hit.v); return; }
+    const pts = FM.evalMaskPath ? FM.evalMaskPath(mask, t) : clonePts(p.kf[0] && p.kf[0].v);
+    p.kf.push({ t: t, v: clonePts(pts), e: 'linear' }); p.kf.sort((a, b) => a.t - b.t);
+  }
+  function afterMasks(layer) {
+    if (layer.masks && !layer.masks.length) delete layer.masks;   // empty === absent → stay byte-for-byte diff-free
+    commitH(); FM.requestRender(); FM.inspector.refresh(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+  }
+  function masksBlock(layer) {
+    const wrap = el('div', 'mask-block');
+    wrap.appendChild(el('div', 'insp-sub-label', 'Masks'));
+    const masks = Array.isArray(layer.masks) ? layer.masks : [];
+    if (!masks.length) wrap.appendChild(el('div', 'insp-hint', 'Draw a shape to reveal part of this layer. Add masks to combine, invert or feather the reveal.'));
+    masks.forEach((mask, idx) => {
+      const item = el('div', 'mask-item' + (mask.enabled === false ? ' mask-off' : ''));
+      const head = el('div', 'mask-item-head');
+      const eye = el('button', 'fx-icon-btn fx-eye' + (mask.enabled === false ? ' off' : ''));
+      eye.title = mask.enabled === false ? 'Mask off — enable' : 'Mask on — disable';
+      eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      eye.addEventListener('click', () => { mask.enabled = mask.enabled === false; afterMasks(layer); });
+      head.appendChild(eye);
+      head.appendChild(el('span', 'mask-name', 'Mask ' + (idx + 1)));
+      head.appendChild(el('span', 'fx-spacer'));
+      const anim = FM.isAnimated(mask.path);
+      const here = anim && FM.hasKeyframeAt(mask.path, FM.time);
+      const kf = el('button', 'kf-btn' + (anim ? ' active' : '') + (here ? ' here' : ''), '◆');
+      kf.title = anim ? 'Path keyframe at playhead (click to remove)' : 'Animate the mask path — adds a keyframe at the playhead';
+      kf.addEventListener('click', () => { toggleMaskPathKf(mask, FM.time); afterMasks(layer); });
+      head.appendChild(kf);
+      const del = el('button', 'fx-icon-btn fx-del'); del.title = 'Delete mask';
+      del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
+      del.addEventListener('click', () => { masks.splice(idx, 1); afterMasks(layer); });
+      head.appendChild(del);
+      item.appendChild(head);
+      item.appendChild(segRow('Mode', [['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect']], () => mask.mode || 'add', v => { mask.mode = v; }));
+      item.appendChild(rangeRow('Feather', () => mask.feather || 0, v => { mask.feather = Math.max(0, v); }, 0, 200, 1));
+      item.appendChild(rangeRow('Opacity', () => Math.round((mask.opacity != null ? mask.opacity : 1) * 100), v => { mask.opacity = Math.max(0, Math.min(1, v / 100)); }, 0, 100, 1));
+      item.appendChild(checkRow('Invert', !!mask.invert, v => { mask.invert = v; FM.requestRender(); }));
+      const edit = el('button', 'mask-edit-btn', 'Edit path');
+      edit.addEventListener('click', () => { if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, mask.id); else if (FM.toast) FM.toast('Mask editor unavailable'); });
+      item.appendChild(edit);
+      wrap.appendChild(item);
+    });
+    const add = el('button', 'fx-add-btn', '+ Add mask');
+    add.addEventListener('click', () => {
+      if (!Array.isArray(layer.masks)) layer.masks = [];
+      const m = (FM.masks && FM.masks.make) ? FM.masks.make('add') : makeMaskFallback();
+      layer.masks.push(m);
+      commitH(); FM.inspector.refresh(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
+    });
+    wrap.appendChild(add);
+    return wrap;
+  }
+
   // ===== Paste Style (Alight Motion) — copy a layer, then apply chosen style aspects to another. =====
   const STYLE_CATS = [
     { key: 'color',     label: 'Color & Fill',       icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
@@ -2048,6 +2124,7 @@ window.FM = window.FM || {};
         }
         body.appendChild(row);
       });
+      if (maskableLayer(layer)) body.appendChild(masksBlock(layer));   // pen masks live under Blending (camera/null/group excluded)
     } else if (key === 'presets') {
       body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
       const pwrap = el('div', 'preset-wrap');

@@ -239,6 +239,7 @@ window.FM = window.FM || {};
     if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => { if (isAnimated(layer.trimPath[k])) out.push(layer.trimPath[k]); });   // stroke draw-on
     if (layer.stroke && layer.stroke.dash && isAnimated(layer.stroke.dash.offset)) out.push(layer.stroke.dash.offset);   // marching-ants
     if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => { if (isAnimated(layer.repeater[k])) out.push(layer.repeater[k]); });   // shape repeater
+    if (layer.masks) layer.masks.forEach(m => { if (m && isAnimated(m.path)) out.push(m.path); });   // pen-mask path (moving reveal / roto) — its keyframes show on the clip and retime with it
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;

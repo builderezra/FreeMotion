@@ -330,12 +330,77 @@ window.FM = window.FM || {};
       return { type: def.type, prop: b.prop, enabled: b.enabled !== false, params: params };
     }).filter(Boolean);
   }
+  // Pen masks (layer.masks — a NEW array, separate from the legacy layer.mask). Each mask's path is
+  // traced into a canvas path and its points are lerped vertex-by-vertex, so a NaN/Infinity coord or a
+  // runaway point/keyframe count would throw or hang the render. Rebuild each mask from the CONTRACT
+  // schema, keeping ONLY known keys — same untrusted-file discipline as audioFx/trimPath/behaviors above.
+  // COORDINATE SPACE: points are project/canvas pixels (0..width, 0..height), clamped to a sane range.
+  const MASK_MAX = 24, MASK_MAX_PTS = 2000, MASK_MAX_KF = 200;
+  // own-property whitelist: a bare MASK_MODES[m.mode] lookup would let 'constructor'/'toString' pass.
+  const MASK_MODES = { add: 1, subtract: 1, intersect: 1 };
+  // A point list -> a clean pts array ([x,y] corner or [x,y,1] smooth). null only when v is not an array
+  // (so a malformed path drops the mask); an empty-but-array path survives as [] (a freshly-drawn mask).
+  function safeMaskPts(v) {
+    if (!Array.isArray(v)) return null;
+    const pts = [];
+    for (let i = 0; i < v.length && pts.length < MASK_MAX_PTS; i++) {
+      const p = v[i];
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const x = +p[0], y = +p[1];
+      if (!isFinite(x) || !isFinite(y)) continue;
+      const pt = [Math.max(-1e5, Math.min(1e5, x)), Math.max(-1e5, Math.min(1e5, y))];
+      if (p[2]) pt.push(1);   // per-point smooth flag preserved (FM.buildSubPath reads pts[i][2])
+      pts.push(pt);
+    }
+    return pts;
+  }
+  // path is EITHER a static pts array OR an animated prop { kf:[{t,v:ptsArray,e}] } so the WHOLE path can
+  // be keyframed. Returns null (drop the mask) when neither shape validates.
+  function safeMaskPath(path) {
+    if (path && typeof path === 'object' && !Array.isArray(path) && Array.isArray(path.kf)) {
+      const kf = [];
+      path.kf.slice(0, MASK_MAX_KF).forEach(k => {
+        if (!k || typeof k !== 'object') return;
+        const t = +k.t;
+        if (!isFinite(t) || t < 0) return;
+        const pts = safeMaskPts(k.v);
+        if (!pts || !pts.length) return;   // a keyframe with no valid vertices contributes nothing → drop it
+        kf.push({ t: Math.min(3600, t), v: pts, e: easeOk(k.e) ? k.e : 'linear' });
+      });
+      if (!kf.length) return null;
+      kf.sort((a, b) => a.t - b.t);
+      return { kf: kf };
+    }
+    return safeMaskPts(path);   // static path (possibly []); null when not an array
+  }
+  function sanitizeMasks(l) {
+    if (l.masks == null) return;
+    if (!Array.isArray(l.masks)) { delete l.masks; return; }
+    l.masks = l.masks.slice(0, MASK_MAX).map(m => {
+      if (!m || typeof m !== 'object') return null;
+      const path = safeMaskPath(m.path);
+      if (path == null) return null;   // malformed path → drop the whole mask
+      let feather = +m.feather; if (!isFinite(feather)) feather = 0;
+      let opacity = +m.opacity; if (!isFinite(opacity)) opacity = 1;
+      return {
+        id: (typeof m.id === 'string' && m.id && m.id.length <= 64) ? m.id : newId('mask'),
+        enabled: m.enabled !== false,                                   // absence stays ON (audioFx convention)
+        mode: hasOwn(MASK_MODES, m.mode) ? m.mode : 'add',
+        feather: Math.max(0, Math.min(500, feather)),
+        opacity: Math.max(0, Math.min(1, opacity)),
+        invert: m.invert === true,
+        closed: m.closed !== false,
+        path: path,
+      };
+    }).filter(Boolean);
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
       sanitizeAudioFx(l);
       sanitizeTrimRepeater(l);
       sanitizeBehaviors(l);
+      sanitizeMasks(l);
       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
       if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
       if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
