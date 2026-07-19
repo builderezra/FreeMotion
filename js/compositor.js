@@ -712,7 +712,7 @@ window.FM = window.FM || {};
   // BLURRED mask shape over it (destination-in keeps inside / destination-out punches out), and blit.
   let _maskCv = null;
   function drawFeatheredMaskLayer(ctx, layer, t, scene) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
@@ -752,7 +752,7 @@ window.FM = window.FM || {};
   // (per-sub-frame decode would need a full forward frame cache). Transform blur is the common use.
   let _mbCv = null;
   function drawMotionBlur(ctx, layer, t, scene) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const mb = layer.motionBlur;
     const samples = Math.max(2, Math.min(32, Math.round(mb.samples || 8)));
@@ -857,7 +857,7 @@ window.FM = window.FM || {};
   const _pfPool = [];
   let _pfDepth = 0;
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
@@ -1272,7 +1272,7 @@ window.FM = window.FM || {};
   const _wpPool = [];
   let _wpDepth = 0;
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
@@ -1317,7 +1317,7 @@ window.FM = window.FM || {};
   // colour there. `_dispDepth` guards against two maps referencing each other into an infinite loop. ----
   let _dspA = null, _dspB = null, _dspM = null, _dispDepth = 0;
   function drawDisplaceEffect(ctx, layer, t, scene, fx, polar) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
@@ -1490,7 +1490,7 @@ window.FM = window.FM || {};
   // getImageData scan — it was the single most expensive part of running them per frame.
   const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1, motionflow: 1 };
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
@@ -2208,7 +2208,7 @@ window.FM = window.FM || {};
   // sampling the RED channel shifted +d and the BLUE channel shifted -d → coloured edge fringes.
   let _rgbA = null, _rgbB = null;
   function drawRgbSplit(ctx, layer, t, scene, d, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, dd = Math.round(Math.max(0, d));
@@ -2249,7 +2249,7 @@ window.FM = window.FM || {};
   // Posterize: quantize each colour channel to N levels (banded / poster look).
   let _psA = null, _psB = null;
   function drawPosterize(ctx, layer, t, scene, levels, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, q = Math.max(2, Math.round(levels));
@@ -2279,7 +2279,7 @@ window.FM = window.FM || {};
   // with the original by `amount` — a quick duotone/colour-wash look.
   let _tiA = null, _tiB = null;
   function drawTint(ctx, layer, t, scene, amount, colorHex, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, am = clamp01(amount), C = hexToRGB(colorHex || '#ff3366');
@@ -2314,7 +2314,7 @@ window.FM = window.FM || {};
   // for a duotone. Alpha is preserved so only the visible shape is split.
   let _thA = null, _thB = null;
   function drawThreshold(ctx, layer, t, scene, level, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, cut = clamp01(level) * 255;
@@ -2347,7 +2347,7 @@ window.FM = window.FM || {};
   // classic print/Spotify look — distinct from Tint (which keeps the original toward one colour).
   let _duA = null, _duB = null;
   function drawDuotone(ctx, layer, t, scene, amount, shadowHex, hiHex, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, am = clamp01(amount), A = hexToRGB(shadowHex || '#241a52'), B = hexToRGB(hiHex || '#ff9e5e');
@@ -2381,7 +2381,7 @@ window.FM = window.FM || {};
   // Mirror / kaleidoscope: render the layer clean, then reflect one half onto the other.
   let _miA = null;
   function drawMirror(ctx, layer, t, scene, mode, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height; mode = Math.round(mode) || 0;
@@ -2417,7 +2417,7 @@ window.FM = window.FM || {};
   // Pixelate / mosaic: render the layer clean, downscale (averaging) then upscale with smoothing off.
   let _pxA = null, _pxS = null;
   function drawPixelate(ctx, layer, t, scene, size, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
@@ -2540,10 +2540,13 @@ window.FM = window.FM || {};
   // / filter / shadow / mask-clip — the caller owns those.
   function applyLayerTransform(ctx, layer, t, scene) {
     const tr = layer.transform;
-    const x = FM.evalProp(tr.x, t);
-    const y = FM.evalProp(tr.y, t);
-    const scale = FM.evalProp(tr.scale, t);
-    const rot = FM.evalProp(tr.rotation, t) * Math.PI / 180;
+    // Behaviors (wiggle/oscillate/bounce/follow/audio) modify the base x/y/scale/rotation scalars.
+    // Guarded: absent script or no behaviors on a prop returns the raw evalProp unchanged (byte-for-byte).
+    const _bv = FM.behaviorValue;
+    const x = _bv ? _bv(layer, "x", FM.evalProp(tr.x, t), t) : FM.evalProp(tr.x, t);
+    const y = _bv ? _bv(layer, "y", FM.evalProp(tr.y, t), t) : FM.evalProp(tr.y, t);
+    const scale = _bv ? _bv(layer, "scale", FM.evalProp(tr.scale, t), t) : FM.evalProp(tr.scale, t);
+    const rot = (_bv ? _bv(layer, "rotation", FM.evalProp(tr.rotation, t), t) : FM.evalProp(tr.rotation, t)) * Math.PI / 180;
     // Non-uniform scale (W/H), skew (X/Y), and a real Z via planar perspective about the project
     // centre. All additive: absent fields fall back so existing projects render identically.
     const _P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
@@ -2923,7 +2926,7 @@ window.FM = window.FM || {};
   // moving/zooming the whole layer to reframe it does NOT.
   let _mbcA = null, _mbcB = null;
   function drawContentMotionBlur(ctx, layer, t, scene, fx) {
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
@@ -3052,7 +3055,7 @@ window.FM = window.FM || {};
     if (scene && layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0) { drawFeatheredMaskLayer(ctx, layer, t, scene); return; }
 
     const tr = layer.transform;
-    const opacity = clamp01(FM.evalProp(tr.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(tr.opacity, t)));
     if (opacity <= 0) return;
 
     ctx.save();
@@ -3367,7 +3370,7 @@ window.FM = window.FM || {};
           // Flat source-over overlay regardless of blend mode — but it FOLLOWS the layer's opacity
           // (a fading clip used to leave its vignette ring floating at full strength).
           ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = clamp01(FM.evalProp(layer.transform.opacity, t));
+          ctx.globalAlpha = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
           const gx = -cw * tr.anchorX + cw / 2, gy = -ch * tr.anchorY + ch / 2, rad = Math.hypot(cw, ch) / 2;
           const grad = ctx.createRadialGradient(gx, gy, rad * 0.45, gx, gy, rad);
           grad.addColorStop(0, 'rgba(0,0,0,0)');
@@ -3423,7 +3426,7 @@ window.FM = window.FM || {};
     const ppfx = (layer.effects || []).filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
     const pixFx = (layer.effects || []).find(e => e.type === 'pixelate' && e.enabled !== false);
     if (!hasCss && !ppfx.length && !pixFx) return;
-    const opacity = clamp01(FM.evalProp(layer.transform.opacity, t));
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = scene.project, W = P.width, H = P.height;
     if (!_adjCv) _adjCv = document.createElement('canvas');

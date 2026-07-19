@@ -284,11 +284,58 @@ window.FM = window.FM || {};
       };
     }
   }
+  // An imported layer.behaviors entry drives the per-frame transform resolver (FM.behaviorValue): .type is a
+  // builder key into FM.behaviorRegistry, .prop selects which transform channel it rewrites, and .params reach
+  // the math every frame. Nothing from the file is trusted — .type is whitelisted OWN-PROPERTY against the
+  // registry (a bare registry[type] would let 'constructor'/'toString' walk the prototype chain and pass), the
+  // resolved def must round-trip its own type, .prop must be a real transform channel the type declares, and
+  // .params are REBUILT from the registry schema (file numbers only after a range check; id refs kept only if
+  // plain strings; band whitelisted). Unknown + leading-underscore keys can't survive the rebuild.
+  const BEH_MAX = 24;
+  const BEHAVIOR_PROPS = ['x', 'y', 'scale', 'rotation', 'opacity'];
+  const BEHAVIOR_BANDS = ['overall', 'bass', 'mid', 'treble'];
+  function sanitizeBehaviors(l) {
+    if (l.behaviors == null) return;
+    // No registry (script failed to load) = no way to whitelist a type — drop rather than trust the file.
+    if (!Array.isArray(l.behaviors) || !FM.behaviorRegistry || typeof FM.behaviorRegistry.get !== 'function') { delete l.behaviors; return; }
+    l.behaviors = l.behaviors.slice(0, BEH_MAX).map(b => {
+      if (!b || typeof b !== 'object') return null;
+      if (typeof b.type !== 'string') return null;
+      // def.type must equal the requested type: a get() that resolved a prototype key ('toString') returns a
+      // def whose own .type wouldn't match, so the round-trip is the own-property guarantee.
+      const def = FM.behaviorRegistry.get(b.type);
+      if (!def || def.type !== b.type) return null;
+      // prop must be a real behaviour-able transform channel AND one this behaviour declares ("*" = any).
+      const allowed = Array.isArray(def.props) ? def.props : [];
+      if (BEHAVIOR_PROPS.indexOf(b.prop) < 0) return null;
+      if (allowed.indexOf('*') < 0 && allowed.indexOf(b.prop) < 0) return null;
+      const schema = typeof FM.behaviorRegistry.paramsOf === 'function' ? (FM.behaviorRegistry.paramsOf(b.type) || []) : [];
+      const params = {};
+      schema.forEach(pd => {
+        if (!pd || typeof pd.key !== 'string') return;
+        const v = b.params && typeof b.params === 'object' ? b.params[pd.key] : undefined;
+        if (typeof pd.def === 'string') {
+          // string param: a layer-id ref (kept only if a plain, length-capped string) or an enum like band.
+          const opts = Array.isArray(pd.options) ? pd.options : (pd.key === 'band' ? BEHAVIOR_BANDS : null);
+          if (opts) params[pd.key] = (typeof v === 'string' && opts.indexOf(v) >= 0) ? v : pd.def;
+          else params[pd.key] = (typeof v === 'string' && v.length <= 64) ? v : pd.def;
+        } else {
+          if (typeof v === 'number' && isFinite(v)) {
+            const min = isFinite(pd.min) ? pd.min : -Infinity, max = isFinite(pd.max) ? pd.max : Infinity;
+            params[pd.key] = Math.max(min, Math.min(max, v));
+          } else params[pd.key] = pd.def;
+        }
+      });
+      // enabled: absence stays ON (matches makeInstance's enabled:true and the audioFx convention).
+      return { type: def.type, prop: b.prop, enabled: b.enabled !== false, params: params };
+    }).filter(Boolean);
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
       sanitizeAudioFx(l);
       sanitizeTrimRepeater(l);
+      sanitizeBehaviors(l);
       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
       if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
       if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
@@ -377,6 +424,13 @@ window.FM = window.FM || {};
     const out = JSON.parse(JSON.stringify(layers, FM.jsonReplacer));
     out.forEach(l => { map[l.id] = newId('l'); l.id = map[l.id]; });
     out.forEach(l => { if (l.parent) l.parent = map[l.parent] || null; });
+    // Behaviors carry CROSS-LAYER id refs (follow.targetId, audio.sourceId). Remap them through the same
+    // table or a follow/audio-drive silently dies in every shared/imported copy (the id points at the
+    // source project's layer). map is null-proto, so a bogus id can't resolve to a prototype key.
+    out.forEach(l => { if (Array.isArray(l.behaviors)) l.behaviors.forEach(b => { if (b && b.params) {
+      if (b.params.targetId) b.params.targetId = map[b.params.targetId] || '';
+      if (b.params.sourceId) b.params.sourceId = map[b.params.sourceId] || '';
+    } }); });
     return { layers: out, map };
   }
   // Snapshot layers + their in-memory media Files into a storable pack.

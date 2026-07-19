@@ -167,6 +167,66 @@ window.FM = window.FM || {};
     return { fps: fps, band: band, times: times, values: values, clipStart: clipStart, clipDur: clipDur };
   };
 
+  // ---- synchronous accessor (for the live audio-drive behavior) ---------------------------------
+
+  // A live behavior evaluates per frame and cannot await, so it needs the envelope NOW or not at all.
+  // Signature captures every opt that changes the computed envelope (fps/band/gain/attack/release/floor);
+  // two behaviors with the same settings share one cached envelope. Leading '_' => never serialized.
+  function envSig(opts) {
+    opts = opts || {};
+    const P = FM.scene && FM.scene.project;
+    const fps = Math.max(1, opts.fps || (P && P.fps) || 30);
+    const band = BANDS[opts.band] ? opts.band : 'overall';
+    const gain = (opts.gain != null) ? opts.gain : 1;
+    const attack = (opts.attack != null) ? opts.attack : 0.02;
+    const release = (opts.release != null) ? opts.release : 0.15;
+    const floor = Math.max(0, Math.min(0.98, opts.floor || 0));
+    return fps + '|' + band + '|' + gain + '|' + attack + '|' + release + '|' + floor;
+  }
+
+  // Return the cached envelope object for (layer,opts) if already computed, else return null and kick
+  // off FM.audioEnvelope in the background (fire-and-forget) so a later frame gets it. A no-audio clip
+  // caches null (via `sig in cache`) so it isn't re-decoded every frame. Allocation-free on the hit path.
+  FM.audioEnvelopeSync = function (layer, opts) {
+    if (!layer) return null;
+    const m = FM.media && FM.media.get(layer.id);
+    if (!m) return null;
+    const sig = envSig(opts);
+    const cache = m._audioEnvCache;
+    if (cache && (sig in cache)) return cache[sig];
+    if (!m._audioEnvPending) m._audioEnvPending = {};
+    if (!m._audioEnvPending[sig]) {
+      m._audioEnvPending[sig] = 1;
+      Promise.resolve().then(function () { return FM.audioEnvelope(layer, opts); }).then(function (env) {
+        if (!m._audioEnvCache) m._audioEnvCache = {};
+        m._audioEnvCache[sig] = env || null;   // cache null too — a clip with no audio must not re-decode forever
+        delete m._audioEnvPending[sig];
+        if (env && FM.requestRender) FM.requestRender();
+      }).catch(function () { if (m._audioEnvPending) delete m._audioEnvPending[sig]; });
+    }
+    return null;
+  };
+
+  // Sample a precomputed envelope object at SCENE time t: linear-interp between frames, 0 outside the
+  // clip span. Frames are uniform (times[i] = clipStart + i/fps), so the index is O(1) — no allocation.
+  FM.audioEnvelopeSampleAt = function (env, t) {
+    if (!env) return 0;
+    const cs = env.clipStart || 0, cd = env.clipDur || 0;
+    if (!(t >= cs) || t > cs + cd) return 0;
+    const vals = env.values;
+    const n = vals ? vals.length : 0;
+    if (n === 0) return 0;
+    if (n === 1) { const v0 = vals[0]; return v0 >= 0 ? v0 : 0; }
+    const fps = env.fps || 30;
+    const f = (t - cs) * fps;   // fractional frame index
+    if (f <= 0) { const v0 = vals[0]; return v0 >= 0 ? v0 : 0; }
+    if (f >= n - 1) { const vn = vals[n - 1]; return vn >= 0 ? vn : 0; }
+    const i = f | 0, frac = f - i;
+    const a = vals[i], b = vals[i + 1];
+    const v = a + (b - a) * frac;
+    return v >= 0 ? v : 0;
+  };
+
   // ---- RDP (single channel): mark which sample indices to KEEP as keyframes ----------------------
   function rdpKeep(times, vals, keep, tol) {
     const stack = [[0, vals.length - 1]];

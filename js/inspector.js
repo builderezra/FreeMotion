@@ -1675,6 +1675,136 @@ window.FM = window.FM || {};
     return wrap;
   }
 
+  // ===== Behaviors — procedural modifiers stacked onto a transform prop (wiggle/oscillate/bounce/
+  // follow/audio). Data lives on layer.behaviors; the resolver is js/behaviors.js. Absent/empty =
+  // today's render, so this block renders nothing until behaviors.js is loaded (diff-free guarantee). =====
+  const BE_PROPS = ['x', 'y', 'scale', 'rotation', 'opacity'];
+  const BE_PROP_LABEL = { x: 'X position', y: 'Y position', scale: 'Scale', rotation: 'Rotation', opacity: 'Opacity' };
+  const BE_DEFAULT_PROP = { wiggle: 'x', oscillate: 'y', bounce: 'scale', follow: 'x', audio: 'scale' };
+  const BE_BANDS = [['overall', 'Overall'], ['bass', 'Bass'], ['mid', 'Mid'], ['treble', 'Treble']];
+  const BE_SPECIAL = { targetId: 1, sourceId: 1, band: 1 };   // rendered as bespoke controls, never as sliders
+
+  function beAllowedProps(def) {
+    const p = def && def.props;
+    if (!p || !p.length || p.indexOf('*') >= 0) return BE_PROPS.slice();
+    return BE_PROPS.filter(k => p.indexOf(k) >= 0);
+  }
+  function beDefaultProp(def) {
+    const allowed = beAllowedProps(def);
+    const pref = BE_DEFAULT_PROP[def.type];
+    return (pref && allowed.indexOf(pref) >= 0) ? pref : allowed[0];
+  }
+  function afterBehavior() { FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); }
+
+  // A layer <select> for follow/audio. videoOnly restricts to video layers (audio source); otherwise
+  // any other visual layer. A stale id (deleted layer) falls back to None.
+  function beLayerSelect(layer, beh, key, label, videoOnly) {
+    const row = el('div', 'prop-row');
+    row.appendChild(el('label', null, label));
+    const sel = document.createElement('select');
+    const none = document.createElement('option'); none.value = ''; none.textContent = videoOnly ? 'None — pick a video' : 'None'; sel.appendChild(none);
+    (FM.scene.layers || []).forEach(l => {
+      if (l.id === layer.id) return;
+      if (videoOnly ? l.type !== 'video' : l.type === 'camera') return;
+      const op = document.createElement('option'); op.value = l.id; op.textContent = l.name || l.type; sel.appendChild(op);
+    });
+    sel.value = beh.params[key] || '';
+    if (sel.selectedIndex < 0) sel.value = '';   // id no longer present → None
+    sel.addEventListener('change', () => { beh.params[key] = sel.value; afterBehavior(); });
+    row.appendChild(sel);
+    return row;
+  }
+
+  // Frequency-band segmented control for the audio behavior (reuses the fx-seg idiom).
+  function beBandSegment(beh) {
+    const row = el('div', 'fx-seg-row');
+    row.appendChild(el('span', 'fx-scrub-label', 'Band'));
+    const seg = el('div', 'fx-seg');
+    const cur = beh.params.band || 'overall';
+    BE_BANDS.forEach(o => {
+      const b = el('button', 'fx-seg-btn' + (cur === o[0] ? ' on' : ''), o[1]);
+      b.addEventListener('click', () => { beh.params.band = o[0]; afterBehavior(); });
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+    return row;
+  }
+
+  function behaviorRow(layer, beh, idx) {
+    const reg = FM.behaviorRegistry;
+    const def = (reg.get && reg.get(beh.type)) || { type: beh.type, label: beh.type, params: [], props: ['*'] };
+    const off = beh.enabled === false;
+    const row = el('div', 'fx-row be-row' + (off ? ' fx-off' : ''));
+    const head = el('div', 'fx-head be-head');
+    const eye = el('button', 'fx-icon-btn fx-eye be-eye' + (off ? ' off' : ''));
+    eye.title = off ? 'Behavior off — enable' : 'Behavior on — disable';
+    eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+    eye.addEventListener('click', () => { beh.enabled = !(beh.enabled !== false); afterBehavior(); });
+    head.appendChild(eye);
+    head.appendChild(el('span', 'fx-name', def.label || beh.type));
+    // target-prop select — which transform channel this behavior drives
+    const allowed = beAllowedProps(def);
+    const psel = document.createElement('select'); psel.className = 'be-prop';
+    allowed.forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = BE_PROP_LABEL[k] || k; if (k === beh.prop) o.selected = true; psel.appendChild(o); });
+    if (allowed.indexOf(beh.prop) < 0) { const o = document.createElement('option'); o.value = beh.prop; o.textContent = BE_PROP_LABEL[beh.prop] || beh.prop; o.selected = true; psel.appendChild(o); }
+    psel.addEventListener('change', () => { beh.prop = psel.value; afterBehavior(); });
+    head.appendChild(psel);
+    head.appendChild(el('span', 'fx-spacer'));
+    const del = el('button', 'fx-icon-btn fx-del be-del'); del.title = 'Delete behavior';
+    del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
+    del.addEventListener('click', () => { (layer.behaviors || []).splice(idx, 1); if (layer.behaviors && !layer.behaviors.length) delete layer.behaviors; afterBehavior(); });
+    head.appendChild(del);
+    row.appendChild(head);
+
+    const body = el('div', 'fx-ed-body');
+    if (!beh.params) beh.params = {};
+    if (beh.type === 'follow') body.appendChild(beLayerSelect(layer, beh, 'targetId', 'Follow layer', false));
+    if (beh.type === 'audio') {
+      body.appendChild(beLayerSelect(layer, beh, 'sourceId', 'Audio source', true));
+      body.appendChild(beBandSegment(beh));
+    }
+    const params = (reg.paramsOf && reg.paramsOf(beh.type)) || def.params || [];
+    params.forEach(p => {
+      if (!p || BE_SPECIAL[p.key]) return;
+      if (typeof p.def !== 'number' || p.min == null || p.max == null) return;   // only numeric params get a slider
+      const dflt = p.def;
+      body.appendChild(rangeRow((p.label || p.key) + (p.unit ? ' (' + p.unit + ')' : ''),
+        () => { const v = beh.params[p.key]; return typeof v === 'number' ? round(v, 3) : dflt; },
+        v => { beh.params[p.key] = v; },
+        p.min, p.max, p.step || 1));
+    });
+    if (!body.childNodes.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+    row.appendChild(body);
+    return row;
+  }
+
+  function behaviorsBlock(layer) {
+    const reg = FM.behaviorRegistry;
+    if (!reg || !reg.all) return null;   // behaviors.js not loaded — render nothing (diff-free)
+    const s = section('Behaviors');
+    const list = el('div', 'fx-list be-list');
+    (layer.behaviors || []).forEach((beh, idx) => { if (beh && beh.type) list.appendChild(behaviorRow(layer, beh, idx)); });
+    s.appendChild(list);
+    if (!(layer.behaviors && layer.behaviors.length)) s.appendChild(el('div', 'insp-hint', 'Add procedural motion: wiggle, oscillate, bounce, follow another layer, or drive from audio.'));
+
+    const add = el('button', 'fx-add-btn', '+ Add behavior');
+    const picker = el('div', 'be-picker'); picker.style.display = 'none';
+    (reg.all() || []).forEach(def => {
+      const b = el('button', 'be-pick-btn', def.label || def.type);
+      b.addEventListener('click', () => {
+        if (!Array.isArray(layer.behaviors)) layer.behaviors = [];
+        const inst = reg.makeInstance ? reg.makeInstance(def.type, beDefaultProp(def)) : { type: def.type, prop: beDefaultProp(def), enabled: true, params: {} };
+        if (inst) layer.behaviors.push(inst);
+        afterBehavior();
+      });
+      picker.appendChild(b);
+    });
+    add.addEventListener('click', () => { picker.style.display = picker.style.display === 'none' ? 'grid' : 'none'; });
+    s.appendChild(add);
+    s.appendChild(picker);
+    return s;
+  }
+
   // ===== Volume panel — keyframeable audio level + easing (AM-style left rail: ◆ + curve) =====
   function volumePanel(layer) {
     if (layer.volume == null) layer.volume = 1;
@@ -1813,6 +1943,11 @@ window.FM = window.FM || {};
     if (key === 'transform') {
       body.appendChild(moveTransformPanel(layer));
       if (layer.type !== 'camera') body.appendChild(parentControl(layer));   // parenting lives with the transform it inherits (the camera ignores a parent) (#11)
+      // Behaviors ride the per-layer transform reads (applyLayerTransform / layerOpacity). A GROUP's own
+      // transform is applied to its children via applyParentChain with RAW evalProp — never through the
+      // resolver — so a group's behaviors would render nothing. Hide the control there rather than ship a
+      // dead switch. (camera has no pixels either.)
+      if (layer.type !== 'camera' && layer.type !== 'group') { const bb = behaviorsBlock(layer); if (bb) body.appendChild(bb); }
     } else if (key === 'volume') {
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {

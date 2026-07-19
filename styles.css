@@ -1646,3 +1646,15 @@ body.drawing #select-box { display: none !important; }
 #export-dialog .field input[type="checkbox"] { width: 20px; height: 20px; margin: 0; cursor: pointer; }
 #export-dialog .field input[type="checkbox"]:disabled { cursor: default; opacity: .5; }
 #export-dialog .field:has(input[type="checkbox"]:disabled) span { color: var(--text-dim); opacity: .55; }
+
+/* ===== Behaviors block (Move & Transform) — procedural transform modifiers ===== */
+.be-list:empty { display: none; }
+.be-head .be-eye, .be-head .be-del { width: 40px; height: 40px; }   /* >=40px tap targets on phone */
+.be-prop { max-width: 140px; height: 40px; padding: 0 8px; background: var(--panel-3); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: 12px; }
+.be-prop:focus { outline: none; border-color: var(--accent); }
+.be-row .prop-row select { min-height: 40px; }
+.be-picker { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.be-pick-btn { min-height: 44px; padding: 10px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; }
+.be-pick-btn:hover { border-color: var(--accent); }
+/* Audio-drive band picker reuses the effects segment button (~30px) — bump it to the 40px touch minimum. */
+.be-row .fx-seg-btn { min-height: 40px; padding: 11px 4px; }
