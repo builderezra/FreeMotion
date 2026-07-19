@@ -55,7 +55,11 @@ NOT add a "you still need to push" reminder.
    GIF caps longest side 640px; runFrames caps 900 frames / 2GB (FRAMES_TOO_BIG). REMINDER: bump ?v AFTER
    the last edit to a file — I cached a stale exporter.js and it hung.
 4. **Behaviors (expressions, packaged)** — property modifiers: Wiggle / Loop / Bounce-Overshoot /
-   Follow (link to another layer/prop) / Audio-drive (reads #1's envelope). Sandbox on import. — STATUS: PENDING
+   Follow (link to another layer/prop) / Audio-drive (reads #1's envelope). Sandbox on import. — STATUS: DONE
+   (v3.40, commit 9731daa). `js/behaviors.js`: FM.behaviorValue(layer,key,base,t) / FM.layerOpacity(layer,t) /
+   FM.behaviorRegistry. Types: wiggle/oscillate/bounce/follow/audio on x/y/scale/rotation/opacity. Hooked in
+   applyLayerTransform + all opacity reads (guarded → diff-free). Loop dropped (keyframe loopMode already does
+   it). FM.audioEnvelopeSync in audio-react.js. reIdLayers remaps follow.targetId/audio.sourceId. Hidden on groups.
 5. **Particles / emitters** — new emitter layer: rate/lifetime/gravity/spread/size+opacity over
    life, sprite = a chosen layer. — STATUS: PENDING
 6. **Pen masks** — multiple bezier masks per layer, Add/Subtract/Intersect modes, per-mask feather,

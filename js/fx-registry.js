@@ -80,6 +80,8 @@ window.FM = window.FM || {};
     palettemap: 'color', lightning: 'proc',
     // batch 29 (layer-referencing displacement)
     displacemap: 'distort', polardisplace: 'distort',
+    // batch 30 (procedural particle system)
+    particles: 'proc',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -117,7 +119,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift', 'touchup', 'voronoi', 'softglow', 'fourcolor'];
+  FM.FX_FEATURED = ['particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift', 'touchup', 'voronoi', 'softglow'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {

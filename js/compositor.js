@@ -290,6 +290,22 @@ window.FM = window.FM || {};
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
     // full-screen shape + Copy Background = an adjustment/colour-grade layer you can mask & animate.
     { type: 'copybg', label: 'Copy Background', params: [] },
+    // ---- batch 30: Particles — deterministic generative emitter (Procedural) ----
+    { type: 'particles', label: 'Particles', params: [
+      { key: 'rate', label: 'Rate', min: 1, max: 200, step: 1, def: 40, unit: '/s' },
+      { key: 'lifetime', label: 'Lifetime', min: 0.2, max: 8, step: 0.1, def: 2, unit: 's' },
+      { key: 'direction', label: 'Direction', min: 0, max: 360, step: 1, def: 270, unit: '°' },
+      { key: 'spread', label: 'Spread', min: 0, max: 360, step: 1, def: 40, unit: '°' },
+      { key: 'speed', label: 'Speed', min: 0, max: 1500, step: 5, def: 320, unit: 'px/s' },
+      { key: 'gravity', label: 'Gravity', min: -2000, max: 2000, step: 10, def: 400, unit: 'px/s²' },
+      { key: 'sizeStart', label: 'Size Start', min: 0, max: 200, step: 1, def: 14, unit: 'px' },
+      { key: 'sizeEnd', label: 'Size End', min: 0, max: 200, step: 1, def: 4, unit: 'px' },
+      { key: 'opacityStart', label: 'Opacity Start', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'opacityEnd', label: 'Opacity End', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'spin', label: 'Spin', min: -720, max: 720, step: 5, def: 0, unit: '°/s' },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Triangle'], [3, 'Star'], [4, 'Streak']], def: 0 },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
+    ], color: true, defColor: '#ffd23f', colorLabel: 'Start', color2: true, defColor2: '#ff5e5e', color2Label: 'End' },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -818,7 +834,7 @@ window.FM = window.FM || {};
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
-    squeeze: 1, tiles: 1, motionflow: 1,
+    squeeze: 1, tiles: 1, motionflow: 1, particles: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
@@ -1488,7 +1504,7 @@ window.FM = window.FM || {};
   let _cfA = null, _cfB = null, _cfTex = null, _reC = null;
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1, motionflow: 1 };
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1, motionflow: 1, particles: 1 };
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -2201,6 +2217,108 @@ window.FM = window.FM || {};
       const r = fparam(p, 'radius', 80, t), spd = fparam(p, 'speed', 0.5, t);
       const a = 2 * Math.PI * spd * tl;
       B.save(); B.translate(r * Math.cos(a), r * Math.sin(a)); B.drawImage(A, 0, 0); B.restore();
+    },
+    // ---- Particles — deterministic generative emitter ----
+    // A pure function of tl: particle i is born at bornT = i/rate and evolved from a hash of i, keeping
+    // NO cross-frame state (no arrays, no Math.random, no Date.now). So the same scene time always
+    // yields the same frame — scrubbing repeats exactly and the frame-stepping exporter matches the
+    // preview. Only the alive window [lo,hi] is iterated and a hard cap thins it, so the loop is bounded
+    // no matter how large rate*lifetime gets.
+    particles: function (A, B, W, H, bb, p, t, tl, layer) {
+      B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
+      if (!(tl > 0)) return;
+      const pHash = function (n) {   // integer avalanche → [0,1); same n → same value, forever
+        n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+        n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+        n = n ^ (n >>> 16);
+        return (n >>> 0) / 4294967296;
+      };
+      const rd = function (k, def, lo, hi) { let v = fparam(p, k, def, t); if (!isFinite(v)) v = def; return v < lo ? lo : (v > hi ? hi : v); };
+      const rate = rd('rate', 40, 1, 200);
+      const lifetime = rd('lifetime', 2, 0.2, 8);
+      const dirR = rd('direction', 270, 0, 360) * Math.PI / 180;
+      const spreadR = rd('spread', 40, 0, 360) * Math.PI / 180;
+      const speed = rd('speed', 320, 0, 1500);
+      const gravity = rd('gravity', 400, -2000, 2000);
+      const sizeS = rd('sizeStart', 14, 0, 200), sizeE = rd('sizeEnd', 4, 0, 200);
+      const opS = rd('opacityStart', 1, 0, 1), opE = rd('opacityEnd', 0, 0, 1);
+      const spinR = rd('spin', 0, -720, 720) * Math.PI / 180;
+      const shape = Math.round(rd('shape', 0, 0, 4));
+      const add = Math.round(rd('blend', 0, 0, 1)) === 1;
+      const cs = hexToRGB(p.color || '#ffd23f'), ce = hexToRGB(p.color2 || '#ff5e5e');
+      const cr = cs[0], cg = cs[1], cb = cs[2], dcr = ce[0] - cr, dcg = ce[1] - cg, dcb = ce[2] - cb;
+
+      const maxLife = lifetime * 1.3;   // life_i = lifetime*(0.7..1.3) → the longest a particle can live
+      const hi = Math.floor(tl * rate);
+      if (hi < 0) return;
+      let lo = Math.ceil((tl - maxLife) * rate); if (lo < 0) lo = 0;
+      const CAP = 2000; let step = 1; const count = hi - lo + 1;
+      if (count > CAP) step = Math.ceil(count / CAP);   // thin the loop so we never draw > CAP sprites
+
+      const start = (layer && layer.start) || 0;
+      const trx = (layer && layer.transform) ? layer.transform.x : null;
+      const trY = (layer && layer.transform) ? layer.transform.y : null;
+      const cx = W * 0.5, cy = H * 0.5;
+      // A static emitter has a constant origin — evaluate it once; a keyframed one is sampled at each
+      // particle's BIRTH time below so a moving emitter leaves a trail.
+      const statX = typeof trx === 'number' && isFinite(trx), statY = typeof trY === 'number' && isFinite(trY);
+      const ox0 = statX ? trx : cx, oy0 = statY ? trY : cy;
+      const TAU = 6.283185307179586;
+
+      B.save();
+      if (add) B.globalCompositeOperation = 'lighter';
+      B.lineCap = 'round';
+      for (let i = lo; i <= hi; i += step) {
+        const bornT = i / rate, age = tl - bornT;
+        if (age < 0) continue;
+        const life = lifetime * (0.7 + 0.6 * pHash(i * 4 + 2));
+        if (age > life) continue;   // already dead this frame
+        const frac = age / life;    // 0 at birth → 1 at death
+        const size = sizeS + (sizeE - sizeS) * frac;
+        if (size < 0.35) continue;
+        const alpha = opS + (opE - opS) * frac;
+        if (alpha <= 0.003) continue;
+
+        const ang = dirR + (pHash(i * 4) - 0.5) * spreadR;
+        const sp = speed * (0.6 + 0.8 * pHash(i * 4 + 1));
+        const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp;
+
+        let ox = ox0, oy = oy0;
+        if (!statX || !statY) {
+          const bt = start + bornT;
+          if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v : cx; }
+          if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v : cy; }
+        }
+        const px = ox + vx * age, py = oy + vy * age + 0.5 * gravity * age * age;
+        if (!isFinite(px) || !isFinite(py)) continue;
+
+        const col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        const rad = size * 0.5;
+        B.save();
+        B.globalAlpha = alpha;
+        B.translate(px, py);
+        if (shape === 4) {   // Streak — a short line along the velocity vector
+          B.rotate(Math.atan2(vy, vx));
+          B.strokeStyle = col; B.lineWidth = rad < 1 ? 1 : rad;
+          const L = size * 0.8;
+          B.beginPath(); B.moveTo(-L, 0); B.lineTo(L, 0); B.stroke();
+        } else {
+          B.rotate(spinR * age + pHash(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
+          B.fillStyle = col; B.beginPath();
+          if (shape === 1) { B.rect(-rad, -rad, size, size); }
+          else if (shape === 2) { B.moveTo(0, -rad); B.lineTo(rad * 0.8660254, rad * 0.5); B.lineTo(-rad * 0.8660254, rad * 0.5); }
+          else if (shape === 3) {
+            for (let k = 0; k < 10; k++) {
+              const rr = (k & 1) ? rad * 0.4 : rad, a2 = -1.5707963 + k * 0.6283185;
+              const xx = Math.cos(a2) * rr, yy = Math.sin(a2) * rr;
+              if (k === 0) B.moveTo(xx, yy); else B.lineTo(xx, yy);
+            }
+          } else { B.arc(0, 0, rad, 0, TAU); }
+          B.closePath(); B.fill();
+        }
+        B.restore();
+      }
+      B.restore();
     },
   };
 
