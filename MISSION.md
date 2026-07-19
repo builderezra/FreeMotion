@@ -61,7 +61,11 @@ NOT add a "you still need to push" reminder.
    applyLayerTransform + all opacity reads (guarded → diff-free). Loop dropped (keyframe loopMode already does
    it). FM.audioEnvelopeSync in audio-react.js. reIdLayers remaps follow.targetId/audio.sourceId. Hidden on groups.
 5. **Particles / emitters** — new emitter layer: rate/lifetime/gravity/spread/size+opacity over
-   life, sprite = a chosen layer. — STATUS: PENDING
+   life, sprite = a chosen layer. — STATUS: DONE (v3.41, commit 1886d22). Built as a generative CANVAS_FX
+   effect "particles" (NOT a new layer type) — `CANVAS_FX.particles` + `CFX_NO_BBOX.particles` +
+   `POSTFX.particles` + FM.EFFECTS def in compositor.js; `CATEGORY_OF.particles='proc'` + FX_FEATURED lead in
+   fx-registry. Pure fn of tl (deterministic), capped 2000 live. NOTE the PWA service worker caches — after a
+   ?v bump, unregister SW + clear caches to see changes (I hit stale v=167 twice).
 6. **Pen masks** — multiple bezier masks per layer, Add/Subtract/Intersect modes, per-mask feather,
    animatable mask path (path keyframing is the hard part). — STATUS: PENDING
 7. **True 2.5D/3D layers + camera parallax** — layer Z + X/Y/Z rotation, shared perspective camera,
