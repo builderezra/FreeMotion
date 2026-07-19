@@ -67,7 +67,10 @@ NOT add a "you still need to push" reminder.
    fx-registry. Pure fn of tl (deterministic), capped 2000 live. NOTE the PWA service worker caches — after a
    ?v bump, unregister SW + clear caches to see changes (I hit stale v=167 twice).
 6. **Pen masks** — multiple bezier masks per layer, Add/Subtract/Intersect modes, per-mask feather,
-   animatable mask path (path keyframing is the hard part). — STATUS: PENDING
+   animatable mask path (path keyframing is the hard part). — STATUS: DONE (v3.42, commit 8e67a74).
+   `layer.masks[]` (canvas-space), `js/masks.js` (FM.masks / FM.evalMaskPath / FM.buildMaskAlpha),
+   `js/mask-tool.js` pen editor, compositor drawPenMaskLayer + applyAdjustment local-grade hook, inspector
+   Masks block, scene.animatedProps + storage.sanitize. Legacy single `layer.mask` untouched. Diff-free verified.
 7. **True 2.5D/3D layers + camera parallax** — layer Z + X/Y/Z rotation, shared perspective camera,
    painter-sort by Z, faux DOF. Extends the existing camera rig. — STATUS: PENDING
 8. **Editable motion paths on canvas (spatial keyframes)** — LAST, riskiest: position becomes a 2D
