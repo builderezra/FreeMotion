@@ -72,7 +72,11 @@ NOT add a "you still need to push" reminder.
    `js/mask-tool.js` pen editor, compositor drawPenMaskLayer + applyAdjustment local-grade hook, inspector
    Masks block, scene.animatedProps + storage.sanitize. Legacy single `layer.mask` untouched. Diff-free verified.
 7. **True 2.5D/3D layers + camera parallax** — layer Z + X/Y/Z rotation, shared perspective camera,
-   painter-sort by Z, faux DOF. Extends the existing camera rig. — STATUS: PENDING
+   painter-sort by Z, faux DOF. Extends the existing camera rig. — STATUS: DONE (v3.43, commit e60319b).
+   transform.rotationX/rotationY (Rotate mode "X tilt"/"Y tilt"), compositor tilt3D/draw3DTiltLayer reusing
+   renderMesh (plate → perspective quad, unshaded, double-sided), camera parallax via _camParallax stash +
+   camPan·(1−pscale) offset in applyLayerTransform. Layer z + perspective already existed. Diff-free verified.
+   (Faux DOF deliberately skipped — low value vs cost.)
 8. **Editable motion paths on canvas (spatial keyframes)** — LAST, riskiest: position becomes a 2D
    keyframe with in/out spatial tangents; editable bezier trajectory on canvas; spatial interp +
    roving. Data-model change — guard old projects hard. — STATUS: PENDING
