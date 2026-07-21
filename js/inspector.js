@@ -1385,12 +1385,12 @@ window.FM = window.FM || {};
   };
   const MT_MODES = ['move', 'rotate', 'scale', 'skew'];
   const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew' };
-  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'] };
+  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation', 'rotationX', 'rotationY'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'] };
   // The channels a mode keyframes by DEFAULT (matches Alight Motion). The extra channels (z for Move,
   // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
   // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)
   const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'] };
-  const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 };
+  const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 };
 
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
   function mtSet(layer, key, v) { FM.setTransform(layer, key, v, FM.time); FM.requestRender(); if (FM.timeline) FM.timeline.updatePlayhead(); }
@@ -1678,7 +1678,9 @@ window.FM = window.FM || {};
       control.appendChild(pad);
     } else if (mode === 'rotate') {
       const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5 });
-      refreshables.push(brot); values.appendChild(brot);
+      const btx = mtVBox('X tilt', () => mtEval(layer, 'rotationX'), v => mtSet(layer, 'rotationX', v), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
+      const bty = mtVBox('Y tilt', () => mtEval(layer, 'rotationY'), v => mtSet(layer, 'rotationY', v), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
+      refreshables.push(brot, btx, bty); values.append(brot, btx, bty);
       const dial = el('div', 'mt-dial'); const ring = el('div', 'mt-dial-ring'); const knob = el('div', 'mt-dial-knob'); const read = el('div', 'mt-dial-read');
       ring.appendChild(knob); dial.appendChild(ring); dial.appendChild(read);
       const place = () => { const deg = mtEval(layer, 'rotation'); const rad = deg * Math.PI / 180; knob.style.left = (50 + Math.cos(rad) * 50) + '%'; knob.style.top = (50 + Math.sin(rad) * 50) + '%'; read.textContent = Math.round(deg) + '°'; };

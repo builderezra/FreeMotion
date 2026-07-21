@@ -1590,6 +1590,68 @@ window.FM = window.FM || {};
     ctx.drawImage(_cfB, 0, 0);
     ctx.restore();
   }
+  // ---- 3D layer tilt (rotationX / rotationY) -------------------------------------------------------
+  // Lean a FLAT layer in 3D. Render it to a clean project-res PLATE exactly as it would look flat (its
+  // content + effects + 2D transform, tilt stripped, opacity/blend neutral), crop the plate's alpha bbox
+  // as a texture, and map it onto a subdivided quad tilted by (rotationX, rotationY) with the SAME
+  // weak-perspective mapper the 3D solids use (renderMesh). Double-sided — renderMesh painter-sorts and
+  // draws back faces, so a >90° tilt shows the mirrored texture, not nothing. shading:0 so the plane
+  // keeps its own colours (a flat card should NOT be Lambert-darkened like a solid). rz:0 — the layer's
+  // own 2D rotation is already baked into the plate. Fires ONLY when rotationX||rotationY ≠ 0, so an
+  // untilted layer never enters here → diff-free. Position/scale/opacity/parent/camera all live in the
+  // plate (built through the normal drawLayer), so it stays correct parented and under the camera, in
+  // export too (pure canvas, project/export dims from scene.project).
+  let _t3A = null, _t3B = null;
+  function tilt3D(layer, t) {
+    const tr = layer.transform; if (!tr) return null;
+    let rx = tr.rotationX != null ? FM.evalProp(tr.rotationX, t) : 0;   // absent ⇒ no evalProp, no tilt (byte-identical)
+    let ry = tr.rotationY != null ? FM.evalProp(tr.rotationY, t) : 0;
+    if (!isFinite(rx)) rx = 0;
+    if (!isFinite(ry)) ry = 0;
+    if (rx === 0 && ry === 0) return null;
+    return { rx: rx * Math.PI / 180, ry: ry * Math.PI / 180 };
+  }
+  function draw3DTiltLayer(ctx, layer, t, scene) {
+    const tilt = tilt3D(layer, t);
+    if (!tilt) return;
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    if (!_t3A) _t3A = document.createElement('canvas');
+    if (!_t3B) _t3B = document.createElement('canvas');
+    if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
+    if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
+    const actx = _t3A.getContext('2d');
+    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    // PLATE: the layer as it would look flat — tilt zeroed (so this drawLayer can't recurse back here),
+    // opacity/blend neutral (re-applied at composite). Effects/masks/motion-blur/parent all bake in.
+    const flatTr = Object.assign({}, layer.transform, { rotationX: 0, rotationY: 0, opacity: 1 });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', transform: flatTr });
+    drawLayer(actx, tmp, t, scene);
+    let bb = null;
+    try { bb = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bb = null; }   // tainted-canvas guard
+    const bctx = _t3B.getContext('2d');
+    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
+    bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
+    if (bb && bb.w > 1 && bb.h > 1) {
+      const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
+      const tex = extractTex(_t3A, bb);
+      const mesh = bParam((u, v) => [(u * 2 - 1) * ax, (v * 2 - 1) * ay, 0], 8, 8);   // 8×8 flat quad, uv 0..1 (cheap; rebuilt per frame)
+      renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+    } else {
+      bctx.drawImage(_t3A, 0, 0);   // nothing visible / tainted → pass the flat plate through (never blank the layer)
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (ctx.canvas === _t3A) ctx.clearRect(0, 0, W, H);   // paranoia: never composite over our own plate scratch
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    ctx.drawImage(_t3B, 0, 0);
+    ctx.restore();
+  }
   function fparam(p, key, def, t) { return p[key] == null ? def : FM.evalProp(p[key], t); }
   // Crop the layer's alpha bounds out of the frame → the texture the solids wrap.
   function extractTex(src, bb) {
@@ -2729,8 +2791,23 @@ window.FM = window.FM || {};
     // space, so the project-centre lerp would converge on the wrong point; a parented layer takes Z as
     // scale alone (about its own origin). (#8)
     const lerp = pscale !== 1 && !layer.parent;
-    const _px = lerp ? _vpx + (x - _vpx) * pscale : x;
-    const _py = lerp ? _vpy + (y - _vpy) * pscale : y;
+    let _px = lerp ? _vpx + (x - _vpx) * pscale : x;
+    let _py = lerp ? _vpy + (y - _vpy) * pscale : y;
+    // Camera parallax: an unparented z≠0 layer resists the camera pan by its depth. The camera composite
+    // shifts everything by -camPan; adding +camPan*(1-pDepth) here makes the NET on-screen shift
+    // -camPan*pDepth — far (pDepth<1) moves LESS, near (pDepth>1) MORE. z=0 → pscale=1 → lerp false → adds
+    // 0 (diff-free); no camera (null) or a parented layer (x/y already in parent space) → adds nothing.
+    // camera.z dollies the depth used for the factor (camera nearer the layer ⇒ stronger parallax);
+    // camZ=0 ⇒ pDepth=pscale, so a camera with no z behaves as the plain-pan spec. Every read guarded finite.
+    if (_camParallax && lerp) {
+      const camZ = _camParallax.z || 0;
+      const pDepth = camZ ? _F / Math.max(_F * 0.05, _F + zz - camZ) : pscale;
+      const pf = 1 - pDepth;
+      if (isFinite(pf)) {
+        if (isFinite(_camParallax.x)) _px += _camParallax.x * pf;
+        if (isFinite(_camParallax.y)) _py += _camParallax.y * pf;
+      }
+    }
     ctx.translate(_px + (wig ? wig.x : 0), _py + (wig ? wig.y : 0));
     applyParentRotMode(ctx, layer, accumRot);   // 'locked'/'weighted' cancel some inherited rotation
     if (rot) ctx.rotate(rot);
@@ -3179,6 +3256,10 @@ window.FM = window.FM || {};
     if (layer.type === 'adjustment') return;   // handled by renderScene (grades layers below)
     if (layer.type === 'camera') return;       // handled by renderScene (drives the composite)
     if (!FM.isLayerVisibleAt(layer, t)) return;
+    // 3D tilt (rotationX / rotationY) is the OUTERMOST geometric transform: build the flat plate through
+    // the normal path (effects/masks/motion-blur/blend all bake in), then lean it in 3D. Gated on a live
+    // tilt, so an untilted layer falls straight through below — diff-free. Needs a scene for proj dims.
+    if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); return; }
     // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
     // (fill+stroke, caption pill, keyed video) would otherwise each re-clip the canvas below.
     const _bop = BLEND[layer.blendMode];
@@ -3640,6 +3721,9 @@ window.FM = window.FM || {};
   // onto the real canvas through the camera's (inverse) transform — so EVERY layer, including
   // post-fx / motion-blur / masked ones, is panned & zoomed uniformly.
   let _camCv = null;
+  // Active camera's evaluated pan {x,y} + z-dolly, stashed by renderScene for the duration of its layer
+  // loop so applyLayerTransform can add depth parallax; null whenever no camera is active (diff-free).
+  let _camParallax = null;
   // ---- group units: a group with anything VISUAL of its own (masking, effects, opacity, blend,
   // shadow) is composited as ONE flattened unit, so all 152 effects / blending / presets act on the
   // group exactly like on a single layer. Plain transform-only groups keep the cheap per-member path.
@@ -3747,6 +3831,15 @@ window.FM = window.FM || {};
       if (!_camCv) _camCv = document.createElement('canvas');
       if (_camCv.width !== P.width || _camCv.height !== P.height) { _camCv.width = P.width; _camCv.height = P.height; }   // cleared below
       target = _camCv.getContext('2d');
+      // Stash the camera's evaluated pan (== what the composite below subtracts) + z-dolly, so the layer
+      // loop's applyLayerTransform can add per-depth parallax. Cleared right after the loop so a drawLayer
+      // outside a camera scene (thumbnails/export of a non-camera comp) never sees a stale offset.
+      const _ct = cam.transform;
+      const _cpx = FM.evalProp(_ct.x, t), _cpy = FM.evalProp(_ct.y, t);
+      const _cpz = _ct.z != null ? FM.evalProp(_ct.z, t) : 0;
+      _camParallax = { x: isFinite(_cpx) ? _cpx : 0, y: isFinite(_cpy) ? _cpy : 0, z: isFinite(_cpz) ? _cpz : 0 };
+    } else {
+      _camParallax = null;
     }
     target.save();
     target.setTransform(1, 0, 0, 1, 0, 0);
@@ -3778,6 +3871,7 @@ window.FM = window.FM || {};
       }
     }
     target.restore();
+    _camParallax = null;   // parallax is scoped to the layer loop above only
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2, tr = cam.transform;
       const zoom = Math.max(1e-3, FM.evalProp(tr.scale, t) || 1);   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
