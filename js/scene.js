@@ -102,12 +102,56 @@ window.FM = window.FM || {};
         else if (hasOwn(EASES, b.e)) f = EASES[b.e](f);
         else if (hasOwn(FM.EASE_PRESETS, b.e)) { const z = FM.EASE_PRESETS[b.e]; f = bezierAt(z[0], z[1], z[2], z[3], f); }
         if (typeof a.v === 'string' || typeof b.v === 'string') return lerpHexKf(a.v, b.v, f);   // colour keyframes
+        // Spatial tangents (motion paths): optional per-keyframe k.to (out) / k.ti (in) — value-space
+        // offsets in the prop's own units, evaluated as a cubic Hermite on the EASED f so temporal
+        // easing still applies. Convention (motion-path.js + smoothPathTangents must match): a tangent
+        // ×3 is the f-space velocity at its keyframe, i.e. one tangent unit = one cubic-bezier
+        // control-point offset (P1 = a.v + a.to, P2 = b.v + b.ti), and a keyframe is smooth when its
+        // ti equals its to. Non-finite tangents are treated as absent — a hostile import must not NaN
+        // the transform. With no tangents this falls through to the exact old lerp.
+        const mo = a.to, mi = b.ti;
+        if (mo != null || mi != null) {
+          const o = Number.isFinite(mo) ? mo : null, n = Number.isFinite(mi) ? mi : null;
+          if (o != null || n != null) {
+            const f2 = f * f, f3 = f2 * f;
+            return (2 * f3 - 3 * f2 + 1) * a.v + (f3 - 2 * f2 + f) * 3 * (o || 0)
+                 + (3 * f2 - 2 * f3) * b.v + (f3 - f2) * 3 * (n || 0);
+          }
+        }
         return a.v + (b.v - a.v) * f;
       }
     }
     return last.v;
   }
   FM.evalProp = evalProp;
+
+  /* Auto spatial tangents for a layer's motion path: Catmull-Rom over transform.x and transform.y
+   * kf arrays (each axis independently, by index) in evalProp's ×3 convention — tangent at kf i =
+   * (v[i+1] - v[i-1]) / 6, one-sided at the ends (the missing neighbour is the point itself).
+   * Same value on ti and to = C1-smooth pass-through. opts.tension (default 1) scales the tangents.
+   * Callers commit history + rerender. */
+  FM.smoothPathTangents = function (layer, opts) {
+    const tension = opts && Number.isFinite(opts.tension) ? opts.tension : 1;
+    ['x', 'y'].forEach(key => {
+      const p = layer && layer.transform && layer.transform[key];
+      if (!isAnimated(p) || p.kf.length < 2) return;
+      const kf = p.kf;
+      for (let i = 0; i < kf.length; i++) {
+        const prev = kf[Math.max(0, i - 1)], next = kf[Math.min(kf.length - 1, i + 1)];
+        const tan = (next.v - prev.v) / 6 * tension;
+        if (!Number.isFinite(tan)) continue;
+        if (i > 0) kf[i].ti = tan;
+        if (i < kf.length - 1) kf[i].to = tan;
+      }
+    });
+  };
+  /* Strip spatial tangents from transform.x/y — the path goes back to exact straight-line lerps. */
+  FM.clearPathTangents = function (layer) {
+    ['x', 'y'].forEach(key => {
+      const p = layer && layer.transform && layer.transform[key];
+      if (isAnimated(p)) p.kf.forEach(k => { delete k.ti; delete k.to; });
+    });
+  };
 
   /* A layer's audio level at time t — default 1, or the keyframed/animated value. Single source of
    * truth so preview + export read keyframed volume the same way. */

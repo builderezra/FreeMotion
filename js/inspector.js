@@ -1382,6 +1382,7 @@ window.FM = window.FM || {};
     skew: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h12l-4 14H4z"/></svg>',
     ease: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19c5 0 5-14 16-14"/><circle cx="4" cy="19" r="1.4" fill="currentColor"/><circle cx="20" cy="5" r="1.4" fill="currentColor"/></svg>',
     link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 8H7a4 4 0 0 0 0 8h2"/><path d="M15 8h2a4 4 0 0 1 0 8h-2"/></svg>',
+    path: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18c4-10 12-2 16-12"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="11.3" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/></svg>',
   };
   const MT_MODES = ['move', 'rotate', 'scale', 'skew'];
   const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew' };
@@ -1654,6 +1655,19 @@ window.FM = window.FM || {};
       const trk = el('button', 'mt-ease mt-track'); trk.innerHTML = MT_ICONS.track; trk.title = 'Auto-track a head / point (writes position keyframes you can then edit)';
       trk.addEventListener('click', () => FM.tracker.pick(layer));
       left.appendChild(trk);
+    }
+    // Motion path — on-canvas trajectory editor. Unparented only (a parented layer's x/y live in
+    // the parent's space, which the overlay can't map yet).
+    if (mode === 'move' && !layer.parent && FM.motionPath && (FM.isAnimated(layer.transform.x) || FM.isAnimated(layer.transform.y))) {
+      const active = FM.motionPath.isActive && FM.motionPath.isActive();
+      const mp = el('button', 'mt-ease mt-path' + (active ? ' on' : '')); mp.innerHTML = MT_ICONS.path;
+      mp.title = active ? 'Close the motion path editor' : 'Motion path — edit the trajectory on the canvas';
+      mp.addEventListener('click', () => {
+        if (FM.motionPath.isActive && FM.motionPath.isActive()) FM.motionPath.stop();
+        else FM.motionPath.open(layer.id);
+        FM.inspector.refresh();
+      });
+      left.appendChild(mp);
     }
 
     // center: value boxes + bespoke control per mode
