@@ -79,7 +79,14 @@ NOT add a "you still need to push" reminder.
    (Faux DOF deliberately skipped — low value vs cost.)
 8. **Editable motion paths on canvas (spatial keyframes)** — LAST, riskiest: position becomes a 2D
    keyframe with in/out spatial tangents; editable bezier trajectory on canvas; spatial interp +
-   roving. Data-model change — guard old projects hard. — STATUS: PENDING
+   roving. Data-model change — guard old projects hard. — STATUS: DONE (v3.44, commit 55f62e3).
+   NO 2D-prop merge: optional per-axis Hermite tangents k.ti/k.to on x/y keyframes (×3 velocity
+   convention; incoming control point = v − ti), evaluated in evalProp (bit-identical when absent).
+   FM.smoothPathTangents/clearPathTangents. `js/motion-path.js` on-canvas editor (dots + handles +
+   Smooth/Straighten), Motion path button in Move & Transform. Roving deliberately skipped (v1).
+
+## MISSION COMPLETE (2026-07-23)
+All 8 features shipped, v3.37 → v3.44, each adversarially audited + browser-verified + committed.
 
 ## Explicitly OUT (need ML/infra — do NOT attempt)
 Roto Brush / AI roto · content-aware video fill · auto-reframe · scene-detect · offline
