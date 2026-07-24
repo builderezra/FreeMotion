@@ -151,7 +151,16 @@ window.FM = window.FM || {};
     FM.kfClipboard = [];
     FM.animatedProps(layer).forEach(p => {
       const k = p.kf.find(kf => Math.abs(kf.t - tt) < 1e-3);
-      if (k) { const key = propKey(layer, p); if (key) FM.kfClipboard.push({ key: key, v: k.v, e: k.e, bez: k.bez ? k.bez.slice() : null }); }
+      if (k) {
+        const key = propKey(layer, p);
+        if (key) {
+          const en = { key: key, v: Array.isArray(k.v) ? JSON.parse(JSON.stringify(k.v)) : k.v, e: k.e, bez: k.bez ? k.bez.slice() : null };
+          // spatial motion-path tangents ride along — dropping them turned a smoothed keyframe into a kink on paste
+          if (typeof k.ti === 'number' && isFinite(k.ti)) en.ti = k.ti;
+          if (typeof k.to === 'number' && isFinite(k.to)) en.to = k.to;
+          FM.kfClipboard.push(en);
+        }
+      }
     });
     return FM.kfClipboard.length;
   }
@@ -166,8 +175,19 @@ window.FM = window.FM || {};
       let p = slot.c[slot.k];
       if (!FM.isAnimated(p)) { p = { kf: [] }; slot.c[slot.k] = p; }   // create container if static/missing
       const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
-      if (hit) { hit.v = en.v; hit.e = en.e; if (en.bez) hit.bez = en.bez.slice(); else delete hit.bez; }
-      else { const nk = { t: t, v: en.v, e: en.e }; if (en.bez) nk.bez = en.bez.slice(); p.kf.push(nk); p.kf.sort((a, b) => a.t - b.t); }
+      const vv = Array.isArray(en.v) ? JSON.parse(JSON.stringify(en.v)) : en.v;
+      // tangents overwrite-or-clear on the hit branch too — keeping the target's stale ti/to applied the OLD curve shape to the new value
+      if (hit) {
+        hit.v = vv; hit.e = en.e; if (en.bez) hit.bez = en.bez.slice(); else delete hit.bez;
+        if (en.ti != null) hit.ti = en.ti; else delete hit.ti;
+        if (en.to != null) hit.to = en.to; else delete hit.to;
+      } else {
+        const nk = { t: t, v: vv, e: en.e };
+        if (en.bez) nk.bez = en.bez.slice();
+        if (en.ti != null) nk.ti = en.ti;
+        if (en.to != null) nk.to = en.to;
+        p.kf.push(nk); p.kf.sort((a, b) => a.t - b.t);
+      }
     });
     FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
   }

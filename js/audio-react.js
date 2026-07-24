@@ -170,9 +170,12 @@ window.FM = window.FM || {};
   // ---- synchronous accessor (for the live audio-drive behavior) ---------------------------------
 
   // A live behavior evaluates per frame and cannot await, so it needs the envelope NOW or not at all.
-  // Signature captures every opt that changes the computed envelope (fps/band/gain/attack/release/floor);
-  // two behaviors with the same settings share one cached envelope. Leading '_' => never serialized.
-  function envSig(opts) {
+  // Signature captures every opt that changes the computed envelope (fps/band/gain/attack/release/floor)
+  // AND the clip's source→timeline mapping (start/trim/duration/reversed/speed) — the envelope bakes
+  // that mapping in, so without it a timeline edit left every audio-drive behavior sampling the clip's
+  // OLD timing forever. Two behaviors with the same settings share one cached envelope; a retime just
+  // changes the key, so the stale entry is abandoned and a fresh compute kicks off. '_' => never saved.
+  function envSig(layer, opts) {
     opts = opts || {};
     const P = FM.scene && FM.scene.project;
     const fps = Math.max(1, opts.fps || (P && P.fps) || 30);
@@ -181,7 +184,14 @@ window.FM = window.FM || {};
     const attack = (opts.attack != null) ? opts.attack : 0.02;
     const release = (opts.release != null) ? opts.release : 0.15;
     const floor = Math.max(0, Math.min(0.98, opts.floor || 0));
-    return fps + '|' + band + '|' + gain + '|' + attack + '|' + release + '|' + floor;
+    // cheap per-frame speed fingerprint: a ramp is summarized by its kf count + endpoints (any edit
+    // to the ramp almost surely moves one of them); a static speed is just the number.
+    const sp = layer ? layer.speed : 1;
+    const spSig = (sp && typeof sp === 'object' && Array.isArray(sp.kf) && sp.kf.length)
+      ? 'r' + sp.kf.length + '@' + sp.kf[0].t + ':' + sp.kf[0].v + '~' + sp.kf[sp.kf.length - 1].t + ':' + sp.kf[sp.kf.length - 1].v
+      : String(sp || 1);
+    const timing = layer ? ((layer.start || 0) + '|' + (layer.trimStart || 0) + '|' + (layer.duration || 0) + '|' + (layer.reversed ? 1 : 0) + '|' + spSig) : '';
+    return fps + '|' + band + '|' + gain + '|' + attack + '|' + release + '|' + floor + '|' + timing;
   }
 
   // Return the cached envelope object for (layer,opts) if already computed, else return null and kick
@@ -191,7 +201,7 @@ window.FM = window.FM || {};
     if (!layer) return null;
     const m = FM.media && FM.media.get(layer.id);
     if (!m) return null;
-    const sig = envSig(opts);
+    const sig = envSig(layer, opts);
     const cache = m._audioEnvCache;
     if (cache && (sig in cache)) return cache[sig];
     if (!m._audioEnvPending) m._audioEnvPending = {};
@@ -205,6 +215,22 @@ window.FM = window.FM || {};
       }).catch(function () { if (m._audioEnvPending) delete m._audioEnvPending[sig]; });
     }
     return null;
+  };
+
+  // Compute an envelope NOW and seed the sync cache — the exporter calls this before its frame loop so
+  // an audio-drive behavior renders from frame 0. Without it, audioEnvelopeSync's fire-and-forget decode
+  // lands mid-export and the drive "pops in" partway through the file (and two exports of the same range
+  // differ depending on cache warmth).
+  FM.audioEnvelopePrewarm = async function (layer, opts) {
+    if (!layer) return null;
+    const m = FM.media && FM.media.get(layer.id);
+    if (!m) return null;
+    const sig = envSig(layer, opts);
+    if (m._audioEnvCache && (sig in m._audioEnvCache)) return m._audioEnvCache[sig];
+    const env = await FM.audioEnvelope(layer, opts).catch(function () { return null; });
+    if (!m._audioEnvCache) m._audioEnvCache = {};
+    m._audioEnvCache[sig] = env || null;
+    return env;
   };
 
   // Sample a precomputed envelope object at SCENE time t: linear-interp between frames, 0 outside the
@@ -285,7 +311,10 @@ window.FM = window.FM || {};
       if (FM.timeline) FM.timeline.rebuild();
       if (FM.inspector) FM.inspector.refresh();
       if (FM.canvasEdit) FM.canvasEdit.update();
-      if (FM.toast) FM.toast(kf.length + ' keyframes added — drag them to touch up');
+      // Say WHERE they went — the sheet closes on apply, so without target+prop the user is left
+      // staring at a diamond-carpeted clip with no idea what just happened (or that undo removes it).
+      const propLabel = { scale: 'Scale', opacity: 'Opacity', rotation: 'Rotation', x: 'Position X', y: 'Position Y' }[prop] || prop;
+      if (FM.toast) FM.toast('Baked ' + kf.length + ' keyframes onto ' + (target.name || 'layer') + ' · ' + propLabel + ' — undo to remove', 3200);
       return kf.length;
     },
 
@@ -372,7 +401,7 @@ window.FM = window.FM || {};
     const head = document.createElement('div');
     head.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:2px;';
     const h = document.createElement('div');
-    h.textContent = 'Audio React';
+    h.textContent = 'Audio → keyframes';   // same name as the button that opens it — one concept, one label
     h.style.cssText = 'font-size:16px;font-weight:700;flex:1;';
     const close = document.createElement('button');
     close.setAttribute('aria-label', 'Close');

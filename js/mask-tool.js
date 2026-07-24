@@ -247,6 +247,8 @@ window.FM = window.FM || {};
     window.removeEventListener('resize', onResize);
     if (overlay && overlay.parentElement) overlay.parentElement.removeChild(overlay); overlay = null;
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
+    const fab = document.getElementById('add-fab');
+    if (fab && fab._mkDisp !== undefined) { fab.style.display = fab._mkDisp; delete fab._mkDisp; }
   }
 
   FM.maskTool = {
@@ -281,6 +283,11 @@ window.FM = window.FM || {};
       bar = document.createElement('div'); bar.id = 'mask-bar';
       bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:max(18px,env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 10px 8px 16px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:94vw;';
       document.body.appendChild(bar);
+      // The green add-FAB shares the bottom strip and sat exactly over the Done pill at 380px — a user
+      // finishing a mask hit + and opened the Add sheet mid-edit. Park it while the editor owns the
+      // bottom of the screen (same as motion-path.js).
+      const fab = document.getElementById('add-fab');
+      if (fab) { fab._mkDisp = fab.style.display; fab.style.display = 'none'; }
       updateBar();
       loop();
       FM.requestRender();

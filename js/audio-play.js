@@ -30,12 +30,31 @@ window.FM = window.FM || {};
   // clip's timeline duration; source is read at speed× rate from the end backward.
   function reversedBuffer(audioCtx, ab, layer) {
     const sr = ab.sampleRate;
-    // ramped speed is an object → raw arithmetic = NaN buffers; use the clip's average rate (matches exporter)
-    const sp = FM.isAnimated && FM.isAnimated(layer.speed)
-      ? FM.layerSourceAdvance(layer, layer.duration) / Math.max(0.01, layer.duration)
-      : (layer.speed || 1);
     const startSample = Math.floor(layer.trimStart * sr);
     const availSec = Math.max(0, ab.duration - layer.trimStart);
+    const ramped = FM.isAnimated && FM.isAnimated(layer.speed);
+    if (ramped) {
+      // Resample along the SAME FM.layerSourceAdvance integral the exporter's makeClipBuffer uses — the
+      // old average-rate shortcut made a reversed+ramped clip PREVIEW different pitch/timing mid-clip
+      // than it exported (only the endpoints lined up).
+      const totalAdv = FM.layerSourceAdvance(layer, layer.duration);
+      const lenSamples = Math.max(1, Math.floor(layer.duration * sr));
+      const out = audioCtx.createBuffer(ab.numberOfChannels, lenSamples, sr);
+      for (let ch = 0; ch < ab.numberOfChannels; ch++) {
+        const src = ab.getChannelData(ch), dst = out.getChannelData(ch);
+        for (let i = 0; i < lenSamples; i++) {
+          const adv = FM.layerSourceAdvance(layer, i / sr);
+          const posSec = totalAdv - adv;                        // reversed reads the integral from the far end
+          if (posSec < 0 || posSec > availSec) continue;        // ran past the source → silence
+          const pos = startSample + posSec * sr;
+          const i0 = Math.floor(pos), frac = pos - i0;
+          const a = src[i0] || 0, b = src[i0 + 1] || 0;
+          dst[i] = a + (b - a) * frac;
+        }
+      }
+      return out;
+    }
+    const sp = layer.speed || 1;
     const lenSec = Math.min(layer.duration, availSec / sp);
     const lenSamples = Math.max(1, Math.floor(lenSec * sr));
     const out = audioCtx.createBuffer(ab.numberOfChannels, lenSamples, sr);

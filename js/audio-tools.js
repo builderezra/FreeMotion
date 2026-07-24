@@ -108,7 +108,12 @@ window.FM = window.FM || {};
     const restore = (srcId, twinId) => {
       const src = srcId ? FM.layerById(FM.scene, srcId) : null;
       if (src) src.muted = false;
-      if (FM.deleteLayer) FM.deleteLayer(twinId);   // keeps the media blob (undo-safe); prune reaps it later
+      // Sweep EVERY twin pointing at this source, not just the pressed/first one — Split-at-playhead and
+      // Duplicate clone the karaokeOf tag, and a survivor would keep playing the instrumental OVER the
+      // now-unmuted vocals.
+      const twinIds = FM.scene.layers.filter(l => l.karaokeOf === srcId).map(l => l.id);
+      if (twinId && twinIds.indexOf(twinId) < 0) twinIds.push(twinId);
+      twinIds.forEach(tid => { if (FM.deleteLayer) FM.deleteLayer(tid); });   // keeps the media blobs (undo-safe); prune reaps them later
       if (src) { FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id]; }
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.commit();
@@ -142,6 +147,13 @@ window.FM = window.FM || {};
       nl.trimStart = layer.trimStart || 0;
       nl.reversed = !!layer.reversed;
       nl.speed = FM.isAnimated(layer.speed) ? JSON.parse(JSON.stringify(layer.speed)) : layer.speed;   // deep-clone the ramp so the two layers don't share one {kf} array
+      // The toggle must be a transparent vocals-off swap, so the twin inherits the source's MIX too —
+      // volume (incl. keyframed), fades, and the audio-effect chain. Without these the instrumental
+      // jumped to full level, lost its fade-out, and dropped the user's EQ/reverb.
+      nl.volume = FM.isAnimated(layer.volume) ? JSON.parse(JSON.stringify(layer.volume)) : (layer.volume == null ? 1 : layer.volume);
+      nl.fadeIn = layer.fadeIn || 0;
+      nl.fadeOut = layer.fadeOut || 0;
+      if (Array.isArray(layer.audioFx) && layer.audioFx.length) nl.audioFx = JSON.parse(JSON.stringify(layer.audioFx, FM.jsonReplacer));
       if (nl.transform) nl.transform.opacity = 0;   // audio-only twin — no picture
     }
     layer.muted = true;   // hear the karaoke, not the original

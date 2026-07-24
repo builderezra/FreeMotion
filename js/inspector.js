@@ -822,6 +822,7 @@ window.FM = window.FM || {};
     { key: 'color', label: 'Color & Fill', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
     { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
+    { key: 'masks', label: 'Masks', icon: 'M4 4h16v16H4zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8' },   // pen masks get their own card — buried at the tail of Blending, nobody found them
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
     { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },          // video only
     { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },   // video only
@@ -1134,13 +1135,15 @@ window.FM = window.FM || {};
     return wrap;
   }
 
-  function catsFor(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
+  // the Masks card only shows where pixels exist to reveal (maskableLayer) — one gate over every branch
+  function catsFor(layer) { return catsForBase(layer).filter(c => c.key !== 'masks' || maskableLayer(layer)); }
+  function catsForBase(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
     // Groups composite as a flattened unit whenever they carry a look of their own, so effects,
     // blending/opacity and presets all act on the whole group — plus the door into its own timeline.
     if (layer.type === 'group') return CATEGORIES.filter(c => ['color', 'border', 'blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
     // Nulls/adjustments never rasterize their own pixels — a fill or border card would be a dead end.
-    if (layer.type === 'null' || layer.type === 'adjustment') return CATEGORIES.filter(c => ['blend', 'transform', 'presets', 'effects'].indexOf(c.key) >= 0);
+    if (layer.type === 'null' || layer.type === 'adjustment') return CATEGORIES.filter(c => ['blend', 'masks', 'transform', 'presets', 'effects'].indexOf(c.key) >= 0);   // masks on an adjustment = a LOCAL grade (the maskable gate drops it for nulls)
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
     if (layer.type === 'video') {
@@ -1166,6 +1169,7 @@ window.FM = window.FM || {};
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
     if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
+    if (v === 'masks') return maskableLayer(layer);   // pen masks need pixels to reveal
     if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
@@ -1656,13 +1660,21 @@ window.FM = window.FM || {};
       trk.addEventListener('click', () => FM.tracker.pick(layer));
       left.appendChild(trk);
     }
-    // Motion path — on-canvas trajectory editor. Unparented only (a parented layer's x/y live in
-    // the parent's space, which the overlay can't map yet).
-    if (mode === 'move' && !layer.parent && FM.motionPath && (FM.isAnimated(layer.transform.x) || FM.isAnimated(layer.transform.y))) {
-      const active = FM.motionPath.isActive && FM.motionPath.isActive();
-      const mp = el('button', 'mt-ease mt-path' + (active ? ' on' : '')); mp.innerHTML = MT_ICONS.path;
-      mp.title = active ? 'Close the motion path editor' : 'Motion path — edit the trajectory on the canvas';
+    // Motion path — on-canvas trajectory editor. ALWAYS drawn in Move mode: an appearing-from-nowhere
+    // button is invisible to someone who hasn't keyframed yet, so the not-ready states render dimmed
+    // and explain themselves on tap instead of not existing. (Parented layers stay unsupported — their
+    // x/y live in the parent's space, which the overlay can't map yet.)
+    if (mode === 'move' && FM.motionPath) {
+      const ready = !layer.parent && (FM.isAnimated(layer.transform.x) || FM.isAnimated(layer.transform.y));
+      const active = ready && FM.motionPath.isActive && FM.motionPath.isActive();
+      const mp = el('button', 'mt-ease mt-path' + (active ? ' on' : '') + (ready ? '' : ' mt-dim')); mp.innerHTML = MT_ICONS.path;
+      if (!ready) mp.style.opacity = '0.38';
+      mp.title = !ready ? 'Motion path — keyframe X/Y first' : active ? 'Close the motion path editor' : 'Motion path — edit the trajectory on the canvas';
       mp.addEventListener('click', () => {
+        if (!ready) {
+          if (FM.toast) FM.toast(layer.parent ? 'Motion path works on unparented layers — unlink Parent first' : 'Keyframe X or Y first (tap ◆), then edit the path here', 2600);
+          return;
+        }
         if (FM.motionPath.isActive && FM.motionPath.isActive()) FM.motionPath.stop();
         else FM.motionPath.open(layer.id);
         FM.inspector.refresh();
@@ -1690,10 +1702,16 @@ window.FM = window.FM || {};
       pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       pad.addEventListener('pointercancel', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(pad);
+      // The parallax payoff is otherwise undiscoverable — Z, the Camera object and "pans give depth"
+      // live in three unconnected places. One line here connects them at the moment Z is in hand.
+      if (layer.type !== 'camera') control.appendChild(el('div', 'insp-hint', 'Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move with parallax.'));
     } else if (mode === 'rotate') {
       const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5 });
-      const btx = mtVBox('X tilt', () => mtEval(layer, 'rotationX'), v => mtSet(layer, 'rotationX', v), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
-      const bty = mtVBox('Y tilt', () => mtEval(layer, 'rotationY'), v => mtSet(layer, 'rotationY', v), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
+      // Snap near-zero tilt to EXACT 0 — a scrubbed-back residual (±1e-6°) is invisible but flips the
+      // renderer onto the full plate+quad 3D path and breaks the touched-then-reverted diff-free case.
+      const snap0 = v => (Math.abs(v) < 0.01 ? 0 : v);
+      const btx = mtVBox('X tilt', () => mtEval(layer, 'rotationX'), v => mtSet(layer, 'rotationX', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
+      const bty = mtVBox('Y tilt', () => mtEval(layer, 'rotationY'), v => mtSet(layer, 'rotationY', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
       refreshables.push(brot, btx, bty); values.append(brot, btx, bty);
       const dial = el('div', 'mt-dial'); const ring = el('div', 'mt-dial-ring'); const knob = el('div', 'mt-dial-knob'); const read = el('div', 'mt-dial-read');
       ring.appendChild(knob); dial.appendChild(ring); dial.appendChild(read);
@@ -1878,6 +1896,9 @@ window.FM = window.FM || {};
     (layer.behaviors || []).forEach((beh, idx) => { if (beh && beh.type) list.appendChild(behaviorRow(layer, beh, idx)); });
     s.appendChild(list);
     if (!(layer.behaviors && layer.behaviors.length)) s.appendChild(el('div', 'insp-hint', 'Add procedural motion: wiggle, oscillate, bounce, follow another layer, or drive from audio.'));
+    // Behavior params are deliberately NOT keyframable — say so, or the missing ◆ (used everywhere
+    // else) reads as a broken control to an AM power user.
+    else s.appendChild(el('div', 'insp-hint', 'Behaviors run live on top of keyframes — their settings hold steady rather than keyframing.'));
 
     const add = el('button', 'fx-add-btn', '+ Add behavior');
     const picker = el('div', 'be-picker'); picker.style.display = 'none';
@@ -2140,7 +2161,8 @@ window.FM = window.FM || {};
         }
         body.appendChild(row);
       });
-      if (maskableLayer(layer)) body.appendChild(masksBlock(layer));   // pen masks live under Blending (camera/null/group excluded)
+    } else if (key === 'masks') {
+      body.appendChild(masksBlock(layer));   // pen masks — promoted from the tail of Blending to their own card
     } else if (key === 'presets') {
       body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
       const pwrap = el('div', 'preset-wrap');

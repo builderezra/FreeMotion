@@ -540,7 +540,7 @@ window.FM = window.FM || {};
     var st = { text: String(baseText == null ? '' : baseText), letterSpacing: baseSpacing || 0 };
     var fx = layer && layer.effects;
     if (fx && fx.length) {
-      var info = { localT: t - (layer.start || 0), fps: (scene && scene.project && scene.project.fps) || 30 };
+      var info = { localT: t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
       for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (fn) fn(st, e.params || {}, t, info); }
     }
     return st;
@@ -573,12 +573,19 @@ window.FM = window.FM || {};
     }
     let accumRot = 0;
     for (let i = chain.length - 1; i >= 0; i--) {
-      const ptr = chain[i].transform;
-      ctx.translate(FM.evalProp(ptr.x, t), FM.evalProp(ptr.y, t));
-      const prot = FM.evalProp(ptr.rotation, t) * Math.PI / 180;
+      const pl = chain[i], ptr = pl.transform;
+      // Resolve each parent channel through the behavior resolver, not raw evalProp — a wiggling/
+      // following/audio-driven parent visibly moves while raw reads left its children glued to the
+      // keyframe path (the standard null-drives-a-rig setup silently detached). behaviorValue is a
+      // cheap pass-through for layers without behaviors, so the no-behaviors chain is unchanged.
+      const bv = FM.behaviorValue;
+      const px = bv ? bv(pl, 'x', FM.evalProp(ptr.x, t), t) : FM.evalProp(ptr.x, t);
+      const py = bv ? bv(pl, 'y', FM.evalProp(ptr.y, t), t) : FM.evalProp(ptr.y, t);
+      ctx.translate(px, py);
+      const prot = (bv ? bv(pl, 'rotation', FM.evalProp(ptr.rotation, t), t) : FM.evalProp(ptr.rotation, t)) * Math.PI / 180;
       if (prot) ctx.rotate(prot);
       accumRot += prot;
-      const ps = FM.evalProp(ptr.scale, t);
+      const ps = bv ? bv(pl, 'scale', FM.evalProp(ptr.scale, t), t) : FM.evalProp(ptr.scale, t);
       if (ps !== 1) { const cps = Math.max(0.001, ps); ctx.scale(cps, cps); }   // clamp like the layer's own scale — an overshoot ease through 0/negative flipped every child for a frame
     }
     return accumRot;
@@ -727,6 +734,18 @@ window.FM = window.FM || {};
   // Feathered mask: clip() can't soft-edge, so render the layer to an offscreen, then composite a
   // BLURRED mask shape over it (destination-in keeps inside / destination-out punches out), and blit.
   let _maskCv = null;
+  // Offscreen-plate proxies neutralize transform.opacity to 1 and multiply the REAL layer opacity back
+  // at composite — but FM.layerOpacity applies opacity BEHAVIORS on top of the raw prop, so a proxy that
+  // keeps the behaviors array gets the behavior delta twice (once into the plate on base 1, once in the
+  // wrapper's multiply). Every plate proxy strips opacity-targeting behaviors; positional ones stay (the
+  // plate bakes the full transform, which the wrapper blits 1:1).
+  function sansOpacityBehaviors(layer) {
+    const b = layer.behaviors;
+    if (!b || !b.length) return b;
+    const f = b.filter(x => !x || x.prop !== 'opacity');
+    return f.length === b.length ? b : f;
+  }
+
   function drawFeatheredMaskLayer(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -738,7 +757,7 @@ window.FM = window.FM || {};
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
     // 1) draw the layer content (no mask, full opacity, normal blend) into the offscreen
-    const tmp = Object.assign({}, layer, { mask: null, blendMode: 'normal', transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { mask: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(octx, tmp, t, scene);
     // 2) composite the blurred mask shape in the layer's transformed local space — the SAME full
     // transform the content used (step 1's drawLayer), so the soft mask lines up even with skew /
@@ -788,7 +807,7 @@ window.FM = window.FM || {};
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
     // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
-    const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(octx, tmp, t, scene);
     // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
     octx.save();
@@ -812,7 +831,7 @@ window.FM = window.FM || {};
   // NOTE: this blurs the layer's TRANSFORM motion (pan/scale/rotate). It does NOT smear a video
   // clip's intrinsic subject motion — a forward video draws the same decoded frame per sub-sample
   // (per-sub-frame decode would need a full forward frame cache). Transform blur is the common use.
-  let _mbCv = null;
+  let _mbCv = null, _mbPlate = null;   // accumulator + per-sample plate (see the intra-plate 'lighter' fix)
   function drawMotionBlur(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -823,12 +842,12 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     if (!_mbCv) _mbCv = document.createElement('canvas');
+    if (!_mbPlate) _mbPlate = document.createElement('canvas');
     const off = _mbCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
+    if (_mbPlate.width !== W || _mbPlate.height !== H) { _mbPlate.width = W; _mbPlate.height = H; }
     const octx = off.getContext('2d');
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
-    // Sub-sample at 1/K opacity with ADDITIVE ('add'→lighter) compositing so overlapping samples
-    // sum to full: a static layer stays solid, a moving one fades into a trail.
     // Collect only sub-times inside the clip's life, then renormalize opacity to that count: keeps
     // brightness constant near clip in/out WITHOUT collapsing skipped samples onto one boundary time
     // (which would reconstruct a sharp un-blurred frame — a visible seam).
@@ -839,8 +858,23 @@ window.FM = window.FM || {};
       if (st >= lo && st <= hi) times.push(st);
     }
     if (!times.length) times.push(Math.max(lo, Math.min(hi, t)));
-    const tmp = Object.assign({}, layer, { motionBlur: null, blendMode: 'add', transform: Object.assign({}, layer.transform, { opacity: 1 / times.length }) });
-    times.forEach(st => drawLayer(octx, tmp, st, scene));
+    // Each sub-frame renders NORMALLY (full opacity) to its own plate, and the PLATES composite
+    // additively at 1/K so overlapping samples sum to full. Setting blendMode:'add' on the layer proxy
+    // itself made the layer's OWN internal passes add against each other within one sub-frame — a
+    // bordered shape's fill 'lighter'-added over its under-stroke and whited out the border the moment
+    // motion blur was enabled, motion or not.
+    const tmp = Object.assign({}, layer, { motionBlur: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const pctx = _mbPlate.getContext('2d');
+    const sampleAlpha = 1 / times.length;
+    times.forEach(st => {
+      pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, W, H);
+      pctx.globalAlpha = 1; pctx.globalCompositeOperation = 'source-over'; pctx.filter = 'none';
+      drawLayer(pctx, tmp, st, scene);
+      octx.globalAlpha = sampleAlpha;
+      octx.globalCompositeOperation = 'lighter';
+      octx.drawImage(_mbPlate, 0, 0);
+    });
+    octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over';
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = opacity;
@@ -935,7 +969,7 @@ window.FM = window.FM || {};
       const actx = pA.getContext('2d');
       actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
       const img = actx.getImageData(0, 0, W, H);
       fn(img.data, W, H, fx.params || {}, t);
@@ -1347,7 +1381,7 @@ window.FM = window.FM || {};
       const actx = wA.getContext('2d');
       actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
       const src = actx.getImageData(0, 0, W, H).data;
       const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
@@ -1393,7 +1427,7 @@ window.FM = window.FM || {};
     const actx = _dspA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const src = actx.getImageData(0, 0, W, H).data;
     // 2) the MAP: the chosen layer rendered at full opacity (its own displace fx stripped so two maps
@@ -1565,7 +1599,7 @@ window.FM = window.FM || {};
     const actx = _cfA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     let bbox = null;
     if (CFX_NO_BBOX[fx.type]) bbox = { x: 0, y: 0, w: W, h: H };   // fn ignores it — full frame stands in
@@ -1577,7 +1611,7 @@ window.FM = window.FM || {};
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer.start || 0), layer);   // layer = temporal-cache key (motionflow)
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1601,7 +1635,12 @@ window.FM = window.FM || {};
   // untilted layer never enters here → diff-free. Position/scale/opacity/parent/camera all live in the
   // plate (built through the normal drawLayer), so it stays correct parented and under the camera, in
   // export too (pure canvas, project/export dims from scene.project).
-  let _t3A = null, _t3B = null;
+  // Depth-indexed pool (like _pfPool): the plate drawLayer below can re-enter this fn — a Displacement
+  // Map whose SOURCE layer is itself tilted renders that source mid-plate, and a single shared scratch
+  // pair left the outer tilt compositing a plate polluted with the map layer's flat render (ghost pixels
+  // + shifted quad geometry).
+  const _t3Pool = [];
+  let _t3Depth = 0;
   function tilt3D(layer, t) {
     const tr = layer.transform; if (!tr) return null;
     let rx = tr.rotationX != null ? FM.evalProp(tr.rotationX, t) : 0;   // absent ⇒ no evalProp, no tilt (byte-identical)
@@ -1618,8 +1657,10 @@ window.FM = window.FM || {};
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
-    if (!_t3A) _t3A = document.createElement('canvas');
-    if (!_t3B) _t3B = document.createElement('canvas');
+    const d = _t3Depth++;
+    try {
+    if (!_t3Pool[d]) _t3Pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    const _t3A = _t3Pool[d].A, _t3B = _t3Pool[d].B;
     if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
     const actx = _t3A.getContext('2d');
@@ -1628,7 +1669,7 @@ window.FM = window.FM || {};
     // PLATE: the layer as it would look flat — tilt zeroed (so this drawLayer can't recurse back here),
     // opacity/blend neutral (re-applied at composite). Effects/masks/motion-blur/parent all bake in.
     const flatTr = Object.assign({}, layer.transform, { rotationX: 0, rotationY: 0, opacity: 1 });
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', transform: flatTr });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: flatTr });
     drawLayer(actx, tmp, t, scene);
     let bb = null;
     try { bb = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bb = null; }   // tainted-canvas guard
@@ -1651,6 +1692,7 @@ window.FM = window.FM || {};
     ctx.filter = 'none';
     ctx.drawImage(_t3B, 0, 0);
     ctx.restore();
+    } finally { _t3Depth--; }
   }
   function fparam(p, key, def, t) { return p[key] == null ? def : FM.evalProp(p[key], t); }
   // Crop the layer's alpha bounds out of the frame → the texture the solids wrap.
@@ -1929,6 +1971,10 @@ window.FM = window.FM || {};
   // frame-stepping and export; a backwards seek or a >0.35s jump just shows the frame unblurred.
   let _mfSa = null, _mfSb = null, _mfW1 = null, _mfMask = null, _mfMov = null;
   const _mflow = {};   // layerId -> { cv (prev plate), t, at, acc (echo feedback) }
+  // Temporal state carries PREVIEW history — an export starting at the playhead would blur against (or
+  // inherit an echo trail from) frames the user merely previewed, making the first exported frame depend
+  // on what was on screen beforehand. The exporter calls this right after setting FM._exporting.
+  FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; };
   function _mfRec(id, W, H) {
     let r = _mflow[id];
     if (!r) {
@@ -2018,6 +2064,35 @@ window.FM = window.FM || {};
       if (al > 1e-3 && mmax > 0.3) { sx[i] = (ax / al) * mmax; sy[i] = (ay / al) * mmax; }
     }
     return { vx: sx, vy: sy, df: df, gw: gw, gh: gh, FW: FW, FH: FH, BS: BS };
+  }
+
+  // The emitter's WORLD position at time bt: the layer's own x/y (behavior-resolved) pushed through the
+  // parent chain's translate→rotate→scale, matching applyLayerTransform — so particles spray from where
+  // the picture actually renders. Reading raw transform.x/y left a grouped/parented or behavior-driven
+  // emitter's cloud detached at its local coordinates. Cycle- and depth-guarded like applyParentChain.
+  function emitterWorldPos(layer, bt, cx, cy) {
+    const bv = FM.behaviorValue;
+    const ev = (l, key, def) => {
+      let v = FM.evalProp(l.transform ? l.transform[key] : null, bt);
+      if (bv) v = bv(l, key, v, bt);
+      return isFinite(v) ? v : def;
+    };
+    let x = ev(layer, 'x', cx), y = ev(layer, 'y', cy);
+    const scene = FM.scene, seen = new Set([layer.id]);
+    let pid = layer.parent, depth = 0;
+    while (pid && scene && !seen.has(pid) && depth++ < 16) {
+      seen.add(pid);
+      const pl = scene.layers.find(l => l.id === pid);
+      if (!pl || !pl.transform) break;
+      const pr = ev(pl, 'rotation', 0) * Math.PI / 180;
+      const ps = Math.max(0.001, ev(pl, 'scale', 1));
+      const c = Math.cos(pr), s = Math.sin(pr);
+      const nx = ev(pl, 'x', 0) + (x * c - y * s) * ps;
+      const ny = ev(pl, 'y', 0) + (x * s + y * c) * ps;
+      x = nx; y = ny;
+      pid = pl.parent;
+    }
+    return { x: x, y: y };
   }
 
   const CANVAS_FX = {
@@ -2371,6 +2446,7 @@ window.FM = window.FM || {};
       // particle's BIRTH time below so a moving emitter leaves a trail.
       const statX = typeof trx === 'number' && isFinite(trx), statY = typeof trY === 'number' && isFinite(trY);
       const ox0 = statX ? trx : cx, oy0 = statY ? trY : cy;
+      const needsWorld = !!(layer && (layer.parent || (layer.behaviors && layer.behaviors.length)));   // plain emitters keep the cheap path
       const TAU = 6.283185307179586;
 
       B.save();
@@ -2392,7 +2468,10 @@ window.FM = window.FM || {};
         const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp;
 
         let ox = ox0, oy = oy0;
-        if (!statX || !statY) {
+        if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
+          const wp = emitterWorldPos(layer, start + bornT, cx, cy);
+          ox = wp.x; oy = wp.y;
+        } else if (!statX || !statY) {
           const bt = start + bornT;
           if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v : cx; }
           if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v : cy; }
@@ -2446,7 +2525,7 @@ window.FM = window.FM || {};
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     // render the layer with the rgbsplit effect removed (full opacity, normal blend) — keeps other fx/mask/blur
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     if (dd <= 0) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, 0, 0); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
@@ -2486,7 +2565,7 @@ window.FM = window.FM || {};
     const actx = _psA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'posterize'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'posterize'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data, step = 255 / (q - 1);
     for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
@@ -2516,7 +2595,7 @@ window.FM = window.FM || {};
     const actx = _tiA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'tint'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'tint'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -2551,7 +2630,7 @@ window.FM = window.FM || {};
     const actx = _thA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'threshold'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'threshold'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -2584,7 +2663,7 @@ window.FM = window.FM || {};
     const actx = _duA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'duotone'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'duotone'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -2616,7 +2695,7 @@ window.FM = window.FM || {};
     const actx = _miA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'mirror'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'mirror'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2654,7 +2733,7 @@ window.FM = window.FM || {};
     const actx = _pxA.getContext('2d');
     actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
-    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'pixelate'), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'pixelate'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3184,14 +3263,17 @@ window.FM = window.FM || {};
     const ntr = Object.assign({}, layer.transform, { x: W / 2, y: H / 2, scale: nscale, scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, skewY: 0, z: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1 });
     // feathered mask stays on the proxy (applied in content space → keeps its soft edge); a hard mask
     // is clipped crisply at composite instead.
-    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, motionBlur: null, mask: feathered ? layer.mask : null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx) });
+    // behaviors: null — this proxy renders in NEUTRAL space and the real composite re-applies the full
+    // applyLayerTransform (behaviors included), so keeping them here applied every positional behavior
+    // TWICE (same reason wiggle is nulled).
+    const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, behaviors: null, motionBlur: null, mask: feathered ? layer.mask : null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx) });
     drawLayer(actx, proxy, t, scene);
     if (!_mbcB) _mbcB = document.createElement('canvas');
     if (_mbcB.width !== W || _mbcB.height !== H) { _mbcB.width = W; _mbcB.height = H; }
     const bctx = _mbcB.getContext('2d');
     bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
-    try { CANVAS_FX.motionflow(_mbcA, bctx, W, H, { x: 0, y: 0, w: W, h: H }, fx.params || {}, t, t - (layer.start || 0), layer); }
+    try { CANVAS_FX.motionflow(_mbcA, bctx, W, H, { x: 0, y: 0, w: W, h: H }, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer); }
     catch (e) { bctx.drawImage(_mbcA, 0, 0); }
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -3778,6 +3860,10 @@ window.FM = window.FM || {};
     for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
       const L = scene.layers[i];
       if (!u.memberIds.has(L.id) || L.id === u.maskId || L.type === 'group') continue;
+      // An ADJUSTMENT member grades the unit's buffer at its z-slot (the members below it, already
+      // accumulated) — drawLayer no-ops for adjustments, so without this branch a grade inside any
+      // flattened group silently stopped applying the moment the group gained opacity/effects/blend.
+      if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(a, L, t, scene); continue; }
       drawLayer(a, L, t, scene);
     }
     const maskLayer = u.maskId ? scene.layers.find(l => l.id === u.maskId) : null;
@@ -3809,6 +3895,7 @@ window.FM = window.FM || {};
     tmp.id = g.id + ':flat';   // STABLE id per group — temporal effects (motionflow) key their cache on it
     tmp._canvas = _mgA;
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
+    tmp._clipStart = g.start || 0;   // real clip start for effect clocks — tl from tmp.start would be a CONSTANT 1, freezing every time-driven effect (spin/wiggle/particles…) on a group
     tmp.effects = g.effects || [];
     // group BORDER = the existing alpha-outline 'stroke' effect run on the flattened unit
     const gbw = (g.stroke && g.stroke.enabled) ? (FM.evalProp(g.stroke.width, t) || 0) : 0;

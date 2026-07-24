@@ -249,7 +249,15 @@ window.FM = window.FM || {};
       buildBar();
       loop();
       FM.requestRender();
-      if (FM.toast) FM.toast('Drag dots to move keyframes · tap a dot for its handles', 2200);
+      // The overlay draws the KEYFRAME path (raw x/y). Behaviors, Z-depth and a camera all offset the
+      // rendered layer on top of it — say so up front rather than let the dots look misaligned.
+      const hasPosBehavior = (l.behaviors || []).some(b => b && b.enabled !== false && (b.prop === 'x' || b.prop === 'y'));
+      const zOff = l.transform.z != null && Math.abs(FM.evalProp(l.transform.z, FM.time) || 0) > 1e-6;
+      const camOn = FM.scene.layers.some(c => c.type === 'camera' && c.visible !== false);
+      if (FM.toast) {
+        if (hasPosBehavior || zOff || camOn) FM.toast('Editing the keyframe path — behaviors, Z-depth and the camera move the layer on top of it', 3000);
+        else FM.toast('Drag dots to move keyframes · tap a dot for its handles', 2200);
+      }
     },
     stop() {
       if (!activeId) return;

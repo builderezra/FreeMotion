@@ -238,6 +238,17 @@ window.FM = window.FM || {};
   // Reverse + frame-blend slow-mo render from the frame cache; the preview cache (if any)
   // may be at a lower fps, so (re)build at the EXACT export fps before the frame loop so the
   // exported file actually contains the smooth/reversed motion seen in preview.
+  // Event-loop yield that background-tab throttling can't clamp: setTimeout(0) is floored to >=1s in a
+  // backgrounded tab (worse under intensive throttling), which turned a 2s GIF export into minutes when
+  // the user switched apps mid-export. MessageChannel posts are not timer-throttled.
+  const _tickCh = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
+  let _tickQ = [];
+  if (_tickCh) _tickCh.port1.onmessage = () => { const q = _tickQ; _tickQ = []; q.forEach(r => r()); };
+  function nextTick() {
+    if (!_tickCh) return new Promise(r => setTimeout(r, 0));
+    return new Promise(r => { _tickQ.push(r); _tickCh.port2.postMessage(0); });
+  }
+
   async function prepareCaches(scene, fps, onStatus) {
     const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
     for (const layer of scene.layers) {
@@ -257,6 +268,30 @@ window.FM = window.FM || {};
         await FM.buildFrameCache(m, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); }, { maxBytes: 1610612736 });
       }
       built.push(m);
+    }
+    // Every export path awaits this before its frame loop, so it doubles as the pre-flight step:
+    // (a) drop motionflow's temporal plates — they hold PREVIEW history, and the first exported frame
+    //     must not blur against (or inherit an echo trail from) whatever was previewed beforehand;
+    // (b) prewarm audio-drive behavior envelopes — audioEnvelopeSync is fire-and-forget, so without
+    //     this the drive is inert for the first frames of a fresh-session export and pops in mid-file.
+    if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+    if (FM.audioEnvelopePrewarm) {
+      for (const layer of scene.layers) {
+        for (const bh of (layer.behaviors || [])) {
+          if (!bh || bh.type !== 'audio' || bh.enabled === false || !bh.params) continue;
+          const src = bh.params.sourceId ? FM.layerById(scene, bh.params.sourceId) : null;
+          if (!src) continue;
+          const sRaw = +bh.params.smooth;   // ||-defaulting would turn smooth=0 into 0.4 and miss the cache key
+          const smooth = Math.max(0, Math.min(1, isFinite(sRaw) && bh.params.smooth != null ? sRaw : 0.4));
+          // EXACTLY the opts audioDelta derives (behaviors.js) — a different key would miss the cache
+          try {
+            await FM.audioEnvelopePrewarm(src, {
+              band: bh.params.band, gain: (bh.params.gain != null) ? +bh.params.gain : 1,
+              attack: 0.005 + smooth * 0.055, release: 0.03 + smooth * 0.37,
+            });
+          } catch (e) { /* best-effort — a failed decode just leaves the behavior inert, as before */ }
+        }
+      }
     }
     return built;
   }
@@ -401,7 +436,7 @@ window.FM = window.FM || {};
           const data = outCtx.getImageData(0, 0, outW, outH).data;
           gif.addFrame(data, delayMs);   // streaming: encoder appends this frame now, retains no pixels
           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'gif');
-          await new Promise(r => setTimeout(r, 0));   // yield so the Cancel tap can land between frames
+          await nextTick();   // yield so the Cancel tap can land between frames (throttle-proof — see nextTick)
         }
         const blob = gif.finish();
         download(blob, (opts.name || 'freemotion-export') + '.gif');

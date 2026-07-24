@@ -1006,14 +1006,22 @@ window.FM = window.FM || {};
     if (src.type === 'group' && FM.groupDescendants) {
       // a group is just a parent link — duplicating ONLY the group row made an empty invisible group.
       // Clone its whole subtree with fresh ids and remap parents through an idMap (like pasteClipboard).
-      const idMap = {}; idMap[src.id] = copy.id;
+      const idMap = Object.create(null); idMap[src.id] = copy.id;
       for (const d of FM.groupDescendants(id)) {
         const dc = FM.cloneLayer(d, true);   // plain copy — the group offset already moved the block
         idMap[d.id] = dc.id;
         await reloadMediaTo(d.id, dc.id);
         inserts.push(dc);
       }
-      inserts.forEach(l => { if (l.parent && idMap[l.parent]) l.parent = idMap[l.parent]; });
+      inserts.forEach(l => {
+        if (l.parent && idMap[l.parent]) l.parent = idMap[l.parent];
+        // follow.targetId / audio.sourceId that point INSIDE the duplicated subtree must follow it —
+        // otherwise the duplicate's behaviors silently keep driving off the ORIGINAL group's layers.
+        if (Array.isArray(l.behaviors)) l.behaviors.forEach(bh => {
+          if (!bh || !bh.params) return;
+          ['targetId', 'sourceId'].forEach(k => { if (bh.params[k] && idMap[bh.params[k]]) bh.params[k] = idMap[bh.params[k]]; });
+        });
+      });
     }
     const idx = FM.scene.layers.findIndex(l => l.id === id);
     FM.scene.layers.splice(Math.max(0, idx), 0, ...inserts);
@@ -1042,7 +1050,7 @@ window.FM = window.FM || {};
   // Omitted → top, matching duplicate/add. The ⧉ Paste-Layer split-button's arrow passes a chosen index.
   FM.pasteClipboard = async function (insertIndex) {
     if (!FM.clipboard || !FM.clipboard.length) return;
-    const idMap = {};
+    const idMap = Object.create(null);   // null-proto: a crafted parent/target id of 'constructor' must not "remap" to a prototype function
     const copies = FM.clipboard.map(entry => {
       const copy = FM.cloneLayer(entry.snapshot);   // fresh id + offset +30 + " copy"
       idMap[entry.snapshot.id] = copy.id;
@@ -1067,6 +1075,18 @@ window.FM = window.FM || {};
         if (idMap[copy.parent]) copy.parent = idMap[copy.parent];
         else if (!FM.layerById(FM.scene, copy.parent)) copy.parent = null;
       }
+      // Behaviors carry CROSS-LAYER id refs too (follow.targetId / audio.sourceId) — same rule as
+      // parent, mirroring storage.js reIdLayers: batch-mate → its clone; a live outside layer keeps;
+      // a dead ref is cleared so the behavior no-ops instead of silently pointing at the old original.
+      if (Array.isArray(copy.behaviors)) copy.behaviors.forEach(bh => {
+        if (!bh || !bh.params) return;
+        ['targetId', 'sourceId'].forEach(k => {
+          const id0 = bh.params[k];
+          if (!id0) return;
+          if (idMap[id0]) bh.params[k] = idMap[id0];
+          else if (!FM.layerById(FM.scene, id0)) bh.params[k] = '';
+        });
+      });
       if (entry.file && entry.kind && entry.kind !== 'text') {
         let nrec = null;
         try {
@@ -1170,7 +1190,15 @@ window.FM = window.FM || {};
         // A looping prop (cycle/ping-pong) intentionally keeps its keyframes in a short span and
         // repeats them across the whole clip — dividing it kills the loop. Leave looping props whole.
         if (p.loopMode && p.loopMode !== 'none' && p.kf.length >= 2) return;
-        const v = FM.evalProp(p, t);
+        // ARRAY-valued keyframes (an animated mask PATH — kf.v is a points array): evalProp's numeric
+        // lerp on an array coerces to a garbage STRING ("100,100…NaN") which then autosaves and kills
+        // the mask on both halves. Snap the boundary to a DEEP COPY of the kf at/just before the split
+        // instead of interpolating.
+        const arrKf = p.kf.some(k => Array.isArray(k.v));
+        const before = arrKf ? [...p.kf].reverse().find(k => k.t <= t + 1e-9) : null;
+        const v = arrKf
+          ? JSON.parse(JSON.stringify((before || p.kf[0]).v))
+          : FM.evalProp(p, t);
         const b = p.kf.find(k => k.t >= t - 1e-9);   // segment-END keyframe bracketing the split: its ease governs the segment we're cutting
         p.kf = p.kf.filter(k => keepLeft ? k.t <= t + 1e-4 : k.t >= t - 1e-4);
         if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) {
@@ -1369,6 +1397,11 @@ window.FM = window.FM || {};
     if (tCb) { tCb.disabled = !alphaOk; if (!alphaOk) tCb.checked = false; }
     const note = document.getElementById('exp-gif-note');
     if (note) note.classList.toggle('hidden', fmt !== 'gif');
+    // Quality maps to H.264 bitrate — meaningless for a palette GIF and actively misleading for
+    // lossless PNG frames (it implied the frames were compressed). MP4-only.
+    const qEl = document.getElementById('exp-quality');
+    const qField = qEl && (qEl.closest('.field') || qEl.parentElement);
+    if (qField) qField.classList.toggle('hidden', fmt !== 'mp4');
     const go = document.getElementById('exp-go');
     if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames' : 'Export MP4');
   }
