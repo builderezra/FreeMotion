@@ -88,6 +88,13 @@ NOT add a "you still need to push" reminder.
 ## MISSION COMPLETE (2026-07-23)
 All 8 features shipped, v3.37 → v3.44, each adversarially audited + browser-verified + committed.
 
+## POST-MISSION REVIEW (2026-07-24, v3.45, commit 8a37965)
+Cross-feature bug hunt + editor-persona UX review → 18 fixes (see POLISH-LOG). KNOWN DEFERRED:
+(1) nested group-unit flattening — an inner unit's own effects drop / double-draw when reordered
+(pre-existing, complex; no concrete plan); (2) pen masks clip particle/generative overlays with the
+plate while the legacy mask doesn't — accepted as the documented pen-mask semantic; (3) behavior params
+are static by design (explainer shipped); (4) MP4 encoder backpressure poll still setTimeout(4).
+
 ## Explicitly OUT (need ML/infra — do NOT attempt)
 Roto Brush / AI roto · content-aware video fill · auto-reframe · scene-detect · offline
 speech-to-text · ML stem separation · ray-traced 3D / volumetrics.
