@@ -2987,7 +2987,9 @@ window.FM = window.FM || {};
     const S = {};
     // — page 1 stragglers (point-editable polygonal kinds; parametric rect/ellipse/etc stay parametric) —
     S.triangle = [[[0.5,0],[1,1],[0,1]]];
-    S.heart = [[[0.5,0.95],[0.03,0.44,1],[0.18,0.065,1],[0.5,0.30],[0.82,0.065,1],[0.97,0.44,1]]];
+    // heart: round lobe domes need MANUAL tangents ([u,v,1,hx,hy]) — auto Catmull-Rom handles are
+    // (next−prev)/6, far too short for a half-circle dome, which rendered the lobes as peaks.
+    S.heart = [[[0.5,0.96],[0.03,0.39,1,-0.005,-0.16],[0.26,0.05,1,0.15,0],[0.5,0.31],[0.74,0.05,1,0.15,0],[0.97,0.39,1,-0.005,0.16]]];
     S.plus = [[[0.33,0],[0.67,0],[0.67,0.33],[1,0.33],[1,0.67],[0.67,0.67],[0.67,1],[0.33,1],[0.33,0.67],[0,0.67],[0,0.33],[0.33,0.33]]];
     S.arrow = [[[0,0.3],[0.55,0.3],[0.55,0],[1,0.5],[0.55,1],[0.55,0.7],[0,0.7]]];
     S.chevron = [[[0,0],[0.55,0],[1,0.5],[0.55,1],[0,1],[0.45,0.5]]];
@@ -2999,10 +3001,14 @@ window.FM = window.FM || {};
     // the old two-overlapping-arcs version self-intersected and filled as a thin sliver
     S.moon = [[[0.34,0.08],[0.665,0.075,1],[0.86,0.24,1],[0.935,0.50,1],[0.86,0.76,1],[0.665,0.925,1],[0.34,0.92],[0.55,0.83,1],[0.68,0.62,1],[0.68,0.38,1],[0.55,0.17,1]]];
     (function(){ const spoke=[[0.47,0.06],[0.53,0.06],[0.53,0.94],[0.47,0.94]], stub=(y,dir)=>[[0.5,y],[0.5+0.14*dir,y-0.1],[0.5+0.17*dir,y-0.06],[0.5+0.03*dir,y+0.045]]; const polys=[]; for(let k=0;k<3;k++){ const a=k*PI/3; polys.push(rot(spoke,0.5,0.5,a)); [[0.16,1],[0.16,-1],[0.84,1],[0.84,-1]].forEach(([y,d])=>polys.push(rot(stub(y,d),0.5,0.5,a))); } S.snowflake=polys; })();
-    S.shield = [[[0.5,0.02],[0.94,0.14]].concat(arcS(0.5,0.14,0.44,0.62,0,PI/2,3,true).slice(1)).concat([[0.5,0.98]]).concat(arcS(0.5,0.14,0.44,0.62,PI/2,PI,3,true).slice(1))];
+    // shield: hand-authored — the old two-arc build kept the arc's bottom-center endpoint in the
+    // path, so the right side dropped a vertical cliff onto the tip while the left ran diagonally.
+    S.shield = [[[0.5,0.03],[0.93,0.15],[0.885,0.475,1,-0.045,0.15],[0.5,0.97],[0.115,0.475,1,-0.045,-0.15],[0.07,0.15]]];
     S.check = [[[0.05,0.55],[0.2,0.4],[0.38,0.58],[0.8,0.12],[0.95,0.26],[0.38,0.88]]];
     S.droplet = [[[0.5,0.02]].concat(arcS(0.5,0.62,0.32,0.34,-PI*0.3,PI*1.3,6,false))];
-    S.cloud = [arcS(0.26,0.58,0.17,0.17,PI*0.5,PI*1.36,3,true).concat(arcS(0.48,0.42,0.2,0.2,PI,PI*1.95,3,true)).concat(arcS(0.72,0.56,0.17,0.17,PI*1.42,PI*2.5,3,true))];
+    // cloud: three distinct puffs (small L, big top, mid R) with crease corners at the valleys and
+    // a FLAT bottom with rounded ends — the old three-arc chain was lopsided with a wavy bottom.
+    S.cloud = [[[0.04,0.63,1,0,-0.095],[0.20,0.435,1,0.09,0],[0.315,0.455],[0.47,0.205,1,0.125,0],[0.65,0.43],[0.78,0.385,1,0.095,0],[0.945,0.62,1,0,0.095],[0.87,0.77,1,-0.07,0],[0.13,0.77,1,-0.07,0]]];
     S.play = [[[0.12,0.06],[0.94,0.5],[0.12,0.94]]];
     (function(){ const o=[]; const turns=2.6,N=26; for(let i=0;i<=N;i++){const f=i/N,a=f*turns*T,r=0.04+f*0.44;o.push([r4(0.5+r*Math.cos(a)),r4(0.5+r*Math.sin(a)),1]);} S.spiral=[o]; })();
     (function(){ const o=[]; for(let i=0;i<8;i++){const a=-PI/2+i*PI/4,r=(i%2===0)?0.48:0.13;o.push([r4(0.5+r*Math.cos(a)),r4(0.5+r*Math.sin(a))]);} S.sparkle=[o]; })();
@@ -3040,7 +3046,9 @@ window.FM = window.FM || {};
       [0.40,0.895],[0.22,0.875],
       [0.115,0.81,1],[0.065,0.665,1],
     ]];
-    S.flame = [[[0.60,0.03],[0.625,0.155,1],[0.565,0.27,1],[0.71,0.40,1],[0.815,0.575,1],[0.765,0.76,1],[0.60,0.89,1],[0.43,0.90,1],[0.27,0.83,1],[0.195,0.665,1],[0.245,0.50,1],[0.36,0.38,1],[0.475,0.245,1],[0.535,0.115,1]]];
+    // flame: leaning tip → concave lick-notch on the right → swelling belly → round bottom —
+    // the old 14-point blob read as a garlic bulb with a wisp.
+    S.flame = [[[0.575,0.03],[0.565,0.30,1,-0.02,0.115],[0.83,0.66,1,0.005,0.135],[0.50,0.965,1,-0.155,0],[0.17,0.66,1,0.005,-0.135],[0.30,0.32,1,0.045,-0.13]]];
     S.banner = [[[0.02,0.24],[0.98,0.24],[0.86,0.5],[0.98,0.76],[0.02,0.76],[0.14,0.5]]];
     (function(){ const polys=[]; const N=14, a0=PI*1.61, a1=PI*3.39; for(let i=0;i<N;i++){ const a=a0+i*(a1-a0)/(N-1); const cx=0.5+0.38*Math.cos(a), cy=0.52+0.38*Math.sin(a); polys.push(rot(circleS(cx,cy,0.088,0.033,6),cx,cy,a+PI/2)); } S.wreath=polys; })();
     S.diamond = [[[0.5,0.02],[0.92,0.5],[0.5,0.98],[0.08,0.5]]];
