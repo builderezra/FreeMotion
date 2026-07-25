@@ -1794,13 +1794,16 @@ window.FM = window.FM || {};
   const BE_BANDS = [['overall', 'Overall'], ['bass', 'Bass'], ['mid', 'Mid'], ['treble', 'Treble']];
   const BE_SPECIAL = { targetId: 1, sourceId: 1, band: 1 };   // rendered as bespoke controls, never as sliders
 
-  function beAllowedProps(def) {
+  function beAllowedProps(def, layer) {
     const p = def && def.props;
-    if (!p || !p.length || p.indexOf('*') >= 0) return BE_PROPS.slice();
-    return BE_PROPS.filter(k => p.indexOf(k) >= 0);
+    let out = (!p || !p.length || p.indexOf('*') >= 0) ? BE_PROPS.slice() : BE_PROPS.filter(k => p.indexOf(k) >= 0);
+    // The camera composite reads x/y/scale/rotation through the resolver but has no pixels — an
+    // opacity behavior on it would be a dead option in the picker.
+    if (layer && layer.type === 'camera') out = out.filter(k => k !== 'opacity');
+    return out;
   }
-  function beDefaultProp(def) {
-    const allowed = beAllowedProps(def);
+  function beDefaultProp(def, layer) {
+    const allowed = beAllowedProps(def, layer);
     const pref = BE_DEFAULT_PROP[def.type];
     return (pref && allowed.indexOf(pref) >= 0) ? pref : allowed[0];
   }
@@ -1853,7 +1856,7 @@ window.FM = window.FM || {};
     head.appendChild(eye);
     head.appendChild(el('span', 'fx-name', def.label || beh.type));
     // target-prop select — which transform channel this behavior drives
-    const allowed = beAllowedProps(def);
+    const allowed = beAllowedProps(def, layer);
     const psel = document.createElement('select'); psel.className = 'be-prop';
     allowed.forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = BE_PROP_LABEL[k] || k; if (k === beh.prop) o.selected = true; psel.appendChild(o); });
     if (allowed.indexOf(beh.prop) < 0) { const o = document.createElement('option'); o.value = beh.prop; o.textContent = BE_PROP_LABEL[beh.prop] || beh.prop; o.selected = true; psel.appendChild(o); }
@@ -1906,7 +1909,7 @@ window.FM = window.FM || {};
       const b = el('button', 'be-pick-btn', def.label || def.type);
       b.addEventListener('click', () => {
         if (!Array.isArray(layer.behaviors)) layer.behaviors = [];
-        const inst = reg.makeInstance ? reg.makeInstance(def.type, beDefaultProp(def)) : { type: def.type, prop: beDefaultProp(def), enabled: true, params: {} };
+        const inst = reg.makeInstance ? reg.makeInstance(def.type, beDefaultProp(def, layer)) : { type: def.type, prop: beDefaultProp(def, layer), enabled: true, params: {} };
         if (inst) layer.behaviors.push(inst);
         afterBehavior();
       });
@@ -2059,8 +2062,9 @@ window.FM = window.FM || {};
       // Behaviors ride the per-layer transform reads (applyLayerTransform / layerOpacity). A GROUP's own
       // transform is applied to its children via applyParentChain with RAW evalProp — never through the
       // resolver — so a group's behaviors would render nothing. Hide the control there rather than ship a
-      // dead switch. (camera has no pixels either.)
-      if (layer.type !== 'camera' && layer.type !== 'group') { const bb = behaviorsBlock(layer); if (bb) body.appendChild(bb); }
+      // dead switch. The CAMERA gets them since v3.46: its composite reads route through behaviorValue,
+      // so a Wiggle on the camera is the one-tap whole-scene shake (with z-depth parallax riding it).
+      if (layer.type !== 'group') { const bb = behaviorsBlock(layer); if (bb) body.appendChild(bb); }
     } else if (key === 'volume') {
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {

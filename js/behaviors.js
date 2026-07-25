@@ -41,8 +41,9 @@ window.FM = window.FM || {};
 
   const DEFS = [
     { type: 'wiggle', label: 'Wiggle', props: ALL_PROPS.slice(), params: [
-      rng('amp', 'Amount', 0, 400, 0.5, 20, ''),
-      rng('freq', 'Frequency', 0.1, 12, 0.1, 2, 'Hz'),
+      rng('amp', 'Amount', 0, 1200, 0.5, 20, ''),
+      rng('freq', 'Frequency', 0.1, 40, 0.1, 2, 'Hz'),
+      rng('jitter', 'Hardness', 0, 1, 0.02, 0, ''),   // 0 = smooth drift (legacy), 1 = hard stepped slam — def 0 keeps every existing wiggle byte-identical
       rng('seed', 'Seed', 0, 1000, 1, 0, ''),
     ] },
     { type: 'oscillate', label: 'Oscillate', props: ALL_PROPS.slice(), params: [
@@ -97,7 +98,16 @@ window.FM = window.FM || {};
 
   function wiggleDelta(params, t) {
     const amp = num(params.amp, 0), freq = num(params.freq, 0), seed = num(params.seed, 0);
-    return amp * wnoise(t * freq + seed);
+    const jit = clamp(num(params.jitter, 0), 0, 1);
+    const u = t * freq + seed;
+    if (jit <= 0) return amp * wnoise(u);   // exact legacy path — hardness only engages when asked for
+    // Hard stepped jitter: a hash-held level per half-cycle (the snappy beat-shake feel), crossfaded
+    // against the smooth noise by `jitter`. Deterministic — same t, same value, forever.
+    let n = (Math.floor(u * 2) + ((seed * 131) | 0)) | 0;
+    n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+    n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+    const step = (((n ^ (n >>> 16)) >>> 0) / 4294967296) * 2 - 1;
+    return amp * ((1 - jit) * wnoise(u) + jit * step);
   }
   function oscillateDelta(params, t) {
     const amp = num(params.amp, 0), freq = num(params.freq, 0), phase = num(params.phase, 0);

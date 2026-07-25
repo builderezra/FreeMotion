@@ -203,8 +203,21 @@ window.FM = window.FM || {};
     { type: 'fliplayer', label: 'Flip Layer', param: 'mode', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
     { type: 'rasterextrude', label: 'Raster Extrude', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
-    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 200, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 10, step: 0.1, def: 2, unit: 'Hz' }] },
-    { type: 'shake', label: 'Shake', params: [{ key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 20, unit: 'px' }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 0.5, def: 12, unit: 'Hz' }, { key: 'twist', label: 'Twist', min: 0, max: 20, step: 0.5, def: 4, unit: '°' }] },
+    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 600, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
+    // Shake is a headline tool for beat-drop edits, so it runs HOT: violent ranges, a zoom punch, a
+    // hardness blend (smooth noise → stepped jitter), axis lock for slam shakes, and a velocity smear so
+    // big displacements read as motion instead of teleporting. NOTE the render fn's fparam fallbacks stay
+    // at the OLD values (20/12/4 + zeros) — an existing project's instance renders byte-identical; only
+    // these schema defaults (what a fresh add gets) are spicy.
+    { type: 'shake', label: 'Shake', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 800, step: 1, def: 120, unit: 'px' },
+      { key: 'speed', label: 'Speed', min: 1, max: 40, step: 0.5, def: 14, unit: 'Hz' },
+      { key: 'twist', label: 'Twist', min: 0, max: 180, step: 0.5, def: 10, unit: '°' },
+      { key: 'zoom', label: 'Zoom punch', min: 0, max: 60, step: 0.5, def: 12, unit: '%' },
+      { key: 'jitter', label: 'Hardness', min: 0, max: 1, step: 0.02, def: 0.65 },
+      { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
+    ] },
     { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
     { type: 'spin', label: 'Spin', param: 'speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
     { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }] },
@@ -2359,12 +2372,51 @@ window.FM = window.FM || {};
     },
     shake: function (A, B, W, H, bb, p, t, tl) {
       const amt = fparam(p, 'amount', 20, t), spd = fparam(p, 'speed', 12, t), tw = fparam(p, 'twist', 4, t);
+      // Fallbacks are the NO-OP values, not the schema defaults — an old instance (amount/speed/twist
+      // only) must keep rendering byte-identical to the original smooth-noise shake.
+      const zoom = Math.max(0, Math.min(60, fparam(p, 'zoom', 0, t)));
+      const jit = Math.max(0, Math.min(1, fparam(p, 'jitter', 0, t)));
+      const smear = Math.max(0, Math.min(1, fparam(p, 'smear', 0, t)));
+      const dir = Math.round(fparam(p, 'direction', 0, t));
+      // Hard jitter: a hash-held random level per noise cycle — the stepped, snappy slam of a beat-drop
+      // shake, vs wnoise's smooth drift. `jitter` crossfades between them. Deterministic (pure fn of u).
+      const ihash = function (n) {
+        n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+        n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+        return (((n ^ (n >>> 16)) >>> 0) / 4294967296) * 2 - 1;
+      };
+      const noise = jit <= 0
+        ? function (u, off) { return wnoise(u + off); }   // exact legacy path
+        : function (u, off) { return (1 - jit) * wnoise(u + off) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
+      const dampX = dir === 2 ? 0.12 : 1, dampY = dir === 1 ? 0.12 : 1;   // axis lock leaves a whisper of cross-shake so it doesn't read robotic
+      const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
+      const u0 = tl * spd;
+      const d0 = disp(u0);
       const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
-      B.save();
-      B.translate(px + amt * wnoise(tl * spd), py + amt * wnoise(tl * spd + 55));
-      B.rotate(tw * wnoise(tl * spd + 200) * Math.PI / 180);
-      B.translate(-px, -py);
-      B.drawImage(A, 0, 0); B.restore();
+      const rot = tw * noise(u0, 200) * Math.PI / 180;
+      const s = zoom > 0 ? 1 + (zoom / 100) * Math.abs(noise(u0, 313)) : 1;   // |n| → always punches IN (impact), never breathes out
+      const stamp = function (dx, dy, alpha) {
+        B.save();
+        B.globalAlpha = alpha;
+        B.translate(px + dx, py + dy);
+        if (rot) B.rotate(rot);
+        if (s !== 1) B.scale(s, s);
+        B.translate(-px, -py);
+        B.drawImage(A, 0, 0);
+        B.restore();
+      };
+      // Smear: ghost copies trailing along the SHAKE VELOCITY (displacement now vs one frame ago), so a
+      // violent frame reads as a smeared hit instead of a clean teleport. Deterministic — the previous
+      // displacement is recomputed from the same noise, no cross-frame state.
+      if (smear > 0) {
+        const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
+        const d1 = disp((tl - 1 / fps) * spd);
+        const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
+        if (Math.hypot(ddx, ddy) > 1.5) {
+          for (let g = 3; g >= 1; g--) stamp(d0[0] - ddx * (g / 4), d0[1] - ddy * (g / 4), smear * 0.38 * (1 - g / 4.5));
+        }
+      }
+      stamp(d0[0], d0[1], 1);
     },
     swing: function (A, B, W, H, bb, p, t, tl) {
       const amp = fparam(p, 'angle', 15, t), spd = fparam(p, 'speed', 1, t);
@@ -3921,8 +3973,13 @@ window.FM = window.FM || {};
       // Stash the camera's evaluated pan (== what the composite below subtracts) + z-dolly, so the layer
       // loop's applyLayerTransform can add per-depth parallax. Cleared right after the loop so a drawLayer
       // outside a camera scene (thumbnails/export of a non-camera comp) never sees a stale offset.
-      const _ct = cam.transform;
-      const _cpx = FM.evalProp(_ct.x, t), _cpy = FM.evalProp(_ct.y, t);
+      // Route through the behavior resolver: a Wiggle/Oscillate/Audio-drive on the CAMERA is the
+      // one-tap whole-scene shake, and the stash must carry the SHAKEN pan so z≠0 layers parallax
+      // against the shake too (depth shake — the far background lags the slam). Pass-through when the
+      // camera has no behaviors.
+      const _ct = cam.transform, _bv = FM.behaviorValue;
+      const _cpx = _bv ? _bv(cam, 'x', FM.evalProp(_ct.x, t), t) : FM.evalProp(_ct.x, t);
+      const _cpy = _bv ? _bv(cam, 'y', FM.evalProp(_ct.y, t), t) : FM.evalProp(_ct.y, t);
       const _cpz = _ct.z != null ? FM.evalProp(_ct.z, t) : 0;
       _camParallax = { x: isFinite(_cpx) ? _cpx : 0, y: isFinite(_cpy) ? _cpy : 0, z: isFinite(_cpz) ? _cpz : 0 };
     } else {
@@ -3961,9 +4018,13 @@ window.FM = window.FM || {};
     _camParallax = null;   // parallax is scoped to the layer loop above only
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2, tr = cam.transform;
-      const zoom = Math.max(1e-3, FM.evalProp(tr.scale, t) || 1);   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
-      const camX = FM.evalProp(tr.x, t), camY = FM.evalProp(tr.y, t);
-      const rot = (FM.evalProp(tr.rotation, t) || 0) * Math.PI / 180;
+      // Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear
+      // off the shake): camera behaviors = whole-scene shake/drift with one tap.
+      const bv2 = FM.behaviorValue;
+      const zoom = Math.max(1e-3, (bv2 ? bv2(cam, 'scale', FM.evalProp(tr.scale, t) || 1, t) : (FM.evalProp(tr.scale, t) || 1)));   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
+      const camX = bv2 ? bv2(cam, 'x', FM.evalProp(tr.x, t), t) : FM.evalProp(tr.x, t);
+      const camY = bv2 ? bv2(cam, 'y', FM.evalProp(tr.y, t), t) : FM.evalProp(tr.y, t);
+      const rot = ((bv2 ? bv2(cam, 'rotation', FM.evalProp(tr.rotation, t) || 0, t) : (FM.evalProp(tr.rotation, t) || 0))) * Math.PI / 180;
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, P.width, P.height);
