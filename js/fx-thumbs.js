@@ -93,16 +93,19 @@ window.FM = window.FM || {};
 
   // Fresh scene per type: shallow-clone the layer list (plain objects) and give the TARGET layer
   // its own effects array — never share an effects array between types.
-  function sceneFor(type) {
+  // `inst` (optional) = a ready effect instance (preset previews); `span` extends layer/project
+  // duration when a preset's keyframes run past the default 2s sample.
+  function sceneFor(type, inst, span) {
     const reg = FM.fxRegistry.get(type);
     const base = reg && reg.appliesTo === 'text' ? samples.text : reg && reg.appliesTo === 'media' ? samples.media : samples.def;
     const layers = base.layers.map(l => Object.assign({}, l));
+    if (span && span > 2) layers.forEach(l => { l.duration = span + 0.5; });
     const target = layers[base.heroIdx];
-    const inst = FM.fxRegistry.makeInstance(type);
-    target.effects = inst ? [inst] : [];
-    const ov = OVERRIDES[type];
-    if (ov) ov(layers, target);
-    return { project: PROJ, layers: layers };
+    const made = inst || FM.fxRegistry.makeInstance(type);
+    target.effects = made ? [made] : [];
+    if (!inst) { const ov = OVERRIDES[type]; if (ov) ov(layers, target); }
+    const proj = (span && span > 2) ? Object.assign({}, PROJ, { duration: span + 0.5 }) : PROJ;
+    return { project: proj, layers: layers };
   }
 
   // ---- generation ----
@@ -146,6 +149,32 @@ window.FM = window.FM || {};
       return fallback();
     }
   }
+  // Preset previews always render an animated strip spanning the preset's own duration (its
+  // keyframes replay anchored at 0, exactly like applying it to a clip that starts at 0).
+  function generatePreset(preset) {
+    try {
+      const span = Math.min(3, Math.max(0.9, preset.dur || 0));
+      const inst = FM.effectPresets ? FM.effectPresets.makeInstance(preset, 0) : null;
+      if (!inst) return fallback();
+      // Presets carry project-scale px values (a 700px slam) — on a 96px sample the hero would just
+      // vanish off-frame. Scale px-unit params to the thumb; everything else (°, %, 0-1) is scale-free.
+      const reg = FM.fxRegistry.get(preset.fx);
+      (reg ? reg.params : []).forEach(function (p) {
+        if (p.unit !== 'px') return;
+        const v = inst.params[p.key];
+        if (typeof v === 'number') inst.params[p.key] = v * 0.2;
+        else if (v && Array.isArray(v.kf)) v.kf.forEach(function (k) { k.v = (k.v || 0) * 0.2; });
+      });
+      const scene = sceneFor(preset.fx, inst, span);
+      renderFrame(scene, 0);   // warm-up for temporal effects
+      const frames = [];
+      for (let i = 0; i < FRAMES; i++) { renderFrame(scene, 0.001 + i * (span / FRAMES)); frames.push(snap()); }
+      return { kind: 'anim', frames: frames };
+    } catch (e) {
+      if (!warned['p:' + preset.id]) { warned['p:' + preset.id] = 1; console.warn('fx-thumbs: preset preview failed for "' + preset.id + '"', e); }
+      return fallback();
+    }
+  }
 
   // ---- shared animation ticker (one interval repaints every live animated tile) ----
   const live = new Map();     // canvasEl -> frames[] (dropped once the canvas leaves the DOM)
@@ -172,45 +201,53 @@ window.FM = window.FM || {};
 
   // ---- generation queue: at most ONE effect per rAF slice (a full strip counts as one), so
   // ~20 visible tiles stream in without ever janking the browser UI ----
-  const pendingQ = new Map();   // type -> [canvasEl,…] waiting (dedup: many tiles, one generation)
+  const pendingQ = new Map();   // cacheKey -> [canvasEl,…] waiting (dedup: many tiles, one generation)
+  const presetByKey = new Map();   // 'p:<id>' -> preset object awaiting generation
   let queue = [], raf = 0;
   function schedule() { if (!raf && queue.length) raf = requestAnimationFrame(pump); }
   function pump() {
     raf = 0;
-    const type = queue.shift();
-    if (type != null) {
-      const entry = cache.get(type) || generate(type);
-      cache.set(type, entry);
-      const ws = pendingQ.get(type) || [];
-      pendingQ.delete(type);
-      ws.forEach(function (cv) { if (cv._fxType === type) paint(cv, entry); });   // skip tiles re-mounted to another type meanwhile
+    const key = queue.shift();
+    if (key != null) {
+      const pre = presetByKey.get(key);
+      const entry = cache.get(key) || (pre ? generatePreset(pre) : generate(key));
+      cache.set(key, entry);
+      presetByKey.delete(key);
+      const ws = pendingQ.get(key) || [];
+      pendingQ.delete(key);
+      ws.forEach(function (cv) { if (cv._fxType === key) paint(cv, entry); });   // skip tiles re-mounted to another key meanwhile
     }
+    schedule();
+  }
+  // Shared mount plumbing: size the canvas, paint from cache or join the generation queue.
+  function mountKey(cv, key, preset) {
+    if (!FM.renderScene || !FM.fxRegistry || !FM.makeLayer) {   // compositor/registry not loaded — nothing to render with
+      if (!warned._init) { warned._init = 1; console.warn('fx-thumbs: FM.renderScene/fxRegistry missing'); }
+      return;
+    }
+    ensureSamples();
+    if (cv.width !== SIZE) cv.width = SIZE;
+    if (cv.height !== SIZE) cv.height = SIZE;
+    cv._fxType = key;
+    const hit = cache.get(key);
+    if (hit) { paint(cv, hit); return; }
+    if (preset) presetByKey.set(key, preset);
+    let ws = pendingQ.get(key);
+    if (!ws) { pendingQ.set(key, ws = []); queue.push(key); }
+    if (ws.indexOf(cv) < 0) ws.push(cv);
     schedule();
   }
 
   FM.fxThumbs = {
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
-    mount: function (cv, type) {
-      if (!FM.renderScene || !FM.fxRegistry || !FM.makeLayer) {   // compositor/registry not loaded — nothing to render with
-        if (!warned._init) { warned._init = 1; console.warn('fx-thumbs: FM.renderScene/fxRegistry missing'); }
-        return;
-      }
-      ensureSamples();
-      if (cv.width !== SIZE) cv.width = SIZE;
-      if (cv.height !== SIZE) cv.height = SIZE;
-      cv._fxType = type;
-      const hit = cache.get(type);
-      if (hit) { paint(cv, hit); return; }
-      let ws = pendingQ.get(type);
-      if (!ws) { pendingQ.set(type, ws = []); queue.push(type); }
-      if (ws.indexOf(cv) < 0) ws.push(cv);
-      schedule();
-    },
+    mount: function (cv, type) { mountKey(cv, type, null); },
+    /* Same contract for a PRESET's live preview (cache keyed by preset id). */
+    mountPreset: function (cv, preset) { if (preset && preset.id) mountKey(cv, 'p:' + preset.id, preset); },
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
     stopAll: function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
-      queue.length = 0; pendingQ.clear();
+      queue.length = 0; pendingQ.clear(); presetByKey.clear();
       if (ticker) { clearInterval(ticker); ticker = 0; }
       live.clear();
     },

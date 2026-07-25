@@ -466,9 +466,17 @@ window.FM = window.FM || {};
   function fxMoreMenu(layer, fx, idx, btn) {
     if (!FM.contextMenu) return;
     const r = btn.getBoundingClientRect();
+    const reg = FM.fxRegistry.get(fx.type);
     FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, [
       { label: 'Reset', action: () => { const inst = FM.fxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterFx(); } } },
-      { label: 'Duplicate', action: () => { const inst = FM.fxRegistry.makeInstance(fx.type); if (inst) { layer.effects.splice(idx + 1, 0, inst); afterFx(); } } },
+      // Duplicate must carry the CURRENT settings + keyframes (a fresh default instance isn't a duplicate)
+      { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); layer.effects.splice(idx + 1, 0, copy); afterFx(); } },
+      { label: 'Save as preset…', action: () => {
+        const name = prompt('Preset name:', (reg ? reg.label : fx.type) + ' preset'); if (!name || !name.trim()) return;
+        const p = FM.effectPresets && FM.effectPresets.capture(fx, name.trim());
+        if (p && FM.effectPresets.save(p)) { if (FM.toast) FM.toast('Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400); }
+        else if (FM.toast) FM.toast('Couldn’t save this effect as a preset', 1600);
+      } },
       { sep: true },
       { label: 'Delete', danger: true, action: () => { layer.effects.splice(idx, 1); afterFx(); } },
     ]);

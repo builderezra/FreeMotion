@@ -28,13 +28,24 @@ window.FM = window.FM || {};
   }
 
   // The ONE add path — exactly one push, then close + refresh the inspector/timeline/canvas.
-  function addEffect(id) {
+  // `preset` (optional) = an FM.effectPresets entry: same flow, but the instance carries the
+  // preset's params with keyframes re-anchored at the playhead (or the clip start if the playhead
+  // is outside the clip) — park the playhead on the beat, add "Beat Slam", the hit lands there.
+  function addEffect(id, preset) {
     // Re-resolve from the LIVE scene by id: the overlay caches _layer at open(), but a delete (Backspace)
     // or undo (Cmd+Z, which rebuilds layer objects) can orphan it — pushing into the detached object would
     // silently lose the effect (history.commit snapshots the live scene without it).
     const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
     if (!layer) { FM.fxBrowser.close(); return; }
-    const inst = FM.fxRegistry.makeInstance(id);
+    let inst;
+    if (preset && FM.effectPresets) {
+      const st = layer.start || 0, du = layer.duration || 0;
+      const ph = (typeof FM.time === 'number') ? FM.time : st;
+      const anchor = (ph >= st && ph < st + du - 0.01) ? ph : st;
+      inst = FM.effectPresets.makeInstance(preset, anchor);
+    } else {
+      inst = FM.fxRegistry.makeInstance(id);
+    }
     if (!inst || !FM.fxRegistry.supportsLayer(id, layer)) {
       const reg = FM.fxRegistry.get(id);
       let msg;
@@ -54,7 +65,128 @@ window.FM = window.FM || {};
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.requestRender) FM.requestRender();
     if (FM.history) FM.history.commit();
-    if (FM.toast) FM.toast('Added ' + (FM.fxRegistry.get(id).label), 1100);
+    if (FM.toast) FM.toast('Added ' + (FM.fxRegistry.get(id).label) + (preset ? ' — ' + preset.name : ''), 1100);
+  }
+
+  // ---- long-press (or right-click) an effect → its preset sheet ----
+  const LP_MS = 420, LP_SLOP = 10;
+  function attachLongPress(elm, reg) {
+    let timer = 0, x0 = 0, y0 = 0;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } };
+    elm.addEventListener('pointerdown', (e) => {
+      if (e.button && e.button !== 0) return;
+      x0 = e.clientX; y0 = e.clientY; elm._lpFired = false;
+      clear();
+      timer = setTimeout(() => {
+        timer = 0; elm._lpFired = true;
+        if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+        openPresets(reg);
+      }, LP_MS);
+    });
+    elm.addEventListener('pointermove', (e) => { if (timer && (Math.abs(e.clientX - x0) > LP_SLOP || Math.abs(e.clientY - y0) > LP_SLOP)) clear(); });   // a scroll-drag is not a hold
+    elm.addEventListener('pointerup', clear);
+    elm.addEventListener('pointercancel', clear);
+    elm.addEventListener('pointerleave', clear);
+    // desktop parity: right-click = presets (and block the OS menu the mobile hold would trigger)
+    elm.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!elm._lpFired) { elm._lpFired = true; openPresets(reg); } });
+  }
+  // The click that ENDS a long-press must not also add the plain effect.
+  function guardedAdd(elm, id) { return () => { if (elm._lpFired) { elm._lpFired = false; return; } addEffect(id); }; }
+
+  // navigator.clipboard needs a secure context — hidden-textarea copy covers plain file:// use.
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { if (FM.toast) FM.toast('Copy failed — export from a saved preset later', 1800); }
+    ta.remove();
+  }
+
+  // Full-cover preset sheet for one effect (same chrome as the category view, incl. the
+  // depth-tracked pause of the featured auto-scroll).
+  function openPresets(reg) {
+    if (!FM.effectPresets) return;
+    const view = el('div', 'fxb-catview');
+    _catDepth++; stopAuto();
+    const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    const top = el('div', 'fxb-catview-top');
+    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
+    top.appendChild(back);
+    top.appendChild(el('div', 'fxb-catview-title', reg.label + ' presets'));
+    view.appendChild(top);
+
+    const scroller = el('div', 'fxb-catview-scroll');
+    const list = el('div', 'fxp-list');
+
+    // One tappable preset row: live animated thumb + name + duration badge + description.
+    function presetRow(preset, mine) {
+      const row = el('button', 'fxp-row');
+      const th = el('div', 'fxb-thumb fxp-thumb'); th.dataset.cat = reg.category;
+      const cv = el('canvas', 'fxb-thumb-cv');
+      th.appendChild(cv);
+      if (FM.fxThumbs && FM.fxThumbs.mountPreset) FM.fxThumbs.mountPreset(cv, preset);
+      row.appendChild(th);
+      const txt = el('div', 'fxp-txt');
+      const nameLine = el('div', 'fxp-name', preset.name);
+      nameLine.appendChild(el('span', 'fxp-dur', preset.dur > 0 ? (+preset.dur.toFixed(2)) + 's' : 'constant'));
+      txt.appendChild(nameLine);
+      if (preset.desc) txt.appendChild(el('div', 'fxp-desc', preset.desc));
+      row.appendChild(txt);
+      if (mine) {
+        const del = el('span', 'fxp-del', '✕'); del.title = 'Delete this preset';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          FM.effectPresets.remove(preset.id);
+          row.remove();
+          if (FM.toast) FM.toast('Preset deleted', 1100);
+        });
+        row.appendChild(del);
+      }
+      row.addEventListener('click', () => addEffect(reg.id, preset));
+      return row;
+    }
+
+    // Plain add row first — the sheet must never be a dead-end vs a normal tap.
+    const plain = el('button', 'fxp-row');
+    const pth = el('div', 'fxb-thumb fxp-thumb'); pth.dataset.cat = reg.category;
+    const pcv = el('canvas', 'fxb-thumb-cv'); pth.appendChild(pcv);
+    if (FM.fxThumbs) FM.fxThumbs.mount(pcv, reg.type);
+    plain.appendChild(pth);
+    const ptxt = el('div', 'fxp-txt');
+    ptxt.appendChild(el('div', 'fxp-name', 'Default'));
+    ptxt.appendChild(el('div', 'fxp-desc', 'Plain ' + reg.label + ' at its normal settings'));
+    plain.appendChild(ptxt);
+    plain.addEventListener('click', () => addEffect(reg.id));
+    list.appendChild(plain);
+
+    const pools = FM.effectPresets.for(reg.type);
+    if (pools.mine.length) {
+      const sec = el('div', 'fxb-sec-title fxp-sec', 'Your presets');
+      // The shipping hand-off: copies ALL your presets (every effect) as JSON — paste them to
+      // Claude to bake into the app so every install gets them.
+      const exp = el('button', 'fxp-export', 'Export all');
+      exp.title = 'Copy all your presets as code (to ship them into the app)';
+      exp.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const code = FM.effectPresets.exportCode();
+        const done = () => { if (FM.toast) FM.toast('Copied ' + FM.effectPresets.custom().length + ' preset(s) — paste to Claude to ship them into the app', 3200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, () => fallbackCopy(code, done));
+        else fallbackCopy(code, done);
+      });
+      sec.appendChild(exp);
+      list.appendChild(sec);
+      pools.mine.forEach(p => list.appendChild(presetRow(p, true)));
+    }
+    if (pools.shipped.length) {
+      list.appendChild(el('div', 'fxb-sec-title fxp-sec', 'Presets'));
+      pools.shipped.forEach(p => list.appendChild(presetRow(p, false)));
+    }
+    if (!pools.mine.length && !pools.shipped.length) {
+      list.appendChild(el('div', 'fxb-empty', 'No presets for ' + reg.label + ' yet — set it up on a layer, then ⋯ → “Save as preset”'));
+    }
+    scroller.appendChild(list);
+    view.appendChild(scroller);
+    root.appendChild(view);
   }
 
   // A tappable effect tile (thumb + name + ★ favourite toggle).
@@ -65,7 +197,8 @@ window.FM = window.FM || {};
     wrap.appendChild(thumb(reg));
     wrap.appendChild(el('span', 'fxb-tile-name', reg.label));
     wrap.appendChild(star);
-    wrap.addEventListener('click', () => addEffect(reg.id));
+    wrap.addEventListener('click', guardedAdd(wrap, reg.id));
+    attachLongPress(wrap, reg);   // hold (or right-click) → preset sheet
     return wrap;
   }
 
@@ -78,7 +211,8 @@ window.FM = window.FM || {};
       const card = el('button', 'fxb-card'); card.title = reg.label;
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
-      card.addEventListener('click', () => addEffect(reg.id));
+      card.addEventListener('click', guardedAdd(card, reg.id));
+      attachLongPress(card, reg);
       row.appendChild(card);
     });
     // pause auto-scroll while the user is touching it
@@ -253,6 +387,11 @@ window.FM = window.FM || {};
       searchInput.value = ''; searchInput.classList.add('hidden');
       root.classList.remove('hidden');
       rebuild();
+      // one-time discoverability nudge for the hidden gesture (AM users know it; new users don't)
+      if (FM.toast && !localStorage.getItem('fm.fx.presetHint')) {
+        try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (_) {}
+        FM.toast('Tip: hold any effect to browse its presets', 2600);
+      }
     },
     close: function () { if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
   };
