@@ -8,15 +8,38 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
+  // ONE seek queue per media element. The frame cache and the timeline filmstrip both seek the
+  // SAME <video>; on a page reload they ran interleaved, so each 'seeked' could belong to the
+  // OTHER build and the cache captured wrong/duplicated frames — smooth slow-mo looked different
+  // after every refresh. Serializing every seek-consumer through the element's lock fixes it.
+  function seekLock(rec, fn) {
+    const prev = rec._seekLock || Promise.resolve();
+    const p = prev.then(fn, fn);
+    rec._seekLock = p.catch(() => {});
+    return p;
+  }
+
   // Seek to t and capture as soon as the seek completes. (Avoid post-'seeked' timers:
   // backgrounded tabs clamp setTimeout to ~1s, which would make decoding crawl.)
   function seekAndPaint(el, t) {
     return new Promise(res => {
-      let done = false;
-      const fin = () => { if (done) return; done = true; el.removeEventListener('seeked', fin); res(); };
-      el.addEventListener('seeked', fin);
-      try { el.currentTime = t; } catch (e) { fin(); }
-      setTimeout(fin, 500); // fallback cap if 'seeked' never fires
+      let tries = 0;
+      const attempt = () => {
+        let done = false;
+        const fin = () => {
+          if (done) return;
+          done = true;
+          el.removeEventListener('seeked', fin);
+          // A stale 'seeked' (another consumer's seek landing) or the 500ms cap can leave the
+          // element on the WRONG frame — verify we actually arrived, one re-seek per miss.
+          if (Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
+          res();
+        };
+        el.addEventListener('seeked', fin);
+        try { el.currentTime = t; } catch (e) { fin(); }
+        setTimeout(fin, 500); // fallback cap if 'seeked' never fires
+      };
+      attempt();
     });
   }
 
@@ -35,9 +58,11 @@ window.FM = window.FM || {};
     // reused for a full-res export (exporter.js force-clears a scaled cache before exporting).
     if (rec.frameCache && rec.frameCache.fps === fps && !!rec.frameCache.scaled === scaled) return Promise.resolve(rec.frameCache);
     if (rec._building) return rec._building;
-    rec._building = (async function () {
+    rec._building = seekLock(rec, async function () {
       try {
       const el = rec.el, dur = rec.duration || 0;
+      // metadata alone isn't decodable frames — on a fresh reload the blob may still be warming up
+      if (el && el.readyState < 2) await new Promise(r => { const on = () => { el.removeEventListener('loadeddata', on); r(); }; el.addEventListener('loadeddata', on); setTimeout(r, 3000); });
       // A full 1080x1920 bitmap is ~8MB; a reversed/slow clip can need hundreds of frames → multiple GB,
       // which OOM-kills mobile Safari. On the preview path, downscale the longest side to maxDim and cap
       // the frame COUNT by a byte budget. The compositor draws frames scaled to display size anyway, so a
@@ -74,7 +99,7 @@ window.FM = window.FM || {};
       rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur, scaled: scaled, w: tw, h: th };
       return rec.frameCache;
       } finally { rec._building = null; }   // clear on THROW too — a mid-build media swap left this a permanently-rejected promise, so reverse/slow-mo never got a cache again
-    })();
+    });
     return rec._building;
   };
 
@@ -92,7 +117,9 @@ window.FM = window.FM || {};
   let _stripQueue = Promise.resolve();
   FM.buildClipStrip = function (m, count) {
     if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return Promise.resolve(m && m.stripFrames);
-    const p = _stripQueue.then(function () { return _extractStrip(m, count); });
+    // global queue (one strip at a time across clips) + the per-element seek lock (never interleave
+    // with a frame-cache build seeking the same <video> — that corrupted reload-time caches)
+    const p = _stripQueue.then(function () { return seekLock(m, function () { return _extractStrip(m, count); }); });
     _stripQueue = p.catch(function () {});   // keep the chain alive even if one build throws
     return p;
   };
