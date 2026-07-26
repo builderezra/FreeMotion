@@ -93,6 +93,44 @@ window.FM = window.FM || {};
   // The click that ENDS a long-press must not also add the plain effect.
   function guardedAdd(elm, id) { return () => { if (elm._lpFired) { elm._lpFired = false; return; } addEffect(id); }; }
 
+  // ---- "Mask" as an addable entry (Ezra: pressing + Add Effect should offer Mask) ----
+  // Not a real effect instance: tapping it ADDS A PEN MASK to the layer and opens the mask editor.
+  // Injected into the Matte category grid + search results; pure UI, the effect registry stays clean.
+  function addMaskFromBrowser() {
+    const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
+    if (!layer) { FM.fxBrowser.close(); return; }
+    if (['shape', 'text', 'image', 'video', 'adjustment'].indexOf(layer.type) < 0) {
+      if (FM.toast) FM.toast('Masks need a layer with pixels — camera/null/group can’t be masked', 1900);
+      return;
+    }
+    if (!Array.isArray(layer.masks)) layer.masks = [];
+    const m = (FM.masks && FM.masks.make) ? FM.masks.make('add')
+      : { id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [] };
+    layer.masks.push(m);
+    FM.fxBrowser.close();
+    if (FM.inspector) FM.inspector.refresh();
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();
+    if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
+  }
+  function maskTile() {
+    const wrap = el('button', 'fxb-tile'); wrap.title = 'Mask — draw a shape that reveals part of this layer';
+    const t = el('div', 'fxb-thumb'); t.dataset.cat = 'matte';
+    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 96; cv.height = 96;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#1c2536'; g.fillRect(0, 0, 96, 96);
+    g.fillStyle = '#2fd0b5';
+    g.beginPath(); g.rect(12, 20, 72, 56); g.arc(48, 48, 20, 0, Math.PI * 2, true); g.fill('evenodd');
+    g.setLineDash([4, 3]); g.strokeStyle = '#e8ecf4'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(48, 48, 20, 0, Math.PI * 2); g.stroke();
+    cv.classList.add('ready');
+    t.appendChild(cv);
+    wrap.appendChild(t);
+    wrap.appendChild(el('span', 'fxb-tile-name', 'Mask'));
+    wrap.addEventListener('click', addMaskFromBrowser);
+    return wrap;
+  }
+
   // navigator.clipboard needs a secure context — hidden-textarea copy covers plain file:// use.
   function fallbackCopy(text, done) {
     const ta = document.createElement('textarea');
@@ -285,6 +323,7 @@ window.FM = window.FM || {};
     top.appendChild(el('div', 'fxb-catview-title', cat.label));
     view.appendChild(top);
     const grid = el('div', 'fxb-grid');
+    if (cat.key === 'matte') grid.appendChild(maskTile());   // Mask leads its home category
     FM.fxRegistry.byCategory(cat.key).forEach(reg => grid.appendChild(tile(reg, null)));
     const scroller = el('div', 'fxb-catview-scroll'); scroller.appendChild(grid);
     view.appendChild(scroller);
@@ -317,6 +356,7 @@ window.FM = window.FM || {};
     (FM.fxRegistry.categories() || []).forEach(c => { catLabel[c.key] = (c.label || '').toLowerCase(); });
     // match the label, the type id, OR the category name — so "3d", "blur" or "warp" surface
     // the whole family, not just effects that happen to carry the word in their title
+    if ('mask'.indexOf(needle) >= 0 || needle.indexOf('mask') >= 0) grid.appendChild(maskTile());   // the pseudo-entry is searchable too
     FM.fxRegistry.all().filter(r =>
       r.label.toLowerCase().indexOf(needle) >= 0 ||
       (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
