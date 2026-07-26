@@ -3042,19 +3042,29 @@ window.FM = window.FM || {};
     S.bookmark = [[[0.22,0.02],[0.78,0.02],[0.78,0.96],[0.5,0.72],[0.22,0.96]]];
     // pointing hand (☞): smooth thumb hump, long index with one smooth tip, three curled fingers,
     // smooth heel back to the wrist.
-    // pointing hand rebuilt from PARTS: rounded fist + upright thumb + long index with a round cap
-    // + three round-capped curled fingers — the old single outline drew the curls as lumpy bumps.
-    S.pointhand = (function(){
-      const fingerBar=(y0,y1,x1)=>[[0.30,y0],[x1,y0],[r4(x1+0.042),r4((y0+y1)/2),1,0,r4((y1-y0)*0.36)],[x1,y1],[0.30,y1]];
-      return [
-        [[0.115,0.39,1],[0.20,0.315,1],[0.36,0.315,1],[0.445,0.39,1],[0.445,0.735,1],[0.36,0.815,1],[0.20,0.815,1],[0.115,0.735,1]],
-        [[0.235,0.36],[0.245,0.20],[0.30,0.135,1,0.05,-0.002],[0.355,0.20],[0.36,0.36]],
-        [[0.42,0.415],[0.865,0.415],[0.93,0.4775,1,0,0.055],[0.865,0.54],[0.42,0.54]],
-        fingerBar(0.565,0.655,0.60),
-        fingerBar(0.672,0.76,0.585),
-        fingerBar(0.765,0.848,0.55),
-      ];
-    })();
+    // pointing hand (☞): ONE silhouette in the same style as thumbsup — cuff, palm with a thumb
+    // dome, long round-tipped index, three round knuckle scallops cascading below it, rounded palm
+    // bottom. Knuckle caps carry MANUAL tangents (auto ones render sawtooth at this bump size).
+    S.pointhand = [
+      [[0.04,0.35],[0.17,0.35],[0.17,0.805],[0.04,0.805]],
+      [[0.21,0.34],
+       [0.33,0.25,1,0.085,0],
+       [0.455,0.375],
+       [0.87,0.375],
+       [0.935,0.44,1,0,0.055],
+       [0.87,0.505],
+       [0.635,0.505],
+       [0.70,0.5525,1,0,0.04],
+       [0.635,0.60],
+       [0.615,0.605],
+       [0.68,0.6525,1,0,0.04],
+       [0.615,0.70],
+       [0.585,0.705],
+       [0.648,0.75,1,0,0.038],
+       [0.585,0.795],
+       [0.38,0.825,1],
+       [0.21,0.80]],
+    ];
     // flame: leaning tip → concave lick-notch on the right → swelling belly → round bottom —
     // the old 14-point blob read as a garlic bulb with a wisp.
     S.flame = [[[0.575,0.03],[0.565,0.30,1,-0.02,0.115],[0.83,0.66,1,0.005,0.135],[0.50,0.965,1,-0.155,0],[0.17,0.66,1,0.005,-0.135],[0.30,0.32,1,0.045,-0.13]]];
