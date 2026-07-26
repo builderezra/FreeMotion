@@ -1156,9 +1156,9 @@ window.FM = window.FM || {};
   FM.splitLayer = async function (id) {
     const layer = FM.layerById(FM.scene, id);
     if (!layer) return;
-    if (['video', 'image', 'text', 'shape'].indexOf(layer.type) < 0) return;   // only real clips split — a camera/group/null/adjustment split would spawn a phantom duplicate
+    if (['video', 'image', 'text', 'shape'].indexOf(layer.type) < 0) { if (FM.toast) FM.toast('Only video/image/text/shape clips can be split', 1600); return; }   // a camera/group/null/adjustment split would spawn a phantom duplicate
     const t = FM.time, end = layer.start + layer.duration;
-    if (t <= layer.start + 0.02 || t >= end - 0.02) return;   // playhead must be inside the clip
+    if (t <= layer.start + 0.02 || t >= end - 0.02) { if (FM.toast) FM.toast('Park the playhead inside the clip to split it', 1800); return; }   // a silent return here felt like a dead button
     const into = t - layer.start;
     const origTrim = layer.trimStart, origDur = layer.duration;
     // trimStart is SOURCE time — advance through the (possibly RAMPED) speed curve, not a flat multiply
@@ -1221,6 +1221,42 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // Move a clip so it STARTS at the playhead (Ezra: park the playhead, jump the clip to it).
+  // Same semantics as dragging the clip there: keyframes ride along (times are absolute project
+  // time), a multi-selection keeps its relative offsets (the pressed clip lands ON the playhead),
+  // and a group bar carries its members.
+  FM.moveLayerToPlayhead = function (id) {
+    const layer = FM.layerById(FM.scene, id);
+    if (!layer) return;
+    if (layer.locked) { if (FM.toast) FM.toast('Clip is locked', 1400); return; }
+    const t = FM.time || 0;
+    const selIds = FM.selectionIds ? FM.selectionIds() : [];
+    const primaries = (selIds.length > 1 && selIds.indexOf(layer.id) >= 0)
+      ? selIds.map(lid => FM.layerById(FM.scene, lid)).filter(Boolean)
+      : [layer];
+    const set = new Map();
+    const addWithMembers = (l) => {
+      if (set.has(l.id)) return;
+      set.set(l.id, l);
+      if (l.type === 'group' && FM.groupDescendants) FM.groupDescendants(l.id).forEach(addWithMembers);
+    };
+    primaries.forEach(addWithMembers);
+    const delta = t - layer.start;
+    if (Math.abs(delta) < 1e-6) { if (FM.toast) FM.toast('Clip already starts at the playhead', 1400); return; }
+    set.forEach(l => {
+      if (l.locked) return;
+      const floor = -(l.duration - 0.1);   // same floor as dragging: a sliver must stay at/after 0
+      const ns = Math.max(floor, l.start + delta);
+      if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, ns - l.start);
+      l.start = ns;
+    });
+    if (FM.autoFitDuration) FM.autoFitDuration();
+    FM.refreshAll();
+    FM.seekVideosToTime();
+    if (FM.history) FM.history.commit();
+    if (FM.toast) FM.toast(set.size > 1 ? 'Moved ' + set.size + ' clips to the playhead' : 'Moved to playhead', 1300);
+  };
+
   FM.layerMenuItems = function (layer) {
     const items = [
       { label: 'Duplicate', action: () => FM.duplicateLayer(layer.id) },
@@ -1228,6 +1264,7 @@ window.FM = window.FM || {};
       { label: 'Copy', action: () => { const ids = FM.selectionIds ? FM.selectionIds() : []; if (!ids.includes(layer.id)) { FM.scene.selectedId = layer.id; FM.scene.selectedIds = [layer.id]; } FM.copySelection(); } },
       { label: 'Paste Style…', disabled: !(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(layer); } },
       { label: 'Split at playhead', action: () => FM.splitLayer(layer.id) },
+      { label: 'Move to playhead', action: () => FM.moveLayerToPlayhead(layer.id) },
     ];
     if (layer.type === 'video' || layer.type === 'image') {
       items.push({ label: 'Replace media…', action: () => FM.replaceMedia(layer.id) });
