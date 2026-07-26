@@ -918,7 +918,7 @@ window.FM = window.FM || {};
     lightglow: 1, longshadow: 1, halftonelines: 1, clouds: 1, rays: 1, stripes: 1,
     darkglow: 1, stroke: 1, smoothedges: 1, blocknoise: 1, starfield: 1, curl: 1,
     bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1,
-    motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,
+    motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1,
     wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
@@ -1219,7 +1219,8 @@ window.FM = window.FM || {};
     grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4; for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_h=(gr_x*73856093)^(gr_y*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216; var gr_h2=(gr_x*83492791)^(gr_y*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216; var gr_mul=1-gr_mot*(gr_n-0.5); if(gr_n<gr_thr){ gr_mul*=(0.25+0.6*gr_n2); } if(gr_mul<0)gr_mul=0; gr_d[gr_i]=gr_d[gr_i]*gr_mul; gr_d[gr_i+1]=gr_d[gr_i+1]*gr_mul; gr_d[gr_i+2]=gr_d[gr_i+2]*gr_mul; } } },
     iridescence: function(d,W,H,p,t){ var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7; iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return; for(var iri_y=0;iri_y<H;iri_y++){ var iri_row=iri_y*W*4; for(var iri_x=0;iri_x<W;iri_x++){ var iri_i=iri_row+iri_x*4; if(d[iri_i+3]<=0)continue; var iri_r=d[iri_i],iri_g=d[iri_i+1],iri_b=d[iri_i+2]; var iri_l=(0.299*iri_r+0.587*iri_g+0.114*iri_b)/255; var iri_h=(iri_l*3+(iri_x+iri_y)/120); iri_h=iri_h-Math.floor(iri_h); var iri_h6=iri_h*6; var iri_cr=Math.abs(iri_h6-3)-1; iri_cr=iri_cr<0?0:(iri_cr>1?1:iri_cr); var iri_cg=2-Math.abs(iri_h6-2); iri_cg=iri_cg<0?0:(iri_cg>1?1:iri_cg); var iri_cb=2-Math.abs(iri_h6-4); iri_cb=iri_cb<0?0:(iri_cb>1?1:iri_cb); var iri_sr=iri_cr*iri_l*255,iri_sg=iri_cg*iri_l*255,iri_sb=iri_cb*iri_l*255; d[iri_i]=iri_r+(iri_sr-iri_r)*iri_amt; d[iri_i+1]=iri_g+(iri_sg-iri_g)*iri_amt; d[iri_i+2]=iri_b+(iri_sb-iri_b)*iri_amt; } } },
     // ---- batch 11 (multi-param pixel) ----
-    motionblur: function(d,W,H,p,t){ var mbDist=FM.evalProp(p.distance,t); if(mbDist==null)mbDist=20; mbDist=Math.max(0,Math.min(60,mbDist)); if(mbDist<1)return; var mbAng=FM.evalProp(p.angle,t); if(mbAng==null)mbAng=0; mbAng=Math.max(0,Math.min(360,mbAng)); var mbRad=mbAng*Math.PI/180; var mbDx=Math.cos(mbRad); var mbDy=Math.sin(mbRad); var mbStep=mbDist/8; var mbS=d.slice(); var mbXmax=W-1, mbYmax=H-1; for(var mbY=0;mbY<H;mbY++){ for(var mbX=0;mbX<W;mbX++){ var mbI=(mbY*W+mbX)*4; if(mbS[mbI+3]===0)continue; var mbR=0,mbG=0,mbB=0,mbA=0; for(var mbK=-4;mbK<=4;mbK++){ var mbOff=mbK*mbStep; var mbSx=Math.round(mbX+mbDx*mbOff); var mbSy=Math.round(mbY+mbDy*mbOff); if(mbSx<0)mbSx=0; else if(mbSx>mbXmax)mbSx=mbXmax; if(mbSy<0)mbSy=0; else if(mbSy>mbYmax)mbSy=mbYmax; var mbJ=(mbSy*W+mbSx)*4; mbR+=mbS[mbJ]; mbG+=mbS[mbJ+1]; mbB+=mbS[mbJ+2]; mbA+=mbS[mbJ+3]; } d[mbI]=mbR/9; d[mbI+1]=mbG/9; d[mbI+2]=mbB/9; d[mbI+3]=mbA/9; } } },
+    // (motionblur moved to CANVAS_FX: the per-pixel 9-tap JS loop cost ~28ms/frame at 1080×1920 —
+    //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
     colorbalance: function(d,W,H,p,t){ var cbR=FM.evalProp(p.red,t); if(cbR==null)cbR=25; cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG=FM.evalProp(p.green,t); if(cbG==null)cbG=0; cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB=FM.evalProp(p.blue,t); if(cbB==null)cbB=-25; cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4; for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
     highlightsshadows: function(d,W,H,p,t){ var hsHi=FM.evalProp(p.highlights,t); if(hsHi==null)hsHi=-40; hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh=FM.evalProp(p.shadows,t); if(hsSh==null)hsSh=50; hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
     tiltshift: function(d,W,H,p,t){ var tsCenter=FM.evalProp(p.center,t); if(tsCenter==null)tsCenter=0.5; tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter); var tsSoft=FM.evalProp(p.softness,t); if(tsSoft==null)tsSoft=0.5; tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft); var tsW4=W*4, tsLen=d.length, tsR=8; var tsSrc=d.slice(); var tsTmp=new Float32Array(tsLen); var tsx,tsy,tsc,tsi,tsj,tsAcc,tsCnt,tsBase; for(tsy=0;tsy<H;tsy++){ var tsRow=tsy*tsW4; for(tsx=0;tsx<W;tsx++){ tsBase=tsRow+tsx*4; for(tsc=0;tsc<4;tsc++){ tsAcc=0; tsCnt=0; for(tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsx+tsj; if(tsnx<0)tsnx=0; else if(tsnx>=W)tsnx=W-1; tsAcc+=tsSrc[tsRow+tsnx*4+tsc]; tsCnt++; } tsTmp[tsBase+tsc]=tsAcc/tsCnt; } } } var tsBlur=new Float32Array(tsLen); for(tsx=0;tsx<W;tsx++){ var tsCol=tsx*4; for(tsy=0;tsy<H;tsy++){ tsBase=tsy*tsW4+tsCol; for(tsc=0;tsc<4;tsc++){ tsAcc=0; tsCnt=0; for(tsj=-tsR;tsj<=tsR;tsj++){ var tsny=tsy+tsj; if(tsny<0)tsny=0; else if(tsny>=H)tsny=H-1; tsAcc+=tsTmp[tsny*tsW4+tsCol+tsc]; tsCnt++; } tsBlur[tsBase+tsc]=tsAcc/tsCnt; } } } var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001; for(tsy=0;tsy<H;tsy++){ var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1; var tsInv=1-tsBw; var tsRowI=tsy*tsW4; for(tsx=0;tsx<W;tsx++){ tsi=tsRowI+tsx*4; if(d[tsi+3]>0){ d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw; d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw; d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw; } } } },
@@ -1600,9 +1601,27 @@ window.FM = window.FM || {};
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
   let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null;
+  // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
+  // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
+  // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
+  // interest (≤4px) — effects use it as a pivot/ROI, where that slack is invisible.
+  let _bbScan = null;
+  function alphaBBoxFast(srcCanvas, W, H) {
+    const S = 4, w = Math.max(1, Math.ceil(W / S)), h = Math.max(1, Math.ceil(H / S));
+    if (!_bbScan) _bbScan = document.createElement('canvas');
+    if (_bbScan.width !== w || _bbScan.height !== h) { _bbScan.width = w; _bbScan.height = h; }
+    const g = _bbScan.getContext('2d', { willReadFrequently: true });
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h);
+    g.drawImage(srcCanvas, 0, 0, w, h);
+    const bb = alphaBBox(g.getImageData(0, 0, w, h).data, w, h);
+    if (!bb) return null;
+    const x = Math.max(0, bb.x * S - S), y = Math.max(0, bb.y * S - S);
+    const x2 = Math.min(W, (bb.x + bb.w) * S + S), y2 = Math.min(H, (bb.y + bb.h) * S + S);
+    return { x: x, y: y, w: x2 - x, h: y2 - y };
+  }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -1621,7 +1640,7 @@ window.FM = window.FM || {};
     drawLayer(actx, tmp, t, scene);
     let bbox = null;
     if (CFX_NO_BBOX[fx.type]) bbox = { x: 0, y: 0, w: W, h: H };   // fn ignores it — full frame stands in
-    else try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
+    else try { bbox = alphaBBoxFast(_cfA, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
     // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases.
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
     // frame — the exact churn line 1500's guard avoids for A); the clearRect does the reset either way.
@@ -2361,6 +2380,28 @@ window.FM = window.FM || {};
       const ddx = Math.cos(ang), ddy = Math.sin(ang);
       for (let i = steps; i >= 1; i--) B.drawImage(_reC, ddx * i, ddy * i);
       B.drawImage(A, 0, 0);
+    },
+    // Directional Motion Blur, GPU edition: mean of 9 taps along the angle via successive-alpha
+    // draws (k-th draw at 1/(k+1) accumulates a true average) — same geometry as the old per-pixel
+    // kernel at ~1/30th the cost. Bonus: the smear now extends naturally past the silhouette edge
+    // (the old kernel only wrote where alpha already existed).
+    motionblur: function (A, B, W, H, bb, p, t) {
+      let dist = FM.evalProp(p.distance, t); if (dist == null) dist = 20;
+      dist = Math.max(0, Math.min(60, dist));
+      if (dist < 1) { B.drawImage(A, 0, 0); return; }
+      let ang = FM.evalProp(p.angle, t); if (ang == null) ang = 0;
+      const rad = Math.max(0, Math.min(360, ang)) * Math.PI / 180;
+      const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / 8;
+      // additive 'lighter' at 1/9 each = true premultiplied MEAN of the 9 taps — successive-alpha
+      // source-over skews partial-coverage edge pixels to full opacity (hard edge, no smear)
+      B.save();
+      B.globalCompositeOperation = 'lighter';
+      B.globalAlpha = 1 / 9;
+      for (let k = 0; k <= 8; k++) {
+        const off = (k - 4) * step;
+        B.drawImage(A, dx * off, dy * off);
+      }
+      B.restore();
     },
     tiles: function (A, B, W, H, bb, p, t) {
       const gap = Math.max(0, Math.min(0.4, fparam(p, 'gap', 8, t) / 100));
