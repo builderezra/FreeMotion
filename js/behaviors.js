@@ -41,13 +41,13 @@ window.FM = window.FM || {};
 
   const DEFS = [
     { type: 'wiggle', label: 'Wiggle', props: ALL_PROPS.slice(), params: [
-      rng('amp', 'Amount', 0, 1200, 0.5, 20, ''),
+      rng('amp', 'Amount', 0, 2400, 0.5, 20, ''),
       rng('freq', 'Frequency', 0.1, 40, 0.1, 2, 'Hz'),
       rng('jitter', 'Hardness', 0, 1, 0.02, 0, ''),   // 0 = smooth drift (legacy), 1 = hard stepped slam — def 0 keeps every existing wiggle byte-identical
       rng('seed', 'Seed', 0, 1000, 1, 0, ''),
     ] },
     { type: 'oscillate', label: 'Oscillate', props: ALL_PROPS.slice(), params: [
-      rng('amp', 'Amount', 0, 400, 0.5, 30, ''),
+      rng('amp', 'Amount', 0, 2400, 0.5, 30, ''),
       rng('freq', 'Frequency', 0.05, 10, 0.05, 1, 'Hz'),
       rng('phase', 'Phase', 0, 360, 1, 0, '°'),
     ] },

@@ -203,14 +203,14 @@ window.FM = window.FM || {};
     { type: 'fliplayer', label: 'Flip Layer', param: 'mode', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
     { type: 'rasterextrude', label: 'Raster Extrude', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
-    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 600, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
+    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
     // Shake is a headline tool for beat-drop edits, so it runs HOT: violent ranges, a zoom punch, a
     // hardness blend (smooth noise → stepped jitter), axis lock for slam shakes, and a velocity smear so
     // big displacements read as motion instead of teleporting. NOTE the render fn's fparam fallbacks stay
     // at the OLD values (20/12/4 + zeros) — an existing project's instance renders byte-identical; only
     // these schema defaults (what a fresh add gets) are spicy.
     { type: 'shake', label: 'Shake', params: [
-      { key: 'amount', label: 'Amount', min: 0, max: 800, step: 1, def: 120, unit: 'px' },
+      { key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 120, unit: 'px' },
       { key: 'speed', label: 'Speed', min: 1, max: 40, step: 0.5, def: 14, unit: 'Hz' },
       { key: 'twist', label: 'Twist', min: 0, max: 180, step: 0.5, def: 10, unit: '°' },
       { key: 'zoom', label: 'Zoom punch', min: 0, max: 60, step: 0.5, def: 12, unit: '%' },
@@ -218,14 +218,19 @@ window.FM = window.FM || {};
       { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3 },
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
     ] },
-    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
+    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
     { type: 'spin', label: 'Spin', param: 'speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
     { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }] },
-    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -400, max: 400, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -400, max: 400, step: 5, def: 0, unit: 'px/s' }] },
-    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 400, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }] },
+    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' }] },
+    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }] },
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
-    { type: 'tiles', label: 'Tiles', params: [{ key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 }, { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 8, unit: '%' }] },
+    { type: 'tiles', label: 'Tiles', params: [
+      { key: 'mode', label: 'Layout', options: ['Extend', 'Grid'], def: 0 },   // Extend = clip stays put, copies fill outward; Grid = classic n×n shrink
+      { key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 },
+      { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
+      { key: 'mirror', label: 'Mirror', options: ['Off', 'On'], def: 1 },      // mirrored copies join seamlessly — "the clip keeps going"
+    ] },
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
     // (RSMB/AE Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
@@ -1594,10 +1599,10 @@ window.FM = window.FM || {};
     maxX = Math.min(W - 1, maxX + 2); maxY = Math.min(H - 1, maxY + 2);
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
-  let _cfA = null, _cfB = null, _cfTex = null, _reC = null;
+  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null;
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, tiles: 1, rasterextrude: 1, motionflow: 1, particles: 1 };
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -2358,12 +2363,49 @@ window.FM = window.FM || {};
       B.drawImage(A, 0, 0);
     },
     tiles: function (A, B, W, H, bb, p, t) {
-      const n = Math.max(1, Math.min(8, Math.round(fparam(p, 'count', 3, t))));
       const gap = Math.max(0, Math.min(0.4, fparam(p, 'gap', 8, t) / 100));
-      const cw = W / n, ch = H / n, gx = cw * gap, gy = ch * gap;
-      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-        B.drawImage(A, 0, 0, W, H, i * cw + gx / 2, j * ch + gy / 2, cw - gx, ch - gy);
+      const mirror = Math.round(fparam(p, 'mirror', 0, t)) === 1;   // fallback Off: old instances byte-identical
+      const mode = Math.round(fparam(p, 'mode', 1, t));             // fallback 1 = Grid (classic): old instances byte-identical
+      if (mode === 1) {
+        const n = Math.max(1, Math.min(8, Math.round(fparam(p, 'count', 3, t))));
+        const cw = W / n, ch = H / n, gx = cw * gap, gy = ch * gap;
+        for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+          const flx = mirror && (i % 2 === 1), fly = mirror && (j % 2 === 1);
+          if (!flx && !fly) { B.drawImage(A, 0, 0, W, H, i * cw + gx / 2, j * ch + gy / 2, cw - gx, ch - gy); continue; }
+          B.save();
+          B.translate(i * cw + gx / 2 + (flx ? cw - gx : 0), j * ch + gy / 2 + (fly ? ch - gy : 0));
+          B.scale(flx ? -1 : 1, fly ? -1 : 1);
+          B.drawImage(A, 0, 0, W, H, 0, 0, cw - gx, ch - gy);
+          B.restore();
+        }
+        return;
       }
+      // EXTEND (default for new adds): the clip stays EXACTLY where it is at full size; copies of
+      // its rendered bounds tile OUTWARD to fill the frame — an add-on around the clip, not a
+      // shrink. Mirror flips alternate copies so the edges join seamlessly ("it keeps going").
+      const bx = bb.x + 2, by = bb.y + 2, bw = bb.w - 4, bh = bb.h - 4;   // alphaBBox pads 2px of transparency — inset it or every join shows a gutter
+      if (bw < 24 || bh < 24 || (bx <= 3 && by <= 3 && bw >= W - 6 && bh >= H - 6)) { B.drawImage(A, 0, 0); return; }   // tiny content / already full-frame → nothing to extend
+      if (!_tileC) _tileC = document.createElement('canvas');
+      if (_tileC.width !== bw || _tileC.height !== bh) { _tileC.width = bw; _tileC.height = bh; }
+      const tc = _tileC.getContext('2d');
+      tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, bw, bh);
+      tc.drawImage(A, bx, by, bw, bh, 0, 0, bw, bh);
+      const stepX = bw * (1 + gap), stepY = bh * (1 + gap);
+      const iMin = Math.max(-60, -Math.ceil((bx + bw) / stepX)), iMax = Math.min(60, Math.ceil((W - bx) / stepX));
+      const jMin = Math.max(-60, -Math.ceil((by + bh) / stepY)), jMax = Math.min(60, Math.ceil((H - by) / stepY));
+      for (let j = jMin; j <= jMax; j++) for (let i = iMin; i <= iMax; i++) {
+        if (i === 0 && j === 0) continue;   // the original draws last, on top, from the untouched plate
+        const x = bx + i * stepX, y = by + j * stepY;
+        if (x + bw < 0 || x > W || y + bh < 0 || y > H) continue;
+        const flx = mirror && ((i % 2 + 2) % 2 === 1), fly = mirror && ((j % 2 + 2) % 2 === 1);
+        if (!flx && !fly) { B.drawImage(_tileC, x, y); continue; }
+        B.save();
+        B.translate(x + (flx ? bw : 0), y + (fly ? bh : 0));
+        B.scale(flx ? -1 : 1, fly ? -1 : 1);
+        B.drawImage(_tileC, 0, 0);
+        B.restore();
+      }
+      B.drawImage(A, 0, 0);
     },
     // ---- Move / Transform (motion about the layer's rendered bounds) ----
     wiggle: function (A, B, W, H, bb, p, t, tl) {
