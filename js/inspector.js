@@ -830,7 +830,6 @@ window.FM = window.FM || {};
     { key: 'color', label: 'Color & Fill', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
     { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
-    { key: 'masks', label: 'Masks', icon: 'M4 4h16v16H4zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8' },   // pen masks get their own card — buried at the tail of Blending, nobody found them
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
     { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },          // video only
     { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },   // video only
@@ -1143,15 +1142,15 @@ window.FM = window.FM || {};
     return wrap;
   }
 
-  // the Masks card only shows where pixels exist to reveal (maskableLayer) — one gate over every branch
-  function catsFor(layer) { return catsForBase(layer).filter(c => c.key !== 'masks' || maskableLayer(layer)); }
+  // masks live INSIDE the Effects card now (Ezra: not their own section) — no per-card gate needed
+  function catsFor(layer) { return catsForBase(layer); }
   function catsForBase(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
     // Groups composite as a flattened unit whenever they carry a look of their own, so effects,
     // blending/opacity and presets all act on the whole group — plus the door into its own timeline.
     if (layer.type === 'group') return CATEGORIES.filter(c => ['color', 'border', 'blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
     // Nulls/adjustments never rasterize their own pixels — a fill or border card would be a dead end.
-    if (layer.type === 'null' || layer.type === 'adjustment') return CATEGORIES.filter(c => ['blend', 'masks', 'transform', 'presets', 'effects'].indexOf(c.key) >= 0);   // masks on an adjustment = a LOCAL grade (the maskable gate drops it for nulls)
+    if (layer.type === 'null' || layer.type === 'adjustment') return CATEGORIES.filter(c => ['blend', 'transform', 'presets', 'effects'].indexOf(c.key) >= 0);   // adjustment reaches masks (= a LOCAL grade) inside its Effects card
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
     if (layer.type === 'video') {
@@ -1177,7 +1176,7 @@ window.FM = window.FM || {};
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
     if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
-    if (v === 'masks') return maskableLayer(layer);   // pen masks need pixels to reveal
+    if (v === 'masks') return false;   // card retired — masks live inside the Effects card (fall back home)
     if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
@@ -2173,8 +2172,6 @@ window.FM = window.FM || {};
         }
         body.appendChild(row);
       });
-    } else if (key === 'masks') {
-      body.appendChild(masksBlock(layer));   // pen masks — promoted from the tail of Blending to their own card
     } else if (key === 'presets') {
       body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
       const pwrap = el('div', 'preset-wrap');
@@ -2215,6 +2212,8 @@ window.FM = window.FM || {};
       const s = effectsSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
       body.appendChild(s);
+      // Masks live here, under the effect stack (Ezra: masks belong in Effects, not their own card).
+      if (maskableLayer(layer)) body.appendChild(masksBlock(layer));
     } else if (key === 'audiofx') {
       const s = audioFxSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
