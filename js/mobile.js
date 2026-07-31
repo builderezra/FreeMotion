@@ -119,6 +119,15 @@ window.FM = window.FM || {};
       if (ids.length > 1 && FM.deleteSelected) { FM.deleteSelected(); return; }   // select-mode: delete the whole set
       var L = curLayer(); if (L && FM.deleteLayer) FM.deleteLayer(L.id);
     });
+    // ⋯ Project More — the SAME menu desktop's top-bar ⋯ shows with nothing selected (save frame,
+    // guides, loop/onion/snapping, export marks, preview speed, open/save/reset project). Items a
+    // phone can't use (keyboard shortcuts) carry mobileHide and are filtered out.
+    var mProjMore = document.getElementById('m-proj-more');
+    if (mProjMore) mProjMore.addEventListener('click', function () {
+      if (!FM.contextMenu || !FM.projectMoreItems) return;
+      var r = mProjMore.getBoundingClientRect();
+      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.projectMoreItems().filter(function (it) { return !it.mobileHide; }));
+    });
     // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
     var mGroup = document.getElementById('m-group');
     if (mGroup) mGroup.addEventListener('click', function () {

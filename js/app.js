@@ -1266,6 +1266,9 @@ window.FM = window.FM || {};
       { label: 'Split at playhead', action: () => FM.splitLayer(layer.id) },
       { label: 'Move to playhead', action: () => FM.moveLayerToPlayhead(layer.id) },
     ];
+    // cross-layer keyframe paste: the keyframe menu needs an existing diamond to long-press, so a
+    // layer with NO keyframes had no touch path — this gives every platform the same entry
+    if (FM.kfClipboard && FM.kfClipboard.length && FM.pasteKfAtPlayhead) items.push({ label: 'Paste keyframes at playhead', action: () => FM.pasteKfAtPlayhead() });
     if (layer.type === 'video' || layer.type === 'image') {
       items.push({ label: 'Replace media…', action: () => FM.replaceMedia(layer.id) });
     }
@@ -1305,6 +1308,9 @@ window.FM = window.FM || {};
     }
     items.push({ label: 'Save as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
     items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
+    // the layer extras (Flip/Fit/Clipping Mask/Outline/Extract Audio/Media Info/colour tag) used to
+    // live ONLY in the desktop top-bar ⋯ — merged here so every surface shows one identical menu
+    if (FM.layerMoreItems) { items.push({ sep: true }); FM.layerMoreItems(layer).forEach(it => items.push(it)); }
     items.push({ sep: true }, { label: 'Delete', danger: true, action: () => FM.deleteLayer(layer.id) });
     return items;
   };
@@ -1675,44 +1681,31 @@ window.FM = window.FM || {};
     const markRegionIn = () => { const P = FM.scene.project; P.loopIn = FM.time; if (P.loopOut != null && P.loopOut <= P.loopIn) P.loopOut = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
     const markRegionOut = () => { const P = FM.scene.project; P.loopOut = FM.time; if (P.loopIn != null && P.loopIn >= P.loopOut) P.loopIn = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
     const clearRegion = () => { FM.scene.project.loopIn = null; FM.scene.project.loopOut = null; FM.timeline.rebuild(); };
-    const moreBtn = document.getElementById('btn-more');
-    if (moreBtn) moreBtn.addEventListener('click', () => {
+    // ---- SHARED menu builders (Ezra: mobile and PC must show the SAME menus in the same places).
+    // One source of truth each: the layer extras feed FM.layerMenuItems (so right-click, desktop ⋯
+    // and the mobile ≡ are all identical), and the project menu feeds desktop ⋯ AND the mobile
+    // top-bar ⋯. Items a phone can't use carry mobileHide.
+    FM.layerMoreItems = function (sel) {
+      const items = [];
+      items.push({ label: (sel.flipH ? '✓ ' : '') + 'Flip Horizontally', action: () => FM.flipLayer(sel, 'h') });
+      items.push({ label: (sel.flipV ? '✓ ' : '') + 'Flip Vertically', action: () => FM.flipLayer(sel, 'v') });
+      if (sel.type !== 'group' && sel.type !== 'null') {
+        items.push({ label: 'Fit Composition Area', action: () => FM.fitLayer(sel, 'fit') });
+        items.push({ label: 'Fill Composition Area', action: () => FM.fitLayer(sel, 'fill') });
+        items.push({ label: 'Stretch to Composition Area', action: () => FM.fitLayer(sel, 'stretch') });
+      }
+      items.push({ label: (sel.blendMode === 'mask-include' ? '✓ ' : '') + 'Create Clipping Mask', action: () => FM.toggleClippingMask(sel) });
+      if (sel.type === 'shape' && sel.shape !== 'path') items.push({ label: 'Convert to Outline', action: () => FM.convertToOutline(sel) });
+      if (sel.type === 'video') items.push({ label: 'Extract Audio', action: () => FM.extractAudio(sel) });
+      items.push({ label: 'Media Info', action: () => FM.mediaInfoToast(sel) });
+      items.push({ swatchLabel: 'Layer colour tag', swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff', '#9b5cff'], onPick: (hex) => FM.setLayerLabel(sel, hex) });
+      return items;
+    };
+    FM.projectMoreItems = function () {
       const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
-      const r = moreBtn.getBoundingClientRect();
       const rates = [0.25, 0.5, 1, 2, 4], cur = FM.previewRate || 1;
       const nextRate = rates[(rates.indexOf(cur) + 1) % rates.length];
-      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-      const items = [];
-      if (sel) {
-        // AM's layer menu — a clip is selected, so ⋯ is about THIS layer (deselect for project options).
-        const isMedia = sel.type === 'video' || sel.type === 'image';
-        const selLayers = (FM.selectionIds ? FM.selectionIds() : [sel.id]).map(id => FM.layerById(FM.scene, id)).filter(Boolean);
-        items.push({ label: 'Save to My Elements', action: async () => {
-          const name = prompt('Element name:', sel.name || 'My element'); if (!name || !name.trim()) return;
-          const ok = await FM.elements.save(name.trim(), selLayers.length ? selLayers : [sel]);
-          if (FM.toast) FM.toast(ok ? 'Saved to My Elements' : 'Could not save element');
-        } });
-        items.push({ label: (sel.flipH ? '✓ ' : '') + 'Flip Horizontally', action: () => FM.flipLayer(sel, 'h') });
-        items.push({ label: (sel.flipV ? '✓ ' : '') + 'Flip Vertically', action: () => FM.flipLayer(sel, 'v') });
-        if (sel.type !== 'group' && sel.type !== 'null') {
-          items.push({ label: 'Fit Composition Area', action: () => FM.fitLayer(sel, 'fit') });
-          items.push({ label: 'Fill Composition Area', action: () => FM.fitLayer(sel, 'fill') });
-          items.push({ label: 'Stretch to Composition Area', action: () => FM.fitLayer(sel, 'stretch') });
-        }
-        items.push({ sep: true });
-        items.push({ label: (sel.blendMode === 'mask-include' ? '✓ ' : '') + 'Create Clipping Mask', action: () => FM.toggleClippingMask(sel) });
-        if (sel.type === 'shape' && sel.shape !== 'path') items.push({ label: 'Convert to Outline', action: () => FM.convertToOutline(sel) });
-        if (sel.type === 'video') items.push({ label: 'Extract Audio', action: () => FM.extractAudio(sel) });
-        items.push({ label: 'Media Info', action: () => FM.mediaInfoToast(sel) });
-        if (sel.type === 'group') items.push({ label: 'Ungroup', action: () => FM.ungroup(sel.id) });
-        items.push({ sep: true });
-        items.push({ swatchLabel: 'Layer colour tag', swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff', '#9b5cff'], onPick: (hex) => FM.setLayerLabel(sel, hex) });
-        items.push({ sep: true });
-        items.push({ label: 'Project options…', action: () => { FM.selectLayer(null); setTimeout(() => moreBtn.click(), 0); } });
-        if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 4, items);
-        return;
-      }
-      items.push(
+      return [
         { label: 'Canvas size…', action: () => clickHidden('btn-canvas') },
         { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
         { label: 'Save frame (PNG)', action: () => clickHidden('btn-snapshot') },
@@ -1733,10 +1726,22 @@ window.FM = window.FM || {};
         { label: 'Open project…', action: () => clickHidden('btn-open-proj') },
         { label: 'Save project', action: () => clickHidden('btn-save-proj') },
         { label: 'Reset project…', danger: true, action: () => { if (confirm('Reset the project? This clears all layers and cannot be undone.')) FM.resetProject(); } },
-        { sep: true },
-        { label: 'Keyboard shortcuts', action: () => clickHidden('btn-help') }
-      );
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, items);
+        { sep: true, mobileHide: true },
+        { label: 'Keyboard shortcuts', mobileHide: true, action: () => clickHidden('btn-help') },
+      ];
+    };
+    const moreBtn = document.getElementById('btn-more');
+    if (moreBtn) moreBtn.addEventListener('click', () => {
+      const r = moreBtn.getBoundingClientRect();
+      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      if (sel) {
+        // a clip is selected → the SAME menu as right-clicking the clip / the mobile ≡, plus the
+        // door back to the project options
+        const items = FM.layerMenuItems(sel).concat([{ sep: true }, { label: 'Project options…', action: () => { FM.selectLayer(null); setTimeout(() => moreBtn.click(), 0); } }]);
+        if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 4, items);
+        return;
+      }
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, FM.projectMoreItems());
     });
     const prateEl = document.getElementById('preview-rate');
     if (prateEl) prateEl.addEventListener('change', () => FM.setPreviewRate(parseFloat(prateEl.value) || 1));

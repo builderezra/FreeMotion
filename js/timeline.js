@@ -191,6 +191,7 @@ window.FM = window.FM || {};
     });
     FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
   }
+  FM.pasteKfAtPlayhead = pasteKfAtPlayhead;   // the layer ≡/⋯ menu needs it: a layer with NO keyframes has no diamond to long-press
 
   function shade(hex, pct) {
     const n = parseInt(hex.slice(1), 16);
@@ -1122,21 +1123,43 @@ window.FM = window.FM || {};
         onDown(e);
       });
       // right-click ruler → add / remove a marker
-      rulerEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        if (!FM.contextMenu) return;
+      // Marker menu — ONE builder for desktop right-click AND mobile long-press (parity: both
+      // platforms see identical items, incl. Rename which used to be desktop-only via the inline input).
+      const rulerMenuItems = (t) => {
         const P = FM.scene.project; if (!P.markers) P.markers = [];
-        const t = timeFromX(e.clientX);
-        const near = P.markers.find(m => Math.abs(m.t - t) < 10 / pxPerSec());
+        const near = P.markers.find(m => Math.abs(m.t - t) < 14 / pxPerSec());
         // Removing the thumbnail-frame marker must also UNPIN it — else P.thumbPinned stays true and the
         // card thumbnail freezes forever (auto-regen is gated on !thumbPinned).
         const unpinIf = (was) => { if (was) { P.thumbPinned = false; if (FM.projects && FM.projects.touchCurrent) FM.projects.touchCurrent(true); } };
-        const items = near
-          ? [{ label: near.thumb ? 'Remove thumbnail pin' : 'Remove marker', danger: true, action: () => { const wasThumb = !!near.thumb; P.markers = P.markers.filter(m => m !== near); unpinIf(wasThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }]
-          : [{ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } }];   // markers live on exact frames
+        const items = [];
+        if (near) {
+          items.push({ label: 'Rename marker…', action: () => { const n = prompt('Marker name:', near.label || 'Marker'); if (n != null && n.trim()) { near.label = n.trim(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } } });
+          items.push({ label: near.thumb ? 'Remove thumbnail pin' : 'Remove marker', danger: true, action: () => { const wasThumb = !!near.thumb; P.markers = P.markers.filter(m => m !== near); unpinIf(wasThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
+        } else {
+          items.push({ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });   // markers live on exact frames
+        }
         if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { const hadThumb = P.markers.some(m => m.thumb); P.markers = []; unpinIf(hadThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
-        FM.contextMenu.show(e.clientX, e.clientY, items);
+        return items;
+      };
+      rulerEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (!FM.contextMenu) return;
+        FM.contextMenu.show(e.clientX, e.clientY, rulerMenuItems(timeFromX(e.clientX)));
       });
+      // touch: long-press the ruler for the same marker menu (phones have no right-click)
+      let rulerHold = 0, rulerHX = 0, rulerHY = 0;
+      rulerEl.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') return;
+        rulerHX = e.clientX; rulerHY = e.clientY;
+        clearTimeout(rulerHold);
+        rulerHold = setTimeout(() => {
+          if (!FM.contextMenu) return;
+          if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+          FM.contextMenu.show(rulerHX, rulerHY + 10, rulerMenuItems(timeFromX(rulerHX)));
+        }, 550);
+      });
+      rulerEl.addEventListener('pointermove', (e) => { if (rulerHold && (Math.abs(e.clientX - rulerHX) > 12 || Math.abs(e.clientY - rulerHY) > 12)) { clearTimeout(rulerHold); rulerHold = 0; } });
+      ['pointerup', 'pointercancel'].forEach(ev => rulerEl.addEventListener(ev, () => { clearTimeout(rulerHold); rulerHold = 0; }));
       // (scrub/deselect on the lanes is handled by the #timeline pointerdown above)
       // right-click empty timeline → quick Add menu
       tracksEl.addEventListener('contextmenu', (e) => {

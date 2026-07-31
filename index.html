@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=193">
+<link rel="stylesheet" href="styles.css?v=194">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.56</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.57</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -50,6 +50,7 @@
       <input id="proj-name-m" class="m-projname" type="text" value="Untitled" spellcheck="false" aria-label="Project name">
       <input id="clip-name-m" class="m-projname m-clipname" type="text" spellcheck="false" aria-label="Layer name">
       <span id="ver-m" class="m-ver" title="Build version"></span>
+      <button id="m-proj-more" class="m-tbtn" aria-label="More — save frame, snapping, onion skin, export marks, project"><svg viewBox="0 0 24 24" class="m-ico" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
       <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button id="m-export" class="m-export" aria-label="Export"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M6 20h12"/></svg></button>
       <button id="m-group" class="m-tbtn" aria-label="Group selected layers"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
@@ -314,7 +315,7 @@
   <script src="js/fx-registry.js?v=38"></script>
   <script src="js/fx-presets.js?v=2"></script>
   <script src="js/fx-thumbs.js?v=4"></script>
-  <script src="js/timeline.js?v=152"></script>
+  <script src="js/timeline.js?v=153"></script>
   <script src="js/addmenu.js?v=10"></script>
   <script src="js/inspector.js?v=171"></script>
   <script src="js/fx-browser.js?v=17"></script>
@@ -345,10 +346,10 @@
   <script src="js/contextmenu.js?v=37"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=162"></script>
+  <script src="js/app.js?v=163"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=3"></script>
-  <script src="js/mobile.js?v=21"></script>
+  <script src="js/mobile.js?v=22"></script>
   <script src="js/ai-manifest.js?v=3"></script>
   <script src="js/ai-ops.js?v=6"></script>
   <script src="js/ai-key.js?v=1"></script>

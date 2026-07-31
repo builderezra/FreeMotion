@@ -1200,13 +1200,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 
   /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
   #clip-name-m, #m-dup, #m-del, #m-group, #m-more { display: none; }
-  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export { display: none; }
+  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more { display: none; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
   body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
   /* multi-select (long-press a layer's header): Group + bin appear beside the export slot */
   body.sel-multi #m-group, body.sel-multi #m-del { display: flex; }
   body.sel-multi #m-dup, body.sel-multi #m-more { display: none; }   /* the ⋯ clip menu is single-clip only */
-  body.sel-multi #m-settings { display: none; }
+  body.sel-multi #m-settings, body.sel-multi #m-proj-more { display: none; }
   #m-del:active .m-ico { color: #ff6b6b; }
 }
 
