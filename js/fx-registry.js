@@ -58,7 +58,7 @@ window.FM = window.FM || {};
     // batch 20 (cinematic grades + framing)
     bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
     // batch 21
-    faded: 'color', nightvision: 'stylize', sketch: 'drawing',
+    faded: 'color', nightvision: 'stylize', sketch: 'drawing', roundcorners: 'stylize',
     // batch 22 (3D — textured-mesh solids)
     cube3d: 'threed', box3d: 'threed', cylinder3d: 'threed', sphere3d: 'threed', ellipsoid3d: 'threed',
     torus3d: 'threed', ring3d: 'threed', pyramid3d: 'threed', octahedron3d: 'threed', hexprism3d: 'threed',
@@ -119,7 +119,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['tiles', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift', 'touchup'];
+  FM.FX_FEATURED = ['roundcorners', 'tiles', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {

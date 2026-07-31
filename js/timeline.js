@@ -36,6 +36,7 @@ window.FM = window.FM || {};
   let kfDrag = null;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
+  let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
   let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
@@ -49,7 +50,8 @@ window.FM = window.FM || {};
   // never followed, a half-trim, a mid-drag keyframe time) — that state would ride silently into the
   // next history.commit and autosave.
   function abortGestures() {
-    const had = clipMove || trimDrag || kfDrag;
+    const had = clipMove || trimDrag || kfDrag || slipDrag;
+    if (slipDrag) { slipDrag.layer.trimStart = slipDrag.trim0; slipDrag = null; }
     if (clipMove) {
       clipMove.layer.start = clipMove.origStart;
       (clipMove.group || []).forEach(g => { g.layer.start = g.origStart; });
@@ -72,28 +74,41 @@ window.FM = window.FM || {};
 
   // Snap a proposed clip start so the clip's start OR end lands on 0 / playhead / another clip edge.
   // Returns { v: snapped start, snapped: bool, guide: alignment time for the guide line }.
-  function snapStart(layer, ns, pps, excl) {
+  function snapStart(layer, ns, pps, excl, sup) {
     if (!snapping) return { v: ns, snapped: false, guide: 0 };   // clip start may go NEGATIVE (AM: drag past 0); floor applied by the caller
-    const snapPx = 7, dur = layer.duration;
+    const snapPx = 7, dur = layer.duration;   // 7 SCREEN px — the time radius scales with zoom automatically (7/pps seconds)
     const starts = [0, FM.time], ends = [FM.time];
+    // sup: targets this clip was ALREADY sitting on when the drag began — the user just snapped
+    // there and is dragging again, so re-offering the same magnet would fight the nudge (Ezra)
+    const supHit = (c) => sup && sup.some(sv => Math.abs(sv - c) < 1e-3);
     // excl: every layer riding in the SAME drag — a co-dragged clip's edge is a moving target that
     // feeds back through the group-delta and ratchets the whole selection along in snap-sized steps
     FM.scene.layers.forEach(l => { if (l.id !== layer.id && !(excl && excl[l.id])) { starts.push(l.start, l.start + l.duration); ends.push(l.start, l.start + l.duration); } });
     (FM.scene.project.markers || []).forEach(mk => { starts.push(mk.t); ends.push(mk.t); });
     let best = ns, bestD = snapPx / pps, snapped = false, guide = 0;
-    starts.forEach(c => { if (Math.abs(ns - c) < bestD) { bestD = Math.abs(ns - c); best = c; snapped = true; guide = c; } });
-    ends.forEach(c => { const s = c - dur; if (s >= 0 && Math.abs(ns - s) < bestD) { bestD = Math.abs(ns - s); best = s; snapped = true; guide = c; } });
+    starts.forEach(c => { if (supHit(c)) return; if (Math.abs(ns - c) < bestD) { bestD = Math.abs(ns - c); best = c; snapped = true; guide = c; } });
+    ends.forEach(c => { if (supHit(c)) return; const s = c - dur; if (s >= 0 && Math.abs(ns - s) < bestD) { bestD = Math.abs(ns - s); best = s; snapped = true; guide = c; } });
     return { v: best, snapped: snapped, guide: guide };   // may be negative (start before 0); caller floors it
+  }
+  // The snap targets a clip currently SITS on (drag-start inventory for the suppression above).
+  function snappedTargetsOf(layer) {
+    const eps = 1e-3, out = [], s0 = layer.start, e0 = layer.start + layer.duration;
+    const cands = [0, FM.time];
+    FM.scene.layers.forEach(l => { if (l.id !== layer.id) cands.push(l.start, l.start + l.duration); });
+    (FM.scene.project.markers || []).forEach(mk => cands.push(mk.t));
+    cands.forEach(c => { if (Math.abs(c - s0) < eps || Math.abs(c - e0) < eps) out.push(c); });
+    return out;
   }
 
   // Snap a single edge time (a trim grip) to 0 / playhead / another clip's edge.
-  function snapEdge(layer, edge, pps) {
+  function snapEdge(layer, edge, pps, sup) {
     if (!snapping) return { snapped: false, guide: edge };
     const snapPx = 7, cands = [0, FM.time];
+    const supHit = (c) => sup && sup.some(sv => Math.abs(sv - c) < 1e-3);
     FM.scene.layers.forEach(l => { if (l.id !== layer.id) cands.push(l.start, l.start + l.duration); });
     (FM.scene.project.markers || []).forEach(mk => cands.push(mk.t));
     let best = edge, bestD = snapPx / pps, snapped = false;
-    cands.forEach(c => { if (Math.abs(edge - c) < bestD) { bestD = Math.abs(edge - c); best = c; snapped = true; } });
+    cands.forEach(c => { if (supHit(c)) return; if (Math.abs(edge - c) < bestD) { bestD = Math.abs(edge - c); best = c; snapped = true; } });
     return { snapped: snapped, guide: best };
   }
 
@@ -767,7 +782,7 @@ window.FM = window.FM || {};
                 if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
                   group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
                 }
-                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: group };
+                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
                 clipTap = null;
                 if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
               } else {
@@ -792,7 +807,7 @@ window.FM = window.FM || {};
         FM.selectLayer(layer.id);
       }
       if (layer.locked) return;   // locked: selectable, never movable in time
-      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked) };
+      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
       innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
       if (FM.playing) FM.pause();
     });
@@ -808,12 +823,35 @@ window.FM = window.FM || {};
         if (layer.locked || pinch) return;   // locked: no trims; pinch fingers never start a trim
         try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // keep the drag alive if the mouse leaves the window
         const m = FM.media.get(layer.id);
-        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type };
+        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer) };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
       });
       clip.appendChild(grip);
     });
+    // SLIP (Canva-style): the clip keeps its exact place and length on the timeline — dragging the
+    // ⇄ pill slides the MEDIA inside it. Shown on the selected video clip when the source has slack
+    // beyond the visible span (nothing to slip otherwise).
+    if (layer.id === FM.scene.selectedId && layer.type === 'video' && !layer.locked) {
+      const m = FM.media.get(layer.id);
+      const advTotal = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (FM.isAnimated(layer.speed) ? 1 : (layer.speed || 1));
+      if (m && isFinite(m.duration) && m.duration - advTotal > 0.05) {
+        const slip = document.createElement('div');
+        slip.className = 'clip-slip';
+        slip.title = 'Slip — slide the media inside the clip (position & length stay put)';
+        slip.textContent = '⇄';
+        slip.addEventListener('pointerdown', (e) => {
+          e.stopPropagation(); e.preventDefault();
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          if (pinch) return;
+          try { slip.setPointerCapture(e.pointerId); } catch (_) {}
+          slipDrag = { layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal };
+          FM.selectLayer(layer.id);
+          if (FM.playing) FM.pause();
+        });
+        clip.appendChild(slip);
+      }
+    }
     lane.appendChild(clip);
 
     // keyframe diamonds for the selected layer (absolute project time, lane-relative px)
@@ -978,7 +1016,7 @@ window.FM = window.FM || {};
     // durations that collapsed the whole timeline. Ramped speed goes through the integral instead.
     const L = trimDrag.layer, ramped = FM.isAnimated(L.speed), sp = ramped ? 1 : (L.speed || 1);
     const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
-    const se = snapEdge(L, movingEdge, pps);
+    const se = snapEdge(L, movingEdge, pps, trimDrag.sup);
     if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); } else hideSnap();
     if (trimDrag.edge === 'right') {
       let nd = Math.max(0.1, trimDrag.dur + dt);
@@ -1218,7 +1256,7 @@ window.FM = window.FM || {};
           // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
           const floor = -(clipMove.layer.duration - 0.1);
           const raw = Math.max(floor, clipMove.origStart + dx / pps);
-          const sr = e.shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl);   // Shift bypasses snap; co-dragged clips excluded (feedback ratchet)
+          const sr = e.shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl, clipMove.sup);   // Shift bypasses snap; co-dragged clips excluded; just-snapped targets suppressed
           clipMove.layer.start = Math.max(floor, sr.v);
           if (sr.snapped) showSnap(sr.guide); else hideSnap();
           const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
@@ -1231,6 +1269,13 @@ window.FM = window.FM || {};
             if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
           });
           FM.requestRender();
+          return;
+        }
+        if (slipDrag) {
+          const dt = (e.clientX - slipDrag.startX) / pxPerSec();
+          // drag right → the media slides right → EARLIER source shows (trimStart decreases), like Canva
+          slipDrag.layer.trimStart = Math.max(0, Math.min(slipDrag.max, slipDrag.trim0 - dt * slipDrag.rate));
+          FM.seekVideosToTime(); FM.requestRender();
           return;
         }
         if (trimDrag) {
@@ -1313,6 +1358,13 @@ window.FM = window.FM || {};
           // else: a plain click already SELECTED the clip on pointerdown — never seek/scroll the
           // timeline. Flush any rebuild that was deferred while the (unmoved) grab was active.
           else if (rebuildPending) FM.timeline.rebuild();
+          return;
+        }
+        if (slipDrag) {
+          const changed = Math.abs((slipDrag.layer.trimStart || 0) - slipDrag.trim0) > 1e-4;
+          slipDrag = null;
+          FM.timeline.rebuild();   // refresh the filmstrip to the new source window
+          if (changed) { if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit(); }
           return;
         }
         if (trimDrag) {

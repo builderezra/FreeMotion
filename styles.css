@@ -140,7 +140,7 @@ body {
   width: 100%; height: 100%;
   background: #000;
   box-shadow: 0 12px 48px rgba(0,0,0,.6);
-  border-radius: 4px;
+  /* no border-radius: the canvas shows the comp at its TRUE rectangle — rounding cropped corner pixels (Ezra) */
   cursor: default;
 }
 #select-box {
@@ -779,6 +779,15 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fxp-del:active { color: #ff5e6e; background: var(--panel-3); }
 .fxp-export { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-size: 11px; padding: 3px 9px; cursor: pointer; text-transform: none; letter-spacing: 0; }
 .fxb-tile, .fxb-card { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+/* SLIP pill — centered on the selected video clip; drag slides the media inside the clip */
+.clip-slip {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  min-width: 44px; height: 26px; display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 12, 18, .78); border: 1px solid rgba(255, 255, 255, .28); border-radius: 13px;
+  color: #fff; font-size: 14px; line-height: 1; z-index: 3; cursor: ew-resize; touch-action: none;
+  -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
+}
+.clip-slip:active { background: rgba(47, 208, 181, .35); border-color: var(--accent); }
 input[type=range] {
   -webkit-appearance: none; appearance: none; flex: 1; height: 4px;
   background: var(--panel-3); border-radius: 3px; outline: none;

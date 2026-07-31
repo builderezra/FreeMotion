@@ -104,8 +104,12 @@ window.FM = window.FM || {};
     { type: 'stripes', label: 'Stripes', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Color' },
     // ---- batch 9 ----
     { type: 'darkglow', label: 'Dark Glow', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
-    { type: 'stroke', label: 'Stroke Color', param: 'width', min: 1, max: 16, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
+    { type: 'stroke', label: 'Stroke Color', param: 'width', min: 1, max: 60, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
     { type: 'smoothedges', label: 'Smooth Edges', param: 'radius', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
+    { type: 'roundcorners', label: 'Rounded Corners', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px' },
+      { key: 'style', label: 'Corner', options: ['Rounded', 'Apple (continuous)'], def: 1 },   // Apple = superellipse: the curve eases out of the straight edge first
+    ] },
     { type: 'blocknoise', label: 'Block Noise', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'starfield', label: 'Starfield', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5, color: true, defColor: '#ffffff', colorLabel: 'Star' },
     { type: 'curl', label: 'Curl', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -927,7 +931,7 @@ window.FM = window.FM || {};
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
-    faded: 1, nightvision: 1, sketch: 1,
+    faded: 1, nightvision: 1, sketch: 1, roundcorners: 1,
     cube3d: 1, box3d: 1, cylinder3d: 1, sphere3d: 1, ellipsoid3d: 1, torus3d: 1, ring3d: 1,
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
@@ -1640,6 +1644,9 @@ window.FM = window.FM || {};
     drawLayer(actx, tmp, t, scene);
     let bbox = null;
     if (CFX_NO_BBOX[fx.type]) bbox = { x: 0, y: 0, w: W, h: H };   // fn ignores it — full frame stands in
+    // roundcorners masks EXACTLY at the content edge — the fast scan's ~12px slack makes its mask
+    // rect bigger than the clip, and the tight Apple curve then barely cuts anything. Pay full price.
+    else if (fx.type === 'roundcorners') { try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
     // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases.
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
@@ -2380,6 +2387,40 @@ window.FM = window.FM || {};
       const ddx = Math.cos(ang), ddy = Math.sin(ang);
       for (let i = steps; i >= 1; i--) B.drawImage(_reC, ddx * i, ddy * i);
       B.drawImage(A, 0, 0);
+    },
+    // Rounded Corners: mask the layer's rendered bounds with a rounded rect. 'Apple (continuous)'
+    // uses SUPERELLIPSE corners (|x/r|^n + |y/r|^n = 1, n=5) — the iOS-icon curve whose curvature
+    // eases out of the straight edge instead of jumping into a circular arc, so the corner appears
+    // to "come out a bit first". Sampled 16 points per corner — visually smooth at any size.
+    roundcorners: function (A, B, W, H, bb, p, t) {
+      let r = FM.evalProp(p.radius, t); if (r == null) r = 80;
+      const style = Math.round(fparam(p, 'style', 0, t));
+      const x = bb.x + 2, y = bb.y + 2, w = bb.w - 4, h = bb.h - 4;   // inset the alphaBBox pad
+      r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+      B.drawImage(A, 0, 0);
+      if (r < 1 || w < 4 || h < 4) return;
+      B.save();
+      B.globalCompositeOperation = 'destination-in';
+      B.beginPath();
+      if (style === 1) {
+        const n = 5, N = 16, pw = v => Math.pow(Math.abs(v), 2 / n);
+        const q = [];   // superellipse quadrant, a: 0 → π/2
+        for (let i = 0; i <= N; i++) { const a = i / N * Math.PI / 2; q.push([pw(Math.sin(a)), pw(Math.cos(a))]); }
+        B.moveTo(x + r, y);
+        B.lineTo(x + w - r, y);
+        q.forEach(([s, c]) => B.lineTo(x + w - r + r * s, y + r - r * c));         // TR
+        B.lineTo(x + w, y + h - r);
+        q.forEach(([s, c]) => B.lineTo(x + w - r + r * c, y + h - r + r * s));     // BR
+        B.lineTo(x + r, y + h);
+        q.forEach(([s, c]) => B.lineTo(x + r - r * s, y + h - r + r * c));         // BL
+        B.lineTo(x, y + r);
+        q.forEach(([s, c]) => B.lineTo(x + r - r * c, y + r - r * s));             // TL
+        B.closePath();
+      } else {
+        B.roundRect(x, y, w, h, r);
+      }
+      B.fill();
+      B.restore();
     },
     // Directional Motion Blur, GPU edition: mean of 9 taps along the angle via successive-alpha
     // draws (k-th draw at 1/(k+1) accumulates a true average) — same geometry as the old per-pixel
