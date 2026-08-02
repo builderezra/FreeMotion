@@ -51,7 +51,7 @@ window.FM = window.FM || {};
   // next history.commit and autosave.
   function abortGestures() {
     const had = clipMove || trimDrag || kfDrag || slipDrag;
-    if (slipDrag) { slipDrag.layer.trimStart = slipDrag.trim0; slipDrag = null; }
+    if (slipDrag) { slipDrag.layer.trimStart = slipDrag.trim0; endSlipGhost(slipDrag); slipDrag = null; }
     if (clipMove) {
       clipMove.layer.start = clipMove.origStart;
       (clipMove.group || []).forEach(g => { g.layer.start = g.origStart; });
@@ -240,6 +240,74 @@ window.FM = window.FM || {};
       ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x + tileW - 1, 0, 1, H);   // frame divider
     }
   }
+
+  // ---- SLIP ghost (premium slip): while sliding the media inside a clip, the WHOLE source shows
+  // on that row — dimmed monochrome outside the clip, full colour inside the fixed clip window —
+  // so you can see exactly how much footage remains on each side and watch the film slide under
+  // the window. Time-accurate: each strip frame sits at its true source-time slot.
+  function beginSlipGhost(sd, clipEl) {
+    const m = sd.m;
+    const lane = clipEl.parentNode; if (!lane) return;
+    const srcW = Math.max(8, Math.round((m.duration / sd.rate) * sd.pps));
+    const bw = Math.min(8192, srcW), H = 32;   // same iOS backing-width cap as the clip filmstrips
+    const cv = document.createElement('canvas');
+    cv.className = 'slip-ghost';
+    cv.width = bw; cv.height = H;
+    cv.style.width = srcW + 'px'; cv.style.height = H + 'px';
+    lane.appendChild(cv);
+    sd.ghost = cv; sd.gW = srcW; sd.gBW = bw; sd.gH = H;
+    if (!m.stripFrames && !m._stripPending && FM.buildClipStrip) {
+      m._stripPending = true;   // frames arrive async → repaint the ghost mid-drag when they land
+      FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; if (slipDrag === sd) renderSlipGhost(sd); });
+    }
+    renderSlipGhost(sd);
+  }
+  function renderSlipGhost(sd) {
+    const cv = sd.ghost; if (!cv) return;
+    const m = sd.m, L = sd.layer, pps = sd.pps, bw = sd.gBW, H = sd.gH, k = bw / sd.gW;
+    const trim = L.trimStart || 0;
+    cv.style.left = (PAD + (L.start - trim / sd.rate) * pps) + 'px';   // source t=0 anchored so the window stays put while the film slides
+    cv.style.top = '5px';
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, bw, H);
+    const frames = m.stripFrames || [];
+    const N = Math.max(1, frames.length);
+    const aspect = (m.width || 16) / (m.height || 9);
+    const tileW = Math.max(18, Math.round(H * aspect));
+    const drawStrip = () => {
+      for (let x = 0; x < bw; x += tileW) {
+        const f = frames.length ? frames[Math.min(N - 1, Math.floor(x / bw * N))] : null;   // frame chosen by SOURCE TIME at this x
+        if (f) { try { g.drawImage(f, x, 0, tileW, H); } catch (e) {} }
+        else { g.fillStyle = 'rgba(120,130,150,.22)'; g.fillRect(x, 0, tileW - 1, H); }
+        g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x + tileW - 1, 0, 1, H);
+      }
+    };
+    g.save(); g.filter = 'grayscale(1) brightness(.45)'; drawStrip(); g.restore();   // the unused footage, B&W
+    const wx = (trim / sd.rate) * pps * k, ww = Math.max(2, L.duration * pps * k);
+    g.save(); g.beginPath(); g.rect(wx, 0, ww, H); g.clip(); g.filter = 'none'; drawStrip(); g.restore();   // the clip's window, colour
+    const atEnd = trim <= 1e-4 || trim >= sd.max - 1e-4;
+    g.strokeStyle = atEnd ? '#ff9042' : 'rgba(47,208,181,.95)';   // orange = jammed against a source end
+    g.lineWidth = 2; g.strokeRect(wx + 1, 1, ww - 2, H - 2);
+    // slack readouts: seconds of unused footage beyond each side of the window (timeline seconds)
+    const lSec = trim / sd.rate, rSec = (sd.max - trim) / sd.rate;
+    g.font = '600 10px -apple-system, system-ui, sans-serif'; g.textBaseline = 'middle';
+    const label = (txt, x, align) => {
+      g.textAlign = align;
+      const w = g.measureText(txt).width;
+      const bx = align === 'left' ? x - 3 : x - w - 3;
+      g.fillStyle = 'rgba(6,9,14,.72)'; g.fillRect(bx, H / 2 - 8, w + 6, 16);
+      g.fillStyle = '#e8ecf4'; g.fillText(txt, x, H / 2 + 0.5);
+    };
+    if (lSec > 0.05 && wx > 52 * k) label('◂ ' + lSec.toFixed(1) + 's', wx - 6, 'right');
+    if (rSec > 0.05 && bw - wx - ww > 52 * k) label(rSec.toFixed(1) + 's ▸', wx + ww + 6, 'left');
+    // the ⇄ handle, redrawn at the window centre so it stays visible above the ghost
+    const cx = wx + ww / 2;
+    g.fillStyle = 'rgba(8,12,18,.82)'; g.strokeStyle = 'rgba(47,208,181,.9)'; g.lineWidth = 1;
+    g.beginPath(); g.roundRect(cx - 20, H / 2 - 9, 40, 18, 9); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.font = '600 12px -apple-system, system-ui, sans-serif'; g.textAlign = 'center';
+    g.fillText('⇄', cx, H / 2 + 0.5);
+  }
+  function endSlipGhost(sd) { if (sd && sd.ghost) { sd.ghost.remove(); sd.ghost = null; } }
 
   // Pixels per second within the clip LANE. Fit-to-viewport at zoom 1; scaled by `zoom`.
   function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
@@ -845,9 +913,10 @@ window.FM = window.FM || {};
           if (e.pointerType === 'mouse' && e.button !== 0) return;
           if (pinch) return;
           try { slip.setPointerCapture(e.pointerId); } catch (_) {}
-          slipDrag = { layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal };
+          slipDrag = { layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal, m: m, pps: pxPerSec() };
           FM.selectLayer(layer.id);
           if (FM.playing) FM.pause();
+          beginSlipGhost(slipDrag, clip);
         });
         clip.appendChild(slip);
       }
@@ -1275,6 +1344,7 @@ window.FM = window.FM || {};
           const dt = (e.clientX - slipDrag.startX) / pxPerSec();
           // drag right → the media slides right → EARLIER source shows (trimStart decreases), like Canva
           slipDrag.layer.trimStart = Math.max(0, Math.min(slipDrag.max, slipDrag.trim0 - dt * slipDrag.rate));
+          renderSlipGhost(slipDrag);   // the film visibly slides under the fixed window
           FM.seekVideosToTime(); FM.requestRender();
           return;
         }
@@ -1362,6 +1432,7 @@ window.FM = window.FM || {};
         }
         if (slipDrag) {
           const changed = Math.abs((slipDrag.layer.trimStart || 0) - slipDrag.trim0) > 1e-4;
+          endSlipGhost(slipDrag);
           slipDrag = null;
           FM.timeline.rebuild();   // refresh the filmstrip to the new source window
           if (changed) { if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit(); }
@@ -1406,7 +1477,7 @@ window.FM = window.FM || {};
       // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
       // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
       const ae = document.activeElement;
-      if (clipMove || trimDrag || kfDrag || reorderActive || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }
+      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive || (ae && ae.classList && ae.classList.contains('marker-edit'))) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
       rebuildPending = false;
       // Preserve the vertical scroll across the DOM rebuild — buildTracks empties the container, which
       // otherwise snaps the layer list back to the TOP every time you tap a layer (the "jumps to top"
