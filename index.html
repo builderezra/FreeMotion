@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=199">
+<link rel="stylesheet" href="styles.css?v=200">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,9 +15,57 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 </head>
 <body>
+  <!-- Splash: the FreeMotion logo animation, once per session (fresh tab / PWA cold launch).
+       FIRST in <body> deliberately — it parses + paints BEFORE the ~1.5MB of app scripts, so on a
+       cold load the splash covers the load instead of appearing after it. The blurred backdrop is a
+       static IMG of the video's first frame (under 46px of blur, motion is imperceptible — and it
+       halves the download vs a second video). The sharp video's poster is that same first frame, so
+       poster → playback is pixel-seamless. Skips: same-session reload (sessionStorage), reduced
+       motion, tap/click, Esc-Enter-Space. Autoplay refused (iOS Low Power Mode) → the poster stands
+       in; a real video ERROR dismisses instantly. All asset urls are assigned by the script only
+       when the splash actually shows, so a skipped splash costs zero bytes. -->
+  <div id="splash" class="hidden" aria-hidden="true">
+    <img id="splash-bg" alt="">
+    <video id="splash-vid" muted playsinline autoplay preload="auto"></video>
+    <div id="splash-skip">tap to skip</div>
+  </div>
+  <script>
+    (function () {
+      try {
+        if (sessionStorage.getItem('fm.splashed')) return;
+        if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        sessionStorage.setItem('fm.splashed', '1');
+      } catch (e) { return; }
+      var sp = document.getElementById('splash'), vid = document.getElementById('splash-vid'), bg = document.getElementById('splash-bg'), skip = document.getElementById('splash-skip');
+      if (!sp || !vid) return;
+      if (skip && window.matchMedia && matchMedia('(hover: hover)').matches) skip.textContent = 'click to skip';
+      sp.classList.remove('hidden');
+      var gone = false;
+      function dismiss() {
+        if (gone) return; gone = true;
+        try { vid.pause(); } catch (e) {}
+        sp.classList.add('splash-out');
+        setTimeout(function () { sp.remove(); }, 380);
+      }
+      vid.addEventListener('ended', dismiss);
+      vid.addEventListener('error', dismiss);
+      sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(); });
+      setTimeout(dismiss, 5000);            // hard cap — nothing holds the editor hostage
+      if (bg) bg.src = 'splash-poster.png?v=2';
+      vid.poster = 'splash-poster.png?v=2';
+      vid.src = 'splash.mp4?v=1';
+      var p = vid.play();
+      // autoplay refused (iOS Low Power Mode etc.) → the poster shows until the cap;
+      // ALSO retry once when data lands — Safari sometimes allows the second attempt
+      if (p && p.catch) p.catch(function () {
+        vid.addEventListener('canplay', function () { var r = vid.play(); if (r && r.catch) r.catch(function () {}); }, { once: true });
+      });
+    })();
+  </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.64</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.65</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -346,7 +394,7 @@
   <script src="js/contextmenu.js?v=37"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=163"></script>
+  <script src="js/app.js?v=164"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=3"></script>
   <script src="js/mobile.js?v=22"></script>
@@ -358,48 +406,6 @@
   <script src="js/ai-templates.js?v=2"></script>
   <script src="js/ai.js?v=6"></script>
   <script src="js/ai-panel.js?v=4"></script>
-  <!-- Splash: the FreeMotion logo animation, once per session (fresh tab / PWA cold launch).
-       Full-bleed: a blurred COVER copy of the video fills the whole screen (the ambient-fill look),
-       with the sharp video contained on top. Reloads in the same tab skip it (sessionStorage),
-       reduced-motion users skip it, a tap skips it. If autoplay is refused (iOS Low Power Mode),
-       the glass-logo poster stands in instead of bailing — and any real video ERROR dismisses
-       instantly, so the editor is never blocked. src is assigned by the script only when the splash
-       actually shows (a skipped splash costs zero bytes). -->
-  <div id="splash" class="hidden" aria-hidden="true">
-    <video id="splash-bg" muted playsinline autoplay loop preload="auto"></video>
-    <video id="splash-vid" muted playsinline autoplay preload="auto" poster="splash-poster.png?v=1"></video>   <!-- the SIMPLE flat mark — the video ENDS on the glass one, so the poster must not spoil it -->
-    <div id="splash-skip">tap to skip</div>
-  </div>
-  <script>
-    (function () {
-      try {
-        if (sessionStorage.getItem('fm.splashed')) return;
-        if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-        sessionStorage.setItem('fm.splashed', '1');
-      } catch (e) { return; }
-      var sp = document.getElementById('splash'), vid = document.getElementById('splash-vid'), bg = document.getElementById('splash-bg');
-      if (!sp || !vid) return;
-      sp.classList.remove('hidden');
-      var gone = false;
-      function dismiss() {
-        if (gone) return; gone = true;
-        sp.classList.add('splash-out');
-        setTimeout(function () { sp.remove(); }, 380);
-      }
-      vid.addEventListener('ended', dismiss);
-      vid.addEventListener('error', dismiss);
-      sp.addEventListener('pointerdown', dismiss);
-      setTimeout(dismiss, 5000);            // hard cap — nothing holds the editor hostage
-      vid.src = 'splash.mp4?v=1';
-      if (bg) { bg.src = 'splash.mp4?v=1'; var pb = bg.play(); if (pb && pb.catch) pb.catch(function () {}); }
-      var p = vid.play();
-      // autoplay refused (iOS Low Power Mode etc.) → the poster shows the glass logo until the cap;
-      // ALSO retry once when data lands — Safari sometimes allows the second attempt
-      if (p && p.catch) p.catch(function () {
-        vid.addEventListener('canplay', function () { var r = vid.play(); if (r && r.catch) r.catch(function () {}); }, { once: true });
-      });
-    })();
-  </script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

@@ -2105,6 +2105,7 @@ window.FM = window.FM || {};
     (function deselectOnEmptyTap() {
       const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel,' +
         ' #ctx-menu, #shortcuts-overlay, #export-overlay, #export-dialog, #canvas-dialog, #add-sheet,' +
+        ' #splash,' +   // tap-to-skip on the launch splash must NOT read as an empty-background tap (it deselected the restored layer)
         ' #topbar, #topbar-m, .sb-handle, button, input, select, textarea, label, a, option, [contenteditable],' +
         // full-screen TOOL overlays: the eyedropper's sample tap and the crop/touch-up box drags land on
         // these, and without them here that tap read as "empty background" → deselect → the open colour
