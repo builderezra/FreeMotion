@@ -788,6 +788,20 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
 }
 .clip-slip:active { background: rgba(47, 208, 181, .35); border-color: var(--accent); }
+/* Splash — full-screen logo animation on app launch (once per session, tap to skip) */
+#splash {
+  position: fixed; inset: 0; z-index: 10000;
+  background: #04080b;   /* matches the video's backdrop so letterboxing is invisible */
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1; transition: opacity .35s ease;
+}
+#splash.hidden { display: none; }
+#splash.splash-out { opacity: 0; pointer-events: none; }
+#splash video { width: min(72vmin, 640px); height: min(72vmin, 640px); object-fit: contain; }
+#splash-skip {
+  position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 0; right: 0;
+  text-align: center; color: rgba(232, 236, 244, .35); font-size: 12px; letter-spacing: .4px;
+}
 /* SLIP ghost — the full source filmstrip shown on the row during a slip drag */
 .slip-ghost {
   position: absolute; z-index: 5; pointer-events: none;
