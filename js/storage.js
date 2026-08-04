@@ -13,6 +13,7 @@ window.FM = window.FM || {};
   // The legacy single-project fm.scene key is migrated into the index on first load.
   const PROJ_INDEX = 'fm.projects', CUR_KEY = 'fm.currentProject', TPL_INDEX = 'fm.templates', ELEM_INDEX = 'fm.elements';
   let saveTimer = null, thumbTimer = 0;
+  let _dirty = false;   // a REAL edit happened since the last modified-stamp — merely viewing a project must not bump it to the top of the home list (Ezra)
   function newId(prefix) { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function readJSON(key, def) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : def; } catch (e) { return def; } }
   function writeJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { warnQuota(e); return false; } }
@@ -86,7 +87,11 @@ window.FM = window.FM || {};
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
-    autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => FM.storage.save(), 600); },
+    // autosave is invoked ONLY by real-edit paths (history commit/undo/redo, template/element
+    // inserts) — the single choke point that marks the project genuinely modified.
+    autosave() { _dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => FM.storage.save(), 600); },
+    markDirty() { _dirty = true; },   // for edit-paths that call save() directly (import)
+    clearDirty() { _dirty = false; }, // for history.reset(): opening/loading a project is not an edit
 
     async load() {
       if (FM.projects) FM.projects.migrate();   // legacy single-project fm.scene → indexed project (one-time)
@@ -471,7 +476,7 @@ window.FM = window.FM || {};
         // Import into a NEW project — never overwrite whatever happens to be open. (#r1)
         if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
         const ok = await FM.storage.applyScene(obj);
-        if (ok) { if (FM.history) FM.history.reset(); FM.storage.save(); if (FM.projects) FM.projects.touchCurrent(true); if (FM.toast) FM.toast('Project imported'); if (onDone) onDone(); }
+        if (ok) { if (FM.history) FM.history.reset(); FM.storage.markDirty(); FM.storage.save(); if (FM.projects) FM.projects.touchCurrent(true); if (FM.toast) FM.toast('Project imported'); if (onDone) onDone(); }
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
     });
     document.body.appendChild(input); input.click();
@@ -623,7 +628,10 @@ window.FM = window.FM || {};
       const idx = this.list();
       const e = idx.find(p => p.id === id); if (!e) return;
       const P = FM.scene.project;
-      e.name = P.name || 'Untitled'; e.modified = Date.now();
+      e.name = P.name || 'Untitled';
+      // modified (= home-list order) moves ONLY on a real edit — viewing refreshes meta/thumb but
+      // leaves the project exactly where it was in the list.
+      if (_dirty) { e.modified = Date.now(); _dirty = false; }
       e.width = P.width; e.height = P.height; e.duration = P.duration;
       e.layers = FM.scene.layers.length;
       const now = Date.now();
@@ -714,7 +722,7 @@ window.FM = window.FM || {};
     },
     rename(id, name) {
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
-      e.name = name; this.saveIndex(idx);
+      e.name = name; e.modified = Date.now(); this.saveIndex(idx);   // renaming is a real change → bumps list order
       const doc = readJSON('fm.proj.' + id, null);
       if (doc && doc.project) { doc.project.name = name; writeJSON('fm.proj.' + id, doc); }
       if (id === curId()) { FM.scene.project.name = name; if (FM.refreshAll) FM.refreshAll(); }

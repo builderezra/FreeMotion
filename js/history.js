@@ -42,7 +42,10 @@ window.FM = window.FM || {};
   }
 
   FM.history = {
-    reset() { stack.length = 0; index = -1; this.commit(); },
+    // reset() runs on open/load/boot — its commit must not count as a user edit, or merely VIEWING
+    // a project would bump it to the top of the home list (the autosave it schedules is harmless:
+    // it rewrites the just-loaded doc).
+    reset() { stack.length = 0; index = -1; this.commit(); if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty(); },
     commit() {
       if (suppress) return;
       const s = snap();
