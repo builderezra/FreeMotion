@@ -604,7 +604,7 @@ window.FM = window.FM || {};
       if (id) {
         const doc = readJSON('fm.proj.' + id, null);
         if (doc && doc.project) {
-          idx.unshift({ id: id, name: doc.project.name || 'My project', modified: Date.now(), width: doc.project.width, height: doc.project.height, duration: doc.project.duration, layers: (doc.layers || []).length, thumb: null });
+          idx.unshift({ id: id, name: doc.project.name || 'My project', created: Date.now(), modified: Date.now(), width: doc.project.width, height: doc.project.height, duration: doc.project.duration, layers: (doc.layers || []).length, thumb: null });
           this.saveIndex(idx);
           return;
         }
@@ -614,10 +614,10 @@ window.FM = window.FM || {};
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
       if (legacy && legacy.project) {
         writeJSON('fm.proj.' + id, legacy);
-        idx.unshift({ id: id, name: legacy.project.name || 'My project', modified: Date.now(), width: legacy.project.width, height: legacy.project.height, duration: legacy.project.duration, layers: (legacy.layers || []).length, thumb: null });
+        idx.unshift({ id: id, name: legacy.project.name || 'My project', created: Date.now(), modified: Date.now(), width: legacy.project.width, height: legacy.project.height, duration: legacy.project.duration, layers: (legacy.layers || []).length, thumb: null });
         try { localStorage.removeItem(SCENE_KEY); } catch (e) {}
       } else {
-        idx.unshift({ id: id, name: 'My project', modified: Date.now(), width: 1080, height: 1920, duration: 0, thumb: null });
+        idx.unshift({ id: id, name: 'My project', created: Date.now(), modified: Date.now(), width: 1080, height: 1920, duration: 0, thumb: null });
       }
       this.saveIndex(idx);
     },
@@ -632,8 +632,9 @@ window.FM = window.FM || {};
       // modified (= home-list order) moves ONLY on a real edit — viewing refreshes meta/thumb but
       // leaves the project exactly where it was in the list.
       if (_dirty) { e.modified = Date.now(); _dirty = false; }
-      e.width = P.width; e.height = P.height; e.duration = P.duration;
+      e.width = P.width; e.height = P.height; e.duration = P.duration; e.fps = P.fps || 30;
       e.layers = FM.scene.layers.length;
+      if (!e.created) e.created = e.modified || Date.now();   // backfill: projects made before creation dates were tracked
       const now = Date.now();
       // A pinned thumbnail (user chose a specific frame) is never auto-overwritten by the periodic capture.
       if (!P.thumbPinned && (forceThumb || (now - thumbTimer > 12000 && !FM.playing))) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
@@ -687,10 +688,14 @@ window.FM = window.FM || {};
       fresh.project.name = opts.name || 'Untitled';
       if (opts.width) fresh.project.width = opts.width;
       if (opts.height) fresh.project.height = opts.height;
+      if (opts.fps) fresh.project.fps = Math.max(1, Math.min(120, parseInt(opts.fps, 10) || 30));
+      // background: a #rrggbb string paints, null/'' means TRANSPARENT (the compositor skips the fill).
+      // Anything else is rejected rather than written into the doc — this value goes straight to fillStyle.
+      if ('background' in opts) fresh.project.background = /^#[0-9a-f]{6}$/i.test(String(opts.background || '')) ? opts.background : null;
       clampProjectDims(fresh.project);   // opts can come from an untrusted import (importFile passes obj.project.width/height straight through)
       writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] });
       const idx = this.list();
-      idx.unshift({ id: id, name: fresh.project.name, modified: Date.now(), width: fresh.project.width, height: fresh.project.height, duration: fresh.project.duration, thumb: null });
+      idx.unshift({ id: id, name: fresh.project.name, created: Date.now(), modified: Date.now(), width: fresh.project.width, height: fresh.project.height, fps: fresh.project.fps, duration: fresh.project.duration, thumb: null });
       this.saveIndex(idx);
       await this.open(id);
       return id;
@@ -706,7 +711,7 @@ window.FM = window.FM || {};
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
       // strand an invisible doc that no home card showed and pruneOrphans then gutted
       const idx = this.list();
-      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', modified: Date.now(), layers: re.layers.length, thumb: null }));
+      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', created: Date.now(), modified: Date.now(), layers: re.layers.length, thumb: null }));
       this.saveIndex(idx);
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
       try {

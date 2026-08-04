@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=201">
+<link rel="stylesheet" href="styles.css?v=202">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -65,7 +65,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.67</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.68</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -208,7 +208,18 @@
   <div id="home-screen" class="hidden">
     <div class="hm-top">
       <div class="hm-brand">▶ FreeMotion</div>
+      <button class="hm-search-btn" id="hm-search-btn" aria-label="Search projects" title="Search by name or date">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.4" y1="15.4" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
       <button class="hm-more" aria-label="More">⋯</button>
+    </div>
+    <div id="hm-searchbar" class="hidden">
+      <div class="hm-search-wrap">
+        <svg class="hm-search-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.4" y1="15.4" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="hm-search-input" type="text" placeholder="Search a name or a date…" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+        <button id="hm-search-clear" aria-label="Clear search">✕</button>
+      </div>
+      <div class="hm-search-hint">Vague is fine — “yesterday”, “last week”, “2 aug”, “august”, or part of a name.</div>
     </div>
     <div class="hm-tabs">
       <button class="hm-tab active" data-tab="projects">Projects</button>
@@ -219,11 +230,51 @@
     <div id="hm-dialog" class="hidden">
       <div class="hm-dlg-card">
         <div class="hm-dlg-title">New project</div>
-        <input id="hm-new-name" type="text" placeholder="Project name" spellcheck="false">
-        <div class="hm-aspects">
-          <button class="hm-aspect active" data-size="1080x1920">9:16<span>Phone</span></button>
-          <button class="hm-aspect" data-size="1920x1080">16:9<span>Wide</span></button>
-          <button class="hm-aspect" data-size="1080x1080">1:1<span>Square</span></button>
+        <div class="hm-dlg-scroll">
+          <div class="hm-fld-label">Name</div>
+          <input id="hm-new-name" type="text" placeholder="Project name" spellcheck="false">
+          <div class="hm-fld-label">Aspect ratio</div>
+          <div class="hm-aspects">
+            <button class="hm-aspect active" data-aspect="9:16"><span class="ac-frame ac-916"></span>9:16<span>Phone</span></button>
+            <button class="hm-aspect" data-aspect="16:9"><span class="ac-frame ac-169"></span>16:9<span>Wide</span></button>
+            <button class="hm-aspect" data-aspect="1:1"><span class="ac-frame ac-11"></span>1:1<span>Square</span></button>
+          </div>
+          <div class="hm-aspects">
+            <button class="hm-aspect" data-aspect="4:5"><span class="ac-frame ac-45"></span>4:5<span>Post</span></button>
+            <button class="hm-aspect" data-aspect="4:3"><span class="ac-frame ac-43"></span>4:3<span>Classic</span></button>
+            <button class="hm-aspect" data-aspect="custom"><span class="ac-frame ac-custom"></span>Custom<span>Any size</span></button>
+          </div>
+          <label class="hm-fld" id="hm-new-res-row"><span>Resolution</span>
+            <select id="hm-new-res">
+              <option value="720">720p (HD)</option>
+              <option value="1080" selected>1080p (FHD)</option>
+              <option value="1440">1440p (QHD)</option>
+              <option value="2160">2160p (4K)</option>
+            </select>
+          </label>
+          <div class="hm-fld hidden" id="hm-new-custom-size"><span>Width × Height</span><span class="hm-num-pair"><input id="hm-new-w" type="number" min="16" max="7680" step="2" value="1080" class="cv-num"><span>×</span><input id="hm-new-h" type="number" min="16" max="7680" step="2" value="1920" class="cv-num"></span></div>
+          <label class="hm-fld"><span>Frame rate</span>
+            <select id="hm-new-fps">
+              <option value="24">24 fps (film)</option>
+              <option value="25">25 fps (PAL)</option>
+              <option value="30" selected>30 fps</option>
+              <option value="50">50 fps</option>
+              <option value="60">60 fps (smooth)</option>
+              <option value="120">120 fps</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          <div class="hm-fld hidden" id="hm-new-custom-fps"><span>Custom fps</span><input id="hm-new-fps-num" type="number" min="1" max="120" step="1" value="30" class="cv-num"></div>
+          <div class="hm-fld"><span>Background</span>
+            <span class="hm-bg-row">
+              <button class="hm-bg-sw active" data-bg="#000000" style="background:#000000" aria-label="Black background" title="Black"></button>
+              <button class="hm-bg-sw" data-bg="#ffffff" style="background:#ffffff" aria-label="White background" title="White"></button>
+              <button class="hm-bg-sw" data-bg="#0b0e14" style="background:#0b0e14" aria-label="Charcoal background" title="Charcoal"></button>
+              <button class="hm-bg-sw hm-bg-none" data-bg="none" aria-label="Transparent background" title="Transparent"></button>
+              <input id="hm-new-bg" type="color" value="#000000" aria-label="Custom background colour" title="Custom colour">
+            </span>
+          </div>
+          <div class="hm-fld"><span>Canvas</span><span id="hm-new-size" class="cv-size">1080 × 1920</span></div>
         </div>
         <div class="hm-dlg-actions">
           <button id="hm-cancel">Cancel</button>
@@ -384,8 +435,8 @@
   <script src="js/audio-fx-live.js?v=1"></script>
   <script src="js/audio-fx-browser.js?v=2"></script>
   <script src="js/history.js?v=24"></script>
-  <script src="js/storage.js?v=78"></script>
-  <script src="js/home.js?v=12"></script>
+  <script src="js/storage.js?v=79"></script>
+  <script src="js/home.js?v=13"></script>
   <script src="js/graph-editor.js?v=107"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

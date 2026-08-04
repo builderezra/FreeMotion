@@ -10,6 +10,7 @@ window.FM = window.FM || {};
   let root = null, grid = null, tab = 'projects';
   let selectMode = false;                 // multi-select for bulk delete / duplicate (projects tab only)
   const selected = new Set();             // ids ticked while in select mode
+  let query = '';                         // live search text ('' = not searching)
 
   function el(tag, cls, text) {
     const d = document.createElement(tag);
@@ -40,10 +41,178 @@ window.FM = window.FM || {};
     if (Math.abs(r - 9 / 16) < 0.02) return '9:16';
     if (Math.abs(r - 16 / 9) < 0.02) return '16:9';
     if (Math.abs(r - 1) < 0.02) return '1:1';
+    if (Math.abs(r - 4 / 5) < 0.02) return '4:5';
+    if (Math.abs(r - 4 / 3) < 0.02) return '4:3';
     return w + '×' + h;
   }
+  // "1080p" the way every editor labels it: the SHORT side (1080×1920 portrait is still 1080p).
+  function resLabel(w, h) { return (w && h) ? Math.min(w, h) + 'p' : ''; }
+  function fmtDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()] + ' ' + d.getFullYear();
+  }
 
-  function projectCard(p) {
+  /* ---------- search: forgiving name + date matching -------------------------------------------
+   * Nothing here demands an exact query. Names match on substring, word-prefix, typo distance and
+   * subsequence; date queries parse loosely ("yesterday", "last week", "aug", "2/8/26") into a
+   * range and score by CLOSENESS, so the nearest project still surfaces when nothing falls inside
+   * the range. Every result carries a 0..1 score; the list is ranked by it, best first.
+   */
+  const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+  const DAY_MS = 86400000;
+  function norm(s) { return String(s == null ? '' : s).toLowerCase().replace(/[\s_\-]+/g, ' ').trim(); }
+
+  // Levenshtein distance — the typo tolerance ("prject" still finds "Project").
+  function lev(a, b) {
+    if (a === b) return 0;
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    let prev = new Array(n + 1), cur = new Array(n + 1);
+    for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+      cur[0] = i;
+      for (let j = 1; j <= n; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1));
+      }
+      const t = prev; prev = cur; cur = t;
+    }
+    return prev[n];
+  }
+  // Initials / skipped-letter match ("sct" → "Spin Cut Transition"), scored by how tightly packed it is.
+  function subseq(s, q) {
+    let i = 0, first = -1, last = -1;
+    for (let j = 0; j < s.length && i < q.length; j++) {
+      if (s.charAt(j) === q.charAt(i)) { if (first < 0) first = j; last = j; i++; }
+    }
+    if (i < q.length) return 0;
+    return Math.max(0.35, q.length / (last - first + 1));
+  }
+  // Initials, the way people actually abbreviate: "sct" → Spin Cut Transition.
+  function initialsScore(s, q) {
+    if (q.indexOf(' ') >= 0 || q.length < 2) return 0;
+    const words = s.split(' ').filter(Boolean);
+    if (words.length < 2 || q.length > words.length) return 0;
+    for (let st = 0; st + q.length <= words.length; st++) {
+      let ok = true;
+      for (let i = 0; i < q.length; i++) if (words[st + i].charAt(0) !== q.charAt(i)) { ok = false; break; }
+      if (ok) return st === 0 ? 0.84 : 0.78;
+    }
+    return 0;
+  }
+  function nameScore(name, q) {
+    const s = norm(name), t = norm(q);
+    if (!s || !t) return 0;
+    if (s === t) return 1;
+    const at = s.indexOf(t);
+    if (at === 0) return 0.96;
+    if (at > 0) return 0.9 - Math.min(0.12, at / 200);
+    const words = s.split(' ').filter(Boolean);
+    if (words.some(w => w.indexOf(t) === 0)) return 0.88;
+    const ini = initialsScore(s, t);
+    if (ini) return ini;
+    let best = 0;
+    for (const c of [s].concat(words)) {
+      if (!c) continue;
+      const sc = 1 - lev(c, t) / Math.max(c.length, t.length);
+      if (sc > best) best = sc;
+    }
+    return Math.max(best * 0.86, subseq(s, t) * 0.7);
+  }
+
+  function dayStart(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function dayEnd(ts) { const d = new Date(ts); d.setHours(23, 59, 59, 999); return d.getTime(); }
+  function monthIndex(w) {
+    if (!w || w.length < 3) return -1;
+    if (w === 'sept') return 8;
+    for (let i = 0; i < 12; i++) if (MONTHS[i].indexOf(w) === 0) return i;
+    return -1;
+  }
+  function monthRange(y, mo) { return { a: new Date(y, mo, 1).getTime(), b: new Date(y, mo + 1, 1).getTime() - 1 }; }
+  function dayRange(y, mo, d) { const t = new Date(y, mo, d).getTime(); return { a: dayStart(t), b: dayEnd(t) }; }
+  // Two-digit years: 26 → 2026, 99 → 1999 (nobody's editing video in 2099).
+  function fullYear(y) { y = +y; return y >= 100 ? y : (y <= 79 ? 2000 + y : 1900 + y); }
+
+  // Loose date query → {a, b} millisecond range, or null when the text isn't date-ish at all.
+  function parseDateQuery(raw) {
+    // NOT norm() — that collapses hyphens, which would eat "2026-08-02" and "2-8-26"
+    const t = String(raw == null ? '' : raw).toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!t) return null;
+    const now = Date.now(), D = new Date(now);
+    let m;
+    if (t === 'today') return { a: dayStart(now), b: dayEnd(now) };
+    if (t === 'yesterday') return { a: dayStart(now - DAY_MS), b: dayEnd(now - DAY_MS) };
+    if (t === 'this week' || t === 'week') return { a: dayStart(now - 6 * DAY_MS), b: dayEnd(now) };
+    if (t === 'last week') return { a: dayStart(now - 13 * DAY_MS), b: dayEnd(now - 7 * DAY_MS) };
+    if (t === 'this month' || t === 'month') return monthRange(D.getFullYear(), D.getMonth());
+    if (t === 'last month') return monthRange(D.getFullYear(), D.getMonth() - 1);
+    if (t === 'this year' || t === 'year') return { a: new Date(D.getFullYear(), 0, 1).getTime(), b: new Date(D.getFullYear() + 1, 0, 1).getTime() - 1 };
+    if (t === 'last year') return { a: new Date(D.getFullYear() - 1, 0, 1).getTime(), b: new Date(D.getFullYear(), 0, 1).getTime() - 1 };
+    // "3 days ago", "2 weeks ago", "6 months ago"
+    m = t.match(/^(\d{1,3}) *(d|day|days|w|week|weeks|mo|month|months|y|year|years) *ago$/);
+    if (m) {
+      const n = +m[1], u = m[2];
+      if (u[0] === 'd') { const ts = now - n * DAY_MS; return { a: dayStart(ts), b: dayEnd(ts) }; }
+      if (u[0] === 'w') { const ts = now - n * 7 * DAY_MS; return { a: dayStart(ts - 3 * DAY_MS), b: dayEnd(ts + 3 * DAY_MS) }; }
+      if (u[0] === 'm') return monthRange(D.getFullYear(), D.getMonth() - n);
+      return { a: new Date(D.getFullYear() - n, 0, 1).getTime(), b: new Date(D.getFullYear() - n + 1, 0, 1).getTime() - 1 };
+    }
+    // ISO-ish: 2026-08-02, 2026/08, 2026-8
+    m = t.match(/^(\d{4})[-\/](\d{1,2})(?:[-\/](\d{1,2}))?$/);
+    if (m) { const y = +m[1], mo = +m[2] - 1; if (mo >= 0 && mo < 12) return m[3] ? dayRange(y, mo, +m[3]) : monthRange(y, mo); }
+    // Day-first (he's in Perth): 2/8, 2-8-26, 02/08/2026
+    m = t.match(/^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2}|\d{4}))?$/);
+    if (m) {
+      const d = +m[1], mo = +m[2] - 1, y = m[3] ? fullYear(m[3]) : D.getFullYear();
+      if (d >= 1 && d <= 31 && mo >= 0 && mo < 12) return dayRange(y, mo, d);
+    }
+    // Month names: "august", "aug 2026", "2 aug", "aug 2", "2 august 2026"
+    const w = t.split(' ').filter(Boolean);
+    if (w.length && w.length <= 3) {
+      let mo = -1, day = 0, year = 0, ok = true;
+      for (const part of w) {
+        const mi = monthIndex(part);
+        if (mi >= 0 && mo < 0) { mo = mi; continue; }
+        if (/^\d{1,2}(st|nd|rd|th)?$/.test(part) && !day) { day = parseInt(part, 10); continue; }
+        if (/^\d{4}$/.test(part) && !year) { year = +part; continue; }
+        ok = false; break;
+      }
+      if (ok && mo >= 0) {
+        const y = year || D.getFullYear();
+        if (day >= 1 && day <= 31) return dayRange(y, mo, day);
+        return monthRange(y, mo);
+      }
+    }
+    // A bare plausible year
+    m = t.match(/^(\d{4})$/);
+    if (m && +m[1] >= 1990 && +m[1] <= 2100) return { a: new Date(+m[1], 0, 1).getTime(), b: new Date(+m[1] + 1, 0, 1).getTime() - 1 };
+    return null;
+  }
+  // Inside the range = a perfect hit; outside it fades over ~6 weeks so "closest" still means something.
+  function dateScore(ts, range) {
+    if (!ts || !range) return 0;
+    if (ts >= range.a && ts <= range.b) return 1;
+    const outDays = (ts < range.a ? range.a - ts : ts - range.b) / DAY_MS;
+    return Math.max(0, 0.85 - outDays * 0.02);
+  }
+  // Best of name / created / edited. A date only counts as a real MATCH when the project actually
+  // falls inside the range — proximity is for ranking the "closest" fallback, so asking for "today"
+  // can't claim last week's project as a hit. `why` explains a date-driven row on the sub-line.
+  function scoreProject(p, q, range) {
+    const n = nameScore(p.name, q);
+    let d = 0, inRange = false, why = '';
+    if (range) {
+      const cts = p.created || p.modified, ets = p.modified;
+      const cs = dateScore(cts, range), es = dateScore(ets, range);
+      d = Math.max(cs, es);
+      inRange = d >= 1;
+      if (d > 0) why = cs >= es ? ('created ' + fmtDate(cts)) : ('edited ' + fmtDate(ets));
+    }
+    return { score: Math.max(n, d), exact: n >= 0.45 || inRange, why: d > n ? why : '' };
+  }
+
+  function projectCard(p, subOverride) {
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
     const card = el('div', 'hm-card' + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
@@ -57,9 +226,14 @@ window.FM = window.FM || {};
     if (p.id === FM.projects.currentId()) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
     if (selectMode) th.appendChild(el('span', 'hm-check' + (selected.has(p.id) ? ' on' : ''), selected.has(p.id) ? '✓' : ''));
     const name = el('div', 'hm-name', p.name || 'Untitled');
-    // duration moved onto the thumb badge — the meta line keeps the rest (same info, AM row look)
-    const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : null)].filter(Boolean).join('  ·  '));
-    const sub = el('div', 'hm-sub', ago(p.modified));
+    // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
+    const meta = el('div', 'hm-meta');
+    const mi = txt => { if (txt) meta.appendChild(el('span', 'hm-mi', txt)); };
+    mi(aspectLabel(p.width, p.height));
+    mi(resLabel(p.width, p.height));
+    mi(p.fps ? p.fps + 'fps' : '');       // older cards have no fps yet — it fills in when the project is next opened
+    mi(p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : '');
+    const sub = el('div', 'hm-sub', subOverride || ('edited ' + ago(p.modified)));
     const more = el('button', 'hm-card-more', '⋯');
     more.setAttribute('aria-label', 'Project actions');
     more.addEventListener('click', (ev) => {
@@ -125,7 +299,9 @@ window.FM = window.FM || {};
     const n = selected.size;
     const count = el('span', 'hm-selcount', n + ' selected');
     const all = el('button', 'hm-selbtn', 'Select all');
-    all.addEventListener('click', () => { FM.projects.list().forEach(p => selected.add(p.id)); renderSelBar(); render(); });
+    // "all" = everything CURRENTLY LISTED — with a search active, ticking projects you can't see
+    // (and then hitting Delete) would be a nasty surprise
+    all.addEventListener('click', () => { (shownIds.length ? shownIds : FM.projects.list().map(p => p.id)).forEach(id => selected.add(id)); renderSelBar(); render(); });
     const dup = el('button', 'hm-selbtn', 'Duplicate');
     dup.disabled = !n;
     dup.addEventListener('click', async () => { if (!n) return; const ids = [...selected]; if (FM.toast) FM.toast('Duplicating ' + ids.length + '…'); for (const id of ids) await FM.projects.duplicate(id); exitSelect(); });
@@ -193,10 +369,12 @@ window.FM = window.FM || {};
     } finally { _opening = false; }
   }
 
+  let shownIds = [];   // project ids visible in the grid right now (search-aware; Select-all uses it)
   function render() {
     if (!grid) return;
     if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
     grid.innerHTML = '';
+    shownIds = [];
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     // header Select toggle (built once, kept in sync)
     const selBtn = document.getElementById('hm-select-btn');
@@ -204,6 +382,20 @@ window.FM = window.FM || {};
     if (tab === 'projects') {
       // most recently EDITED first — the project you just worked on is always the front card
       const list = FM.projects.list().slice().sort((a, b) => (b.modified || 0) - (a.modified || 0));
+      if (query) {
+        if (!list.length) { grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.')); renderSelBar(); return; }
+        const range = parseDateQuery(query);
+        const scored = list.map(p => { const r = scoreProject(p, query, range); return { p: p, score: r.score, exact: r.exact, why: r.why }; })
+          .sort((a, b) => (b.score - a.score) || ((b.p.modified || 0) - (a.p.modified || 0)));
+        const strong = scored.filter(x => x.exact);
+        const shown = strong.length ? strong : scored.slice(0, 5);   // never a dead end: fall back to the closest few
+        grid.appendChild(el('div', 'hm-note', strong.length
+          ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + (range ? ' for that date' : '') + ' — best first')
+          : 'Nothing matched “' + query + '” exactly. Closest projects:'));
+        shown.forEach(x => { shownIds.push(x.p.id); grid.appendChild(projectCard(x.p, x.why || undefined)); });
+        renderSelBar();
+        return;
+      }
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.'));
       // gentle housekeeping nudge on a big library (thumbs are out of the hot path now, so this is
       // informational — never a "you must delete to fix lag" like some other editors)
@@ -214,22 +406,101 @@ window.FM = window.FM || {};
           : 'You have ' + h.count + ' projects. Tap Select to bulk-delete or duplicate.';
         grid.appendChild(el('div', 'hm-note', msg));
       }
-      list.forEach(p => grid.appendChild(projectCard(p)));
+      list.forEach(p => { shownIds.push(p.id); grid.appendChild(projectCard(p)); });
     } else {
-      const list = FM.templates.list();
+      let list = FM.templates.list();
+      if (query && list.length) {
+        // templates carry no dates — name matching only, same forgiving scorer
+        const scored = list.map(t => ({ t: t, score: nameScore(t.name, query) })).sort((a, b) => b.score - a.score);
+        const strong = scored.filter(x => x.score >= 0.45);
+        const shown = strong.length ? strong : scored.slice(0, 5);
+        grid.appendChild(el('div', 'hm-note', strong.length ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + ' — best first') : 'Nothing matched “' + query + '” exactly. Closest templates:'));
+        shown.forEach(x => grid.appendChild(templateCard(x.t)));
+        renderSelBar();
+        return;
+      }
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No templates yet. On a project card, tap ⋯ → “Save as template…”.'));
       list.forEach(t => grid.appendChild(templateCard(t)));
     }
     renderSelBar();
   }
 
+  // Search bar show/hide. Closing always clears the query so reopening Home is never mysteriously filtered.
+  function toggleSearch(force) {
+    const bar = document.getElementById('hm-searchbar'), btn = document.getElementById('hm-search-btn'), inp = document.getElementById('hm-search-input');
+    if (!bar || !inp) return;
+    const on = force != null ? force : bar.classList.contains('hidden');
+    bar.classList.toggle('hidden', !on);
+    if (btn) { btn.classList.toggle('on', on); btn.setAttribute('aria-expanded', on ? 'true' : 'false'); }
+    if (on) { setTimeout(() => inp.focus(), 20); }
+    else { inp.value = ''; if (query) { query = ''; render(); } }
+  }
+
+  /* ---------- new-project dialog: every canvas option up front ---------------------------------
+   * Aspect ratio + resolution (or a free custom W×H), frame rate (presets or custom), background
+   * colour (or transparent) and the exact pixel size — so a project starts the way you want it
+   * instead of being corrected later in Canvas settings. The picks are remembered for next time.
+   */
+  const NEWP_KEY = 'fm.newproj';
+  let npAspect = '9:16', npBg = '#000000';
+  const npEl = id => document.getElementById(id);
+  const npClampDim = v => Math.max(16, Math.min(7680, Math.round((parseInt(v, 10) || 16) / 2) * 2));   // even + sane bounds, same clamp as Canvas settings
+  function npCompute() {
+    if (npAspect === 'custom') return { w: npClampDim(npEl('hm-new-w').value), h: npClampDim(npEl('hm-new-h').value) };
+    const base = parseInt(npEl('hm-new-res').value, 10) || 1080;
+    const pr = npAspect.split(':').map(Number), a = pr[0], b = pr[1];
+    let w, h;
+    if (a >= b) { h = base; w = base * a / b; } else { w = base; h = base * b / a; }   // the resolution is always the SHORT side
+    return { w: Math.round(w / 2) * 2, h: Math.round(h / 2) * 2 };
+  }
+  function npFps() {
+    const sel = npEl('hm-new-fps');
+    const raw = (sel && sel.value === 'custom') ? (npEl('hm-new-fps-num') || {}).value : (sel ? sel.value : 30);
+    return Math.max(1, Math.min(120, parseInt(raw, 10) || 30));
+  }
+  function npUpdate() {
+    const custom = npAspect === 'custom';
+    npEl('hm-new-res-row').classList.toggle('hidden', custom);
+    npEl('hm-new-custom-size').classList.toggle('hidden', !custom);
+    npEl('hm-new-custom-fps').classList.toggle('hidden', npEl('hm-new-fps').value !== 'custom');
+    const dlg = npEl('hm-dialog');
+    dlg.querySelectorAll('.hm-aspect').forEach(b => b.classList.toggle('active', b.dataset.aspect === npAspect));
+    dlg.querySelectorAll('.hm-bg-sw').forEach(b => b.classList.toggle('active', b.dataset.bg === npBg));
+    const s = npCompute();
+    npEl('hm-new-size').textContent = s.w + ' × ' + s.h + '  ·  ' + npFps() + ' fps';
+  }
   function newProjectDialog() {
     const dlg = document.getElementById('hm-dialog');
-    dlg.classList.remove('hidden');
-    const input = dlg.querySelector('#hm-new-name');
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(NEWP_KEY)) || {}; } catch (e) {}
+    npAspect = typeof saved.aspect === 'string' ? saved.aspect : '9:16';
+    npBg = (saved.bg === 'none' || /^#[0-9a-f]{6}$/i.test(saved.bg || '')) ? saved.bg : '#000000';
+    // set every control EVERY time (not just when remembered) — the dialog is reused, so a value
+    // left behind by the previous open would silently become the next project's setting
+    npEl('hm-new-res').value = String(saved.res || 1080);
+    npEl('hm-new-w').value = saved.w || 1080;
+    npEl('hm-new-h').value = saved.h || 1920;
+    const fsel = npEl('hm-new-fps'), fnum = npEl('hm-new-fps-num');
+    const wantFps = String(saved.fps || 30);
+    let has = false;
+    for (let i = 0; i < fsel.options.length; i++) if (fsel.options[i].value === wantFps) has = true;
+    if (has) { fsel.value = wantFps; fnum.value = 30; }
+    else { fsel.value = 'custom'; fnum.value = wantFps; }
+    if (/^#[0-9a-f]{6}$/i.test(npBg)) npEl('hm-new-bg').value = npBg;
+    const input = npEl('hm-new-name');
     input.value = 'Project ' + (FM.projects.list().length + 1);
-    dlg.querySelectorAll('.hm-aspect').forEach((b, i) => b.classList.toggle('active', i === 0));
+    npUpdate();
+    dlg.classList.remove('hidden');
     setTimeout(() => { input.focus(); input.select(); }, 30);
+  }
+  async function createFromDialog() {
+    const dlg = npEl('hm-dialog');
+    const name = (npEl('hm-new-name').value || '').trim() || 'Untitled';
+    const s = npCompute(), fps = npFps();
+    try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
+    dlg.classList.add('hidden');
+    await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
+    FM.home.close();
   }
 
   FM.home = {
@@ -255,20 +526,32 @@ window.FM = window.FM || {};
           { label: 'Shortcuts', action: () => { FM.home.close(); FM.shortcuts.toggle(); } },
         ]);
       });
+      // search: magnifier → name/date bar over the list
+      const sBtn = document.getElementById('hm-search-btn'), sInp = document.getElementById('hm-search-input');
+      if (sBtn && sInp) {
+        sBtn.addEventListener('click', () => toggleSearch());
+        sInp.addEventListener('input', () => { query = sInp.value.trim(); render(); });
+        sInp.addEventListener('keydown', e => {
+          if (e.key === 'Escape') { e.preventDefault(); toggleSearch(false); }
+          else if (e.key === 'Enter') { e.preventDefault(); sInp.blur(); }   // phones: close the keyboard, keep the results
+        });
+        const clr = document.getElementById('hm-search-clear');
+        if (clr) clr.addEventListener('click', () => { sInp.value = ''; query = ''; render(); sInp.focus(); });
+      }
       // new-project dialog wiring
       const dlg = document.getElementById('hm-dialog');
-      dlg.querySelectorAll('.hm-aspect').forEach(b => b.addEventListener('click', () => {
-        dlg.querySelectorAll('.hm-aspect').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
+      dlg.querySelectorAll('.hm-aspect').forEach(b => b.addEventListener('click', () => { npAspect = b.dataset.aspect; npUpdate(); }));
+      dlg.querySelectorAll('.hm-bg-sw').forEach(b => b.addEventListener('click', () => {
+        npBg = b.dataset.bg;
+        if (/^#[0-9a-f]{6}$/i.test(npBg)) npEl('hm-new-bg').value = npBg;
+        npUpdate();
       }));
-      dlg.querySelector('#hm-create').addEventListener('click', async () => {
-        const name = (dlg.querySelector('#hm-new-name').value || '').trim() || 'Untitled';
-        const a = dlg.querySelector('.hm-aspect.active');
-        const dims = a ? a.dataset.size.split('x') : ['1080', '1920'];
-        dlg.classList.add('hidden');
-        await FM.projects.create({ name: name, width: +dims[0], height: +dims[1] });
-        FM.home.close();
-      });
+      npEl('hm-new-bg').addEventListener('input', () => { npBg = npEl('hm-new-bg').value; npUpdate(); });
+      npEl('hm-new-res').addEventListener('change', npUpdate);
+      npEl('hm-new-fps').addEventListener('change', npUpdate);
+      ['hm-new-w', 'hm-new-h', 'hm-new-fps-num'].forEach(id => { const inp = npEl(id); if (inp) inp.addEventListener('input', npUpdate); });
+      npEl('hm-new-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); createFromDialog(); } });
+      dlg.querySelector('#hm-create').addEventListener('click', createFromDialog);
       dlg.querySelector('#hm-cancel').addEventListener('click', () => dlg.classList.add('hidden'));
     },
     open() {
@@ -278,6 +561,7 @@ window.FM = window.FM || {};
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
       FM.projects.touchCurrent(true);   // fresh thumbnail for the card
       if (selectMode) { selectMode = false; selected.clear(); }
+      toggleSearch(false);   // Home always opens on the full library, never a stale filter
       tab = 'projects';
       // one-time: lift legacy inline thumbs out of the index into IDB, then re-render so cards refill
       if (FM.projects.migrateThumbs) FM.projects.migrateThumbs().then(() => { if (root && !root.classList.contains('hidden')) render(); });
