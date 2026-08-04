@@ -526,17 +526,28 @@ window.FM = window.FM || {};
     if (db) db.close();
     FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
   }
-  // Small poster frame of the current scene for home-screen cards.
+  // Poster frame of the current scene for home-screen cards. 360px longest side (2× the old 180 —
+  // retina-crisp at the list-row thumb size), PROGRESSIVE halving on the way down (a single
+  // 1080→180 drawImage skipped most source pixels = the old mushy cards), JPEG q0.8.
   function makeThumb() {
     try {
       const P = FM.scene.project;
-      const full = document.createElement('canvas'); full.width = P.width; full.height = P.height;
-      FM.renderScene(full.getContext('2d'), FM.scene, FM.time);
-      const s = Math.min(180 / P.width, 180 / P.height);
+      let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
+      FM.renderScene(src.getContext('2d'), FM.scene, FM.time);
+      const s = Math.min(360 / P.width, 360 / P.height, 1);
+      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
+      while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
+        const half = document.createElement('canvas');
+        half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
+        const hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high';
+        hg.drawImage(src, 0, 0, half.width, half.height);
+        src = half;
+      }
       const c = document.createElement('canvas');
-      c.width = Math.max(2, Math.round(P.width * s)); c.height = Math.max(2, Math.round(P.height * s));
-      c.getContext('2d').drawImage(full, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', 0.6);
+      c.width = tw; c.height = th;
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+      g.drawImage(src, 0, 0, tw, th);
+      return c.toDataURL('image/jpeg', 0.8);
     } catch (e) { return null; }
   }
 

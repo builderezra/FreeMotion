@@ -1529,20 +1529,25 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .hm-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 8px; }
 .hm-brand { font-weight: 800; font-size: 19px; letter-spacing: .2px; }
 .hm-more { width: 38px; height: 38px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 18px; cursor: pointer; }
-.hm-tabs { display: flex; gap: 20px; padding: 6px 20px 0; border-bottom: 1px solid var(--line-soft); }
-.hm-tab { background: none; border: none; color: var(--text-dim); font-size: 14.5px; font-weight: 700; padding: 10px 2px 12px; cursor: pointer; border-bottom: 2px solid transparent; }
-.hm-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+/* AM-style pill tabs */
+.hm-tabs { display: flex; gap: 10px; padding: 10px 18px 12px; }
+.hm-tab { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13.5px; font-weight: 700; padding: 9px 18px; cursor: pointer; border-radius: 999px; }
+.hm-tab.active { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 .hm-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 110px; }
-.hm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; max-width: 980px; margin: 0 auto; }
-.hm-card { position: relative; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 0 0 10px; overflow: hidden; cursor: pointer; color: var(--text); }
+/* AM-style project LIST rows: thumb left, name + meta stacked, actions right */
+.hm-grid { display: flex; flex-direction: column; gap: 10px; max-width: 700px; margin: 0 auto; }
+.hm-card { position: relative; display: flex; align-items: center; gap: 13px; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px; cursor: pointer; color: var(--text); }
 .hm-card:active { background: var(--panel-3); }
-.hm-thumb { position: relative; aspect-ratio: 9 / 12; background: #05070b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.hm-thumb { position: relative; flex: 0 0 86px; width: 86px; height: 86px; border-radius: 11px; background: #05070b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.hm-thumb-empty { font-size: 30px; opacity: .25; }
-.hm-open-badge { position: absolute; top: 7px; left: 7px; font-size: 9px; font-weight: 800; letter-spacing: .8px; color: #0b0e14; background: var(--accent); border-radius: 6px; padding: 3px 6px; }
-.hm-name { font-size: 13.5px; font-weight: 700; padding: 9px 11px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hm-meta { font-size: 11px; color: var(--text-dim); padding: 0 11px; }
-.hm-card-more { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(10, 13, 20, .65); color: #fff; font-size: 15px; cursor: pointer; }
+.hm-thumb-empty { font-size: 26px; opacity: .25; }
+.hm-dur { position: absolute; bottom: 5px; left: 5px; font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 2px 6px; }
+.hm-open-badge { position: absolute; top: 5px; left: 5px; font-size: 8.5px; font-weight: 800; letter-spacing: .7px; color: #0b0e14; background: var(--accent); border-radius: 6px; padding: 2px 5px; }
+.hm-body { flex: 1; min-width: 0; }
+.hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-meta { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+.hm-sub { font-size: 11px; color: var(--text-faint, rgba(160,170,190,.55)); margin-top: 2px; }
+.hm-card-more { flex: none; align-self: center; width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(10, 13, 20, .65); color: #fff; font-size: 15px; cursor: pointer; }
 .hm-empty { grid-column: 1 / -1; color: var(--text-faint); font-size: 13px; font-style: italic; text-align: center; padding: 48px 20px; }
 /* multi-select + housekeeping note + storage-health */
 .hm-select-btn { margin-left: auto; margin-right: 8px; padding: 7px 14px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -1556,7 +1561,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .hm-selbtn { padding: 8px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
 .hm-selbtn:disabled { opacity: .4; cursor: default; }
 .hm-selbtn.danger { background: #e0313122; border-color: #e0313166; color: #ff8a8a; }
-#hm-new { position: fixed; right: 22px; bottom: 26px; width: 62px; height: 62px; border-radius: 50%; border: none; background: var(--accent); color: #0b0e14; font-size: 30px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+#hm-new { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 62px; height: 62px; border-radius: 50%; border: none; background: var(--accent); color: #0b0e14; font-size: 30px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }   /* centred like AM's + */
 #hm-dialog { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
 #hm-dialog.hidden { display: none; }
 .hm-dlg-card { width: min(360px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }

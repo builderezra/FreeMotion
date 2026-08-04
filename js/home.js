@@ -30,6 +30,10 @@ window.FM = window.FM || {};
     if (s < 86400) return Math.floor(s / 3600) + 'h ago';
     return Math.floor(s / 86400) + 'd ago';
   }
+  function fmtDur(s) {
+    s = Math.max(0, Math.round(s || 0));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
   function aspectLabel(w, h) {
     if (!w || !h) return '';
     const r = w / h;
@@ -49,10 +53,13 @@ window.FM = window.FM || {};
     // Thumbnails now live in IndexedDB (out of the autosave-hot index) — load async, placeholder first.
     const ph = el('span', 'hm-thumb-empty', '▶'); th.appendChild(ph);
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
+    th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
     if (p.id === FM.projects.currentId()) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
     if (selectMode) th.appendChild(el('span', 'hm-check' + (selected.has(p.id) ? ' on' : ''), selected.has(p.id) ? '✓' : ''));
     const name = el('div', 'hm-name', p.name || 'Untitled');
-    const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.duration || 0) + 's', (p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : null), ago(p.modified)].filter(Boolean).join(' · '));
+    // duration moved onto the thumb badge — the meta line keeps the rest (same info, AM row look)
+    const meta = el('div', 'hm-meta', [aspectLabel(p.width, p.height), (p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : null)].filter(Boolean).join('  ·  '));
+    const sub = el('div', 'hm-sub', ago(p.modified));
     const more = el('button', 'hm-card-more', '⋯');
     more.setAttribute('aria-label', 'Project actions');
     more.addEventListener('click', (ev) => {
@@ -84,7 +91,9 @@ window.FM = window.FM || {};
         } },
       ]);
     });
-    card.appendChild(th); card.appendChild(name); card.appendChild(meta);
+    const body = el('div', 'hm-body');
+    body.appendChild(name); body.appendChild(meta); body.appendChild(sub);
+    card.appendChild(th); card.appendChild(body);
     if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
     card.addEventListener('click', () => { if (selectMode) toggleSel(p.id); else openProject(p.id); });
     keyActivate(card);
@@ -145,9 +154,12 @@ window.FM = window.FM || {};
     const th = el('div', 'hm-thumb');
     if (t.thumb) { const img = document.createElement('img'); img.src = t.thumb; img.alt = ''; th.appendChild(img); }
     else th.appendChild(el('span', 'hm-thumb-empty', '❖'));
+    th.appendChild(el('span', 'hm-dur', fmtDur(t.duration)));
     card.appendChild(th);
-    card.appendChild(el('div', 'hm-name', t.name || 'Template'));
-    card.appendChild(el('div', 'hm-meta', [aspectLabel(t.width, t.height), (t.duration || 0) + 's'].filter(Boolean).join(' · ')));
+    const body = el('div', 'hm-body');
+    body.appendChild(el('div', 'hm-name', t.name || 'Template'));
+    body.appendChild(el('div', 'hm-meta', aspectLabel(t.width, t.height)));
+    card.appendChild(body);
     const more = el('button', 'hm-card-more', '⋯');
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
