@@ -589,6 +589,13 @@ window.FM = window.FM || {};
   };
 
   /* ---------- layers ---------- */
+  // Default length for a layer with no length of its own (photo, text, shape, drawing). Video keeps
+  // its own duration. Settings owns the value; this clamps it so a hand-edited pref can't spawn a
+  // zero-length or absurd layer.
+  FM.defaultLayerDuration = function () {
+    const v = FM.settings ? +FM.settings.get('layerDuration') : 5;
+    return (isFinite(v) && v > 0) ? Math.min(60, v) : 5;
+  };
   FM.addMediaLayer = function (rec) {
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
@@ -596,8 +603,9 @@ window.FM = window.FM || {};
       P.width = rec.width; P.height = rec.height;
       resizeCanvas();
     }
-    // Use the clip's FULL length — never cap it to the existing composition.
-    const dur = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : 5;
+    // Use the clip's FULL length — never cap it to the existing composition. A still has no length
+    // of its own, so it takes the default from Settings.
+    const dur = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : FM.defaultLayerDuration();
     const layer = FM.makeLayer(rec.kind, {
       name: rec.file ? rec.file.name.replace(/\.[^.]+$/, '') : rec.kind,
       x: P.width / 2, y: P.height / 2, start: first ? 0 : FM.time, duration: dur,   // import AT THE PLAYHEAD (first clip anchors at 0)
@@ -620,11 +628,13 @@ window.FM = window.FM || {};
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
     if (FM.storage && FM.storage.save) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close
+    // Remember it in the Media library so it's one tap away next time — no picker, no Photos app.
+    if (FM.mediaLib && rec.file) FM.mediaLib.add(rec, layer.id);
   }
 
   FM.addTextLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), start: FM.time, duration: 5 });
+    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), start: FM.time, duration: FM.defaultLayerDuration() });
     FM.scene.layers.unshift(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
@@ -668,7 +678,7 @@ window.FM = window.FM || {};
       name: opts.name || (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
       shape: shape || 'rect', x: P.width / 2, y: P.height / 2,
       shapeW: Math.round(d * asp[0]), shapeH: Math.round(d * asp[1]),
-      start: FM.time, duration: 5,   // add AT THE PLAYHEAD (was start 0); a fixed 5s clip that extends the comp
+      start: FM.time, duration: FM.defaultLayerDuration(),   // add AT THE PLAYHEAD (was start 0); a fixed 5s clip that extends the comp
       extra: opts.extra,
     });
     FM.scene.layers.unshift(layer);
@@ -693,7 +703,7 @@ window.FM = window.FM || {};
       name: opt.name || 'Drawing', shape: 'path',
       x: minX + w / 2, y: minY + h / 2,
       shapeW: Math.round(w), shapeH: Math.round(h),
-      start: FM.time, duration: 5,   // appears at the playhead
+      start: FM.time, duration: FM.defaultLayerDuration(),   // appears at the playhead
       extra: { points: pts, closed: !!opt.closed },
     });
     if (opt.closed) {
@@ -1563,6 +1573,7 @@ window.FM = window.FM || {};
   }
 
   function init() {
+    if (FM.settings) FM.settings.init();   // preferences first — layer durations and demo mode read them straight away
     canvas = document.getElementById('preview');
     ctx = canvas.getContext('2d');
     readoutEl = document.getElementById('time-readout');
@@ -1621,6 +1632,9 @@ window.FM = window.FM || {};
         let lastView = null; try { lastView = localStorage.getItem('fm.view'); } catch (e) {}
         if (!(restored && lastView === 'editor')) FM.home.open();
       }
+      // Seed the Media library from media already sitting in existing projects, THEN sweep — the
+      // sweep's keep-set reads the library, so seeding first is what stops it eating those blobs.
+      if (FM.mediaLib) FM.mediaLib.backfill();
       if (FM.projects) FM.projects.pruneOrphans();   // boot sweep of orphaned media blobs
     });
     // ‹ crumb pill exits the Edit Group view

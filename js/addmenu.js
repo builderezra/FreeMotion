@@ -61,12 +61,25 @@ window.FM = window.FM || {};
       { label: 'Line', icon: ico('<path d="M4 12h16"/>'), add: shp('line') },
       { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/><circle cx="12" cy="12" r="1.6"/>'), add: shp('polygon') },
     ].concat(LIB_SHAPES.map(function (s) { return { label: s[1], icon: icoPoly(s[0]), add: shp(s[0], { name: s[1] }) }; })) },
-    { key: 'media', label: 'Media', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'), options: [
-      { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
-      { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
-      { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
-      { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
-    ] },
+    { key: 'media', label: 'Media', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'), options: function () {
+      var base = [
+        { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
+        { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
+        { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
+        { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
+      ];
+      // …then everything you've imported before, newest first. One tap re-adds it — no picker, no
+      // trip through the Photos app. (A browser can't read the camera roll; this is the closest
+      // thing that actually works, and after the first import it behaves the same.)
+      (FM.mediaLib ? FM.mediaLib.list() : []).forEach(function (m) {
+        base.push({
+          label: m.name, mid: m.mid, kind: m.kind, dur: m.dur,
+          icon: ico(m.kind === 'video' ? '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z"/>' : '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'),
+          add: function () { FM.mediaLib.use(m.mid); },
+        });
+      });
+      return base;
+    } },
     { key: 'audio', label: 'Audio', icon: ico('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), options: [
       { label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
     ] },
@@ -104,15 +117,42 @@ window.FM = window.FM || {};
 
   var _startTab = null;   // set by openTab() so a keyboard shortcut can jump straight to a tab
 
+  function fmtDur(s) {
+    s = Math.max(0, Math.round(s || 0));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+  // Demo mode blanks anything that would expose the user's own files on a screen recording: the
+  // preview frame AND the filename (which is often just as revealing).
+  function demo() { return !!(FM.settings && FM.settings.get('demoMode')); }
+
   function card(item, cls, iconOnly) {
     var b = document.createElement('button');
-    b.className = cls; b.type = 'button'; b.title = item.label;
+    b.className = cls; b.type = 'button';
+    var hidden = item.mid && demo();
+    var label = hidden ? (item.kind === 'video' ? 'Video' : 'Photo') : item.label;
+    b.title = label;
     var ic = document.createElement('span'); ic.className = 'addmenu-ic';
     ic.innerHTML = item.emoji ? '<span class="add-emoji">' + item.emoji + '</span>' : item.icon;   // trusted literals only (ico()/emoji)
     b.appendChild(ic);
+    // Library tiles show the actual frame, loaded lazily (IDB → cached). Never in demo mode.
+    if (item.mid && !hidden && FM.mediaLib) {
+      b.classList.add('addmenu-media');
+      FM.mediaLib.getThumb(item.mid).then(function (url) {
+        if (!url || !b.isConnected) return;
+        var img = document.createElement('img');
+        img.src = url; img.alt = ''; img.className = 'addmenu-thumb';
+        b.insertBefore(img, b.firstChild);
+        b.classList.add('has-thumb');
+      });
+      if (item.kind === 'video' && item.dur) {
+        var d = document.createElement('span'); d.className = 'addmenu-dur'; d.textContent = fmtDur(item.dur);
+        b.appendChild(d);
+      }
+    }
+    if (item.mid && hidden) b.classList.add('addmenu-media', 'addmenu-media--demo');
     if (!iconOnly) {   // shape cards are icon-only (AM) — the name lives in the tooltip
       var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
-      lb.textContent = item.label;   // element/template names are USER input — textContent, never innerHTML (#r3)
+      lb.textContent = label;   // element/template/file names are USER input — textContent, never innerHTML (#r3)
       b.appendChild(lb);
     }
     return b;
@@ -141,11 +181,24 @@ window.FM = window.FM || {};
         var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         function makeCard(o) {
           var c = card(o, 'addmenu-card' + (iconOnly ? ' addmenu-card--ico' : ''), iconOnly);
-          c.addEventListener('click', function () { o.add(); after(); });
+          c.addEventListener('click', function () { if (!c._longPressed) { o.add(); after(); } c._longPressed = false; });
           if (o.elementId) c.addEventListener('contextmenu', function (ev) {   // desktop: right-click removes a saved element
             ev.preventDefault();
             if (confirm('Delete element \u201c' + o.label + '\u201d?')) { FM.elements.remove(o.elementId); drawBody(); }
           });
+          // Library tile: right-click (PC) or long-press (phone) takes it out of the library. The
+          // FILE isn't deleted from any project that uses it \u2014 this only forgets the shortcut.
+          if (o.mid) {
+            var forget = function () {
+              if (!confirm('Remove this from your media library?\n\nProjects already using it keep it.')) return;
+              FM.mediaLib.remove(o.mid); drawBody();
+            };
+            c.addEventListener('contextmenu', function (ev) { ev.preventDefault(); forget(); });
+            var t = null;
+            var cancel = function () { if (t) { clearTimeout(t); t = null; } };
+            c.addEventListener('pointerdown', function () { cancel(); t = setTimeout(function () { c._longPressed = true; t = null; forget(); }, 550); });
+            ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { c.addEventListener(ev, cancel); });
+          }
           return c;
         }
         // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots \u2014 not a vertical scroll.

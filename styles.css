@@ -1765,3 +1765,48 @@ body.drawing #select-box { display: none !important; }
 .mask-edit-btn { width: 100%; min-height: 40px; margin-top: 8px; padding: 10px; background: var(--panel-3); border: 1px solid var(--line); border-radius: 9px; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; }
 .mask-edit-btn:hover { border-color: var(--accent); }
 .mask-item .seg-btn { min-height: 40px; }
+
+/* ---- Settings panel (home cog) — app-wide prefs; per-project ones live in Canvas settings ---- */
+.set-scrim { position: fixed; inset: 0; z-index: 220; background: rgba(4, 6, 10, 0); transition: background .24s ease; display: flex; }
+.set-scrim.open { background: rgba(4, 6, 10, .62); }
+.set-panel {
+  display: flex; flex-direction: column;
+  width: min(380px, 88vw); max-width: 100%; height: 100%;
+  background: var(--panel); border-right: 1px solid var(--line);
+  transform: translateX(-100%); transition: transform .24s cubic-bezier(.22, .8, .3, 1);
+  box-shadow: 18px 0 50px rgba(0, 0, 0, .5);
+}
+.set-scrim.open .set-panel { transform: translateX(0); }
+.set-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 10px; padding-top: max(18px, env(safe-area-inset-top)); }
+.set-title { font-size: 22px; font-weight: 800; letter-spacing: .2px; }
+.set-close { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 13px; cursor: pointer; }
+.set-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 14px calc(24px + env(safe-area-inset-bottom)); }
+.set-group { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px; margin-bottom: 14px; }
+.set-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; }
+.set-row + .set-row { border-top: 1px solid var(--line); }
+.set-rowtext { flex: 1; min-width: 0; }
+.set-label { font-size: 14.5px; font-weight: 600; }
+.set-hint { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin-top: 4px; }
+.set-switch { flex: none; position: relative; width: 50px; height: 30px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-3); cursor: pointer; padding: 0; transition: background .16s ease, border-color .16s ease; }
+.set-switch.on { background: var(--accent); border-color: var(--accent); }
+.set-knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .16s cubic-bezier(.3, .8, .3, 1); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+.set-switch.on .set-knob { transform: translateX(20px); }
+.set-seg { flex: none; display: flex; background: var(--panel-3); border-radius: 999px; padding: 3px; }
+.set-segbtn { border: none; background: none; color: var(--text-dim); font-size: 13px; font-weight: 700; padding: 7px 18px; border-radius: 999px; cursor: pointer; }
+.set-segbtn.on { background: var(--accent); color: #0b0e14; }
+.set-select { flex: none; background: var(--panel-3); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 13px; }
+.set-foot { font-size: 11px; color: var(--text-dim); text-align: center; padding: 6px 8px 0; }
+
+/* Show touches — a ring where you tapped, so a screen recording shows the interaction */
+.touch-ripple { position: fixed; z-index: 9999; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; pointer-events: none; border: 2px solid rgba(47, 208, 181, .9); background: rgba(47, 208, 181, .18); animation: touch-pop .6s ease-out forwards; }
+@keyframes touch-pop { from { transform: scale(.35); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .touch-ripple { animation-duration: .01ms; } .set-panel { transition: none; } }
+
+/* ---- Media library tiles in Add → Media ---- */
+.addmenu-card.addmenu-media { position: relative; overflow: hidden; }
+.addmenu-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.addmenu-card.has-thumb .addmenu-ic { opacity: 0; }   /* the frame replaces the generic icon once it lands */
+.addmenu-card.has-thumb .addmenu-lbl { position: relative; z-index: 1; background: linear-gradient(transparent, rgba(6, 9, 14, .86) 55%); padding: 10px 4px 3px; margin-top: auto; width: 100%; text-align: center; }
+.addmenu-dur { position: absolute; top: 4px; right: 4px; z-index: 1; font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .8); border-radius: 5px; padding: 1px 4px; }
+.addmenu-media--demo .addmenu-ic { opacity: .45; }
+.addmenu-media--demo { border-style: dashed; }

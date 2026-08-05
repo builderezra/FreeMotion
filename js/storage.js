@@ -87,6 +87,11 @@ window.FM = window.FM || {};
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
+    // Generic single-key access to the media store, for features that need to read or write a blob
+    // outside the scene document (the Media library reads imported files and caches its thumbnails).
+    async readMedia(key) { try { const db = await openDB(); const v = await idbGet(db, key); db.close(); return v; } catch (e) { return null; } },
+    async writeMedia(key, val) { try { const db = await openDB(); await idbPut(db, key, val); db.close(); return true; } catch (e) { return false; } },
+
     // autosave is invoked ONLY by real-edit paths (history commit/undo/redo, template/element
     // inserts) — the single choke point that marks the project genuinely modified.
     autosave() { _dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => FM.storage.save(), 600); },
@@ -782,13 +787,17 @@ window.FM = window.FM || {};
             }
           }
           FM.scene.layers.forEach(l => keep.add(l.id));
+          // The Media library points at blobs by the id of the layer that first imported them, so a
+          // file stays available after the project that introduced it is deleted. Without this the
+          // library would quietly rot to broken tiles at the next boot.
+          if (FM.mediaLib && FM.mediaLib.keys) FM.mediaLib.keys().forEach(k => keep.add(k));
           return keep;
         };
         const keep = collectKeep();
         const db = await openDB();
         const candidates = [];
         for (const k of await idbKeys(db)) {
-          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0)) continue;
+          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0 || k.indexOf('libthumb:') === 0)) continue;
           // project-card thumbnails are keyed 'thumb:<projectId>' — they were being treated as
           // orphans and wiped at EVERY boot; only a deleted project's thumb is really an orphan
           if (typeof k === 'string' && k.indexOf('thumb:') === 0) { if (projIds.has(k.slice(6))) continue; candidates.push(k); continue; }

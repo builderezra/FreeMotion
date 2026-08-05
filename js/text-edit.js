@@ -82,7 +82,9 @@ window.FM = window.FM || {};
       card.addEventListener('click', () => { const ly = layer(); if (!ly) return; ly.fontFamily = css; FM.requestRender(); updateBarLabels(); rail.querySelectorAll('.te-font-card.on').forEach(c => c.classList.remove('on')); card.classList.add('on'); });
       rail.appendChild(card);
     };
-    FONTS.forEach(css => addCard(css, css.split(',')[0].trim()));
+    // Settings → Show system fonts. Off = only the fonts you imported, so the rail is your own set.
+    const showSystem = !FM.settings || FM.settings.get('systemFonts') !== false;
+    if (showSystem) FONTS.forEach(css => addCard(css, css.split(',')[0].trim()));
     (FM.fonts ? FM.fonts.list() : []).forEach(f => addCard(f.css, f.name));
     // Import (AM's "View All Fonts" → here it's the useful action: pull a font off the device)
     const imp = elc('button', 'te-font-card te-font-import', '<span class="te-font-abc">＋</span><span class="te-font-name">Import</span>');

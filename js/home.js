@@ -397,8 +397,12 @@ window.FM = window.FM || {};
     const selBtn = document.getElementById('hm-select-btn');
     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = tab === 'projects' ? '' : 'none'; }
     if (tab === 'projects') {
-      // most recently EDITED first — the project you just worked on is always the front card
-      const list = FM.projects.list().slice().sort((a, b) => (b.modified || 0) - (a.modified || 0));
+      // Order follows Settings → Project sorting: most recently EDITED first (so the project you
+      // just worked on is the front card), or plain A–Z by name.
+      const byName = FM.settings && FM.settings.get('sort') === 'name';
+      const list = FM.projects.list().slice().sort(byName
+        ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
+        : (a, b) => (b.modified || 0) - (a.modified || 0));
       if (query) {
         if (!list.length) { grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.')); renderSelBar(); return; }
         const range = parseDateQuery(query);
@@ -550,6 +554,17 @@ window.FM = window.FM || {};
         sb.addEventListener('click', () => { if (selectMode) exitSelect(); else enterSelect(); });
         top.insertBefore(sb, top.querySelector('.hm-more'));
       }
+      // settings cog — app-wide preferences (sorting, demo mode, defaults). Injected like the
+      // Select button so the markup stays put; sits left of the ⋯ file menu.
+      if (top && !document.getElementById('hm-settings-btn')) {
+        const cg = el('button', 'hm-search-btn', ''); cg.id = 'hm-settings-btn';
+        cg.setAttribute('aria-label', 'Settings'); cg.title = 'Settings';
+        cg.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';   // same mark as the editor's cog
+        cg.addEventListener('click', () => { if (FM.settings) FM.settings.open(); });
+        top.insertBefore(cg, top.querySelector('.hm-more'));
+      }
+      // re-sort / re-render when a setting that affects this screen changes
+      if (FM.settings) FM.settings.onChange(() => { if (FM.home.isOpen()) render(); });
       // top-right ⋯: file-level actions that used to live behind the editor's back arrow
       root.querySelector('.hm-more').addEventListener('click', (ev) => {
         const r = ev.currentTarget.getBoundingClientRect();
