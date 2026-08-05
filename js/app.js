@@ -1706,7 +1706,7 @@ window.FM = window.FM || {};
       const rates = [0.25, 0.5, 1, 2, 4], cur = FM.previewRate || 1;
       const nextRate = rates[(rates.indexOf(cur) + 1) % rates.length];
       return [
-        { label: 'Canvas size…', action: () => clickHidden('btn-canvas') },
+        { label: 'Canvas settings…', action: () => clickHidden('btn-canvas') },   // size + aspect + frame rate + background
         { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
         { label: 'Save frame (PNG)', action: () => clickHidden('btn-snapshot') },
         { sep: true },
