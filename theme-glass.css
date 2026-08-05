@@ -166,12 +166,18 @@ html[data-theme="glass"] #hm-new:active {
     inset 0 -6px 14px -6px rgba(3, 24, 34, .6),
     0 6px 18px rgba(90, 199, 237, .18);
 }
-/* A slow highlight drifting across the bead — the one moving thing, and it's barely there. */
+/* A slow highlight drifting across the glass — the one moving thing, and it's barely there.
+   overflow:hidden is what keeps it INSIDE: the sheen is a full-size layer that slides past the
+   button's edges, so unclipped it read as a streak floating outside the circle. Clipping it to the
+   rounded box means the highlight travels across the glass and disappears at the rim, like light
+   crossing a real lens. (Outer box-shadows are unaffected — overflow only clips children.) */
+html[data-theme="glass"] #hm-new,
+html[data-theme="glass"] #add-fab { overflow: hidden; }
 html[data-theme="glass"] #hm-new::after {
   content: '';
   position: absolute; inset: 0;
   border-radius: inherit;
-  background: linear-gradient(122deg, transparent 30%, rgba(255, 255, 255, .30) 46%, transparent 62%);
+  background: linear-gradient(122deg, transparent 38%, rgba(255, 255, 255, .26) 50%, transparent 62%);
   animation: glass-sheen 7s ease-in-out infinite;
   pointer-events: none;
 }
