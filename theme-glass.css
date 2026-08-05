@@ -175,16 +175,26 @@ html[data-theme="glass"] #hm-new,
 html[data-theme="glass"] #add-fab { overflow: hidden; }
 html[data-theme="glass"] #hm-new::after {
   content: '';
-  position: absolute; inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(122deg, transparent 38%, rgba(255, 255, 255, .26) 50%, transparent 62%);
+  position: absolute;
+  /* DOUBLE the button's size and centred on it. The mask (overflow:hidden above) is what shapes the
+     highlight; this layer just has to be big enough that a FULL-WIDTH band is always inside the
+     circle mid-sweep. Sized to the button, the clip left only a sliver visible. */
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: linear-gradient(115deg,
+    transparent 34%,
+    rgba(255, 255, 255, .10) 42%,
+    rgba(255, 255, 255, .38) 50%,
+    rgba(255, 255, 255, .10) 58%,
+    transparent 66%);
   animation: glass-sheen 7s ease-in-out infinite;
   pointer-events: none;
 }
+/* Travel is ±40% of the OVERSIZED layer, which parks the band just off each side of the button —
+   so it enters and leaves on its own and needs no opacity fade to hide the reset. */
 @keyframes glass-sheen {
-  0%, 62% { transform: translateX(-62%); opacity: 0; }
-  72% { opacity: .9; }
-  100% { transform: translateX(62%); opacity: 0; }
+  0%, 78% { transform: translateX(-40%); }
+  100% { transform: translateX(40%); }
 }
 @media (prefers-reduced-motion: reduce) {
   html[data-theme="glass"] #hm-new::after { animation: none; opacity: .18; transform: none; }
