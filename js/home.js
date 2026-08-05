@@ -123,6 +123,7 @@ window.FM = window.FM || {};
 
   function dayStart(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
   function dayEnd(ts) { const d = new Date(ts); d.setHours(23, 59, 59, 999); return d.getTime(); }
+  function daysInMonth(y, mo) { return new Date(y, mo + 1, 0).getDate(); }
   function monthIndex(w) {
     if (!w || w.length < 3) return -1;
     if (w === 'sept') return 8;
@@ -130,7 +131,13 @@ window.FM = window.FM || {};
     return -1;
   }
   function monthRange(y, mo) { return { a: new Date(y, mo, 1).getTime(), b: new Date(y, mo + 1, 1).getTime() - 1 }; }
-  function dayRange(y, mo, d) { const t = new Date(y, mo, d).getTime(); return { a: dayStart(t), b: dayEnd(t) }; }
+  // A day that doesn't exist ("31/6", "29/2/25") is NOT silently rolled into the next month — JS Date
+  // would happily do that and we'd then announce "1 match" for a date the project was never touched on.
+  function dayRange(y, mo, d) {
+    if (d < 1 || d > daysInMonth(y, mo)) return null;
+    const t = new Date(y, mo, d).getTime();
+    return { a: dayStart(t), b: dayEnd(t) };
+  }
   // Two-digit years: 26 → 2026, 99 → 1999 (nobody's editing video in 2099).
   function fullYear(y) { y = +y; return y >= 100 ? y : (y <= 79 ? 2000 + y : 1900 + y); }
 
@@ -180,7 +187,7 @@ window.FM = window.FM || {};
       }
       if (ok && mo >= 0) {
         const y = year || D.getFullYear();
-        if (day >= 1 && day <= 31) return dayRange(y, mo, day);
+        if (day >= 1) { const r = dayRange(y, mo, day); if (r) return r; }   // "feb 30" → fall back to the whole month rather than a wrong day
         return monthRange(y, mo);
       }
     }
@@ -203,11 +210,13 @@ window.FM = window.FM || {};
     const n = nameScore(p.name, q);
     let d = 0, inRange = false, why = '';
     if (range) {
-      const cts = p.created || p.modified, ets = p.modified;
+      const cts = p.created || 0, ets = p.modified;
       const cs = dateScore(cts, range), es = dateScore(ets, range);
       d = Math.max(cs, es);
       inRange = d >= 1;
-      if (d > 0) why = cs >= es ? ('created ' + fmtDate(cts)) : ('edited ' + fmtDate(ets));
+      // Only ever say "created" when a creation date was actually recorded — pre-v3.68 cards have
+      // only an edit date, and labelling that as the creation date would be a plain lie.
+      if (d > 0) why = (cts && cs >= es) ? ('created ' + fmtDate(cts)) : ('edited ' + fmtDate(ets));
     }
     return { score: Math.max(n, d), exact: n >= 0.45 || inRange, why: d > n ? why : '' };
   }
@@ -370,6 +379,14 @@ window.FM = window.FM || {};
   }
 
   let shownIds = [];   // project ids visible in the grid right now (search-aware; Select-all uses it)
+  // A tick only counts while you can SEE the card. Without this, selecting three projects and then
+  // typing a search would leave "3 selected" on the bar and Delete would take three projects that
+  // are no longer on screen — the exact surprise the Select-all guard exists to prevent.
+  function pruneSelection() {
+    if (!selectMode || !selected.size) return;
+    const live = new Set(shownIds);
+    [...selected].forEach(id => { if (!live.has(id)) selected.delete(id); });
+  }
   function render() {
     if (!grid) return;
     if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
@@ -393,6 +410,7 @@ window.FM = window.FM || {};
           ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + (range ? ' for that date' : '') + ' — best first')
           : 'Nothing matched “' + query + '” exactly. Closest projects:'));
         shown.forEach(x => { shownIds.push(x.p.id); grid.appendChild(projectCard(x.p, x.why || undefined)); });
+        pruneSelection();
         renderSelBar();
         return;
       }
@@ -407,6 +425,7 @@ window.FM = window.FM || {};
         grid.appendChild(el('div', 'hm-note', msg));
       }
       list.forEach(p => { shownIds.push(p.id); grid.appendChild(projectCard(p)); });
+      pruneSelection();
     } else {
       let list = FM.templates.list();
       if (query && list.length) {
@@ -432,8 +451,14 @@ window.FM = window.FM || {};
     const on = force != null ? force : bar.classList.contains('hidden');
     bar.classList.toggle('hidden', !on);
     if (btn) { btn.classList.toggle('on', on); btn.setAttribute('aria-expanded', on ? 'true' : 'false'); }
-    if (on) { setTimeout(() => inp.focus(), 20); }
-    else { inp.value = ''; if (query) { query = ''; render(); } }
+    // focus SYNCHRONOUSLY inside the tap handler — WebKit only raises the software keyboard for a
+    // focus() that still holds the user-gesture token, and a setTimeout callback has lost it
+    if (on) { inp.focus(); }
+    else {
+      inp.value = '';
+      const hint = document.querySelector('.hm-search-hint'); if (hint) hint.classList.remove('hidden');
+      if (query) { query = ''; render(); }
+    }
   }
 
   /* ---------- new-project dialog: every canvas option up front ---------------------------------
@@ -442,7 +467,8 @@ window.FM = window.FM || {};
    * instead of being corrected later in Canvas settings. The picks are remembered for next time.
    */
   const NEWP_KEY = 'fm.newproj';
-  let npAspect = '9:16', npBg = '#000000';
+  const NP_ASPECTS = ['9:16', '16:9', '1:1', '4:5', '4:3', 'custom'];   // whitelist: a corrupt remembered value must not reach the a/b maths as NaN
+  let npAspect = '9:16', npBg = '#000000', dlgEsc = null;
   const npEl = id => document.getElementById(id);
   const npClampDim = v => Math.max(16, Math.min(7680, Math.round((parseInt(v, 10) || 16) / 2) * 2));   // even + sane bounds, same clamp as Canvas settings
   function npCompute() {
@@ -464,8 +490,10 @@ window.FM = window.FM || {};
     npEl('hm-new-custom-size').classList.toggle('hidden', !custom);
     npEl('hm-new-custom-fps').classList.toggle('hidden', npEl('hm-new-fps').value !== 'custom');
     const dlg = npEl('hm-dialog');
-    dlg.querySelectorAll('.hm-aspect').forEach(b => b.classList.toggle('active', b.dataset.aspect === npAspect));
-    dlg.querySelectorAll('.hm-bg-sw').forEach(b => b.classList.toggle('active', b.dataset.bg === npBg));
+    // aria-pressed too — the accent border is the ONLY selected-state cue otherwise, which tells a
+    // screen-reader user (and a colour-blind one, on Black vs Charcoal) nothing at all
+    dlg.querySelectorAll('.hm-aspect').forEach(b => { const on = b.dataset.aspect === npAspect; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    dlg.querySelectorAll('.hm-bg-sw').forEach(b => { const on = b.dataset.bg === npBg; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     const s = npCompute();
     npEl('hm-new-size').textContent = s.w + ' × ' + s.h + '  ·  ' + npFps() + ' fps';
   }
@@ -473,7 +501,7 @@ window.FM = window.FM || {};
     const dlg = document.getElementById('hm-dialog');
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(NEWP_KEY)) || {}; } catch (e) {}
-    npAspect = typeof saved.aspect === 'string' ? saved.aspect : '9:16';
+    npAspect = NP_ASPECTS.indexOf(saved.aspect) >= 0 ? saved.aspect : '9:16';
     npBg = (saved.bg === 'none' || /^#[0-9a-f]{6}$/i.test(saved.bg || '')) ? saved.bg : '#000000';
     // set every control EVERY time (not just when remembered) — the dialog is reused, so a value
     // left behind by the previous open would silently become the next project's setting
@@ -491,7 +519,12 @@ window.FM = window.FM || {};
     input.value = 'Project ' + (FM.projects.list().length + 1);
     npUpdate();
     dlg.classList.remove('hidden');
-    setTimeout(() => { input.focus(); input.select(); }, 30);
+    // Focus the name field on a real keyboard only. On a phone, auto-focus throws the software
+    // keyboard up the instant the dialog opens and pushes Create/Cancel off the visual viewport
+    // (measured: a 667pt screen leaves ~380pt, the card is ~550pt) — the name already has a sane
+    // default, so tapping the field when you actually want to rename is the better trade.
+    const hasKeyboard = !window.matchMedia || matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (hasKeyboard) setTimeout(() => { input.focus(); input.select(); }, 30);
   }
   async function createFromDialog() {
     const dlg = npEl('hm-dialog');
@@ -530,14 +563,31 @@ window.FM = window.FM || {};
       const sBtn = document.getElementById('hm-search-btn'), sInp = document.getElementById('hm-search-input');
       if (sBtn && sInp) {
         sBtn.addEventListener('click', () => toggleSearch());
-        sInp.addEventListener('input', () => { query = sInp.value.trim(); render(); });
+        // debounced: render() rebuilds every card and re-reads each thumbnail from IndexedDB, so a
+        // per-keystroke rebuild made a big library strobe its ▶ placeholders while typing
+        let sTimer = null;
+        sInp.addEventListener('input', () => {
+          const hint = document.querySelector('.hm-search-hint');
+          if (hint) hint.classList.toggle('hidden', !!sInp.value);   // reclaim the space once they're typing (phones: keyboard up)
+          clearTimeout(sTimer);
+          sTimer = setTimeout(() => { query = sInp.value.trim(); render(); }, 110);
+        });
         sInp.addEventListener('keydown', e => {
           if (e.key === 'Escape') { e.preventDefault(); toggleSearch(false); }
           else if (e.key === 'Enter') { e.preventDefault(); sInp.blur(); }   // phones: close the keyboard, keep the results
         });
         const clr = document.getElementById('hm-search-clear');
-        if (clr) clr.addEventListener('click', () => { sInp.value = ''; query = ''; render(); sInp.focus(); });
+        if (clr) clr.addEventListener('click', () => {
+          sInp.value = ''; query = '';
+          const hint = document.querySelector('.hm-search-hint'); if (hint) hint.classList.remove('hidden');
+          render(); sInp.focus();
+        });
       }
+      // modal manners for the (now much bigger) new-project dialog: Escape closes, so does a tap on
+      // the backdrop — on a phone with the keyboard up, the buttons can be the hardest thing to reach
+      dlgEsc = e => { const d = document.getElementById('hm-dialog'); if (e.key === 'Escape' && d && !d.classList.contains('hidden')) { e.preventDefault(); d.classList.add('hidden'); } };
+      document.addEventListener('keydown', dlgEsc);
+      document.getElementById('hm-dialog').addEventListener('pointerdown', e => { if (e.target && e.target.id === 'hm-dialog') e.currentTarget.classList.add('hidden'); });
       // new-project dialog wiring
       const dlg = document.getElementById('hm-dialog');
       dlg.querySelectorAll('.hm-aspect').forEach(b => b.addEventListener('click', () => { npAspect = b.dataset.aspect; npUpdate(); }));
@@ -561,8 +611,8 @@ window.FM = window.FM || {};
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
       FM.projects.touchCurrent(true);   // fresh thumbnail for the card
       if (selectMode) { selectMode = false; selected.clear(); }
-      toggleSearch(false);   // Home always opens on the full library, never a stale filter
-      tab = 'projects';
+      tab = 'projects';       // set BEFORE toggleSearch: clearing a live query re-renders, and doing that on a stale 'templates' tab built a grid we immediately throw away
+      toggleSearch(false);    // Home always opens on the full library, never a stale filter
       // one-time: lift legacy inline thumbs out of the index into IDB, then re-render so cards refill
       if (FM.projects.migrateThumbs) FM.projects.migrateThumbs().then(() => { if (root && !root.classList.contains('hidden')) render(); });
       render();

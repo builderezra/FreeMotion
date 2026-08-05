@@ -186,7 +186,11 @@ window.FM = window.FM || {};
     if (p.height != null) p.height = ev(p.height) || 1920;
     if (!(p.width >= 16)) p.width = 1080;
     if (!(p.height >= 16)) p.height = 1920;
-    p.fps = [24, 25, 30, 50, 60].indexOf(+p.fps) >= 0 ? +p.fps : 30;
+    // fps: an integer 1–120, the same range the editor's own Canvas settings and the New project
+    // dialog offer. (This used to be a 24/25/30/50/60 WHITELIST, which silently reset every other
+    // value to 30 — including 120, every Custom fps, and any 48fps project round-tripped through
+    // an export/import. The bound is what protects us; the whitelist was just lossy.)
+    p.fps = Math.max(1, Math.min(120, Math.round(+p.fps) || 30));
     p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
   }
   // An imported layer.fillImage flows straight to img.src / CSS url() on the first render — an external
@@ -561,16 +565,23 @@ window.FM = window.FM || {};
   // made that a multi-MB serialize at a few hundred projects — the "gets laggy, delete some" problem.
   // Out of the index, each entry is ~150 bytes, so hundreds of projects stay snappy. (STORE 'media' is
   // keyed by layer id like 'l_…'; 'thumb:p_…' can't collide.)
-  function putThumb(id, url) { openDB().then(db => idbPut(db, 'thumb:' + id, url).then(() => db.close())).catch(() => {}); }
-  function delThumb(db, id) { return idbDel(db, 'thumb:' + id); }
+  // In-memory mirror of what's in IDB, so re-rendering the Home grid (every search keystroke, every
+  // select tick) doesn't reopen the database once per card — that's what made the cards strobe their
+  // ▶ placeholder while typing. A cache hit resolves in a microtask, before the browser paints.
+  const _thumbCache = new Map();
+  function putThumb(id, url) { _thumbCache.set(id, url); openDB().then(db => idbPut(db, 'thumb:' + id, url).then(() => db.close())).catch(() => {}); }
+  function delThumb(db, id) { _thumbCache.delete(id); return idbDel(db, 'thumb:' + id); }
 
   FM.projects = {
     list() { return readJSON(PROJ_INDEX, []); },
     // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
     async getThumb(id) {
-      try { const db = await openDB(); const v = await idbGet(db, 'thumb:' + id); db.close(); if (v) return v; } catch (e) {}
+      if (_thumbCache.has(id)) return _thumbCache.get(id);
+      try { const db = await openDB(); const v = await idbGet(db, 'thumb:' + id); db.close(); if (v) { _thumbCache.set(id, v); return v; } } catch (e) {}
       const e = this.list().find(p => p.id === id);
-      return (e && e.thumb) || null;
+      const legacy = (e && e.thumb) || null;
+      if (legacy) _thumbCache.set(id, legacy);
+      return legacy;
     },
     // One-time sweep: lift every inline thumb out of the index into IDB, then null it. Runs once (guarded)
     // so existing users' indexes shrink immediately instead of only as each project is next opened.
@@ -579,7 +590,7 @@ window.FM = window.FM || {};
       const idx = this.list(); let moved = false;
       try {
         const db = await openDB();
-        for (const p of idx) { if (p.thumb) { await idbPut(db, 'thumb:' + p.id, p.thumb); p.thumb = null; moved = true; } }
+        for (const p of idx) { if (p.thumb) { await idbPut(db, 'thumb:' + p.id, p.thumb); _thumbCache.set(p.id, p.thumb); p.thumb = null; moved = true; } }
         db.close();
       } catch (e) {}
       if (moved) this.saveIndex(idx);
@@ -629,12 +640,14 @@ window.FM = window.FM || {};
       const e = idx.find(p => p.id === id); if (!e) return;
       const P = FM.scene.project;
       e.name = P.name || 'Untitled';
+      // Backfill BEFORE the bump below — reading e.modified afterwards would stamp every pre-v3.68
+      // project as "created today" the moment it's first edited.
+      if (!e.created) e.created = e.modified || Date.now();
       // modified (= home-list order) moves ONLY on a real edit — viewing refreshes meta/thumb but
       // leaves the project exactly where it was in the list.
       if (_dirty) { e.modified = Date.now(); _dirty = false; }
       e.width = P.width; e.height = P.height; e.duration = P.duration; e.fps = P.fps || 30;
       e.layers = FM.scene.layers.length;
-      if (!e.created) e.created = e.modified || Date.now();   // backfill: projects made before creation dates were tracked
       const now = Date.now();
       // A pinned thumbnail (user chose a specific frame) is never auto-overwritten by the periodic capture.
       if (!P.thumbPinned && (forceThumb || (now - thumbTimer > 12000 && !FM.playing))) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
@@ -720,7 +733,7 @@ window.FM = window.FM || {};
           const rec = await idbGet(db, oldId);
           if (rec) await idbPut(db, re.map[oldId], rec);
         }
-        const th = await idbGet(db, 'thumb:' + id); if (th) await idbPut(db, 'thumb:' + nid, th);   // copy the card thumbnail too
+        const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); }   // copy the card thumbnail too
         db.close();
       } catch (e) {}
       FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);

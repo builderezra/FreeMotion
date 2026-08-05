@@ -1911,6 +1911,18 @@ window.FM = window.FM || {};
       if (a >= b) { h = base; w = base * a / b; } else { w = base; h = base * b / a; }
       return { w: Math.round(w / 2) * 2, h: Math.round(h / 2) * 2 };
     }
+    // Canvas background — 'none' means transparent (the compositor skips the fill). Without this the
+    // choice made in the New project dialog was a one-way door: nothing else in the app writes it.
+    let cvBg = '#000000';
+    function cvBgSync() {
+      const inp = document.getElementById('cv-bg');
+      if (inp && /^#[0-9a-f]{6}$/i.test(cvBg)) inp.value = cvBg;
+      document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => {
+        const on = b.dataset.bg === cvBg;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
     function cvUpdate() {
       const custom = cvAspect === 'custom';
       const resRow = document.getElementById('cv-res-row'); if (resRow) resRow.classList.toggle('hidden', custom);
@@ -1953,9 +1965,14 @@ window.FM = window.FM || {};
           if (FPS_PRESETS.indexOf(cur) >= 0) { fpsSel.value = cur; if (fpsCustomRow) fpsCustomRow.classList.add('hidden'); }
           else { fpsSel.value = 'custom'; if (fpsNum) fpsNum.value = cur; if (fpsCustomRow) fpsCustomRow.classList.remove('hidden'); }
         }
+        const pb = FM.scene.project.background;
+        cvBg = /^#[0-9a-f]{6}$/i.test(String(pb || '')) ? pb : 'none';
+        cvBgSync();
         cvUpdate();
         cvDialog.classList.remove('hidden');
       });
+      document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => b.addEventListener('click', () => { cvBg = b.dataset.bg; cvBgSync(); }));
+      { const bgInp = document.getElementById('cv-bg'); if (bgInp) bgInp.addEventListener('input', () => { cvBg = bgInp.value; cvBgSync(); }); }
       document.querySelectorAll('.aspect-chip').forEach(chip => chip.addEventListener('click', () => { cvAspect = chip.dataset.aspect; cvUpdate(); }));
       document.getElementById('cv-res').addEventListener('change', cvUpdate);
       ['cv-cw', 'cv-ch'].forEach(id => { const inp = document.getElementById(id); if (inp) inp.addEventListener('input', cvUpdate); });
@@ -1966,6 +1983,7 @@ window.FM = window.FM || {};
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
         const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
         FM.scene.project.fps = Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30));
+        FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
         cvDialog.classList.add('hidden');
