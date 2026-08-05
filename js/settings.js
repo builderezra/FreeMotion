@@ -13,6 +13,7 @@ window.FM = window.FM || {};
   const KEY = 'fm.settings';
   const DEFAULTS = {
     sort: 'date',            // home list order: 'date' (recently edited) | 'name' (A–Z)
+    theme: 'glass',          // 'glass' = the logo-sampled Liquid Glass look | 'classic' = the original palette
     demoMode: false,         // hide personal media previews + filenames (for screen recordings)
     showTouches: false,      // draw a ripple where you tap, so a recording shows what you pressed
     systemFonts: true,       // include the built-in font list in the text font picker
@@ -30,6 +31,7 @@ window.FM = window.FM || {};
     if (saved && typeof saved === 'object') {
       // validate every field — this is hand-editable storage, and layerDuration feeds layer maths
       if (saved.sort === 'name' || saved.sort === 'date') state.sort = saved.sort;
+      if (saved.theme === 'glass' || saved.theme === 'classic') state.theme = saved.theme;
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
@@ -40,6 +42,9 @@ window.FM = window.FM || {};
 
   // Everything that reacts to a setting reads it through here, so a change is applied in one place.
   function apply() {
+    // theme-glass.css is scoped entirely to html[data-theme="glass"], so removing the attribute
+    // restores the original stylesheet exactly — this is the one-tap undo for the whole look.
+    document.documentElement.setAttribute('data-theme', state.theme === 'classic' ? 'classic' : 'glass');
     document.body.classList.toggle('demo-mode', !!state.demoMode);
     touchRipples(state.showTouches);
     listeners.forEach(fn => { try { fn(state); } catch (e) {} });
@@ -135,7 +140,10 @@ window.FM = window.FM || {};
     head.appendChild(close);
 
     const body = el('div', 'set-body');
-    body.appendChild(group(segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }])));
+    body.appendChild(group(
+      segmentRow('Appearance', 'theme', [{ label: 'Glass', value: 'glass' }, { label: 'Classic', value: 'classic' }]),
+      segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }]),
+    ));
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),
       toggleRow('Show touches', 'Draws a ring where you tap. Screen recordings don’t capture taps on their own.', 'showTouches'),
