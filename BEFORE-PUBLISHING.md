@@ -1,0 +1,67 @@
+# ⚠️ BEFORE PUBLISHING — make it look like OURS, not Alight Motion
+
+**Status: NOT DONE.** This is a blocker for any public release (app stores, a public URL you
+promote, a demo video, a tutorial series). Delete this file only when the work below is actually
+finished — not when it's planned.
+
+## Why this exists
+
+FreeMotion's UI was deliberately built by copying Alight Motion, screenshot by screenshot, because
+that was the fastest way to get a good interface and to learn what "good" looks like in a motion
+editor. That was the right call for building. It is the wrong thing to ship.
+
+Copying **what an app does** is normal — features, capabilities and workflows are how every editor
+in the category resembles every other one. Copying **how an app looks** is the part that gets you
+in trouble and, just as importantly, leaves you with no identity of your own. A user should be able
+to see one screenshot of FreeMotion and know it isn't Alight Motion.
+
+(If any of this ends up mattering commercially, get a real opinion from someone qualified — this
+file is a build note, not legal advice.)
+
+## What is currently modelled on Alight Motion
+
+Each of these was built from an AM screenshot and needs an original treatment:
+
+- **Home screen** — the list-row cards (86px thumb left, name + meta chips, ⋯ on the right), the
+  pill tab row, the centred green + FAB, the duration badge on the thumbnail. This is AM's layout.
+- **Settings panel** — the slide-in drawer, its grouped rounded cards, and the row set itself
+  (Project sorting / Demo mode / Show touches / Show system fonts / Default layer duration) came
+  straight from AM's settings screenshot.
+- **Add menu** — the tab row across the top opening a sub-grid, plus the vertical quick-add rail on
+  the right (Text / Freehand / Vector). That interaction model and its arrangement are AM's.
+- **Editor chrome** — the top bar composition (back ‹, project name, ⚙, green export button), the
+  transport row, and the timeline clip look.
+- **Terminology** — "Elements", "Object / Element", "Templates" as tab names follow AM's wording.
+
+Our own already: the logo and splash animation (Ezra's), the effect set and its internals, the
+slip ghost, the Apple-squircle corner rounding, the media library, and everything under the hood.
+
+## What "done" looks like
+
+Not a re-skin — a different composition. Concretely:
+
+1. **Re-lay-out the home screen.** Different card shape and information hierarchy — not thumb-left
+   rows with a chip line. (A grid of large posters, a column of wide preview strips, something
+   with our own idea in it.)
+2. **Re-lay-out the Add menu.** Keep one-tap access to everything; change the arrangement so it
+   isn't tabs-across-the-top plus a right-hand rail.
+3. **Own icon set.** Ours are generic strokes now; give them a consistent, deliberate style.
+4. **Own colour + type.** The teal accent on near-black is close to AM's. Pick a palette and a type
+   treatment on purpose, and apply them everywhere.
+5. **Own words.** Rename the borrowed labels to what WE call them.
+6. **Own motion.** Panel transitions, the FAB, sheet behaviour — small signature moments.
+7. **Sweep for their marks.** No AM icons or sample assets in anything we publish, and nothing in a
+   screenshot or tutorial that shows their app. On strings: as of v3.73 there are **24 mentions of
+   "Alight Motion" in the source, all of them code comments** citing it as the design reference —
+   nothing user-visible, so nothing leaks to a user today. But they're visible to anyone reading a
+   public repo, so if this goes open-source, reword them to describe the behaviour instead of
+   naming the app. Check with:
+
+   ```bash
+   grep -rin "alight" js/ index.html styles.css manifest.json
+   ```
+
+## Do this before
+
+- Any public link Ezra promotes, any store listing, any tutorial or demo video.
+- Not before then — it costs real time and the app should be worth publishing first.
