@@ -1092,9 +1092,15 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .field select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 10px; }
 
-#shortcuts-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(4,7,14,.62); }
+#shortcuts-overlay { position: fixed; inset: 0; z-index: 230; display: flex; align-items: center; justify-content: center; background: rgba(4,7,14,.62); }   /* above the home screen (200) and its chrome, so it can be read without leaving home */
 #shortcuts-overlay.hidden { display: none; }
-.shortcuts-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; min-width: 360px; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+/* The list is far taller than a phone, so the card scrolls INSIDE a viewport-bounded box — it used
+   to overflow the screen, cutting the title off the top and pushing Close past the bottom edge.
+   min-width is a floor only up to the screen width (360px + padding overflowed a 380px phone). */
+.shortcuts-card { display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; width: min(440px, calc(100vw - 24px)); min-width: min(360px, calc(100vw - 24px)); max-width: 440px; max-height: min(86vh, 86dvh); overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+/* Close stays reachable without scrolling to the end of a long list. It's a full-width sticky
+   footer with its own surface — as a bare sticky button, the list scrolled visibly underneath it. */
+.shortcuts-card .btn { flex: none; position: sticky; bottom: -22px; align-self: stretch; text-align: center; margin: 6px -24px -22px; padding: 13px 24px; border: none; border-top: 1px solid var(--line); border-radius: 0 0 13px 13px; background: var(--panel-2); }
 .shortcuts-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; color: var(--text); }
 .shortcuts-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
 .shortcut-row { display: flex; align-items: center; gap: 14px; }

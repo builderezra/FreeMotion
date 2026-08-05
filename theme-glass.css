@@ -246,6 +246,10 @@ html[data-theme="glass"] input:focus,
 html[data-theme="glass"] select:focus,
 html[data-theme="glass"] .hm-search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(90, 199, 237, .16); }
 
+/* The shortcuts card's sticky Close footer needs an opaque surface of its own — the card itself is
+   translucent, so an inherited background would let the scrolling list read through it. */
+html[data-theme="glass"] .shortcuts-card .btn { background: #0c1c25; border-top-color: var(--line-soft); }
+
 /* Screens where a device can't do backdrop-filter still get a solid, correct-looking material. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html[data-theme="glass"] .set-panel,

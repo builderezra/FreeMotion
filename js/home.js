@@ -571,7 +571,9 @@ window.FM = window.FM || {};
         FM.contextMenu.show(Math.min(r.left, window.innerWidth - 220), r.bottom + 4, [
           { label: 'Import project file…', action: () => { FM.storage.importFile(() => FM.home.close()); } },   // close on SUCCESS, not a blind 400ms timer (which dumped you into the editor even if you cancelled the picker)
           { label: 'Save frame (PNG)', action: () => FM.snapshotPNG() },
-          { label: 'Shortcuts', action: () => { FM.home.close(); FM.shortcuts.toggle(); } },
+          // Opens ON TOP of the home screen — reading the shortcut list shouldn't drop you into a
+          // project you didn't ask to open (and, on a fresh install, shouldn't create one).
+          { label: 'Shortcuts', action: () => { FM.shortcuts.toggle(); } },
         ]);
       });
       // search: magnifier → name/date bar over the list
