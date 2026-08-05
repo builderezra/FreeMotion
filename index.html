@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=203">
+<link rel="stylesheet" href="styles.css?v=204">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,15 +17,16 @@
 <body>
   <!-- Splash: the FreeMotion logo animation, once per session (fresh tab / PWA cold launch).
        FIRST in <body> deliberately — it parses + paints BEFORE the ~1.5MB of app scripts, so on a
-       cold load the splash covers the load instead of appearing after it. The blurred backdrop is a
-       static IMG of the video's first frame (under 46px of blur, motion is imperceptible — and it
-       halves the download vs a second video). The sharp video's poster is that same first frame, so
-       poster → playback is pixel-seamless. Skips: same-session reload (sessionStorage), reduced
-       motion, tap/click, Esc-Enter-Space. Autoplay refused (iOS Low Power Mode) → the poster stands
-       in; a real video ERROR dismisses instantly. All asset urls are assigned by the script only
-       when the splash actually shows, so a skipped splash costs zero bytes. -->
+       cold load the splash covers the load instead of appearing after it. The video sits on PURE
+       BLACK and nothing else: its own edges are #000, so the letterbox disappears and the mark
+       floats instead of playing inside a visible square. (There used to be a blurred cover-copy
+       behind it for an ambient fill — that fill was what made the square readable, so it's gone,
+       which also saves its download.) The poster is the video's exact first frame, so poster →
+       playback is seamless. Skips: same-session reload (sessionStorage), reduced motion, tap/click,
+       Esc-Enter-Space. Autoplay refused (iOS Low Power Mode) → the poster stands in; a real video
+       ERROR dismisses instantly. Asset urls are assigned by the script only when the splash
+       actually shows, so a skipped splash costs zero bytes. -->
   <div id="splash" class="hidden" aria-hidden="true">
-    <img id="splash-bg" alt="">
     <video id="splash-vid" muted playsinline autoplay preload="auto"></video>
     <div id="splash-skip">tap to skip</div>
   </div>
@@ -36,7 +37,7 @@
         if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         sessionStorage.setItem('fm.splashed', '1');
       } catch (e) { return; }
-      var sp = document.getElementById('splash'), vid = document.getElementById('splash-vid'), bg = document.getElementById('splash-bg'), skip = document.getElementById('splash-skip');
+      var sp = document.getElementById('splash'), vid = document.getElementById('splash-vid'), skip = document.getElementById('splash-skip');
       if (!sp || !vid) return;
       if (skip && window.matchMedia && matchMedia('(hover: hover)').matches) skip.textContent = 'click to skip';
       sp.classList.remove('hidden');
@@ -52,9 +53,8 @@
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(); });
       setTimeout(dismiss, 5000);            // hard cap — nothing holds the editor hostage
-      if (bg) bg.src = 'splash-poster.png?v=2';
-      vid.poster = 'splash-poster.png?v=2';
-      vid.src = 'splash.mp4?v=1';
+      vid.poster = 'splash-poster.png?v=3';
+      vid.src = 'splash.mp4?v=2';
       var p = vid.play();
       // autoplay refused (iOS Low Power Mode etc.) → the poster shows until the cap;
       // ALSO retry once when data lands — Safari sometimes allows the second attempt
@@ -65,7 +65,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.70</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v3.71</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
