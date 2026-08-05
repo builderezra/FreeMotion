@@ -187,14 +187,17 @@ html[data-theme="glass"] #hm-new::after {
     rgba(255, 255, 255, .38) 50%,
     rgba(255, 255, 255, .10) 58%,
     transparent 66%);
-  animation: glass-sheen 7s ease-in-out infinite;
+  animation: glass-sheen 7s linear infinite;
   pointer-events: none;
 }
-/* Travel is ±40% of the OVERSIZED layer, which parks the band just off each side of the button —
-   so it enters and leaves on its own and needs no opacity fade to hide the reset. */
+/* Travel is ±100% of the layer, i.e. its FULL width each way. At both ends the entire layer sits
+   clear of the button, so the band has completely left the glass before the loop resets — nothing
+   to cut out. (±40% only moved the band's CENTRE past the edge; the band is ~50px wide, so a third
+   of it was still on the button when the animation snapped back, which read as the glint being
+   switched off mid-motion.) linear, not ease-in-out: a glint that decelerates looks like it stalls. */
 @keyframes glass-sheen {
-  0%, 78% { transform: translateX(-40%); }
-  100% { transform: translateX(40%); }
+  0%, 82% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 @media (prefers-reduced-motion: reduce) {
   html[data-theme="glass"] #hm-new::after { animation: none; opacity: .18; transform: none; }
