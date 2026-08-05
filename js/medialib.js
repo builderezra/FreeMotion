@@ -10,13 +10,18 @@
  * id (storage.js save()), so an entry just points at that key — a library of 200 clips costs a few
  * KB of index, not a second copy of every video. FM.projects.pruneOrphans() is taught to keep any
  * key the library references, so deleting the project that first imported a file doesn't evict it.
- * Thumbnails are generated lazily on first display and cached at 'libthumb:<mid>'.
+ * Thumbnails are generated lazily on first display (after waiting for a real decoded frame —
+ * see frameReady) and cached at 'libthumb2:<mid>'.
  */
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
   const INDEX = 'fm.medialib';
+  // v2 prefix: v1 ('libthumb:') cached solid-black tiles for every video, because the frame hadn't
+  // decoded when it was drawn. Renaming the namespace retires those permanently — pruneOrphans no
+  // longer protects the old prefix, so the poisoned entries get swept on the next boot.
+  const THUMB = 'libthumb2:';
   const MAX = 300;                       // newest-first cap; the tail is dropped from the INDEX only
   const memThumb = new Map();            // mid -> dataURL (avoids re-reading IDB on every redraw)
 
@@ -32,7 +37,8 @@ window.FM = window.FM || {};
   }
 
   FM.mediaLib = {
-    // Newest first. Entries whose blob has since been evicted are filtered out (and forgotten).
+    // Newest first. Entries are NOT verified here (that would mean an IDB read per tile on every
+    // redraw) — a tile whose blob has gone is dropped when it's tapped or its thumbnail is built.
     list() { return readIndex(); },
 
     // Called on every successful import. `key` is the IDB key the blob lives under (the layer id).
@@ -41,8 +47,12 @@ window.FM = window.FM || {};
       const fp = fingerprint(rec.file);
       const list = readIndex();
       const hit = list.find(e => e.fp === fp);
-      if (hit) {   // already known — just float it to the front and make sure the key is live
-        hit.key = key; hit.added = Date.now();
+      if (hit) {
+        // Already known — float it to the front, but DON'T repoint it at this import's blob. The
+        // old anchor may live in a project the user is keeping; re-pointing it at a copy inside a
+        // project they later delete would take the library entry down with it.
+        hit.added = Date.now();
+        if (!hit.key) hit.key = key;
         writeIndex([hit].concat(list.filter(e => e !== hit)));
         return hit.mid;
       }
@@ -94,29 +104,33 @@ window.FM = window.FM || {};
       if (memThumb.has(mid)) return memThumb.get(mid);
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return null;
-      const cached = await FM.storage.readMedia('libthumb:' + mid);
+      const cached = await FM.storage.readMedia(THUMB + mid);
       if (typeof cached === 'string' && cached) { memThumb.set(mid, cached); return cached; }
       const file = await this.getFile(mid);
       if (!file) return null;
       let url = null;
       try {
         const loaded = e.kind === 'image' ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
-        url = makeThumb(loaded);
+        // loadVideoFile resolves at 'loadedmetadata' (readyState 1) — drawing a video that has no
+        // decoded frame yet paints NOTHING, which used to bake a solid black tile into the cache
+        // forever. Wait for a real frame first, and bail rather than cache a blank.
+        const ok = e.kind === 'image' ? true : await frameReady(loaded.el);
+        url = ok ? makeThumb(loaded) : null;
         if (loaded.url) URL.revokeObjectURL(loaded.url);   // this element was only ever for the thumbnail
       } catch (err) { return null; }
-      if (url) { memThumb.set(mid, url); FM.storage.writeMedia('libthumb:' + mid, url); }
+      if (url) { memThumb.set(mid, url); FM.storage.writeMedia(THUMB + mid, url); }
       return url;
     },
 
     remove(mid) {
       writeIndex(readIndex().filter(e => e.mid !== mid));
       memThumb.delete(mid);
-      if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia('libthumb:' + mid);
+      if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(THUMB + mid);
       // the blob itself is left alone — pruneOrphans collects it if no project still uses it
     },
 
     clear() {
-      readIndex().forEach(e => { if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia('libthumb:' + e.mid); });
+      readIndex().forEach(e => { if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(THUMB + e.mid); });
       memThumb.clear();
       writeIndex([]);
     },
@@ -151,10 +165,32 @@ window.FM = window.FM || {};
     },
   };
 
-  // 200px JPEG from a loaded media record (image element or a seeked video element).
+  // Resolve once the element actually has a frame to draw. Seeks a touch past 0 (the very first
+  // frame of a fade-in is often black anyway), and never hangs the grid: 3s and it gives up.
+  function frameReady(el) {
+    if (!el) return Promise.resolve(false);
+    if (el.readyState >= 2) return Promise.resolve(true);   // HAVE_CURRENT_DATA
+    return new Promise(res => {
+      let done = false;
+      const finish = () => {
+        if (done) return; done = true;
+        clearTimeout(timer);
+        el.removeEventListener('seeked', finish);
+        el.removeEventListener('loadeddata', finish);
+        res(el.readyState >= 2);
+      };
+      const timer = setTimeout(finish, 3000);
+      el.addEventListener('seeked', finish, { once: true });
+      el.addEventListener('loadeddata', finish, { once: true });
+      try { el.currentTime = Math.min(0.1, (el.duration || 1) / 10); } catch (e) {}
+    });
+  }
+
+  // 200px JPEG from a loaded media record (image element or a video with a decoded frame).
   function makeThumb(rec) {
     try {
       const src = rec.el;
+      if (src && src.readyState !== undefined && src.readyState < 2) return null;   // belt and braces: a blank canvas must never reach the cache
       const sw = rec.width || src.videoWidth || src.naturalWidth || 0;
       const sh = rec.height || src.videoHeight || src.naturalHeight || 0;
       if (!sw || !sh) return null;

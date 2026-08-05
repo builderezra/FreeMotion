@@ -257,11 +257,12 @@ window.FM = window.FM || {};
   // Destructive + not undoable, so call sites confirm first.
   FM.resetProject = function () {
     if (FM.pause) FM.pause();
+    const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);   // blobs the Media library holds survive a project reset
     (FM.scene.layers || []).forEach(l => {
       const m = FM.media.get(l.id); if (m && FM.clearFrameCache) FM.clearFrameCache(m);
       dropAudioGraph(m);
       if (FM.media.remove) FM.media.remove(l.id);
-      if (FM.storage && FM.storage.removeMedia) { try { FM.storage.removeMedia(l.id); } catch (e) {} }
+      if (FM.storage && FM.storage.removeMedia && !libKeys.has(l.id)) { try { FM.storage.removeMedia(l.id); } catch (e) {} }
     });
     const blank = FM.newScene();
     FM.scene.project = blank.project;
@@ -1157,6 +1158,13 @@ window.FM = window.FM || {};
       refreshAll(); FM.seekVideosToTime();
       if (FM.history) FM.history.commit();
       if (FM.storage && FM.storage.save) FM.storage.save();
+      // The blob under this key is a DIFFERENT file now. Any library tile still anchored here would
+      // show the old name and hand back the new footage — forget it (that also clears its cached
+      // thumbnail), then register the replacement so it gets an honest tile of its own.
+      if (FM.mediaLib) {
+        FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
+        FM.mediaLib.add(nrec, id);
+      }
     });
     document.body.appendChild(input);
     input.click();

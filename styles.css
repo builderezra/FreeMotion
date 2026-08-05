@@ -1800,7 +1800,14 @@ body.drawing #select-box { display: none !important; }
 /* Show touches — a ring where you tapped, so a screen recording shows the interaction */
 .touch-ripple { position: fixed; z-index: 9999; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; pointer-events: none; border: 2px solid rgba(47, 208, 181, .9); background: rgba(47, 208, 181, .18); animation: touch-pop .6s ease-out forwards; }
 @keyframes touch-pop { from { transform: scale(.35); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .touch-ripple { animation-duration: .01ms; } .set-panel { transition: none; } }
+/* Reduced motion must not silently DISABLE this: collapsing the duration jumped the ripple straight
+   to opacity 0, so a user with Reduce Motion on (common on iOS) flipped the switch and recorded
+   nothing. Hold the ring still at full opacity, then fade — visible, with no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .touch-ripple { animation: touch-hold .45s linear forwards; }
+  @keyframes touch-hold { 0%, 55% { transform: none; opacity: 1; } 100% { transform: none; opacity: 0; } }
+  .set-panel { transition: none; }
+}
 
 /* ---- Media library tiles in Add → Media ---- */
 .addmenu-card.addmenu-media { position: relative; overflow: hidden; }

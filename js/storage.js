@@ -140,7 +140,8 @@ window.FM = window.FM || {};
       try {
         const doc = readJSON(curKey(), null);
         const db = await openDB();
-        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) await idbDel(db, l.id);
+        const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);   // same keep-set as remove()/pruneOrphans
+        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id)) await idbDel(db, l.id); }
         db.close();
         localStorage.removeItem(curKey());
         if (FM.projects) FM.projects.touchCurrent();
@@ -754,7 +755,11 @@ window.FM = window.FM || {};
       const doc = readJSON('fm.proj.' + id, null);
       try {
         const db = await openDB();
-        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) await idbDel(db, l.id);
+        // Deleting a project deletes ITS media — except any blob the Media library is holding on
+        // to. This path never goes through pruneOrphans, so it needs the same keep-set: without it,
+        // deleting the project you imported a file into would silently gut the library grid.
+        const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);
+        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id)) await idbDel(db, l.id); }
         await delThumb(db, id);
         db.close();
       } catch (e) {}
@@ -797,7 +802,7 @@ window.FM = window.FM || {};
         const db = await openDB();
         const candidates = [];
         for (const k of await idbKeys(db)) {
-          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0 || k.indexOf('libthumb:') === 0)) continue;
+          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0 || k.indexOf('libthumb2:') === 0)) continue;
           // project-card thumbnails are keyed 'thumb:<projectId>' — they were being treated as
           // orphans and wiped at EVERY boot; only a deleted project's thumb is really an orphan
           if (typeof k === 'string' && k.indexOf('thumb:') === 0) { if (projIds.has(k.slice(6))) continue; candidates.push(k); continue; }
