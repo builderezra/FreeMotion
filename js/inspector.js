@@ -1434,13 +1434,17 @@ window.FM = window.FM || {};
     path: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18c4-10 12-2 16-12"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="11.3" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/></svg>',
   };
   const MT_MODES = ['move', 'rotate', 'scale', 'skew'];
-  const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew' };
-  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation', 'rotationX', 'rotationY'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'] };
+  // 'anchor' is a real mode but deliberately NOT a fifth rail button: pressing Move while already in
+  // Move switches to it (Ezra), so the rail stays four wide and the anchor is one tap from where you
+  // already are. MT_MODES is what the rail renders; ALL_MT_MODES is what the panel accepts.
+  const ALL_MT_MODES = ['move', 'rotate', 'scale', 'skew', 'anchor'];
+  const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew', anchor: 'Anchor point' };
+  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation', 'rotationX', 'rotationY'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'], anchor: ['anchorX', 'anchorY'] };
   // The channels a mode keyframes by DEFAULT (matches Alight Motion). The extra channels (z for Move,
   // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
   // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)
-  const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'] };
-  const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 };
+  const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'], anchor: ['anchorX', 'anchorY'] };
+  const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, anchorX: 0.5, anchorY: 0.5 };
 
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
   function mtSet(layer, key, v) { FM.setTransform(layer, key, v, FM.time); FM.requestRender(); if (FM.timeline) FM.timeline.updatePlayhead(); }
@@ -1665,7 +1669,7 @@ window.FM = window.FM || {};
   }
 
   function moveTransformPanel(layer) {
-    const mode = MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
+    const mode = ALL_MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
     const panel = el('div', 'mt-panel');
     const refreshables = [];
     const syncFns = [];   // extra redraws (dial knob, etc.) re-run when the playhead moves (#2)
@@ -1828,6 +1832,51 @@ window.FM = window.FM || {};
         control.appendChild(mtScrub(effY, v => mtSet(layer, 'scaleY', Math.max(0.01, v) / base()), 0.004,
           () => { bh._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
       }
+    } else if (mode === 'anchor') {
+      // THE ANCHOR PLACER. The anchor is the point a layer scales and rotates AROUND, stored 0..1
+      // across the layer's own box (0.5,0.5 = its centre). Move it to the top-left and the layer
+      // grows down-right from there instead of outward in all directions — which is the whole point
+      // of "so when you make stuff bigger it will expand from that point".
+      //
+      // Moving the anchor ALONE makes the layer jump, because x/y position the layer BY its anchor.
+      // So every write compensates x/y by the same visual distance the anchor travelled, and the
+      // layer stays exactly where it looks like it is. Only its pivot moves.
+      const asz = FM.layerSize(layer);
+      const aEffX = () => mtEval(layer, 'scale') * (layer.transform.scaleX != null ? mtEval(layer, 'scaleX') : 1);
+      const aEffY = () => mtEval(layer, 'scale') * (layer.transform.scaleY != null ? mtEval(layer, 'scaleY') : 1);
+      const getA = k => { const v = layer.transform[k]; return typeof v === 'number' ? v : (FM.evalProp(v, FM.time) != null ? FM.evalProp(v, FM.time) : 0.5); };
+      const setAnchor = (ax, ay) => {
+        const oldX = getA('anchorX'), oldY = getA('anchorY');
+        const nx = Math.max(0, Math.min(1, ax)), ny = Math.max(0, Math.min(1, ay));
+        layer.transform.anchorX = Math.round(nx * 1000) / 1000;
+        layer.transform.anchorY = Math.round(ny * 1000) / 1000;
+        // keep it visually still: the anchor moved (nx-oldX) of the layer's SCALED width
+        mtSet(layer, 'x', Math.round(mtEval(layer, 'x') + (nx - oldX) * asz.w * aEffX()));
+        mtSet(layer, 'y', Math.round(mtEval(layer, 'y') + (ny - oldY) * asz.h * aEffY()));
+      };
+      const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: 0, max: 100, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: 0, max: 100, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      refreshables.push(bax, bay); values.append(bax, bay);
+      const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to centre, edges and corners'));
+      // 260px of swipe crosses the layer, and it snaps to the nine points you actually want
+      const SNAP = [0, 0.25, 0.5, 0.75, 1];
+      const snapA = v => { for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
+      let ad = null;
+      apad.addEventListener('pointerdown', e => { ad = { x: e.clientX, y: e.clientY, ax: getA('anchorX'), ay: getA('anchorY') }; try { apad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      apad.addEventListener('pointermove', e => {
+        if (!ad) return;
+        if (e.pointerType === 'mouse' && e.buttons === 0) { ad = null; commitH(); return; }
+        setAnchor(snapA(ad.ax + (e.clientX - ad.x) / 260), snapA(ad.ay + (e.clientY - ad.y) / 260));
+        refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
+      });
+      apad.addEventListener('pointerup', e => { if (!ad) return; ad = null; try { apad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      apad.addEventListener('pointercancel', e => { if (!ad) return; ad = null; try { apad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      control.appendChild(apad);
+      const reset = el('button', 'btn', 'Centre the anchor');
+      reset.style.cssText = 'width:100%;justify-content:center;min-height:38px;';
+      reset.addEventListener('click', () => { setAnchor(0.5, 0.5); refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); FM.inspector.refresh(); });
+      control.appendChild(reset);
+      control.appendChild(el('div', 'insp-hint', 'Scaling and rotation happen around this point. The layer stays where it is — only its pivot moves.'));
     } else if (mode === 'skew') {
       const bsx = mtVBox('X Skew', () => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
       const bsy = mtVBox('Y Skew', () => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
@@ -1839,7 +1888,19 @@ window.FM = window.FM || {};
 
     // right rail: mode buttons
     const right = el('div', 'mt-rail mt-rail-right');
-    MT_MODES.forEach(m => { const b = el('button', 'mt-mode' + (m === mode ? ' on' : '')); b.innerHTML = MT_ICONS[m]; b.title = MT_TITLES[m]; b.addEventListener('click', () => { FM._mtMode = m; FM.inspector.refresh(); }); right.appendChild(b); });
+    MT_MODES.forEach(m => {
+      // Move lights up for its own mode AND for anchor, because anchor lives behind it.
+      const on = (m === mode) || (m === 'move' && mode === 'anchor');
+      const b = el('button', 'mt-mode' + (on ? ' on' : '') + (m === 'move' && mode === 'anchor' ? ' mt-mode-alt' : ''));
+      b.innerHTML = MT_ICONS[m];
+      b.title = m === 'move' ? 'Move — press again for the anchor point' : MT_TITLES[m];
+      b.addEventListener('click', () => {
+        // Press Move while already on Move → the anchor placer. Press it again → back to Move.
+        FM._mtMode = (m === 'move' && (mode === 'move' || mode === 'anchor')) ? (mode === 'move' ? 'anchor' : 'move') : m;
+        FM.inspector.refresh();
+      });
+      right.appendChild(b);
+    });
 
     panel.append(left, center, right);
     // Expose a cheap "redraw values from the current playhead" hook the playback/seek paths call
