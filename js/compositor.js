@@ -59,7 +59,12 @@ window.FM = window.FM || {};
     { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'gamma', label: 'Gamma', param: 'gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
     { type: 'temperature', label: 'Color Temperature', param: 'amount', min: -100, max: 100, step: 1, def: 40 },
-    { type: 'noise', label: 'Noise', param: 'amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+    { type: 'noise', label: 'Noise', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'speed', label: 'Speed', min: 0, max: 60, step: 1, def: 24, unit: 'Hz' },
+      { key: 'size', label: 'Grain size', min: 1, max: 8, step: 0.5, def: 1 },
+      { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'scanlines', label: 'Scanlines', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', param: 'amount', min: 0, max: 2, step: 0.02, def: 1.6 },
@@ -68,8 +73,19 @@ window.FM = window.FM || {};
     { type: 'dither', label: 'Dither', param: 'levels', min: 2, max: 8, step: 1, def: 4 },
     { type: 'halftone', label: 'Halftone Dots', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
-    { type: 'wave', label: 'Wave', param: 'amount', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
-    { type: 'ripple', label: 'Circular Ripple', param: 'amount', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
+    { type: 'wave', label: 'Wave', params: [
+      { key: 'amount', label: 'Amplitude', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
+      { key: 'wavelength', label: 'Wavelength', min: 8, max: 300, step: 1, def: 38, unit: 'px' },
+      { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+    ] },
+    { type: 'ripple', label: 'Circular Ripple', params: [
+      { key: 'amount', label: 'Height', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
+      { key: 'wavelength', label: 'Spacing', min: 4, max: 200, step: 1, def: 20, unit: 'px' },
+      { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'twirl', label: 'Twirl', params: [
       { key: 'amount', label: 'Twist', min: -360, max: 360, step: 1, def: 140, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -121,7 +137,13 @@ window.FM = window.FM || {};
     { type: 'longshadow', label: 'Long Shadow', param: 'length', min: 0, max: 80, step: 1, def: 30, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'halftonelines', label: 'Halftone Lines', param: 'size', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
     { type: 'clouds', label: 'Clouds', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
-    { type: 'rays', label: 'Radial Rays', param: 'count', min: 3, max: 64, step: 1, def: 16, color: true, defColor: '#ffffff', colorLabel: 'Color' },
+    { type: 'rays', label: 'Radial Rays', color: true, defColor: '#ffffff', colorLabel: 'Color', params: [
+      { key: 'count', label: 'Rays', min: 3, max: 64, step: 1, def: 16 },
+      { key: 'x', label: 'Source X', min: -50, max: 150, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Source Y', min: -50, max: 150, step: 1, def: 50, unit: '%' },
+      { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+    ] },
     { type: 'stripes', label: 'Stripes', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Color' },
     // ---- batch 9 ----
     { type: 'darkglow', label: 'Dark Glow', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -137,9 +159,20 @@ window.FM = window.FM || {};
       { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 15, unit: '%' },
       { key: 'shadows', label: 'In shadows', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     ] },
-    { type: 'blocknoise', label: 'Block Noise', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'blocknoise', label: 'Block Noise', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'size', label: 'Block size', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
+      { key: 'aspect', label: 'Block aspect', min: 0.1, max: 6, step: 0.05, def: 1 },
+      { key: 'speed', label: 'Speed', min: 0, max: 30, step: 0.5, def: 8, unit: 'Hz' },
+    ] },
     { type: 'starfield', label: 'Starfield', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5, color: true, defColor: '#ffffff', colorLabel: 'Star' },
-    { type: 'curl', label: 'Curl', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'curl', label: 'Curl', params: [
+      { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+      { key: 'wavelength', label: 'Spacing', min: 8, max: 300, step: 1, def: 40, unit: 'px' },
+      { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     // ---- batch 10 ----
     { type: 'bumpmap', label: 'Bump Map', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.2 },
     { type: 'edgeglow', label: 'Edge Glow', param: 'amount', min: 0, max: 4, step: 0.05, def: 1.5, color: true, defColor: '#00ffea', colorLabel: 'Glow' },
@@ -1056,14 +1089,27 @@ window.FM = window.FM || {};
     },
     noise: function (d, W, H, p, t) {
       const amt = (FM.evalProp(p.amount, t) || 0) / 100 * 160;   // up to ±80
+      // speed 0 FREEZES the static — the one thing it could never do, and why animated noise strobed
+      // under a keyframed opacity. 24 reproduces the old hardcoded frame rate exactly.
+      const spd = p.speed == null ? 24 : FM.evalProp(p.speed, t);
+      const frame = Math.floor(t * spd) | 0;
+      const size = p.size == null ? 1 : Math.max(1, FM.evalProp(p.size, t));
+      const chroma = (p.color == null ? 0 : FM.evalProp(p.color, t)) / 100;
+      const one = size === 1;   // at size 1 the cell IS the pixel — keep the old index exactly
+      const inv = 1 / size;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
-        // deterministic per-pixel hash (stable when paused), shifted slightly by frame for subtle motion
         const px = (i >> 2);
-        let h = (px * 374761393 + Math.floor(t * 24) * 668265263) | 0;
+        const cell = one ? px : ((((px / W) | 0) * inv | 0) * W + ((px % W) * inv | 0));
+        let h = (cell * 374761393 + frame * 668265263) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         const n = ((h & 255) / 255 - 0.5) * amt;
-        d[i] += n; d[i + 1] += n; d[i + 2] += n;
+        if (chroma <= 0) { d[i] += n; d[i + 1] += n; d[i + 2] += n; continue; }
+        let h2 = (h ^ 0x5bf03635) * 2246822519; h2 = (h2 ^ (h2 >> 15));
+        let h3 = (h ^ 0x27d4eb2f) * 3266489917; h3 = (h3 ^ (h3 >> 15));
+        d[i] += n + ((h2 & 255) / 255 - 0.5) * amt * chroma;
+        d[i + 1] += n;
+        d[i + 2] += n + ((h3 & 255) / 255 - 0.5) * amt * chroma;
       }
     },
     // Film grain — the difference from `noise` above is that this behaves like film rather than like
@@ -1275,13 +1321,13 @@ window.FM = window.FM || {};
     longshadow: function(d,W,H,p,t){ var lsLen=FM.evalProp(p.length,t); if(lsLen==null)lsLen=30; lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=d.slice(); var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
     halftonelines: function(d,W,H,p,t){ var htlSize=FM.evalProp(p.size,t); if(htlSize==null||isNaN(htlSize))htlSize=8; htlSize=Math.max(3,Math.min(40,Math.round(htlSize))); var htlW4=W*4; for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4; for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue; var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1; var htlThresh=(1-htlL)*htlSize; var htlV=(htlRowMod<htlThresh)?0:255; d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
     clouds: function(d,W,H,p,t){ var cl_amt=FM.evalProp(p.amount,t); if(cl_amt==null)cl_amt=0.6; cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_cells=[64,32,16], cl_wts=[0.5715,0.2857,0.1428]; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_gx=Math.floor(cl_x/cl_C), cl_gy=Math.floor(cl_y/cl_C); var cl_fx=(cl_x-cl_gx*cl_C)/cl_C, cl_fy=(cl_y-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g-d[cl_i+2])*cl_amt; } } },
-    rays: function(d,W,H,p,t){ var raysCount=FM.evalProp(p.count,t); if(raysCount==null)raysCount=16; raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysCx=W/2,raysCy=H/2; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx); var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*0.6; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
+    rays: function(d,W,H,p,t){ var raysCount=FM.evalProp(p.count,t); if(raysCount==null)raysCount=16; raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t){ var stp_size=FM.evalProp(p.size,t); if(stp_size==null)stp_size=16; stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size)); var stp_half=stp_period*0.5; var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2]; var stp_k=0.6,stp_ik=1-stp_k; for(var stp_y=0;stp_y<H;stp_y++){ var stp_row=stp_y*W*4; for(var stp_x=0;stp_x<W;stp_x++){ var stp_i=stp_row+stp_x*4; if(d[stp_i+3]<=0)continue; var stp_m=(stp_x+stp_y)%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
     darkglow: function(d,W,H,p,t){ var dgAmt=FM.evalProp(p.amount,t); if(dgAmt==null)dgAmt=0.6; dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<102)dgDark[dgi]=255-dgL; } } var dgR=6,dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>16)st_w=16; var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0; var st_h=new Uint8Array(st_N); for(st_y=0;st_y<H;st_y++){ var st_row=st_y*W; var st_acc=0; var st_lo,st_hi; for(st_x=0;st_x<W;st_x++){ st_lo=st_x-st_w; if(st_lo<0)st_lo=0; st_hi=st_x+st_w; if(st_hi>W-1)st_hi=W-1; if(st_x===0){ st_acc=0; for(var st_k=st_lo;st_k<=st_hi;st_k++)st_acc+=st_src[st_row+st_k]; } else { var st_addH=st_x+st_w; if(st_addH<=W-1)st_acc+=st_src[st_row+st_addH]; var st_remH=st_x-st_w-1; if(st_remH>=0)st_acc-=st_src[st_row+st_remH]; } st_h[st_row+st_x]=st_acc>0?1:0; } } var st_dil=new Uint8Array(st_N); for(st_x=0;st_x<W;st_x++){ var st_accV=0; var st_loV,st_hiV; for(st_y=0;st_y<H;st_y++){ st_loV=st_y-st_w; if(st_loV<0)st_loV=0; st_hiV=st_y+st_w; if(st_hiV>H-1)st_hiV=H-1; if(st_y===0){ st_accV=0; for(var st_kv=st_loV;st_kv<=st_hiV;st_kv++)st_accV+=st_h[st_kv*W+st_x]; } else { var st_addV=st_y+st_w; if(st_addV<=H-1)st_accV+=st_h[st_addV*W+st_x]; var st_remV=st_y-st_w-1; if(st_remV>=0)st_accV-=st_h[st_remV*W+st_x]; } st_dil[st_y*W+st_x]=st_accV>0?1:0; } } for(st_i=0;st_i<st_N;st_i++){ if(st_dil[st_i]===1 && st_src[st_i]===0){ var st_o=st_i*4; d[st_o]=st_col[0]; d[st_o+1]=st_col[1]; d[st_o+2]=st_col[2]; d[st_o+3]=255; } } },
     smoothedges: function(d,W,H,p,t){ var seR=Math.round(FM.evalProp(p.radius,t)); if(seR==null||isNaN(seR))seR=4; if(seR<1)return; if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; } var seWin=seR*2+1,seInv=1/seWin; for(sey=0;sey<seH;sey++){ var seRow=sey*seW,seSum=0,sek; for(sek=-seR;sek<=seR;sek++){ var seXc=sek<0?0:(sek>=seW?seW-1:sek); seSum+=seA[seRow+seXc]; } for(sex=0;sex<seW;sex++){ seTmp[seRow+sex]=seSum*seInv; var seAddX=sex+seR+1; seAddX=seAddX>=seW?seW-1:seAddX; var seSubX=sex-seR; seSubX=seSubX<0?0:seSubX; seSum+=seA[seRow+seAddX]-seA[seRow+seSubX]; } } for(sex=0;sex<seW;sex++){ var seSumV=0,sekk; for(sekk=-seR;sekk<=seR;sekk++){ var seYc=sekk<0?0:(sekk>=seH?seH-1:sekk); seSumV+=seTmp[seYc*seW+sex]; } for(sey=0;sey<seH;sey++){ var seVal=seSumV*seInv; d[(sey*seW+sex)*4+3]=seVal<0?0:(seVal>255?255:seVal); var seAddY=sey+seR+1; seAddY=seAddY>=seH?seH-1:seAddY; var seSubY=sey-seR; seSubY=seSubY<0?0:seSubY; seSumV+=seTmp[seAddY*seW+sex]-seTmp[seSubY*seW+sex]; } } },
-    blocknoise: function(d,W,H,p,t){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnFrame=Math.floor(t*8)|0, bnW4=W*4; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/6)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/6)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
+    blocknoise: function(d,W,H,p,t){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4; for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue; var sf_h=(sf_x*374761393+sf_y*668265263)|0; sf_h=(sf_h^(sf_h>>>13))*1274126177; sf_h=sf_h^(sf_h>>>16); var sf_r=(sf_h>>>0)/4294967295; if(sf_r<sf_thr){ sf_d[sf_i]=sf_col[0]; sf_d[sf_i+1]=sf_col[1]; sf_d[sf_i+2]=sf_col[2]; sf_d[sf_i+3]=255; } } } },
     // ---- batch 10 (pixel) ----
     bumpmap: function(d,W,H,p,t){ var bmAmt=FM.evalProp(p.amount,t); if(bmAmt==null)bmAmt=1.2; bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=d.slice(); var bmW4=W*4; var bmK=4; var bmLx=-0.5,bmLy=-0.5,bmLz=1; var bmLlen=Math.sqrt(bmLx*bmLx+bmLy*bmLy+bmLz*bmLz); bmLx/=bmLlen; bmLy/=bmLlen; bmLz/=bmLlen; for(var bmY=0;bmY<H;bmY++){ var bmYu=bmY>0?bmY-1:0; var bmYd=bmY<H-1?bmY+1:H-1; for(var bmX=0;bmX<W;bmX++){ var bmI=(bmY*W+bmX)*4; if(bmS[bmI+3]===0){ d[bmI]=bmS[bmI]; d[bmI+1]=bmS[bmI+1]; d[bmI+2]=bmS[bmI+2]; continue; } var bmXl=bmX>0?bmX-1:0; var bmXr=bmX<W-1?bmX+1:W-1; var bmIl=(bmY*W+bmXl)*4; var bmIr=(bmY*W+bmXr)*4; var bmIu=(bmYu*W+bmX)*4; var bmId=(bmYd*W+bmX)*4; var bmLumL=0.299*bmS[bmIl]+0.587*bmS[bmIl+1]+0.114*bmS[bmIl+2]; var bmLumR=0.299*bmS[bmIr]+0.587*bmS[bmIr+1]+0.114*bmS[bmIr+2]; var bmLumU=0.299*bmS[bmIu]+0.587*bmS[bmIu+1]+0.114*bmS[bmIu+2]; var bmLumD=0.299*bmS[bmId]+0.587*bmS[bmId+1]+0.114*bmS[bmId+2]; var bmGx=(bmLumR-bmLumL)/255; var bmGy=(bmLumD-bmLumU)/255; var bmNx=-bmGx, bmNy=-bmGy, bmNz=bmK; var bmNlen=Math.sqrt(bmNx*bmNx+bmNy*bmNy+bmNz*bmNz); if(bmNlen<1e-6)bmNlen=1e-6; bmNx/=bmNlen; bmNy/=bmNlen; bmNz/=bmNlen; var bmDiff=bmNx*bmLx+bmNy*bmLy+bmNz*bmLz; if(bmDiff<0)bmDiff=0; var bmF=0.5+bmAmt*0.6*bmDiff; var bmR=bmS[bmI]*bmF; var bmG=bmS[bmI+1]*bmF; var bmB=bmS[bmI+2]*bmF; d[bmI]=bmR>255?255:(bmR<0?0:bmR); d[bmI+1]=bmG>255?255:(bmG<0?0:bmG); d[bmI+2]=bmB>255?255:(bmB<0?0:bmB); } } },
@@ -1589,11 +1635,20 @@ window.FM = window.FM || {};
   const WARP_FX = {
     wave: function (x, y, W, H, cx, cy, maxR, p, t) {
       const amp = FM.evalProp(p.amount, t) || 0;
-      return [x + amp * Math.sin(y / 38), y + amp * 0.4 * Math.sin(x / 46)];
+      // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
+      // ratio (46 = 38 * 1.2105…) so a single control moves both without changing the default look.
+      const wl = p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t));
+      const wl2 = wl === 38 ? 46 : wl * (46 / 38);
+      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
+      return [x + amp * Math.sin(y / wl + ph), y + amp * cross * Math.sin(x / wl2 + ph)];
     },
     ripple: function (x, y, W, H, cx, cy, maxR, p, t) {
+      cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
       const amp = FM.evalProp(p.amount, t) || 0, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) || 1e-6;
-      const off = amp * Math.sin(r / 20);
+      const wl = p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t));
+      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      const off = amp * Math.sin(r / wl - ph);   // minus: rising phase sends the rings OUTWARD
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
     twirl: function (x, y, W, H, cx, cy, maxR, p, t) {
@@ -1630,7 +1685,7 @@ window.FM = window.FM || {};
     bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
     glass: function(x,y,W,H,cx,cy,maxR,p,t){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
     // ---- batch 9 (warp) ----
-    curl: function(x,y,W,H,cx,cy,maxR,p,t){ var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/40); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
+    curl: function(x,y,W,H,cx,cy,maxR,p,t){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
     fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t){ var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; var fwNx=Math.sin(x/57+y/40)+Math.sin(x/29-y/53)*0.6+Math.sin(x/15+y/19)*0.35; var fwNy=Math.cos(x/47-y/61)+Math.sin(x/35+y/27)*0.6+Math.cos(x/13-y/21)*0.35; return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
     // ---- batch 26: Tunnel — radial inversion about the centre (inside turns outside), blended by
