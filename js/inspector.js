@@ -1739,11 +1739,37 @@ window.FM = window.FM || {};
       const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2 });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
       // 2D trackpad
-      const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move layer'));
-      const sens = ((FM.scene.project.width || 1080) / 300);
+      const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move layer · snaps to centre, edges & earlier keyframes'));
+      // HALF the old gain (was width/300 — 3.6 project px per finger px on a 1080 comp, which made
+      // fine placement impossible). This pad is the precision control now, so it trades reach for
+      // control: a long swipe crosses the frame, a small one nudges.
+      const sens = ((FM.scene.project.width || 1080) / 640);
+      // SNAPPING LIVES HERE NOW (Ezra). The canvas drag used to snap and this didn't; it is the wrong
+      // way round, because the coarse gesture should go exactly where you put it and the precision one
+      // should help you land on something. Targets are the same set the canvas used: frame centre,
+      // frame edges, and — the new one — the positions this layer sits at on its OWN earlier
+      // keyframes, so you can put it back exactly where it was.
+      const snapT = (v, targets, thr) => {
+        let best = null, bd = thr;
+        for (let i = 0; i < targets.length; i++) { const d = Math.abs(v - targets[i]); if (d < bd) { bd = d; best = targets[i]; } }
+        return best == null ? v : best;
+      };
       let pd = null;
-      pad.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y') }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-      pad.addEventListener('pointermove', e => { if (!pd) return; if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; } mtSet(layer, 'x', Math.round(pd.ix + (e.clientX - pd.x) * sens)); mtSet(layer, 'y', Math.round(pd.iy + (e.clientY - pd.y) * sens)); refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); });
+      pad.addEventListener('pointerdown', e => {
+        pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y'),
+               tx: FM.alignTargets ? FM.alignTargets(layer, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width],
+               ty: FM.alignTargets ? FM.alignTargets(layer, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height] };
+        try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
+      });
+      pad.addEventListener('pointermove', e => {
+        if (!pd) return;
+        if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; }
+        const thr = 9 * sens;   // ~9 finger px of stickiness, expressed in project units
+        const nx = snapT(pd.ix + (e.clientX - pd.x) * sens, pd.tx, thr);
+        const ny = snapT(pd.iy + (e.clientY - pd.y) * sens, pd.ty, thr);
+        mtSet(layer, 'x', Math.round(nx)); mtSet(layer, 'y', Math.round(ny));
+        refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
+      });
       pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       pad.addEventListener('pointercancel', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(pad);
@@ -1778,12 +1804,30 @@ window.FM = window.FM || {};
       const link = FM._mtLink !== false;
       const setW = px => { const f = px / Math.max(1, sz.w); if (link) { mtSet(layer, 'scale', f); if (layer.transform.scaleX != null) mtSet(layer, 'scaleX', 1); if (layer.transform.scaleY != null) mtSet(layer, 'scaleY', 1); } else mtSet(layer, 'scaleX', f / Math.max(1e-4, mtEval(layer, 'scale'))); };
       const setH = px => { const f = px / Math.max(1, sz.h); if (link) { mtSet(layer, 'scale', f); if (layer.transform.scaleX != null) mtSet(layer, 'scaleX', 1); if (layer.transform.scaleY != null) mtSet(layer, 'scaleY', 1); } else mtSet(layer, 'scaleY', f / Math.max(1e-4, mtEval(layer, 'scale'))); };
-      const bw = mtVBox('Width', () => sz.w * effX(), setW, { dp: 1, scrub: 1, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
-      const bh = mtVBox('Height', () => sz.h * effY(), setH, { dp: 1, scrub: 1, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      // scrub 0.35 instead of 1: size was the worst offender for "expands too quickly" (Ezra), because
+      // one finger pixel moved the layer a whole project pixel of width.
+      const bw = mtVBox('Width', () => sz.w * effX(), setW, { dp: 1, scrub: 0.35, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      const bh = mtVBox('Height', () => sz.h * effY(), setH, { dp: 1, scrub: 0.35, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const linkBtn = el('button', 'mt-link' + (link ? ' on' : '')); linkBtn.innerHTML = MT_ICONS.link; linkBtn.title = link ? 'Aspect ratio linked' : 'Aspect ratio unlinked';
       linkBtn.addEventListener('click', () => { FM._mtLink = !link; FM.inspector.refresh(); });
       refreshables.push(bw, bh); values.append(bw, linkBtn, bh);
-      control.appendChild(mtScrub(() => mtEval(layer, 'scale'), v => mtSet(layer, 'scale', Math.max(0.01, v)), 0.01, () => { refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+      if (link) {
+        // linked: ONE strip driving the uniform scale, as before (0.004/px — was 0.01, i.e. 2.5x finer)
+        control.appendChild(mtScrub(() => mtEval(layer, 'scale'), v => mtSet(layer, 'scale', Math.max(0.01, v)), 0.004, () => { refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+      } else {
+        // UNLINKED: a SECOND strip appears below the first, and the two drive width and height
+        // separately (Ezra: "in alight motion it opens up a second slider below the first one and the
+        // two sliders will separately effect the width and height"). Before this, unlinking only
+        // changed what the two number boxes wrote — the single slider still moved both axes together,
+        // which is the "confusing and janky" part. Both strips work in EFFECTIVE factor units so
+        // mtScrub's re-anchor check sees the same units it writes.
+        control.classList.add('mt-control-dual');
+        const base = () => Math.max(1e-4, mtEval(layer, 'scale'));
+        control.appendChild(mtScrub(effX, v => mtSet(layer, 'scaleX', Math.max(0.01, v) / base()), 0.004,
+          () => { bw._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+        control.appendChild(mtScrub(effY, v => mtSet(layer, 'scaleY', Math.max(0.01, v) / base()), 0.004,
+          () => { bh._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); }));
+      }
     } else if (mode === 'skew') {
       const bsx = mtVBox('X Skew', () => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
       const bsy = mtVBox('Y Skew', () => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });

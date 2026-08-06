@@ -197,6 +197,23 @@ window.FM = window.FM || {};
       scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y,
       u: vpOriginScreen(),   // transform-origin in screen space → keeps the content UNDER the fingers
     };
+    // WITH A LAYER SELECTED the pinch resizes THAT LAYER instead of zooming the view (Ezra: "dragging
+    // or pinching on the canvas won't affect the size or position of the canvas but the layer you have
+    // selected"). Nothing selected — or a camera, which owns the view by design — keeps the old
+    // view-zoom. Snapshot the starting scale once here, exactly as the corner-handle drag does, so
+    // every move is an absolute write and the multiplicative shiftTransform converges.
+    const sel = FM.selectedLayer(FM.scene);
+    if (sel && sel.type !== 'camera' && !sel.locked) {
+      vpPinch.layer = sel;
+      vpPinch.startScale = FM.evalProp(sel.transform.scale, FM.time) || 0.0001;
+      // a group scales about its visible bounds centre, so its members don't fly off-frame —
+      // same pivot the corner handle builds in startHandle
+      if (sel.type === 'group' && FM.groupBounds) {
+        const b = FM.groupBounds(sel.id);
+        if (b) vpPinch.pivot = { cx: b.x + b.w / 2, cy: b.y + b.h / 2,
+                                 g0x: FM.evalProp(sel.transform.x, FM.time), g0y: FM.evalProp(sel.transform.y, FM.time) };
+      }
+    }
   }
 
   function startMove(e) {
@@ -304,6 +321,23 @@ window.FM = window.FM || {};
         // FINGER-ANCHORED zoom: keep the scene point that was under the finger midpoint UNDER the
         // midpoint (zooming about the canvas centre made content slide out from under the fingers).
         // screen(Q) = u + t + s·(Q − u)  ⇒  t' = mid − u − (s'/s0)·(mid0 − u − t0)
+        if (vpPinch.layer) {
+          // LAYER pinch: the finger separation ratio drives the layer's own scale. The view is left
+          // completely alone, which also means none of the preview re-rasterising fires.
+          const L = vpPinch.layer;
+          const ratio = d / vpPinch.dist;
+          const sc = Math.max(0.02, Math.round(vpPinch.startScale * ratio * 1000) / 1000);
+          if (vpPinch.pivot) {   // keep a group's visible centre put while its members scale
+            const k = sc / vpPinch.startScale, P = vpPinch.pivot;
+            FM.shiftTransform(L, 'x', Math.round(P.cx + (P.g0x - P.cx) * k), FM.time);
+            FM.shiftTransform(L, 'y', Math.round(P.cy + (P.g0y - P.cy) * k), FM.time);
+          }
+          FM.shiftTransform(L, 'scale', sc, FM.time);
+          vpPinch.moved = true;
+          FM.requestRender();
+          if (FM.canvasEdit) FM.canvasEdit.update();
+          return;
+        }
         const midX = (q[0].x + q[1].x) / 2, midY = (q[0].y + q[1].y) / 2, u = vpPinch.u;
         FM.viewport.scale = s1;
         FM.viewport.x = midX - u.x - (s1 / vpPinch.scale) * (vpPinch.midX - u.x - vpPinch.x);
@@ -353,11 +387,13 @@ window.FM = window.FM || {};
       // snap to centre / edges AND this layer's keyframe positions — from the GRAB-time snapshot
       // (live targets tracked the drag itself and ratcheted it in ~14px steps). Groups snap their
       // visible bounds centre (offX/offY translate between the offset and what the user sees).
-      const offX = drag.boundsOffX || 0, offY = drag.boundsOffY || 0;
-      const sx = snapTo(nx + offX, drag.tx || [FM.scene.project.width / 2, 0, FM.scene.project.width], thr);
-      const sy = snapTo(ny + offY, drag.ty || [FM.scene.project.height / 2, 0, FM.scene.project.height], thr);
-      nx = sx.v - offX; ny = sy.v - offY;
-      showGuides(sx.hit ? sx.target : null, sy.hit ? sy.target : null);
+      // NO SNAPPING ON THE CANVAS (Ezra: "the canvas has snapping when you touch to drag stuff, while
+      // the touch pad thing to move stuff does not, it should be the other way around"). A finger drag
+      // is the coarse gesture — it should go exactly where you put it. The snap targets this used to
+      // apply (centre, edges, and this layer's own earlier keyframe positions) have moved to the Move &
+      // Transform trackpad, which is the precision control. drag.tx/ty are still snapshotted at grab
+      // time because the trackpad reads the same helper.
+      showGuides(null, null);
       // shiftTransform (not setTransform): a canvas drag moves the WHOLE animation, never adds a keyframe
       FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
       FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
@@ -389,7 +425,19 @@ window.FM = window.FM || {};
   }
 
   function onUp(e) {
-    if (e && vpPtrs.has(e.pointerId)) { vpPtrs.delete(e.pointerId); if (vpPtrs.size < 2) vpPinch = null; }
+    if (e && vpPtrs.has(e.pointerId)) {
+      vpPtrs.delete(e.pointerId);
+      if (vpPtrs.size < 2) {
+        // A view zoom is runtime-only and deliberately uncommitted; a LAYER pinch changed the scene
+        // and has to be undoable like any other transform edit.
+        if (vpPinch && vpPinch.layer && vpPinch.moved) {
+          if (FM.inspector) FM.inspector.refresh();
+          if (FM.timeline) FM.timeline.rebuild();
+          if (FM.history) FM.history.commit();
+        }
+        vpPinch = null;
+      }
+    }
     if (!drag) return;
     if (drag.pointerId != null && e && e.pointerId != null && e.pointerId !== drag.pointerId) return;   // another finger lifting must not end this drag
     const d = drag;
