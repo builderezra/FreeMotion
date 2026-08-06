@@ -14,7 +14,7 @@ window.FM = window.FM || {};
     blur: 'blur',
     rgbsplit: 'distort', pixelate: 'distort', mirror: 'distort',
     posterize: 'proc', threshold: 'proc',
-    chromakey: 'matte', lumakey: 'matte',
+    chromakey: 'matte', lumakey: 'matte', mask: 'matte',
     // batch 1
     gamma: 'color', temperature: 'color',
     solarize: 'stylize', noise: 'proc', scanlines: 'stylize',

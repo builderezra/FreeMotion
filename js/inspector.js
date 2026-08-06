@@ -888,7 +888,7 @@ window.FM = window.FM || {};
     const wrap = el('div', 'mask-block');
     wrap.appendChild(el('div', 'insp-sub-label', 'Masks'));
     const masks = Array.isArray(layer.masks) ? layer.masks : [];
-    if (!masks.length) wrap.appendChild(el('div', 'insp-hint', 'Draw a shape to reveal part of this layer. Add masks to combine, invert or feather the reveal.'));
+    if (!masks.length) wrap.appendChild(el('div', 'insp-hint', 'A mask reveals part of this layer — add one from + Add Effect (under Matte / Mask / Key). Stack masks to combine, invert or feather the reveal.'));
     masks.forEach((mask, idx) => {
       const item = el('div', 'mask-item' + (mask.enabled === false ? ' mask-off' : ''));
       const head = el('div', 'mask-item-head');
@@ -919,15 +919,9 @@ window.FM = window.FM || {};
       item.appendChild(edit);
       wrap.appendChild(item);
     });
-    const add = el('button', 'fx-add-btn', '+ Add mask');
-    add.addEventListener('click', () => {
-      if (!Array.isArray(layer.masks)) layer.masks = [];
-      const m = (FM.masks && FM.masks.make) ? FM.masks.make('add') : makeMaskFallback();
-      layer.masks.push(m);
-      commitH(); FM.inspector.refresh(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
-      if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
-    });
-    wrap.appendChild(add);
+    // No "+ Add mask" button any more: Mask is an entry in the effect browser now (Ezra), so there
+    // is ONE way in for everything that shapes a layer. This block still lists and edits whatever
+    // masks the layer has.
     return wrap;
   }
 

@@ -37,6 +37,38 @@ window.FM = window.FM || {};
     // silently lose the effect (history.commit snapshots the live scene without it).
     const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
     if (!layer) { FM.fxBrowser.close(); return; }
+    // 'mask' is a catalogue entry, not an effect: picking it adds a pen mask to the layer. It sits
+    // in the browser so masks are found alongside every other layer-shaping tool rather than behind
+    // a button of their own, but nothing must ever land in layer.effects for it.
+    if (id === 'mask') {
+      const MASKABLE = { shape: 1, text: 1, image: 1, video: 1, adjustment: 1 };
+      if (!MASKABLE[layer.type]) {
+        if (FM.toast) FM.toast('Masks work on shapes, text, images, video and adjustment layers', 2200);
+        return;
+      }
+      if (!Array.isArray(layer.masks)) layer.masks = [];
+      const m = (FM.masks && FM.masks.make) ? FM.masks.make('add')
+        : { mode: 'add', enabled: true, invert: false, feather: 0, opacity: 1, points: [] };
+      layer.masks.push(m);
+      pushRecent(id);
+      FM.fxBrowser.close();
+      if (FM.inspector) {
+        if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+        else FM.inspector.refresh();
+        requestAnimationFrame(() => {
+          const m = document.querySelector('.mask-item:last-of-type');
+          if (m && m.scrollIntoView) m.scrollIntoView({ block: 'nearest' });
+        });
+      }
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.requestRender) FM.requestRender();
+      if (FM.history) FM.history.commit();
+      // straight into the drawing tool, exactly as the old button did — adding a mask you then have
+      // to go and find is not adding a mask
+      if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
+      if (FM.toast) FM.toast('Mask added — draw on the canvas to shape it', 1600);
+      return;
+    }
     let inst;
     if (preset && FM.effectPresets) {
       const st = layer.start || 0, du = layer.duration || 0;
