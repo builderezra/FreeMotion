@@ -56,12 +56,21 @@ window.FM = window.FM || {};
     { type: 'lumakey', label: 'Luma Key', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
     { type: 'rgbsplit', label: 'RGB Split', param: 'amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
     { type: 'pixelate', label: 'Pixelate', param: 'size', min: 1, max: 80, step: 1, def: 12, unit: 'px' },
-    { type: 'posterize', label: 'Posterize', param: 'levels', min: 2, max: 16, step: 1, def: 5 },
+    { type: 'posterize', label: 'Posterize', params: [
+      { key: 'levels', label: 'Levels', min: 2, max: 16, step: 1, def: 5 },
+      { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'channels', label: 'Quantise', def: 0, options: [[0, 'RGB'], [1, 'Luma only']] },
+      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, step: 0.05, def: 1 },
+    ] },
     { type: 'mirror', label: 'Mirror', params: [
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
       { key: 'position', label: 'Seam', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    { type: 'tint', label: 'Tint', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ff3366' },
+    { type: 'tint', label: 'Tint', color: true, defColor: '#ff3366', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'range', label: 'Range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
+      { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
     { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
@@ -159,7 +168,11 @@ window.FM = window.FM || {};
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', param: 'radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
     { type: 'spinblur', label: 'Spin Blur', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
-    { type: 'gradientmap', label: 'Gradient Map', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights' },
+    { type: 'gradientmap', label: 'Gradient Map', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'midpoint', label: 'Midpoint', min: 5, max: 95, step: 1, def: 50, unit: '%' },
+      { key: 'dither', label: 'Dither', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'colorize', label: 'Colorize', color: true, defColor: '#3aa0ff', colorLabel: 'Color', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'lift', label: 'Shadow lift', min: 0, max: 100, step: 1, def: 25, unit: '%' },
@@ -1472,7 +1485,7 @@ window.FM = window.FM || {};
     // ---- batch 6 ----
     boxblur: function(d,W,H,p,t){ var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40; var bbWin=2*bbr+1, bbInv=1/bbWin, bbSrc=d.slice(), bbX, bbY, bbCh, bbBase, bbSum, bbIdx, bbN, bbW4=W*4; for(bbY=0;bbY<H;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=0;bbX<W;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
     spinblur: function(d,W,H,p,t){ var sbAmt=FM.evalProp(p.amount,t); if(sbAmt==null)sbAmt=0.5; if(sbAmt<0)sbAmt=0; if(sbAmt>1)sbAmt=1; if(sbAmt<=0)return; var sbS=d.slice(); var sbCx=W/2, sbCy=H/2, sbW4=W*4; var sbSpan=sbAmt*0.4, sbN=9, sbHalf=(sbN-1)/2; var sbCos=new Float64Array(sbN), sbSin=new Float64Array(sbN); for(var sbk=0;sbk<sbN;sbk++){ var sbOff=(sbk-sbHalf)/sbHalf*sbSpan; sbCos[sbk]=Math.cos(sbOff); sbSin[sbk]=Math.sin(sbOff); } for(var sby=0;sby<H;sby++){ var sbDy=sby-sbCy; for(var sbx=0;sbx<W;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
-    gradientmap: function(d,W,H,p,t){ var gmAmt=FM.evalProp(p.amount,t); if(gmAmt==null)gmAmt=1; if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
+    gradientmap: function(d,W,H,p,t){ var gmAmt=FM.evalProp(p.amount,t); if(gmAmt==null)gmAmt=1; if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2]; for(var chkY=0;chkY<H;chkY++){ var chkRow=(chkY/chkSz)|0; var chkBase=chkY*W*4; for(var chkX=0;chkX<W;chkX++){ if((((chkX/chkSz)|0)+chkRow)&1){ var chkI=chkBase+chkX*4; if(d[chkI+3]>0){ d[chkI]=(d[chkI]+chkR)*0.5; d[chkI+1]=(d[chkI+1]+chkG)*0.5; d[chkI+2]=(d[chkI+2]+chkB)*0.5; } } } } },
     grid: function(d,W,H,p,t){ var grSize=FM.evalProp(p.size,t); grSize=(grSize==null?32:grSize); grSize=Math.round(grSize); if(grSize<4)grSize=4; if(grSize>160)grSize=160; var grLW=Math.max(1,Math.round(grSize*0.06)); var grCol=hexToRGB(p.color)||[255,255,255]; var grR=grCol[0],grG=grCol[1],grB=grCol[2]; for(var grY=0;grY<H;grY++){ var grYOn=((grY%grSize)<grLW); var grRow=grY*W*4; for(var grX=0;grX<W;grX++){ if(grYOn||((grX%grSize)<grLW)){ var grI=grRow+grX*4; if(d[grI+3]>0){ d[grI]=grR; d[grI+1]=grG; d[grI+2]=grB; } } } } },
@@ -3046,8 +3059,8 @@ window.FM = window.FM || {};
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'posterize'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
-    const img = actx.getImageData(0, 0, W, H), d = img.data, step = 255 / (q - 1);
-    for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
+    const img = actx.getImageData(0, 0, W, H), d = img.data;
+    posterizePixels(d, q, (fx && fx.params) || {}, t);
     _psB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
     baseT(ctx);
@@ -3077,12 +3090,7 @@ window.FM = window.FM || {};
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'tint'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;   // luma 0..1
-      d[i] = d[i] + (l * C[0] - d[i]) * am;
-      d[i + 1] = d[i + 1] + (l * C[1] - d[i + 1]) * am;
-      d[i + 2] = d[i + 2] + (l * C[2] - d[i + 2]) * am;
-    }
+    tintPixels(d, am, C, (fx && fx.params) || {}, t);
     _tiB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
     baseT(ctx);
@@ -3152,6 +3160,83 @@ window.FM = window.FM || {};
     if (ctx.canvas === _duA) ctx.clearRect(0, 0, W, H);   // two stacked Duotones: clear our own scratch so B replaces, not double-composites (see drawTint)
     ctx.drawImage(_duB, 0, 0);
     ctx.restore();
+  }
+
+  // 8x8 ordered matrix, normalised 0..1 — used to break gradient-map banding on video, where a
+  // straight two-colour ramp shows visible steps that no amount of colour choice can hide.
+  const BAYER8 = (function () {
+    const m = [0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,
+               3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21];
+    return m.map(v => v / 64);
+  })();
+
+  // Tint kernel, shared by drawTint and applyPixelFx. RANGE restricts the wash to part of the tonal
+  // scale, which is what makes split-toning possible (cool shadows, warm highlights = two Tints).
+  // PRESERVE keeps each pixel's original luminance so the tint is purely a colour move — without it
+  // tinting toward a dark colour also crushes the image, which is why it always flattened contrast.
+  const TINT_W = [
+    null,                                   // All — no weighting, the original behaviour
+    (l) => (1 - l) * (1 - l),               // Shadows
+    (l) => 1 - Math.abs(2 * l - 1),         // Midtones
+    (l) => l * l,                           // Highlights
+  ];
+  function tintPixels(d, am, C, p, t) {
+    const rng = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+    const pres = p.preserve == null ? 0 : (Math.round(FM.evalProp(p.preserve, t)) | 0);
+    const wf = TINT_W[rng > 0 && rng < TINT_W.length ? rng : 0];
+    if (!wf && !pres) {
+      for (let i = 0; i < d.length; i += 4) {
+        const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+        d[i] = d[i] + (l * C[0] - d[i]) * am;
+        d[i + 1] = d[i + 1] + (l * C[1] - d[i + 1]) * am;
+        d[i + 2] = d[i + 2] + (l * C[2] - d[i + 2]) * am;
+      }
+      return;
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+      const l = (r0 * 0.299 + g0 * 0.587 + b0 * 0.114) / 255;
+      const k = am * (wf ? wf(l) : 1);
+      let nr = r0 + (l * C[0] - r0) * k, ng = g0 + (l * C[1] - g0) * k, nb = b0 + (l * C[2] - b0) * k;
+      if (pres) {
+        const l1 = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+        if (l1 > 0.0001) { const s = (l * 255) / l1; nr *= s; ng *= s; nb *= s; }
+      }
+      d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+    }
+  }
+
+  // Posterize kernel, shared by drawPosterize and applyPixelFx. GAMMA decides WHERE the bands fall
+  // (quantising in a warped space puts more of them in the shadows, where banding shows); CHANNELS
+  // can quantise luminance only, so hue survives instead of collapsing to a colour-clash; MIX fades
+  // the whole thing back. Defaults short-circuit to the original loop — the warped expression does
+  // not round identically even at gamma 1.
+  function posterizePixels(d, q, p, t) {
+    const step = 255 / (q - 1);
+    const mix = p.mix == null ? 1 : FM.evalProp(p.mix, t);
+    const ch = p.channels == null ? 0 : (Math.round(FM.evalProp(p.channels, t)) | 0);
+    const gm = p.gamma == null ? 1 : FM.evalProp(p.gamma, t);
+    if (mix === 1 && ch === 0 && gm === 1) {
+      for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
+      return;
+    }
+    const ig = 1 / Math.max(0.05, gm);
+    const quant = (v) => {
+      if (gm === 1) return Math.round(Math.round(v / step) * step);
+      const x = Math.pow(v / 255, ig);
+      return 255 * Math.pow(Math.round(x * (q - 1)) / (q - 1), gm);
+    };
+    const m = mix < 0 ? 0 : (mix > 1 ? 1 : mix);
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let nr, ng, nb;
+      if (ch === 1) {                                   // luma only — keep the colour, band the tone
+        const l = 0.299 * r + 0.587 * g + 0.114 * b;
+        const s = l > 0.5 ? quant(l) / l : 1;
+        nr = r * s; ng = g * s; nb = b * s;
+      } else { nr = quant(r); ng = quant(g); nb = quant(b); }
+      d[i] = r + (nr - r) * m; d[i + 1] = g + (ng - g) * m; d[i + 2] = b + (nb - b) * m;
+    }
   }
 
   // The one duotone kernel, shared by drawDuotone and applyPixelFx — same reason as thresholdPixels
@@ -4422,14 +4507,14 @@ window.FM = window.FM || {};
       return;
     }
     if (fx.type === 'posterize') {
-      const q = Math.max(2, Math.round(FM.evalProp(p.levels, t) || 5)), step = 255 / (q - 1);
-      for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
+      const q = Math.max(2, Math.round(FM.evalProp(p.levels, t) || 5));
+      posterizePixels(d, q, p, t);
     } else if (fx.type === 'threshold') {
       const cut = clamp01(p.level == null ? 0.5 : FM.evalProp(p.level, t)) * 255;   // catalog-default fallback (mirror the per-layer drawFx path) — a params-less threshold used to blow the frame solid white
       thresholdPixels(d, cut, p, t);
     } else if (fx.type === 'tint') {
       const am = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t)), C = hexToRGB(p.color || '#ff3366');
-      for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255; d[i] += (l * C[0] - d[i]) * am; d[i + 1] += (l * C[1] - d[i + 1]) * am; d[i + 2] += (l * C[2] - d[i + 2]) * am; }
+      tintPixels(d, am, C, p, t);
     } else if (fx.type === 'duotone') {
       const am = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t)), A = hexToRGB(p.color || '#241a52'), B = hexToRGB(p.color2 || '#ff9e5e');
       duotonePixels(d, am, A, B, p, t);
