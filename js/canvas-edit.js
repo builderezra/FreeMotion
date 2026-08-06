@@ -50,6 +50,9 @@ window.FM = window.FM || {};
       // 10px handle (+ its touch pad) shrank to fingertip-impossible; at 8× it covered small layers
       w.style.setProperty('--vz', String(1 / (this.scale || 1)));
       FM.canvasZoom = this.scale;   // keep the legacy zoom readers (vb-zoom +/− steps) in step
+      // Zoomed in = the comp covers more device pixels, so re-rasterise the preview at that
+      // resolution rather than letting the browser stretch a project-sized bitmap (soft edges).
+      if (FM.refreshPreviewScale) FM.refreshPreviewScale();
       const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = Math.round(this.scale * 100) + '%';
       const cz = document.getElementById('cv-zoom'); if (cz) cz.textContent = Math.round(this.scale * 100) + '%';
       update();

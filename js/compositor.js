@@ -777,7 +777,7 @@ window.FM = window.FM || {};
     if (!_maskCv) _maskCv = document.createElement('canvas');
     const off = _maskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
     const octx = off.getContext('2d');
-    octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
+    baseT(octx); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
     // 1) draw the layer content (no mask, full opacity, normal blend) into the offscreen
     const tmp = Object.assign({}, layer, { mask: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
@@ -795,7 +795,7 @@ window.FM = window.FM || {};
     octx.filter = 'none'; octx.globalCompositeOperation = 'source-over';
     // 3) blit onto the main canvas with the layer's real opacity + blend
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -827,21 +827,21 @@ window.FM = window.FM || {};
     if (!_penMaskCv) _penMaskCv = document.createElement('canvas');
     const off = _penMaskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
     const octx = off.getContext('2d');
-    octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
+    baseT(octx); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
     // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
     const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(octx, tmp, t, scene);
     // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
     octx.save();
-    octx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(octx);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'destination-in'; octx.filter = 'none';
     try { octx.drawImage(maskCanvas, 0, 0); } catch (e) {}
     octx.restore();
     octx.globalCompositeOperation = 'source-over';
     // 3) blit onto the main canvas with the layer's real opacity + blend
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -869,7 +869,7 @@ window.FM = window.FM || {};
     const off = _mbCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
     if (_mbPlate.width !== W || _mbPlate.height !== H) { _mbPlate.width = W; _mbPlate.height = H; }
     const octx = off.getContext('2d');
-    octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
+    baseT(octx); octx.clearRect(0, 0, W, H);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
     // Collect only sub-times inside the clip's life, then renormalize opacity to that count: keeps
     // brightness constant near clip in/out WITHOUT collapsing skipped samples onto one boundary time
@@ -890,7 +890,7 @@ window.FM = window.FM || {};
     const pctx = _mbPlate.getContext('2d');
     const sampleAlpha = 1 / times.length;
     times.forEach(st => {
-      pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, W, H);
+      baseT(pctx); pctx.clearRect(0, 0, W, H);
       pctx.globalAlpha = 1; pctx.globalCompositeOperation = 'source-over'; pctx.filter = 'none';
       drawLayer(pctx, tmp, st, scene);
       octx.globalAlpha = sampleAlpha;
@@ -899,7 +899,7 @@ window.FM = window.FM || {};
     });
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over';
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -990,7 +990,7 @@ window.FM = window.FM || {};
       if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }
       if (pB.width !== W || pB.height !== H) { pB.width = W; pB.height = H; }
       const actx = pA.getContext('2d');
-      actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, W, H);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
@@ -998,7 +998,7 @@ window.FM = window.FM || {};
       fn(img.data, W, H, fx.params || {}, t);
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      baseT(ctx);
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
@@ -1403,7 +1403,7 @@ window.FM = window.FM || {};
       if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
       if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
       const actx = wA.getContext('2d');
-      actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, W, H);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
@@ -1422,7 +1422,7 @@ window.FM = window.FM || {};
       }
       bctx.putImageData(outImg, 0, 0);
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      baseT(ctx);
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
@@ -1449,7 +1449,7 @@ window.FM = window.FM || {};
     if (_dspM.width !== W || _dspM.height !== H) { _dspM.width = W; _dspM.height = H; }
     // 1) target layer, clean (this fx stripped) — the pixels we resample from
     const actx = _dspA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -1461,7 +1461,7 @@ window.FM = window.FM || {};
     let map = src;
     if (mapLayer && _dispDepth < 3) {
       const mctx = _dspM.getContext('2d');
-      mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, W, H);
+      baseT(mctx); mctx.clearRect(0, 0, W, H);
       mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
       const mtmp = Object.assign({}, mapLayer, { blendMode: 'normal', effects: (mapLayer.effects || []).filter(e => e.type !== 'displacemap' && e.type !== 'polardisplace'), transform: Object.assign({}, mapLayer.transform, { opacity: 1 }) });
       _dispDepth++;
@@ -1504,7 +1504,7 @@ window.FM = window.FM || {};
     }
     bctx.putImageData(outImg, 0, 0);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -1616,7 +1616,7 @@ window.FM = window.FM || {};
     if (!_bbScan) _bbScan = document.createElement('canvas');
     if (_bbScan.width !== w || _bbScan.height !== h) { _bbScan.width = w; _bbScan.height = h; }
     const g = _bbScan.getContext('2d', { willReadFrequently: true });
-    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h);
+    baseT(g); g.clearRect(0, 0, w, h);
     g.drawImage(srcCanvas, 0, 0, w, h);
     const bb = alphaBBox(g.getImageData(0, 0, w, h).data, w, h);
     if (!bb) return null;
@@ -1639,7 +1639,7 @@ window.FM = window.FM || {};
     if (_cfA.width !== W || _cfA.height !== H) { _cfA.width = W; _cfA.height = H; }
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     const actx = _cfA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -1654,12 +1654,12 @@ window.FM = window.FM || {};
     // frame — the exact churn line 1500's guard avoids for A); the clearRect does the reset either way.
     const bctx = _cfB.getContext('2d');
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
-    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
+    baseT(bctx); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     // Nested canvas fx (two+ stacked): dst IS our scratch A, still holding this call's clean-layer
     // render — wipe it so only the effected result goes up, not a ghost of the plain layer under it.
     if (ctx.canvas === _cfA) ctx.clearRect(0, 0, W, H);
@@ -1709,7 +1709,7 @@ window.FM = window.FM || {};
     if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
     const actx = _t3A.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     // PLATE: the layer as it would look flat — tilt zeroed (so this drawLayer can't recurse back here),
     // opacity/blend neutral (re-applied at composite). Effects/masks/motion-blur/parent all bake in.
@@ -1719,7 +1719,7 @@ window.FM = window.FM || {};
     let bb = null;
     try { bb = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bb = null; }   // tainted-canvas guard
     const bctx = _t3B.getContext('2d');
-    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
+    baseT(bctx); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     if (bb && bb.w > 1 && bb.h > 1) {
       const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
@@ -1730,7 +1730,7 @@ window.FM = window.FM || {};
       bctx.drawImage(_t3A, 0, 0);   // nothing visible / tainted → pass the flat plate through (never blank the layer)
     }
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     if (ctx.canvas === _t3A) ctx.clearRect(0, 0, W, H);   // paranoia: never composite over our own plate scratch
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
@@ -1745,7 +1745,7 @@ window.FM = window.FM || {};
     if (!_cfTex) _cfTex = document.createElement('canvas');
     _cfTex.width = bb.w; _cfTex.height = bb.h;
     const c = _cfTex.getContext('2d');
-    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, bb.w, bb.h);
+    baseT(c); c.clearRect(0, 0, bb.w, bb.h);
     c.drawImage(src, bb.x, bb.y, bb.w, bb.h, 0, 0, bb.w, bb.h);
     return _cfTex;
   }
@@ -2379,7 +2379,7 @@ window.FM = window.FM || {};
       if (!_reC) _reC = document.createElement('canvas');
       _reC.width = W; _reC.height = H;
       const rctx = _reC.getContext('2d');
-      rctx.setTransform(1, 0, 0, 1, 0, 0); rctx.clearRect(0, 0, W, H);
+      baseT(rctx); rctx.clearRect(0, 0, W, H);
       rctx.globalCompositeOperation = 'source-over'; rctx.drawImage(A, 0, 0);
       rctx.globalCompositeOperation = 'source-atop';
       rctx.fillStyle = 'rgba(0,0,0,' + dk.toFixed(3) + ')';
@@ -2471,7 +2471,7 @@ window.FM = window.FM || {};
       if (!_tileC) _tileC = document.createElement('canvas');
       if (_tileC.width !== bw || _tileC.height !== bh) { _tileC.width = bw; _tileC.height = bh; }
       const tc = _tileC.getContext('2d');
-      tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, bw, bh);
+      baseT(tc); tc.clearRect(0, 0, bw, bh);
       tc.drawImage(A, bx, by, bw, bh, 0, 0, bw, bh);
       const stepX = bw * (1 + gap), stepY = bh * (1 + gap);
       const iMin = Math.max(-60, -Math.ceil((bx + bw) / stepX)), iMax = Math.min(60, Math.ceil((W - bx) / stepX));
@@ -2699,12 +2699,12 @@ window.FM = window.FM || {};
     if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
     if (_rgbB.width !== W || _rgbB.height !== H) { _rgbB.width = W; _rgbB.height = H; }
     const actx = _rgbA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     // render the layer with the rgbsplit effect removed (full opacity, normal blend) — keeps other fx/mask/blur
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
-    if (dd <= 0) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, 0, 0); ctx.restore(); return; }
+    if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, 0, 0); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
     const bctx = _rgbB.getContext('2d'); const out = bctx.createImageData(W, H); const o = out.data;
     for (let y = 0; y < H; y++) {
@@ -2719,7 +2719,7 @@ window.FM = window.FM || {};
     }
     bctx.putImageData(out, 0, 0);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -2740,7 +2740,7 @@ window.FM = window.FM || {};
     if (_psA.width !== W || _psA.height !== H) { _psA.width = W; _psA.height = H; }
     if (_psB.width !== W || _psB.height !== H) { _psB.width = W; _psB.height = H; }
     const actx = _psA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'posterize'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -2748,7 +2748,7 @@ window.FM = window.FM || {};
     for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
     _psB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -2770,7 +2770,7 @@ window.FM = window.FM || {};
     if (_tiA.width !== W || _tiA.height !== H) { _tiA.width = W; _tiA.height = H; }
     if (_tiB.width !== W || _tiB.height !== H) { _tiB.width = W; _tiB.height = H; }
     const actx = _tiA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'tint'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -2783,7 +2783,7 @@ window.FM = window.FM || {};
     }
     _tiB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -2805,7 +2805,7 @@ window.FM = window.FM || {};
     if (_thA.width !== W || _thA.height !== H) { _thA.width = W; _thA.height = H; }
     if (_thB.width !== W || _thB.height !== H) { _thB.width = W; _thB.height = H; }
     const actx = _thA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'threshold'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -2816,7 +2816,7 @@ window.FM = window.FM || {};
     }
     _thB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -2838,7 +2838,7 @@ window.FM = window.FM || {};
     if (_duA.width !== W || _duA.height !== H) { _duA.width = W; _duA.height = H; }
     if (_duB.width !== W || _duB.height !== H) { _duB.width = W; _duB.height = H; }
     const actx = _duA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'duotone'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -2851,7 +2851,7 @@ window.FM = window.FM || {};
     }
     _duB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -2870,12 +2870,12 @@ window.FM = window.FM || {};
     if (!_miA) _miA = document.createElement('canvas');
     if (_miA.width !== W || _miA.height !== H) { _miA.width = W; _miA.height = H; }   // cleared below
     const actx = _miA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'mirror'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -2908,12 +2908,12 @@ window.FM = window.FM || {};
     if (!_pxS) _pxS = document.createElement('canvas');
     if (_pxA.width !== W || _pxA.height !== H) { _pxA.width = W; _pxA.height = H; }   // cleared below
     const actx = _pxA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'pixelate'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -3469,7 +3469,7 @@ window.FM = window.FM || {};
     if (!_mbcA) _mbcA = document.createElement('canvas');
     if (_mbcA.width !== W || _mbcA.height !== H) { _mbcA.width = W; _mbcA.height = H; }
     const actx = _mbcA.getContext('2d');
-    actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, W, H);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const feathered = layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0;
     const ntr = Object.assign({}, layer.transform, { x: W / 2, y: H / 2, scale: nscale, scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, skewY: 0, z: 0, anchorX: 0.5, anchorY: 0.5, opacity: 1 });
@@ -3483,7 +3483,7 @@ window.FM = window.FM || {};
     if (!_mbcB) _mbcB = document.createElement('canvas');
     if (_mbcB.width !== W || _mbcB.height !== H) { _mbcB.width = W; _mbcB.height = H; }
     const bctx = _mbcB.getContext('2d');
-    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);
+    baseT(bctx); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     try { CANVAS_FX.motionflow(_mbcA, bctx, W, H, { x: 0, y: 0, w: W, h: H }, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer); }
     catch (e) { bctx.drawImage(_mbcA, 0, 0); }
@@ -3511,7 +3511,7 @@ window.FM = window.FM || {};
     if (!_cbA) _cbA = document.createElement('canvas');
     if (_cbA.width !== W || _cbA.height !== H) { _cbA.width = W; _cbA.height = H; }
     const a = _cbA.getContext('2d');
-    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
+    baseT(a); a.clearRect(0, 0, W, H);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     let M = null; try { M = ctx.getTransform(); } catch (e) {}
     if (M) a.setTransform(M.a, M.b, M.c, M.d, M.e, M.f);   // same transform as the layer → footprint in screen space
@@ -3534,14 +3534,29 @@ window.FM = window.FM || {};
       const w = (cr && cr.w) || sz.w, h = (cr && cr.h) || sz.h;
       a.fillRect(-w * tr.anchorX, -h * tr.anchorY, w, h);
     }
-    a.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(a);
     a.globalCompositeOperation = 'source-in';   // keep the backdrop ONLY inside the footprint
     try { a.drawImage(layer._bgSnap, 0, 0); } catch (e) {}
     a.globalCompositeOperation = 'source-over';
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);   // composite in screen space; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)
+    ctx.save(); baseT(ctx);   // composite in screen space; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)
     try { ctx.drawImage(_cbA, 0, 0); } catch (e) {}
     ctx.restore();
   }
+  // ---- render scale (preview sharpness) ------------------------------------------------------
+  // The preview canvas can carry MORE pixels than the project when zoomed in: at 4x zoom a 1080px
+  // comp is stretched across ~4600 device pixels, and a CSS-scaled bitmap turns every vector edge
+  // into a 4px smear. Sizing the backing store up and rendering through a matching base transform
+  // re-rasterises shapes, text and drawings at the real display resolution instead.
+  //
+  // The scale lives ON the canvas (__fmRS) rather than in a module variable, which is what makes
+  // this safe: comp-space scratch canvases are never stamped, so they resolve to 1 and every
+  // existing plate/effect path behaves exactly as it always did. Export and thumbnails render into
+  // unstamped canvases too, so they are untouched by construction.
+  function baseT(c) {
+    const s = c.canvas.__fmRS || 1;
+    c.setTransform(s, 0, 0, s, 0, 0);
+  }
+
   // A layer using a blend mode Canvas can't express: rasterise it once with a neutral blend, then
   // hand the plate and the backdrop to the per-pixel blender. Only the plate's alpha bounds make
   // the getImageData round trip — a small clip on a 1080×1920 comp reads a few percent of the
@@ -3549,16 +3564,21 @@ window.FM = window.FM || {};
   let _manualCv = null;
   function drawManualBlendLayer(ctx, layer, t, scene) {
     const P = scene.project;
+    const cw = ctx.canvas.width, ch = ctx.canvas.height;
     if (!_manualCv) _manualCv = document.createElement('canvas');
-    if (_manualCv.width !== P.width || _manualCv.height !== P.height) { _manualCv.width = P.width; _manualCv.height = P.height; }
+    // The plate must match the TARGET's pixel grid, not the project's — the preview canvas is
+    // supersampled when zoomed, and a project-sized plate would blend the wrong region against it.
+    // Carrying the same __fmRS also means the layer rasterises sharp before it's blended.
+    if (_manualCv.width !== cw || _manualCv.height !== ch) { _manualCv.width = cw; _manualCv.height = ch; }
+    _manualCv.__fmRS = ctx.canvas.__fmRS || 1;
     const mc = _manualCv.getContext('2d', { willReadFrequently: true });
-    mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, P.width, P.height);
+    mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, cw, ch);
+    baseT(mc);
     mc.globalAlpha = 1; mc.globalCompositeOperation = 'source-over'; mc.filter = 'none';
     const saved = layer.blendMode; layer.blendMode = 'normal';
     try { drawLayer(mc, layer, t, scene); } finally { layer.blendMode = saved; }   // opacity bakes into the plate's alpha here, which is exactly what the blender expects
 
-    const cw = ctx.canvas.width, ch = ctx.canvas.height;
-    const bb = alphaBBoxFast(_manualCv, Math.min(P.width, cw), Math.min(P.height, ch));
+    const bb = alphaBBoxFast(_manualCv, cw, ch);   // device pixels, same grid as the target
     if (!bb || bb.w <= 0 || bb.h <= 0) return;   // nothing drew — the backdrop stands
     const x = Math.max(0, bb.x), y = Math.max(0, bb.y);
     const w = Math.min(bb.w, cw - x), h = Math.min(bb.h, ch - y);
@@ -3567,7 +3587,7 @@ window.FM = window.FM || {};
     let bd, sd;
     try { bd = ctx.getImageData(x, y, w, h); sd = mc.getImageData(x, y, w, h); }
     catch (e) {   // tainted canvas (cross-origin media): fall back to a plain composite rather than dropping the layer
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+      ctx.save(); baseT(ctx); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
       ctx.drawImage(_manualCv, 0, 0); ctx.restore(); return;
     }
     FM.BLEND_MANUAL[layer.blendMode](bd.data, sd.data, w, h);
@@ -3608,7 +3628,7 @@ window.FM = window.FM || {};
       if (!_blendMaskCv) _blendMaskCv = document.createElement('canvas');
       if (_blendMaskCv.width !== P.width || _blendMaskCv.height !== P.height) { _blendMaskCv.width = P.width; _blendMaskCv.height = P.height; }
       const mc = _blendMaskCv.getContext('2d');
-      mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, P.width, P.height);
+      baseT(mc); mc.clearRect(0, 0, P.width, P.height);
       mc.globalAlpha = 1; mc.globalCompositeOperation = 'source-over'; mc.filter = 'none';
       const saved = layer.blendMode; layer.blendMode = 'normal';
       try { drawLayer(mc, layer, t, scene); } finally { layer.blendMode = saved; }
@@ -4021,7 +4041,7 @@ window.FM = window.FM || {};
     if (!_adjCv) _adjCv = document.createElement('canvas');
     if (_adjCv.width !== W || _adjCv.height !== H) { _adjCv.width = W; _adjCv.height = H; }   // cleared below
     const a = _adjCv.getContext('2d');
-    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H); a.globalAlpha = 1; a.filter = 'none';
+    baseT(a); a.clearRect(0, 0, W, H); a.globalAlpha = 1; a.filter = 'none';
     a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below)
     if (ppfx.length) {                             // per-pixel post-fx grade the whole snapshot, in stack order
       const img = a.getImageData(0, 0, W, H), d = img.data;
@@ -4050,7 +4070,7 @@ window.FM = window.FM || {};
       if (mc) { a.globalCompositeOperation = 'destination-in'; try { a.drawImage(mc, 0, 0); } catch (e) {} a.globalCompositeOperation = 'source-over'; }
     }
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = 'source-over';
     ctx.filter = hasCss ? filter : 'none';
@@ -4113,7 +4133,7 @@ window.FM = window.FM || {};
     if (_mgA.width !== P.width || _mgA.height !== P.height) { _mgA.width = P.width; _mgA.height = P.height; }
     if (_mgB.width !== P.width || _mgB.height !== P.height) { _mgB.width = P.width; _mgB.height = P.height; }
     const a = _mgA.getContext('2d');
-    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, P.width, P.height);
+    baseT(a); a.clearRect(0, 0, P.width, P.height);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
       const L = scene.layers[i];
@@ -4127,7 +4147,7 @@ window.FM = window.FM || {};
     const maskLayer = u.maskId ? scene.layers.find(l => l.id === u.maskId) : null;
     if (maskLayer && FM.isLayerVisibleAt(maskLayer, t)) {   // hidden mask → members show unclipped
       const b = _mgB.getContext('2d');
-      b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, P.width, P.height);
+      baseT(b); b.clearRect(0, 0, P.width, P.height);
       b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.filter = 'none';
       drawLayer(b, maskLayer, t, scene);
       a.globalCompositeOperation = 'destination-in';
@@ -4170,6 +4190,10 @@ window.FM = window.FM || {};
 
   FM.renderScene = function (ctx, scene, t) {
     const P = scene.project;
+    // Supersample factor for THIS target: how many canvas pixels exist per project pixel. Export and
+    // thumbnails hand us a canvas sized exactly to the project, so this is 1 and nothing changes.
+    const RS = (P.width > 0 && ctx.canvas.width) ? (ctx.canvas.width / P.width) : 1;
+    ctx.canvas.__fmRS = (RS > 0 && isFinite(RS)) ? RS : 1;
     const cam = scene.layers.find(l => l.type === 'camera' && l.visible !== false && FM.isLayerVisibleAt(l, t));
     let target = ctx;
     if (cam) {
@@ -4192,7 +4216,7 @@ window.FM = window.FM || {};
       _camParallax = null;
     }
     target.save();
-    target.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(target);
     target.clearRect(0, 0, P.width, P.height);
     if (!cam && P.background) {   // with a camera, the bg is painted on the real canvas so it stays fixed
       target.fillStyle = P.background;
@@ -4212,9 +4236,10 @@ window.FM = window.FM || {};
       else {
         if (FM.hasCopyBg(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far as this layer's content
           if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = document.createElement('canvas');
-          if (L._bgSnap.width !== P.width || L._bgSnap.height !== P.height) { L._bgSnap.width = P.width; L._bgSnap.height = P.height; }
+          const _tw = target.canvas.width, _th = target.canvas.height;   // match the TARGET's pixels (may be supersampled), else the snapshot is a downscale
+          if (L._bgSnap.width !== _tw || L._bgSnap.height !== _th) { L._bgSnap.width = _tw; L._bgSnap.height = _th; }
           const bs = L._bgSnap.getContext('2d');
-          bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, P.width, P.height);
+          bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, _tw, _th);
           try { bs.drawImage(target.canvas, 0, 0); } catch (e) {}
         }
         drawLayer(target, L, t, scene);
@@ -4232,7 +4257,7 @@ window.FM = window.FM || {};
       const camY = bv2 ? bv2(cam, 'y', FM.evalProp(tr.y, t), t) : FM.evalProp(tr.y, t);
       const rot = ((bv2 ? bv2(cam, 'rotation', FM.evalProp(tr.rotation, t) || 0, t) : (FM.evalProp(tr.rotation, t) || 0))) * Math.PI / 180;
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      baseT(ctx);
       ctx.clearRect(0, 0, P.width, P.height);
       if (P.background) { ctx.fillStyle = P.background; ctx.fillRect(0, 0, P.width, P.height); }
       ctx.translate(cx, cy); ctx.scale(zoom, zoom); ctx.rotate(rot); ctx.translate(-camX, -camY);

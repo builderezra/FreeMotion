@@ -71,14 +71,43 @@ window.FM = window.FM || {};
     requestAnimationFrame(() => { renderQueued = false; render(); });
   };
 
+  // How many canvas pixels to keep per project pixel, so vector edges rasterise at the real screen
+  // resolution instead of being a stretched bitmap. Zooming to 4x on a phone spreads a 1080px comp
+  // across ~4600 device pixels — without this every shape edge is a 4px smear (the thing Ezra
+  // photographed next to Alight Motion). Capped by a pixel budget: a 4K comp at 3x zoom on a 3x
+  // screen would otherwise ask for a 100-megapixel canvas.
+  const MAX_PREVIEW_PX = 12e6;   // ~12MP — comfortably above any phone screen, far below a GPU limit
+  function previewScale() {
+    const P = FM.scene.project;
+    const dpr = window.devicePixelRatio || 1;
+    const zoom = (FM.viewport && FM.viewport.scale) || FM.canvasZoom || 1;
+    const wrap = document.getElementById('canvas-wrap');
+    const cssW = wrap ? wrap.clientWidth : 0;
+    if (!cssW || !P.width) return 1;
+    // device pixels the comp actually occupies on screen, expressed per project pixel
+    let s = (cssW * dpr * zoom) / P.width;
+    s = Math.max(1, Math.min(4, s));                       // never render BELOW project res, never above 4x
+    const budget = Math.sqrt(MAX_PREVIEW_PX / (P.width * P.height));
+    if (s > budget) s = Math.max(1, budget);
+    return Math.round(s * 100) / 100;
+  }
   function resizeCanvas() {
     const P = FM.scene.project;
-    canvas.width = P.width;
-    canvas.height = P.height;
+    const s = previewScale();
+    const w = Math.max(1, Math.round(P.width * s)), h = Math.max(1, Math.round(P.height * s));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // assigning re-allocates the backing store, so only on a real change
     document.documentElement.style.setProperty('--comp-ar', P.width + ' / ' + P.height);   // canvas-wrap holds this aspect → preview always contains in the stage
     render();
   }
   FM.resizeCanvas = resizeCanvas;
+  // Zoom changed → the comp now covers a different number of device pixels, so re-rasterise for it.
+  // Debounced: a pinch fires continuously, and reallocating a multi-megapixel backing store on every
+  // move would stutter. The CSS transform keeps the view live in between.
+  let _rsTimer = null;
+  FM.refreshPreviewScale = function () {
+    clearTimeout(_rsTimer);
+    _rsTimer = setTimeout(() => { if (Math.abs(previewScale() - (canvas.width / (FM.scene.project.width || 1))) > 0.01) resizeCanvas(); }, 120);
+  };
 
   function updateReadout() {
     // AM-style timecode: MM:SS:FF for the current playhead time.
