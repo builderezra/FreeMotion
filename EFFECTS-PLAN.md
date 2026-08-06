@@ -7,8 +7,58 @@ workflow output lived in temp files that get cleaned, so everything needed to co
 **An existing project must render byte-for-byte identically after any of these changes.**
 Every new param's fallback must equal the constant currently hardcoded in the implementation,
 and the accessor should short-circuit on that value rather than recompute it (see `wCx`/`wCy`/`wR`
-in compositor.js, added in v3.87). Verify with: render a legacy instance vs one with explicit
-defaults and require 0 differing bytes.
+in compositor.js, added in v3.87).
+
+### How to verify — do NOT use legacy-vs-explicit-defaults on its own
+
+That test compares the new code against **itself**, so if the upgrade breaks the effect outright
+both sides break equally and it reports a false pass. This actually happened in v3.89: `lightglow`
+and `darkglow` read the new threshold *above* its own `var` declaration, so it was `undefined`
+during the loop, the mask came out all zeros, and both effects rendered nothing at all — while the
+identity test happily reported 0 differing bytes.
+
+**Diff against the previous commit instead.** Run this in the browser console with the app open:
+
+```js
+// 1. in the repo:  git show HEAD:js/compositor.js > _oldfx.js.txt      (delete it before committing)
+const oldSrc = await (await fetch('/_oldfx.js.txt?x=1')).text();
+const newSrc = await (await fetch('/js/compositor.js?bust=' + performance.now())).text();
+const PRELUDE = `
+function hexToRGB(h){h=String(h||'#000000').replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];return [parseInt(h.slice(0,2),16)||0,parseInt(h.slice(2,4),16)||0,parseInt(h.slice(4,6),16)||0];}
+function wCx(p,t,W,cx){const v=p.centerx==null?50:FM.evalProp(p.centerx,t);return v===50?cx:W*(v/100);}
+function wCy(p,t,H,cy){const v=p.centery==null?50:FM.evalProp(p.centery,t);return v===50?cy:H*(v/100);}
+function wR(p,t,maxR){const v=p.radius==null?100:FM.evalProp(p.radius,t);return v===100?maxR:Math.max(1,maxR*(v/100));}`;
+const grab = (src, name) => {                       // brace-matched, survives any indentation
+  const m = new RegExp('\\n\\s*' + name + ':\\s*function\\s*\\(([^)]*)\\)\\s*\\{').exec(src);
+  if (!m) return null;
+  let i = src.indexOf('{', m.index + m[0].length - 1), depth = 0, j = i;
+  for (; j < src.length; j++) { const c = src[j]; if (c === '{') depth++; else if (c === '}') { depth--; if (!depth) { j++; break; } } }
+  return { args: m[1], body: src.slice(i, j) };
+};
+const mk = (src, n) => { const g = grab(src, n); return g && new Function('FM', PRELUDE + 'return (function(' + g.args + ')' + g.body + ');')(FM); };
+const W = 96, H = 96;
+const seed = () => { const d = new Uint8ClampedArray(W*H*4); let s = 12345;   // ramp + noise + alpha holes
+  for (let i = 0; i < W*H; i++) { s=(s*1103515245+12345)&0x7fffffff; const x=i%W,y=(i/W)|0,r=(x+y)/(W+H)*255;
+    d[i*4]=(r*0.9+(s>>7&63))|0; d[i*4+1]=(r+(s>>11&63))|0; d[i*4+2]=(r*1.1+(s>>15&63))|0;
+    d[i*4+3]=(x>6&&x<W-6&&y>6&&y<H-6)?255:0; } return d; };
+const cnt = (a,b) => { let n=0; for (let i=0;i<a.length;i++) if (a[i]!==b[i]) n++; return n; };
+const run = (src,n,p,t) => { const d = seed(); mk(src,n)(d,W,H,p,t==null?0.5:t); return d; };
+
+const LEG = { amount: 0.6 };                        // what a project saved BEFORE the upgrade holds
+cnt(run(oldSrc,'myfx',LEG), run(newSrc,'myfx',LEG));          // MUST be 0  — identity vs HEAD
+cnt(seed(),  run(newSrc,'myfx',LEG));                         // MUST be >0 — it still does something
+cnt(run(newSrc,'myfx',LEG), run(newSrc,'myfx',{...LEG, myNewParam: x}));   // MUST be >0 per control
+```
+
+Warp effects use `(x,y,W,H,cx,cy,maxR,p,t)` and return `[x,y]` — sample a grid and require every
+point identical rather than diffing bytes.
+
+**Three gates, every effect, every time:** identity vs HEAD = 0 · effect still active > 0 ·
+each new control moves pixels > 0. The middle gate is the one that catches this class of bug.
+
+**Watch for degenerate test values** — two v3.89 "failures" were the test, not the code:
+`noise` takes amount as **0–100**, not 0–1; and `iridescence`'s hue wraps with period 1.0, so
+speed 3 at t=0 vs t=2 is phase 0 vs phase 6 — identical by definition. Use a fractional delta.
 
 ## Flagged — do NOT build as proposed
 
@@ -34,6 +84,11 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
 ## DONE
 
 - v3.87 — twirl, bulge, fisheye, kaleidoscope: centre X/Y + radius (+ phase on kaleidoscope).
+- v3.88 — wave (wavelength/phase/vertical), ripple + curl (wavelength/phase/centre),
+  rays (x/y/intensity/phase), blocknoise (size/aspect/speed), noise (speed/size/colour).
+- v3.89 — lightglow, darkglow, softglow (radius + threshold); clouds (scale/drift/tint);
+  iridescence (scale/bands/speed). All of v3.87–v3.89 re-verified against HEAD with the
+  harness above: 15 effects, 0 differing bytes each.
 
 ## Build order (from the ranking pass)
 
