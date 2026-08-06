@@ -77,6 +77,42 @@ window.FM = window.FM || {};
   // photographed next to Alight Motion). Capped by a pixel budget: a 4K comp at 3x zoom on a 3x
   // screen would otherwise ask for a 100-megapixel canvas.
   const MAX_PREVIEW_PX = 12e6;   // ~12MP — comfortably above any phone screen, far below a GPU limit
+
+  /* ---------- adaptive playback quality --------------------------------------------------------
+   * Smoothness beats detail WHILE PLAYING, and detail beats everything when you stop to look. So
+   * the preview drops resolution during playback and snaps back to full the moment you pause —
+   * which is why other editors look softer in motion and sharpen on the last frame.
+   *
+   * It's adaptive rather than a fixed setting because the whole point is that the same build has to
+   * be smooth on a phone AND use the headroom of a fast desktop. We measure how long a frame
+   * actually takes to render and move a tier at a time, with hysteresis so it settles instead of
+   * oscillating. A slow machine sinks to a tier it can hold; a fast one climbs back to 1.0 and
+   * effectively never leaves it.
+   */
+  const PLAY_TIERS = [1, 0.8, 0.62, 0.48, 0.36, 0.28];
+  let _playTier = 0, _renderAvg = 0, _tierCooldown = 0, _lastPlayTier = 0;
+  function playQualityFactor() {
+    if (!FM.playing) return 1;
+    const mode = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
+    if (mode === 'detail') return 1;                                   // never trade sharpness — for fast machines
+    if (mode === 'smooth') return PLAY_TIERS[Math.max(2, _playTier)];   // start low and stay low
+    return PLAY_TIERS[Math.min(PLAY_TIERS.length - 1, _playTier)];
+  }
+  // Called once per rendered frame with the measured cost of that frame.
+  function notePlaybackCost(ms) {
+    if (!FM.playing) return;
+    _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
+    if (_tierCooldown > 0) { _tierCooldown--; return; }
+    const budget = 1000 / 60;                       // a frame's worth of time at display rate
+    const before = _playTier;
+    if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1) _playTier++;        // struggling → shed pixels
+    else if (_renderAvg < budget * 0.30 && _playTier > 0) _playTier--;                        // lots of headroom → give detail back
+    if (_playTier !== before) { _tierCooldown = 24; _renderAvg = 0; resizeCanvas(); }         // ~0.4s before the next move, so it settles
+  }
+  FM.playbackQualityInfo = function () {
+    return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto' };
+  };
+
   function previewScale() {
     const P = FM.scene.project;
     const dpr = window.devicePixelRatio || 1;
@@ -89,6 +125,10 @@ window.FM = window.FM || {};
     s = Math.max(1, Math.min(4, s));                       // never render BELOW project res, never above 4x
     const budget = Math.sqrt(MAX_PREVIEW_PX / (P.width * P.height));
     if (s > budget) s = Math.max(1, budget);
+    // While playing, the adaptive tier may take it BELOW project resolution — that's the trade, and
+    // it's what keeps the playhead moving evenly on a phone.
+    const q = playQualityFactor();
+    if (q < 1) s = Math.max(0.25, s * q);
     return Math.round(s * 100) / 100;
   }
   // VIEWPORT CROP. Zoomed in, most of the comp is off-screen — so paint only the part you can
@@ -131,6 +171,8 @@ window.FM = window.FM || {};
       // one device pixel per screen pixel over the visible slice, capped by the same pixel budget
       let s = ((document.getElementById('canvas-wrap').getBoundingClientRect().width / P.width) * dpr);
       s = Math.max(1, Math.min(6, s));
+      const q = playQualityFactor();
+      if (q < 1) s = Math.max(0.25, s * q);   // playing: shed pixels here too, same trade as the full-comp path
       const px = crop.w * crop.h * s * s;
       if (px > MAX_PREVIEW_PX) s = Math.max(1, s * Math.sqrt(MAX_PREVIEW_PX / px));
       w = Math.max(1, Math.round(crop.w * s)); h = Math.max(1, Math.round(crop.h * s));
@@ -586,7 +628,9 @@ window.FM = window.FM || {};
       }
     });
     if (FM.audioFxLive) FM.audioFxLive.applyAt(FM.time);   // keyframed audio-effect params follow the playhead
+    const _t0 = performance.now();
     render();
+    notePlaybackCost(performance.now() - _t0);   // measures the RENDER, not the rAF gap — that's the part we can actually control
     FM.timeline.updatePlayhead();
     updateReadout();
     rafId = requestAnimationFrame(tick);
@@ -598,6 +642,9 @@ window.FM = window.FM || {};
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
     lastTs = 0;
+    _renderAvg = 0; _tierCooldown = 8;          // let the first few frames settle before judging the machine
+    _lastPlayTier = -1;                          // force the canvas to re-size into playback quality
+    resizeCanvas();
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
     if (FM.audioFxLive) { FM.audioFxLive.resume(); FM.audioFxLive.syncAll(); }
     FM.scene.layers.forEach(layer => {
@@ -642,6 +689,9 @@ window.FM = window.FM || {};
       if (m && m.el && m.el.pause) { try { m.el.pause(); m.el.muted = true; } catch (e) {} }
     });
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>';   // play icon
+    // Stopped = you're looking at a frame, so put every pixel back. This is the visible "it sharpens
+    // when you pause" moment, and it's the whole reason dropping quality during motion is acceptable.
+    resizeCanvas();
     // Review play: any stop (button, space, end-of-timeline) returns the playhead to where review
     // started, so previewing never loses your working position.
     if (FM._reviewing) {

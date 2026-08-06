@@ -18,6 +18,7 @@ window.FM = window.FM || {};
     showTouches: false,      // draw a ripple where you tap, so a recording shows what you pressed
     systemFonts: true,       // include the built-in font list in the text font picker
     layerDuration: 5,        // seconds given to a newly added photo / text / shape / drawing
+    playbackQuality: 'auto', // 'auto' adapts to the machine | 'smooth' pins it low | 'detail' never drops
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -32,6 +33,7 @@ window.FM = window.FM || {};
       // validate every field — this is hand-editable storage, and layerDuration feeds layer maths
       if (saved.sort === 'name' || saved.sort === 'date') state.sort = saved.sort;
       if (saved.theme === 'glass' || saved.theme === 'classic') state.theme = saved.theme;
+      if (['auto', 'smooth', 'detail'].indexOf(saved.playbackQuality) >= 0) state.playbackQuality = saved.playbackQuality;
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
@@ -110,6 +112,12 @@ window.FM = window.FM || {};
     return row;
   }
 
+  function hintRow(text) {
+    const row = el('div', 'set-row');
+    row.appendChild(el('div', 'set-hint', text));
+    return row;
+  }
+
   function selectRow(label, hint, key, values, fmt) {
     const row = el('div', 'set-row');
     const txt = el('div', 'set-rowtext');
@@ -149,6 +157,12 @@ window.FM = window.FM || {};
       toggleRow('Show touches', 'Draws a ring where you tap. Screen recordings don’t capture taps on their own.', 'showTouches'),
       toggleRow('Show system fonts', 'Off = the text font picker lists only fonts you imported.', 'systemFonts'),
       selectRow('Default layer duration', 'How long a new photo, text, shape or drawing lasts. Video clips always use their own length.', 'layerDuration', DURATIONS, v => (v < 1 ? v + 's' : v + 's')),
+    ));
+    body.appendChild(group(
+      segmentRow('Playback quality', 'playbackQuality', [
+        { label: 'Auto', value: 'auto' }, { label: 'Smooth', value: 'smooth' }, { label: 'Sharp', value: 'detail' },
+      ]),
+      hintRow('While playing, the preview renders at a lower resolution so the playhead keeps time, then snaps back to full detail the moment you pause. Auto measures your machine and uses as much detail as it can hold — Smooth pins it low for a slow device, Sharp never trades quality (for a fast computer).'),
     ));
 
     const foot = el('div', 'set-foot');
