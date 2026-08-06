@@ -1930,6 +1930,31 @@ window.FM = window.FM || {};
     maxX = Math.min(W - 1, maxX + 2); maxY = Math.min(H - 1, maxY + 2);
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
+  // EXACT alpha bounds — every pixel, no sampling stride, no padding. Tiles needs the true content
+  // edge because it spaces copies by the bbox width: any slack in the box becomes a transparent
+  // gutter between them, which is why the gap would not close even with the gap slider at 0.
+  // (alphaBBox samples every 2nd pixel and pads 2; alphaBBoxFast scans a 4x downsample and can be
+  // ~12px out — fine for a mask, fatal for something that tiles by the measurement.)
+  function alphaBBoxExact(d, W, H) {
+    let minY = -1, maxY = -1;
+    for (let y = 0; y < H && minY < 0; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) if (d[row + x * 4 + 3] > 8) { minY = y; break; }
+    }
+    if (minY < 0) return null;
+    for (let y = H - 1; y >= minY && maxY < 0; y--) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) if (d[row + x * 4 + 3] > 8) { maxY = y; break; }
+    }
+    let minX = W, maxX = -1;
+    for (let y = minY; y <= maxY; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < minX; x++) if (d[row + x * 4 + 3] > 8) { minX = x; break; }
+      for (let x = W - 1; x > maxX; x--) if (d[row + x * 4 + 3] > 8) { maxX = x; break; }
+    }
+    if (maxX < minX) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
   let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
@@ -1973,6 +1998,8 @@ window.FM = window.FM || {};
     // roundcorners masks EXACTLY at the content edge — the fast scan's ~12px slack makes its mask
     // rect bigger than the clip, and the tight Apple curve then barely cuts anything. Pay full price.
     else if (fx.type === 'roundcorners') { try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
+    // tiles spaces its copies BY this rectangle, so it needs the exact one for the same reason
+    else if (fx.type === 'tiles') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
     // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases.
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
@@ -2862,14 +2889,25 @@ window.FM = window.FM || {};
       const mode = Math.round(fparam(p, 'mode', 1, t));             // fallback 1 = Grid (classic): old instances byte-identical
       if (mode === 1) {
         const n = Math.max(1, Math.min(8, Math.round(fparam(p, 'count', 3, t))));
-        const cw = W / n, ch = H / n, gx = cw * gap, gy = ch * gap;
+        // Cell edges snap to WHOLE pixels. W/n is fractional for most project sizes (1080/3 is fine,
+        // 1920/7 is not), and a fractional destination rect makes canvas resample the edge column —
+        // which shows as a faint seam between cells that no gap setting can remove. Deriving each
+        // cell from rounded boundaries means cell k ends exactly where cell k+1 begins.
         for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+          const x0 = Math.round(i * W / n), x1 = Math.round((i + 1) * W / n);
+          const y0 = Math.round(j * H / n), y1 = Math.round((j + 1) * H / n);
+          const cw = x1 - x0, ch = y1 - y0;
+          const gx = Math.round(cw * gap), gy = Math.round(ch * gap);
+          // same one-pixel bleed as EXTEND: at gap 0 each cell is drawn a pixel wider so its soft
+          // right/bottom edge sits UNDER its neighbour instead of beside it
+          const dw = cw - gx + (gx === 0 ? 1 : 0), dh = ch - gy + (gy === 0 ? 1 : 0);
+          if (dw < 1 || dh < 1) continue;
           const flx = mirror && (i % 2 === 1), fly = mirror && (j % 2 === 1);
-          if (!flx && !fly) { B.drawImage(A, 0, 0, W, H, i * cw + gx / 2, j * ch + gy / 2, cw - gx, ch - gy); continue; }
+          if (!flx && !fly) { B.drawImage(A, 0, 0, W, H, x0 + (gx >> 1), y0 + (gy >> 1), dw, dh); continue; }
           B.save();
-          B.translate(i * cw + gx / 2 + (flx ? cw - gx : 0), j * ch + gy / 2 + (fly ? ch - gy : 0));
+          B.translate(x0 + (gx >> 1) + (flx ? dw : 0), y0 + (gy >> 1) + (fly ? dh : 0));
           B.scale(flx ? -1 : 1, fly ? -1 : 1);
-          B.drawImage(A, 0, 0, W, H, 0, 0, cw - gx, ch - gy);
+          B.drawImage(A, 0, 0, W, H, 0, 0, dw, dh);
           B.restore();
         }
         return;
@@ -2877,14 +2915,29 @@ window.FM = window.FM || {};
       // EXTEND (default for new adds): the clip stays EXACTLY where it is at full size; copies of
       // its rendered bounds tile OUTWARD to fill the frame — an add-on around the clip, not a
       // shrink. Mirror flips alternate copies so the edges join seamlessly ("it keeps going").
-      const bx = bb.x + 2, by = bb.y + 2, bw = bb.w - 4, bh = bb.h - 4;   // alphaBBox pads 2px of transparency — inset it or every join shows a gutter
-      if (bw < 24 || bh < 24 || (bx <= 3 && by <= 3 && bw >= W - 6 && bh >= H - 6)) { B.drawImage(A, 0, 0); return; }   // tiny content / already full-frame → nothing to extend
+      // bb is now the EXACT content rectangle (see alphaBBoxExact), so it is used as-is. The old
+      // fixed ±2 inset was compensating for a padded, 4x-downsampled measurement, and it could not:
+      // the fast scan's slack varies with the content, so the leftover margin rode along inside
+      // every copy and showed up as a gutter that the gap slider could not close.
+      const bx = bb.x, by = bb.y, bw = bb.w, bh = bb.h;
+      if (bw < 8 || bh < 8 || (bx === 0 && by === 0 && bw >= W && bh >= H)) { B.drawImage(A, 0, 0); return; }   // tiny content / already full-frame → nothing to extend
       if (!_tileC) _tileC = document.createElement('canvas');
       if (_tileC.width !== bw || _tileC.height !== bh) { _tileC.width = bw; _tileC.height = bh; }
       const tc = _tileC.getContext('2d');
       baseT(tc); tc.clearRect(0, 0, bw, bh);
       tc.drawImage(A, bx, by, bw, bh, 0, 0, bw, bh);
-      const stepX = bw * (1 + gap), stepY = bh * (1 + gap);
+      // Whole-pixel step. A fractional step means every copy lands on a fractional x/y, canvas
+      // resamples it, and the soft resampled edge reads as a hairline seam between neighbours —
+      // the same "gap" symptom from a different cause. At gap 0 the step IS the tile, so copies abut.
+      // At gap 0 the copies OVERLAP by one pixel. Butting them exactly edge-to-edge still shows a
+      // faint line, because the content's own antialiased boundary column is ~50% alpha and two of
+      // those side by side composite to ~50%, not solid. One pixel of overlap lands them on top of
+      // each other instead and the join goes fully opaque. With a real gap set, no overlap is wanted.
+      // TWO pixels, not one. With a single pixel of overlap the two soft boundary columns land on
+      // each other: 50% over 50% composites to 75%, which still reads as a line. Two puts a fully
+      // opaque column under the soft one and the join goes solid. (Measured: 192 -> 255 alpha.)
+      const lap = gap === 0 ? 2 : 0;
+      const stepX = Math.max(1, Math.round(bw * (1 + gap)) - lap), stepY = Math.max(1, Math.round(bh * (1 + gap)) - lap);
       const iMin = Math.max(-60, -Math.ceil((bx + bw) / stepX)), iMax = Math.min(60, Math.ceil((W - bx) / stepX));
       const jMin = Math.max(-60, -Math.ceil((by + bh) / stepY)), jMax = Math.min(60, Math.ceil((H - by) / stepY));
       for (let j = jMin; j <= jMax; j++) for (let i = iMin; i <= iMax; i++) {
