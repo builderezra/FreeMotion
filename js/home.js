@@ -278,9 +278,114 @@ window.FM = window.FM || {};
     body.appendChild(name); body.appendChild(meta); body.appendChild(sub);
     card.appendChild(th); card.appendChild(body);
     if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
-    card.addEventListener('click', () => { if (selectMode) toggleSel(p.id); else openProject(p.id); });
+    card.addEventListener('click', () => {
+      if (card._paintedAway) { card._paintedAway = false; return; }   // that "click" was the end of a drag-select
+      if (selectMode) toggleSel(p.id); else openProject(p.id);
+    });
+    // Drag across cards to select a run of them. In select mode a drag paints immediately; outside
+    // it, a HOLD enters select mode first and then paints — the same two ways in as the timeline.
+    let holdTimer = null, downY = 0, downX = 0;
+    card.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (ev.target.closest && ev.target.closest('.hm-card-more')) return;   // the ⋯ stays a button
+      downX = ev.clientX; downY = ev.clientY;
+      if (selectMode) { beginPaint(p.id, ev.clientY); }
+      else {
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          if (!card.isConnected) return;
+          selectMode = true; selected.clear(); selected.add(p.id);
+          document.body.classList.add('hm-selecting');
+          render();                                   // one rebuild to draw the checks, BEFORE painting starts
+          beginPaint(p.id, downY);
+          if (paint) { paint.moved = true; card._paintedAway = true; paintClasses(); renderSelBar(); }
+        }, 380);
+      }
+    });
+    card.addEventListener('pointermove', (ev) => {
+      if (holdTimer && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) { clearTimeout(holdTimer); holdTimer = null; }
+      if (!paint) return;
+      if (!paint.moved && Math.hypot(ev.clientX - downX, ev.clientY - downY) < 8) return;   // still a tap, not a drag
+      if (!paint.moved) { paint.moved = true; card._paintedAway = true; paint.raf = requestAnimationFrame(paintAutoScroll); }
+      ev.preventDefault();
+      paint.y = ev.clientY;
+      paintTo(ev.clientY);
+    });
+    const finish = () => { clearTimeout(holdTimer); holdTimer = null; endPaint(); };
+    card.addEventListener('pointerup', finish);
+    card.addEventListener('pointercancel', finish);
     keyActivate(card);
     return card;
+  }
+
+  /* ---------- paint-select: drag across cards to select a run of them ---------------------------
+   * Same gesture the timeline uses on track heads, so it feels like one app: the selection this
+   * drag makes is always the SPAN anchor→current card, which means dragging back the way you came
+   * un-selects what you passed instead of forcing you to undo it by hand. Cards ticked before the
+   * gesture started are never disturbed.
+   *
+   * Deliberately does NOT re-render while dragging — render() rebuilds the grid, which would detach
+   * the card under your finger mid-gesture. Classes are painted straight onto the elements and the
+   * bar is reconciled on release.
+   */
+  let paint = null;
+  function cardEls() { return grid ? [].slice.call(grid.querySelectorAll('.hm-card[data-pid]')) : []; }
+  function paintClasses() {
+    cardEls().forEach(el => {
+      const on = selected.has(el.dataset.pid);
+      el.classList.toggle('hm-sel', on);
+      const chk = el.querySelector('.hm-check');
+      if (chk) { chk.classList.toggle('on', on); chk.textContent = on ? '✓' : ''; }
+    });
+  }
+  function beginPaint(id, y) {
+    const ids = cardEls().map(el => el.dataset.pid);
+    const anchor = ids.indexOf(id);
+    if (anchor < 0) return;
+    paint = { ids: ids, anchor: anchor, pre: new Set(selected), last: anchor, moved: false, y: y, raf: 0 };
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch (e) {} }
+  }
+  function paintTo(clientY) {
+    if (!paint) return;
+    const els = cardEls();
+    // Use each card's vertical band rather than elementFromPoint, so sliding sideways off the card
+    // (or past the ends of the list) keeps extending the range instead of stalling.
+    let idx = paint.last;
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (clientY >= r.top && clientY <= r.bottom) { idx = i; break; }
+      if (i === 0 && clientY < r.top) idx = 0;
+      if (i === els.length - 1 && clientY > r.bottom) idx = els.length - 1;
+    }
+    paint.last = idx;
+    const lo = Math.min(paint.anchor, idx), hi = Math.max(paint.anchor, idx);
+    selected.clear();
+    paint.pre.forEach(v => selected.add(v));           // pre-existing ticks survive untouched
+    for (let i = lo; i <= hi; i++) selected.add(paint.ids[i]);
+    paintClasses();
+    renderSelBar();
+  }
+  // Auto-scroll when the finger sits near the top/bottom of the list, so a long run is reachable.
+  function paintAutoScroll() {
+    if (!paint) return;
+    const sc = root && root.querySelector('.hm-scroll');
+    if (sc) {
+      const r = sc.getBoundingClientRect(), EDGE = 56;
+      let d = 0;
+      if (paint.y < r.top + EDGE) d = -(EDGE - (paint.y - r.top));
+      else if (paint.y > r.bottom - EDGE) d = EDGE - (r.bottom - paint.y);
+      if (d) { sc.scrollTop += d * 0.35; paintTo(paint.y); }
+    }
+    paint.raf = requestAnimationFrame(paintAutoScroll);
+  }
+  function endPaint() {
+    if (!paint) return;
+    if (paint.raf) cancelAnimationFrame(paint.raf);
+    const did = paint.moved;
+    paint = null;
+    renderSelBar();
+    return did;
   }
 
   function toggleSel(id) {
@@ -390,6 +495,7 @@ window.FM = window.FM || {};
   function render() {
     if (!grid) return;
     if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
+    document.body.classList.toggle('hm-selecting', selectMode);   // CSS hands card drags to paint-select instead of scrolling
     grid.innerHTML = '';
     shownIds = [];
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));

@@ -1566,6 +1566,9 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .hm-grid { display: flex; flex-direction: column; gap: 10px; max-width: 700px; margin: 0 auto; }
 .hm-card { position: relative; display: flex; align-items: center; gap: 13px; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px; cursor: pointer; color: var(--text); }
 .hm-card:active { background: var(--panel-3); }
+/* While selecting, a drag across cards PAINTS a selection, so the card must not hand the gesture to
+   the scroller. Outside select mode it stays scrollable — dragging a card is how you scroll a list. */
+body.hm-selecting .hm-card { touch-action: none; }
 .hm-thumb { position: relative; flex: 0 0 86px; width: 86px; height: 86px; border-radius: 11px; background: #05070b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .hm-thumb-empty { font-size: 26px; opacity: .25; }

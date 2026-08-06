@@ -149,7 +149,7 @@ window.FM = window.FM || {};
 
     const body = el('div', 'set-body');
     body.appendChild(group(
-      segmentRow('Appearance', 'theme', [{ label: 'Glass', value: 'glass' }, { label: 'Classic', value: 'classic' }]),
+      segmentRow('Appearance', 'theme', [{ label: 'Liquid', value: 'glass' }, { label: 'Classic', value: 'classic' }]),
       segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }]),
     ));
     body.appendChild(group(
