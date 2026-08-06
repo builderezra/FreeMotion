@@ -45,15 +45,24 @@ window.FM = window.FM || {};
     { type: 'sepia', label: 'Sepia', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'invert', label: 'Invert', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'glow', label: 'Glow', param: 'radius', min: 0, max: 60, step: 1, def: 16, unit: 'px', color: true },
-    { type: 'vignette', label: 'Vignette', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+    { type: 'vignette', label: 'Vignette', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
+    ] },
     { type: 'chromakey', label: 'Chroma Key', param: 'tolerance', min: 0, max: 1, step: 0.02, def: 0.3, color: true, defColor: '#00ff00' },
     { type: 'lumakey', label: 'Luma Key', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
     { type: 'rgbsplit', label: 'RGB Split', param: 'amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
     { type: 'pixelate', label: 'Pixelate', param: 'size', min: 1, max: 80, step: 1, def: 12, unit: 'px' },
     { type: 'posterize', label: 'Posterize', param: 'levels', min: 2, max: 16, step: 1, def: 5 },
-    { type: 'mirror', label: 'Mirror', param: 'mode', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
+    { type: 'mirror', label: 'Mirror', params: [
+      { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
+      { key: 'position', label: 'Seam', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'tint', label: 'Tint', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ff3366' },
-    { type: 'threshold', label: 'Threshold', param: 'level', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
+      { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'duotone', label: 'Duotone', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights' },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -69,7 +78,12 @@ window.FM = window.FM || {};
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', param: 'amount', min: 0, max: 2, step: 0.02, def: 1.6 },
     { type: 'sharpen', label: 'Sharpen', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.5 },
-    { type: 'thermal', label: 'Hot Color', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
+    { type: 'thermal', label: 'Hot Color', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'palette', label: 'Palette', def: 0, options: [[0, 'Iron'], [1, 'White hot'], [2, 'Black hot'], [3, 'Arctic'], [4, 'Magma'], [5, 'Spectrum']] },
+      { key: 'low', label: 'Low', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'high', label: 'High', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'dither', label: 'Dither', param: 'levels', min: 2, max: 8, step: 1, def: 4 },
     { type: 'halftone', label: 'Halftone Dots', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
@@ -1030,7 +1044,7 @@ window.FM = window.FM || {};
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
     if (fx.type === 'pixelate') return drawPixelate(ctx, layer, t, scene, FM.evalProp(p.size, t) || 1, fx);
     if (fx.type === 'posterize') return drawPosterize(ctx, layer, t, scene, FM.evalProp(p.levels, t) || 5, fx);
-    if (fx.type === 'mirror') return drawMirror(ctx, layer, t, scene, p.mode || 0, fx);
+    if (fx.type === 'mirror') return drawMirror(ctx, layer, t, scene, p.mode || 0, fx, p.position == null ? 50 : FM.evalProp(p.position, t));
     // fall back to the CATALOG default when a param is absent (older project / imported node): a raw
     // evalProp(undefined) returns 0, so Threshold at level 0 turned every pixel solid white, etc.
     if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#ff3366', fx);   // catalog def is 1 (matches the inspector slider + a fresh makeInstance)
@@ -1205,16 +1219,34 @@ window.FM = window.FM || {};
       }
     },
     thermal: (function () {
-      const STOPS = [[0, 0, 0], [10, 0, 130], [120, 0, 170], [230, 50, 40], [255, 175, 0], [255, 255, 165]];
-      function pal(l) {
+      // RAMPS[0] is the original hardcoded ramp, untouched — a legacy instance has no `palette`
+      // key, falls to 0, and lands on exactly these stops.
+      const RAMPS = [
+        [[0, 0, 0], [10, 0, 130], [120, 0, 170], [230, 50, 40], [255, 175, 0], [255, 255, 165]],       // Iron
+        [[0, 0, 0], [64, 64, 64], [128, 128, 128], [192, 192, 192], [255, 255, 255]],                   // White hot
+        [[255, 255, 255], [192, 192, 192], [128, 128, 128], [64, 64, 64], [0, 0, 0]],                   // Black hot
+        [[8, 0, 60], [0, 90, 200], [0, 200, 170], [200, 230, 60], [255, 240, 120]],                     // Arctic
+        [[20, 0, 40], [140, 0, 120], [255, 40, 60], [255, 160, 0], [255, 255, 220]],                    // Magma
+        [[0, 0, 0], [0, 0, 255], [0, 255, 255], [0, 255, 0], [255, 255, 0], [255, 0, 0], [255, 255, 255]], // Spectrum
+      ];
+      function pal(STOPS, l) {
         const seg = l * (STOPS.length - 1); let i0 = Math.floor(seg); if (i0 >= STOPS.length - 1) i0 = STOPS.length - 2; const f = seg - i0;
         const a = STOPS[i0], b = STOPS[i0 + 1];
         return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
       }
       return function (d, W, H, p, t) {
         const a = FM.evalProp(p.amount, t), am = (a == null ? 1 : clamp01(a));
+        const pi = p.palette == null ? 0 : (Math.round(FM.evalProp(p.palette, t)) | 0);
+        const STOPS = RAMPS[pi < 0 ? 0 : (pi >= RAMPS.length ? 0 : pi)];
+        // low/high remap which part of the tonal range the ramp is spread across — the difference
+        // between "everything is orange mush" and an actual heat read. 0/100 is a pure passthrough.
+        const lo = p.low == null ? 0 : FM.evalProp(p.low, t), hi = p.high == null ? 100 : FM.evalProp(p.high, t);
+        const plain = (lo === 0 && hi === 100);
+        const lo1 = lo / 100, span = (hi - lo) / 100, inv = span === 0 ? 0 : 1 / span;
         for (let i = 0; i < d.length; i += 4) {
-          const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255, c = pal(l);
+          let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+          if (!plain) { l = (l - lo1) * inv; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
+          const c = pal(STOPS, l);
           d[i] += (c[0] - d[i]) * am; d[i + 1] += (c[1] - d[i + 1]) * am; d[i + 2] += (c[2] - d[i + 2]) * am;
         }
       };
@@ -1498,7 +1530,7 @@ window.FM = window.FM || {};
     // Vignette (non-media layers): comp-space radial darkening of the layer's own pixels. Media layers
     // never reach this — they keep their inline clip-bounds vignette in the media draw branch; this fn
     // exists so text/shape/path/group layers stop silently ignoring the effect. (#backlog: vignette no-op)
-    vignette: function(d,W,H,p,t){ var vgA=FM.evalProp(p.amount,t); if(vgA==null)vgA=0.6; vgA=vgA<0?0:(vgA>1?1:vgA); if(vgA<=0)return; var vgCx=W/2, vgCy=H/2, vgMr=Math.hypot(vgCx,vgCy); for(var vgy=0;vgy<H;vgy++){ var vgRow=vgy*W, vgDy=vgy-vgCy; for(var vgx=0;vgx<W;vgx++){ var vgi=(vgRow+vgx)*4; if(d[vgi+3]===0)continue; var vgR=Math.hypot(vgx-vgCx,vgDy)/vgMr, vgQ=(vgR-0.35)/0.65; if(vgQ<=0)continue; var vgF=1-vgA*Math.pow(vgQ,1.6); if(vgF<0)vgF=0; d[vgi]*=vgF; d[vgi+1]*=vgF; d[vgi+2]*=vgF; } } },
+    vignette: function(d,W,H,p,t){ var vgA=FM.evalProp(p.amount,t); if(vgA==null)vgA=0.6; vgA=vgA<0?0:(vgA>1?1:vgA); if(vgA<=0)return; var vgCx=W/2, vgCy=H/2, vgMr=Math.hypot(vgCx,vgCy); var vgSz=p.size==null?35:FM.evalProp(p.size,t); var vgIn=vgSz===35?0.35:Math.max(0,Math.min(0.98,vgSz/100)), vgSpan=vgIn===0.35?0.65:(1-vgIn); for(var vgy=0;vgy<H;vgy++){ var vgRow=vgy*W, vgDy=vgy-vgCy; for(var vgx=0;vgx<W;vgx++){ var vgi=(vgRow+vgx)*4; if(d[vgi+3]===0)continue; var vgR=Math.hypot(vgx-vgCx,vgDy)/vgMr, vgQ=(vgR-vgIn)/vgSpan; if(vgQ<=0)continue; var vgF=1-vgA*Math.pow(vgQ,1.6); if(vgF<0)vgF=0; d[vgi]*=vgF; d[vgi+1]*=vgF; d[vgi+2]*=vgF; } } },
     // ---- batch 28 (AM parity fill-ins) ----
     // Palette Map: quantize every pixel to the nearest of a small evenly-spaced palette (posterize in
     // 3D RGB space → banded, screen-print look). Count = palette steps per axis; Amount blends toward it.
@@ -2966,10 +2998,7 @@ window.FM = window.FM || {};
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'threshold'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) >= cut ? 255 : 0;
-      d[i] = v; d[i + 1] = v; d[i + 2] = v;
-    }
+    thresholdPixels(d, cut, (fx && fx.params) || {}, t);
     _thB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
     baseT(ctx);
@@ -3016,9 +3045,33 @@ window.FM = window.FM || {};
     ctx.restore();
   }
 
+  // The one threshold kernel, shared by the per-layer path (drawThreshold) and the adjustment-layer
+  // path (applyPixelFx) — they used to hold two copies of the same loop, which is exactly how the
+  // two drift apart. Softness 0 with black/white is the original hard cut, byte for byte.
+  function thresholdPixels(d, cut, p, t) {
+    const softPc = p.softness == null ? 0 : FM.evalProp(p.softness, t);
+    const loHex = p.color || '#000000', hiHex = p.color2 || '#ffffff';
+    if (softPc === 0 && loHex === '#000000' && hiHex === '#ffffff') {
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) >= cut ? 255 : 0;
+        d[i] = v; d[i + 1] = v; d[i + 2] = v;
+      }
+      return;
+    }
+    const A = hexToRGB(loHex), B = hexToRGB(hiHex);
+    const half = Math.max(0, softPc) / 100 * 255 / 2;          // softness is a % of full range
+    for (let i = 0; i < d.length; i += 4) {
+      const L = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      let k;
+      if (half <= 0) k = L >= cut ? 1 : 0;
+      else { k = (L - (cut - half)) / (2 * half); k = k < 0 ? 0 : (k > 1 ? 1 : k); k = k * k * (3 - 2 * k); }
+      d[i] = A[0] + (B[0] - A[0]) * k; d[i + 1] = A[1] + (B[1] - A[1]) * k; d[i + 2] = A[2] + (B[2] - A[2]) * k;
+    }
+  }
+
   // Mirror / kaleidoscope: render the layer clean, then reflect one half onto the other.
   let _miA = null;
-  function drawMirror(ctx, layer, t, scene, mode, fx) {
+  function drawMirror(ctx, layer, t, scene, mode, fx, position) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
@@ -3035,19 +3088,37 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    const hw = W / 2, hh = H / 2;
+    // The seam is movable (position %, default 50 = the old hardcoded half-frame). Past the first
+    // reflection the strip MIRROR-TILES rather than stopping: an axis at 30% would otherwise leave
+    // the far 40% of the frame empty, i.e. the effect would delete content. At 50% the loop emits
+    // exactly the two drawImage calls it always did (2*(W/2) === W), so old projects are untouched.
+    const pos = clamp01((position == null ? 50 : position) / 100);
+    const ax = W * pos, ay = H * pos, LIM = 64;
+    let k;
     if (mode === 0) {           // Left → Right
-      ctx.drawImage(_miA, 0, 0, hw, H, 0, 0, hw, H);
-      ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, 0, 0, hw, H, 0, 0, hw, H); ctx.restore();
+      const aw = ax; if (aw < 0.5) return void ctx.restore();
+      for (k = 0; k * aw < W && k < LIM; k++) {
+        if (k % 2 === 0) ctx.drawImage(_miA, 0, 0, aw, H, k * aw, 0, aw, H);
+        else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, 0, 0, aw, H, 0, 0, aw, H); ctx.restore(); }
+      }
     } else if (mode === 1) {    // Right → Left
-      ctx.drawImage(_miA, hw, 0, hw, H, hw, 0, hw, H);
-      ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, hw, 0, hw, H, hw, 0, hw, H); ctx.restore();
+      const aw = W - ax; if (aw < 0.5) return void ctx.restore();
+      for (k = 0; ax - k * aw + aw > 0 && k < LIM; k++) {
+        if (k % 2 === 0) ctx.drawImage(_miA, ax, 0, aw, H, ax - k * aw, 0, aw, H);
+        else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, ax, 0, aw, H, ax, 0, aw, H); ctx.restore(); }
+      }
     } else if (mode === 2) {    // Top → Bottom
-      ctx.drawImage(_miA, 0, 0, W, hh, 0, 0, W, hh);
-      ctx.save(); ctx.translate(0, H); ctx.scale(1, -1); ctx.drawImage(_miA, 0, 0, W, hh, 0, 0, W, hh); ctx.restore();
+      const ah = ay; if (ah < 0.5) return void ctx.restore();
+      for (k = 0; k * ah < H && k < LIM; k++) {
+        if (k % 2 === 0) ctx.drawImage(_miA, 0, 0, W, ah, 0, k * ah, W, ah);
+        else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, 0, 0, W, ah, 0, 0, W, ah); ctx.restore(); }
+      }
     } else {                    // Bottom → Top
-      ctx.drawImage(_miA, 0, hh, W, hh, 0, hh, W, hh);
-      ctx.save(); ctx.translate(0, H); ctx.scale(1, -1); ctx.drawImage(_miA, 0, hh, W, hh, 0, hh, W, hh); ctx.restore();
+      const ah = H - ay; if (ah < 0.5) return void ctx.restore();
+      for (k = 0; ay - k * ah + ah > 0 && k < LIM; k++) {
+        if (k % 2 === 0) ctx.drawImage(_miA, 0, ay, W, ah, 0, ay - k * ah, W, ah);
+        else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, 0, ay, W, ah, 0, ay, W, ah); ctx.restore(); }
+      }
     }
     ctx.restore();
   }
@@ -4182,7 +4253,12 @@ window.FM = window.FM || {};
           ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
           const gx = -cw * tr.anchorX + cw / 2, gy = -ch * tr.anchorY + ch / 2, rad = Math.hypot(cw, ch) / 2;
-          const grad = ctx.createRadialGradient(gx, gy, rad * 0.45, gx, gy, rad);
+          // NOTE the fallback is 45 here and 35 in the pixel path — the two have always disagreed.
+          // Keeping each one's own legacy number means no existing project moves; a NEW vignette now
+          // carries size 35 from the schema, so from here on both paths agree on one number.
+          const vgs = vig.params && vig.params.size != null ? FM.evalProp(vig.params.size, t) : 45;
+          const inner = Math.max(0, Math.min(0.98, vgs / 100));
+          const grad = ctx.createRadialGradient(gx, gy, rad * inner, gx, gy, rad);
           grad.addColorStop(0, 'rgba(0,0,0,0)');
           grad.addColorStop(1, 'rgba(0,0,0,' + amt + ')');
           ctx.fillStyle = grad;
@@ -4222,7 +4298,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
     } else if (fx.type === 'threshold') {
       const cut = clamp01(p.level == null ? 0.5 : FM.evalProp(p.level, t)) * 255;   // catalog-default fallback (mirror the per-layer drawFx path) — a params-less threshold used to blow the frame solid white
-      for (let i = 0; i < d.length; i += 4) { const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) >= cut ? 255 : 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+      thresholdPixels(d, cut, p, t);
     } else if (fx.type === 'tint') {
       const am = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t)), C = hexToRGB(p.color || '#ff3366');
       for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255; d[i] += (l * C[0] - d[i]) * am; d[i + 1] += (l * C[1] - d[i + 1]) * am; d[i + 2] += (l * C[2] - d[i + 2]) * am; }
