@@ -58,8 +58,17 @@ window.FM = window.FM || {};
     { type: 'mask', label: 'Mask', params: [] },
     { type: 'chromakey', label: 'Chroma Key', param: 'tolerance', min: 0, max: 1, step: 0.02, def: 0.3, color: true, defColor: '#00ff00' },
     { type: 'lumakey', label: 'Luma Key', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
-    { type: 'rgbsplit', label: 'RGB Split', param: 'amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
-    { type: 'pixelate', label: 'Pixelate', param: 'size', min: 1, max: 80, step: 1, def: 12, unit: 'px' },
+    { type: 'rgbsplit', label: 'RGB Split', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '\u00b0' },
+      { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'green', label: 'Green shift', min: -40, max: 40, step: 1, def: 0, unit: 'px' },
+    ] },
+    { type: 'pixelate', label: 'Pixelate', params: [
+      { key: 'size', label: 'Block size', min: 1, max: 80, step: 1, def: 12, unit: 'px' },
+      { key: 'aspect', label: 'Block aspect', min: 25, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'smooth', label: 'Edges', def: 0, options: [[0, 'Blocks'], [1, 'Soft']] },
+    ] },
     { type: 'posterize', label: 'Posterize', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 16, step: 1, def: 5 },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
@@ -3175,13 +3184,38 @@ window.FM = window.FM || {};
     if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, 0, 0); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
     const bctx = _rgbB.getContext('2d'); const out = bctx.createImageData(W, H); const o = out.data;
+    // Same three additions as the adjustment-layer path: an ANGLE so the tear isn't stuck horizontal,
+    // RADIAL so the offset can grow toward the edge like real lens fringing, and a GREEN shift that
+    // was welded at zero. At angle 0 / radial 0 / green 0 the sampling reduces to the original
+    // left-right offsets exactly, so existing projects don't move.
+    const pp = (fx && fx.params) || {};
+    const ang = (pp.angle == null ? 0 : FM.evalProp(pp.angle, t)) * Math.PI / 180;
+    const radl = (pp.radial == null ? 0 : FM.evalProp(pp.radial, t)) / 100;
+    const gsh = pp.green == null ? 0 : FM.evalProp(pp.green, t);
+    const plain = (ang === 0 && radl === 0 && gsh === 0);
+    const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
+    const idx = (x, y) => {
+      const xi = x < 0 ? 0 : (x >= W ? W - 1 : x | 0);
+      const yi = y < 0 ? 0 : (y >= H ? H - 1 : y | 0);
+      return (yi * W + xi) * 4;
+    };
     for (let y = 0; y < H; y++) {
       const row = y * W;
       for (let x = 0; x < W; x++) {
         const i = (row + x) * 4;
-        const ri = (row + Math.min(W - 1, x + dd)) * 4;   // red sampled from the right
-        const bi = (row + Math.max(0, x - dd)) * 4;        // blue sampled from the left
-        o[i] = src[ri]; o[i + 1] = src[i + 1]; o[i + 2] = src[bi + 2];
+        let ri, bi, gi = i;
+        if (plain) {
+          ri = (row + Math.min(W - 1, x + dd)) * 4;   // red sampled from the right
+          bi = (row + Math.max(0, x - dd)) * 4;        // blue sampled from the left
+        } else {
+          const k = radl === 0 ? 1 : (1 - radl) + radl * (Math.hypot(x - cx, y - cy) / maxR) * 2;
+          const ox = ux * dd * k, oy = uy * dd * k;
+          ri = idx(x + ox, y + oy);
+          bi = idx(x - ox, y - oy);
+          if (gsh !== 0) gi = idx(x + ux * gsh * k, y + uy * gsh * k);
+        }
+        o[i] = src[ri]; o[i + 1] = src[gi + 1]; o[i + 2] = src[bi + 2];
         o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3]);
       }
     }
@@ -3511,13 +3545,20 @@ window.FM = window.FM || {};
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
     if (size <= 1) { ctx.drawImage(_pxA, 0, 0); ctx.restore(); return; }
-    const sw = Math.max(1, Math.round(W / size)), sh = Math.max(1, Math.round(H / size));
+    // ASPECT stretches the block on one axis: 100 is the square block this always made, low values
+    // give wide CRT-style cells, high values give tall ones. SMOOTH keeps the upscale interpolated
+    // instead of nearest-neighbour, which is a low-res look rather than a mosaic.
+    const fxp = (fx && fx.params) || {};
+    const aspect = Math.max(25, Math.min(400, fxp.aspect == null ? 100 : FM.evalProp(fxp.aspect, t))) / 100;
+    const soft = Math.round(fxp.smooth == null ? 0 : FM.evalProp(fxp.smooth, t)) === 1;
+    const sizeY = aspect === 1 ? size : Math.max(1, size * aspect);
+    const sw = Math.max(1, Math.round(W / size)), sh = Math.max(1, Math.round(H / sizeY));
     _pxS.width = sw; _pxS.height = sh;
     const sctx = _pxS.getContext('2d');
     sctx.clearRect(0, 0, sw, sh); sctx.imageSmoothingEnabled = true;
     sctx.drawImage(_pxA, 0, 0, sw, sh);                 // downscale (block-average)
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(_pxS, 0, 0, sw, sh, 0, 0, W, H);      // upscale → blocky
+    ctx.imageSmoothingEnabled = soft;
+    ctx.drawImage(_pxS, 0, 0, sw, sh, 0, 0, W, H);      // upscale → blocky (or soft)
     ctx.imageSmoothingEnabled = true;
     ctx.restore();
   }
@@ -4810,13 +4851,29 @@ window.FM = window.FM || {};
     if (fx.type === 'rgbsplit') {
       const dd = Math.round(FM.evalProp(p.amount, t) || 0);
       if (dd > 0 && W && H) {
-        const src = d.slice();   // shift the RED channel +dd and BLUE −dd, sampling the original
+        // ANGLE frees the split from the horizontal axis (a vertical or diagonal tear was impossible),
+        // RADIAL grows the offset toward the frame edge the way real lens fringing does, and GREEN
+        // lets the third channel move at all — it was welded to zero. Defaults reproduce the old
+        // horizontal-only shift exactly: angle 0 gives cos/sin of 1/0, radial 0 skips the scaling.
+        const ang = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180;
+        const rad = (p.radial == null ? 0 : FM.evalProp(p.radial, t)) / 100;
+        const gsh = p.green == null ? 0 : FM.evalProp(p.green, t);
+        const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
+        const src = d.slice();
+        const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
+        const at = (x, y, c) => {
+          const xi = x < 0 ? 0 : (x >= W ? W - 1 : x | 0);
+          const yi = y < 0 ? 0 : (y >= H ? H - 1 : y | 0);
+          return src[(yi * W + xi) * 4 + c];
+        };
         for (let y = 0; y < H; y++) {
-          const row = y * W;
           for (let x = 0; x < W; x++) {
-            const i = (row + x) * 4;
-            d[i] = src[(row + Math.min(W - 1, x + dd)) * 4];
-            d[i + 2] = src[(row + Math.max(0, x - dd)) * 4 + 2];
+            const i = (y * W + x) * 4;
+            const k = rad === 0 ? 1 : (1 - rad) + rad * (Math.hypot(x - cx, y - cy) / maxR) * 2;
+            const ox = ux * dd * k, oy = uy * dd * k;
+            d[i]     = at(x + ox, y + oy, 0);
+            d[i + 2] = at(x - ox, y - oy, 2);
+            if (gsh !== 0) d[i + 1] = at(x + ux * gsh * k, y + uy * gsh * k, 1);
           }
         }
       }
