@@ -91,22 +91,82 @@ window.FM = window.FM || {};
     if (s > budget) s = Math.max(1, budget);
     return Math.round(s * 100) / 100;
   }
+  // VIEWPORT CROP. Zoomed in, most of the comp is off-screen — so paint only the part you can
+  // actually see, at full device resolution. At 4x zoom roughly a sixteenth of the comp is visible,
+  // which is why this buys real sharpness for LESS memory than rendering the whole comp coarsely.
+  // The canvas element is repositioned inside the wrap to cover exactly that region; the wrap keeps
+  // its comp-sized box, so selection handles and hit-testing (which work in comp space) are
+  // untouched. Returns null whenever cropping isn't worth it or can't be measured — then we render
+  // the whole comp exactly as before.
+  const CROP_MARGIN = 0.18;        // render a bit past the edges so a small pan doesn't expose blank
+  function previewCrop() {
+    const P = FM.scene.project;
+    const wrap = document.getElementById('canvas-wrap');
+    const stage = document.getElementById('stage');
+    const zoom = (FM.viewport && FM.viewport.scale) || 1;
+    if (!wrap || !stage || zoom < 1.35) return null;          // at low zoom the whole comp fits — no point
+    const wr = wrap.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    if (!(wr.width > 0 && wr.height > 0 && sr.width > 0 && sr.height > 0)) return null;   // not laid out — never guess
+    // getBoundingClientRect already includes the wrap's zoom/pan transform, so the visible slice is
+    // just the overlap, expressed as a fraction of the wrap.
+    let u0 = (Math.max(sr.left, wr.left) - wr.left) / wr.width;
+    let u1 = (Math.min(sr.right, wr.right) - wr.left) / wr.width;
+    let v0 = (Math.max(sr.top, wr.top) - wr.top) / wr.height;
+    let v1 = (Math.min(sr.bottom, wr.bottom) - wr.top) / wr.height;
+    if (!(u1 > u0 && v1 > v0)) return null;                   // scrolled fully out of view
+    const mu = (u1 - u0) * CROP_MARGIN, mv = (v1 - v0) * CROP_MARGIN;
+    u0 = Math.max(0, u0 - mu); u1 = Math.min(1, u1 + mu);
+    v0 = Math.max(0, v0 - mv); v1 = Math.min(1, v1 + mv);
+    if ((u1 - u0) > 0.92 && (v1 - v0) > 0.92) return null;    // basically the whole comp — not worth the special case
+    return { x: u0 * P.width, y: v0 * P.height, w: (u1 - u0) * P.width, h: (v1 - v0) * P.height, u0: u0, v0: v0, u1: u1, v1: v1 };
+  }
+
   function resizeCanvas() {
     const P = FM.scene.project;
-    const s = previewScale();
-    const w = Math.max(1, Math.round(P.width * s)), h = Math.max(1, Math.round(P.height * s));
+    const crop = previewCrop();
+    const dpr = window.devicePixelRatio || 1;
+    const zoom = (FM.viewport && FM.viewport.scale) || 1;
+    let w, h;
+    if (crop) {
+      // one device pixel per screen pixel over the visible slice, capped by the same pixel budget
+      let s = ((document.getElementById('canvas-wrap').getBoundingClientRect().width / P.width) * dpr);
+      s = Math.max(1, Math.min(6, s));
+      const px = crop.w * crop.h * s * s;
+      if (px > MAX_PREVIEW_PX) s = Math.max(1, s * Math.sqrt(MAX_PREVIEW_PX / px));
+      w = Math.max(1, Math.round(crop.w * s)); h = Math.max(1, Math.round(crop.h * s));
+      canvas.__fmCrop = true; canvas.__fmRS = s; canvas.__fmOX = crop.x; canvas.__fmOY = crop.y;
+      canvas.style.position = 'absolute';
+      canvas.style.left = (crop.u0 * 100) + '%';
+      canvas.style.top = (crop.v0 * 100) + '%';
+      canvas.style.width = ((crop.u1 - crop.u0) * 100) + '%';
+      canvas.style.height = ((crop.v1 - crop.v0) * 100) + '%';
+    } else {
+      const s = previewScale();
+      w = Math.max(1, Math.round(P.width * s)); h = Math.max(1, Math.round(P.height * s));
+      canvas.__fmCrop = false; canvas.__fmRS = s; canvas.__fmOX = 0; canvas.__fmOY = 0;
+      canvas.style.position = ''; canvas.style.left = ''; canvas.style.top = '';
+      canvas.style.width = ''; canvas.style.height = '';
+    }
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // assigning re-allocates the backing store, so only on a real change
     document.documentElement.style.setProperty('--comp-ar', P.width + ' / ' + P.height);   // canvas-wrap holds this aspect → preview always contains in the stage
     render();
   }
+  FM.previewCropInfo = function () { const c = previewCrop(); return c ? { crop: c, backing: canvas.width + '×' + canvas.height, scale: canvas.__fmRS } : null; };
   FM.resizeCanvas = resizeCanvas;
   // Zoom changed → the comp now covers a different number of device pixels, so re-rasterise for it.
   // Debounced: a pinch fires continuously, and reallocating a multi-megapixel backing store on every
   // move would stutter. The CSS transform keeps the view live in between.
-  let _rsTimer = null;
+  let _rsTimer = null, _lastKey = '';
   FM.refreshPreviewScale = function () {
     clearTimeout(_rsTimer);
-    _rsTimer = setTimeout(() => { if (Math.abs(previewScale() - (canvas.width / (FM.scene.project.width || 1))) > 0.01) resizeCanvas(); }, 120);
+    _rsTimer = setTimeout(() => {
+      // PAN changes the visible slice too, not just zoom — so the key includes the crop rect.
+      const c = previewCrop();
+      const key = c ? ('c' + c.u0.toFixed(3) + ',' + c.v0.toFixed(3) + ',' + c.u1.toFixed(3) + ',' + c.v1.toFixed(3)) : ('f' + previewScale().toFixed(2));
+      if (key === _lastKey) return;
+      _lastKey = key;
+      resizeCanvas();
+    }, 120);
   };
 
   function updateReadout() {

@@ -3594,9 +3594,11 @@ window.FM = window.FM || {};
   // this safe: comp-space scratch canvases are never stamped, so they resolve to 1 and every
   // existing plate/effect path behaves exactly as it always did. Export and thumbnails render into
   // unstamped canvases too, so they are untouched by construction.
+  // The canvas may also be showing only PART of the comp (viewport crop at high zoom), so the base
+  // transform carries the crop origin as well as the scale. Unstamped canvases give 1 and 0,0.
   function baseT(c) {
-    const s = c.canvas.__fmRS || 1;
-    c.setTransform(s, 0, 0, s, 0, 0);
+    const cv = c.canvas, s = cv.__fmRS || 1;
+    c.setTransform(s, 0, 0, s, -(cv.__fmOX || 0) * s, -(cv.__fmOY || 0) * s);
   }
 
   // A layer using a blend mode Canvas can't express: rasterise it once with a neutral blend, then
@@ -3613,6 +3615,7 @@ window.FM = window.FM || {};
     // Carrying the same __fmRS also means the layer rasterises sharp before it's blended.
     if (_manualCv.width !== cw || _manualCv.height !== ch) { _manualCv.width = cw; _manualCv.height = ch; }
     _manualCv.__fmRS = ctx.canvas.__fmRS || 1;
+    _manualCv.__fmOX = ctx.canvas.__fmOX || 0; _manualCv.__fmOY = ctx.canvas.__fmOY || 0;
     const mc = _manualCv.getContext('2d', { willReadFrequently: true });
     mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, cw, ch);
     baseT(mc);
@@ -4234,8 +4237,15 @@ window.FM = window.FM || {};
     const P = scene.project;
     // Supersample factor for THIS target: how many canvas pixels exist per project pixel. Export and
     // thumbnails hand us a canvas sized exactly to the project, so this is 1 and nothing changes.
-    const RS = (P.width > 0 && ctx.canvas.width) ? (ctx.canvas.width / P.width) : 1;
-    ctx.canvas.__fmRS = (RS > 0 && isFinite(RS)) ? RS : 1;
+    // A caller that is cropping (the zoomed preview) stamps the canvas itself and sets __fmCrop —
+    // its scale can't be derived from the canvas size, because the canvas holds only part of the
+    // comp. Everyone else (export, thumbnails, effect plates) gets it derived, which is 1 for a
+    // canvas sized exactly to the project.
+    if (!ctx.canvas.__fmCrop) {
+      const RS = (P.width > 0 && ctx.canvas.width) ? (ctx.canvas.width / P.width) : 1;
+      ctx.canvas.__fmRS = (RS > 0 && isFinite(RS)) ? RS : 1;
+      ctx.canvas.__fmOX = 0; ctx.canvas.__fmOY = 0;
+    }
     const cam = scene.layers.find(l => l.type === 'camera' && l.visible !== false && FM.isLayerVisibleAt(l, t));
     let target = ctx;
     if (cam) {

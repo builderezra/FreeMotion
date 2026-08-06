@@ -25,9 +25,13 @@ window.FM = window.FM || {};
     if (gy == null) { guideH.style.display = 'none'; } else { guideH.style.display = 'block'; guideH.style.top = (gy * ds) + 'px'; }
   }
 
+  // CSS px per PROJECT px. The preview canvas is no longer 1:1 with the project — it is supersampled
+  // when zoomed (sharp vectors) and may hold only the visible crop — so the project-space extent it
+  // covers is canvas.width / __fmRS, not canvas.width. Everything downstream works in project units.
+  function projSpan() { return (canvas.width / (canvas.__fmRS || 1)) || FM.scene.project.width || 1; }
   function dispScale() {
     const r = canvas.getBoundingClientRect();
-    return r.width / canvas.width || 1;
+    return r.width / projSpan() || 1;
   }
   // wrap-LOCAL px per project px: the selection box / guides are children of #canvas-wrap, which the
   // viewport CSS-scales — their style.left/width lay out in UNscaled space, so the viewport scale in
@@ -63,9 +67,12 @@ window.FM = window.FM || {};
 
   function eventToProject(e) {
     const r = canvas.getBoundingClientRect();
+    const sc = canvas.__fmRS || 1;
+    // fraction across the canvas -> project units it spans -> plus the crop origin, so this stays
+    // true whether the canvas holds the whole comp at 1:1, a supersampled comp, or a zoomed crop.
     return {
-      x: (e.clientX - r.left) * (canvas.width / r.width),
-      y: (e.clientY - r.top) * (canvas.height / r.height),
+      x: (canvas.__fmOX || 0) + ((e.clientX - r.left) / r.width) * (canvas.width / sc),
+      y: (canvas.__fmOY || 0) + ((e.clientY - r.top) / r.height) * (canvas.height / sc),
     };
   }
 
