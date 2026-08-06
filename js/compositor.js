@@ -66,7 +66,11 @@ window.FM = window.FM || {};
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
-    { type: 'duotone', label: 'Duotone', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights' },
+    { type: 'duotone', label: 'Duotone', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+    ] },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'gamma', label: 'Gamma', params: [
@@ -131,7 +135,11 @@ window.FM = window.FM || {};
     // ---- batch 4 ----
     { type: 'edge', label: 'Find Edges', param: 'amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
     { type: 'emboss', label: 'Emboss', param: 'amount', min: 0, max: 3, step: 0.05, def: 1 },
-    { type: 'exposure', label: 'Exposure', param: 'stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
+    { type: 'exposure', label: 'Exposure', params: [
+      { key: 'stops', label: 'Stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
+      { key: 'offset', label: 'Black point', min: -50, max: 50, step: 1, def: 0 },
+      { key: 'rolloff', label: 'Highlight rolloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'fisheye', label: 'Fisheye', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -152,7 +160,11 @@ window.FM = window.FM || {};
     { type: 'boxblur', label: 'Box Blur', param: 'radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
     { type: 'spinblur', label: 'Spin Blur', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'gradientmap', label: 'Gradient Map', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights' },
-    { type: 'colorize', label: 'Colorize', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#3aa0ff', colorLabel: 'Color' },
+    { type: 'colorize', label: 'Colorize', color: true, defColor: '#3aa0ff', colorLabel: 'Color', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'lift', label: 'Shadow lift', min: 0, max: 100, step: 1, def: 25, unit: '%' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Tone'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']] },
+    ] },
     { type: 'checker', label: 'Checker', param: 'size', min: 2, max: 120, step: 1, def: 24, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Color' },
     { type: 'grid', label: 'Grid', param: 'size', min: 4, max: 160, step: 1, def: 32, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Color' },
     // ---- batch 7 ----
@@ -364,7 +376,12 @@ window.FM = window.FM || {};
     { type: 'replacecolor', label: 'Replace Color', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25, color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To' },
     { type: 'spotcolor', label: 'Spot Color', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.2, color: true, defColor: '#e03131', colorLabel: 'Keep' },
     { type: 'fourcolor', label: 'Four-Color Gradient', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85, color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right' },
-    { type: 'spectralmap', label: 'Spectral Map', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
+    { type: 'spectralmap', label: 'Spectral Map', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'span', label: 'Spectrum span', min: 0, max: 360, step: 1, def: 260, unit: '\u00b0' },
+      { key: 'offset', label: 'Hue offset', min: 0, max: 360, step: 1, def: 0, unit: '\u00b0' },
+      { key: 'saturation', label: 'Saturation', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'radialshadow', label: 'Radial Shadow', params: [
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
       { key: 'x', label: 'Light X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1387,7 +1404,25 @@ window.FM = window.FM || {};
     },
     exposure: function (d, W, H, p, t) {
       const m = Math.pow(2, FM.evalProp(p.stops, t) || 0);
-      for (let i = 0; i < d.length; i += 4) { d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
+      // OFFSET is a black-point lift/crush, which a pure multiply cannot do at all (multiplying
+      // never moves black). ROLLOFF replaces the hard 255 clip with a soft knee, so pushing a stop
+      // up compresses the highlights instead of smashing them into flat white. Both 0 = old loop.
+      const off = p.offset == null ? 0 : FM.evalProp(p.offset, t);
+      const roll = (p.rolloff == null ? 0 : FM.evalProp(p.rolloff, t)) / 100;
+      if (off === 0 && roll === 0) {
+        for (let i = 0; i < d.length; i += 4) { d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
+        return;
+      }
+      const knee = 255 * (1 - roll * 0.6);              // where the shoulder starts
+      const head = 255 - knee;
+      const soft = (v) => {
+        if (roll <= 0 || v <= knee) return v;
+        const x = (v - knee) / (head <= 0 ? 1 : head);   // 0..∞ above the knee
+        return knee + head * (x / (1 + x));              // asymptotic to 255, never clips flat
+      };
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = soft(d[i] * m + off); d[i + 1] = soft(d[i + 1] * m + off); d[i + 2] = soft(d[i + 2] * m + off);
+      }
     },
     // ---- batch 5 ----
     glitch: function (d, W, H, p, t) {
@@ -1438,7 +1473,7 @@ window.FM = window.FM || {};
     boxblur: function(d,W,H,p,t){ var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40; var bbWin=2*bbr+1, bbInv=1/bbWin, bbSrc=d.slice(), bbX, bbY, bbCh, bbBase, bbSum, bbIdx, bbN, bbW4=W*4; for(bbY=0;bbY<H;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=0;bbX<W;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
     spinblur: function(d,W,H,p,t){ var sbAmt=FM.evalProp(p.amount,t); if(sbAmt==null)sbAmt=0.5; if(sbAmt<0)sbAmt=0; if(sbAmt>1)sbAmt=1; if(sbAmt<=0)return; var sbS=d.slice(); var sbCx=W/2, sbCy=H/2, sbW4=W*4; var sbSpan=sbAmt*0.4, sbN=9, sbHalf=(sbN-1)/2; var sbCos=new Float64Array(sbN), sbSin=new Float64Array(sbN); for(var sbk=0;sbk<sbN;sbk++){ var sbOff=(sbk-sbHalf)/sbHalf*sbSpan; sbCos[sbk]=Math.cos(sbOff); sbSin[sbk]=Math.sin(sbOff); } for(var sby=0;sby<H;sby++){ var sbDy=sby-sbCy; for(var sbx=0;sbx<W;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
     gradientmap: function(d,W,H,p,t){ var gmAmt=FM.evalProp(p.amount,t); if(gmAmt==null)gmAmt=1; if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
-    colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=0.25+0.75*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
+    colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2]; for(var chkY=0;chkY<H;chkY++){ var chkRow=(chkY/chkSz)|0; var chkBase=chkY*W*4; for(var chkX=0;chkX<W;chkX++){ if((((chkX/chkSz)|0)+chkRow)&1){ var chkI=chkBase+chkX*4; if(d[chkI+3]>0){ d[chkI]=(d[chkI]+chkR)*0.5; d[chkI+1]=(d[chkI+1]+chkG)*0.5; d[chkI+2]=(d[chkI+2]+chkB)*0.5; } } } } },
     grid: function(d,W,H,p,t){ var grSize=FM.evalProp(p.size,t); grSize=(grSize==null?32:grSize); grSize=Math.round(grSize); if(grSize<4)grSize=4; if(grSize>160)grSize=160; var grLW=Math.max(1,Math.round(grSize*0.06)); var grCol=hexToRGB(p.color)||[255,255,255]; var grR=grCol[0],grG=grCol[1],grB=grCol[2]; for(var grY=0;grY<H;grY++){ var grYOn=((grY%grSize)<grLW); var grRow=grY*W*4; for(var grX=0;grX<W;grX++){ if(grYOn||((grX%grSize)<grLW)){ var grI=grRow+grX*4; if(d[grI+3]>0){ d[grI]=grR; d[grI+1]=grG; d[grI+2]=grB; } } } } },
     // ---- batch 7 (pixel) ----
@@ -1534,7 +1569,7 @@ window.FM = window.FM || {};
     fourcolor: function(d,W,H,p,t){ var fcA=FM.evalProp(p.amount,t); if(fcA==null)fcA=0.85; fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255]; var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH, fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu; d[fci]=d[fci]+(fcr-d[fci])*fcA; d[fci+1]=d[fci+1]+(fcg-d[fci+1])*fcA; d[fci+2]=d[fci+2]+(fcb-d[fci+2])*fcA; } } },
     // Spectral Map: luminance → spectrum sweep (violet 260° for shadows through to red 0° for
     // highlights), full saturation, value lifted so shadows stay readable. False-colour look.
-    spectralmap: function(d,W,H,p,t){ var smA=FM.evalProp(p.amount,t); if(smA==null)smA=1; smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=(1-smL)*260, smV=0.25+0.75*smL, smC=smV, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else {smR=smX;smG=0;smB=smC;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
+    spectralmap: function(d,W,H,p,t){ var smA=FM.evalProp(p.amount,t); if(smA==null)smA=1; smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
     // Radial Shadow: point-light shadow — each transparent pixel marches a few taps back toward the
     // light; if opaque content sits between it and the light, it's in shadow. Strength fades with tap
     // distance so the shadow softens as it throws further. Paints only transparent px (like longshadow).
@@ -3107,12 +3142,7 @@ window.FM = window.FM || {};
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'duotone'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;   // luma 0..1
-      d[i] = d[i] + ((A[0] + (B[0] - A[0]) * l) - d[i]) * am;
-      d[i + 1] = d[i + 1] + ((A[1] + (B[1] - A[1]) * l) - d[i + 1]) * am;
-      d[i + 2] = d[i + 2] + ((A[2] + (B[2] - A[2]) * l) - d[i + 2]) * am;
-    }
+    duotonePixels(d, am, A, B, (fx && fx.params) || {}, t);
     _duB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
     baseT(ctx);
@@ -3122,6 +3152,25 @@ window.FM = window.FM || {};
     if (ctx.canvas === _duA) ctx.clearRect(0, 0, W, H);   // two stacked Duotones: clear our own scratch so B replaces, not double-composites (see drawTint)
     ctx.drawImage(_duB, 0, 0);
     ctx.restore();
+  }
+
+  // The one duotone kernel, shared by drawDuotone and applyPixelFx — same reason as thresholdPixels
+  // below: two copies of a ramp is how the per-layer and adjustment-layer versions drift apart.
+  // BALANCE bends the luma curve so the handover between shadow and highlight colour can move
+  // (every duotone used to land in exactly the same place); CONTRAST widens or flattens the ramp.
+  // 0 / 100 short-circuits to the original straight line — 0.5 + (x - 0.5) is NOT exactly x.
+  function duotonePixels(d, am, A, B, p, t) {
+    const bal = p.balance == null ? 0 : FM.evalProp(p.balance, t);
+    const con = p.contrast == null ? 100 : FM.evalProp(p.contrast, t);
+    const plain = (bal === 0 && con === 100);
+    const g = plain ? 1 : Math.pow(2, -bal / 100), k = con / 100;
+    for (let i = 0; i < d.length; i += 4) {
+      let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;   // luma 0..1
+      if (!plain) { l = Math.pow(l, g); l = 0.5 + (l - 0.5) * k; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
+      d[i] = d[i] + ((A[0] + (B[0] - A[0]) * l) - d[i]) * am;
+      d[i + 1] = d[i + 1] + ((A[1] + (B[1] - A[1]) * l) - d[i + 1]) * am;
+      d[i + 2] = d[i + 2] + ((A[2] + (B[2] - A[2]) * l) - d[i + 2]) * am;
+    }
   }
 
   // The one threshold kernel, shared by the per-layer path (drawThreshold) and the adjustment-layer
@@ -4383,7 +4432,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255; d[i] += (l * C[0] - d[i]) * am; d[i + 1] += (l * C[1] - d[i + 1]) * am; d[i + 2] += (l * C[2] - d[i + 2]) * am; }
     } else if (fx.type === 'duotone') {
       const am = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t)), A = hexToRGB(p.color || '#241a52'), B = hexToRGB(p.color2 || '#ff9e5e');
-      for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255; d[i] += ((A[0] + (B[0] - A[0]) * l) - d[i]) * am; d[i + 1] += ((A[1] + (B[1] - A[1]) * l) - d[i + 1]) * am; d[i + 2] += ((A[2] + (B[2] - A[2]) * l) - d[i + 2]) * am; }
+      duotonePixels(d, am, A, B, p, t);
     }
   }
   function applyAdjustment(ctx, layer, t, scene) {
