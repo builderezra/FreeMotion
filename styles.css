@@ -1112,6 +1112,10 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 /* Armed and live. Needs !important to beat the hover rule above, and must NOT touch `transform` —
    .ease-hold re-shapes the diamond into a square, and overriding transform here would spin it
    back into a diamond mid-drag. */
+/* A keyframe belonging to a property you are NOT currently editing: still visible so you can see the
+   shape of the animation, but inert so you can't grab it by mistake. */
+.kf-dot.kf-dim { opacity: .3; pointer-events: none; }
+.kf-dot.kf-dim::after { pointer-events: none; }
 .kf-dot.kf-dragging { background: #ff9d3d !important; border-color: #ff9d3d !important;
   box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 0 10px rgba(255,157,61,.8) !important; z-index: 6; }
 

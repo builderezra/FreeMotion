@@ -2551,6 +2551,37 @@ window.FM = window.FM || {};
     }
   }
 
+  // WHICH keyframes are you actually working on right now? The timeline PULLS this at build time
+  // (rather than the inspector pushing, which would need a rebuild every panel change and could loop).
+  // Returns the prop objects — the same `{kf:[…]}` containers FM.animatedProps hands back, so the
+  // timeline matches them by identity — or null meaning "everything is in play".
+  //
+  // Ezra: every slider should own its keyframes, the ones for what you're editing should be full
+  // opacity and draggable, and the rest should still show at ~30% so you can see them without
+  // grabbing them by accident.
+  FM.kfFocusProps = function (layer) {
+    if (!layer) return null;
+    // An OPEN EFFECT editor wins: you are looking at that effect's controls, so those are its
+    // keyframes. Includes every animated param of that one effect.
+    const openFx = (layer.effects || []).find(e => e && e._expanded);
+    if (openFx && openFx.params) {
+      const out = [];
+      Object.keys(openFx.params).forEach(k => { if (FM.isAnimated(openFx.params[k])) out.push(openFx.params[k]); });
+      return out;
+    }
+    // Move & Transform: the channels the current mode owns (Move = x/y/z, Scale = scale/scaleX/scaleY…).
+    if (view === 'transform') {
+      const mode = ALL_MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
+      const out = [];
+      (MT_PROPS[mode] || []).forEach(k => { if (FM.isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
+      return out;
+    }
+    if (view === 'blend' && FM.isAnimated(layer.transform.opacity)) return [layer.transform.opacity];
+    if (view === 'volume' && FM.isAnimated(layer.volume)) return [layer.volume];
+    if (view === 'speed' && FM.isAnimated(layer.speed)) return [layer.speed];
+    return null;   // home / anything else — no single property is in focus, so nothing is dimmed
+  };
+
   FM.inspector = {
     init() {
       root = document.getElementById('inspector');

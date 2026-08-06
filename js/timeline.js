@@ -953,20 +953,34 @@ window.FM = window.FM || {};
 
     // keyframe diamonds for the selected layer (absolute project time, lane-relative px)
     if (layer.id === FM.scene.selectedId) {
-      const times = new Set();
-      FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => times.add(Math.round(kf.t * 1000) / 1000)));
-      times.forEach(tt => {
+      // ONE DIAMOND PER PROPERTY, not one per time (Ezra). Keyframes used to be merged: every
+      // property that had a keyframe at 1.2s shared a single diamond, and dragging it retimed all of
+      // them at once. Now each animated property owns its own, so a slider's keyframes are its own.
+      //
+      // The ones belonging to whatever you are editing right now are full opacity and draggable;
+      // every other keyframe on the layer still shows, dimmed and inert, so you can see the shape of
+      // the animation without grabbing the wrong thing. Nothing focused (the home panel) → they are
+      // all live, which is the old behaviour.
+      const focus = FM.kfFocusProps ? FM.kfFocusProps(layer) : null;
+      const inFocus = (prop) => !focus || focus.indexOf(prop) >= 0;
+      const entries = [];
+      FM.animatedProps(layer).forEach(prop => {
+        const live = inFocus(prop);
+        prop.kf.forEach(kf => entries.push({ prop: prop, kf: kf, t: Math.round(kf.t * 1000) / 1000, live: live }));
+      });
+      // dimmed first so the live ones paint over them where they share a time
+      entries.sort((a, b) => (a.live === b.live) ? 0 : (a.live ? 1 : -1));
+      entries.forEach(entry => {
+        const tt = entry.t;
         const dot = document.createElement('div');
-        // colour the diamond by the easing of the keyframe(s) at this time
-        let dotEase = null;
-        for (const p of FM.animatedProps(layer)) {
-          const hit = p.kf.find(kf => Math.abs(kf.t - tt) < 1e-3); if (hit) { dotEase = hit.e || (hit.bez ? 'custom' : 'linear'); break; }
-        }
+        // colour by THIS keyframe's own easing (it used to take the first property that happened to
+        // have a keyframe at this time, which was arbitrary once several shared one)
+        const dotEase = entry.kf.e || (entry.kf.bez ? 'custom' : 'linear');
         const easeClass = dotEase === 'hold' ? 'ease-hold'
           : dotEase === 'linear' ? 'ease-linear'
             : (dotEase === 'overshoot' || dotEase === 'anticipate') ? 'ease-back'
               : dotEase === 'custom' ? 'ease-custom' : 'ease-smooth';
-        dot.className = 'kf-dot ' + easeClass;
+        dot.className = 'kf-dot ' + easeClass + (entry.live ? '' : ' kf-dim');
         dot.style.left = (PAD + tt * pps) + 'px';
         dot.title = 'Drag to retime · double-click to delete';
         dot.addEventListener('pointerdown', (e) => {
@@ -974,8 +988,10 @@ window.FM = window.FM || {};
           if (e.pointerType === 'mouse' && e.button !== 0) return;   // right-click is the MENU, never a drag
           if (layer.locked || pinch) return;
           try { dot.setPointerCapture(e.pointerId); } catch (_) {}   // survive a release outside the window
-          const kfs = [];
-          FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => { if (Math.abs(kf.t - tt) < 1e-3) kfs.push(kf); }));
+          if (!entry.live) return;   // dimmed = belongs to a property you are not editing
+          // ONLY this property's keyframe moves. Retiming every property that shared the time was
+          // the merged behaviour Ezra asked to end.
+          const kfs = [entry.kf];
           // orig: pre-drag times, so pinch-start/pointercancel can RESTORE instead of half-applying
           // HOLD TO DRAG (Ezra). A keyframe used to retime from the very first pixel, which made it
           // far too easy to nudge one while scrubbing past. Now the gesture has to be held before it
