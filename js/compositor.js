@@ -52,10 +52,6 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
     ] },
-    // Not a real effect — the effect browser intercepts this id and adds a pen MASK to the layer.
-    // It lives in the catalogue so masks are found where every other layer-shaping tool is,
-    // instead of behind their own button.
-    { type: 'mask', label: 'Mask', params: [] },
     { type: 'chromakey', label: 'Chroma Key', param: 'tolerance', min: 0, max: 1, step: 0.02, def: 0.3, color: true, defColor: '#00ff00' },
     { type: 'lumakey', label: 'Luma Key', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
     { type: 'rgbsplit', label: 'RGB Split', params: [
