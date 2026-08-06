@@ -2302,8 +2302,21 @@ window.FM = window.FM || {};
       }, true);
       document.addEventListener('pointerup', (e) => {
         if (!armed) return; armed = false;
+        const moved = Math.abs(e.clientX - dx) > 6 || Math.abs(e.clientY - dy) > 6;         // a drag, not a tap
+        // The Add sheet behaves like a modal: a tap ANYWHERE outside it closes it and clears the
+        // selection, so you never have to find the ✕. Checked before the KEEP list below, because
+        // tapping the canvas or the timeline should dismiss it too — those are exactly the places
+        // you tap when you've changed your mind. The FAB is excluded: it already toggles, and
+        // closing here as well would cancel out its own tap.
+        const sheet = document.getElementById('add-sheet');
+        if (!moved && sheet && sheet.classList.contains('open') &&
+            !(e.target && e.target.closest && e.target.closest('#add-sheet, #add-fab'))) {
+          if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+          if (FM.selectLayer) FM.selectLayer(null);
+          return;
+        }
         if (keepAtDown) return;                                                             // tapped a control / self-managing area
-        if (Math.abs(e.clientX - dx) > 6 || Math.abs(e.clientY - dy) > 6) return;           // a drag, not a tap
+        if (moved) return;
         if (!FM.scene || (!FM.scene.selectedId && !(FM.scene.selectedIds && FM.scene.selectedIds.length))) return;
         // Clicking anywhere off the inspector CLOSES it — deselect straight back to the Add menu so the
         // panel visibly clears (no matter how deep you were, e.g. the Effects sub-menu). Esc is the
