@@ -3543,6 +3543,43 @@ window.FM = window.FM || {};
       for (let i = 0; i < n; i++) { const a = -PI / 2 + i * T / n; o.push([r4(cx + rx * Math.cos(a)), r4(cy + ry * Math.sin(a)), 1]); }
       return o;
     };
+    // Rounded rectangle: the two edge points plus a smooth 45° point per corner (a smooth point AT
+    // the corner would curve THROUGH it and cut the corner off instead of rounding it).
+    const rrectS = (x0, y0, x1, y1, r) => {
+      const k = r * 0.2929;
+      return [
+        [r4(x0 + r), r4(y0)], [r4(x1 - r), r4(y0)], [r4(x1 - k), r4(y0 + k), 1], [r4(x1), r4(y0 + r)],
+        [r4(x1), r4(y1 - r)], [r4(x1 - k), r4(y1 - k), 1], [r4(x1 - r), r4(y1)],
+        [r4(x0 + r), r4(y1)], [r4(x0 + k), r4(y1 - k), 1], [r4(x0), r4(y1 - r)],
+        [r4(x0), r4(y0 + r)], [r4(x0 + k), r4(y0 + k), 1],
+      ];
+    };
+    // Superellipse — the "squircle". A plain rounded rect snaps from a straight edge into a
+    // circular arc, and the eye reads that junction as a crease; a superellipse leaves the edge
+    // gradually so curvature is continuous, which is why Apple's corners bulge slightly past where
+    // a radius would put them. n = 4 sits at about Apple's; higher n is squarer.
+    const squircleS = (cx, cy, rx, ry, n, steps) => {
+      n = n || 4; steps = steps || 40;
+      const e = 2 / n, o = [];
+      for (let i = 0; i < steps; i++) {
+        const a = -PI / 2 + i * T / steps, c = Math.cos(a), s = Math.sin(a);
+        o.push([r4(cx + rx * Math.sign(c) * Math.pow(Math.abs(c), e)),
+                r4(cy + ry * Math.sign(s) * Math.pow(Math.abs(s), e)), 1]);
+      }
+      return o;
+    };
+    // A sub-path wound the other way — under nonzero fill that punches a HOLE in the poly before it.
+    // Every body here winds clockwise (positive shoelace with y pointing down), so a hole must wind
+    // anticlockwise. Blindly reversing is NOT enough: if the caller's points already ran
+    // anticlockwise, reversing makes them match the body and the "hole" silently fills in solid.
+    const holeS = (pts) => {
+      let a = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const q = pts[i], r = pts[(i + 1) % pts.length];
+        a += q[0] * r[1] - r[0] * q[1];
+      }
+      return a > 0 ? pts.slice().reverse() : pts.slice();
+    };
     const rot = (pts, cx, cy, ang) => pts.map(p => {
       const dx = p[0] - cx, dy = p[1] - cy, c = Math.cos(ang), s = Math.sin(ang);
       const q = [r4(cx + dx * c - dy * s), r4(cy + dx * s + dy * c)];
@@ -3578,7 +3615,15 @@ window.FM = window.FM || {};
     // shield: hand-authored — the old two-arc build kept the arc's bottom-center endpoint in the
     // path, so the right side dropped a vertical cliff onto the tip while the left ran diagonally.
     S.shield = [[[0.5,0.03],[0.93,0.15],[0.885,0.475,1,-0.045,0.15],[0.5,0.97],[0.115,0.475,1,-0.045,-0.15],[0.07,0.15]]];
-    S.check = [[[0.05,0.55],[0.2,0.4],[0.38,0.58],[0.8,0.12],[0.95,0.26],[0.38,0.88]]];
+    // check: a TAPERED tick with rounded caps — a constant-width chevron reads as a badge glyph,
+    // not a hand-drawn tick. Built as a centreline (left tip → elbow → right tip) offset by a
+    // half-width that shrinks toward the top-right, so the stroke thins as it sweeps up.
+    S.check = [[
+      [0.0897,0.5375], [0.4041,0.9045,1], [0.9218,0.1876],
+      [0.9176,0.1482,1],
+      [0.8782,0.1524], [0.3959,0.6755], [0.1703,0.4625],
+      [0.0925,0.4597,1],
+    ]];
     S.droplet = [[[0.5,0.02]].concat(arcS(0.5,0.62,0.32,0.34,-PI*0.3,PI*1.3,6,false))];
     // cloud: three distinct puffs (small L, big top, mid R) with crease corners at the valleys and
     // a FLAT bottom with rounded ends — the old three-arc chain was lopsided with a wavy bottom.
@@ -3594,12 +3639,22 @@ window.FM = window.FM || {};
     // thumbs-up 👍: wrist cuff + palm, smooth thumb sweep to a round tip, four scalloped fingers —
     // each fingertip is ONE smooth point, each knuckle/notch a corner.
     S.thumbsup = [
-      [[0.03,0.54],[0.19,0.54],[0.19,0.95],[0.03,0.95]],
-      // thumb slimmed to a real thumb's width (was nearly half the hand), tip at (0.425,0.115)
-      [[0.23,0.95],[0.23,0.58],
-       [0.265,0.46,1],[0.30,0.30,1],[0.35,0.17,1],[0.425,0.115,1],[0.48,0.16,1],[0.475,0.26,1],[0.45,0.36,1],
-       [0.46,0.42],[0.88,0.42],[0.945,0.485,1],[0.88,0.55],[0.86,0.55],[0.925,0.615,1],[0.86,0.68],
-       [0.84,0.68],[0.90,0.74,1],[0.84,0.80],[0.80,0.80],[0.855,0.86,1],[0.80,0.92],[0.5,0.95]],
+      // the cuff is its own rounded bar, separated from the hand by a clear gap (reference)
+      rrectS(0.06, 0.42, 0.245, 0.88, 0.075),
+      [
+        [0.315,0.875,1], [0.30,0.83],                       // rounded bottom-left of the palm
+        [0.30,0.50],                                         // left edge up to where the thumb leaves
+        [0.335,0.35,1], [0.415,0.165,1], [0.525,0.095,1],    // thumb: sweeps up to a broad round tip
+        [0.625,0.145,1], [0.655,0.275,1], [0.645,0.405],     // and back down to the top of the palm
+        [0.80,0.405],                                        // palm top edge
+        // four curled fingers as a SCALLOPED edge — alternating out/in smooth points. Cutting real
+        // notches between them (the first attempt) renders as sawtooth spikes at this size.
+        [0.885,0.47,1], [0.815,0.535,1],
+        [0.86,0.60,1], [0.79,0.665,1],
+        [0.835,0.725,1], [0.765,0.785,1],
+        [0.80,0.84,1], [0.72,0.878,1],
+        [0.40,0.88],
+      ],
     ];
     S.paperplane = [[[0.04,0.5],[0.96,0.08],[0.62,0.92],[0.46,0.62],[0.3,0.56]]];
     S.house = [[[0.5,0.04],[0.96,0.44],[0.86,0.44],[0.86,0.96],[0.6,0.96],[0.6,0.66],[0.4,0.66],[0.4,0.96],[0.14,0.96],[0.14,0.44],[0.04,0.44]]];
@@ -3611,24 +3666,19 @@ window.FM = window.FM || {};
     // dome, long round-tipped index, three round knuckle scallops cascading below it, rounded palm
     // bottom. Knuckle caps carry MANUAL tangents (auto ones render sawtooth at this bump size).
     S.pointhand = [
-      [[0.04,0.35],[0.17,0.35],[0.17,0.805],[0.04,0.805]],
-      [[0.21,0.34],
-       [0.33,0.25,1,0.085,0],
-       [0.455,0.375],
-       [0.87,0.375],
-       [0.935,0.44,1,0,0.055],
-       [0.87,0.505],
-       [0.635,0.505],
-       [0.70,0.5525,1,0,0.04],
-       [0.635,0.60],
-       [0.615,0.605],
-       [0.68,0.6525,1,0,0.04],
-       [0.615,0.70],
-       [0.585,0.705],
-       [0.648,0.75,1,0,0.038],
-       [0.585,0.795],
-       [0.38,0.825,1],
-       [0.21,0.80]],
+      [
+        [0.425,0.10], [0.48,0.045,1], [0.535,0.10],          // index fingertip, rounded cap
+        [0.535,0.375],                                        // right side of the index, straight down
+        [0.60,0.335,1], [0.66,0.405,1],                       // three curled fingers as scallops,
+        [0.725,0.375,1], [0.785,0.45,1],                      // tops descending toward the outside
+        [0.845,0.425,1], [0.89,0.52,1],
+        [0.885,0.60],                                         // outside of the fist
+        [0.83,0.80,1], [0.66,0.90,1], [0.48,0.905], [0.33,0.86,1],   // round palm bottom
+        [0.22,0.70],                                          // heel, then the thumb reaching left
+        [0.12,0.615,1], [0.085,0.565,1], [0.145,0.53,1],
+        [0.30,0.575], [0.40,0.60],                            // back to the base of the index
+        [0.425,0.42],
+      ],
     ];
     // flame: leaning tip → concave lick-notch on the right → swelling belly → round bottom —
     // the old 14-point blob read as a garlic bulb with a wisp.
@@ -3645,7 +3695,15 @@ window.FM = window.FM || {};
     // — page 4 —
     S.boat = [[[0.5,0.02],[0.54,0.02],[0.54,0.62],[0.5,0.62]],[[0.58,0.1],[0.94,0.6],[0.58,0.6]],[[0.46,0.22],[0.46,0.6],[0.1,0.6]],[[0.06,0.68],[0.94,0.68],[0.82,0.94],[0.18,0.94]]];
     S.magnifier = [circleS(0.42,0.42,0.34,0.34),[[0.62,0.68],[0.7,0.6],[0.98,0.86],[0.9,0.94]]];
-    S.key = [circleS(0.3,0.3,0.24,0.24),[[0.44,0.42],[0.94,0.88],[0.94,0.97],[0.84,0.97],[0.84,0.88],[0.74,0.88],[0.74,0.78],[0.64,0.78],[0.36,0.5]]];
+    S.key = [
+      circleS(0.5,0.235,0.215,0.215,12),
+      holeS(circleS(0.5,0.20,0.075,0.075,10)),               // the bow is a RING, not a disc
+      [[0.555,0.40],[0.555,0.98],[0.445,0.98],
+       [0.445,0.90],[0.375,0.90],[0.375,0.855],[0.445,0.855],
+       [0.445,0.79],[0.365,0.79],[0.365,0.745],[0.445,0.745],
+       [0.445,0.68],[0.37,0.68],[0.37,0.635],[0.445,0.635],
+       [0.445,0.40]],
+    ];
     (function(){ const polys=[circleS(0.5,0.5,0.24,0.24)]; for(let i=0;i<8;i++){ const a=i*PI/4; polys.push(rot([[0.5,0.02],[0.56,0.18],[0.44,0.18]],0.5,0.5,a)); } S.sun=polys; })();
     // person: PROPORTIONAL head (was comically big) + a corner point at every joint — shoulders,
     // elbows, wrists, hips, knees, ankles — with smooth points only for hand/foot tips. Move the
@@ -3686,7 +3744,13 @@ window.FM = window.FM || {};
       ];
     })();
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
-    S.envelope = [[[0.03,0.16],[0.97,0.16],[0.5,0.6]],[[0.03,0.24],[0.44,0.56],[0.03,0.84]],[[0.97,0.24],[0.97,0.84],[0.56,0.56]],[[0.1,0.86],[0.46,0.62],[0.5,0.66],[0.54,0.62],[0.9,0.86]]];
+    // envelope: the flap is a thin GROOVE cut across a full body — cutting the V out as a solid
+    // wedge (the obvious way) reads as a chevron or a shopping bag, not an envelope.
+    S.envelope = [
+      rrectS(0.04, 0.19, 0.96, 0.81, 0.075),
+      holeS([[0.0637,0.2485],[0.4757,0.6265],[0.5243,0.5735],[0.1123,0.1955]]),
+      holeS([[0.8877,0.1955],[0.4757,0.5735],[0.5243,0.6265],[0.9363,0.2485]]),
+    ];
     // woman: proportional head, shoulder/elbow/wrist joints on both arms, flared dress, legs with
     // ankle joints + smooth foot tips.
     // woman: same pictogram construction — head / flared dress / arms / legs below the hem.
@@ -3718,9 +3782,17 @@ window.FM = window.FM || {};
     // car: body silhouette + wheels as TRUE circle subpaths (nonzero fill unions them) — the old
     // single outline drew the wheels as shallow smooth-point lumps, nowhere near round.
     S.car = [
-      [[0.045,0.63],[0.05,0.50,1,0.005,-0.035],[0.13,0.455],[0.31,0.445],[0.445,0.26,1,0.065,-0.01],[0.60,0.255,1,0.065,0.005],[0.77,0.44],[0.92,0.465],[0.955,0.52,1,0.005,0.035],[0.955,0.63]],
-      circleS(0.25,0.705,0.10,0.10),
-      circleS(0.75,0.705,0.10,0.10),
+      [
+        [0.03,0.62], [0.035,0.53,1], [0.10,0.495],            // nose and bonnet
+        [0.30,0.485], [0.40,0.30,1], [0.66,0.285],            // windscreen up onto a long roof
+        [0.80,0.44,1], [0.93,0.472], [0.965,0.53,1], [0.965,0.62],   // rear screen, boot, tail
+        [0.87,0.62], [0.75,0.528,1], [0.63,0.62],             // rear wheel arch (dips BELOW the
+        [0.37,0.62], [0.25,0.528,1], [0.13,0.62],             // tyre tops, else a white crescent shows
+      ],
+      holeS([[0.415,0.34],[0.545,0.34],[0.545,0.455],[0.385,0.455]]),   // windows are real holes
+      holeS([[0.575,0.34],[0.665,0.34],[0.745,0.455],[0.575,0.455]]),
+      circleS(0.25,0.63,0.115,0.115,12),
+      circleS(0.75,0.63,0.115,0.115,12),
     ];
     // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),
     // with explicit corner points so the outline never overshoots the square
