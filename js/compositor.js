@@ -3212,27 +3212,69 @@ window.FM = window.FM || {};
     // wrist + elbow points and he waves.
     // person: restroom-pictogram PARTS (head / torso / arms / legs — nonzero fill unions them).
     // The old single-outline figure traced every limb in one path and rendered noodly.
-    S.person = [
-      circleS(0.5,0.115,0.085,0.085),
-      [[0.365,0.30,1,0.005,-0.045],[0.435,0.235,1,0.05,0],[0.565,0.235,1,0.05,0],[0.635,0.30,1,0.005,0.045],[0.615,0.56],[0.385,0.56]],
-      [[0.375,0.255],[0.42,0.31],[0.335,0.565],[0.30,0.585,1,-0.033,-0.008],[0.27,0.545]],
-      [[0.625,0.255],[0.73,0.545],[0.70,0.585,1,-0.033,0.008],[0.665,0.565],[0.58,0.31]],
-      [[0.385,0.54],[0.49,0.54],[0.487,0.915],[0.4375,0.945,1,-0.032,0],[0.388,0.915]],
-      [[0.51,0.54],[0.615,0.54],[0.612,0.915],[0.5625,0.945,1,-0.032,0],[0.513,0.915]],
-    ];
+    // person / woman: the international restroom pictogram, rebuilt from Ezra's reference so the two
+    // read as a matched pair. Construction is deliberately the same for both — detached head circle,
+    // one solid body with ROUNDED shoulders and rounded limb ends, then two legs below — so they sit
+    // together in a sign. Everything is derived from a few named proportions rather than loose
+    // numbers, which is what keeps the pair consistent when one of them is tweaked.
+    S.person = (function () {
+      const hc = 0.093, hr = 0.088;          // head centre / radius
+      const shY = 0.205, armX = 0.159;       // shoulder line, outer edge of the hanging arms
+      const r1 = 0.036;                      // shoulder round — small: the reference's shoulders are square-ish, a big radius domes them
+      const handY = 0.600, r2 = 0.032;       // where the hands stop, and their round
+      const hipX = 0.140, crotchY = 0.672;   // hips are a touch narrower than the arms — the step reads as a wrist
+      const gap = 0.037, footY = 0.985, r3 = 0.040;
+      const L = 0.5 - hipX, R = 0.5 + hipX, gL = 0.5 - gap / 2, gR = 0.5 + gap / 2;
+      const leg = (x0, x1) => [].concat(
+        [[x0, crotchY - 0.01], [x1, crotchY - 0.01], [x1, footY - r3]],
+        arcS(x1 - r3, footY - r3, r3, r3, 0, PI / 2, 3, true),
+        [[x0 + r3, footY]],
+        arcS(x0 + r3, footY - r3, r3, r3, PI / 2, PI, 3, true)
+      );
+      return [
+        circleS(0.5, hc, hr, hr),
+        [].concat(
+          arcS(0.5 - armX + r1, shY + r1, r1, r1, PI, PI * 1.5, 3, true),          // left shoulder
+          arcS(0.5 + armX - r1, shY + r1, r1, r1, PI * 1.5, PI * 2, 3, true),      // right shoulder
+          [[0.5 + armX, handY - r2]],
+          arcS(0.5 + armX - r2, handY - r2, r2, r2, 0, PI / 2, 3, true),           // right hand
+          [[R, handY], [R, crotchY], [L, crotchY], [L, handY], [0.5 - armX + r2, handY]],
+          arcS(0.5 - armX + r2, handY - r2, r2, r2, PI / 2, PI, 3, true)           // left hand
+        ),
+        leg(L, gL),
+        leg(gR, R),
+      ];
+    })();
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
     S.envelope = [[[0.03,0.16],[0.97,0.16],[0.5,0.6]],[[0.03,0.24],[0.44,0.56],[0.03,0.84]],[[0.97,0.24],[0.97,0.84],[0.56,0.56]],[[0.1,0.86],[0.46,0.62],[0.5,0.66],[0.54,0.62],[0.9,0.86]]];
     // woman: proportional head, shoulder/elbow/wrist joints on both arms, flared dress, legs with
     // ankle joints + smooth foot tips.
     // woman: same pictogram construction — head / flared dress / arms / legs below the hem.
-    S.woman = [
-      circleS(0.5,0.115,0.085,0.085),
-      [[0.375,0.295,1,0.008,-0.042],[0.44,0.235,1,0.048,0],[0.56,0.235,1,0.048,0],[0.625,0.295,1,0.008,0.042],[0.70,0.645],[0.30,0.645]],
-      [[0.385,0.255],[0.425,0.315],[0.33,0.565],[0.295,0.585,1,-0.033,-0.008],[0.265,0.545]],
-      [[0.615,0.255],[0.735,0.545],[0.705,0.585,1,-0.033,0.008],[0.67,0.565],[0.575,0.315]],
-      [[0.425,0.63],[0.495,0.63],[0.493,0.915],[0.4595,0.943,1,-0.025,0],[0.426,0.915]],
-      [[0.505,0.63],[0.575,0.63],[0.573,0.915],[0.5395,0.943,1,-0.025,0],[0.506,0.915]],
-    ];
+    S.woman = (function () {
+      const hc = 0.093, hr = 0.088;          // identical head to `person` — they must match in a sign
+      const shY = 0.205, shX = 0.107;        // narrower shoulders; the flare does the rest
+      const r1 = 0.034;
+      const armX = 0.132, armY = 0.545;      // the arm line leaves the shoulder at a shallow angle; the skirt kicks out below it
+      const hemX = 0.186, hemY = 0.706;      // the dress hem, square-cornered
+      const gap = 0.050, legX = 0.101, footY = 0.985, r3 = 0.034;
+      const gL = 0.5 - gap / 2, gR = 0.5 + gap / 2;
+      const leg = (x0, x1) => [].concat(
+        [[x0, hemY - 0.01], [x1, hemY - 0.01], [x1, footY - r3]],
+        arcS(x1 - r3, footY - r3, r3, r3, 0, PI / 2, 3, true),
+        [[x0 + r3, footY]],
+        arcS(x0 + r3, footY - r3, r3, r3, PI / 2, PI, 3, true)
+      );
+      return [
+        circleS(0.5, hc, hr, hr),
+        [].concat(
+          arcS(0.5 - shX + r1, shY + r1, r1, r1, PI, PI * 1.5, 3, true),           // left shoulder
+          arcS(0.5 + shX - r1, shY + r1, r1, r1, PI * 1.5, PI * 2, 3, true),       // right shoulder
+          [[0.5 + armX, armY], [0.5 + hemX, hemY], [0.5 - hemX, hemY], [0.5 - armX, armY]]
+        ),
+        leg(0.5 - legX, gL),
+        leg(gR, 0.5 + legX),
+      ];
+    })();
     // car: body silhouette + wheels as TRUE circle subpaths (nonzero fill unions them) — the old
     // single outline drew the wheels as shallow smooth-point lumps, nowhere near round.
     S.car = [
