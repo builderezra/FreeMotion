@@ -70,15 +70,35 @@ window.FM = window.FM || {};
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', param: 'amount', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
     { type: 'ripple', label: 'Circular Ripple', param: 'amount', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
-    { type: 'twirl', label: 'Twirl', param: 'amount', min: -360, max: 360, step: 1, def: 140, unit: '°' },
-    { type: 'bulge', label: 'Pinch / Bulge', param: 'amount', min: -1, max: 2, step: 0.02, def: -0.5 },
+    { type: 'twirl', label: 'Twirl', params: [
+      { key: 'amount', label: 'Twist', min: -360, max: 360, step: 1, def: 140, unit: '°' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'radius', label: 'Radius', min: 5, max: 200, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'bulge', label: 'Pinch / Bulge', params: [
+      { key: 'amount', label: 'Amount', min: -1, max: 2, step: 0.02, def: -0.5 },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'radius', label: 'Radius', min: 5, max: 200, step: 1, def: 100, unit: '%' },
+    ] },
     // ---- batch 4 ----
     { type: 'edge', label: 'Find Edges', param: 'amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
     { type: 'emboss', label: 'Emboss', param: 'amount', min: 0, max: 3, step: 0.05, def: 1 },
     { type: 'exposure', label: 'Exposure', param: 'stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
-    { type: 'fisheye', label: 'Fisheye', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    { type: 'fisheye', label: 'Fisheye', params: [
+      { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'radius', label: 'Lens size', min: 5, max: 200, step: 1, def: 100, unit: '%' },
+    ] },
     // ---- batch 5 ----
-    { type: 'kaleidoscope', label: 'Kaleidoscope', param: 'segments', min: 2, max: 12, step: 1, def: 6 },
+    { type: 'kaleidoscope', label: 'Kaleidoscope', params: [
+      { key: 'segments', label: 'Segments', min: 2, max: 12, step: 1, def: 6 },
+      { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     { type: 'glitch', label: 'Glitch', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'zoomblur', label: 'Zoom Blur', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'crt', label: 'CRT', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.7 },
@@ -1437,6 +1457,14 @@ window.FM = window.FM || {};
   // canvas the outer then read as its source → an un-warped ghost of the layer bled through.
   const _wpPool = [];
   let _wpDepth = 0;
+  // Radial warps used to be welded to the frame centre and the frame diagonal, so a twirl or a bulge
+  // could only ever happen in the middle of the shot — useless for putting a vortex on a face. These
+  // read the centre/radius params and fall back to EXACTLY the old constants (50% → W/2, 100% → maxR),
+  // so an existing project renders byte-for-byte as it did before.
+  function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
+  function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
+  function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
+
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -1569,25 +1597,31 @@ window.FM = window.FM || {};
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
     twirl: function (x, y, W, H, cx, cy, maxR, p, t) {
+      cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy); maxR = wR(p, t, maxR);
       const ang = (FM.evalProp(p.amount, t) || 0) * Math.PI / 180, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
       const f = Math.max(0, 1 - r / maxR), a = Math.atan2(dy, dx) + ang * f * f;
       return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     },
     bulge: function (x, y, W, H, cx, cy, maxR, p, t) {
+      cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy); maxR = wR(p, t, maxR);
       const k = FM.evalProp(p.amount, t) || 0, nx = (x - cx) / maxR, ny = (y - cy) / maxR, r = Math.hypot(nx, ny);
+      if (r >= 1) return [x, y];   // outside the lens: untouched (at radius 100% nothing reaches here that didn't before)
       const scale = r < 1e-4 ? 1 : Math.pow(r, 1 + k) / r;   // k>0 pinch, k<0 bulge
       return [cx + nx * scale * maxR, cy + ny * scale * maxR];
     },
     fisheye: function (x, y, W, H, cx, cy, maxR, p, t) {
+      cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy); maxR = wR(p, t, maxR);
       const k = FM.evalProp(p.amount, t) || 0, dx = (x - cx) / maxR, dy = (y - cy) / maxR, r = Math.hypot(dx, dy);
       if (r >= 1 || r < 1e-5) return [x, y];
       const f = (r * (1 - k * (1 - r * r))) / r;   // barrel (k>0) / pincushion (k<0)
       return [cx + dx * f * maxR, cy + dy * f * maxR];
     },
     kaleidoscope: function (x, y, W, H, cx, cy, maxR, p, t) {
+      cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
       const seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6)), dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy);
       const slice = Math.PI * 2 / seg;
-      let a = Math.atan2(dy, dx) % slice; if (a < 0) a += slice;
+      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      let a = (Math.atan2(dy, dx) + ph) % slice; if (a < 0) a += slice;
       a = Math.abs(a - slice / 2);   // fold within the wedge → mirrored kaleidoscope
       return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     },
