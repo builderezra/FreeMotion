@@ -237,10 +237,15 @@ window.FM = window.FM || {};
       { key: 'tint', label: 'Tint amount', min: 0, max: 100, step: 1, def: 12, unit: '%' },
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '\u00b0' },
     ] },
-    { type: 'roundcorners', label: 'Rounded Corners', params: [
-      { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px' },
-      { key: 'style', label: 'Corner', options: ['Rounded', 'Apple (continuous)'], def: 1 },   // Apple = superellipse: the curve eases out of the straight edge first
-      { key: 'smoothing', label: 'Smoothing', min: 0, max: 100, step: 1, def: 50, unit: '%' },  // Apple corners only
+    { type: 'roundcorners', label: 'Rounded Corners / Apple style', params: [
+      // The tick box is listed FIRST because it decides whether the two sliders under it do anything.
+      { key: 'style', label: 'Apple corners', toggle: true, def: 1,
+        note: 'One continuous squircle across the whole layer — the app-icon shape. Radius does nothing while this is on.' },
+      { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px', overriddenBy: 'style' },
+      // NO smoothing slider. It only ever applied to the old Apple-flavoured-rounded-rect path, and now
+      // that Apple corners is a full override with a fixed exponent, a smoothing dial would do nothing
+      // in EITHER state — a control that never moves anything is worse than no control. (Existing
+      // instances may still carry a stored `smoothing` value; it is simply ignored.)
     ] },
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
@@ -2837,36 +2842,38 @@ window.FM = window.FM || {};
       const x = bb.x + 2, y = bb.y + 2, w = bb.w - 4, h = bb.h - 4;   // inset the alphaBBox pad
       r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
       B.drawImage(A, 0, 0);
-      if (r < 1 || w < 4 || h < 4) return;
+      if (w < 4 || h < 4) return;
+
+      // APPLE CORNERS is an override, not a flavour of the radius. Ticked, the whole layer becomes one
+      // superellipse across its full bounds — the app-icon shape, where the curve never stops turning
+      // and there is no straight-edge-into-arc junction to size. That is why it ignores Radius and
+      // Smoothing rather than reinterpreting them: a squircle's corner is a property of the whole
+      // outline, not a corner radius you dial in. Unticked, this is the plain rounded rectangle it
+      // always was, so a project saved before any of this (no `style` key -> 0) renders untouched.
+      if (style === 1) {
+        const n = 5;                                   // the Apple-ish exponent
+        const e = 2 / n, cx = x + w / 2, cy = y + h / 2, ax = w / 2, ay = h / 2;
+        const STEPS = Math.max(64, Math.min(256, Math.ceil((w + h) / 8)));
+        B.save();
+        B.globalCompositeOperation = 'destination-in';
+        B.beginPath();
+        for (let i = 0; i <= STEPS; i++) {
+          const a = i / STEPS * Math.PI * 2;
+          const c = Math.cos(a), sn = Math.sin(a);
+          const px = cx + ax * Math.sign(c) * Math.pow(Math.abs(c), e);
+          const py = cy + ay * Math.sign(sn) * Math.pow(Math.abs(sn), e);
+          if (i === 0) B.moveTo(px, py); else B.lineTo(px, py);
+        }
+        B.closePath();
+        B.fill();
+        B.restore();
+        return;
+      }
+      if (r < 1) return;
       B.save();
       B.globalCompositeOperation = 'destination-in';
       B.beginPath();
-      if (style === 1) {
-        // SMOOTHING is the superellipse exponent — how far the corner eases out of the straight edge
-        // before it starts turning. 50 lands on exactly 5, the constant this always used (2 + 50*0.06),
-        // so an existing project is untouched; low is nearly circular, high is nearly square.
-        const sm = fparam(p, 'smoothing', 50, t);
-        const n = 2 + sm * 0.06;
-        // The corner polygon used a flat 16 segments per quadrant, which at a 400px radius is a 39px
-        // chord — visibly faceted. Segments now scale with the radius, and any radius up to 96px
-        // (the default 80 included) still resolves to 16, so those renders do not move.
-        const N = Math.max(16, Math.min(72, Math.ceil(r / 6)));
-        const pw = v => Math.pow(Math.abs(v), 2 / n);
-        const q = [];   // superellipse quadrant, a: 0 → π/2
-        for (let i = 0; i <= N; i++) { const a = i / N * Math.PI / 2; q.push([pw(Math.sin(a)), pw(Math.cos(a))]); }
-        B.moveTo(x + r, y);
-        B.lineTo(x + w - r, y);
-        q.forEach(([s, c]) => B.lineTo(x + w - r + r * s, y + r - r * c));         // TR
-        B.lineTo(x + w, y + h - r);
-        q.forEach(([s, c]) => B.lineTo(x + w - r + r * c, y + h - r + r * s));     // BR
-        B.lineTo(x + r, y + h);
-        q.forEach(([s, c]) => B.lineTo(x + r - r * s, y + h - r + r * c));         // BL
-        B.lineTo(x, y + r);
-        q.forEach(([s, c]) => B.lineTo(x + r - r * c, y + r - r * s));             // TL
-        B.closePath();
-      } else {
-        B.roundRect(x, y, w, h, r);
-      }
+      B.roundRect(x, y, w, h, r);
       B.fill();
       B.restore();
     },

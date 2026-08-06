@@ -363,6 +363,27 @@ window.FM = window.FM || {};
   }
 
   // AM segmented control (e.g. Mirror direction) — no slider, no keyframe.
+  // A tick box for a param that switches a whole behaviour on, rather than picking between two equal
+  // options. `note` explains what it does to the controls under it — which is the point of using a
+  // tick box here at all: a segmented control implies "one of these two", a tick implies "this takes over".
+  function fxToggle(fx, p) {
+    const on = !!(fx.params[p.key] == null ? p.default : fx.params[p.key]);
+    const row = el('div', 'fx-tog-row' + (on ? ' on' : ''));
+    const btn = el('button', 'fx-tog');
+    btn.setAttribute('role', 'switch');
+    btn.setAttribute('aria-checked', String(on));
+    btn.innerHTML = '<span class="fx-tog-box">' + (on ? '<span class="fx-tog-tick"></span>' : '') + '</span>' +
+                    '<span class="fx-tog-label"></span>';
+    btn.querySelector('.fx-tog-label').textContent = p.label;
+    btn.addEventListener('click', () => {
+      fx.params[p.key] = on ? 0 : 1;
+      FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
+    });
+    row.appendChild(btn);
+    if (p.note) { const n = el('div', 'fx-tog-note'); n.textContent = p.note; row.appendChild(n); }
+    return row;
+  }
+
   function fxSegment(fx, p) {
     const row = el('div', 'fx-seg-row');
     row.appendChild(el('span', 'fx-scrub-label', p.label));
@@ -657,7 +678,25 @@ window.FM = window.FM || {};
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       reg.params.forEach(p => {
-        if (p.type === 'range') body.appendChild(fxScrubber(fx, p, layer, idx));
+        if (p.type === 'range') {
+          const row = fxScrubber(fx, p, layer, idx);
+          // Dim and lock a slider whose value is currently being overridden by a tick box above it,
+          // and say WHICH one — a greyed control with no explanation just reads as broken.
+          if (p.overriddenBy) {
+            const ctrl = reg.params.find(q => q.key === p.overriddenBy);
+            const raw = fx.params[p.overriddenBy];
+            const active = !!(raw == null ? (ctrl && ctrl.default) : raw);
+            if (active) {
+              row.classList.add('fx-overridden');
+              row.setAttribute('aria-disabled', 'true');
+              const tag = el('span', 'fx-ovr-tag');
+              tag.textContent = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
+              row.appendChild(tag);
+            }
+          }
+          body.appendChild(row);
+        }
+        else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));
         else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
         else if (p.type === 'color') { const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label)); cr.appendChild(colorField(() => fx.params[p.key] || p.default, v => { fx.params[p.key] = v; })); body.appendChild(cr); }
         else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp

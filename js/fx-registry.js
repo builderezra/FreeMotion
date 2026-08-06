@@ -129,8 +129,11 @@ window.FM = window.FM || {};
       // multi-param effects: a `params` array on the def — each a range control, or a segmented
       // choice when the entry carries `options` (e.g. Motion Blur (Content) styles).
       def.params.forEach(function (pp) {
-        if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: pp.options, default: pp.def, keyframable: false });
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true });
+        // `toggle` is a tick box, not a two-button segment: it reads as ON/OFF rather than as a choice
+        // between two equal options, which matters when the thing it switches on overrides other controls.
+        if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, note: pp.note || '', keyframable: false });
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: pp.options, default: pp.def, keyframable: false });
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '' });
       });
     } else if (def.options) {
       out.push({ key: def.param, label: def.label, type: 'segment', options: def.options, default: def.def, keyframable: false });
