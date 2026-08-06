@@ -804,7 +804,13 @@ window.FM = window.FM || {};
   const SHAPE_ASPECT = {
     rect: [1.5, 1], line: [1.6, 0.4], arrow: [1.6, 0.8], semicircle: [1.3, 0.65],
     trapezoid: [1.4, 0.9], parallelogram: [1.5, 0.9],
-    banner: [1.6, 0.7], envelope: [1.4, 1], car: [1.5, 1], check: [1.25, 1], cloud: [1.4, 0.95], boat: [1.1, 1.1],
+    banner: [1.6, 0.7], cloud: [1.4, 0.95], boat: [1.1, 1.1],
+    // these six come from traced references, so their aspect IS the reference's aspect
+    check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
+    envelope: [1.33, 0.75], key: [0.7, 1.44], car: [1.76, 0.57],
+    // added shapes
+    squircle: [1.35, 1], crown: [1.3, 0.85], eye: [1.5, 0.9], pin: [0.82, 1.1],
+    lock: [0.88, 1], note: [0.9, 1],
   };
   FM.addShapeLayer = function (shape, opts) {
     opts = opts || {};

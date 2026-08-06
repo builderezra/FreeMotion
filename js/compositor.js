@@ -3615,15 +3615,6 @@ window.FM = window.FM || {};
     // shield: hand-authored — the old two-arc build kept the arc's bottom-center endpoint in the
     // path, so the right side dropped a vertical cliff onto the tip while the left ran diagonally.
     S.shield = [[[0.5,0.03],[0.93,0.15],[0.885,0.475,1,-0.045,0.15],[0.5,0.97],[0.115,0.475,1,-0.045,-0.15],[0.07,0.15]]];
-    // check: a TAPERED tick with rounded caps — a constant-width chevron reads as a badge glyph,
-    // not a hand-drawn tick. Built as a centreline (left tip → elbow → right tip) offset by a
-    // half-width that shrinks toward the top-right, so the stroke thins as it sweeps up.
-    S.check = [[
-      [0.0897,0.5375], [0.4041,0.9045,1], [0.9218,0.1876],
-      [0.9176,0.1482,1],
-      [0.8782,0.1524], [0.3959,0.6755], [0.1703,0.4625],
-      [0.0925,0.4597,1],
-    ]];
     S.droplet = [[[0.5,0.02]].concat(arcS(0.5,0.62,0.32,0.34,-PI*0.3,PI*1.3,6,false))];
     // cloud: three distinct puffs (small L, big top, mid R) with crease corners at the valleys and
     // a FLAT bottom with rounded ends — the old three-arc chain was lopsided with a wavy bottom.
@@ -3636,50 +3627,10 @@ window.FM = window.FM || {};
     S.pushpin = [arcS(0.5,0.3,0.26,0.26,PI*0.9,PI*2.1,5,true).concat([[0.62,0.55],[0.54,0.6],[0.5,0.97],[0.46,0.6],[0.38,0.55]])];
     // — page 3 —
     S.flag = [[[0.14,0.02],[0.22,0.02],[0.22,0.12],[0.9,0.2],[0.68,0.34],[0.9,0.48],[0.22,0.42],[0.22,0.98],[0.14,0.98]]];
-    // thumbs-up 👍: wrist cuff + palm, smooth thumb sweep to a round tip, four scalloped fingers —
-    // each fingertip is ONE smooth point, each knuckle/notch a corner.
-    S.thumbsup = [
-      // the cuff is its own rounded bar, separated from the hand by a clear gap (reference)
-      rrectS(0.06, 0.42, 0.245, 0.88, 0.075),
-      [
-        [0.315,0.875,1], [0.30,0.83],                       // rounded bottom-left of the palm
-        [0.30,0.50],                                         // left edge up to where the thumb leaves
-        [0.335,0.35,1], [0.415,0.165,1], [0.525,0.095,1],    // thumb: sweeps up to a broad round tip
-        [0.625,0.145,1], [0.655,0.275,1], [0.645,0.405],     // and back down to the top of the palm
-        [0.80,0.405],                                        // palm top edge
-        // four curled fingers as a SCALLOPED edge — alternating out/in smooth points. Cutting real
-        // notches between them (the first attempt) renders as sawtooth spikes at this size.
-        [0.885,0.47,1], [0.815,0.535,1],
-        [0.86,0.60,1], [0.79,0.665,1],
-        [0.835,0.725,1], [0.765,0.785,1],
-        [0.80,0.84,1], [0.72,0.878,1],
-        [0.40,0.88],
-      ],
-    ];
     S.paperplane = [[[0.04,0.5],[0.96,0.08],[0.62,0.92],[0.46,0.62],[0.3,0.56]]];
     S.house = [[[0.5,0.04],[0.96,0.44],[0.86,0.44],[0.86,0.96],[0.6,0.96],[0.6,0.66],[0.4,0.66],[0.4,0.96],[0.14,0.96],[0.14,0.44],[0.04,0.44]]];
     (function(){ const polys=[[[0.55,0.98],[0.50,0.98],[0.365,0.06],[0.415,0.05]]]; const sa=Math.atan2(-0.9,-0.14); for(let i=0;i<6;i++){ const f=0.15+i*0.14, cx=0.525-0.14*f, cy=0.98-0.9*f; [[1,sa+0.7],[-1,sa-0.7]].forEach(([sgn,ang])=>{ const lx=cx+sgn*0.078, ly=cy-sgn*0.012; polys.push(rot(circleS(lx,ly,0.095,0.034,6),lx,ly,ang)); }); } S.laurel=polys; })();
     S.bookmark = [[[0.22,0.02],[0.78,0.02],[0.78,0.96],[0.5,0.72],[0.22,0.96]]];
-    // pointing hand (☞): smooth thumb hump, long index with one smooth tip, three curled fingers,
-    // smooth heel back to the wrist.
-    // pointing hand (☞): ONE silhouette in the same style as thumbsup — cuff, palm with a thumb
-    // dome, long round-tipped index, three round knuckle scallops cascading below it, rounded palm
-    // bottom. Knuckle caps carry MANUAL tangents (auto ones render sawtooth at this bump size).
-    S.pointhand = [
-      [
-        [0.425,0.10], [0.48,0.045,1], [0.535,0.10],          // index fingertip, rounded cap
-        [0.535,0.375],                                        // right side of the index, straight down
-        [0.60,0.335,1], [0.66,0.405,1],                       // three curled fingers as scallops,
-        [0.725,0.375,1], [0.785,0.45,1],                      // tops descending toward the outside
-        [0.845,0.425,1], [0.89,0.52,1],
-        [0.885,0.60],                                         // outside of the fist
-        [0.83,0.80,1], [0.66,0.90,1], [0.48,0.905], [0.33,0.86,1],   // round palm bottom
-        [0.22,0.70],                                          // heel, then the thumb reaching left
-        [0.12,0.615,1], [0.085,0.565,1], [0.145,0.53,1],
-        [0.30,0.575], [0.40,0.60],                            // back to the base of the index
-        [0.425,0.42],
-      ],
-    ];
     // flame: leaning tip → concave lick-notch on the right → swelling belly → round bottom —
     // the old 14-point blob read as a garlic bulb with a wisp.
     S.flame = [[[0.575,0.03],[0.565,0.30,1,-0.02,0.115],[0.83,0.66,1,0.005,0.135],[0.50,0.965,1,-0.155,0],[0.17,0.66,1,0.005,-0.135],[0.30,0.32,1,0.045,-0.13]]];
@@ -3695,15 +3646,6 @@ window.FM = window.FM || {};
     // — page 4 —
     S.boat = [[[0.5,0.02],[0.54,0.02],[0.54,0.62],[0.5,0.62]],[[0.58,0.1],[0.94,0.6],[0.58,0.6]],[[0.46,0.22],[0.46,0.6],[0.1,0.6]],[[0.06,0.68],[0.94,0.68],[0.82,0.94],[0.18,0.94]]];
     S.magnifier = [circleS(0.42,0.42,0.34,0.34),[[0.62,0.68],[0.7,0.6],[0.98,0.86],[0.9,0.94]]];
-    S.key = [
-      circleS(0.5,0.235,0.215,0.215,12),
-      holeS(circleS(0.5,0.20,0.075,0.075,10)),               // the bow is a RING, not a disc
-      [[0.555,0.40],[0.555,0.98],[0.445,0.98],
-       [0.445,0.90],[0.375,0.90],[0.375,0.855],[0.445,0.855],
-       [0.445,0.79],[0.365,0.79],[0.365,0.745],[0.445,0.745],
-       [0.445,0.68],[0.37,0.68],[0.37,0.635],[0.445,0.635],
-       [0.445,0.40]],
-    ];
     (function(){ const polys=[circleS(0.5,0.5,0.24,0.24)]; for(let i=0;i<8;i++){ const a=i*PI/4; polys.push(rot([[0.5,0.02],[0.56,0.18],[0.44,0.18]],0.5,0.5,a)); } S.sun=polys; })();
     // person: PROPORTIONAL head (was comically big) + a corner point at every joint — shoulders,
     // elbows, wrists, hips, knees, ankles — with smooth points only for hand/foot tips. Move the
@@ -3744,13 +3686,6 @@ window.FM = window.FM || {};
       ];
     })();
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
-    // envelope: the flap is a thin GROOVE cut across a full body — cutting the V out as a solid
-    // wedge (the obvious way) reads as a chevron or a shopping bag, not an envelope.
-    S.envelope = [
-      rrectS(0.04, 0.19, 0.96, 0.81, 0.075),
-      holeS([[0.0637,0.2485],[0.4757,0.6265],[0.5243,0.5735],[0.1123,0.1955]]),
-      holeS([[0.8877,0.1955],[0.4757,0.5735],[0.5243,0.6265],[0.9363,0.2485]]),
-    ];
     // woman: proportional head, shoulder/elbow/wrist joints on both arms, flared dress, legs with
     // ankle joints + smooth foot tips.
     // woman: same pictogram construction — head / flared dress / arms / legs below the hem.
@@ -3779,21 +3714,6 @@ window.FM = window.FM || {};
         leg(gR, 0.5 + legX),
       ];
     })();
-    // car: body silhouette + wheels as TRUE circle subpaths (nonzero fill unions them) — the old
-    // single outline drew the wheels as shallow smooth-point lumps, nowhere near round.
-    S.car = [
-      [
-        [0.03,0.62], [0.035,0.53,1], [0.10,0.495],            // nose and bonnet
-        [0.30,0.485], [0.40,0.30,1], [0.66,0.285],            // windscreen up onto a long roof
-        [0.80,0.44,1], [0.93,0.472], [0.965,0.53,1], [0.965,0.62],   // rear screen, boot, tail
-        [0.87,0.62], [0.75,0.528,1], [0.63,0.62],             // rear wheel arch (dips BELOW the
-        [0.37,0.62], [0.25,0.528,1], [0.13,0.62],             // tyre tops, else a white crescent shows
-      ],
-      holeS([[0.415,0.34],[0.545,0.34],[0.545,0.455],[0.385,0.455]]),   // windows are real holes
-      holeS([[0.575,0.34],[0.665,0.34],[0.745,0.455],[0.575,0.455]]),
-      circleS(0.25,0.63,0.115,0.115,12),
-      circleS(0.75,0.63,0.115,0.115,12),
-    ];
     // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),
     // with explicit corner points so the outline never overshoots the square
     S.stamp = [(function(){ const pts=[]; const bumps=4, r=0.05, c0=0.20, span=(0.80-0.20)/(bumps-1);
@@ -3806,6 +3726,177 @@ window.FM = window.FM || {};
       pts.push([0.08,0.92]);
       for(let i=0;i<bumps;i++){ const y=0.80-span*i; pts.push([0.08,r4(y+r)],[0.125,r4(y),1],[0.08,r4(y-r)]); }
       return pts; })()];
+    // ---- traced from Ezra's reference images ----
+    // These six are not hand-plotted: the reference bitmaps were thresholded, boundary-traced by
+    // chaining unit edges, smoothed to remove the pixel staircase, simplified with RDP, and each
+    // vertex flagged smooth only where the path genuinely turns gently - so the check keeps its
+    // point and the key keeps its teeth while every curve stays a curve. Hand-plotting these was
+    // exactly why the first attempt looked amateur next to the references.
+    S.check = [
+      // outer
+      [
+        [0.9603,0.0031,1],[0.7983,0.1066,1],[0.6215,0.2694,1],[0.4632,0.4636,1],[0.3277,0.7021],[0.2447,0.5712,1],
+        [0.1451,0.4689,1],[0.0801,0.4601],[0.0196,0.5154,1],[0.0002,0.5779,1],[0.0125,0.6398,1],[0.1813,0.8384,1],
+        [0.2661,0.976],[0.3441,0.9988],[0.4241,0.9329,1],[0.5519,0.6583,1],[0.7238,0.3688,1],[0.8962,0.1487,1],
+        [0.9945,0.0536],[0.9945,0.0154],[0.9658,0.0013]
+      ],
+    ];
+    S.thumbsup = [
+      // outer
+      [
+        [0.5259,0.001,1],[0.492,0.0156,1],[0.4709,0.0442,1],[0.4571,0.1726,1],[0.4166,0.2828,1],[0.3619,0.3669,1],
+        [0.2954,0.422],[0.2934,0.9368],[0.3033,0.9478,1],[0.3684,0.9774,1],[0.4601,0.9999,1],[0.8321,0.9969,1],
+        [0.8766,0.9747,1],[0.8966,0.9504,1],[0.9099,0.9107,1],[0.9029,0.849],[0.933,0.8195,1],[0.9491,0.7828,1],
+        [0.9524,0.7487,1],[0.9404,0.7004],[0.9616,0.6774,1],[0.9796,0.6401,1],[0.9821,0.6031,1],[0.9632,0.5487],
+        [0.9966,0.4909,1],[0.9966,0.4334,1],[0.9841,0.4037,1],[0.9644,0.3791,1],[0.9196,0.3571,1],[0.652,0.3519],
+        [0.6479,0.3435,1],[0.6649,0.2431,1],[0.665,0.1541,1],[0.6491,0.0821,1],[0.633,0.0508,1],[0.6041,0.0199,1],
+        [0.5596,0.0004,1],[0.5279,0.0004,1]
+      ],
+      // part 2
+      [
+        [0.0759,0.3956,1],[0.0356,0.4142,1],[0.0159,0.4361,1],[0.0029,0.4707,1],[0.0029,0.9266,1],[0.0245,0.9709,1],
+        [0.0509,0.9909,1],[0.0801,0.9999,1],[0.1671,0.9969,1],[0.2094,0.9696,1],[0.2296,0.9239,1],[0.2296,0.4707,1],
+        [0.213,0.4318,1],[0.1783,0.4018,1],[0.1524,0.3947,1],[0.0779,0.395,1]
+      ],
+    ];
+    S.pointhand = [
+      // outer
+      [
+        [0.4628,0.0008,1],[0.4167,0.0147,1],[0.3899,0.035,1],[0.3723,0.0614,1],[0.3646,0.0882,1],[0.3633,0.5801],
+        [0.1901,0.5296,1],[0.1354,0.5191,1],[0.098,0.5191,1],[0.058,0.53,1],[0.0233,0.556,1],[0.0027,0.5924,1],
+        [0.0003,0.6294,1],[0.0104,0.6561,1],[0.0352,0.6825,1],[0.1801,0.7476,1],[0.2434,0.7862,1],[0.3435,0.8949,1],
+        [0.3876,0.9314,1],[0.4333,0.9582,1],[0.5128,0.9867,1],[0.581,0.9978,1],[0.6571,0.9999,1],[0.7378,0.9892,1],
+        [0.7992,0.97,1],[0.8696,0.9314,1],[0.9291,0.8749,1],[0.9706,0.811,1],[0.9901,0.757,1],[0.9999,0.6966,1],
+        [1,0.5042,1],[0.9949,0.471,1],[0.9756,0.4378,1],[0.9553,0.42,1],[0.9277,0.4066,1],[0.8834,0.4017,1],
+        [0.8501,0.4115],[0.8172,0.3824,1],[0.7878,0.3706,1],[0.7477,0.3683,1],[0.7072,0.378],[0.6706,0.3522,1],
+        [0.6468,0.3439,1],[0.6168,0.3411,1],[0.5869,0.3461],[0.5857,0.1004,1],[0.5801,0.0698,1],[0.5648,0.0414,1],
+        [0.5348,0.0154,1],[0.4997,0.0024,1],[0.4646,0.0003,1]
+      ],
+    ];
+    S.envelope = [
+      // outer
+      [
+        [0.0478,0.0032,1],[0.037,0.0134],[0.0445,0.0332,1],[0.4641,0.6862,1],[0.504,0.7315],[0.9037,0.1148,1],
+        [0.9576,0.0268,1],[0.9555,0.0077],[0.0521,0.0006,1]
+      ],
+      // part 2
+      [
+        [0.3175,0.5446],[0.0445,0.9668,1],[0.037,0.9866],[0.0575,1,1],[0.9555,0.9923],[0.9555,0.9668,1],
+        [0.6825,0.5446],[0.5302,0.7781,1],[0.5,0.8048],[0.4641,0.7679,1],[0.3204,0.5446]
+      ],
+      // part 3
+      [
+        [0.9846,0.0644,1],[0.7091,0.4974],[0.9885,0.9375],[1,0.8878,1],[1,0.1122,1],[0.9885,0.0625]
+      ],
+      // part 4
+      [
+        [0.0079,0.0651],[0,0.102,1],[0,0.898,1],[0.0079,0.9349],[0.0154,0.9356],[0.2866,0.5],[0.2543,0.4362,1],
+        [0.0115,0.0625]
+      ],
+    ];
+    S.key = [
+      // outer
+      [
+        [0.4578,0.0008,1],[0.3646,0.0092,1],[0.2596,0.0299,1],[0.1879,0.0532,1],[0.1095,0.0912,1],[0.0616,0.1261,1],
+        [0.0189,0.1792,1],[0.0001,0.2372,1],[0.0047,0.2729,1],[0.0431,0.3393,1],[0.103,0.3885,1],[0.1925,0.4323,1],
+        [0.2794,0.4594],[0.2828,0.5137],[0.3676,0.5191],[0.2864,0.5658],[0.3697,0.5968],[0.3728,0.6083],
+        [0.2822,0.6599],[0.3697,0.693],[0.3728,0.7022],[0.2821,0.7427],[0.3728,0.7832],[0.3697,0.7992],
+        [0.2879,0.8428],[0.3671,0.8934],[0.3732,0.9172],[0.3671,0.9232,1],[0.2873,0.9404,1],[0.2828,0.9455],
+        [0.3749,0.9992,1],[0.4603,0.9975],[0.4609,0.5213],[0.466,0.5171,1],[0.5017,0.5171],[0.5075,0.9975],
+        [0.6538,0.9997],[0.6596,0.5193],[0.7153,0.515],[0.7206,0.4594],[0.8376,0.42,1],[0.8951,0.3898,1],
+        [0.9385,0.3572,1],[0.9754,0.3147,1],[0.9949,0.2749,1],[0.9953,0.2126,1],[0.98,0.1775,1],[0.9384,0.1261,1],
+        [0.8905,0.0912,1],[0.8121,0.0532,1],[0.7373,0.0291,1],[0.639,0.0097,1],[0.5387,0.0002,1],[0.4613,0.0002,1]
+      ],
+      // hole 1
+      [
+        [0.4706,0.0651,1],[0.5294,0.0651,1],[0.5745,0.0746,1],[0.6113,0.0925,1],[0.6308,0.1121],[0.6308,0.1452,1],
+        [0.6159,0.1625,1],[0.5725,0.184,1],[0.5341,0.1921,1],[0.4844,0.1944,1],[0.4302,0.1849,1],[0.386,0.1638,1],
+        [0.3692,0.1452,1],[0.3646,0.1278],[0.3795,0.0992,1],[0.4045,0.0823,1],[0.467,0.0656,1]
+      ],
+    ];
+    S.car = [
+      // outer
+      [
+        [0.2791,0.0065,1],[0.2251,0.0482,1],[0.1195,0.2643,1],[0.0604,0.3112,1],[0.0342,0.3138],[0.0118,0.349,1],
+        [0.0004,0.418,1],[0.0004,0.457,1],[0.0313,0.5078,1],[0.0334,0.582,1],[0.0287,0.6094,1],[0.0004,0.668,1],
+        [0.0004,0.832,1],[0.0089,0.8893,1],[0.0291,0.9518,1],[0.0785,0.9922],[0.0899,0.819,1],[0.1132,0.724,1],
+        [0.1372,0.6732,1],[0.1626,0.6471],[0.1959,0.6458],[0.2276,0.6732,1],[0.2584,0.7448,1],[0.2749,0.819,1],
+        [0.2834,0.8971,1],[0.2842,0.9779,1],[0.291,0.9987],[0.7158,0.9987],[0.7226,0.9779,1],[0.7251,0.8815,1],
+        [0.7551,0.724,1],[0.7791,0.6732,1],[0.8045,0.6471],[0.8378,0.6458],[0.883,0.694,1],[0.9071,0.7656,1],
+        [0.9253,0.8971,1],[0.9282,0.9922],[0.9793,0.9987],[0.9996,0.9362,1],[0.9996,0.7305,1],[0.9928,0.7096],
+        [0.9548,0.7018],[0.9278,0.6393,1],[0.9215,0.599,1],[0.9261,0.5846],[0.9814,0.5964],[0.9856,0.5833,1],
+        [0.9776,0.5482,1],[0.9438,0.4857,1],[0.8577,0.418,1],[0.7791,0.3893],[0.6533,0.1315,1],[0.5739,0.0221,1],
+        [0.5338,0],[0.2842,0.0013]
+      ],
+      // hole 1
+      [
+        [0.4531,0.1055],[0.5469,0.1055],[0.5992,0.1523,1],[0.6871,0.319,1],[0.7137,0.3828,1],[0.709,0.4154],
+        [0.4599,0.3945],[0.4531,0.3737,1],[0.4464,0.2904,1],[0.4485,0.112,1]
+      ],
+      // hole 2
+      [
+        [0.3045,0.1055],[0.4096,0.112],[0.4122,0.3542,1],[0.405,0.3945],[0.2572,0.3737,1],[0.1985,0.3255],
+        [0.201,0.2865,1],[0.2521,0.1523,1],[0.2994,0.1107,1]
+      ],
+    ];
+    // ---- squircle + additions ----
+    // The squircle is the rounded rectangle Apple actually uses: curvature is continuous, so the
+    // corner leaves the straight edge gradually instead of snapping into an arc. Side by side with
+    // a plain rounded rect it looks slightly fuller — that fullness IS the effect.
+    S.squircle = [squircleS(0.5, 0.5, 0.5, 0.5, 4, 44)];
+    // cross: a plus rotated 45°, so the arms stay square-ended and even (drawing an X directly from
+    // corner points gives arms of unequal width once the box is not square).
+    S.cross = (function () {
+      const a = 0.10, e = 0.44, c = 0.5;
+      return [rot([[c-a,c-e],[c+a,c-e],[c+a,c-a],[c+e,c-a],[c+e,c+a],[c+a,c+a],
+                   [c+a,c+e],[c-a,c+e],[c-a,c+a],[c-e,c+a],[c-e,c-a],[c-a,c-a]], c, c, PI/4)];
+    })();
+    // map pin: a head arc that closes to a point, with the ring punched out
+    S.pin = [arcS(0.5, 0.355, 0.30, 0.30, PI*0.78, PI*2.22, 14, true).concat([[0.5, 0.975]]),
+             holeS(circleS(0.5, 0.335, 0.115, 0.115, 10))];
+    S.lock = [
+      rrectS(0.17, 0.45, 0.83, 0.94, 0.10),
+      holeS(circleS(0.5, 0.645, 0.072, 0.072, 8)),
+      holeS([[0.468,0.645],[0.532,0.645],[0.522,0.83],[0.478,0.83]]),          // keyhole stem
+      arcS(0.5, 0.47, 0.235, 0.25, PI, T, 12, true)                             // shackle: outer arc…
+        .concat([[0.735,0.52],[0.645,0.52]])
+        .concat(arcS(0.5, 0.47, 0.145, 0.16, T, PI, 10, true))                  // …back along the inner
+        .concat([[0.355,0.52],[0.265,0.52]]),
+    ];
+    S.gear = (function () {
+      const N = 8, ro = 0.48, ri = 0.372, pts = [];
+      for (let i = 0; i < N; i++) {
+        const a0 = i * T / N, w = T / N;
+        [[ri,0], [ro,0.17], [ro,0.43], [ri,0.60]].forEach(([r, f]) => {
+          const a = a0 + w * f;
+          pts.push([r4(0.5 + r*Math.cos(a)), r4(0.5 + r*Math.sin(a))]);
+        });
+      }
+      return [pts, holeS(circleS(0.5, 0.5, 0.155, 0.155, 10))];
+    })();
+    S.crown = [[[0.06,0.30],[0.27,0.60],[0.5,0.22],[0.73,0.60],[0.94,0.30],
+                [0.90,0.84],[0.855,0.88,1],[0.145,0.88],[0.10,0.84]]];
+    // eye: a lens outline (ring) with a solid pupil — a filled almond alone reads as a leaf
+    S.eye = [[[0.055,0.5],[0.5,0.155,1],[0.945,0.5],[0.5,0.845,1]],
+             holeS([[0.145,0.5],[0.5,0.235,1],[0.855,0.5],[0.5,0.765,1]]),
+             circleS(0.5, 0.5, 0.17, 0.17, 10)];
+    S.note = [
+      rot(circleS(0.335, 0.775, 0.175, 0.135, 10), 0.335, 0.775, -0.34),        // tilted head
+      [[0.487,0.115],[0.545,0.095],[0.545,0.775],[0.487,0.775]],                // stem
+      [[0.545,0.095],[0.72,0.20,1],[0.83,0.385],[0.795,0.45],[0.775,0.33,1],[0.545,0.215]],  // flag
+    ];
+    S.starburst = (function () {
+      const N = 12, pts = [];
+      for (let i = 0; i < N * 2; i++) { const a = -PI/2 + i*PI/N, r = (i % 2 ? 0.265 : 0.48);
+        pts.push([r4(0.5 + r*Math.cos(a)), r4(0.5 + r*Math.sin(a))]); }
+      return [pts];
+    })();
+    S.clock = [
+      circleS(0.5, 0.5, 0.47, 0.47, 16), holeS(circleS(0.5, 0.5, 0.375, 0.375, 16)),
+      [[0.468,0.5],[0.532,0.5],[0.532,0.255],[0.468,0.255]],                    // hour hand
+      [[0.5,0.468],[0.5,0.532],[0.735,0.532],[0.735,0.468]],                    // minute hand
+      circleS(0.5, 0.5, 0.05, 0.05, 8),
+    ];
     return S;
   })();
   const OPEN_POLY = { spiral: 1 };   // data shapes that STROKE their polyline instead of filling

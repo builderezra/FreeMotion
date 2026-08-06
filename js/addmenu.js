@@ -36,6 +36,9 @@ window.FM = window.FM || {};
     ['diamond', 'Diamond'], ['plane', 'Plane'], ['umbrella', 'Umbrella'], ['bomb', 'Bomb'],
     ['boat', 'Boat'], ['magnifier', 'Magnifier'], ['key', 'Key'], ['sun', 'Sun'], ['person', 'Person'],
     ['rocket', 'Rocket'], ['envelope', 'Envelope'], ['woman', 'Woman'], ['car', 'Car'],
+    ['squircle', 'Squircle'], ['cross', 'Cross'], ['pin', 'Map pin'], ['lock', 'Lock'],
+    ['gear', 'Gear'], ['crown', 'Crown'], ['eye', 'Eye'], ['note', 'Music note'],
+    ['starburst', 'Starburst'], ['clock', 'Clock'],
   ];
 
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).

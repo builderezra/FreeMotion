@@ -61,6 +61,22 @@ Not a re-skin — a different composition. Concretely:
    grep -rin "alight" js/ index.html styles.css manifest.json
    ```
 
+## 8. Six shapes are traced from stock images — REDRAW BEFORE PUBLISHING
+
+In v3.96 the `check`, `thumbsup`, `pointhand`, `envelope`, `key` and `car` shapes were produced by
+**boundary-tracing Ezra's reference images**, which came from stock sites (two of the six still had
+Dreamstime / Shutterstock watermarks in them). The traced geometry is a derivative of those specific
+drawings, not an independent design.
+
+The *ideas* — a tick, a key, a thumbs-up — are not protectable, and the shapes are simple and
+generic. The risk is narrow but real: a trace reproduces one artist's particular version of the
+form, and these ship inside the product.
+
+**What "done" looks like:** redraw those six from scratch (or from a licence we hold), keeping the
+proportions that read well but not the exact contour. Everything else in the shape library is
+original geometry and is fine. The tracing pipeline itself is in the v3.96 commit message if it's
+useful again on assets we own.
+
 ## Do this before
 
 - Any public link Ezra promotes, any store listing, any tutorial or demo video.
