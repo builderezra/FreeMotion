@@ -30,7 +30,8 @@ window.FM = window.FM || {};
     'mask-include': 'destination-in',
     'mask-exclude': 'destination-out',
   };
-  FM.BLEND_MODES = Object.keys(BLEND);
+  // Both registries: the native gCO map AND the per-pixel modes in js/blend-modes.js.
+  FM.BLEND_MODES = Object.keys(BLEND).concat(FM.BLEND_MANUAL ? Object.keys(FM.BLEND_MANUAL) : []);
 
   // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
@@ -3541,6 +3542,40 @@ window.FM = window.FM || {};
     try { ctx.drawImage(_cbA, 0, 0); } catch (e) {}
     ctx.restore();
   }
+  // A layer using a blend mode Canvas can't express: rasterise it once with a neutral blend, then
+  // hand the plate and the backdrop to the per-pixel blender. Only the plate's alpha bounds make
+  // the getImageData round trip — a small clip on a 1080×1920 comp reads a few percent of the
+  // frame instead of all of it, which is the difference between usable and not.
+  let _manualCv = null;
+  function drawManualBlendLayer(ctx, layer, t, scene) {
+    const P = scene.project;
+    if (!_manualCv) _manualCv = document.createElement('canvas');
+    if (_manualCv.width !== P.width || _manualCv.height !== P.height) { _manualCv.width = P.width; _manualCv.height = P.height; }
+    const mc = _manualCv.getContext('2d', { willReadFrequently: true });
+    mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, P.width, P.height);
+    mc.globalAlpha = 1; mc.globalCompositeOperation = 'source-over'; mc.filter = 'none';
+    const saved = layer.blendMode; layer.blendMode = 'normal';
+    try { drawLayer(mc, layer, t, scene); } finally { layer.blendMode = saved; }   // opacity bakes into the plate's alpha here, which is exactly what the blender expects
+
+    const cw = ctx.canvas.width, ch = ctx.canvas.height;
+    const bb = alphaBBoxFast(_manualCv, Math.min(P.width, cw), Math.min(P.height, ch));
+    if (!bb || bb.w <= 0 || bb.h <= 0) return;   // nothing drew — the backdrop stands
+    const x = Math.max(0, bb.x), y = Math.max(0, bb.y);
+    const w = Math.min(bb.w, cw - x), h = Math.min(bb.h, ch - y);
+    if (w <= 0 || h <= 0) return;
+
+    let bd, sd;
+    try { bd = ctx.getImageData(x, y, w, h); sd = mc.getImageData(x, y, w, h); }
+    catch (e) {   // tainted canvas (cross-origin media): fall back to a plain composite rather than dropping the layer
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+      ctx.drawImage(_manualCv, 0, 0); ctx.restore(); return;
+    }
+    FM.BLEND_MANUAL[layer.blendMode](bd.data, sd.data, w, h);
+    // putImageData ignores transform, clip, globalAlpha and composite op — the blend already did
+    // all of that, so this is a straight write of the finished pixels.
+    ctx.putImageData(bd, x, y);
+  }
+
   function drawLayer(ctx, layer, t, scene) {
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
@@ -3552,6 +3587,18 @@ window.FM = window.FM || {};
     // 3D tilt (rotationX / rotationY) is the OUTERMOST geometric transform: build the flat plate through
     // the normal path (effects/masks/motion-blur/blend all bake in), then lean it in 3D. Gated on a live
     // tilt, so an untilted layer falls straight through below — diff-free. Needs a scene for proj dims.
+    // Blend modes Canvas has NO globalCompositeOperation for (Vivid Light, Pin Light, Subtract, …)
+    // are computed per pixel — same shape as the mask interception above: render the layer as ONE
+    // plate with a neutral blend, then combine it with the backdrop by hand. Everything Canvas can
+    // do natively never reaches here (that path is GPU and far cheaper); see js/blend-modes.js.
+    if (scene && FM.BLEND_MANUAL && FM.BLEND_MANUAL[layer.blendMode] && (!_manualCv || ctx.canvas !== _manualCv)) {
+      drawManualBlendLayer(ctx, layer, t, scene);
+      return;
+    }
+    // NOTE: this sits ABOVE the 3D-tilt branch deliberately. draw3DTiltLayer composites its plate
+    // with BLEND[layer.blendMode], which has no key for a manual mode — so tilting a Vivid Light
+    // layer by one degree used to drop it back to Normal with no warning. Re-entering with
+    // blendMode:'normal' bakes the tilt into the plate first, then we blend the tilted result.
     if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); return; }
     // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
     // (fill+stroke, caption pill, keyed video) would otherwise each re-clip the canvas below.

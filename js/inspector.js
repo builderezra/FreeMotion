@@ -2133,20 +2133,28 @@ window.FM = window.FM || {};
         }));
       }
     } else if (key === 'blend') {
-      // AM layout: opacity slider on top, then blend CATEGORIES as expandable rows — each opens a
-      // dropdown of the modes in that family (one per family for now; more land as AM refs arrive).
+      // Opacity slider on top, then blend families as expandable rows.
+      //
+      // ORDER AND NAMING ARE OURS, DELIBERATELY. Cutout sits directly under Basic because keeping
+      // or punching a hole is the thing people reach for constantly — it doesn't belong buried at
+      // the bottom under the colour maths. Brighten leads Deepen (adding light is the common case),
+      // and Invert trails because it's the specialist. Labels use Australian spelling and plain
+      // words for the same operations — the ids underneath are unchanged, so projects, presets and
+      // the AI ops keep working regardless of what a row is called.
       body.appendChild(transformRow(layer, 'opacity', 'Opacity', { step: 0.01, dp: 2, slider: { min: 0, max: 1, step: 0.01 } }));
       const CATS = [
-        ['Normal', [['normal', 'Normal']]],
-        ['Darken', [['darken', 'Darken']]],
-        ['Lighten', [['lighten', 'Lighten']]],
-        ['Contrast', [['overlay', 'Overlay']]],
-        ['Difference', [['difference', 'Difference'], ['exclusion', 'Exclusion']]],
-        ['Color', [['color', 'Color']]],
-        ['Mask', [['mask-include', 'Mask (include)'], ['mask-exclude', 'Mask (exclude)']]],
+        ['Basic', [['normal', 'Normal']]],
+        ['Cutout', [['mask-include', 'Stencil'], ['mask-exclude', 'Punch Out']]],
+        ['Brighten', [['screen', 'Screen'], ['lighten', 'Lighten'], ['lighter-color', 'Brightest Colour'], ['color-dodge', 'Colour Dodge'], ['linear-dodge', 'Add']]],
+        ['Deepen', [['multiply', 'Multiply'], ['darken', 'Darken'], ['darker-color', 'Deepest Colour'], ['color-burn', 'Colour Burn'], ['linear-burn', 'Linear Burn']]],
+        ['Punch', [['overlay', 'Overlay'], ['soft-light', 'Soft Light'], ['hard-light', 'Hard Light'], ['soft-overlay', 'Gentle Overlay'], ['vivid-light', 'Vivid Light'], ['linear-light', 'Linear Light'], ['pin-light', 'Pin Light']]],
+        ['Tint', [['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Colourise'], ['luminosity', 'Luminance']]],
+        ['Invert', [['difference', 'Difference'], ['exclusion', 'Exclusion'], ['subtract', 'Minus'], ['divide', 'Ratio']]],
       ];
       // Legacy/unlisted modes still resolve to their family so the current mode is always visible.
-      const FAMILY = { multiply: 'Darken', 'color-burn': 'Darken', screen: 'Lighten', add: 'Lighten', 'color-dodge': 'Lighten', 'hard-light': 'Contrast', 'soft-light': 'Contrast', hue: 'Color', saturation: 'Color', luminosity: 'Color' };
+      // 'add' is the old Porter-Duff PLUS id kept for projects that already use it — new picks get
+      // 'linear-dodge', which is the same look but composites correctly under opacity.
+      const FAMILY = { add: 'Brighten' };
       const cur = layer.blendMode || 'normal';
       CATS.forEach(c => { const fam = FAMILY[cur]; if (fam === c[0] && !c[1].some(m => m[0] === cur)) c[1].push([cur, cur.charAt(0).toUpperCase() + cur.slice(1)]); });
       const catOf = m => { const hit = CATS.find(c => c[1].some(x => x[0] === m)); return hit ? hit[0] : 'Normal'; };
