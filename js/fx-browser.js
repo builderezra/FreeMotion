@@ -61,7 +61,19 @@ window.FM = window.FM || {};
     layer.effects.push(inst);             // <- exactly one entry
     pushRecent(id);
     FM.fxBrowser.close();
-    if (FM.inspector) FM.inspector.refresh();
+    // Land ON the new effect's controls. inst._expanded above only decides which row is open —
+    // it does nothing if the inspector has meanwhile fallen back to the category grid, which is
+    // what made adding an effect look like it just closed the layer.
+    if (FM.inspector) {
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      else FM.inspector.refresh();
+      // …and bring it into view: on a phone the new row is usually below the fold, so without this
+      // you arrive at the right panel and still cannot see the controls you just added.
+      requestAnimationFrame(() => {
+        const open = document.querySelector('.fx-row.fx-open');
+        if (open && open.scrollIntoView) open.scrollIntoView({ block: 'nearest' });
+      });
+    }
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.requestRender) FM.requestRender();
     if (FM.history) FM.history.commit();

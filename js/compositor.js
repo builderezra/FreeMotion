@@ -219,9 +219,19 @@ window.FM = window.FM || {};
     ] },
     { type: 'stroke', label: 'Stroke Color', param: 'width', min: 1, max: 60, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
     { type: 'smoothedges', label: 'Smooth Edges', param: 'radius', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
+    { type: 'glass', label: 'Liquid Glass', color: true, defColor: '#ffffff', colorLabel: 'Tint', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'frost', label: 'Frost', min: 0, max: 40, step: 0.5, def: 8, unit: 'px' },
+      { key: 'clarity', label: 'Clarity', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'sheen', label: 'Sheen', min: 0, max: 100, step: 1, def: 45, unit: '%' },
+      { key: 'bevel', label: 'Edge', min: 0, max: 20, step: 0.5, def: 4, unit: 'px' },
+      { key: 'tint', label: 'Tint amount', min: 0, max: 100, step: 1, def: 12, unit: '%' },
+      { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '\u00b0' },
+    ] },
     { type: 'roundcorners', label: 'Rounded Corners', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px' },
       { key: 'style', label: 'Corner', options: ['Rounded', 'Apple (continuous)'], def: 1 },   // Apple = superellipse: the curve eases out of the straight edge first
+      { key: 'smoothing', label: 'Smoothing', min: 0, max: 100, step: 1, def: 50, unit: '%' },  // Apple corners only
     ] },
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
@@ -1082,7 +1092,7 @@ window.FM = window.FM || {};
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
-    faded: 1, nightvision: 1, sketch: 1, roundcorners: 1,
+    faded: 1, nightvision: 1, sketch: 1, roundcorners: 1, glass: 1,
     cube3d: 1, box3d: 1, cylinder3d: 1, sphere3d: 1, ellipsoid3d: 1, torus3d: 1, ring3d: 1,
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
@@ -2708,6 +2718,83 @@ window.FM = window.FM || {};
     // uses SUPERELLIPSE corners (|x/r|^n + |y/r|^n = 1, n=5) — the iOS-icon curve whose curvature
     // eases out of the straight edge instead of jumping into a circular arc, so the corner appears
     // to "come out a bit first". Sampled 16 points per corner — visually smooth at any size.
+    // Liquid Glass: makes the LAYER look like a pane of frosted glass rather than painting a glass
+    // sprite over the frame. Four things stacked, which is what actually sells it — none alone does:
+    // a frost blur clipped back to the crisp silhouette, a little of the sharp image left showing
+    // through, a diagonal specular sheen, and a two-sided bevel (light rim top-left, dark rim
+    // bottom-right) built by subtracting an offset copy of the layer's own alpha from itself.
+    glass: (function () {
+      let _gA = null, _gB = null;
+      return function (A, B, W, H, bb, p, t) {
+        const amt = Math.max(0, Math.min(1, fparam(p, 'amount', 1, t)));
+        if (amt <= 0) { B.drawImage(A, 0, 0); return; }
+        const frost = Math.max(0, fparam(p, 'frost', 8, t));
+        const clarity = Math.max(0, Math.min(100, fparam(p, 'clarity', 35, t))) / 100;
+        const sheen = Math.max(0, Math.min(100, fparam(p, 'sheen', 45, t))) / 100;
+        const bevel = Math.max(0, fparam(p, 'bevel', 4, t));
+        const tintA = Math.max(0, Math.min(100, fparam(p, 'tint', 12, t))) / 100;
+        const C = hexToRGB(p.color || '#ffffff');
+        const ang = fparam(p, 'angle', 135, t) * Math.PI / 180;
+
+        if (!_gA) { _gA = document.createElement('canvas'); _gB = document.createElement('canvas'); }
+        if (_gA.width !== W || _gA.height !== H) { _gA.width = _gB.width = W; _gA.height = _gB.height = H; }
+        const g1 = _gA.getContext('2d'), g2 = _gB.getContext('2d');
+
+        // ---- the glass body, built on scratch so `amount` can cross-fade it against the original
+        g1.setTransform(1, 0, 0, 1, 0, 0); g1.clearRect(0, 0, W, H);
+        g1.globalCompositeOperation = 'source-over'; g1.globalAlpha = 1;
+        g1.filter = 'blur(' + frost.toFixed(2) + 'px) saturate(1.25) brightness(1.06)';
+        g1.drawImage(A, 0, 0);
+        g1.filter = 'none';
+        if (clarity > 0) { g1.globalAlpha = clarity; g1.drawImage(A, 0, 0); g1.globalAlpha = 1; }
+        // the blur bled past the silhouette — clip it back to the layer's own crisp alpha
+        g1.globalCompositeOperation = 'destination-in';
+        g1.drawImage(A, 0, 0);
+        g1.globalCompositeOperation = 'source-atop';
+
+        if (tintA > 0) {
+          g1.fillStyle = 'rgba(' + C[0] + ',' + C[1] + ',' + C[2] + ',' + tintA.toFixed(3) + ')';
+          g1.fillRect(0, 0, W, H);
+        }
+        if (sheen > 0) {
+          const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2, R = Math.hypot(bb.w, bb.h) / 2;
+          const gx = Math.cos(ang) * R, gy = Math.sin(ang) * R;
+          const gr = g1.createLinearGradient(cx - gx, cy - gy, cx + gx, cy + gy);
+          gr.addColorStop(0.00, 'rgba(255,255,255,' + (0.42 * sheen).toFixed(3) + ')');
+          gr.addColorStop(0.34, 'rgba(255,255,255,' + (0.06 * sheen).toFixed(3) + ')');
+          gr.addColorStop(0.52, 'rgba(255,255,255,0)');
+          gr.addColorStop(0.74, 'rgba(255,255,255,' + (0.16 * sheen).toFixed(3) + ')');
+          gr.addColorStop(1.00, 'rgba(255,255,255,0)');
+          g1.fillStyle = gr; g1.fillRect(0, 0, W, H);
+        }
+        g1.globalCompositeOperation = 'source-over';
+
+        // ---- bevel: A minus A-shifted leaves a crescent along one side of every edge, whatever
+        // the silhouette is. Two passes, opposite offsets, light then dark.
+        if (bevel > 0.2) {
+          const dx = Math.cos(ang) * bevel, dy = Math.sin(ang) * bevel;
+          [[-dx, -dy, '255,255,255', 0.55], [dx, dy, '0,0,0', 0.30]].forEach(([ox, oy, rgb, a]) => {
+            g2.setTransform(1, 0, 0, 1, 0, 0); g2.clearRect(0, 0, W, H);
+            g2.globalCompositeOperation = 'source-over'; g2.globalAlpha = 1;
+            g2.drawImage(A, 0, 0);
+            g2.globalCompositeOperation = 'destination-out';
+            g2.drawImage(A, ox, oy);
+            g2.globalCompositeOperation = 'source-in';
+            g2.fillStyle = 'rgb(' + rgb + ')'; g2.fillRect(0, 0, W, H);
+            g1.globalCompositeOperation = 'source-atop';
+            g1.globalAlpha = a;
+            g1.drawImage(_gB, 0, 0);
+            g1.globalAlpha = 1;
+            g1.globalCompositeOperation = 'source-over';
+          });
+        }
+
+        B.drawImage(A, 0, 0);
+        B.globalAlpha = amt;
+        B.drawImage(_gA, 0, 0);
+        B.globalAlpha = 1;
+      };
+    })(),
     roundcorners: function (A, B, W, H, bb, p, t) {
       let r = FM.evalProp(p.radius, t); if (r == null) r = 80;
       const style = Math.round(fparam(p, 'style', 0, t));
@@ -2719,7 +2806,16 @@ window.FM = window.FM || {};
       B.globalCompositeOperation = 'destination-in';
       B.beginPath();
       if (style === 1) {
-        const n = 5, N = 16, pw = v => Math.pow(Math.abs(v), 2 / n);
+        // SMOOTHING is the superellipse exponent — how far the corner eases out of the straight edge
+        // before it starts turning. 50 lands on exactly 5, the constant this always used (2 + 50*0.06),
+        // so an existing project is untouched; low is nearly circular, high is nearly square.
+        const sm = fparam(p, 'smoothing', 50, t);
+        const n = 2 + sm * 0.06;
+        // The corner polygon used a flat 16 segments per quadrant, which at a 400px radius is a 39px
+        // chord — visibly faceted. Segments now scale with the radius, and any radius up to 96px
+        // (the default 80 included) still resolves to 16, so those renders do not move.
+        const N = Math.max(16, Math.min(72, Math.ceil(r / 6)));
+        const pw = v => Math.pow(Math.abs(v), 2 / n);
         const q = [];   // superellipse quadrant, a: 0 → π/2
         for (let i = 0; i <= N; i++) { const a = i / N * Math.PI / 2; q.push([pw(Math.sin(a)), pw(Math.cos(a))]); }
         B.moveTo(x + r, y);
