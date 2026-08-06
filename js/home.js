@@ -258,9 +258,21 @@ window.FM = window.FM || {};
           const ok = await FM.templates.save(n.trim(), p.id);
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
         } },
-        // export WITHOUT permanently switching to it — serialize, then switch back to the project
-        // that was open (the ⋯ export used to silently move the OPEN badge to the exported project)
-        { label: 'Export project file', action: async () => {
+        // EXPORT VIDEO — the same dialog the editor's Export button opens (format, resolution, frame
+        // rate, quality, range). It used to fire FM.storage.exportFile() the instant you tapped, which
+        // silently downloaded a .fmotion.json project file: no options, and not what "Export" means to
+        // anyone. Rendering video needs the scene and its media actually loaded, so this opens the
+        // project first and leaves you in it — you are exporting THAT project, so that is where you
+        // should be standing.
+        { label: 'Export video…', action: async () => {
+          const ok = await openProject(p.id);
+          if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }
+          // let the editor finish laying out before the dialog measures the project for its presets
+          setTimeout(() => { if (FM.showExportDialog) FM.showExportDialog(); }, 260);
+        } },
+        // the project FILE (.fmotion.json) is a different thing — a backup you can re-import — so it
+        // keeps its own entry, and still exports without stealing the OPEN badge from your project
+        { label: 'Save project file…', action: async () => {
           const prev = FM.projects.currentId();
           const ok = await openProject(p.id, true);
           if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }   // switch was skipped (another open in flight): exporting now would serialize the WRONG scene
@@ -676,7 +688,8 @@ window.FM = window.FM || {};
         const r = ev.currentTarget.getBoundingClientRect();
         FM.contextMenu.show(Math.min(r.left, window.innerWidth - 220), r.bottom + 4, [
           { label: 'Import project file…', action: () => { FM.storage.importFile(() => FM.home.close()); } },   // close on SUCCESS, not a blind 400ms timer (which dumped you into the editor even if you cancelled the picker)
-          { label: 'Save frame (PNG)', action: () => FM.snapshotPNG() },
+          // NO "Save frame (PNG)" here: on Home there is no open project and so no frame to save.
+          // It lives in the editor, where a frame actually exists.
           // Opens ON TOP of the home screen — reading the shortcut list shouldn't drop you into a
           // project you didn't ask to open (and, on a fresh install, shouldn't create one).
           { label: 'Shortcuts', action: () => { FM.shortcuts.toggle(); } },

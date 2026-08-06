@@ -839,13 +839,22 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 }
 #splash.hidden { display: none; }
 #splash.splash-out { opacity: 0; }   /* keeps swallowing pointer/ghost-click events while fading — pointer-events:none let the post-touch synthesized click punch through to editor controls */
-#splash video { position: absolute; }
-#splash-vid {
+#splash video, #splash-poster { position: absolute; }
+#splash-vid, #splash-poster {
   left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(100vw, 100vh); height: min(100vw, 100vh);   /* as large as the screen's short side; the rest of the screen is the same black the video ends in */
   width: min(100vw, 100dvh); height: min(100vw, 100dvh); /* dynamic viewport where supported: mobile-landscape 100vh overshoots by the URL bar and cropped the video's edges */
   object-fit: contain;
 }
+/* The still stands in until the video is genuinely PLAYING. iOS draws its own big play control over
+   any <video> that has a poster and isn't running, and a 2.8MB file on a phone leaves a long window
+   where that is exactly the state — which is the play button appearing on the splash. So the video
+   carries no poster attribute at all and stays invisible until its `playing` event fires; if it
+   never plays (Low Power Mode, slow connection) you simply see the still and the splash times out. */
+#splash-vid { opacity: 0; transition: opacity .2s linear; pointer-events: none; }
+#splash-vid.playing { opacity: 1; }
+#splash-vid.playing + #splash-poster { opacity: 0; }
+#splash-poster { opacity: 1; transition: opacity .2s linear; pointer-events: none; }
 #splash-skip {
   position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 0; right: 0;
   text-align: center; color: rgba(232, 236, 244, .45); font-size: 12px; letter-spacing: .4px;
@@ -874,6 +883,13 @@ input[type=range]::-webkit-slider-thumb {
      grid child with only 2 rows dumped it into the 1fr row, ballooning it and squashing the timeline.) */
   display: grid; grid-template-rows: 40px 26px 1fr;
   position: relative;   /* anchors the fixed-centre #tl-centerline (phone) + the drag-resizer */
+  /* A grid TRACK has an implicit minimum of auto, so a 1fr row refuses to shrink below its content.
+     With enough layers the panel grew past #app (which is height:100vh; overflow:hidden), the rows
+     below the fold were simply clipped, and #timeline's own overflow:auto had nothing left to scroll
+     — which is what "I can't scroll down through the layers" was. min-height:0 lets the track shrink
+     to the space actually available so the inner scroller does its job. Needed on BOTH levels:
+     the panel inside #app, and #timeline inside the panel. */
+  min-height: 0;
 }
 /* Drag the top edge of the timeline up/down to resize it (desktop). Straddles the panel's top border;
    a pill appears on hover / during the drag. Persisted to localStorage, restored on load. */
@@ -944,7 +960,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 
 /* touch-action:none so JS owns ALL timeline gestures — horizontal grab-scrub works ANYWHERE (lanes,
    empty space, ruler), not just the ruler. The scrub handler does vertical pan itself when needed. */
-#timeline { position: relative; overflow: auto; touch-action: none; overscroll-behavior: contain; }
+#timeline { position: relative; overflow: auto; touch-action: none; overscroll-behavior: contain; min-height: 0; }
 #tl-inner { position: relative; min-height: 100%; }
 #tl-rulerrow { display: flex; height: 22px; position: sticky; top: 0; z-index: 7; background: var(--panel); }
 .tl-headspace { width: var(--head-w); flex: 0 0 var(--head-w); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line-soft); position: sticky; left: 0; z-index: 9; background: var(--panel); }

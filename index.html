@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=211">
+<link rel="stylesheet" href="styles.css?v=213">
 <link rel="stylesheet" href="theme-glass.css?v=7">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -29,6 +29,7 @@
        actually shows, so a skipped splash costs zero bytes. -->
   <div id="splash" class="hidden" aria-hidden="true">
     <video id="splash-vid" muted playsinline autoplay preload="auto"></video>
+    <img id="splash-poster" alt="" aria-hidden="true">
     <div id="splash-skip">tap to skip</div>
   </div>
   <script>
@@ -54,7 +55,13 @@
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(); });
       setTimeout(dismiss, 5000);            // hard cap — nothing holds the editor hostage
-      vid.poster = 'splash-poster.png?v=3';
+      // NO poster attribute on the <video>: iOS renders its own play control over a video that has a
+      // poster and is not playing, and with a 2.8MB file that state can last the whole splash. The
+      // still is a separate <img> underneath instead, and the video only fades in once it is really
+      // playing — so a refused autoplay or a slow load shows the logo, never a play button.
+      var pos = document.getElementById('splash-poster');
+      if (pos) pos.src = 'splash-poster.png?v=3';
+      vid.addEventListener('playing', function () { vid.classList.add('playing'); });
       vid.src = 'splash.mp4?v=2';
       var p = vid.play();
       // autoplay refused (iOS Low Power Mode etc.) → the poster shows until the cap;
@@ -66,7 +73,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.04</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.05</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -426,7 +433,7 @@
   <script src="js/fx-registry.js?v=46"></script>
   <script src="js/fx-presets.js?v=2"></script>
   <script src="js/fx-thumbs.js?v=4"></script>
-  <script src="js/timeline.js?v=156"></script>
+  <script src="js/timeline.js?v=98"></script>
   <script src="js/addmenu.js?v=12"></script>
   <script src="js/inspector.js?v=174"></script>
   <script src="js/fx-browser.js?v=20"></script>
@@ -449,7 +456,7 @@
   <script src="js/history.js?v=24"></script>
   <script src="js/storage.js?v=82"></script>
   <script src="js/medialib.js?v=2"></script>
-  <script src="js/home.js?v=17"></script>
+  <script src="js/home.js?v=99"></script>
   <script src="js/graph-editor.js?v=107"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -458,7 +465,7 @@
   <script src="js/contextmenu.js?v=37"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=173"></script>
+  <script src="js/app.js?v=174"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=4"></script>
   <script src="js/mobile.js?v=22"></script>

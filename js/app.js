@@ -1824,6 +1824,8 @@ window.FM = window.FM || {};
       sampleBtn.disabled = false; sampleBtn.textContent = 'Sample clip';
     });
     document.getElementById('btn-export').addEventListener('click', showExportDialog);
+    // Home's project ⋯ opens this same dialog, so it can't stay private to this module.
+    FM.showExportDialog = showExportDialog;
     const helpBtn = document.getElementById('btn-help');
     if (helpBtn) helpBtn.addEventListener('click', () => { if (FM.shortcuts) FM.shortcuts.toggle(); });
     const fitBtn = document.getElementById('btn-fit');

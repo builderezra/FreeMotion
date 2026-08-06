@@ -454,19 +454,44 @@ window.FM = window.FM || {};
     // to paint more rows into the selection. Reordering lives on the right-edge ≡ handle now, so a
     // mouse hold no longer conflicts with anything. Android's synthetic long-press contextmenu is
     // suppressed via the shared lpFiredAt window (see contextmenu handler).
-    let lpTimer = null, lpStart = null;
+    // A drag on the header also PANS the list. #timeline sets touch-action:none so JS owns every
+    // gesture, and the scroller's own pan handler deliberately skips .track-head — so before this,
+    // putting a finger on a layer name and dragging did nothing at all: the hold timer cancelled on
+    // movement and no other handler picked the gesture up. On a phone the header column is most of
+    // what you can reach, so that read as "the layers don't scroll".
+    let lpTimer = null, lpStart = null, panning = false, panFrom = 0, panMoved = false, lpFired = false;
     head.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.target.closest('.th-eye') || e.target.closest('.th-chevron')) return;   // buttons stay buttons
       lpStart = { x: e.clientX, y: e.clientY };
+      panning = false; panMoved = false; lpFired = false;
+      panFrom = timelineEl ? timelineEl.scrollTop : 0;
       clearTimeout(lpTimer);
-      lpTimer = setTimeout(() => { lpTimer = null; if (!head.isConnected) return; beginPaintSelect(layer); }, 380);   // a mid-press rebuild detaches the head — its up/cancel can then never clear this timer (phantom select-mode)
+      lpTimer = setTimeout(() => { lpTimer = null; if (!head.isConnected) return; lpFired = true; beginPaintSelect(layer); }, 380);   // a mid-press rebuild detaches the head — its up/cancel can then never clear this timer (phantom select-mode)
     });
     head.addEventListener('pointermove', (e) => {
-      if (lpTimer && lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 10) { clearTimeout(lpTimer); lpTimer = null; }
+      if (!lpStart) return;
+      const dx = e.clientX - lpStart.x, dy = e.clientY - lpStart.y;
+      if (lpTimer && Math.hypot(dx, dy) > 10) { clearTimeout(lpTimer); lpTimer = null; }
+      if (lpTimer) return;                       // still inside the hold window — not a pan yet
+      if (lpFired) return;                       // the hold fired — paint-select owns this gesture
+      // Commit to panning only once the gesture is clearly vertical, so a sideways smudge on a
+      // header can't hijack it, and a tap never turns into a 1px scroll.
+      if (!panning && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
+        panning = true;
+        try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+      if (panning && timelineEl) {
+        e.preventDefault();
+        panMoved = true;
+        const max = Math.max(0, timelineEl.scrollHeight - timelineEl.clientHeight);
+        timelineEl.scrollTop = Math.max(0, Math.min(max, panFrom - dy));
+      }
     });
-    head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; });
-    head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; });
+    // A pan must not also select the layer it started on — the click fires after pointerup.
+    head.addEventListener('click', (e) => { if (panMoved) { e.stopPropagation(); panMoved = false; } }, true);
+    head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; lpFired = false; });
+    head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; panMoved = false; });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - lpFiredAt < 800) return; FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     return head;
   }
