@@ -1109,6 +1109,11 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .kf-dot.ease-custom { background: #b18cff; }       /* hand-shaped bezier */
 .kf-dot.ease-hold { background: #7d8ca5; transform: translateX(-5.5px) rotate(0deg); border-radius: 1px; }  /* stepped / hold — flat square */
 .kf-dot:hover { background: #d7fff5 !important; }
+/* Armed and live. Needs !important to beat the hover rule above, and must NOT touch `transform` —
+   .ease-hold re-shapes the diamond into a square, and overriding transform here would spin it
+   back into a diamond mid-drag. */
+.kf-dot.kf-dragging { background: #ff9d3d !important; border-color: #ff9d3d !important;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 0 10px rgba(255,157,61,.8) !important; z-index: 6; }
 
 /* ---------- overlays ---------- */
 .hidden { display: none !important; }
@@ -1545,8 +1550,20 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 
   /* AM property menu: SHORT + HORIZONTAL — a compact 3-wide category grid, not a tall 2-col stack */
   #inspector-panel .cat-grid { gap: 8px; }
-  #inspector-panel .cat-grid-top { grid-template-columns: repeat(3, 1fr); }  /* AM: Color/Border/Blending */
-  #inspector-panel .cat-grid-bot { grid-template-columns: repeat(4, 1fr); }  /* AM: Transform/Edit/Presets/Effects */
+  /* ONE 3-across rhythm for both rows. The bottom grid used to be 4 columns while the top was 3,
+     so a phone with 9 categories laid out 3 / 4 / 2 and left a hole in the bottom-right corner —
+     which is the blank space that looked wrong. At 3 columns, 9 cards fill a clean 3x3, and the
+     span classes below pad the last row whenever a layer type offers a count that isn't a multiple
+     of three (video drops Edit Group, audio-only drops more), so the hole can never come back. */
+  #inspector-panel .cat-grid-top { grid-template-columns: repeat(3, 1fr); }
+  #inspector-panel .cat-grid-bot { grid-template-columns: repeat(3, 1fr); }
+  /* The phone gets its OWN fill classes. The desktop ones (.cat-span2/3) are computed excluding the
+     Effects card, because on a wide screen Effects is deliberately a full-width band — applying them
+     here pushed Effects onto a row of its own and left a bigger hole than before. */
+  #inspector-panel .cat-mspan2 { grid-column: span 2; }
+  #inspector-panel .cat-mspan3 { grid-column: 1 / -1; }
+  #inspector-panel .cat-span2, #inspector-panel .cat-span3, #inspector-panel .cat-card-fx { grid-column: auto; }
+  #inspector-panel .cat-grid-top .cat-card:only-child { grid-column: 1 / -1; }
   #inspector-panel .cat-card { padding: 14px 5px; gap: 7px; border-radius: 12px; }
   #inspector-panel .cat-ico svg { width: 23px; height: 23px; }
   #inspector-panel .cat-label { font-size: 10.5px; line-height: 1.25; }

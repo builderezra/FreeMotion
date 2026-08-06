@@ -1237,11 +1237,16 @@ window.FM = window.FM || {};
       });
       (i < 3 ? top : bot).appendChild(card);
     });
-    // PC row-fill: the bot grid is 3 columns with Effects spanning the full bottom row — pad the
-    // last row of squares so no orphan gap remains (classes only styled ≥701px; phone untouched).
+    // Row-fill: pad the last row of squares so no orphan gap remains. These classes are now styled
+    // on the PHONE too (they used to be desktop-only, which is why the phone kept a hole).
     const nonFx = bot.querySelectorAll('.cat-card:not(.cat-card-fx)');
     if (nonFx.length % 3 === 2) nonFx[nonFx.length - 1].classList.add('cat-span2');
     else if (nonFx.length % 3 === 1 && nonFx.length > 1) nonFx[nonFx.length - 1].classList.add('cat-span3');
+    // PHONE row-fill, computed over EVERY bottom card including Effects — the phone has no
+    // full-width Effects band, so the desktop count (which skips it) pads the wrong row.
+    const all = bot.querySelectorAll('.cat-card');
+    if (all.length % 3 === 2) all[all.length - 1].classList.add('cat-mspan2');
+    else if (all.length % 3 === 1 && all.length > 1) all[all.length - 1].classList.add('cat-mspan3');
     wrap.appendChild(top);
     if (bot.children.length) wrap.appendChild(bot);
     return wrap;

@@ -34,6 +34,7 @@ window.FM = window.FM || {};
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
   let kfDrag = null;
+  const KF_HOLD_MS = 600;   // press-and-hold before a keyframe becomes draggable (Ezra: "hold on it for a second")
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
   let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
@@ -66,6 +67,8 @@ window.FM = window.FM || {};
     if (kfDrag) {
       if (kfDrag.orig) kfDrag.kfs.forEach((k, i) => { k.t = kfDrag.orig[i]; });
       if (kfDrag.holdTimer) clearTimeout(kfDrag.holdTimer);
+      if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);   // a stale arm timer would colour a dead diamond
+      if (kfDrag.dot) kfDrag.dot.classList.remove('kf-dragging');
       kfDrag = null;
     }
     if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }   // orphaned hold timer could grab the WRONG clip later
@@ -974,18 +977,22 @@ window.FM = window.FM || {};
           const kfs = [];
           FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => { if (Math.abs(kf.t - tt) < 1e-3) kfs.push(kf); }));
           // orig: pre-drag times, so pinch-start/pointercancel can RESTORE instead of half-applying
-          kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t) };
-          // iOS Safari never fires contextmenu on long-press, so give touch its own press-and-hold
-          // route into the easing menu (mouse keeps right-click; both share openKfMenu)
-          if (e.pointerType !== 'mouse') {
-            kfDrag.holdTimer = setTimeout(() => {
-              if (!kfDrag || kfDrag.dot !== dot || kfDrag.moved) return;
-              kfDrag = null;
-              if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
-              const r = dot.getBoundingClientRect();
-              openKfMenu(r.left + r.width / 2, r.top - 8);
-            }, 450);
-          }
+          // HOLD TO DRAG (Ezra). A keyframe used to retime from the very first pixel, which made it
+          // far too easy to nudge one while scrubbing past. Now the gesture has to be held before it
+          // arms, and the diamond changes colour the moment it does, so you can see it is live.
+          //
+          // The 450ms touch timer that used to open the easing menu had to move: it fired BEFORE any
+          // arm delay and nulled kfDrag, so a hold-to-drag could never have armed on a phone. The two
+          // now share one hold — arm at KF_HOLD_MS, and if you let go without moving, that same hold
+          // opens the menu instead. One gesture, both outcomes, and touch keeps its route in.
+          kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false };
+          kfDrag.armTimer = setTimeout(() => {
+            if (!kfDrag || kfDrag.dot !== dot) return;
+            kfDrag.armTimer = 0;
+            kfDrag.armed = true;
+            dot.classList.add('kf-dragging');
+            if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+          }, KF_HOLD_MS);
           if (FM.playing) FM.pause();
         });
         dot.addEventListener('dblclick', (e) => {
@@ -1387,11 +1394,17 @@ window.FM = window.FM || {};
           const fps = FM.scene.project.fps || 30;
           let nt = Math.round(timeFromX(e.clientX) * fps) / fps;
           nt = Math.max(0, Math.min(FM.scene.project.duration, nt));
-          if (!kfDrag.moved && kfDrag.orig && Math.abs(nt - kfDrag.orig[0]) > 0.5 / pxPerSec() * 6) {
-            kfDrag.moved = true;   // a real drag — cancel the pending touch long-press (easing menu)
-            if (kfDrag.holdTimer) { clearTimeout(kfDrag.holdTimer); kfDrag.holdTimer = null; }
+          // Moving BEFORE the hold arms is a scrub past the diamond, not a retime — abandon the
+          // gesture rather than starting one, so brushing a keyframe can never shift it.
+          if (!kfDrag.armed) {
+            if (kfDrag.orig && Math.abs(nt - kfDrag.orig[0]) > 0.5 / pxPerSec() * 6) {
+              if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
+              kfDrag.dot.classList.remove('kf-dragging');
+              kfDrag = null;
+            }
+            return;
           }
-          if (!kfDrag.moved) return;   // sub-threshold jitter must NOT retime (it nudged keyframes a frame while the long-press menu was arming)
+          kfDrag.moved = true;   // armed and tracking — every pixel from here retimes
           kfDrag.kfs.forEach(kf => { kf.t = nt; });
           kfDrag.dot.style.left = (PAD + nt * pxPerSec()) + 'px';
           FM.requestRender();
@@ -1470,14 +1483,26 @@ window.FM = window.FM || {};
           return;
         }
         if (kfDrag) {
-          if (kfDrag.holdTimer) clearTimeout(kfDrag.holdTimer);
-          const layer = kfDrag.layer;
-          // Re-sort every animated prop (transform AND effect params) so evalProp stays correct
-          // after a keyframe is dragged past a neighbour in time, dropping any keyframe the drag
-          // landed exactly on top of so two don't stack at one time.
-          FM.dedupDraggedKfs(layer, kfDrag.kfs);
-          kfDrag = null;
-          FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+          if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
+          const layer = kfDrag.layer, armed = kfDrag.armed, moved = kfDrag.moved, dot = kfDrag.dot;
+          if (dot) dot.classList.remove('kf-dragging');
+          if (moved) {
+            // Re-sort every animated prop (transform AND effect params) so evalProp stays correct
+            // after a keyframe is dragged past a neighbour in time, dropping any keyframe the drag
+            // landed exactly on top of so two don't stack at one time.
+            FM.dedupDraggedKfs(layer, kfDrag.kfs);
+            kfDrag = null;
+            FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+          } else if (armed) {
+            // Held long enough to arm, then released without moving → that same hold is the way into
+            // the easing menu. This is where the old 450ms touch timer's job went.
+            kfDrag = null;
+            const r = dot.getBoundingClientRect();
+            openKfMenu(r.left + r.width / 2, r.top - 8);
+          } else {
+            // A plain tap. It used to rebuild the timeline and push an empty undo entry every time.
+            kfDrag = null;
+          }
         }
       });
       window.addEventListener('pointercancel', () => {
