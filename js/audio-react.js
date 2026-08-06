@@ -16,6 +16,21 @@ window.FM = window.FM || {};
   const BANDS = { overall: 1, bass: 1, mid: 1, treble: 1 };
   const PROP_OK = { scale: 1, opacity: 1, rotation: 1, x: 1, y: 1 };
 
+  // A bake target is either a transform prop ('scale') or an EFFECT PARAM, encoded 'fx:<index>:<key>'.
+  // Index, not id — fxRegistry.makeInstance doesn't stamp ids, so position in layer.effects is the
+  // only stable handle, and a bake resolves it immediately.
+  function parseFxProp(prop) {
+    const m = /^fx:(\d+):(.+)$/.exec(String(prop || ''));
+    return m ? { idx: +m[1], key: m[2] } : null;
+  }
+
+  // The registry already normalises every effect's controls; only `range` ones are keyframable, and
+  // a colour or a segmented choice cannot be driven by a continuous envelope.
+  function fxParamSchema(type, key) {
+    const list = (FM.fxRegistry && FM.fxRegistry.paramsOf(type)) || [];
+    return list.find(p => p.key === key && p.keyframable && p.type === 'range') || null;
+  }
+
   // ---- audio plumbing ---------------------------------------------------------------------------
 
   // Decode (once) into the same media-rec slot getWaveform / audio-tools use. null => no audio track.
@@ -281,7 +296,15 @@ window.FM = window.FM || {};
       const targetId = opts.targetLayerId || layer.id;
       const target = (FM.scene && FM.scene.layers.find(l => l.id === targetId)) || layer;
       const prop = opts.prop;
-      if (!PROP_OK[prop] || !target || !target.transform) { if (FM.toast) FM.toast('Pick a property to drive'); return 0; }
+      const fxT = parseFxProp(prop);
+      let fx = null, fxSchema = null;
+      if (fxT) {
+        fx = target && target.effects && target.effects[fxT.idx];
+        fxSchema = fx && fxParamSchema(fx.type, fxT.key);
+        if (!fx || !fxSchema) { if (FM.toast) FM.toast('That effect control is no longer there'); return 0; }
+      } else if (!PROP_OK[prop] || !target || !target.transform) {
+        if (FM.toast) FM.toast('Pick a property to drive'); return 0;
+      }
 
       const outMin = (opts.outMin != null) ? opts.outMin : 0;
       const outMax = (opts.outMax != null) ? opts.outMax : 1;
@@ -291,7 +314,10 @@ window.FM = window.FM || {};
       const mapped = new Array(N);
       for (let i = 0; i < N; i++) {
         let v = outMin + vals[i] * range;
-        if (prop === 'opacity') { if (v < 0) v = 0; else if (v > 1) v = 1; }   // sane domains; rotation/x/y unclamped
+        if (fxSchema) {                                                       // stay inside the control's own domain
+          if (fxSchema.min != null && v < fxSchema.min) v = fxSchema.min;
+          if (fxSchema.max != null && v > fxSchema.max) v = fxSchema.max;
+        } else if (prop === 'opacity') { if (v < 0) v = 0; else if (v > 1) v = 1; }   // sane domains; rotation/x/y unclamped
         else if (prop === 'scale') { if (v < 0) v = 0; }
         mapped[i] = v;
       }
@@ -305,7 +331,8 @@ window.FM = window.FM || {};
       for (let i = 0; i < N; i++) if (keep[i]) kf.push({ t: times[i], v: mapped[i], e: 'linear' });
       if (kf.length < 2) { if (FM.toast) FM.toast('Could not build keyframes'); return 0; }
 
-      target.transform[prop] = { kf: kf };
+      if (fx) { fx.params = fx.params || {}; fx.params[fxT.key] = { kf: kf }; }
+      else target.transform[prop] = { kf: kf };
       if (FM.history) FM.history.commit();
       if (FM.requestRender) FM.requestRender();
       if (FM.timeline) FM.timeline.rebuild();
@@ -313,7 +340,9 @@ window.FM = window.FM || {};
       if (FM.canvasEdit) FM.canvasEdit.update();
       // Say WHERE they went — the sheet closes on apply, so without target+prop the user is left
       // staring at a diamond-carpeted clip with no idea what just happened (or that undo removes it).
-      const propLabel = { scale: 'Scale', opacity: 'Opacity', rotation: 'Rotation', x: 'Position X', y: 'Position Y' }[prop] || prop;
+      const propLabel = fxSchema
+        ? (((FM.fxRegistry && FM.fxRegistry.get(fx.type) || {}).label || fx.type) + ' · ' + fxSchema.label)
+        : ({ scale: 'Scale', opacity: 'Opacity', rotation: 'Rotation', x: 'Position X', y: 'Position Y' }[prop] || prop);
       if (FM.toast) FM.toast('Baked ' + kf.length + ' keyframes onto ' + (target.name || 'layer') + ' · ' + propLabel + ' — undo to remove', 3200);
       return kf.length;
     },
@@ -357,10 +386,28 @@ window.FM = window.FM || {};
       reqId: 0, debounce: 0,
     };
     function targetLayer() { return scene.layers.find(l => l.id === st.targetId) || layer; }
+
+    // Meta for either kind of target. Effect params describe themselves through the registry, so
+    // their unit and domain come from the same schema the inspector's slider uses.
+    function metaOf(prop) {
+      const fxT = parseFxProp(prop);
+      if (!fxT) return PROP_META[prop] || PROP_META.scale;
+      const eff = (targetLayer().effects || [])[fxT.idx];
+      const sch = eff && fxParamSchema(eff.type, fxT.key);
+      if (!sch) return PROP_META.scale;
+      return { label: sch.label, unit: sch.unit || '', def: null, toStore: v => v, schema: sch, eff: eff };
+    }
     function defRange(prop) {
-      const meta = PROP_META[prop];
+      const meta = metaOf(prop);
       if (meta.def) return meta.def.slice();
-      const t = targetLayer();
+      const t = targetLayer(), fxT = parseFxProp(prop);
+      if (fxT && meta.schema) {
+        // quiet = where the control sits now, loud = the top of its range: "it stays put, then peaks"
+        const sch = meta.schema;
+        const cur = FM.evalProp((meta.eff.params || {})[fxT.key], at);
+        const lo = cur == null ? sch.min : cur;
+        return (lo >= sch.max) ? [sch.min, sch.max] : [lo, sch.max];
+      }
       const cur = Math.round(FM.evalProp(t.transform[prop], at) || 0);
       return [cur, cur + 80];
     }
@@ -463,16 +510,44 @@ window.FM = window.FM || {};
       if (l.id === st.targetId) o.selected = true;
       targetSel.appendChild(o);
     });
-    targetSel.addEventListener('change', () => { st.targetId = targetSel.value; resetRange(); });
+    targetSel.addEventListener('change', () => { st.targetId = targetSel.value; buildPropOptions(); resetRange(); });
     sheet.appendChild(targetSel);
 
     sheet.appendChild(fieldLabel('Property'));
     const propSel = document.createElement('select');
     styleSelect(propSel);
-    Object.keys(PROP_META).forEach(p => {
-      const o = document.createElement('option'); o.value = p; o.textContent = PROP_META[p].label;
-      if (p === st.prop) o.selected = true; propSel.appendChild(o);
-    });
+    // The list depends on the TARGET, so it is rebuilt whenever the target changes: transform props
+    // first, then a group per effect on that layer exposing its keyframable controls. This is what
+    // makes the whole effect catalogue beat-reactive instead of just move/scale/fade.
+    function buildPropOptions() {
+      propSel.textContent = '';
+      const addOpt = (parent, value, label) => {
+        const o = document.createElement('option'); o.value = value; o.textContent = label;
+        if (value === st.prop) o.selected = true; parent.appendChild(o);
+      };
+      const base = document.createElement('optgroup'); base.label = 'Transform';
+      Object.keys(PROP_META).forEach(p => addOpt(base, p, PROP_META[p].label));
+      propSel.appendChild(base);
+
+      let n = 0;
+      (targetLayer().effects || []).forEach((eff, idx) => {
+        if (eff.enabled === false) return;
+        const reg = FM.fxRegistry && FM.fxRegistry.get(eff.type);
+        const controls = ((reg && reg.params) || []).filter(p => p.keyframable && p.type === 'range');
+        if (!controls.length) return;
+        const g = document.createElement('optgroup');
+        g.label = (reg && reg.label) || eff.type;
+        controls.forEach(c => { addOpt(g, 'fx:' + idx + ':' + c.key, c.label); n++; });
+        propSel.appendChild(g);
+      });
+      // the previously chosen effect param may not exist on the new target — fall back to Scale
+      if (parseFxProp(st.prop) && !propSel.querySelector('option[value="' + st.prop + '"]')) {
+        st.prop = 'scale';
+        const opt = propSel.querySelector('option[value="scale"]'); if (opt) opt.selected = true;
+      }
+      return n;
+    }
+    buildPropOptions();
     propSel.addEventListener('change', () => { st.prop = propSel.value; resetRange(); });
     sheet.appendChild(propSel);
 
@@ -484,7 +559,7 @@ window.FM = window.FM || {};
     const arrow = document.createElement('span'); arrow.textContent = '→'; arrow.style.cssText = 'color:var(--text-dim);flex:0 0 auto;';
     const maxIn = numField(st.max, v => { st.max = v; });
     const unit = document.createElement('span'); unit.style.cssText = 'color:var(--text-dim);flex:0 0 auto;min-width:20px;';
-    unit.textContent = PROP_META[st.prop].unit;
+    unit.textContent = metaOf(st.prop).unit;
     rangeRow.appendChild(minIn); rangeRow.appendChild(arrow); rangeRow.appendChild(maxIn); rangeRow.appendChild(unit);
     sheet.appendChild(rangeRow);
 
@@ -492,7 +567,7 @@ window.FM = window.FM || {};
       const r = defRange(st.prop);
       st.min = r[0]; st.max = r[1];
       minIn.value = st.min; maxIn.value = st.max;
-      unit.textContent = PROP_META[st.prop].unit;
+      unit.textContent = metaOf(st.prop).unit;
     }
 
     // footer
@@ -506,7 +581,7 @@ window.FM = window.FM || {};
     apply.className = 'btn btn-accent'; apply.textContent = 'Apply';
     apply.style.cssText += ';flex:1;justify-content:center;min-height:44px;';
     apply.addEventListener('click', async () => {
-      const meta = PROP_META[st.prop];
+      const meta = metaOf(st.prop);
       apply.disabled = true; apply.textContent = 'Applying…';
       const times = smoothingTimes();
       const n = await FM.audioReact.bake(layer, {

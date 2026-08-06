@@ -89,6 +89,11 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
 - v3.89 — lightglow, darkglow, softglow (radius + threshold); clouds (scale/drift/tint);
   iridescence (scale/bands/speed). All of v3.87–v3.89 re-verified against HEAD with the
   harness above: 15 effects, 0 differing bytes each.
+- v3.90 — mirror (movable seam, mirror-tiles past the first reflection); vignette (size, each
+  path keeping its own legacy fallback 35/45); thermal (6 palettes + low/high); threshold
+  (softness + colour either side, and both code paths now share one kernel).
+- v3.91 — audio → effect params (see above). Not from the effect list, but it was the
+  highest-leverage item in this file.
 
 ## Build order (from the ranking pass)
 
@@ -231,11 +236,17 @@ branch)/fourcolor/hexarray.
 
 67 raw ideas from six lenses, deduped against the existing 174 effects.
 
-## The highest-leverage change is not an effect
+## The highest-leverage change is not an effect — ✅ DONE in v3.91
 
 `audio-react.js:17` — `PROP_OK = {scale, opacity, rotation, x, y}` and `bake()` writes only to
 `target.transform[prop]`. Letting it write `layer.effects[i].params[key]` makes a large slice of
 the existing 174 effects beat-reactive at once. One function. **Do this first.**
+
+**Shipped.** A bake target is now either a transform prop or `fx:<index>:<key>` (index, not id —
+`makeInstance` doesn't stamp ids). The sheet's Property dropdown rebuilds per target layer with an
+`<optgroup>` per effect, offering only `keyframable && type === 'range'` controls, and the range/unit
+come from the same registry schema the inspector's slider uses. Measured reach: **169 of 174 effects,
+365 individual controls.**
 
 ## Corrections the judge made
 
