@@ -228,7 +228,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'stroke', label: 'Stroke Color', param: 'width', min: 1, max: 60, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
     { type: 'smoothedges', label: 'Smooth Edges', param: 'radius', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
-    { type: 'glass', label: 'Liquid Glass', color: true, defColor: '#ffffff', colorLabel: 'Tint', params: [
+    { type: 'liquidglass', label: 'Liquid Glass', color: true, defColor: '#ffffff', colorLabel: 'Tint', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'frost', label: 'Frost', min: 0, max: 40, step: 0.5, def: 8, unit: 'px' },
       { key: 'clarity', label: 'Clarity', min: 0, max: 100, step: 1, def: 35, unit: '%' },
@@ -1101,7 +1101,7 @@ window.FM = window.FM || {};
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
-    faded: 1, nightvision: 1, sketch: 1, roundcorners: 1, glass: 1,
+    faded: 1, nightvision: 1, sketch: 1, roundcorners: 1, liquidglass: 1,
     cube3d: 1, box3d: 1, cylinder3d: 1, sphere3d: 1, ellipsoid3d: 1, torus3d: 1, ring3d: 1,
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
@@ -2759,7 +2759,7 @@ window.FM = window.FM || {};
     // a frost blur clipped back to the crisp silhouette, a little of the sharp image left showing
     // through, a diagonal specular sheen, and a two-sided bevel (light rim top-left, dark rim
     // bottom-right) built by subtracting an offset copy of the layer's own alpha from itself.
-    glass: (function () {
+    liquidglass: (function () {
       let _gA = null, _gB = null;
       return function (A, B, W, H, bb, p, t) {
         const amt = Math.max(0, Math.min(1, fparam(p, 'amount', 1, t)));
