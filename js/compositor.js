@@ -44,7 +44,10 @@ window.FM = window.FM || {};
     { type: 'grayscale', label: 'Grayscale', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'sepia', label: 'Sepia', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'invert', label: 'Invert', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
-    { type: 'glow', label: 'Glow', param: 'radius', min: 0, max: 60, step: 1, def: 16, unit: 'px', color: true },
+    { type: 'glow', label: 'Glow', color: true, params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 60, step: 1, def: 16, unit: 'px' },
+      { key: 'passes', label: 'Bloom', min: 1, max: 4, step: 1, def: 1 },
+    ] },
     { type: 'vignette', label: 'Vignette', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
@@ -66,8 +69,17 @@ window.FM = window.FM || {};
     { type: 'duotone', label: 'Duotone', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights' },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.5 },
-    { type: 'gamma', label: 'Gamma', param: 'gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
-    { type: 'temperature', label: 'Color Temperature', param: 'amount', min: -100, max: 100, step: 1, def: 40 },
+    { type: 'gamma', label: 'Gamma', params: [
+      { key: 'gamma', label: 'Gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
+      { key: 'red', label: 'Red', min: 0.3, max: 3, step: 0.02, def: 1 },
+      { key: 'green', label: 'Green', min: 0.3, max: 3, step: 0.02, def: 1 },
+      { key: 'blue', label: 'Blue', min: 0.3, max: 3, step: 0.02, def: 1 },
+    ] },
+    { type: 'temperature', label: 'Color Temperature', params: [
+      { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
+      { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'preserve', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'noise', label: 'Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'speed', label: 'Speed', min: 0, max: 60, step: 1, def: 24, unit: 'Hz' },
@@ -76,7 +88,11 @@ window.FM = window.FM || {};
     ] },
     { type: 'scanlines', label: 'Scanlines', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     // ---- batch 2 ----
-    { type: 'vibrance', label: 'Vibrance', param: 'amount', min: 0, max: 2, step: 0.02, def: 1.6 },
+    { type: 'vibrance', label: 'Vibrance', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.6 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'highlights', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'sharpen', label: 'Sharpen', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.5 },
     { type: 'thermal', label: 'Hot Color', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -143,7 +159,10 @@ window.FM = window.FM || {};
     { type: 'mosaic', label: 'Mosaic', param: 'size', min: 2, max: 100, step: 1, def: 16, unit: 'px' },
     { type: 'lensblur', label: 'Lens Blur', param: 'radius', min: 0, max: 30, step: 1, def: 10, unit: 'px' },
     { type: 'dots', label: 'Dots', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Color' },
-    { type: 'polarcoords', label: 'Polar Coordinates', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
+    { type: 'polarcoords', label: 'Polar Coordinates', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Rect → Polar'], [1, 'Polar → Rect']] },
+    ] },
     { type: 'bend', label: 'Bend', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
     { type: 'glass', label: 'Glass', param: 'amount', min: 0, max: 40, step: 1, def: 12, unit: 'px' },
     // ---- batch 8 ----
@@ -562,7 +581,14 @@ window.FM = window.FM || {};
         case 'grayscale': parts.push('grayscale(' + v('amount', 1) + ')'); break;
         case 'sepia': parts.push('sepia(' + v('amount', 1) + ')'); break;
         case 'invert': parts.push('invert(' + v('amount', 1) + ')'); break;
-        case 'glow': parts.push('drop-shadow(0 0 ' + v('radius', 12) + 'px ' + (p.color || '#ffffff') + ')'); break;
+        // Bloom is STACKED drop-shadows: one pass is a halo, three is a glow that actually reads as
+        // light. Passes 1 emits the single shadow it always did, character for character.
+        case 'glow': {
+          const gr = v('radius', 12), gc = (p.color || '#ffffff');
+          const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
+          for (let gi = 0; gi < gp; gi++) parts.push('drop-shadow(0 0 ' + gr + 'px ' + gc + ')');
+          break;
+        }
       }
     }
     // Skip the colour-grade filter when the FILL system owns the layer's colour (shapes/text, or a
@@ -1116,11 +1142,43 @@ window.FM = window.FM || {};
     gamma: function (d, W, H, p, t) {
       const g = Math.max(0.05, FM.evalProp(p.gamma, t) || 1), inv = 1 / g, LUT = new Uint8ClampedArray(256);
       for (let v = 0; v < 256; v++) LUT[v] = Math.round(255 * Math.pow(v / 255, inv));
-      for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
+      // Per-channel trims MULTIPLY the master, so 1 leaves the master LUT bit-for-bit (g*1 === g) and
+      // the three channels share it. Pulling one channel's gamma is how you kill a colour cast that
+      // a single master curve can only make lighter or darker.
+      const cr = p.red == null ? 1 : FM.evalProp(p.red, t);
+      const cg = p.green == null ? 1 : FM.evalProp(p.green, t);
+      const cb = p.blue == null ? 1 : FM.evalProp(p.blue, t);
+      if (cr === 1 && cg === 1 && cb === 1) {
+        for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
+        return;
+      }
+      const mk = (c) => { if (c === 1) return LUT; const gg = Math.max(0.05, g * c), iv = 1 / gg, L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) L[v] = Math.round(255 * Math.pow(v / 255, iv)); return L; };
+      const LR = mk(cr), LG = mk(cg), LB = mk(cb);
+      for (let i = 0; i < d.length; i += 4) { d[i] = LR[d[i]]; d[i + 1] = LG[d[i + 1]]; d[i + 2] = LB[d[i + 2]]; }
     },
     temperature: function (d, W, H, p, t) {
       const a = (FM.evalProp(p.amount, t) || 0) / 100, r = a * 50, b = -a * 50;   // warm: +R -B, cool: opposite
-      for (let i = 0; i < d.length; i += 4) { d[i] = d[i] + r; d[i + 2] = d[i + 2] + b; }
+      // TINT is the other half of a white balance — the green/magenta axis. Without it you can only
+      // slide along orange/blue, which is why a fluorescent green cast was uncorrectable here.
+      const tn = (p.tint == null ? 0 : FM.evalProp(p.tint, t)) / 100 * 50;
+      // PRESERVE re-scales each pixel back to its original luminance, so a warm-up stops also being
+      // a brighten — the shift becomes purely a colour move.
+      const pres = (p.preserve == null ? 0 : FM.evalProp(p.preserve, t)) / 100;
+      if (tn === 0 && pres === 0) {
+        for (let i = 0; i < d.length; i += 4) { d[i] = d[i] + r; d[i + 2] = d[i + 2] + b; }
+        return;
+      }
+      const th = tn * 0.5;
+      for (let i = 0; i < d.length; i += 4) {
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+        let nr = r0 + r + th, ng = g0 - tn, nb = b0 + b + th;
+        if (pres > 0) {
+          const l0 = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
+          const l1 = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+          if (l1 > 0.0001) { const k = 1 + (l0 / l1 - 1) * pres; nr *= k; ng *= k; nb *= k; }
+        }
+        d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+      }
     },
     noise: function (d, W, H, p, t) {
       const amt = (FM.evalProp(p.amount, t) || 0) / 100 * 160;   // up to ±80
@@ -1198,9 +1256,27 @@ window.FM = window.FM || {};
     // ---- batch 2 ----
     vibrance: function (d, W, H, p, t) {
       const a = FM.evalProp(p.amount, t), k = (a == null ? 1.6 : a);
+      // SKIN holds back the boost on orange-red hues, the standard reason a vibrance pass looks
+      // wrong: everything else improves while faces go radioactive. HIGHLIGHTS backs off as a pixel
+      // approaches clipping, where pushing saturation just shifts hue. Both 0 = the original loop.
+      const skin = (p.skin == null ? 0 : FM.evalProp(p.skin, t)) / 100;
+      const hi = (p.highlights == null ? 0 : FM.evalProp(p.highlights, t)) / 100;
+      const plain = (skin === 0 && hi === 0);
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2], avg = (r + g + b) / 3;
-        const f = 1 + (k - 1) * (1 - (Math.max(r, g, b) - Math.min(r, g, b)) / 255);   // unsaturated pixels boosted more
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        let f = 1 + (k - 1) * (1 - (mx - mn) / 255);   // unsaturated pixels boosted more
+        if (!plain) {
+          let guard = 0;
+          if (skin > 0 && mx > 0 && r === mx && b === mn) {
+            // hue sits in the red→yellow wedge; peak the guard mid-wedge (orange), taper to the edges
+            const hw = (g - b) / (mx - mn || 1);            // 0 at red, 1 at yellow
+            const w = 1 - Math.abs(hw - 0.45) / 0.55;
+            if (w > 0) guard = Math.max(guard, skin * Math.min(1, w));
+          }
+          if (hi > 0 && mx > 178) guard = Math.max(guard, hi * ((mx - 178) / 77));
+          if (guard > 0) f = 1 + (f - 1) * (1 - Math.min(1, guard));
+        }
         d[i] = avg + (r - avg) * f; d[i + 1] = avg + (g - avg) * f; d[i + 2] = avg + (b - avg) * f;
       }
     },
@@ -1734,7 +1810,10 @@ window.FM = window.FM || {};
       return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     },
     // ---- batch 7 (warp) ----
-    polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; var plSx=cx+Math.cos(plAng)*plRad, plSy=cy+Math.sin(plAng)*plRad; return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
+    // Mode 0 is Rect→Polar (what this always did). Mode 1 is the INVERSE, which was simply missing —
+    // it unwraps a circular image into a straight strip (a clock face into a timeline, a tunnel into
+    // a wall). Half the effect had no way to be reached.
+    polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0); var plSx, plSy; if(plMode===1){ var plDx=x-cx, plDy=y-cy; var plA=Math.atan2(plDy,plDx); if(plA<0)plA+=Math.PI*2; plSx=(plA/(Math.PI*2))*W; plSy=(Math.sqrt(plDx*plDx+plDy*plDy)/maxR)*H; } else { var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; plSx=cx+Math.cos(plAng)*plRad; plSy=cy+Math.sin(plAng)*plRad; } return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
     bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
     glass: function(x,y,W,H,cx,cy,maxR,p,t){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
     // ---- batch 9 (warp) ----
