@@ -718,8 +718,21 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fxb-tile { position: relative; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 0 0 7px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
 .fxb-tile .fxb-thumb { height: 62px; border-radius: 0; }
 .fxb-tile-name { padding: 6px 4px 0; font-size: 10.5px; color: var(--text-dim); text-align: center; line-height: 1.2; }
-.fxb-star { position: absolute; top: 3px; right: 5px; font-size: 13px; color: rgba(255,255,255,.32); cursor: pointer; line-height: 1; }
-.fxb-star.on { color: #ffce4a; }
+/* ★ favourite. The glyph is small by design (it must not fight the thumbnail) but the TAP TARGET
+   is not: it was a bare 13×13px hit area in the corner, which is unhittable with a thumb — you
+   either missed it or added the effect instead. Padding + a negative offset grow the target to
+   ~30px without moving the star or changing the layout. */
+.fxb-star {
+  position: absolute; top: -4px; right: -2px;
+  padding: 8px; margin: 0;
+  font-size: 14px; line-height: 1;
+  color: rgba(255, 255, 255, .38);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .65);   /* readable over a bright thumbnail */
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fxb-star:active { transform: scale(1.25); }
+.fxb-star.on { color: #ffce4a; text-shadow: 0 1px 4px rgba(0, 0, 0, .8); }
 .fxb-empty { color: var(--text-faint); font-size: 12px; font-style: italic; padding: 22px 12px; text-align: center; }
 .fxb-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
 .fxb-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }

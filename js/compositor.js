@@ -111,6 +111,12 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px' },
       { key: 'style', label: 'Corner', options: ['Rounded', 'Apple (continuous)'], def: 1 },   // Apple = superellipse: the curve eases out of the straight edge first
     ] },
+    { type: 'filmgrain', label: 'Film Grain', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'size', label: 'Grain size', min: 1, max: 6, step: 0.5, def: 2 },        // real grain clumps — it is not one pixel
+      { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 15, unit: '%' },
+      { key: 'shadows', label: 'In shadows', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+    ] },
     { type: 'blocknoise', label: 'Block Noise', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'starfield', label: 'Starfield', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5, color: true, defColor: '#ffffff', colorLabel: 'Star' },
     { type: 'curl', label: 'Curl', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -921,7 +927,7 @@ window.FM = window.FM || {};
     boxblur: 1, spinblur: 1, gradientmap: 1, colorize: 1, checker: 1, grid: 1,
     mosaic: 1, lensblur: 1, dots: 1, polarcoords: 1, bend: 1, glass: 1,
     lightglow: 1, longshadow: 1, halftonelines: 1, clouds: 1, rays: 1, stripes: 1,
-    darkglow: 1, stroke: 1, smoothedges: 1, blocknoise: 1, starfield: 1, curl: 1,
+    darkglow: 1, stroke: 1, smoothedges: 1, blocknoise: 1, starfield: 1, curl: 1, filmgrain: 1,
     bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1,
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
@@ -1038,6 +1044,46 @@ window.FM = window.FM || {};
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         const n = ((h & 255) / 255 - 0.5) * amt;
         d[i] += n; d[i + 1] += n; d[i + 2] += n;
+      }
+    },
+    // Film grain — the difference from `noise` above is that this behaves like film rather than like
+    // static: grain lives in the MIDTONES (silver halide has little to do in blacks, and blown
+    // highlights are clipped), it CLUMPS instead of sitting on single pixels, and it is nearly
+    // monochrome, because dye clouds scatter luminance far more than colour. Flat per-pixel RGB
+    // noise reads as a broken sensor; this reads as stock.
+    filmgrain: function (d, W, H, p, t) {
+      const amt = (fparam(p, 'amount', 40, t) / 100) * 90;          // peak swing at mid-grey
+      if (amt <= 0) return;
+      const size = Math.max(1, fparam(p, 'size', 2, t));
+      const chroma = fparam(p, 'color', 15, t) / 100;               // 0 = pure luminance grain
+      const shadowKeep = fparam(p, 'shadows', 35, t) / 100;         // how much grain survives into the blacks
+      const frame = Math.floor(t * 24);                             // re-roll per frame: static grain reads as dirt on the lens
+      const inv = 1 / size;
+      const gw = Math.ceil(W * inv) + 1;
+      for (let y = 0; y < H; y++) {
+        const gy = (y * inv) | 0;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) << 2;
+          if (d[i + 3] === 0) continue;
+          // one hash per GRAIN cell, not per pixel — this is what gives it structure at size > 1
+          const cell = ((y * inv) | 0) * gw + ((x * inv) | 0);
+          let h = (cell * 374761393 + frame * 668265263) | 0;
+          h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+          const n = ((h & 1023) / 1023 - 0.5);                      // -0.5..0.5
+          // response curve: 4*L*(1-L) peaks at mid-grey and falls to 0 at both ends, then the
+          // shadow floor lifts the dark end back up by the user's amount.
+          const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+          const mid = 4 * L * (1 - L);
+          const resp = mid + (1 - mid) * shadowKeep * (1 - L);
+          const g = n * amt * resp;
+          if (chroma <= 0) { d[i] += g; d[i + 1] += g; d[i + 2] += g; continue; }
+          // colour grain: decorrelate the channels a little, scaled by the chroma amount
+          let h2 = (h ^ 0x5bf03635) * 2246822519; h2 = (h2 ^ (h2 >> 15));
+          let h3 = (h ^ 0x27d4eb2f) * 3266489917; h3 = (h3 ^ (h3 >> 15));
+          const cr = ((h2 & 255) / 255 - 0.5) * chroma * amt * resp;
+          const cb = ((h3 & 255) / 255 - 0.5) * chroma * amt * resp;
+          d[i] += g + cr; d[i + 1] += g - (cr + cb) * 0.5; d[i + 2] += g + cb;
+        }
       }
     },
     scanlines: function (d, W, H, p, t) {

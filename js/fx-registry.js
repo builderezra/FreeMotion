@@ -35,6 +35,7 @@ window.FM = window.FM || {};
     lightglow: 'color', longshadow: 'color', halftonelines: 'drawing', clouds: 'proc', rays: 'proc', stripes: 'stylize',
     // batch 9
     darkglow: 'color', stroke: 'drawing', smoothedges: 'drawing', blocknoise: 'proc', starfield: 'proc', curl: 'distort',
+    filmgrain: 'stylize',
     // batch 10
     bumpmap: 'color', edgeglow: 'drawing', contourlines: 'drawing', grunge: 'proc', iridescence: 'color', fractalwarp: 'distort',
     // batch 11 (multi-param)
@@ -119,7 +120,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['roundcorners', 'tiles', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg', 'tileshift'];
+  FM.FX_FEATURED = ['filmgrain', 'roundcorners', 'tiles', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap', 'stretchseg'];
 
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {
