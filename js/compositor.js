@@ -3499,25 +3499,25 @@ window.FM = window.FM || {};
     const ax = W * pos, ay = H * pos, LIM = 64;
     let k;
     if (mode === 0) {           // Left → Right
-      const aw = ax; if (aw < 0.5) return void ctx.restore();
+      const aw = ax; if (aw < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; k * aw < W && k < LIM; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, 0, 0, aw, H, k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, 0, 0, aw, H, 0, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 1) {    // Right → Left
-      const aw = W - ax; if (aw < 0.5) return void ctx.restore();
+      const aw = W - ax; if (aw < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; ax - k * aw + aw > 0 && k < LIM; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, ax, 0, aw, H, ax - k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, ax, 0, aw, H, ax, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 2) {    // Top → Bottom
-      const ah = ay; if (ah < 0.5) return void ctx.restore();
+      const ah = ay; if (ah < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; k * ah < H && k < LIM; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, 0, 0, W, ah, 0, k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, 0, 0, W, ah, 0, 0, W, ah); ctx.restore(); }
       }
     } else {                    // Bottom → Top
-      const ah = H - ay; if (ah < 0.5) return void ctx.restore();
+      const ah = H - ay; if (ah < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; ay - k * ah + ah > 0 && k < LIM; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, 0, ay, W, ah, 0, ay - k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, 0, ay, W, ah, 0, ay, W, ah); ctx.restore(); }
@@ -4350,10 +4350,18 @@ window.FM = window.FM || {};
   function drawCopyBg(ctx, layer, t, scene) {
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, tr = layer.transform;
+    // The plate has to live on the TARGET's pixel grid, not the project's — same rule drawManualBlendLayer
+    // follows. `_bgSnap` was captured at the target's size, and the footprint below is stamped with the
+    // target's own transform; a project-sized plate put both at the wrong scale and offset. That made
+    // Copy Background misalign on ANY supersampled preview (a retina screen alone is enough — it does
+    // not take zoom), while export, which renders at exactly 1:1, looked correct.
+    const cw = ctx.canvas.width, ch = ctx.canvas.height;
     if (!_cbA) _cbA = document.createElement('canvas');
-    if (_cbA.width !== W || _cbA.height !== H) { _cbA.width = W; _cbA.height = H; }
+    if (_cbA.width !== cw || _cbA.height !== ch) { _cbA.width = cw; _cbA.height = ch; }
+    _cbA.__fmRS = ctx.canvas.__fmRS || 1;
+    _cbA.__fmOX = ctx.canvas.__fmOX || 0; _cbA.__fmOY = ctx.canvas.__fmOY || 0;
     const a = _cbA.getContext('2d');
-    baseT(a); a.clearRect(0, 0, W, H);
+    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     let M = null; try { M = ctx.getTransform(); } catch (e) {}
     if (M) a.setTransform(M.a, M.b, M.c, M.d, M.e, M.f);   // same transform as the layer → footprint in screen space
@@ -4376,11 +4384,11 @@ window.FM = window.FM || {};
       const w = (cr && cr.w) || sz.w, h = (cr && cr.h) || sz.h;
       a.fillRect(-w * tr.anchorX, -h * tr.anchorY, w, h);
     }
-    baseT(a);
+    a.setTransform(1, 0, 0, 1, 0, 0);   // _bgSnap already IS this pixel grid — copy it 1:1, no remap
     a.globalCompositeOperation = 'source-in';   // keep the backdrop ONLY inside the footprint
     try { a.drawImage(layer._bgSnap, 0, 0); } catch (e) {}
     a.globalCompositeOperation = 'source-over';
-    ctx.save(); baseT(ctx);   // composite in screen space; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);   // plate and target share the grid; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)
     try { ctx.drawImage(_cbA, 0, 0); } catch (e) {}
     ctx.restore();
   }
@@ -4400,6 +4408,11 @@ window.FM = window.FM || {};
     const cv = c.canvas, s = cv.__fmRS || 1;
     c.setTransform(s, 0, 0, s, -(cv.__fmOX || 0) * s, -(cv.__fmOY || 0) * s);
   }
+  // Overlays drawn AFTER renderScene (guides, onion skin) need the same mapping — renderScene puts the
+  // transform back when it's done, so anything painted afterwards in project coordinates lands on the
+  // raw backing store instead. On a 1:1 canvas that's the same thing; zoomed in (supersampled and
+  // cropped) it isn't, and the guides drew a third of the way across the PIXELS rather than the comp.
+  FM.applyPreviewTransform = baseT;
 
   // A layer using a blend mode Canvas can't express: rasterise it once with a neutral blend, then
   // hand the plate and the backdrop to the per-pixel blender. Only the plate's alpha bounds make

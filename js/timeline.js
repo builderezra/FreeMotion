@@ -115,7 +115,11 @@ window.FM = window.FM || {};
     return { snapped: snapped, guide: best };
   }
 
-  function deleteKeyframesAt(layer, tt) {
+  // `only` (optional) restricts the delete to ONE property container. Without it this strips every
+  // keyframe at `tt` across the whole layer — which was right when diamonds were merged, but wrong
+  // now that each property owns its own: deleting a visible keyframe also silently destroyed the
+  // dimmed ones sitting behind it at the same time, on properties you weren't even looking at.
+  function deleteKeyframesAt(layer, tt, only) {
     const slots = [];
     Object.keys(layer.transform).forEach(k => slots.push({ c: layer.transform, k: k }));
     if (FM.isAnimated(layer.volume)) slots.push({ c: layer, k: 'volume' });   // keyframed audio level draws diamonds too
@@ -129,6 +133,7 @@ window.FM = window.FM || {};
     slots.forEach(({ c, k }) => {
       const p = c[k];
       if (!FM.isAnimated(p)) return;
+      if (only && p !== only) return;   // scoped delete: leave every other property alone
       const removed = p.kf.filter(kf => Math.abs(kf.t - tt) < 1e-3);
       if (!removed.length) return;
       p.kf = p.kf.filter(kf => Math.abs(kf.t - tt) >= 1e-3);
@@ -1001,7 +1006,15 @@ window.FM = window.FM || {};
           // arm delay and nulled kfDrag, so a hold-to-drag could never have armed on a phone. The two
           // now share one hold — arm at KF_HOLD_MS, and if you let go without moving, that same hold
           // opens the menu instead. One gesture, both outcomes, and touch keeps its route in.
-          kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false };
+          kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
+                     downX: e.clientX, downY: e.clientY,   // where the press landed — the arm test measures travel FROM here
+                     // Carry the menu opener WITH the gesture. Release is handled by a window-level
+                     // pointerup (it has to be, or letting go off the diamond strands the drag), and
+                     // openKfMenu lives in this per-diamond closure — calling it from there threw
+                     // "openKfMenu is not defined" every single time, which killed the hold-to-open
+                     // route into easing entirely. On touch that is the ONLY route: dblclick and
+                     // right-click never fire on a finger.
+                     openMenu: (mx, my) => openKfMenu(mx, my) };
           kfDrag.armTimer = setTimeout(() => {
             if (!kfDrag || kfDrag.dot !== dot) return;
             kfDrag.armTimer = 0;
@@ -1013,15 +1026,17 @@ window.FM = window.FM || {};
         });
         dot.addEventListener('dblclick', (e) => {
           e.stopPropagation();
-          deleteKeyframesAt(layer, tt);
+          deleteKeyframesAt(layer, tt, entry.prop);   // this diamond's property only — the dimmed ones behind it survive
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
         });
         const openKfMenu = (mx, my) => {
           if (!FM.contextMenu || !FM.EASE_PRESETS) return;
+          // Easing is per-KEYFRAME too. It used to sweep every animated property that happened to have
+          // a keyframe at this time, so easing a scale keyframe silently re-eased position as well.
           const items = Object.keys(FM.EASE_PRESETS).map(key => ({
             label: EASE_LABELS[key] || key,
             action: () => {
-              FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => { if (Math.abs(kf.t - tt) < 1e-3) { kf.bez = FM.EASE_PRESETS[key].slice(); kf.e = key; } }));
+              entry.kf.bez = FM.EASE_PRESETS[key].slice(); entry.kf.e = key;
               FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
             },
           }));
@@ -1029,7 +1044,7 @@ window.FM = window.FM || {};
           items.push({
             label: 'Hold (step)',
             action: () => {
-              FM.animatedProps(layer).forEach(p => p.kf.forEach(kf => { if (Math.abs(kf.t - tt) < 1e-3) { kf.e = 'hold'; delete kf.bez; } }));
+              entry.kf.e = 'hold'; delete entry.kf.bez;
               FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
             },
           });
@@ -1053,7 +1068,7 @@ window.FM = window.FM || {};
           // long-press menu is also the phone's route to DELETE
           items.push({ sep: true });
           items.push({ label: 'Delete keyframe', danger: true, action: () => {
-            deleteKeyframesAt(layer, tt);
+            deleteKeyframesAt(layer, tt, entry.prop);   // scoped, same as double-click
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
           } });
           FM.contextMenu.show(mx, my, items);
@@ -1413,7 +1428,13 @@ window.FM = window.FM || {};
           // Moving BEFORE the hold arms is a scrub past the diamond, not a retime — abandon the
           // gesture rather than starting one, so brushing a keyframe can never shift it.
           if (!kfDrag.armed) {
-            if (kfDrag.orig && Math.abs(nt - kfDrag.orig[0]) > 0.5 / pxPerSec() * 6) {
+            // Measure how far the finger has MOVED from where it went down — not how far the press
+            // landed from the diamond's centre. Comparing against the keyframe's own time meant a
+            // press anywhere but dead-centre already exceeded the threshold, and since the diamond
+            // carries a deliberate ~35px touch pad around an 11px shape, most legitimate presses
+            // aborted on the first speck of finger drift: no arm, no colour, no easing menu.
+            const moved = Math.hypot(e.clientX - kfDrag.downX, e.clientY - kfDrag.downY);
+            if (moved > 10) {
               if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
               kfDrag.dot.classList.remove('kf-dragging');
               kfDrag = null;
@@ -1501,6 +1522,7 @@ window.FM = window.FM || {};
         if (kfDrag) {
           if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
           const layer = kfDrag.layer, armed = kfDrag.armed, moved = kfDrag.moved, dot = kfDrag.dot;
+          const openMenu = kfDrag.openMenu;   // grab it before kfDrag is nulled below
           if (dot) dot.classList.remove('kf-dragging');
           if (moved) {
             // Re-sort every animated prop (transform AND effect params) so evalProp stays correct
@@ -1514,7 +1536,7 @@ window.FM = window.FM || {};
             // the easing menu. This is where the old 450ms touch timer's job went.
             kfDrag = null;
             const r = dot.getBoundingClientRect();
-            openKfMenu(r.left + r.width / 2, r.top - 8);
+            if (openMenu) openMenu(r.left + r.width / 2, r.top - 8);
           } else {
             // A plain tap. It used to rebuild the timeline and push an empty undo entry every time.
             kfDrag = null;

@@ -41,13 +41,16 @@ window.FM = window.FM || {};
       gctx.fillStyle = dt < 0 ? 'rgba(80,200,255,0.55)' : 'rgba(255,110,110,0.55)';
       gctx.fillRect(0, 0, P.width, P.height);
       gctx.restore();
-      ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostC, 0, 0); ctx.restore();
+      // project coords → preview pixels (zoomed previews are supersampled and cropped)
+      ctx.save(); if (FM.applyPreviewTransform) FM.applyPreviewTransform(ctx);
+      ctx.globalAlpha = 0.4; ctx.drawImage(ghostC, 0, 0); ctx.restore();
     });
   }
   // Rule-of-thirds grid + title-safe margin guides (preview only, never exported).
   function drawGuides() {
     const P = FM.scene.project, w = P.width, h = P.height, lw = Math.max(1, w / 960);
     ctx.save();
+    if (FM.applyPreviewTransform) FM.applyPreviewTransform(ctx);   // same project→preview mapping renderScene uses
     ctx.lineWidth = lw; ctx.strokeStyle = 'rgba(255,255,255,.22)';
     for (let i = 1; i < 3; i++) {
       ctx.beginPath(); ctx.moveTo(w * i / 3, 0); ctx.lineTo(w * i / 3, h); ctx.stroke();
@@ -163,13 +166,27 @@ window.FM = window.FM || {};
 
   function resizeCanvas() {
     const P = FM.scene.project;
+    const wrapEl = document.getElementById('canvas-wrap');
+    // ALWAYS measure from an uncropped layout. The crop branch below lifts the canvas out of normal
+    // flow, and #canvas-wrap is sized BY that canvas — so a wrap left over from a previous crop
+    // measures 0 high, previewCrop bails on that ("not laid out — never guess"), the canvas drops
+    // back into flow, the wrap re-inflates, and the next call crops again. The preview flip-flopped
+    // between sharp-cropped and full-comp on every other resize, and while the wrap was collapsed
+    // the selection box and handles — which are positioned against it — collapsed with it.
+    // Resetting first costs one forced reflow per resize (not per frame) and makes the decision stable.
+    if (wrapEl && (canvas.style.position === 'absolute' || wrapEl.style.height)) {
+      canvas.style.position = ''; canvas.style.left = ''; canvas.style.top = '';
+      canvas.style.width = ''; canvas.style.height = '';
+      wrapEl.style.width = ''; wrapEl.style.height = '';
+      void wrapEl.offsetHeight;
+    }
     const crop = previewCrop();
     const dpr = window.devicePixelRatio || 1;
     const zoom = (FM.viewport && FM.viewport.scale) || 1;
     let w, h;
     if (crop) {
       // one device pixel per screen pixel over the visible slice, capped by the same pixel budget
-      let s = ((document.getElementById('canvas-wrap').getBoundingClientRect().width / P.width) * dpr);
+      let s = ((wrapEl.getBoundingClientRect().width / P.width) * dpr);
       s = Math.max(1, Math.min(6, s));
       const q = playQualityFactor();
       if (q < 1) s = Math.max(0.25, s * q);   // playing: shed pixels here too, same trade as the full-comp path
@@ -177,6 +194,11 @@ window.FM = window.FM || {};
       if (px > MAX_PREVIEW_PX) s = Math.max(1, s * Math.sqrt(MAX_PREVIEW_PX / px));
       w = Math.max(1, Math.round(crop.w * s)); h = Math.max(1, Math.round(crop.h * s));
       canvas.__fmCrop = true; canvas.__fmRS = s; canvas.__fmOX = crop.x; canvas.__fmOY = crop.y;
+      // Hold the wrap's box open at the size it has RIGHT NOW, while the canvas is still in flow —
+      // everything positioned against the wrap (selection box, handles, overlays, hit-testing) works
+      // in comp space and must keep its full comp-sized rectangle once the canvas leaves.
+      const kw = wrapEl.offsetWidth, kh = wrapEl.offsetHeight;
+      if (kw > 0 && kh > 0) { wrapEl.style.width = kw + 'px'; wrapEl.style.height = kh + 'px'; }
       canvas.style.position = 'absolute';
       canvas.style.left = (crop.u0 * 100) + '%';
       canvas.style.top = (crop.v0 * 100) + '%';
@@ -809,7 +831,9 @@ window.FM = window.FM || {};
     check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
     envelope: [1.33, 0.75], key: [0.7, 1.44], car: [1.76, 0.57],
     // added shapes
-    squircle: [1.35, 1], crown: [1.3, 0.85], eye: [1.5, 0.9], pin: [0.82, 1.1],
+    // A squircle is an app-icon shape — it's only itself when it's square. (Was 1.35:1, which made
+    // the "Apple corners" pair at the top of the Shape tab spawn as a squashed rounded rectangle.)
+    squircle: [1, 1], crown: [1.3, 0.85], eye: [1.5, 0.9], pin: [0.82, 1.1],
     lock: [0.88, 1], note: [0.9, 1],
   };
   FM.addShapeLayer = function (shape, opts) {
@@ -819,7 +843,8 @@ window.FM = window.FM || {};
     // 1:1 — never stretched by the canvas aspect), then apply the shape's own natural aspect so it
     // actually looks like what it's called (a circle stays a circle, a rectangle isn't a square).
     const d = Math.round(Math.min(P.width, P.height) / 3);
-    const asp = SHAPE_ASPECT[shape || 'rect'] || [1, 1];
+    // opts.aspect overrides the kind's natural one — how "Square" and "Rectangle" can both be `rect`.
+    const asp = opts.aspect || SHAPE_ASPECT[shape || 'rect'] || [1, 1];
     const layer = FM.makeLayer('shape', {
       name: opts.name || (shape ? shape.charAt(0).toUpperCase() + shape.slice(1) : 'Shape'),
       shape: shape || 'rect', x: P.width / 2, y: P.height / 2,

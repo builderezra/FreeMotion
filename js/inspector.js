@@ -1439,11 +1439,15 @@ window.FM = window.FM || {};
   // already are. MT_MODES is what the rail renders; ALL_MT_MODES is what the panel accepts.
   const ALL_MT_MODES = ['move', 'rotate', 'scale', 'skew', 'anchor'];
   const MT_TITLES = { move: 'Move', rotate: 'Rotate', scale: 'Scale', skew: 'Skew', anchor: 'Anchor point' };
-  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation', 'rotationX', 'rotationY'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'], anchor: ['anchorX', 'anchorY'] };
+  // anchor is deliberately EMPTY: the compositor reads tr.anchorX/anchorY as RAW NUMBERS (see
+  // `-sw * tr.anchorX` in compositor.js), so letting the ◆ turn one into a {kf:[…]} object produces
+  // NaN and the layer disappears entirely. The mode still needs an entry here or the keyframe rail
+  // throws the moment you enter it.
+  const MT_PROPS = { move: ['x', 'y', 'z'], rotate: ['rotation', 'rotationX', 'rotationY'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'], anchor: [] };
   // The channels a mode keyframes by DEFAULT (matches Alight Motion). The extra channels (z for Move,
   // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
   // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)
-  const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'], anchor: ['anchorX', 'anchorY'] };
+  const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'], anchor: [] };
   const MT_DEF = { x: 0, y: 0, z: 0, rotation: 0, rotationX: 0, rotationY: 0, scale: 1, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, anchorX: 0.5, anchorY: 0.5 };
 
   function mtEval(layer, key) { const p = layer.transform[key]; return p == null ? MT_DEF[key] : FM.evalProp(p, FM.time); }
@@ -1699,10 +1703,16 @@ window.FM = window.FM || {};
       });
       FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH();
     });
-    left.appendChild(kfBtn);
-    const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
-    easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, mode); });
-    left.appendChild(easeBtn);
+    // Anchor mode owns no keyframable channel (MT_PROPS.anchor is empty — the compositor reads
+    // anchorX/anchorY as raw numbers), so ◆ would be a dead button there. The easing one was worse
+    // than dead: graph-editor has no `anchor` entry in MODE_PROPS and fell back to `all`, so pressing
+    // it while placing a pivot re-eased position, rotation and scale. Neither is rendered.
+    if (props.length) {
+      left.appendChild(kfBtn);
+      const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Easing curve';
+      easeBtn.addEventListener('click', () => { if (FM.openEasingCurve) FM.openEasingCurve(layer, mode); });
+      left.appendChild(easeBtn);
+    }
     // Auto motion/head track — video only, on the Move rail. Seeds from a tap, writes x/y keyframes.
     if (layer.type === 'video' && mode === 'move' && !layer.parent && FM.tracker) {
       const trk = el('button', 'mt-ease mt-track'); trk.innerHTML = MT_ICONS.track; trk.title = 'Auto-track a head / point (writes position keyframes you can then edit)';
@@ -1850,9 +1860,20 @@ window.FM = window.FM || {};
         const nx = Math.max(0, Math.min(1, ax)), ny = Math.max(0, Math.min(1, ay));
         layer.transform.anchorX = Math.round(nx * 1000) / 1000;
         layer.transform.anchorY = Math.round(ny * 1000) / 1000;
-        // keep it visually still: the anchor moved (nx-oldX) of the layer's SCALED width
-        mtSet(layer, 'x', Math.round(mtEval(layer, 'x') + (nx - oldX) * asz.w * aEffX()));
-        mtSet(layer, 'y', Math.round(mtEval(layer, 'y') + (ny - oldY) * asz.h * aEffY()));
+        // Keep it visually still. The anchor moved (nx-oldX) of the layer's SCALED width — but that
+        // displacement is in the LAYER's own space, and the layer is drawn translate → rotate →
+        // scale, so it has to be rotated into the parent frame before it can be added to x/y.
+        // Without this a rotated layer jumped the moment you touched its pivot.
+        let dx = (nx - oldX) * asz.w * aEffX();
+        let dy = (ny - oldY) * asz.h * aEffY();
+        const rot = (mtEval(layer, 'rotation') || 0) * Math.PI / 180;
+        if (rot) { const c = Math.cos(rot), s = Math.sin(rot); const rx = dx * c - dy * s; dy = dx * s + dy * c; dx = rx; }
+        // shiftTransform, not mtSet: on a layer with ANIMATED position, setTransform would upsert a
+        // keyframe at the playhead — moving the pivot would silently add a keyframe and bend the
+        // existing animation. shiftTransform moves the whole curve, which is what a pivot change means.
+        FM.shiftTransform(layer, 'x', Math.round(mtEval(layer, 'x') + dx), FM.time);
+        FM.shiftTransform(layer, 'y', Math.round(mtEval(layer, 'y') + dy), FM.time);
+        FM.requestRender();
       };
       const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: 0, max: 100, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: 0, max: 100, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
@@ -2563,18 +2584,26 @@ window.FM = window.FM || {};
     if (!layer) return null;
     // An OPEN EFFECT editor wins: you are looking at that effect's controls, so those are its
     // keyframes. Includes every animated param of that one effect.
-    const openFx = (layer.effects || []).find(e => e && e._expanded);
-    if (openFx && openFx.params) {
-      const out = [];
-      Object.keys(openFx.params).forEach(k => { if (FM.isAnimated(openFx.params[k])) out.push(openFx.params[k]); });
-      return out;
+    // Only while the EFFECTS panel is actually open. An effect left expanded from an earlier visit
+    // would otherwise keep stealing focus while you work in Move & Transform.
+    if (view === 'effects') {
+      const openFx = (layer.effects || []).find(e => e && e._expanded);
+      if (openFx && openFx.params) {
+        const out = [];
+        Object.keys(openFx.params).forEach(k => { if (FM.isAnimated(openFx.params[k])) out.push(openFx.params[k]); });
+        // An effect with NOTHING animated focuses nothing. Returning [] here matched no property and
+        // so dimmed and froze every keyframe on the layer the moment you added any effect — a fresh
+        // effect has no animated params, and v3.97 opens its editor automatically on add.
+        return out.length ? out : null;
+      }
+      return null;
     }
     // Move & Transform: the channels the current mode owns (Move = x/y/z, Scale = scale/scaleX/scaleY…).
     if (view === 'transform') {
       const mode = ALL_MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
       const out = [];
       (MT_PROPS[mode] || []).forEach(k => { if (FM.isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
-      return out;
+      return out.length ? out : null;   // nothing animated in this mode → don't dim the whole layer
     }
     if (view === 'blend' && FM.isAnimated(layer.transform.opacity)) return [layer.transform.opacity];
     if (view === 'volume' && FM.isAnimated(layer.volume)) return [layer.volume];

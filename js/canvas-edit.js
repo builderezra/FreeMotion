@@ -209,8 +209,12 @@ window.FM = window.FM || {};
       // a group scales about its visible bounds centre, so its members don't fly off-frame —
       // same pivot the corner handle builds in startHandle
       if (sel.type === 'group' && FM.groupBounds) {
-        const b = FM.groupBounds(sel.id);
-        if (b) vpPinch.pivot = { cx: b.x + b.w / 2, cy: b.y + b.h / 2,
+        // groupBounds is (layer, scene, t) — passing the id string made group.transform undefined and
+        // threw, which left vpPinch live but pivot-less, so a group pinch scaled about the project's
+        // top-left and flung it off-frame. It also returns a CENTRE-anchored box, so b.x IS the centre
+        // (adding w/2 would land on the right edge) — same convention startHandle already relies on.
+        const b = FM.groupBounds(sel, FM.scene, FM.time);
+        if (b) vpPinch.pivot = { cx: b.x, cy: b.y,
                                  g0x: FM.evalProp(sel.transform.x, FM.time), g0y: FM.evalProp(sel.transform.y, FM.time) };
       }
     }

@@ -16,12 +16,14 @@ window.FM = window.FM || {};
 
   // Icon rendered straight from the shape's own polygon data (FM.SHAPE_POLYS) — the menu preview
   // can never drift from what actually gets added.
-  function icoPoly(kind) {
+  // `outline` draws it stroked instead of filled, to match the hand-drawn icons in the first block
+  // of the Shape tab — a filled icon sitting next to stroked ones reads as a mistake.
+  function icoPoly(kind, outline) {
     var polys = (FM.SHAPE_POLYS && FM.SHAPE_POLYS[kind]) || [];
     var open = kind === 'spiral';
     var body = polys.map(function (pl) {
       var pts = pl.map(function (p) { return (3 + p[0] * 18).toFixed(1) + ',' + (3 + p[1] * 18).toFixed(1); }).join(' ');
-      return open ? '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.4"/>'
+      return (open || outline) ? '<' + (open ? 'polyline' : 'polygon') + ' points="' + pts + '" fill="none" stroke="currentColor" stroke-width="' + (outline ? 1.8 : 1.4) + '" stroke-linejoin="round"/>'
                   : '<polygon points="' + pts + '" fill="currentColor" stroke="none"/>';
     }).join('');
     return '<svg viewBox="0 0 24 24">' + body + '</svg>';
@@ -36,7 +38,7 @@ window.FM = window.FM || {};
     ['diamond', 'Diamond'], ['plane', 'Plane'], ['umbrella', 'Umbrella'], ['bomb', 'Bomb'],
     ['boat', 'Boat'], ['magnifier', 'Magnifier'], ['key', 'Key'], ['sun', 'Sun'], ['person', 'Person'],
     ['rocket', 'Rocket'], ['envelope', 'Envelope'], ['woman', 'Woman'], ['car', 'Car'],
-    ['squircle', 'Squircle'], ['cross', 'Cross'], ['pin', 'Map pin'], ['lock', 'Lock'],
+    ['cross', 'Cross'], ['pin', 'Map pin'], ['lock', 'Lock'],   // (squircle is promoted to the top pair, next to Square)
     ['gear', 'Gear'], ['crown', 'Crown'], ['eye', 'Eye'], ['note', 'Music note'],
     ['starburst', 'Starburst'], ['clock', 'Clock'],
   ];
@@ -44,6 +46,10 @@ window.FM = window.FM || {};
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
     { key: 'shape', label: 'Shape', icon: ico('<rect x="4" y="4" width="9" height="9" rx="1.5"/><circle cx="16" cy="16" r="5"/>'), options: [
+      // The pair Ezra asked for, first and side by side: the same square, sharp corners vs Apple's.
+      // Both spawn a TRUE square (aspect forced 1:1) so the only difference you see is the corner.
+      { label: 'Square', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'), add: shp('rect', { name: 'Square', aspect: [1, 1] }) },
+      { label: 'Squircle', icon: icoPoly('squircle', true), add: shp('squircle', { name: 'Squircle', aspect: [1, 1] }) },
       { label: 'Rectangle', icon: ico('<rect x="4" y="6" width="16" height="12" rx="1.5"/>'), add: shp('rect') },
       { label: 'Ellipse', icon: ico('<ellipse cx="12" cy="12" rx="9" ry="7"/>'), add: shp('ellipse') },
       { label: 'Triangle', icon: ico('<path d="M12 4l8 16H4z"/>'), add: shp('triangle') },

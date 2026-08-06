@@ -11,6 +11,9 @@ window.FM = window.FM || {};
 
   const MODE_PROPS = {
     move: ['x', 'y', 'z'], rotate: ['rotation'], scale: ['scale', 'scaleX', 'scaleY'], skew: ['skewX', 'skewY'],
+    // anchor keyframes nothing (see MT_PROPS in inspector.js). Present so the `|| MODE_PROPS.all`
+    // fallback below can't quietly re-ease every transform channel if this ever gets opened.
+    anchor: [],
     all: ['x', 'y', 'z', 'rotation', 'scale', 'scaleX', 'scaleY', 'skewX', 'skewY', 'opacity'],
   };
   const PRESETS = [

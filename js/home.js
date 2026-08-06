@@ -311,7 +311,21 @@ window.FM = window.FM || {};
           document.body.classList.add('hm-selecting');
           render();                                   // one rebuild to draw the checks, BEFORE painting starts
           beginPaint(p.id, downY);
-          if (paint) { paint.moved = true; card._paintedAway = true; paintClasses(); renderSelBar(); }
+          if (paint) {
+            paint.moved = true;
+            paint.y = downY;
+            // render() above replaced this card, so `card` is now a detached node — flag the LIVE one
+            // (whichever node the follow-up click actually lands on) or the release immediately
+            // un-ticks the project you just held to select.
+            const live = grid && grid.querySelector('.hm-card[data-pid="' + p.id + '"]');
+            if (live) live._paintedAway = true;
+            card._paintedAway = true;
+            // Arm the auto-scroll here too. The pointermove branch below only starts it on the
+            // moved:false → true transition, and this path has already set moved — so entering select
+            // mode by HOLD and then dragging to the edge of the list never scrolled.
+            paint.raf = requestAnimationFrame(paintAutoScroll);
+            paintClasses(); renderSelBar();
+          }
         }, 380);
       }
     });
@@ -356,6 +370,12 @@ window.FM = window.FM || {};
     const anchor = ids.indexOf(id);
     if (anchor < 0) return;
     paint = { ids: ids, anchor: anchor, pre: new Set(selected), last: anchor, moved: false, y: y, raf: 0 };
+    // The cards' own pointerup only fires when you release ON the card you started from. Releasing
+    // over a gap, over the select bar, or outside the grid left `paint` alive with its auto-scroll
+    // rAF still running — the list kept scrolling by itself and the next tap painted a range.
+    paint.onUp = function () { endPaint(); };
+    window.addEventListener('pointerup', paint.onUp);
+    window.addEventListener('pointercancel', paint.onUp);
     if (navigator.vibrate) { try { navigator.vibrate(10); } catch (e) {} }
   }
   function paintTo(clientY) {
@@ -394,8 +414,14 @@ window.FM = window.FM || {};
   function endPaint() {
     if (!paint) return;
     if (paint.raf) cancelAnimationFrame(paint.raf);
+    if (paint.onUp) { window.removeEventListener('pointerup', paint.onUp); window.removeEventListener('pointercancel', paint.onUp); }
     const did = paint.moved;
     paint = null;
+    // `_paintedAway` exists to swallow the click that ends a drag — but that click lands on the card
+    // you RELEASED over, so the flag on the card the drag STARTED from was never cleared and quietly
+    // ate a genuine tap on it later. Clear them all once the click has had its turn (a 0ms timeout
+    // runs after the click event that follows pointerup).
+    setTimeout(function () { cardEls().forEach(function (el) { el._paintedAway = false; }); }, 0);
     renderSelBar();
     return did;
   }
