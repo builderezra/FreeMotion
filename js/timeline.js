@@ -34,7 +34,10 @@ window.FM = window.FM || {};
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
   let kfDrag = null;
-  const KF_HOLD_MS = 600;   // press-and-hold before a keyframe becomes draggable (Ezra: "hold on it for a second")
+  // Press-and-hold before a keyframe becomes draggable. Was 600ms ("hold on it for a second"), which
+  // in the hand felt like waiting rather than deciding; 320ms still can't be hit by a tap or by the
+  // start of a timeline scrub (both move within ~100ms) but stops the deliberate press from dragging.
+  const KF_HOLD_MS = 320;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
   let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
