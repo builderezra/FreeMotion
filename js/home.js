@@ -260,6 +260,14 @@ window.FM = window.FM || {};
           const ok = await FM.templates.save(n.trim(), p.id);
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
         } },
+        // The other half of "build a new element": the same shelf as Save as template, because from
+        // here they are the same gesture — turn this project into a reusable thing.
+        { label: 'Save as element…', action: async () => {
+          const n = prompt('Element name:', p.name || 'My element'); if (!n || !n.trim()) return;
+          const ok = await FM.elements.saveFromProject(p.id, n.trim());
+          if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
+          render();
+        } },
         { label: 'Select…', action: () => { enterSelect(p.id); } },
         // EXPORT VIDEO — the same dialog the editor's Export button opens (format, resolution, frame
         // rate, quality, range). It used to fire FM.storage.exportFile() the instant you tapped, which
@@ -580,12 +588,31 @@ window.FM = window.FM || {};
       return;
     }
     if (tab === 'elements') {
-      pickProject('Save which project as an element?', async (p) => {
-        const name = prompt('Element name:', p.name || 'Element'); if (!name || !name.trim()) return;
-        const ok = await FM.elements.saveFromProject(p.id, name.trim());
-        if (FM.toast) FM.toast(ok ? 'Saved element “' + name.trim() + '”' : 'Could not save that element');
-        render();
-      });
+      // Two ways in. Until now you could only turn EXISTING work into an element (Ezra: "in alight
+      // motion you can create elements, in this you can only turn stuff into elements"), so the first
+      // entry builds one from nothing: a square, transparent canvas — the shape a watermark, logo or
+      // sticker actually wants — which you then save from its own ⋯ menu.
+      const nb = document.getElementById('hm-new'), nr = nb.getBoundingClientRect();
+      FM.contextMenu.show(Math.max(8, Math.min(nr.left - 150, window.innerWidth - 240)), Math.max(8, nr.top - 96), [
+        { label: 'New element', disabled: true }, { sep: true },
+        { label: 'Build a new one…', action: async () => {
+          const name = prompt('Element name:', 'My element'); if (!name || !name.trim()) return;
+          const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080 });
+          if (!pid) { if (FM.toast) FM.toast('Could not create that'); return; }
+          FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
+          if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
+          FM.home.close();
+          if (FM.toast) FM.toast('Build it, then Home → this project’s ⋯ → Save as element…', 4200);
+        } },
+        { label: 'From an existing project…', action: () => {
+          pickProject('Save which project as an element?', async (p) => {
+            const name = prompt('Element name:', p.name || 'Element'); if (!name || !name.trim()) return;
+            const ok = await FM.elements.saveFromProject(p.id, name.trim());
+            if (FM.toast) FM.toast(ok ? 'Saved element “' + name.trim() + '”' : 'Could not save that element');
+            render();
+          });
+        } },
+      ]);
       return;
     }
     newProjectDialog();
