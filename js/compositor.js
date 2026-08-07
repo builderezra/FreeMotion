@@ -656,6 +656,25 @@ window.FM = window.FM || {};
       { key: 'trackspeed', label: 'Band speed', min: 0, max: 3, step: 0.05, def: 0.4, unit: 'Hz' },
       { key: 'headswitch', label: 'Head switch', min: 0, max: 1, step: 0.02, def: 0.6 },
     ] },
+    // ---- batch 37: the last two off the build table ----
+    // Compression Crunch — what over-compression actually does: colour degrades into blocks and
+    // FLAT areas band, while edges stay razor sharp. Mosaic and Pixelate destroy the luma, which is
+    // the exact opposite, and is why neither of them reads as a re-uploaded video.
+    { type: 'compresscrunch', label: 'Compression Crunch', desc: 'Convincing over-compression: colour collapses into blocks and flat areas band, while edges stay razor sharp. Fry pushes it into meme territory.', params: [
+      { key: 'quality', label: 'Quality', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'blocksize', label: 'Block size', min: 2, max: 40, step: 1, def: 8, unit: 'px' },
+      { key: 'chromablock', label: 'Colour block', min: 2, max: 80, step: 1, def: 16, unit: 'px' },
+      { key: 'ringing', label: 'Ringing', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'fry', label: 'Fry', min: 0, max: 1, step: 0.02, def: 0.25 },
+    ] },
+    // Temporal Denoise — averages a frame with the one before it WHERE NOTHING MOVED, so low-light
+    // grain melts out of the static parts and a moving subject stays sharp. A plain blur cannot tell
+    // the difference and softens everything.
+    { type: 'temporaldenoise', label: 'Temporal Denoise', desc: 'Melts grain out of the parts of the shot that are holding still, and leaves anything that moves sharp. For low-light footage.', params: [
+      { key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'threshold', label: 'Motion threshold', min: 0.01, max: 0.5, step: 0.01, def: 0.12 },
+      { key: 'spatial', label: 'Extra smoothing', min: 0, max: 6, step: 0.1, def: 0.6, unit: 'px' },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1352,7 +1371,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1 };
+    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1460,6 +1479,73 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    /* Compression Crunch — what over-compression actually looks like.
+     * Real codecs throw away CHROMA resolution and quantise flat DCT blocks, so colour degrades into
+     * squares and gradients band while edges stay razor sharp. Mosaic and Pixelate destroy the luma,
+     * which is the exact opposite — that is why neither of them reads as a re-uploaded video.
+     *
+     * Three linear passes, no random access: chroma tile means, then per luma tile a mean and an
+     * ACTIVITY figure. The activity term is what makes it convincing: a flat tile collapses toward
+     * its mean (banding), a busy one keeps its detail, exactly as a bitrate-starved encoder behaves. */
+    compresscrunch: function (d, W, H, p, t, ps) {
+      const s = ps == null ? 1 : ps;
+      const q = 1 - clamp01(p.quality == null ? 0.3 : FM.evalProp(p.quality, t));
+      const fry = clamp01(p.fry == null ? 0.25 : FM.evalProp(p.fry, t));
+      if (q <= 0.002 && fry <= 0.002) return;
+      const bs = Math.max(2, Math.round((p.blocksize == null ? 8 : FM.evalProp(p.blocksize, t)) * s));
+      const cbs = Math.max(bs, Math.round((p.chromablock == null ? 16 : FM.evalProp(p.chromablock, t)) * s));
+      const ring = clamp01(p.ringing == null ? 0.5 : FM.evalProp(p.ringing, t)) * q;
+      const n = W * H;
+      // One allocation reused across frames — three Float32Arrays at 1080p is 24MB, and allocating
+      // that per frame is a garbage-collection stutter you can feel.
+      if (!_ccY || _ccY.length < n) { _ccY = new Float32Array(n); _ccB = new Float32Array(n); _ccR = new Float32Array(n); }
+      const Y = _ccY, Cb = _ccB, Cr = _ccR, src = d;
+      for (let i = 0, j = 0; j < n; i += 4, j++) {
+        const r = src[i], g = src[i + 1], b = src[i + 2];
+        Y[j] = 0.299 * r + 0.587 * g + 0.114 * b;
+        Cb[j] = -0.169 * r - 0.331 * g + 0.5 * b;
+        Cr[j] = 0.5 * r - 0.419 * g - 0.081 * b;
+      }
+      for (let ty = 0; ty < H; ty += cbs) {            // pass 1: chroma subsampling
+        const y1 = Math.min(H, ty + cbs);
+        for (let tx = 0; tx < W; tx += cbs) {
+          const x1 = Math.min(W, tx + cbs);
+          let sb = 0, sr = 0, c = 0;
+          for (let y = ty; y < y1; y++) for (let x = tx; x < x1; x++) { const j = y * W + x; sb += Cb[j]; sr += Cr[j]; c++; }
+          const mb = sb / c, mr = sr / c;
+          for (let y = ty; y < y1; y++) for (let x = tx; x < x1; x++) { const j = y * W + x; Cb[j] += (mb - Cb[j]) * q; Cr[j] += (mr - Cr[j]) * q; }
+        }
+      }
+      const ACT = 26;                                  // mean absolute deviation above which a tile is "busy"
+      const step = 1 + q * 30;                         // luma quantisation ladder — this is the DC term
+      for (let ty = 0; ty < H; ty += bs) {             // passes 2+3: luma quantise + ringing, fused
+        const y1 = Math.min(H, ty + bs);
+        for (let tx = 0; tx < W; tx += bs) {
+          const x1 = Math.min(W, tx + bs);
+          let sy = 0, c = 0;
+          for (let y = ty; y < y1; y++) for (let x = tx; x < x1; x++) { sy += Y[y * W + x]; c++; }
+          const m = sy / c;
+          let act = 0;
+          for (let y = ty; y < y1; y++) for (let x = tx; x < x1; x++) act += Math.abs(Y[y * W + x] - m);
+          act /= c;
+          const flat = 1 - (act >= ACT ? 1 : act / ACT);
+          // The tile MEAN has to land on a ladder too. Flattening the detail inside each tile only
+          // softens a gradient — what makes a starved encoder BAND is the DC term losing precision,
+          // so neighbouring tiles snap to the same value. Scaled by `flat` so a busy tile keeps its
+          // true mean and only quiet ones step.
+          const mq = m + (Math.round(m / step) * step - m) * flat;
+          const keep = 1 - q * flat + ring;            // <1 bands a flat tile, >1 overshoots an edge
+          for (let y = ty; y < y1; y++) for (let x = tx; x < x1; x++) { const j = y * W + x; Y[j] = mq + (Y[j] - m) * keep; }
+        }
+      }
+      const cGain = 1 + fry * 1.6, yGain = 1 + fry * 0.5;
+      for (let i = 0, j = 0; j < n; i += 4, j++) {
+        if (src[i + 3] === 0) continue;
+        const cb = Cb[j] * cGain, cr = Cr[j] * cGain;
+        const y = fry > 0 ? 128 + (Y[j] - 128) * yGain : Y[j];
+        d[i] = y + 1.402 * cr; d[i + 1] = y - 0.344 * cb - 0.714 * cr; d[i + 2] = y + 1.772 * cb;
       }
     },
     /* Dispersion — the disintegrate transition. A noise front sweeps across the layer; ahead of it
@@ -2586,7 +2672,8 @@ window.FM = window.FM || {};
     if (maxX < minX) return null;
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
-  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _lwA = null, _lwB = null;
+  let _ccY = null, _ccB = null, _ccR = null;
+  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -2607,7 +2694,7 @@ window.FM = window.FM || {};
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -3224,6 +3311,73 @@ window.FM = window.FM || {};
       B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
       B.drawImage(_halC, 0, 0, W, H);
       B.restore();
+    },
+    /* ---- Temporal Denoise ------------------------------------------------------------------------
+     * Grain is random per frame; the picture is not. So averaging a frame with the one before it
+     * cancels the grain and keeps the picture — but only where nothing MOVED, or a moving subject
+     * smears into a double exposure. A spatial blur cannot tell the difference and softens the lot.
+     *
+     * The motion mask is built at BLOCK resolution (a 32-wide grid, ~1.8k pixels) rather than per
+     * pixel, and one drawImage bilinear-upscales it to full size. That is the trick that makes this
+     * cheap: it needs the frame DIFFERENCE, not motion vectors, so it skips the block search that
+     * makes the footage blur's field expensive. */
+    temporaldenoise: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      B.drawImage(A, 0, 0);
+      if (FM._mfGhost) return;                          // onion-skin ghosts must not rotate the history
+      const strength = clamp01(p.strength == null ? 0.85 : FM.evalProp(p.strength, t));
+      if (strength <= 0.002) return;
+      const thr = Math.max(0.01, p.threshold == null ? 0.12 : FM.evalProp(p.threshold, t)) * 255;
+      const spatial = Math.max(0, (p.spatial == null ? 0.6 : FM.evalProp(p.spatial, t)) * (ps == null ? 1 : ps));
+      const rec = _mfRec(((layer && layer.id) || '_anon') + ':dn', W, H);
+      const advance = rec.t >= 0 && t > rec.t + 1e-4 && (t - rec.t) <= 0.35;
+      // Stash the OUTPUT, not the input. Averaging each frame with the raw previous one is a two-tap
+      // filter and cannot remove more than 29% of the grain however hard you push it; feeding the
+      // result back makes it an exponential moving average, which is what a real temporal denoiser
+      // is. The motion mask is what keeps that from turning into an accumulating smear — where a
+      // block moved, its weight is zero and the history contributes nothing at all.
+      const stash = function () {
+        const c = rec.cv.getContext('2d');
+        c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+        c.clearRect(0, 0, W, H); c.drawImage(B.canvas, 0, 0);
+        rec.t = t; rec.at = performance.now();
+      };
+      if (!advance) { stash(); return; }                // first frame after a seek has nothing to average with
+      const gw = 32, gh = Math.max(1, Math.round(32 * H / W)) || 1;
+      if (!_dnA) { _dnA = document.createElement('canvas'); _dnB = document.createElement('canvas'); _dnM = document.createElement('canvas'); }
+      if (_dnA.width !== gw || _dnA.height !== gh) { _dnA.width = gw; _dnA.height = gh; _dnB.width = gw; _dnB.height = gh; _dnM.width = gw; _dnM.height = gh; }
+      const ga = _dnA.getContext('2d', { willReadFrequently: true }), gb = _dnB.getContext('2d', { willReadFrequently: true });
+      ga.setTransform(1, 0, 0, 1, 0, 0); ga.clearRect(0, 0, gw, gh); ga.drawImage(A, 0, 0, gw, gh);
+      gb.setTransform(1, 0, 0, 1, 0, 0); gb.clearRect(0, 0, gw, gh); gb.drawImage(rec.cv, 0, 0, gw, gh);
+      let da, db;
+      try { da = ga.getImageData(0, 0, gw, gh); db = gb.getImageData(0, 0, gw, gh).data; } catch (e) { stash(); return; }
+      const m = da.data;
+      for (let i = 0; i < m.length; i += 4) {
+        const dl = Math.abs((0.299 * m[i] + 0.587 * m[i + 1] + 0.114 * m[i + 2]) - (0.299 * db[i] + 0.587 * db[i + 1] + 0.114 * db[i + 2]));
+        const w = dl >= thr ? 0 : 1 - dl / thr;         // 1 = block held still, 0 = it moved
+        // linear, not squared: squaring pulls the weight down even on blocks that barely moved,
+        // and the whole point is to average as much of the STILL picture as possible.
+        m[i] = 255; m[i + 1] = 255; m[i + 2] = 255; m[i + 3] = (w * 255) | 0;
+      }
+      const gm = _dnM.getContext('2d');
+      gm.setTransform(1, 0, 0, 1, 0, 0); gm.clearRect(0, 0, gw, gh); gm.putImageData(da, 0, 0);
+      // the previous frame, cut to the static blocks, laid over at `strength`
+      if (!_dnC) _dnC = document.createElement('canvas');
+      if (_dnC.width !== W || _dnC.height !== H) { _dnC.width = W; _dnC.height = H; }
+      const cc = _dnC.getContext('2d');
+      cc.setTransform(1, 0, 0, 1, 0, 0); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over';
+      cc.clearRect(0, 0, W, H);
+      cc.filter = spatial > 0.05 ? 'blur(' + spatial.toFixed(2) + 'px)' : 'none';
+      cc.drawImage(rec.cv, 0, 0);
+      cc.filter = 'none';
+      cc.globalCompositeOperation = 'destination-in';
+      cc.imageSmoothingEnabled = true;                  // the bilinear upscale IS the mask's feathering
+      cc.drawImage(_dnM, 0, 0, W, H);
+      cc.globalCompositeOperation = 'source-over';
+      B.save();
+      B.globalAlpha = strength * 0.5;                   // an average, not a replacement — 0.5 is "both frames equally"
+      B.drawImage(_dnC, 0, 0);
+      B.restore();
+      stash();
     },
     /* ---- Light Wrap ------------------------------------------------------------------------------
      * Bleeds the light from the layers UNDERNEATH around this layer's own edge. It is the shot that

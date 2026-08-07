@@ -264,6 +264,11 @@ window.FM = window.FM || {};
     },
     // Same reason: a frozen half of a STILL picture looks exactly like the live half, so all you
     // would see is a bar travelling. Put motion under it and the freeze becomes the point.
+    // Temporal denoise only shows itself against MOTION — it is defined by what it leaves sharp.
+    temporaldenoise: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 14; mv.params.speed = 1.2; hero.effects.unshift(mv); }
+    },
     timewarp: function (layers, hero) {
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }

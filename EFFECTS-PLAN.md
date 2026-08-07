@@ -158,7 +158,22 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   appears (measured: 0 warm pixels before, 21628 after). VHS's chroma bleed default is 26px, not the
   14 first tried — real colour-under has about a tenth of the luma bandwidth, and 14px at 1080p is
   1.3% of the width, far too subtle to read. 2.25ms and 3.56ms; 0 differing bytes over 19 stacks.
-  **Still open on this table:** Temporal Denoise (11), Compression Crunch (13).
+- v4.61 (round 10, part 7 — **the table is CLEARED**) — **Temporal Denoise** (11) and **Compression
+  Crunch** (13). Two findings worth keeping:
+  * Compression Crunch: flattening the detail INSIDE each tile only softens a gradient. What makes a
+    starved encoder band is the DC term losing precision, so the tile MEAN has to snap to a ladder
+    too — scaled by flatness so busy tiles keep their true mean. Measured: 172 distinct luma levels
+    across a gradient before, 43 after; without the mean quantisation it was 160, i.e. nothing.
+  * Temporal Denoise: stash the OUTPUT, not the input. Averaging each frame with the raw previous
+    one is a two-tap filter that cannot beat 29% however hard you push it; feeding the result back
+    makes it an exponential moving average. Measured 25% grain reduction with zero ghosting, because
+    where a block moved its weight is zero and the history contributes nothing. The block-resolution
+    mask (a 32-wide grid) is also what makes it cheap — it needs the frame DIFFERENCE, never the
+    motion vectors, so it skips the block search entirely.
+  **The BUILD NEXT table is now empty.** All thirteen shipped, v4.54 - v4.61. What remains in this
+  file is the "WORTH DOING LATER" list (Luma Matte, Compound Blur, Corner Pin, LUT, Pixel Sort,
+  Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-offline-analysis, Curves) and the
+  proposal table of per-effect PARAM upgrades, which is where round 11 should start.
 
 ## Build order (from the ranking pass)
 
