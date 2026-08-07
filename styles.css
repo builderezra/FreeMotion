@@ -206,6 +206,14 @@ body {
 .mt-trackpad::before, .mt-trackpad::after { content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #475774; }
 .mt-trackpad::before { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mt-trackpad::after { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
+/* Snap indicator: the axis that locked draws its rule across the pad, and the pad picks up the accent
+   so a lock is unmistakable at a glance. The hint text names the target (see showPadSnap). */
+.mt-pad-rule { position: absolute; background: var(--accent); opacity: 0; transition: opacity .1s; pointer-events: none; }
+.mt-pad-rule.v { left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); }
+.mt-pad-rule.h { top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%); }
+.mt-trackpad.snap-x .mt-pad-rule.v, .mt-trackpad.snap-y .mt-pad-rule.h { opacity: 1; }
+.mt-trackpad.snap-x, .mt-trackpad.snap-y { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.mt-trackpad.snap-x .mt-trackpad-hint, .mt-trackpad.snap-y .mt-trackpad-hint { color: var(--accent); font-weight: 600; }
 /* rotation dial */
 .mt-dial { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 124px; }
 .mt-dial-ring { position: relative; width: 140px; height: 140px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); touch-action: none; cursor: pointer; }

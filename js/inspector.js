@@ -1875,7 +1875,37 @@ window.FM = window.FM || {};
       const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2 });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
       // 2D trackpad
-      const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move layer · snaps to centre, edges & earlier keyframes'));
+      const pad = el('div', 'mt-trackpad');
+      const padHint = el('span', 'mt-trackpad-hint', 'Swipe here to move layer · snaps to centre, edges & earlier keyframes');
+      // Snapping was invisible: the layer just stopped somewhere and you had to guess whether it had
+      // actually landed on anything (Ezra: "there should be an indicator of grid snapping when you are
+      // using the move and transform move pad"). Now the pad shows a rule on the axis that locked, the
+      // hint NAMES what it locked onto, and the matching alignment guide flashes on the canvas — the
+      // same guide the X/Y boxes already used but the pad never asked for.
+      const padVRule = el('i', 'mt-pad-rule v'), padHRule = el('i', 'mt-pad-rule h');
+      pad.appendChild(padVRule); pad.appendChild(padHRule); pad.appendChild(padHint);
+      const PAD_HINT = padHint.textContent;
+      const targetName = (v, axis) => {
+        const P = FM.scene.project;
+        if (axis === 'x') return v === P.width / 2 ? 'centre' : v === 0 ? 'left edge' : v === P.width ? 'right edge' : 'a keyframe';
+        return v === P.height / 2 ? 'middle' : v === 0 ? 'top edge' : v === P.height ? 'bottom edge' : 'a keyframe';
+      };
+      let padLockSig = '';
+      const showPadSnap = (hx, hy) => {
+        pad.classList.toggle('snap-x', hx != null);
+        pad.classList.toggle('snap-y', hy != null);
+        const sig = (hx == null ? '-' : hx) + ',' + (hy == null ? '-' : hy);
+        if (sig !== padLockSig) {
+          padLockSig = sig;
+          // a tick only when it CATCHES something, not on every frame it stays caught
+          if ((hx != null || hy != null) && navigator.vibrate) { try { navigator.vibrate(8); } catch (err) {} }
+        }
+        if (hx == null && hy == null) { padHint.textContent = PAD_HINT; return; }
+        const parts = [];
+        if (hx != null) parts.push(targetName(hx, 'x'));
+        if (hy != null) parts.push(targetName(hy, 'y'));
+        padHint.textContent = 'Snapped to ' + parts.join(' + ');
+      };
       // HALF the old gain (was width/300 — 3.6 project px per finger px on a 1080 comp, which made
       // fine placement impossible). This pad is the precision control now, so it trades reach for
       // control: a long swipe crosses the frame, a small one nudges.
@@ -1885,10 +1915,11 @@ window.FM = window.FM || {};
       // should help you land on something. Targets are the same set the canvas used: frame centre,
       // frame edges, and — the new one — the positions this layer sits at on its OWN earlier
       // keyframes, so you can put it back exactly where it was.
+      // Returns the target it caught, or null — the caller needs to KNOW, not just get a number back.
       const snapT = (v, targets, thr) => {
         let best = null, bd = thr;
         for (let i = 0; i < targets.length; i++) { const d = Math.abs(v - targets[i]); if (d < bd) { bd = d; best = targets[i]; } }
-        return best == null ? v : best;
+        return best;
       };
       let pd = null;
       pad.addEventListener('pointerdown', e => {
@@ -1901,13 +1932,16 @@ window.FM = window.FM || {};
         if (!pd) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; }
         const thr = 9 * sens;   // ~9 finger px of stickiness, expressed in project units
-        const nx = snapT(pd.ix + (e.clientX - pd.x) * sens, pd.tx, thr);
-        const ny = snapT(pd.iy + (e.clientY - pd.y) * sens, pd.ty, thr);
-        mtSet(layer, 'x', Math.round(nx)); mtSet(layer, 'y', Math.round(ny));
+        const rx = pd.ix + (e.clientX - pd.x) * sens, ry = pd.iy + (e.clientY - pd.y) * sens;
+        const hx = snapT(rx, pd.tx, thr), hy = snapT(ry, pd.ty, thr);
+        mtSet(layer, 'x', Math.round(hx == null ? rx : hx)); mtSet(layer, 'y', Math.round(hy == null ? ry : hy));
+        showPadSnap(hx, hy);
+        if (FM.showAlignGuide) FM.showAlignGuide(hx, hy);   // the line on the CANVAS — what did I line up with?
         refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
       });
-      pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
-      pad.addEventListener('pointercancel', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      const padEnd = e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} showPadSnap(null, null); commitH(); };
+      pad.addEventListener('pointerup', padEnd);
+      pad.addEventListener('pointercancel', padEnd);
       control.appendChild(pad);
       // The parallax payoff is otherwise undiscoverable — Z, the Camera object and "pans give depth"
       // live in three unconnected places. One line here connects them at the moment Z is in hand.
