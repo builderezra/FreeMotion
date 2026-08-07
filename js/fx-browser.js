@@ -80,6 +80,31 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Added ' + (FM.fxRegistry.get(id).label) + (preset ? ' — ' + preset.name : ''), 1100);
   }
 
+  /* Tap anywhere empty to back out of a sub-view (Ezra, 2026-08-07). The ‹ Back button is a long
+   * reach with one thumb, and once you are three categories deep it is the only way out. Any tap
+   * that does not land on something interactive now backs out one level.
+   *
+   * It has to be a TAP, not a pointerdown: the category grid scrolls, and dismissing the list out
+   * from under a drag would make the sheet feel broken. So arm on pointerdown over empty space, and
+   * only fire on pointerup if the finger barely moved and did not linger. Every tile, preset row and
+   * nav arrow is a <button>, so `closest('button')` is the whole interactive test. */
+  const TAP_SLOP = 10, TAP_MS = 700;
+  function tapOutToClose(view, closeView) {
+    let x0 = 0, y0 = 0, t0 = 0, armed = false;
+    view.addEventListener('pointerdown', (e) => {
+      armed = !(e.target.closest && e.target.closest('button, a, input, textarea, select, label, canvas'));
+      x0 = e.clientX; y0 = e.clientY; t0 = perfNow();
+    });
+    view.addEventListener('pointercancel', () => { armed = false; });
+    view.addEventListener('pointerup', (e) => {
+      if (!armed) return;
+      armed = false;
+      if (Math.abs(e.clientX - x0) > TAP_SLOP || Math.abs(e.clientY - y0) > TAP_SLOP) return;   // that was a scroll
+      if (perfNow() - t0 > TAP_MS) return;                                                       // that was a hold
+      closeView();
+    });
+  }
+
   // ---- long-press (or right-click) an effect → its preset sheet ----
   const LP_MS = 420, LP_SLOP = 10;
   function attachLongPress(elm, reg) {
@@ -159,6 +184,7 @@ window.FM = window.FM || {};
     const view = el('div', 'fxb-catview');
     _catDepth++; stopAuto();
     const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    tapOutToClose(view, closeView);
     const top = el('div', 'fxb-catview-top');
     const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
     top.appendChild(back);
@@ -340,6 +366,7 @@ window.FM = window.FM || {};
     // (they were repainting invisibly underneath)
     _catDepth++; stopAuto();
     const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    tapOutToClose(view, closeView);
     const top = el('div', 'fxb-catview-top');
     const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
     top.appendChild(back);
