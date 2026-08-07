@@ -71,7 +71,12 @@ window.FM = window.FM || {};
   FM.requestRender = function () {
     if (renderQueued) return;
     renderQueued = true;
-    requestAnimationFrame(() => { renderQueued = false; render(); });
+    requestAnimationFrame(() => {
+      renderQueued = false;
+      const _t0 = performance.now();
+      render();
+      noteMotion(performance.now() - _t0);
+    });
   };
 
   // How many canvas pixels to keep per project pixel, so vector edges rasterise at the real screen
@@ -94,8 +99,31 @@ window.FM = window.FM || {};
    */
   const PLAY_TIERS = [1, 0.8, 0.62, 0.48, 0.36, 0.28];
   let _playTier = 0, _renderAvg = 0, _tierCooldown = 0, _lastPlayTier = 0;
+
+  /* Playback is not the only time the picture is MOVING. Dragging the playhead, a layer on the
+   * canvas, or a slider re-renders continuously too, and the same trade applies there: shed pixels
+   * while it moves, snap back to full detail the moment it stops.
+   * This is inferred from the render funnel rather than wired into each drag handler — there are
+   * dozens of those across the timeline, canvas, trackpad and inspector, and one missed call site
+   * would be an invisible hole. A burst of frames in one short window IS a drag, whatever caused it. */
+  const MOTION_FRAMES = 5, MOTION_WINDOW = 250, MOTION_IDLE = 200;
+  let _inMotion = false, _mFrames = 0, _mWinStart = 0, _mIdle = null;
+  function noteMotion(ms) {
+    if (FM.playing) return;                       // playback has its own measurement below
+    const now = performance.now();
+    if (now - _mWinStart > MOTION_WINDOW) { _mWinStart = now; _mFrames = 0; }
+    _mFrames++;
+    if (!_inMotion && _mFrames >= MOTION_FRAMES) { _inMotion = true; resizeCanvas(); }
+    if (_inMotion) notePlaybackCost(ms);           // the same adaptive ladder, so a fast machine never drops at all
+    clearTimeout(_mIdle);
+    _mIdle = setTimeout(() => {
+      _mFrames = 0;
+      if (_inMotion) { _inMotion = false; resizeCanvas(); }   // stopped → repaint sharp
+    }, MOTION_IDLE);
+  }
+
   function playQualityFactor() {
-    if (!FM.playing) return 1;
+    if (!FM.playing && !_inMotion) return 1;
     const mode = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
     if (mode === 'detail') return 1;                                   // never trade sharpness — for fast machines
     if (mode === 'smooth') return PLAY_TIERS[Math.max(2, _playTier)];   // start low and stay low
@@ -103,17 +131,19 @@ window.FM = window.FM || {};
   }
   // Called once per rendered frame with the measured cost of that frame.
   function notePlaybackCost(ms) {
-    if (!FM.playing) return;
+    if (!FM.playing && !_inMotion) return;
     _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
     if (_tierCooldown > 0) { _tierCooldown--; return; }
     const budget = 1000 / 60;                       // a frame's worth of time at display rate
     const before = _playTier;
     if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1) _playTier++;        // struggling → shed pixels
     else if (_renderAvg < budget * 0.30 && _playTier > 0) _playTier--;                        // lots of headroom → give detail back
-    if (_playTier !== before) { _tierCooldown = 24; _renderAvg = 0; resizeCanvas(); }         // ~0.4s before the next move, so it settles
+    // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
+    // A drag is short and you're watching position, not detail, so it may find its level quickly.
+    if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; resizeCanvas(); }
   }
   FM.playbackQualityInfo = function () {
-    return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto' };
+    return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto' };
   };
 
   /* The comp is almost always DISPLAYED smaller than its own pixel size — a 1080×1920 project sits
