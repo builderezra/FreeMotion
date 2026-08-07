@@ -675,6 +675,30 @@ window.FM = window.FM || {};
       { key: 'threshold', label: 'Motion threshold', min: 0.01, max: 0.5, step: 0.01, def: 0.12 },
       { key: 'spatial', label: 'Extra smoothing', min: 0, max: 6, step: 0.1, def: 0.6, unit: 'px' },
     ] },
+    // ---- batch 38: round 11 opens ----
+    // Lens Distortion — a real k1/k2 radial polynomial, which is what a lens actually does. Fisheye
+    // and Pinch/Bulge are ad-hoc curves that happen to look bendy; this one can straighten GoPro
+    // footage as well as bend a flat shot, and it carries the radial colour fringing that comes with
+    // real glass — strongest at the corners, zero at the centre.
+    { type: 'lensdistort', label: 'Lens Distortion', desc: 'Real lens geometry — barrel or pincushion by a k1/k2 polynomial, with colour fringing that grows toward the corners the way glass does. Straightens wide-angle footage as well as bends a flat shot.', params: [
+      { key: 'k1', label: 'Barrel', min: -0.8, max: 0.8, step: 0.01, def: 0.18 },
+      { key: 'k2', label: 'Corner falloff', min: -0.5, max: 0.5, step: 0.01, def: 0 },
+      // Bending a rectangle outward pulls in content from beyond the frame, which does not exist —
+      // every tool that does this has a resize control for exactly that reason. Default it to just
+      // cover the k1 default so the effect does not land looking broken.
+      { key: 'zoom', label: 'Zoom', min: 50, max: 200, step: 1, def: 118, unit: '%' },
+      { key: 'chroma', label: 'Colour fringing', min: 0, max: 1, step: 0.02, def: 0.3 },
+    ] },
+    // Pixel Sort — the datamosh look: runs of pixels re-ordered by brightness, which turns a frame
+    // into vertical or horizontal smears of sorted colour. Nothing else here re-ORDERS pixels.
+    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
+      { key: 'density', label: 'Density', min: 0.02, max: 1, step: 0.02, def: 0.35 },
+      { key: 'low', label: 'Dark cut', min: 0, max: 1, step: 0.01, def: 0.2 },
+      { key: 'high', label: 'Bright cut', min: 0, max: 1, step: 0.01, def: 0.85 },
+      { key: 'length', label: 'Max run', min: 8, max: 600, step: 4, def: 160, unit: 'px' },
+      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical']], def: 0 },
+      { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1371,7 +1395,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1 };
+    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1479,6 +1503,121 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    /* Lens Distortion — the real thing: a radial polynomial r' = r(1 + k1·r² + k2·r⁴), sampled
+     * backwards from the destination so there are no holes. Fisheye and Pinch/Bulge are ad-hoc
+     * curves; this one inverts properly, so a NEGATIVE k1 straightens wide-angle footage instead of
+     * just bending it the other way.
+     *
+     * Written as a pixel pass rather than a WARP_FX because the chromatic half needs a DIFFERENT
+     * sample point per channel, and the warp path returns one [x, y] for all three. The fringing
+     * scales with r, so it is zero at the centre and strongest at the corners — which is what real
+     * glass does, and what the shipped Chromatic Aberration (uniform across the frame) cannot. */
+    lensdistort: function (d, W, H, p, t) {
+      const k1 = p.k1 == null ? 0.18 : FM.evalProp(p.k1, t);
+      const k2 = p.k2 == null ? 0 : FM.evalProp(p.k2, t);
+      const zoom = Math.max(0.1, (p.zoom == null ? 118 : FM.evalProp(p.zoom, t)) / 100);
+      const chroma = clamp01(p.chroma == null ? 0.3 : FM.evalProp(p.chroma, t));
+      if (k1 === 0 && k2 === 0 && zoom === 1 && chroma === 0) return;
+      const src = d.slice();
+      const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
+      const iz = 1 / zoom;
+      const sample = function (sx, sy, o, di) {
+        let ix = sx | 0, iy = sy | 0;
+        if (ix < 0 || iy < 0 || ix >= W || iy >= H) { d[di + o] = 0; return; }
+        d[di + o] = src[((iy * W + ix) << 2) + o];
+      };
+      for (let y = 0; y < H; y++) {
+        const dy = (y - cy) * iz;
+        for (let x = 0; x < W; x++) {
+          const dx = (x - cx) * iz;
+          const r = Math.sqrt(dx * dx + dy * dy) / maxR;
+          const r2 = r * r;
+          const f = 1 + k1 * r2 + k2 * r2 * r2;
+          const di = (y * W + x) << 2;
+          const bx = cx + dx * f, by = cy + dy * f;
+          if (chroma <= 0) {
+            let ix = bx | 0, iy = by | 0;
+            if (ix < 0 || iy < 0 || ix >= W || iy >= H) { d[di + 3] = 0; continue; }
+            const si = (iy * W + ix) << 2;
+            d[di] = src[si]; d[di + 1] = src[si + 1]; d[di + 2] = src[si + 2]; d[di + 3] = src[si + 3];
+            continue;
+          }
+          // r-scaled per-channel spread: nothing at the centre, most at the corners
+          const g = chroma * 0.045 * r;
+          const fr = f * (1 + g), fb = f * (1 - g);
+          sample(cx + dx * fr, cy + dy * fr, 0, di);
+          sample(cx + dx * f, cy + dy * f, 1, di);
+          sample(cx + dx * fb, cy + dy * fb, 2, di);
+          let ax = bx | 0, ay = by | 0;
+          d[di + 3] = (ax < 0 || ay < 0 || ax >= W || ay >= H) ? 0 : src[((ay * W + ax) << 2) + 3];
+        }
+      }
+    },
+    /* Pixel Sort — the datamosh look. Runs of pixels are re-ORDERED by brightness, which nothing
+     * else in this catalogue does; every other effect changes pixels in place.
+     *
+     * The sort is the whole cost, so it is done the fast way: brightness is packed into the high
+     * bits of an integer alongside the pixel's index, and the COMPARATOR-LESS TypedArray sort runs.
+     * Passing a comparator drops the engine to its generic path and costs several times more for
+     * exactly the same ordering. Density defaults low because this is a burst effect, not a grade. */
+    pixelsort: function (d, W, H, p, t, ps) {
+      const s = ps == null ? 1 : ps;
+      const density = clamp01(p.density == null ? 0.35 : FM.evalProp(p.density, t));
+      if (density <= 0) return;
+      const lo = clamp01(p.low == null ? 0.2 : FM.evalProp(p.low, t)) * 255;
+      const hi = clamp01(p.high == null ? 0.85 : FM.evalProp(p.high, t)) * 255;
+      if (hi <= lo) return;
+      const maxRun = Math.max(4, Math.round((p.length == null ? 160 : FM.evalProp(p.length, t)) * s));
+      const vert = Math.round(FM.evalProp(p.direction, t) || 0) === 1;
+      const desc = Math.round(FM.evalProp(p.order, t) || 0) === 1;
+      const lines = vert ? W : H, span = vert ? H : W;
+      const stride = vert ? W : 1, lineStep = vert ? 1 : W;
+      const keys = new Uint32Array(span);
+      const src = d.slice();
+      for (let L = 0; L < lines; L++) {
+        // deterministic per line: the same frame always sorts the same lines
+        let h = ((L * 374761393) ^ 0x5bf03635) | 0;
+        h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+        if ((h & 0xffff) / 65536 > density) continue;
+        const base = L * lineStep;
+        let i = 0;
+        while (i < span) {
+          // find a run of pixels inside the brightness window
+          let a = i;
+          while (a < span) {
+            const o = (base + a * stride) << 2;
+            const lum = 0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2];
+            if (src[o + 3] > 8 && lum >= lo && lum <= hi) break;
+            a++;
+          }
+          if (a >= span) break;
+          let b = a;
+          while (b < span && b - a < maxRun) {
+            const o = (base + b * stride) << 2;
+            const lum = 0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2];
+            if (src[o + 3] <= 8 || lum < lo || lum > hi) break;
+            b++;
+          }
+          const n = b - a;
+          if (n > 2) {
+            for (let j = 0; j < n; j++) {
+              const o = (base + (a + j) * stride) << 2;
+              let lum = (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0;
+              if (desc) lum = 255 - lum;
+              keys[j] = (lum << 20) | j;                  // brightness in the high bits, index in the low
+            }
+            const run = keys.subarray(0, n);
+            run.sort();                                   // no comparator — this is the fast path
+            for (let j = 0; j < n; j++) {
+              const from = (base + (a + (run[j] & 0xfffff)) * stride) << 2;
+              const to = (base + (a + j) * stride) << 2;
+              d[to] = src[from]; d[to + 1] = src[from + 1]; d[to + 2] = src[from + 2]; d[to + 3] = src[from + 3];
+            }
+          }
+          i = b + 1;
+        }
       }
     },
     /* Compression Crunch — what over-compression actually looks like.

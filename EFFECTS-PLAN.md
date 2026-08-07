@@ -170,6 +170,15 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     where a block moved its weight is zero and the history contributes nothing. The block-resolution
     mask (a 32-wide grid) is also what makes it cheap — it needs the frame DIFFERENCE, never the
     motion vectors, so it skips the block search entirely.
+- v4.62 (round 11, part 1) — **Lens Distortion** and **Pixel Sort**, both off the WORTH DOING LATER
+  list. Lens Distortion is written as a PIXEL_FX, not a WARP_FX: the chromatic half needs a different
+  sample point PER CHANNEL and the warp path returns one [x,y] for all three. Its `zoom` defaults to
+  118 to cover the k1 default — bending a rectangle outward samples from beyond the frame, and
+  without the resize the effect lands showing black wedges. Pixel Sort packs brightness into the high
+  bits alongside the index and uses the COMPARATOR-LESS TypedArray sort, per this file's perf note;
+  verified a sorted row is a pure re-ordering (same colour multiset in and out). 2.5ms each,
+  0 differing bytes over 23 stacks.
+
   **The BUILD NEXT table is now empty.** All thirteen shipped, v4.54 - v4.61. What remains in this
   file is the "WORTH DOING LATER" list (Luma Matte, Compound Blur, Corner Pin, LUT, Pixel Sort,
   Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-offline-analysis, Curves) and the
