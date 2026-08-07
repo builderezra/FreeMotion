@@ -1560,13 +1560,65 @@ window.FM = window.FM || {};
   }
 
   // A horizontal tick-strip you drag to scrub a value.
+  // The ruler TRAVELS under the fixed centre line, and a flick keeps gliding and eases to a stop, the
+  // same way the timeline does (Ezra: "stiff and don't actually show any movement… should glide
+  // slightly, like how the timeline does when you do a hard swipe"). The strip used to be a static
+  // texture: only the number above it changed, so the control gave no sense of having moved at all,
+  // and a big change meant many short drags because a fast one was worth no more than a slow one.
   function mtScrub(getVal, setVal, scrub, onChange) {
     const strip = el('div', 'mt-scrub'); strip.appendChild(el('div', 'mt-scrub-ticks')); strip.appendChild(el('div', 'mt-scrub-mid'));
-    let drag = null;
-    strip.addEventListener('pointerdown', e => { drag = { x: e.clientX, v: getVal() }; try { strip.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-    strip.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; } const raw = drag.v + (e.clientX - drag.x) * scrub; setVal(raw); const got = getVal(); if (Math.abs(got - raw) > 1e-6) { drag.x = e.clientX; drag.v = got; } if (onChange) onChange(); });   // setVal clamps in the caller — re-anchor to the value that actually stuck (no dead zone)
-    strip.addEventListener('pointerup', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
-    strip.addEventListener('pointercancel', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
+    let drag = null, glideRAF = 0, offset = 0;
+    // Both background layers (coarse + fine ruling) scroll together. Only the X longhand is set, so
+    // the shorthand's `center` Y survives; repeat-x means the offset can grow forever without a seam.
+    const paint = () => { strip.style.backgroundPositionX = offset + 'px, ' + offset + 'px'; };
+    const stopGlide = () => { if (glideRAF) { cancelAnimationFrame(glideRAF); glideRAF = 0; } };
+    // Apply dx SCREEN pixels of scrub. Returns false when the value refused to move (clamped at its
+    // end) so the glide can die there instead of spinning against a wall.
+    const applyDx = (dx) => {
+      const before = getVal(), raw = before + dx * scrub;
+      setVal(raw);
+      offset += dx; paint();
+      if (onChange) onChange();
+      return Math.abs(getVal() - before) > 1e-9;
+    };
+    strip.addEventListener('pointerdown', e => {
+      stopGlide();                                   // a fresh grab kills any in-flight glide
+      drag = { x: e.clientX, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+      try { strip.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    strip.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; }
+      const dx = e.clientX - drag.lastX, dt = e.timeStamp - drag.lastT;
+      if (dt > 0) drag.v = drag.v * 0.35 + (dx / dt) * 0.65;   // px/ms, smoothed the way the timeline smooths its scrub
+      drag.lastX = e.clientX; drag.lastT = e.timeStamp;
+      if (dx) applyDx(dx);
+    });
+    const release = (e) => {
+      if (!drag) return;
+      const v0 = drag.v; drag = null;
+      try { strip.releasePointerCapture(e.pointerId); } catch (_) {}
+      let v = Math.max(-2.5, Math.min(2.5, isFinite(v0) ? v0 : 0));   // clamp: a hard flick glides a long way, not forever
+      // Only a real FLICK glides. A deliberate positioning drag runs well under 0.5 px/ms and has to
+      // stop dead where you let go, or fine placement becomes impossible; a flick is several px/ms.
+      if (Math.abs(v) < 0.6) { commitH(); if (onChange) onChange(); return; }
+      let last = performance.now();
+      const step = (now) => {
+        // The panel rebuilds constantly (refresh, category change, deselect), which detaches this
+        // strip while its glide is still in flight — and its closures would go on writing to the old
+        // layer's property from a control nobody can see. Die with the element.
+        if (!strip.isConnected) { glideRAF = 0; commitH(); return; }
+        const dt = Math.min(48, now - last); last = now;
+        v *= Math.pow(0.9, dt / 16.67);                                // same friction as the timeline's momentum
+        const alive = applyDx(v * dt);
+        if (alive && Math.abs(v) > 0.008) glideRAF = requestAnimationFrame(step);
+        else { glideRAF = 0; commitH(); if (onChange) onChange(); }    // ONE history entry for the whole gesture
+      };
+      glideRAF = requestAnimationFrame(step);
+    };
+    strip.addEventListener('pointerup', release);
+    strip.addEventListener('pointercancel', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });   // OS-cancelled → settle where it is, never glide
     return strip;
   }
 
