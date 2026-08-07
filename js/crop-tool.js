@@ -49,8 +49,10 @@ window.FM = window.FM || {};
     const rx = (sx - m.tanX * sy) / det, ry = (sy - m.tanY * sx) / det;
     return { u: rx / m.w + m.ax, v: ry / m.h + m.ay };
   }
-  function dispScale() { const cv = preview(), r = cv.getBoundingClientRect(); return r.width / cv.width || 1; }
-  function evtToCanvas(e) { const r = preview().getBoundingClientRect(); return { x: (e.clientX - r.left) * (preview().width / r.width), y: (e.clientY - r.top) * (preview().height / r.height) }; }
+  // Project units, via the one shared conversion — toCanvas() below is misnamed: xform() reads
+  // tr.x/tr.y, so it returns PROJECT px, and the pointer has to be in the same space.
+  function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }
+  function evtToCanvas(e) { return FM.eventToProject(e); }
   // source px → overlay display px (via canvas px × dispScale)
   function srcDisp(sx, sy) { const l = layer(), k = dispScale(); const q = toCanvas(l, sx / MW, sy / MH); return { x: q.x * k, y: q.y * k }; }
   // pointer → source px

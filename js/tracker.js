@@ -39,8 +39,7 @@ window.FM = window.FM || {};
     return { x: g.x + lx * c - ly * s, y: g.y + lx * s + ly * c };
   }
   function evtToProject(e) {
-    const cv = preview(), r = cv.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (cv.width / r.width), y: (e.clientY - r.top) * (cv.height / r.height) };
+    return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
   }
 
   // ---- grayscale frame extraction (cached per source-frame index) ----
@@ -138,7 +137,7 @@ window.FM = window.FM || {};
         overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr);
         const g = overlay.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
         if (picking && picking.seed) {
-          const k = r.width / cv.width;
+          const k = FM.previewDispScale ? FM.previewDispScale() : (r.width / cv.width);   // CSS px per PROJECT px — contentToProj returns project units
           const sp = contentToProj(layer, FM.time, picking.seed.x, picking.seed.y);
           const bx = sp.x * k, by = sp.y * k, hw = (picking.boxPx || 60) * k / 2;
           g.strokeStyle = '#29d9bb'; g.lineWidth = 2; g.strokeRect(bx - hw, by - hw, hw * 2, hw * 2);

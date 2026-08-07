@@ -32,10 +32,9 @@ window.FM = window.FM || {};
 
   // screen px ↔ project(canvas) px. The preview canvas is sized to project px (app.js resizeCanvas),
   // so canvas px === project px and the only mapping is the on-screen display scale.
-  function dispScale() { const cv = preview(), r = cv.getBoundingClientRect(); return r.width / cv.width || 1; }
+  function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
   function evtToProj(e) {
-    const cv = preview(), r = cv.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (cv.width / r.width), y: (e.clientY - r.top) * (cv.height / r.height) };
+    return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
   }
 
   function isAnim() { const m = mask(); return !!(m && FM.isAnimated && FM.isAnimated(m.path)); }

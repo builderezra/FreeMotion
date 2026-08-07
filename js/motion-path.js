@@ -29,10 +29,9 @@ window.FM = window.FM || {};
 
   // screen px ↔ project(canvas) px — the preview canvas is sized to project px (app.js resizeCanvas),
   // so the only mapping is the on-screen display scale (same trick as mask-tool.js).
-  function dispScale() { const cv = preview(), r = cv.getBoundingClientRect(); return r.width / cv.width || 1; }
+  function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
   function evtToProj(e) {
-    const cv = preview(), r = cv.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (cv.width / r.width), y: (e.clientY - r.top) * (cv.height / r.height) };
+    return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
   }
   function clampN(v) { v = +v; return isFinite(v) ? Math.max(-32768, Math.min(32768, v)) : 0; }
   function r2(v) { return Math.round(v * 100) / 100; }

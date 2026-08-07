@@ -56,10 +56,9 @@ window.FM = window.FM || {};
     return { u: rx / m.w + m.ax, v: ry / m.h + m.ay };
   }
   // preview-canvas px ↔ overlay display px
-  function dispScale() { const cv = preview(), r = cv.getBoundingClientRect(); return r.width / cv.width || 1; }
+  function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
   function evtToCanvas(e) {
-    const r = preview().getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (preview().width / r.width), y: (e.clientY - r.top) * (preview().height / r.height) };
+    return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
   }
 
   function subsOf(l) { return l.subs || (l.points ? [l.points] : []); }

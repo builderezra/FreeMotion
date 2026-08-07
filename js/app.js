@@ -262,6 +262,25 @@ window.FM = window.FM || {};
     // when a stroke is in progress.
     if (FM.drawTool && FM.drawTool.sync) FM.drawTool.sync();
   }
+  /* ---- ONE pointer→comp conversion for every on-canvas tool -----------------------------------
+   * The preview canvas is NOT 1:1 with the comp. It is supersampled when the comp is displayed
+   * larger than its own pixels, reduced when displayed smaller, and may hold only the visible crop.
+   * The project extent it covers is canvas.width / __fmRS starting at __fmOX.
+   * Six tools each rolled their own (canvas.width / rect.width) version of this, and every one was
+   * wrong the moment the scale left exactly 1 — points landed hundreds of pixels from the touch.
+   * New on-canvas tools MUST use these rather than writing it a seventh time.
+   * (canvas-edit.js keeps its own identical copy plus a viewport-scale variant; it was the one that
+   *  already had it right, and is left alone deliberately.) */
+  FM.previewSpan = function () { return (canvas.width / (canvas.__fmRS || 1)) || FM.scene.project.width || 1; };
+  FM.previewDispScale = function () { const r = canvas.getBoundingClientRect(); return (r.width / FM.previewSpan()) || 1; };   // CSS px per PROJECT px
+  FM.eventToProject = function (e) {
+    const r = canvas.getBoundingClientRect(), sc = canvas.__fmRS || 1;
+    return {
+      x: (canvas.__fmOX || 0) + ((e.clientX - r.left) / r.width) * (canvas.width / sc),
+      y: (canvas.__fmOY || 0) + ((e.clientY - r.top) / r.height) * (canvas.height / sc),
+    };
+  };
+
   FM.previewCropInfo = function () { const c = previewCrop(); return c ? { crop: c, backing: canvas.width + '×' + canvas.height, scale: canvas.__fmRS } : null; };
   FM.resizeCanvas = resizeCanvas;
   // Zoom changed → the comp now covers a different number of device pixels, so re-rasterise for it.
