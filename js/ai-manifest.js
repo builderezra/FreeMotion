@@ -126,7 +126,7 @@ window.FM = window.FM || {};
     type: 'object', additionalProperties: false, required: ['subject', 'style', 'durationSec', 'aspect'],
     properties: {
       subject: { type: 'string', description: 'what the video is about / the hero message' },
-      style: { type: 'string', description: 'visual style, e.g. "punchy product reel", "elegant real-estate", "retro VHS"' },
+      style: { type: 'string', description: 'visual style, e.g. "punchy product reel", "elegant event title", "retro VHS"' },
       palette: { type: 'array', items: { type: 'string' }, description: '2-5 hex colours that define the look' },
       pacing: { type: 'string', description: 'slow | medium | fast' },
       durationSec: { type: 'number' },

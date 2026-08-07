@@ -15,7 +15,7 @@ window.FM = window.FM || {};
 
   var EXAMPLES = [
     '30s product reel — three fast cuts, punch-in on the name, upbeat captions',
-    'Elegant real-estate intro — the address slides in, the price pops, a sold sticker spins on',
+    'Elegant event intro — the date slides in, the venue pops, a gold seal spins on',
     'Bold quote card — big kinetic text on a gradient, slow zoom, energetic',
     'Calm wellness opener — soft palette, gentle float, fade-up title',
     'Retro VHS title — neon colours, glitchy slide-in, scanline vibe',
@@ -183,7 +183,9 @@ window.FM = window.FM || {};
     FM.ai.generateScene(prompt, chips, { deepPolish: fields.deep.checked, dryRun: !!opts.dryRun });
   }
 
-  function runDemo() { promptInput.value = promptInput.value || EXAMPLES[1]; setMode('running'); FM.ai.generateScene(promptInput.value.trim(), gatherChips(), { dryRun: true }); }
+  // The no-key demo runs the FIRST example rather than a hardcoded index, so reordering the list
+  // can never quietly change what the demo shows.
+  function runDemo() { promptInput.value = promptInput.value || EXAMPLES[0]; setMode('running'); FM.ai.generateScene(promptInput.value.trim(), gatherChips(), { dryRun: true }); }
 
   function buildTemplate() {
     setMode('running');
