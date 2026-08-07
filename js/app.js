@@ -296,13 +296,23 @@ window.FM = window.FM || {};
     updateReadout();
     render();
     syncTopBar();
-    // multi-selection state drives the Group button; select-mode ends when the selection empties
-    const multi = FM.selectionIds ? FM.selectionIds().length : 0;
-    if (multi === 0 && FM.selectMode) FM.selectMode = false;
-    document.body.classList.toggle('sel-multi', multi >= 2);
-    document.body.classList.toggle('sel-mode', !!FM.selectMode);
+    FM.syncSelectionChrome();
   }
   FM.refreshAll = refreshAll;
+
+  // The multi-select chrome, DERIVED from the live selection. It used to be computed only inside
+  // refreshAll — but selectLayer(null) (tap the background, Esc, the phone's back arrow) doesn't call
+  // refreshAll, so deselecting a multi-selection left `sel-multi` stuck on the body. That class shows
+  // the Group button and HIDES ⋯, settings and the project menu, which is why the fix for it was "I
+  // couldn't get rid of the group options and I couldn't do anything" (Ezra). The timeline set both
+  // classes by hand in two more places for the same reason. One function, called from every path that
+  // can change the selection, and it recounts rather than trusting whoever called it.
+  FM.syncSelectionChrome = function () {
+    const multi = FM.selectionIds ? FM.selectionIds().length : 0;
+    if (multi === 0 && FM.selectMode) FM.selectMode = false;   // select-mode ends when the selection empties
+    document.body.classList.toggle('sel-multi', multi >= 2);
+    document.body.classList.toggle('sel-mode', !!FM.selectMode);
+  };
 
   // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there, AM-style) and
   // reverts to the project name when nothing is selected; the delete button appears only with a
@@ -983,6 +993,7 @@ window.FM = window.FM || {};
     if (FM.cropTool && FM.cropTool.isActive() && FM.cropTool.layerId && FM.cropTool.layerId() !== id) FM.cropTool.stop();
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
+    FM.syncSelectionChrome();   // BEFORE the rebuilds — sel-mode/sel-multi change what they render
     FM.layersPanel.refresh();
     FM.inspector.refresh();
     FM.timeline.rebuild();

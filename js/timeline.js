@@ -514,8 +514,7 @@ window.FM = window.FM || {};
     lpFiredAt = Date.now();
     FM.selectMode = true;
     if (!isSelected(layer.id)) FM.toggleSelect(layer.id, true);
-    document.body.classList.add('sel-mode');
-    syncPaintClasses();
+    syncPaintClasses();   // sets sel-mode + sel-multi through the one owner (app.js syncSelectionChrome)
     if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
     // RANGE painting: the selection made by this gesture is always the span anchor→current row.
     // Drag down to add rows; drag BACK the way you came and the rows you passed unselect again
@@ -612,7 +611,7 @@ window.FM = window.FM || {};
       const L = FM.scene.layers[parseInt(h.dataset.idx, 10)];
       h.classList.toggle('sel', !!(L && sel.has(L.id)));
     });
-    document.body.classList.toggle('sel-multi', sel.size >= 2);
+    if (FM.syncSelectionChrome) FM.syncSelectionChrome();   // one owner for sel-multi/sel-mode (see app.js)
   }
 
   // ≡ drag handle at each row's RIGHT edge (AM): press + drag vertically to reorder layers.
