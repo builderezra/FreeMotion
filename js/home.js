@@ -252,12 +252,15 @@ window.FM = window.FM || {};
         { label: 'Open', action: () => openProject(p.id) },
         { label: 'Rename…', action: () => { const n = prompt('Project name:', p.name); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
         { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); await FM.projects.duplicate(p.id); render(); } },
-        { label: 'Select…', action: () => { enterSelect(p.id); } },
+        // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
+        // pair. It was buried below Select… (a mode, not a creation) and Ezra asked for a feature that
+        // was already here — which is a findability problem, not a missing one.
         { label: 'Save as template…', action: async () => {
           const n = prompt('Template name:', p.name || 'My template'); if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
         } },
+        { label: 'Select…', action: () => { enterSelect(p.id); } },
         // EXPORT VIDEO — the same dialog the editor's Export button opens (format, resolution, frame
         // rate, quality, range). It used to fire FM.storage.exportFile() the instant you tapped, which
         // silently downloaded a .fmotion.json project file: no options, and not what "Export" means to

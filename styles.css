@@ -1671,7 +1671,10 @@ body.hm-selecting .hm-card { touch-action: none; }
 .hm-selbtn { padding: 8px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
 .hm-selbtn:disabled { opacity: .4; cursor: default; }
 .hm-selbtn.danger { background: #e0313122; border-color: #e0313166; color: #ff8a8a; }
-#hm-new { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 62px; height: 62px; border-radius: 50%; border: none; background: var(--accent); color: #0b0e14; font-size: 30px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }   /* centred like AM's + */
+/* The glyph is an SVG and the box is a flex centre, so the + lands on the button's exact centre on
+   every device. As a text character it rode the resolved font's line box and sat visibly low. */
+#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 62px; height: 62px; border-radius: 50%; border: none; background: var(--accent); color: #0b0e14; cursor: pointer; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); -webkit-tap-highlight-color: transparent; }   /* centred like AM's + */
+#hm-new svg { width: 28px; height: 28px; display: block; }
 #hm-dialog { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
 #hm-dialog.hidden { display: none; }
 /* the card is a column so the options scroll while the title + Create row stay put on a phone */
