@@ -43,6 +43,24 @@ window.FM = window.FM || {};
     ['starburst', 'Starburst'], ['clock', 'Clock'],
   ];
 
+  // Previously-imported files as one-tap tiles, newest first. `wantAudio` splits the library in two:
+  // the Media tab shows clips and photos, the Audio tab shows songs. One tap re-adds — no picker, no
+  // trip through the Photos app. (A browser can't read the camera roll; this is the closest thing
+  // that actually works, and after the first import it behaves the same.)
+  function libEntries(wantAudio) {
+    var lib = FM.mediaLib;
+    if (!lib) return [];
+    return lib.list().filter(function (m) { return !!lib.isAudio(m) === !!wantAudio; }).map(function (m) {
+      return {
+        label: m.name, mid: m.mid, kind: wantAudio ? 'audio' : m.kind, dur: m.dur,
+        icon: ico(wantAudio ? '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'
+          : m.kind === 'video' ? '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z"/>'
+          : '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'),
+        add: function () { FM.mediaLib.use(m.mid); },
+      };
+    });
+  }
+
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
     { key: 'shape', label: 'Shape', icon: ico('<rect x="4" y="4" width="9" height="9" rx="1.5"/><circle cx="16" cy="16" r="5"/>'), options: [
@@ -80,18 +98,17 @@ window.FM = window.FM || {};
       // …then everything you've imported before, newest first. One tap re-adds it — no picker, no
       // trip through the Photos app. (A browser can't read the camera roll; this is the closest
       // thing that actually works, and after the first import it behaves the same.)
-      (FM.mediaLib ? FM.mediaLib.list() : []).forEach(function (m) {
-        base.push({
-          label: m.name, mid: m.mid, kind: m.kind, dur: m.dur,
-          icon: ico(m.kind === 'video' ? '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z"/>' : '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M4 18l5-5 4 3 3-2 4 4"/>'),
-          add: function () { FM.mediaLib.use(m.mid); },
-        });
-      });
+      libEntries(false).forEach(function (o) { base.push(o); });   // songs are filed under Audio, not here
       return base;
     } },
-    { key: 'audio', label: 'Audio', icon: ico('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), options: [
-      { label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
-    ] },
+    { key: 'audio', label: 'Audio', icon: ico('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), options: function () {
+      // Songs you've already imported live HERE, newest first, one tap to drop another copy on the
+      // timeline — exactly how the Media tab has always treated clips and photos (Ezra: "when you add
+      // a song like adding media it stays in the audios section"). They used to land in Media, mixed
+      // in among the video thumbnails with no artwork to tell them apart.
+      return [{ label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport }]
+        .concat(libEntries(true));
+    } },
     { key: 'object', label: 'Object / Element', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: function () {
       var base = [
         { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
@@ -138,7 +155,7 @@ window.FM = window.FM || {};
     var b = document.createElement('button');
     b.className = cls; b.type = 'button';
     var hidden = item.mid && demo();
-    var label = hidden ? (item.kind === 'video' ? 'Video' : 'Photo') : item.label;
+    var label = hidden ? (item.kind === 'video' ? 'Video' : item.kind === 'audio' ? 'Audio' : 'Photo') : item.label;
     b.title = label;
     var ic = document.createElement('span'); ic.className = 'addmenu-ic';
     ic.innerHTML = item.emoji ? '<span class="add-emoji">' + item.emoji + '</span>' : item.icon;   // trusted literals only (ico()/emoji)
@@ -153,7 +170,7 @@ window.FM = window.FM || {};
         b.insertBefore(img, b.firstChild);
         b.classList.add('has-thumb');
       });
-      if (item.kind === 'video' && item.dur) {
+      if ((item.kind === 'video' || item.kind === 'audio') && item.dur) {   // a song's length matters as much as a clip's
         var d = document.createElement('span'); d.className = 'addmenu-dur'; d.textContent = fmtDur(item.dur);
         b.appendChild(d);
       }

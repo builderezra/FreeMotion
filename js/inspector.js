@@ -1175,6 +1175,13 @@ window.FM = window.FM || {};
   }
 
   // masks live INSIDE the Effects card now (Ezra: not their own section) — no per-card gate needed
+  // mp3/wav ride the video path with a 0×0 picture — that missing picture is what makes every visual
+  // category meaningless on them.
+  function isAudioOnly(layer) {
+    if (!layer || layer.type !== 'video') return false;
+    const m = FM.media.get(layer.id);
+    return !!m && (!m.width || !m.height);
+  }
   function catsFor(layer) { return catsForBase(layer); }
   function catsForBase(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
@@ -1186,11 +1193,17 @@ window.FM = window.FM || {};
     // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
     // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
     if (layer.type === 'video') {
-      const m = FM.media.get(layer.id);
-      const audioOnly = m && (!m.width || !m.height);   // mp3/wav ride the video path with a 0×0 picture
-      // Real video keeps Edit Shape (the AM Size editor); audio-only has no picture to size, so it,
-      // colour and border are all hidden for it.
-      return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && !(audioOnly && (c.key === 'color' || c.key === 'border' || c.key === 'element')));
+      const audioOnly = isAudioOnly(layer);
+      // A SONG gets its own three cards. Every visual category is a dead end on a 0×0 layer — there
+      // is nothing to colour, size, move, blend or run an effect over (Ezra: "get rid of the effects
+      // menu for audios because none of the effects will do anything"), and Presets is visual too
+      // (layer styles and effect looks). What's left is what a song actually has: Speed, Volume and
+      // Audio Effects — one clean row of three. Speed and Volume are normally kept OUT of the grid
+      // because video parks them in the quick-action row, but on audio they're the whole point, and
+      // three cards beat one card floating on its own. They stay in the quick row as well.
+      if (audioOnly) return CATEGORIES.filter(c => ['speed', 'volume', 'audiofx'].indexOf(c.key) >= 0);
+      // Real video keeps Edit Shape (the AM Size editor) and parks Speed/Volume in the quick row.
+      return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
     }
     // shape / text / image get Speed + Volume cards too (AM parity). Speed re-times the clip like it
     // does for video; Volume shows but is DISABLED when the layer has no audio (categoryGrid greys it).
@@ -1207,6 +1220,11 @@ window.FM = window.FM || {};
     if (v === 'speed') return ['video', 'shape', 'text', 'image'].indexOf(layer.type) >= 0;
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
+    // Past this point every view is a VISUAL one, and a song has no card for any of them — so nothing
+    // may route into one either. A view persisted from the previously selected layer, or a timeline
+    // double-click, would otherwise open a panel with no picture behind it. (Speed, Volume and Audio
+    // Effects have already returned above; those are the three a song does keep.)
+    if (isAudioOnly(layer)) return false;
     if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
     if (v === 'masks') return false;   // card retired — masks live inside the Effects card (fall back home)
     if (v === 'editgroup') return false;   // it's an action (enterGroup), not a panel
@@ -1221,7 +1239,6 @@ window.FM = window.FM || {};
     cats.forEach((cat, i) => {
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
-      if (cat.key === 'effects') card.classList.add('cat-card-fx');   // PC: Effects is the big full-width card
       const volDisabled = cat.key === 'volume' && !layerHasAudio(layer);   // Volume card shows on shapes/text but can't do anything with no audio
       if (volDisabled) card.classList.add('cat-card-disabled');
       // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
@@ -1236,16 +1253,10 @@ window.FM = window.FM || {};
       });
       (i < 3 ? top : bot).appendChild(card);
     });
-    // Row-fill: pad the last row of squares so no orphan gap remains. These classes are now styled
-    // on the PHONE too (they used to be desktop-only, which is why the phone kept a hole).
-    const nonFx = bot.querySelectorAll('.cat-card:not(.cat-card-fx)');
-    if (nonFx.length % 3 === 2) nonFx[nonFx.length - 1].classList.add('cat-span2');
-    else if (nonFx.length % 3 === 1 && nonFx.length > 1) nonFx[nonFx.length - 1].classList.add('cat-span3');
-    // PHONE row-fill, computed over EVERY bottom card including Effects — the phone has no
-    // full-width Effects band, so the desktop count (which skips it) pads the wrong row.
-    const all = bot.querySelectorAll('.cat-card');
-    if (all.length % 3 === 2) all[all.length - 1].classList.add('cat-mspan2');
-    else if (all.length % 3 === 1 && all.length > 1) all[all.length - 1].classList.add('cat-mspan3');
+    // No row-fill classes any more. Stretching the last card to close the gap is what made Presets
+    // two columns wide and Effects a full-width band, and those two then read as bigger, more
+    // important things than the cards around them. The grid centres a short last row instead
+    // (styles.css .cat-grid) — every card the same size, and no lopsided corner either way.
     wrap.appendChild(top);
     if (bot.children.length) wrap.appendChild(bot);
     return wrap;

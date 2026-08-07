@@ -56,10 +56,15 @@ window.FM = window.FM || {};
         writeIndex([hit].concat(list.filter(e => e !== hit)));
         return hit.mid;
       }
+      // A song imports through the VIDEO path (an mp3 is a <video> with a 0×0 picture), so `kind`
+      // alone can't tell a track from a clip. Record it, so the Add menu can file songs under Audio
+      // instead of burying them among the video thumbnails (Ezra).
+      const isAud = (rec.kind || 'image') !== 'image' && !(rec.width > 0 && rec.height > 0);
       const entry = {
         mid: newMid(), key: key, fp: fp,
-        name: rec.file.name || (rec.kind === 'video' ? 'Video' : 'Photo'),
+        name: rec.file.name || (isAud ? 'Audio' : rec.kind === 'video' ? 'Video' : 'Photo'),
         kind: rec.kind || 'image',
+        audio: isAud,
         w: rec.width || 0, h: rec.height || 0,
         dur: rec.kind === 'video' ? (rec.duration || 0) : 0,
         size: rec.file.size || 0,
@@ -68,6 +73,10 @@ window.FM = window.FM || {};
       writeIndex([entry].concat(list));
       return entry.mid;
     },
+
+    // Is this entry a song? Entries written before the `audio` flag existed are recognised by the
+    // shape they already have: not an image, and no picture dimensions.
+    isAudio(e) { return !!e && (e.audio === true || (e.kind !== 'image' && !e.w && !e.h)); },
 
     // Every IDB key the library still points at — pruneOrphans must not sweep these.
     keys() { return readIndex().map(e => e.key).filter(Boolean); },
@@ -104,6 +113,7 @@ window.FM = window.FM || {};
       if (memThumb.has(mid)) return memThumb.get(mid);
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return null;
+      if (this.isAudio(e)) return null;   // no picture to grab — don't decode a whole song for a blank tile
       const cached = await FM.storage.readMedia(THUMB + mid);
       if (typeof cached === 'string' && cached) { memThumb.set(mid, cached); return cached; }
       const file = await this.getFile(mid);
