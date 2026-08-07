@@ -4833,7 +4833,13 @@ window.FM = window.FM || {};
       // the clip's own bounds (media branch), and that behaviour must not change. Text/shape/path/group
       // layers used to silently ignore the effect entirely.
       const vigOk = layer.type !== 'video' && layer.type !== 'image';
-      const pp = layer.effects.filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false);
+      // A GROUP reaches the effect stack already flattened, with its own transform baked into the
+      // pixels — so there is nothing left for the content blur to neutralise, and it would smear the
+      // group when you DRAG it, the exact opposite of what it promises. The browser no longer offers
+      // it there; this drops it from any project that already had one, rather than rendering the
+      // reverse of the effect's own name.
+      const pp = layer.effects.filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false
+        && !(e.type === 'motionflow' && layer.type === '_flat'));
       const outer = pp[pp.length - 1];
       // Motion Blur (Content): blur ONLY what moves INSIDE the layer, never the layer's own transform.
       // Render the content at a neutral transform, blur it there, then composite with the REAL

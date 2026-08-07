@@ -200,6 +200,12 @@ window.FM = window.FM || {};
       if (e.appliesTo === 'media' && !(layer.type === 'video' || layer.type === 'image')) return false;
       if (e.appliesTo === 'text' && layer.type !== 'text') return false;   // text effects need a text layer
       if (layer.type === 'adjustment' && !ADJ_OK[id]) return false;        // adjustment layers can only grade (no geometry/most pixel passes) (#6)
+      // Motion Blur (Footage) promises the OPPOSITE of what it would do on a group. Its whole design
+      // is a plate rendered with the layer's transform zeroed, so moving the clip cannot smear it —
+      // but a group is handed to the effect stack already flattened, with its transform baked into
+      // the pixels. There is nothing left to neutralise, so dragging the group WOULD smear it. Offer
+      // it on the members instead of shipping a control that does the reverse of its own name.
+      if (id === 'motionflow' && layer.type === 'group') return false;
       return true;
     },
   };
