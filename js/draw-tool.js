@@ -8,7 +8,9 @@ window.FM = window.FM || {};
   'use strict';
 
   var overlay = null, octx = null, bar = null, drawing = false;
-  FM.drawTool = { active: false, mode: null, points: [], stroke: 8, color: '#ffffff' };
+  // cursor: where the NEXT vector point will land (project coords). The trackpad moves it, "Add point"
+  // commits it. snapX/snapY hold the co-ordinate it locked onto, so the guides can be drawn.
+  FM.drawTool = { active: false, mode: null, points: [], stroke: 8, color: '#ffffff', cursor: null, snapX: null, snapY: null };
 
   function preview() { return document.getElementById('preview'); }
   function wrap() { return document.getElementById('canvas-wrap'); }
@@ -39,7 +41,7 @@ window.FM = window.FM || {};
     var s = dispScale();
     octx.clearRect(0, 0, overlay.width, overlay.height);
     var pts = FM.drawTool.points;
-    if (!pts.length) return;
+    if (!pts.length) { drawCursor(s); return; }   // the cursor exists BEFORE the first point — that is the point of it
     octx.lineJoin = 'round'; octx.lineCap = 'round';
     octx.strokeStyle = FM.drawTool.color;
     octx.lineWidth = Math.max(1.5, FM.drawTool.stroke * s);
@@ -51,6 +53,60 @@ window.FM = window.FM || {};
       octx.fillStyle = FM.drawTool.color;
       pts.forEach(function (p, i) { octx.beginPath(); octx.arc(p[0] * s, p[1] * s, i === 0 ? 6 : 4.5, 0, 6.2832); octx.fill(); if (i === 0) { octx.strokeStyle = '#fff'; octx.lineWidth = 2; octx.stroke(); } });
     }
+    drawCursor(s);
+  }
+
+  // The cursor is where "Add point" will drop an anchor: a ring with a crosshair, plus a dashed rubber
+  // band back to the last point so you can see the segment you are about to commit. When it locks onto
+  // another point's row or column, that alignment is drawn right across the frame — the whole reason
+  // for snapping is to build square corners and level edges, and you have to SEE the line to trust it.
+  function drawCursor(s) {
+    var t = FM.drawTool;
+    if (t.mode !== 'vector' || !t.cursor || !octx) return;
+    var cx = t.cursor[0] * s, cy = t.cursor[1] * s, W = overlay.width, H = overlay.height;
+    octx.save();
+    if (t.snapX != null || t.snapY != null) {
+      octx.strokeStyle = 'rgba(41,217,187,.85)'; octx.lineWidth = 1; octx.setLineDash([5, 4]);
+      if (t.snapX != null) { octx.beginPath(); octx.moveTo(cx, 0); octx.lineTo(cx, H); octx.stroke(); }
+      if (t.snapY != null) { octx.beginPath(); octx.moveTo(0, cy); octx.lineTo(W, cy); octx.stroke(); }
+      octx.setLineDash([]);
+    }
+    var pts = t.points;
+    if (pts.length) {   // rubber band from the last anchor to the cursor
+      octx.strokeStyle = 'rgba(255,255,255,.5)'; octx.lineWidth = 1.5; octx.setLineDash([4, 4]);
+      octx.beginPath(); octx.moveTo(pts[pts.length - 1][0] * s, pts[pts.length - 1][1] * s); octx.lineTo(cx, cy); octx.stroke();
+      octx.setLineDash([]);
+    }
+    var locked = t.snapX != null || t.snapY != null;
+    octx.strokeStyle = locked ? '#29d9bb' : '#ffffff'; octx.lineWidth = 2;
+    octx.beginPath(); octx.arc(cx, cy, 9, 0, 6.2832); octx.stroke();
+    octx.beginPath(); octx.moveTo(cx - 14, cy); octx.lineTo(cx - 4, cy); octx.moveTo(cx + 4, cy); octx.lineTo(cx + 14, cy);
+    octx.moveTo(cx, cy - 14); octx.lineTo(cx, cy - 4); octx.moveTo(cx, cy + 4); octx.lineTo(cx, cy + 14); octx.stroke();
+    octx.restore();
+  }
+
+  // Snap the cursor to the ROW or COLUMN of any point already placed — independently, so a corner can
+  // line up with one neighbour horizontally and a different one vertically (Ezra: "grid snapping to
+  // the other points"). Threshold is expressed in finger pixels and converted, so it feels the same
+  // however far the preview is zoomed.
+  function snapCursor() {
+    var t = FM.drawTool, c = t.cursor;
+    t.snapX = t.snapY = null;
+    if (!c || !t.points.length) return;
+    var thr = 9 / Math.max(1e-6, dispScale());   // ~9 screen px of stickiness, in project units
+    var bx = thr, by = thr;
+    t.points.forEach(function (p) {
+      var dx = Math.abs(c[0] - p[0]); if (dx < bx) { bx = dx; t.snapX = p[0]; }
+      var dy = Math.abs(c[1] - p[1]); if (dy < by) { by = dy; t.snapY = p[1]; }
+    });
+    if (t.snapX != null) c[0] = t.snapX;
+    if (t.snapY != null) c[1] = t.snapY;
+  }
+
+  function setCursor(x, y) {
+    var P = FM.scene.project;
+    FM.drawTool.cursor = [Math.max(0, Math.min(P.width, x)), Math.max(0, Math.min(P.height, y))];
+    snapCursor();
   }
 
   function onDown(e) {
@@ -67,7 +123,11 @@ window.FM = window.FM || {};
         var d = Math.hypot((p[0] - pts[0][0]) * s, (p[1] - pts[0][1]) * s);
         if (d < 14) { finish(); return; }
       }
-      pts.push(p); redraw(); updateBar();
+      // Tapping still drops a point straight away — the trackpad is the PRECISE route, not a
+      // replacement for the quick one. The tap runs through the same snapping, and parks the cursor
+      // on what it just placed, so you can carry straight on nudging from there.
+      setCursor(p[0], p[1]);
+      pts.push(FM.drawTool.cursor.slice()); redraw(); updateBar();
     }
   }
   function onMove(e) {
@@ -97,6 +157,7 @@ window.FM = window.FM || {};
 
   function stop() {
     FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false;
+    FM.drawTool.cursor = null; FM.drawTool.snapX = FM.drawTool.snapY = null;
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
     if (overlay) overlay.style.display = 'none';
     if (bar) bar.classList.add('hidden');
@@ -105,20 +166,24 @@ window.FM = window.FM || {};
 
   function updateBar() {
     if (!bar) return;
-    var undo = bar.querySelector('.db-undo'), done = bar.querySelector('.db-done');
+    var vec = FM.drawTool.mode === 'vector';
+    ['.db-undo', '.db-done', '.db-pad', '.db-add'].forEach(function (sel) {
+      var elx = bar.querySelector(sel); if (elx) elx.style.display = vec ? '' : 'none';
+    });
+    bar.classList.toggle('db-vector', vec);
     var n = FM.drawTool.points.length;
-    if (undo) undo.style.display = FM.drawTool.mode === 'vector' ? '' : 'none';
-    if (done) done.style.display = FM.drawTool.mode === 'vector' ? '' : 'none';
     var hint = bar.querySelector('.db-hint');
     if (hint) hint.textContent = FM.drawTool.mode === 'freehand'
       ? 'Draw on the canvas'
-      : (n < 3 ? 'Tap points to build a shape (' + n + ')' : 'Tap Done / press Enter, or tap the first point (' + n + ')');
+      : (n < 3 ? 'Tap the canvas or use the pad, then + Add point (' + n + ')' : 'Done / Enter to finish, or land on the first point (' + n + ')');
   }
 
   function buildBar() {
     bar = document.createElement('div');
     bar.id = 'draw-bar'; bar.className = 'hidden';
     bar.innerHTML =
+      '<div class="db-pad"><span class="db-pad-hint">Swipe here to move the point · snaps to the others</span></div>' +
+      '<button class="db-add" type="button">+ Add point</button>' +
       '<span class="db-hint"></span>' +
       '<label class="db-color" title="Colour"><input type="color" value="#ffffff"></label>' +
       '<label class="db-width" title="Brush width"><input type="range" min="1" max="40" value="8"></label>' +
@@ -131,6 +196,38 @@ window.FM = window.FM || {};
     bar.querySelector('.db-undo').addEventListener('click', function () { FM.drawTool.points.pop(); redraw(); updateBar(); });
     bar.querySelector('.db-done').addEventListener('click', finish);
     bar.querySelector('.db-cancel').addEventListener('click', stop);
+    bar.querySelector('.db-add').addEventListener('click', function () {
+      var t = FM.drawTool;
+      if (!t.cursor) return;
+      // Landing on the FIRST point is how you close the shape, exactly as tapping it on the canvas is.
+      if (t.points.length > 2 && Math.hypot(t.cursor[0] - t.points[0][0], t.cursor[1] - t.points[0][1]) * dispScale() < 14) { finish(); return; }
+      t.points.push(t.cursor.slice());
+      snapCursor();   // the new point becomes a snap target for the next one
+      redraw(); updateBar();
+    });
+
+    // The pad. Same gain as Move & Transform's (project width / 640), which is finer than touching the
+    // canvas directly — on a phone a finger pixel there is ~3.5 project px, here it is ~1.7 — so a
+    // point can be put somewhere a fingertip simply cannot reach.
+    var pad = bar.querySelector('.db-pad'), pd = null;
+    pad.addEventListener('pointerdown', function (e) {
+      var t = FM.drawTool; if (t.mode !== 'vector') return;
+      if (!t.cursor) setCursor(FM.scene.project.width / 2, FM.scene.project.height / 2);
+      pd = { x: e.clientX, y: e.clientY, cx: t.cursor[0], cy: t.cursor[1] };
+      try { pad.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault(); e.stopPropagation();
+    });
+    pad.addEventListener('pointermove', function (e) {
+      if (!pd) return;
+      if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; return; }
+      var sens = (FM.scene.project.width || 1080) / 640;
+      setCursor(pd.cx + (e.clientX - pd.x) * sens, pd.cy + (e.clientY - pd.y) * sens);
+      redraw(); updateBar();
+      e.preventDefault();
+    });
+    function endPad(e) { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} }
+    pad.addEventListener('pointerup', endPad);
+    pad.addEventListener('pointercancel', endPad);
   }
 
   FM.startDraw = function (mode) {
@@ -138,6 +235,10 @@ window.FM = window.FM || {};
     if (!overlay) FM.drawTools && FM.drawTools.init();
     if (!overlay) return;
     FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false;
+    FM.drawTool.snapX = FM.drawTool.snapY = null;
+    // Vector starts with the cursor parked in the middle of the frame, so the pad has something to
+    // move from the moment the tool opens rather than only after a first tap.
+    FM.drawTool.cursor = mode === 'vector' ? [FM.scene.project.width / 2, FM.scene.project.height / 2] : null;
     if (FM.selectLayer) FM.selectLayer(null);
     document.body.classList.add('drawing');
     syncOverlay();
@@ -146,7 +247,7 @@ window.FM = window.FM || {};
     bar.classList.remove('hidden');
     bar.querySelector('.db-width').style.display = mode === 'freehand' ? '' : 'none';
     updateBar();
-    if (FM.toast) FM.toast(mode === 'freehand' ? 'Freehand: draw on the canvas' : 'Vector: tap points, then Done', 2600);
+    if (FM.toast) FM.toast(mode === 'freehand' ? 'Freehand: draw on the canvas' : 'Vector: tap the canvas, or nudge with the pad and + Add point', 2800);
   };
 
   FM.drawTools = {
