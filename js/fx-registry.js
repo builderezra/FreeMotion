@@ -161,14 +161,128 @@ window.FM = window.FM || {};
     return out;
   }
 
+  /* Hand-written descriptions for the effects people reach for most. Everything else falls back to
+   * describeOf(), which states the family and the controls truthfully rather than inventing prose —
+   * a wrong description is worse than a plain one. Add to this map as effects earn a real sentence.
+   * Kept here rather than in FM.EFFECTS so the compositor catalogue stays about rendering. */
+  const DESCRIPTIONS = {
+    blur: 'Softens everything evenly, like a lens out of focus.',
+    boxblur: 'A cheaper, squarer blur — faster than Gaussian, slightly boxy up close.',
+    sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo.',
+    zoomblur: 'Streaks outward from a centre point, like a fast zoom during the shot.',
+    spinblur: 'Streaks in a circle around a centre point — motion from a spin.',
+    lensblur: 'Defocus with real lens character: bright points bloom into the aperture shape.',
+    tiltshift: 'Keeps one band sharp and blurs away from it, the miniature-model look.',
+    brightness: 'Lifts or drops the whole image evenly.',
+    contrast: 'Pushes lights lighter and darks darker, or flattens them together.',
+    saturate: 'Strengthens or drains colour without touching brightness.',
+    vibrance: 'Boosts the muted colours and leaves already-vivid ones alone — kinder to skin than Saturation.',
+    hue: 'Rotates every colour around the wheel.',
+    grayscale: 'Removes colour entirely.',
+    sepia: 'Warm monochrome — the old-photograph tone.',
+    invert: 'Flips every colour to its opposite, like a film negative.',
+    gamma: 'Reshapes the midtones without moving black or white.',
+    exposure: 'Brightness in stops, the way a camera meters it.',
+    temperature: 'Warms toward orange or cools toward blue.',
+    tint: 'Washes the whole clip toward one colour.',
+    colorize: 'Replaces the image colour with a single hue, keeping its light and shade.',
+    duotone: 'Maps darks to one colour and lights to another.',
+    gradientmap: 'Remaps brightness onto a gradient — darks take one end, lights the other.',
+    glow: 'Blooms the bright areas into a soft halo.',
+    softglow: 'A gentler bloom that lifts highlights without washing the picture out.',
+    vignette: 'Darkens the edges to pull the eye to the middle.',
+    filmgrain: 'Adds film grain. Controls how coarse it is and whether it sits in the shadows, the highlights, or both.',
+    noise: 'Random speckle over the whole frame.',
+    scanlines: 'Horizontal lines across the picture, like an old CRT.',
+    crt: 'The whole old-television look: scanlines, curvature and a shadow mask.',
+    glitch: 'Tears the image into displaced bands, digital-fault style.',
+    rgbsplit: 'Separates the red, green and blue channels so they sit slightly apart.',
+    chromaticaberration: 'Colour fringing toward the edges, the way a real lens misfocuses each colour.',
+    pixelate: 'Averages the image into blocks.',
+    posterize: 'Cuts the colours down to a few flat steps.',
+    threshold: 'Hard two-tone: everything is black or white on either side of a cut.',
+    dither: 'Reduces to few colours but scatters the error, so it reads as more shades than it has.',
+    halftone: 'Rebuilds the image out of dots, like newsprint.',
+    edge: 'Keeps only the edges and drops the fill.',
+    emboss: 'Lights the image from one side so it reads as raised.',
+    stroke: 'Draws an outline around the layer\u2019s own shape.',
+    dropshadow: 'Casts a shadow behind the layer.',
+    innerglow: 'Glows inward from the layer\u2019s edges.',
+    roundcorners: 'Rounds the layer\u2019s corners, Apple-style — a continuous curve, not a plain arc.',
+    liquidglass: 'A glass panel over the layer: refraction, a lit rim and a soft specular.',
+    letterbox: 'Adds cinematic bars, cropping the frame to a wider ratio.',
+    border: 'Draws a frame around the edge of the composition.',
+    chromakey: 'Removes a colour — the green-screen key.',
+    lumakey: 'Removes by brightness instead of colour.',
+    mirror: 'Reflects one half of the frame onto the other.',
+    kaleidoscope: 'Repeats a wedge of the image around a centre.',
+    wave: 'Ripples the image along a sine wave.',
+    ripple: 'Rings spreading from a centre, like a drop in water.',
+    twirl: 'Spirals the image around a centre point.',
+    bulge: 'Pushes the middle out or sucks it in.',
+    fisheye: 'Barrel distortion, like a very wide lens.',
+    particles: 'Emits particles from the layer — deterministic, so the same time always gives the same frame.',
+    shake: 'Handheld camera shake, with optional zoom and twist.',
+    wiggle: 'Drifts the layer around on smooth random noise.',
+    tiles: 'Repeats the clip across the frame. Extend keeps it full size and fills outward; Grid shrinks it into an n\u00d7n block.',
+    lightleak: 'A wash of light across the frame, like a leak onto film.',
+    tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange.',
+    bleachbypass: 'High-contrast, low-saturation — the bleach-bypass film process.',
+    crossprocess: 'The colour shifts of developing film in the wrong chemistry.',
+    nightvision: 'Green phosphor, grain and a soft vignette.',
+    sketch: 'Redraws the image as pencil lines.',
+    copybg: 'Copies the layers underneath into this one, so it can be distorted or masked as a unit.',
+  };
+
+  // Every control an effect exposes, as plain words — the vocabulary someone searches with.
+  function paramWords(def) {
+    const out = [];
+    if (Array.isArray(def.params)) def.params.forEach(function (p) { if (p.label) out.push(String(p.label)); });
+    else if (def.label && def.param) out.push(String(def.label));
+    if (def.color) out.push(def.colorLabel || 'Color');
+    if (def.layer) out.push(def.layerLabel || 'Source');
+    return out;
+  }
+  function tagsOf(def) {
+    const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'other'] || '';
+    const words = [].concat(
+      String(def.label || '').split(/[^A-Za-z0-9]+/),
+      cat.split(/[^A-Za-z0-9]+/),
+      paramWords(def).join(' ').split(/[^A-Za-z0-9]+/),
+      def.tags || [],
+      [def.type]
+    );
+    const seen = {}, out = [];
+    words.forEach(function (w) {
+      w = String(w || '').trim().toLowerCase();
+      if (w.length < 2) return;
+      if (seen[w]) return; seen[w] = 1; out.push(w);
+    });
+    return out;
+  }
+  // A truthful fallback line when an effect hasn't been given one by hand: what family it is in and
+  // what you can actually change. No invented adjectives — a wrong description is worse than none.
+  function describeOf(def) {
+    const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'other'] || 'Effect';
+    const ctrl = paramWords(def);
+    if (!ctrl.length) return cat + '. No settings — it either is or it isn\u2019t.';
+    if (ctrl.length === 1) return cat + '. One control: ' + ctrl[0] + '.';
+    return cat + '. Controls: ' + ctrl.slice(0, 5).join(', ') + (ctrl.length > 5 ? '\u2026' : '') + '.';
+  }
+
   const REG = {};
   (FM.EFFECTS || []).forEach(def => {
     REG[def.type] = {
       id: def.type, type: def.type, label: def.label,
       // A plain-English sentence saying what the effect actually does. Generic on purpose — the two
       // motion blurs need it most (their names alone cannot tell you which reads movement), but any
-      // effect that declares one gets it shown in the panel and in the browser.
-      desc: def.desc || '',
+      // effect that declares one gets it shown in the panel and in the browser. When one isn't
+      // written, describeOf builds a truthful line from the catalogue rather than inventing prose.
+      desc: def.desc || DESCRIPTIONS[def.type] || describeOf(def),
+      // Search keywords. DERIVED rather than hand-listed for 175 effects: the category, the words in
+      // the label, the type id, and every control the effect exposes — which is what people actually
+      // type ("radius", "angle", "shutter"). An effect can add its own with a `tags:` array.
+      tags: tagsOf(def),
       category: CATEGORY_OF[def.type] || 'other',
       params: paramsOf(def),
       appliesTo: TEXT_ONLY[def.type] ? 'text' : (MEDIA_ONLY[def.type] ? 'media' : 'all'),

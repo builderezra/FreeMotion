@@ -162,8 +162,18 @@ window.FM = window.FM || {};
     const top = el('div', 'fxb-catview-top');
     const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
     top.appendChild(back);
-    top.appendChild(el('div', 'fxb-catview-title', reg.label + ' presets'));
+    top.appendChild(el('div', 'fxb-catview-title', reg.label));
     view.appendChild(top);
+    // What it does, then the words it answers to. Holding a tile is the one moment someone is asking
+    // "what IS this?", so the answer goes above the presets rather than after them.
+    if (reg.desc) {
+      const d = el('div', 'fxb-desc'); d.textContent = reg.desc; view.appendChild(d);
+    }
+    if (reg.tags && reg.tags.length) {
+      const tw = el('div', 'fxb-tags');
+      reg.tags.slice(0, 10).forEach(function (t) { tw.appendChild(el('span', 'fxb-tag', t)); });
+      view.appendChild(tw);
+    }
 
     const scroller = el('div', 'fxb-catview-scroll');
     const list = el('div', 'fxp-list');
@@ -370,10 +380,15 @@ window.FM = window.FM || {};
     // match the label, the type id, OR the category name — so "3d", "blur" or "warp" surface
     // the whole family, not just effects that happen to carry the word in their title
     if ('mask'.indexOf(needle) >= 0 || needle.indexOf('mask') >= 0) grid.appendChild(maskTile());   // the pseudo-entry is searchable too
+    // Name, id, category, DESCRIPTION and TAGS — so "shutter", "angle" or "smear" find the thing you
+    // meant even when the word never appears in its title. (Ezra: "when you search for effects it
+    // will also show effects with descriptions matching what you searched".)
     FM.fxRegistry.all().filter(r =>
       r.label.toLowerCase().indexOf(needle) >= 0 ||
       (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
-      (catLabel[r.category] || '').indexOf(needle) >= 0
+      (catLabel[r.category] || '').indexOf(needle) >= 0 ||
+      (r.desc || '').toLowerCase().indexOf(needle) >= 0 ||
+      (r.tags || []).some(function (t) { return t.indexOf(needle) >= 0; })
     ).forEach(reg => grid.appendChild(tile(reg, null)));
     if (!grid.children.length) grid.appendChild(el('div', 'fxb-empty', 'No effects match “' + q + '”'));
     return grid;
