@@ -108,7 +108,12 @@ window.FM = window.FM || {};
       { key: 'size', label: 'Grain size', min: 1, max: 8, step: 0.5, def: 1 },
       { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
-    { type: 'scanlines', label: 'Scanlines', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+    { type: 'scanlines', label: 'Scanlines', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'spacing', label: 'Pitch', min: 2, max: 40, step: 1, def: 2, unit: 'px' },
+      { key: 'thickness', label: 'Line weight', min: 1, max: 20, step: 1, def: 1, unit: 'px' },
+      { key: 'roll', label: 'Roll', min: -20, max: 20, step: 1, def: 0, unit: 'px/s' },
+    ] },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.6 },
@@ -122,7 +127,12 @@ window.FM = window.FM || {};
       { key: 'low', label: 'Low', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'high', label: 'High', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
-    { type: 'dither', label: 'Dither', param: 'levels', min: 2, max: 8, step: 1, def: 4 },
+    { type: 'dither', label: 'Dither', params: [
+      { key: 'levels', label: 'Levels', min: 2, max: 8, step: 1, def: 4 },
+      { key: 'scale', label: 'Cell size', min: 1, max: 16, step: 1, def: 1, unit: 'px' },
+      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']] },
+      { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Mono']] },
+    ] },
     { type: 'halftone', label: 'Halftone Dots', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
@@ -171,9 +181,19 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    { type: 'glitch', label: 'Glitch', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    { type: 'glitch', label: 'Glitch', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'bands', label: 'Slices', min: 2, max: 60, step: 1, def: 14 },
+      { key: 'speed', label: 'Re-roll', min: 0, max: 30, step: 1, def: 10, unit: 'Hz' },
+      { key: 'split', label: 'RGB tear', min: 0, max: 3, step: 0.1, def: 1, unit: '×' },
+    ] },
     { type: 'zoomblur', label: 'Zoom Blur', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
-    { type: 'crt', label: 'CRT', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.7 },
+    { type: 'crt', label: 'CRT', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
+      { key: 'scale', label: 'Cell size', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
+      { key: 'scanline', label: 'Scanlines', min: 0, max: 1, step: 0.02, def: 0.45 },
+      { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
+    ] },
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', param: 'radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
     { type: 'spinblur', label: 'Spin Blur', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -1301,9 +1321,19 @@ window.FM = window.FM || {};
     },
     scanlines: function (d, W, H, p, t) {
       const amt = clamp01(p.amount == null ? 0.6 : FM.evalProp(p.amount, t));   // reach the 0.6 default for a missing param (evalProp→0, never null) (#19)
+      // SPACING is the pitch and THICKNESS how many of those rows go dark. At 2/1 the phase test below
+      // selects exactly the rows `y % 2 === 0 ? skip` did, so a saved project is untouched — but a 2px
+      // pitch on a 1080p frame reads as a flat darkening, not as scanlines, which is the whole problem.
+      // ROLL drifts the pattern in px/s: a real CRT's lines crawl, and a frozen one looks like texture.
+      const sp = p.spacing == null ? 2 : Math.max(2, Math.round(FM.evalProp(p.spacing, t)));
+      const th = p.thickness == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.thickness, t)));
+      const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
+      const plain = sp === 2 && th === 1 && !roll;
+      const off = roll ? roll * t : 0, lo = sp - Math.min(th, sp), k = 1 - amt;
       for (let y = 0; y < H; y++) {
-        if (y % 2 === 0) continue;                 // darken every other row
-        const k = 1 - amt, row = y * W * 4;
+        if (plain) { if (y % 2 === 0) continue; }                 // darken every other row
+        else { const ph = ((y - off) % sp + sp) % sp; if (ph < lo) continue; }
+        const row = y * W * 4;
         for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
       }
     },
@@ -1383,14 +1413,32 @@ window.FM = window.FM || {};
     })(),
     dither: (function () {
       const B = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+      const B2 = [[0, 2], [3, 1]];
       return function (d, W, H, p, t) {
         const lv = Math.max(2, Math.round(FM.evalProp(p.levels, t) || 4)), step = 255 / (lv - 1);
+        // SCALE fattens the Bayer cell to N pixels — welded to one device pixel the pattern dissolves
+        // into noise above SD, so the chunky 1-bit look was unreachable at any Levels setting. At 1 the
+        // index is `x & 3` exactly as before. MATRIX 1 is the legacy 4x4 table (0 = coarse 2x2, 2 = the
+        // 8x8 already used by Gradient Map's dither). MONO quantises one luma channel instead of three
+        // independent ramps — three ramps can never land on true black-and-white, which is the look.
+        const sc = p.scale == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.scale, t)));
+        const mx = p.matrix == null ? 1 : (Math.round(FM.evalProp(p.matrix, t)) | 0);
+        const mono = p.mono == null ? 0 : (Math.round(FM.evalProp(p.mono, t)) | 0);
+        const one = sc === 1;
         for (let y = 0; y < H; y++) {
+          const gy = one ? y : Math.floor(y / sc);
           for (let x = 0; x < W; x++) {
-            const i = (y * W + x) * 4, thr = (B[y & 3][x & 3] / 16 - 0.5) * step;
-            d[i] = Math.round(Math.round((d[i] + thr) / step) * step);
-            d[i + 1] = Math.round(Math.round((d[i + 1] + thr) / step) * step);
-            d[i + 2] = Math.round(Math.round((d[i + 2] + thr) / step) * step);
+            const i = (y * W + x) * 4, gx = one ? x : Math.floor(x / sc);
+            const n = mx === 0 ? B2[gy & 1][gx & 1] / 4 : mx === 2 ? BAYER8[(gy & 7) * 8 + (gx & 7)] : B[gy & 3][gx & 3] / 16;
+            const thr = (n - 0.5) * step;
+            if (mono) {
+              const v = Math.round(Math.round((d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 + thr) / step) * step);
+              d[i] = v; d[i + 1] = v; d[i + 2] = v;
+            } else {
+              d[i] = Math.round(Math.round((d[i] + thr) / step) * step);
+              d[i + 1] = Math.round(Math.round((d[i + 1] + thr) / step) * step);
+              d[i + 2] = Math.round(Math.round((d[i + 2] + thr) / step) * step);
+            }
           }
         }
       };
@@ -1464,7 +1512,13 @@ window.FM = window.FM || {};
     // ---- batch 5 ----
     glitch: function (d, W, H, p, t) {
       const amt = clamp01(FM.evalProp(p.amount, t)); if (amt <= 0) return;
-      const s = d.slice(), bands = 14, bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * 10);
+      // BANDS is the slice count, SPEED the re-roll rate in Hz — 0 freezes the pattern on frame 0, which
+      // is how you get a single held tear instead of a permanent 10 Hz stutter. SPLIT scales the RGB
+      // fringe on its own; it used to be welded to Amount, so a big displacement forced a big fringe.
+      const bands = p.bands == null ? 14 : Math.max(2, Math.round(FM.evalProp(p.bands, t)));
+      const speed = p.speed == null ? 10 : FM.evalProp(p.speed, t);
+      const split = p.split == null ? 1 : FM.evalProp(p.split, t);
+      const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * speed);
       for (let b = 0; b < bands; b++) {
         let h = (b * 2654435761 + frame * 40503) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h ^ (h >> 16);
         const shift = Math.round(((h & 255) / 255 - 0.5) * amt * W * 0.28);
@@ -1475,7 +1529,7 @@ window.FM = window.FM || {};
           for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx += W; else if (sx >= W) sx -= W; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
         }
       }
-      const cs = Math.round(amt * 9);
+      const cs = Math.round(amt * 9 * split);
       if (cs > 0) { const s2 = d.slice(); for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] = s2[row + Math.min(W - 1, x + cs) * 4]; d[i + 2] = s2[row + Math.max(0, x - cs) * 4 + 2]; } } }
     },
     zoomblur: function (d, W, H, p, t) {
@@ -1495,12 +1549,21 @@ window.FM = window.FM || {};
     },
     crt: function (d, W, H, p, t) {
       const amt = clamp01(FM.evalProp(p.amount, t)), cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+      // SCALE is the cell size for BOTH the scanline pitch and the phosphor triad. Nailed to one device
+      // pixel, the mask is invisible at 1080p and above — you get a grey wash where a CRT should be.
+      // SCANLINE and MASK split the two phenomena the single Amount slider drove together, so scanlines
+      // without colour fringing (or a phosphor mask with no line structure) are finally reachable.
+      const sc = p.scale == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.scale, t)));
+      const sl = p.scanline == null ? 0.45 : FM.evalProp(p.scanline, t);
+      const mk = p.mask == null ? 0.18 : FM.evalProp(p.mask, t);
+      const one = sc === 1;
       for (let y = 0; y < H; y++) {
-        const scan = (y & 1) ? (1 - amt * 0.45) : 1, row = y * W;
+        const gy = one ? y : Math.floor(y / sc);
+        const scan = (gy & 1) ? (1 - amt * sl) : 1, row = y * W;
         for (let x = 0; x < W; x++) {
-          const i = (row + x) * 4, ph = x % 3;
+          const i = (row + x) * 4, ph = (one ? x : Math.floor(x / sc)) % 3;
           let kr = scan, kg = scan, kb = scan;
-          if (ph === 0) { kg *= 1 - amt * 0.18; kb *= 1 - amt * 0.18; } else if (ph === 1) { kr *= 1 - amt * 0.18; kb *= 1 - amt * 0.18; } else { kr *= 1 - amt * 0.18; kg *= 1 - amt * 0.18; }
+          if (ph === 0) { kg *= 1 - amt * mk; kb *= 1 - amt * mk; } else if (ph === 1) { kr *= 1 - amt * mk; kb *= 1 - amt * mk; } else { kr *= 1 - amt * mk; kg *= 1 - amt * mk; }
           const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * 0.55 * Math.max(0, r - 0.4);
           d[i] *= kr * vg; d[i + 1] *= kg * vg; d[i + 2] *= kb * vg;
         }

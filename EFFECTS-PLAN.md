@@ -103,6 +103,11 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   (handover point + dither to kill the banding).
 - v4.00 (round 8) — rgbsplit (angle, toward-edges, green shift — written into BOTH the
   per-layer and adjustment-grade paths), pixelate (non-square blocks).
+- v4.13 (round 9, the retro-screen family) — scanlines (pitch/line weight/roll), crt (cell
+  size + scanline and phosphor-mask split apart), glitch (slices/re-roll Hz/RGB tear),
+  dither (cell size, 2x2·4x4·8x8 matrix, mono output). All 12 new defs equal the constants
+  they replaced, so makeInstance-seeded NEW instances are byte-identical too — the vignette
+  trap flagged above, checked explicitly this round.
 
 ## Build order (from the ranking pass)
 
