@@ -69,7 +69,9 @@ window.FM = window.FM || {};
       { label: 'Square', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'), add: shp('rect', { name: 'Square', aspect: [1, 1] }) },
       { label: 'Squircle', icon: icoPoly('squircle', true), add: shp('squircle', { name: 'Squircle', aspect: [1, 1] }) },
       { label: 'Rectangle', icon: ico('<rect x="4" y="6" width="16" height="12" rx="1.5"/>'), add: shp('rect') },
-      { label: 'Ellipse', icon: ico('<ellipse cx="12" cy="12" rx="9" ry="7"/>'), add: shp('ellipse') },
+      // A CIRCLE, because that is what tapping it gives you — ellipse has no SHAPE_ASPECT entry, so it
+      // spawns 1:1. The oval icon was promising a shape the button never made (Ezra).
+      { label: 'Ellipse', icon: ico('<circle cx="12" cy="12" r="8"/>'), add: shp('ellipse') },
       { label: 'Triangle', icon: ico('<path d="M12 4l8 16H4z"/>'), add: shp('triangle') },
       { label: 'Star', icon: ico('<path d="M12 3l2.5 6 6.5.5-5 4.2 1.6 6.3L12 17l-5.6 3 1.6-6.3-5-4.2 6.5-.5z"/>'), add: shp('star') },
       { label: 'Heart', icon: ico('<path d="M12 20s-7.5-4.9-9-9.2C1.9 7.6 4 5 6.7 5 8.9 5 10.6 6.4 12 8c1.4-1.6 3.1-3 5.3-3 2.7 0 4.8 2.6 3.7 5.8C19.5 15.1 12 20 12 20z"/>'), add: shp('heart') },

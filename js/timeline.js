@@ -1629,13 +1629,18 @@ window.FM = window.FM || {};
     },
 
     setZoom(z, anchorTime) {
-      zoom = Math.max(0.25, Math.min(12, z));
+      // The floor used to be 0.25, which showed 20 seconds across the lane — a two-minute edit could
+      // never be seen end to end, so you scrolled blind. 0.02 puts ~250 seconds on screen (Ezra: "you
+      // should be able to zoom out of the timeline way more"). Nothing gets more expensive out there:
+      // the ruler thins its notches to stay >=5px apart, so a wider view draws FEWER of them.
+      zoom = Math.max(0.02, Math.min(12, z));
       const at = (anchorTime != null) ? anchorTime : FM.time;
       this.rebuild();
       if (timelineEl) timelineEl.scrollLeft = Math.max(0, at * pxPerSec());
       this.updatePlayhead();
       const zl = document.getElementById('tl-zoom-label');
-      if (zl) zl.textContent = (Math.round(zoom * 10) / 10) + '×';
+      // 2 decimals below 1x — "0.1x / 0.0x / 0.0x" made every zoomed-out step look identical
+      if (zl) zl.textContent = (zoom < 1 ? (Math.round(zoom * 100) / 100) : (Math.round(zoom * 10) / 10)) + '×';
     },
     zoomBy(f, anchorTime) { this.setZoom(zoom * f, anchorTime); },
     stopMomentum() { stopMomentum(); },

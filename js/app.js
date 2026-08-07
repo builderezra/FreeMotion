@@ -244,6 +244,9 @@ window.FM = window.FM || {};
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
+    // The clip-action row swaps trim/split for move/extend when the playhead leaves the clip — this is
+    // the one place every time-change passes through, and syncPlayhead only acts on the crossing.
+    if (FM.inspector && FM.inspector.syncPlayhead) FM.inspector.syncPlayhead();
     if (FM.refreshEasing) FM.refreshEasing();   // re-pick the easing editor's segment when scrubbing past a keyframe
 
   }
@@ -1338,6 +1341,68 @@ window.FM = window.FM || {};
     });
     document.body.appendChild(input);
     input.click();
+  };
+
+  // ===== Playhead-is-outside-the-clip actions (Alight Motion parity) =====
+  // Trim-start / split / trim-end all need the playhead INSIDE the clip. Parked outside, they are three
+  // dead buttons, so AM swaps them for the two that do make sense out there: slide the clip to the
+  // playhead, or stretch its near edge out to meet it.
+  //  -1 = playhead sits before the clip · 0 = inside it (the trim/split set applies) · 1 = after it
+  FM.clipPlayheadSide = function (layer, t) {
+    if (!layer) return 0;
+    if (t == null) t = FM.time;
+    if (t <= layer.start + 1e-4) return -1;
+    if (t >= layer.start + layer.duration - 1e-4) return 1;
+    return 0;
+  };
+
+  // MOVE: the clip slides so it STARTS at t. Length, trim and speed are all untouched — only when it
+  // plays changes. Keyframe times are absolute, so they ride along or the animation detaches from the
+  // picture (the same rule a clip drag follows).
+  FM.moveClipTo = function (layer, t) {
+    if (!layer) return false;
+    if (t == null) t = FM.time;
+    const d = t - layer.start;
+    if (Math.abs(d) < 1e-6) return false;
+    layer.start = t;
+    if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(layer, d);
+    return true;
+  };
+
+  // EXTEND: the edge NEAREST the playhead stretches out to meet it; the far edge stays put. This is a
+  // trim in reverse and obeys exactly the clamps the trim grips do — a video can only grow as far as it
+  // has source (both directions), a ramped speed goes through the integral rather than a raw multiply
+  // (an animated speed prop is an OBJECT, and ÷object is NaN), and a clip can never start before 0.
+  // Keyframes deliberately do NOT ride along here: extending the head reveals earlier source while every
+  // frame that was already on screen keeps the moment it played at.
+  FM.extendClipTo = function (layer, t) {
+    if (!layer) return false;
+    if (t == null) t = FM.time;
+    const side = FM.clipPlayheadSide(layer, t);
+    if (!side) return false;                                   // inside the clip — extending is meaningless
+    const m = layer.type === 'video' && FM.media.get ? FM.media.get(layer.id) : null;
+    const srcDur = (m && m.duration) ? m.duration : Infinity;
+    const ramped = FM.isAnimated(layer.speed), sp = ramped ? 1 : (layer.speed || 1);
+    const s0 = layer.start, d0 = layer.duration, tr0 = layer.trimStart;
+    if (side > 0) {                                            // stretch the TAIL out to the playhead
+      let nd = Math.max(0.1, t - layer.start);
+      if (layer.type === 'video' && isFinite(srcDur)) nd = Math.min(nd, FM.maxDurForSource(layer, srcDur - (layer.trimStart || 0), nd));
+      layer.duration = nd;
+    } else {                                                   // stretch the HEAD back to the playhead
+      let delta = t - layer.start;                             // negative: the head travels left
+      if (layer.start + delta < 0) delta = -layer.start;
+      if (layer.duration - delta < 0.1) delta = layer.duration - 0.1;
+      const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // local source rate at the new head
+      if (layer.type === 'video' && (layer.trimStart || 0) + delta * spL < 0) delta = -(layer.trimStart || 0) / spL;
+      layer.start = layer.start + delta;
+      layer.duration = layer.duration - delta;
+      if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + delta * spL;
+    }
+    // belt-and-braces: a non-finite number must NEVER reach the scene — it cascades into every layout
+    if (!isFinite(layer.duration) || layer.duration < 0.1) layer.duration = d0;
+    if (!isFinite(layer.start)) layer.start = s0;
+    if (layer.trimStart != null && !isFinite(layer.trimStart)) layer.trimStart = tr0;
+    return layer.start !== s0 || layer.duration !== d0;
   };
 
   // Split a clip into two at the current playhead time.

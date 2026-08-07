@@ -1056,6 +1056,23 @@ window.FM = window.FM || {};
 
   // AM-style clip-action quick-row (matches Alight Motion's selected-layer panel):
   // speed/timing · split · trim-start-to-playhead · trim-end-to-playhead · mute.
+  // What the clip-action row was last BUILT for. Null until a row exists, so syncPlayhead can't fire
+  // before there is anything to keep in sync. Everything that changes which buttons appear (or which
+  // way their arrows point) has to be in this signature, or the row goes stale mid-scrub.
+  let quickSideSig = null;
+  let lastNavSig = null;   // layer+view the panel is currently scrolled for (see refresh)
+  function homeRowSig() {
+    const ids = FM.selectionIds ? FM.selectionIds() : [];
+    if (ids.length >= 2) {
+      const layers = ids.map(id => FM.layerById(FM.scene, id)).filter(Boolean);
+      if (!layers.length) return 'multi:0';
+      const onAny = layers.some(l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4);
+      const first = Math.min.apply(null, layers.map(l => l.start));
+      return 'multi:' + ids.length + ':' + (onAny ? 1 : 0) + ':' + (FM.time >= first ? 'r' : 'l');
+    }
+    const l = FM.selectedLayer(FM.scene);
+    return l ? l.id + ':' + (FM.clipPlayheadSide ? FM.clipPlayheadSide(l) : 0) : null;
+  }
   function quickRow(layer) {
     const row = el('div', 'quick-row');
     function qbtn(title, icon, opts, fn) {
@@ -1072,24 +1089,42 @@ window.FM = window.FM || {};
     // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
     const isVideo = layer.type === 'video';
     if (isVideo) row.appendChild(qbtn('Speed — slow-mo / reverse', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => goCat('speed')));
-    // trim START to playhead (drop everything before the playhead)
-    // disabled state is evaluated at BUILD, but the panel doesn't rebuild on scrub — leave the
-    // buttons live and guard inside each handler with the CURRENT playhead instead
-    row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', {}, () => {
-      const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
-      layer.start = FM.time; layer.duration -= cut;
-      // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
-      // the source tail, so the kept (later) span keeps the same trimStart — matches splitLayer. (#12)
-      if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, cut) : cut * (layer.speed || 1));   // ramp-safe: animated speed is an object (raw × = NaN)
-      after();
-    }));
-    // split at playhead
-    row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', {}, () => { if (FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4) FM.splitLayer(layer.id); }));
-    // trim END to playhead (drop everything after the playhead)
-    row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', {}, () => {
-      const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
-      layer.duration = nd; after();
-    }));
+    // THE MIDDLE THREE SWAP WITH THE PLAYHEAD (Alight Motion). Parked outside the clip, trim-start,
+    // split and trim-end are three buttons that can't do anything — so out there they become the two
+    // that can: slide the clip to the playhead, or stretch its near edge out to meet it. The icons
+    // point the way the clip will actually travel, which is the only thing that tells you, before you
+    // press, whether you're about to pull it left or push it right.
+    const side = FM.clipPlayheadSide ? FM.clipPlayheadSide(layer) : 0;
+    quickSideSig = homeRowSig();   // what this row was built for — syncPlayhead rebuilds when it stops matching
+    if (side) {
+      const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
+      row.appendChild(qbtn(right ? 'Move clip right to the playhead' : 'Move clip left to the playhead',
+        right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16',
+        {}, () => { if (FM.moveClipTo(layer, FM.time)) after(); }));
+      // open-ended box = that edge stretches; closed box above = the whole clip travels
+      row.appendChild(qbtn(right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead',
+        right ? 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16' : 'M12 8h8v8h-8M12 12H6M8 10l-2 2 2 2M3 4v16',
+        {}, () => { if (FM.extendClipTo(layer, FM.time)) after(); else if (FM.toast) FM.toast('No more source to extend into', 1500); }));
+    } else {
+      // trim START to playhead (drop everything before the playhead)
+      // disabled state is evaluated at BUILD, but the panel doesn't rebuild on scrub — leave the
+      // buttons live and guard inside each handler with the CURRENT playhead instead
+      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', {}, () => {
+        const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
+        layer.start = FM.time; layer.duration -= cut;
+        // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
+        // the source tail, so the kept (later) span keeps the same trimStart — matches splitLayer. (#12)
+        if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, cut) : cut * (layer.speed || 1));   // ramp-safe: animated speed is an object (raw × = NaN)
+        after();
+      }));
+      // split at playhead
+      row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', {}, () => { if (FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4) FM.splitLayer(layer.id); }));
+      // trim END to playhead (drop everything after the playhead)
+      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', {}, () => {
+        const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
+        layer.duration = nd; after();
+      }));
+    }
     // The Audio button opens the full Volume panel (which has its own mute) — no standalone mute button.
     if (isVideo) row.appendChild(qbtn('Audio — volume & fades', 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7', {}, () => goCat('volume')));
     return row;
@@ -1124,6 +1159,30 @@ window.FM = window.FM || {};
     function ab(title, icon, opts, fn) { const b = el('button', 'qr-btn' + (opts.danger ? ' qr-danger' : '')); b.title = title; b.innerHTML = svgIcon(icon); if (opts.disabled) b.disabled = true; b.addEventListener('click', fn); bar.appendChild(b); }
     const inside = l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4;
     const onAny = layers.some(inside);
+    quickSideSig = homeRowSig();   // this bar swaps with the playhead too — keep syncPlayhead watching it
+    // Same swap the single-clip row makes (Alight Motion): with the playhead over NONE of the selected
+    // clips, trim and split are three dead buttons, so the whole set gets move / extend instead.
+    if (!onAny) {
+      // MOVE moves the selection as a BLOCK — the earliest clip lands on the playhead and every other
+      // one keeps its offset from it. Snapping them all to the same start would destroy the timing you
+      // built between them, which is the opposite of what a multi-select is for.
+      const first = Math.min.apply(null, layers.map(l => l.start));
+      const right = FM.time >= first;
+      ab(right ? 'Move all ' + n + ' clips right to the playhead' : 'Move all ' + n + ' clips left to the playhead',
+        right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16', {}, () => {
+        const d = FM.time - Math.min.apply(null, layers.map(l => l.start));
+        layers.forEach(l => setStart(l, l.start + d));
+        done();
+      });
+      // EXTEND is per-clip: each one's nearest edge reaches the playhead, so clips on either side of it
+      // grow toward it from their own direction and they all end up meeting there.
+      ab('Extend all ' + n + ' clips to the playhead', 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16', {}, () => {
+        let moved = 0;
+        layers.forEach(l => { if (FM.extendClipTo(l, FM.time)) moved++; });
+        if (!moved && FM.toast) FM.toast('No more source to extend into', 1500);
+        done();
+      });
+    } else {
     ab('Trim starts to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onAny }, () => {
       layers.forEach(l => {
         if (!inside(l)) return;
@@ -1141,6 +1200,7 @@ window.FM = window.FM || {};
       layers.forEach(l => { if (inside(l)) l.duration = FM.time - l.start; });
       done();
     });
+    }
     ab('Delete ' + n + ' layers', 'M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6', { danger: true }, () => {
       ids.forEach(id => FM.deleteLayer(id, true));   // _nested: one teardown + ONE undo step for the whole set
       if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
@@ -2629,6 +2689,15 @@ window.FM = window.FM || {};
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
     openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
+    // The quick row's middle buttons depend on which SIDE of the clip the playhead is sitting on, and
+    // the panel deliberately does NOT rebuild while you scrub (it would rebuild 60-120 times a second).
+    // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on
+    // the home view: refreshing while a slider or an easing curve is open would yank it out mid-drag.
+    syncPlayhead() {
+      if (view !== 'home' || !root || quickSideSig == null) return;
+      const sig = homeRowSig();
+      if (sig != null && sig !== quickSideSig) this.refresh();
+    },
     // Number keys 1..N (a layer selected): open the Nth category card in the grid's order.
     openCategoryByIndex(i) {
       const layer = FM.selectedLayer(FM.scene); if (!layer) return false;
@@ -2649,9 +2718,31 @@ window.FM = window.FM || {};
       FM.selectLayer(null); return true;   // at the grid → deselect (closes the editor)
     },
     refresh() {
+      // A selectedId that no longer resolves is the worst state this panel can be in: the app believes
+      // something is selected (top bar, delete button, keyboard shortcuts, the mobile sheet) while the
+      // inspector falls through to the Add menu — "a layer is selected but the edit options are gone".
+      // A layer can vanish under the id from a dozen directions (delete, undo/redo, group/ungroup,
+      // entering or leaving a group, a project load, an AI edit), so rather than patch each one, the
+      // truth is re-established HERE, on the one path all of them already run through.
+      if (FM.scene) {
+        if (FM.scene.selectedId && !FM.layerById(FM.scene, FM.scene.selectedId)) FM.scene.selectedId = null;
+        if (Array.isArray(FM.scene.selectedIds) && FM.scene.selectedIds.length) {
+          const live = FM.scene.selectedIds.filter(id => !!FM.layerById(FM.scene, id));
+          if (live.length !== FM.scene.selectedIds.length) FM.scene.selectedIds = live;
+          // the primary is gone but others survive → promote one, don't strand the set with no primary
+          if (!FM.scene.selectedId && live.length) FM.scene.selectedId = live[live.length - 1];
+        }
+      }
       const layer = FM.selectedLayer(FM.scene);
       const title = document.querySelector('#inspector-panel .panel-title');
+      // A sub-view can be much taller than the grid, and the sheet keeps its scroll across a rebuild —
+      // land back at the top whenever the LAYER or the VIEW changes, or you return to a short panel
+      // already scrolled past its own content and it reads as empty. Same-view refreshes (a slider
+      // dragging, the playhead crossing a clip edge) deliberately leave the scroll alone.
+      const navSig = (layer ? layer.id : '-') + '/' + view;
+      const navChanged = navSig !== lastNavSig; lastNavSig = navSig;
       root.innerHTML = '';
+      if (navChanged && root.scrollTop) root.scrollTop = 0;
       if (!layer) {
         // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
         // Selecting a clip swaps this for the property editor (refresh() re-runs on select).

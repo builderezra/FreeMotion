@@ -32,6 +32,10 @@ Each of these was built from an AM screenshot and needs an original treatment:
 - **Editor chrome** — the top bar composition (back ‹, project name, ⚙, green export button), the
   transport row, and the timeline clip look.
 - **Terminology** — "Elements", "Object / Element", "Templates" as tab names follow AM's wording.
+- **Clip-action row, playhead-outside state** (v4.17) — built from AM screenshots: the middle buttons
+  swapping from trim/split to move-to-playhead / extend-to-playhead when the playhead leaves the clip,
+  the two icon glyphs (box → bar, open box → bar), and the multi-select bar carrying the same pair
+  alongside the align set. The behaviour is worth keeping; the icon language is AM's and needs redrawing.
 
 Our own already: the logo and splash animation (Ezra's), the effect set and its internals, the
 slip ghost, the Apple-squircle corner rounding, the media library, and everything under the hood.

@@ -22,7 +22,43 @@ window.FM = window.FM || {};
 
     function open() { insp.classList.add('open'); btn.classList.add('on'); document.body.classList.add('insp-open'); }
     function close() { insp.classList.remove('open'); btn.classList.remove('on'); document.body.classList.remove('insp-open'); }
-    function toggle() { insp.classList.contains('open') ? close() : open(); }
+    function toggle() { insp.classList.contains('open') ? dismiss() : open(); }
+
+    // ---------- the sheet's state is DERIVED from the selection, not set by one caller ----------
+    // It used to open in exactly one place: the FM.selectLayer wrapper below. But twenty-odd code
+    // paths set FM.scene.selectedId directly and never go near it — adding a shape, paste, duplicate,
+    // split, select-all, shift/paint-select, group and ungroup, undo/redo, the AI scene builder. Every
+    // one of those left you with a layer selected, the top bar showing its name, and no edit options
+    // on screen (Ezra: "sometimes you have a layer selected but all the edit options don't show up").
+    // Deriving it from the selection on every inspector refresh — the one call they ALL make — closes
+    // the whole class, including any path added later.
+    var lastSyncKey = null;     // which selection the sheet last synced to
+    var userClosed = false;     // …and whether the user dismissed it for THAT selection
+    function dismiss() { userClosed = true; close(); }   // only a DELIBERATE close latches
+    // m-editing is the focused single-clip timeline layout (it drives --head-w), so it must stay OFF
+    // for a multi-select even though the sheet is open — the multi bar is where Group / trim-all /
+    // align live, and gating the sheet on m-editing hid all of them behind an empty panel.
+    function syncEditingClass() {
+      if (!isPhone()) return;
+      var ids = (FM.selectionIds ? FM.selectionIds() : []) || [];
+      var multi = ids.length > 1 || !!FM.selectMode;
+      document.body.classList.toggle('m-editing', !!(FM.scene && FM.scene.selectedId) && !multi);
+    }
+    function syncSheet() {
+      if (!isPhone()) return;
+      syncEditingClass();
+      var id = (FM.scene && FM.scene.selectedId) || null;
+      var ids = (FM.selectionIds ? FM.selectionIds() : []) || [];
+      var multi = ids.length > 1 || !!FM.selectMode;
+      var has = !!id || ids.length > 0;
+      var key = multi ? 'multi:' + ids.length : id;
+      if (key !== lastSyncKey) { userClosed = false; lastSyncKey = key; }   // a NEW selection always gets the sheet back
+      if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
+      if (userClosed) return;                                               // swiped away on purpose — leave it down
+      if (!insp.classList.contains('open')) { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); open(); }
+      if (multi) { insp.style.top = ''; insp.style.maxHeight = ''; }        // the docked position belongs to ONE clip
+      else { syncClipName(); dockSheet(); }
+    }
 
     // Swipe a bottom sheet DOWN to dismiss it (follows the finger, then snaps closed past a threshold).
     function makeSwipeDown(panel, grabEl, dismiss, getScrollEl) {
@@ -70,22 +106,27 @@ window.FM = window.FM || {};
     }
 
     btn.addEventListener('click', toggle);
-    grab.addEventListener('click', function () { if (insp._swiped) { insp._swiped = false; return; } close(); });
-    makeSwipeDown(insp, grab, function () { if (isPhone() && document.body.classList.contains('m-editing')) FM.selectLayer(null); else close(); }, function () { return insp; });
+    grab.addEventListener('click', function () { if (insp._swiped) { insp._swiped = false; return; } dismiss(); });
+    makeSwipeDown(insp, grab, function () { if (isPhone() && document.body.classList.contains('m-editing')) FM.selectLayer(null); else dismiss(); }, function () { return insp; });
 
-    // Selecting a layer (canvas tap or layer list) slides the inspector up so its
-    // controls are reachable; deselecting drops it. Wrap, don't edit, the core fn.
+    // Every rebuild of the panel re-derives the sheet's state. This is the hook that makes the rule
+    // above universal: selectLayer, refreshAll, add-a-shape, paste, duplicate, split, group, undo —
+    // they all end in an inspector refresh, whether or not they know the sheet exists.
+    if (FM.inspector && typeof FM.inspector.refresh === 'function') {
+      var origInspRefresh = FM.inspector.refresh;
+      FM.inspector.refresh = function () { var r = origInspRefresh.apply(this, arguments); syncSheet(); return r; };
+    }
+
+    // Selecting a layer (canvas tap or layer list) slides the inspector up so its controls are
+    // reachable; deselecting drops it. Wrap, don't edit, the core fn. The class has to be set BEFORE
+    // the rebuild inside orig() — it drives --head-w (overview eye-only vs edit pill), which the
+    // rebuild reads to keep clip-x / playhead in sync; syncSheet then settles everything after.
     if (typeof FM.selectLayer === 'function') {
       var orig = FM.selectLayer;
       FM.selectLayer = function (id) {
-        // Toggle m-editing BEFORE the rebuild inside orig() — it drives --head-w (overview eye-only
-        // vs edit pill), which the rebuild reads to keep clip-x / playhead in sync.
         if (isPhone()) document.body.classList.toggle('m-editing', !!id);
         var r = orig.apply(this, arguments);
-        if (isPhone()) {
-          if (id) { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); open(); syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); }   // tapping a clip while the Add sheet is open slides it away
-          else { insp.style.top = ''; insp.style.maxHeight = ''; close(); }
-        }
+        if (isPhone() && id) requestAnimationFrame(dockSheet);   // dock once the sheet's height has settled
         return r;
       };
     }
@@ -170,14 +211,12 @@ window.FM = window.FM || {};
     if (typeof FM.refreshAll === 'function') {   // keep it synced on load / undo / restore
       var origRefresh = FM.refreshAll;
       FM.refreshAll = function () {
-        // set m-editing BEFORE origRefresh's rebuild (drives --head-w; see selectLayer note)
-        if (isPhone()) document.body.classList.toggle('m-editing', !!(FM.scene && FM.scene.selectedId) && !FM.selectMode && !(FM.scene.selectedIds && FM.scene.selectedIds.length > 1));
+        syncEditingClass();   // BEFORE origRefresh's rebuild (drives --head-w; see the selectLayer note)
         var r = origRefresh.apply(this, arguments);
         syncProjName();
-        if (isPhone()) {
-          var sel = FM.scene && FM.scene.selectedId && document.body.classList.contains('m-editing');
-          if (sel) { syncClipName(); dockSheet(); requestAnimationFrame(dockSheet); } else { insp.style.top = ''; insp.style.maxHeight = ''; close(); }   // no selection (e.g. deleted last layer) → drop the sheet + restore the top bar (#13)
-        }
+        // The sheet itself was settled by the inspector refresh inside origRefresh. Only the docked
+        // position needs the extra frame, once the new content has given the sheet its height.
+        if (isPhone() && document.body.classList.contains('m-editing')) requestAnimationFrame(dockSheet);
         return r;
       };
     }
