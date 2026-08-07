@@ -600,6 +600,28 @@ window.FM = window.FM || {};
       { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band' },
       { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band' },
     ] },
+    // ---- batch 34: the scan bar + a key that survives bad lighting ----
+    // Time Warp Scan — a bar crosses the frame and everything it has passed stays frozen at the
+    // instant it was crossed. Reveal is the same bar the other way round: the frame is held still
+    // and the bar wipes the present in.
+    { type: 'timewarp', label: 'Time Warp Scan', desc: 'A bar sweeps across and everything behind it freezes at the moment it was crossed. Reveal flips it: the frame is held and the bar wipes the live picture in.', params: [
+      { key: 'duration', label: 'Sweep time', min: 0.2, max: 20, step: 0.1, def: 2.5, unit: 's' },
+      { key: 'direction', label: 'Direction', options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left']], def: 0 },
+      { key: 'mode', label: 'Mode', options: [[0, 'Freeze'], [1, 'Reveal']], def: 0 },
+      { key: 'barwidth', label: 'Bar width', min: 0, max: 60, step: 1, def: 5, unit: 'px' },
+      { key: 'glow', label: 'Bar glow', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'loop', label: 'Repeat', options: [[0, 'Once'], [1, 'Loop']], def: 0 },
+    ], color: true, defColor: '#eaf4ff', colorLabel: 'Bar' },
+    // Chroma Key Pro — keys on CHROMA ONLY, discarding brightness, which is why a shadowed corner
+    // of the screen keys the same as a hotspot. The shipped Chroma Key measures distance in RGB, so
+    // it cannot. Also despills and works on any layer, not just media.
+    { type: 'chromakeypro', label: 'Chroma Key Pro', desc: 'A green screen key that survives uneven lighting: it measures colour only and ignores brightness, so a shadowed corner keys like a lit one. Despill removes the green rim.', params: [
+      { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.3 },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 1, step: 0.02, def: 0.28 },
+      { key: 'despill', label: 'Despill', min: 0, max: 1, step: 0.02, def: 0.7 },
+      { key: 'edgedesat', label: 'Edge desaturate', min: 0, max: 1, step: 0.02, def: 0.35 },
+      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte']], def: 0 },
+    ], color: true, defColor: '#00c23c', colorLabel: 'Key colour' },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1295,7 +1317,8 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1 };
+    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
+    timewarp: 1, chromakeypro: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1403,6 +1426,48 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    /* Chroma Key Pro — the key that survives a badly lit screen.
+     * The shipped Chroma Key measures distance in RGB, so a shadowed corner of the green screen is
+     * FAR from the key colour and stays; lifting the tolerance far enough to catch it then eats the
+     * subject. This converts to YCbCr and throws Y away: chroma-only distance means a dark green and
+     * a hot green are the same colour, which is the entire point. Despill fixes the green rim that
+     * every key leaves behind, and edge-desaturate takes the remaining fringe toward neutral. */
+    chromakeypro: function (d, W, H, p, t) {
+      const k = hexToRGB(p.color || '#00c23c');
+      const kcb = -0.169 * k[0] - 0.331 * k[1] + 0.5 * k[2];
+      const kcr = 0.5 * k[0] - 0.419 * k[1] - 0.081 * k[2];
+      const tol = (p.tolerance == null ? 0.3 : clamp01(FM.evalProp(p.tolerance, t))) * 180;
+      const soft = (p.softness == null ? 0.28 : clamp01(FM.evalProp(p.softness, t))) * 180;
+      const spill = clamp01(p.despill == null ? 0.7 : FM.evalProp(p.despill, t));
+      const eDesat = clamp01(p.edgedesat == null ? 0.35 : FM.evalProp(p.edgedesat, t));
+      const matte = Math.round(FM.evalProp(p.view, t) || 0) === 1;
+      const hi = tol + (soft < 1 ? 1 : soft);            // never a zero-width step — that hard-edges the matte
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const cb = -0.169 * r - 0.331 * g + 0.5 * b;
+        const cr = 0.5 * r - 0.419 * g - 0.081 * b;
+        const dcb = cb - kcb, dcr = cr - kcr;
+        const dist = Math.sqrt(dcb * dcb + dcr * dcr);
+        let a;
+        if (dist <= tol) a = 0;
+        else if (dist >= hi) a = 1;
+        else { const u = (dist - tol) / (hi - tol); a = u * u * (3 - 2 * u); }
+        if (matte) { const v = a * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; continue; }
+        if (a <= 0) { d[i + 3] = 0; continue; }
+        d[i + 3] = d[i + 3] * a;
+        if (spill > 0) {
+          // Green above both neighbours is spill, not colour. Pull it down to their maximum.
+          const mx = r > b ? r : b;
+          if (g > mx) d[i + 1] = g - (g - mx) * spill;
+        }
+        if (a < 1 && eDesat > 0) {
+          const w = eDesat * (1 - a);
+          const rr = d[i], gg = d[i + 1], bb = d[i + 2];
+          const l = 0.299 * rr + 0.587 * gg + 0.114 * bb;
+          d[i] = rr + (l - rr) * w; d[i + 1] = gg + (l - gg) * w; d[i + 2] = bb + (l - bb) * w;
+        }
       }
     },
     /* HSL Bands — the CapCut/Lightroom HSL panel: retune ONE colour band and leave the rest alone.
@@ -2374,7 +2439,7 @@ window.FM = window.FM || {};
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -2990,6 +3055,88 @@ window.FM = window.FM || {};
       B.globalAlpha = Math.min(1, amount * 0.35);
       B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
       B.drawImage(_halC, 0, 0, W, H);
+      B.restore();
+    },
+    /* ---- Time Warp Scan -------------------------------------------------------------------------
+     * A bar crosses the frame; everything it has passed stays frozen at the instant it was crossed.
+     *
+     * The accumulator only ever receives the STRIP the bar just crossed — three blits and a fillRect
+     * per frame, not a full-frame readback. Freeze and Reveal share one canvas by swapping which
+     * side of the bar it supplies: Freeze fills it strip by strip and draws it over the live frame;
+     * Reveal fills it once with the whole frame and lets the live frame punch through behind the bar.
+     *
+     * Seeking is the hard case. A jump forward or backwards means the strips in between were never
+     * captured, so the accumulator is rebuilt from the current frame — the scanned region freezes at
+     * where you landed rather than at where the bar actually was. It is wrong for one seek and right
+     * from the next frame on, which is the same bargain motionflow makes. */
+    timewarp: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }
+      const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));
+      const dir = Math.round(FM.evalProp(p.direction, t) || 0);
+      const mode = Math.round(FM.evalProp(p.mode, t) || 0);
+      const bw = Math.max(0, (p.barwidth == null ? 5 : FM.evalProp(p.barwidth, t)) * (ps == null ? 1 : ps));
+      const glow = clamp01(p.glow == null ? 0.6 : FM.evalProp(p.glow, t));
+      const loop = Math.round(FM.evalProp(p.loop, t) || 0) === 1;
+      const col = p.color || '#eaf4ff';
+      let u = Math.max(0, tl) / dur;
+      u = loop ? u - Math.floor(u) : (u > 1 ? 1 : u);
+      const vert = dir < 2, span = vert ? H : W;
+      const pos = u * span;                                  // distance travelled along the axis
+      const rec = _mfRec(((layer && layer.id) || '_anon') + ':tw', W, H);
+      // The scanned band, as a rect. Down/Right grow from 0; Up/Left grow from the far edge.
+      const region = function (from, to) {
+        if (to <= from) return null;
+        if (dir === 0) return [0, from, W, to - from];
+        if (dir === 1) return [0, H - to, W, to - from];
+        if (dir === 2) return [from, 0, to - from, H];
+        return [W - to, 0, to - from, H];
+      };
+      const acc = rec.cv, ac = acc.getContext('2d');
+      ac.setTransform(1, 0, 0, 1, 0, 0);
+      ac.globalAlpha = 1; ac.globalCompositeOperation = 'source-over'; ac.filter = 'none';
+      const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34;
+      if (jumped) {
+        ac.clearRect(0, 0, W, H);
+        if (mode === 1) ac.drawImage(A, 0, 0);               // Reveal holds the WHOLE frame
+        else { const rg = region(0, pos); if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]); }
+      } else if (mode === 0 && u > rec.u) {
+        const rg = region(rec.u * span, pos);                // just the strip the bar crossed
+        if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
+      }
+      rec.u = u; rec.at = performance.now();
+      // Inside the scanned band the frozen frame REPLACES the live one — it cannot be composited
+      // over it. A layer with transparent areas (any shape, any keyed clip) would otherwise show
+      // both its frozen position and its live one at once, which reads as a ghost, not a freeze.
+      const scanned = region(0, pos);
+      const under = mode === 1 ? acc : A, over = mode === 1 ? A : acc;
+      B.drawImage(under, 0, 0);
+      if (scanned) {
+        B.clearRect(scanned[0], scanned[1], scanned[2], scanned[3]);
+        B.drawImage(over, scanned[0], scanned[1], scanned[2], scanned[3], scanned[0], scanned[1], scanned[2], scanned[3]);
+      }
+      if (bw <= 0 || (!loop && (u <= 0 || u >= 1))) return;  // no bar before it starts or after it lands
+      const rgb = hexToRGB(col);
+      const c0 = Math.max(0, pos - bw / 2), c1 = Math.min(span, pos + bw / 2);
+      const bar = region(c0, c1);
+      B.save();
+      if (glow > 0) {
+        const gw = bw * (1 + glow * 7);
+        const g0 = Math.max(0, pos - gw / 2), g1 = Math.min(span, pos + gw / 2);
+        const gr = region(g0, g1);
+        if (gr) {
+          const grad = vert
+            ? B.createLinearGradient(0, gr[1], 0, gr[1] + gr[3])
+            : B.createLinearGradient(gr[0], 0, gr[0] + gr[2], 0);
+          const a = glow * 0.55, cs = rgb[0] + ',' + rgb[1] + ',' + rgb[2];
+          grad.addColorStop(0, 'rgba(' + cs + ',0)');
+          grad.addColorStop(0.5, 'rgba(' + cs + ',' + a.toFixed(3) + ')');
+          grad.addColorStop(1, 'rgba(' + cs + ',0)');
+          B.globalCompositeOperation = 'lighter';
+          B.fillStyle = grad; B.fillRect(gr[0], gr[1], gr[2], gr[3]);
+          B.globalCompositeOperation = 'source-over';
+        }
+      }
+      if (bar) { B.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')'; B.fillRect(bar[0], bar[1], bar[2], bar[3]); }
       B.restore();
     },
     /* ---- Speed Lines --------------------------------------------------------------------------

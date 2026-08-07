@@ -217,7 +217,10 @@ window.FM = window.FM || {};
     // subject just swings its own edges through the tile.
     framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
-    chromakey: 'keyshot', lumakey: 'keyshot',
+    chromakey: 'keyshot', lumakey: 'keyshot', chromakeypro: 'keyshot',
+    // The scan bar has to have somewhere to sweep, and the frozen half only reads against a live
+    // half — a full-frame subject with internal motion is the only thing that shows both.
+    timewarp: 'photo',
     // Geometry that reads better on a real picture than on an abstract lattice: these re-tile or
     // re-colour the content rather than bending it, so what matters is recognising the content.
     mirror: 'photo', pixelate: 'photo', chromaticaberration: 'photo', hextiles: 'photo', glass: 'photo',
@@ -254,6 +257,14 @@ window.FM = window.FM || {};
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 17; mv.params.speed = 1.4; hero.effects.unshift(mv); }
       hero.effects[hero.effects.length - 1].params.rate = 4;
+    },
+    // Same reason: a frozen half of a STILL picture looks exactly like the live half, so all you
+    // would see is a bar travelling. Put motion under it and the freeze becomes the point.
+    timewarp: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
+      const fx = hero.effects[hero.effects.length - 1];
+      fx.params.duration = 1.5; fx.params.loop = 1; fx.params.barwidth = 4;
     },
     // Copy Background aligns the copied backdrop to the COMP, so a straight rectangle sitting on
     // that backdrop is invisible — the tile just looks like the untouched picture. Rotating the

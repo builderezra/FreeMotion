@@ -130,8 +130,16 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   itself. HSL Bands' fixed bands are **40 deg wide, not 30**: real skies sit near 215, 25 off the 240
   nominal, and at 30 the default barely moved them. 1.27ms and 6.8ms; 0 differing bytes across
   thirteen stacks.
-  **Still open on this table:** Time Warp Scan (6), Chroma Key Pro (8), Light Wrap (9),
-  Dispersion (10), Temporal Denoise (11), VHS Tape (12), Compression Crunch (13).
+- v4.57 (round 10, part 4) — **Time Warp Scan** (6) and **Chroma Key Pro** (8). The scan bar needed
+  one correction the sketch does not mention: inside the scanned band the frozen frame must REPLACE
+  the live one (clearRect then draw), not composite over it — any layer with transparent areas
+  otherwise shows its frozen position AND its live one at once, which reads as a ghost. Chroma Key
+  Pro is a generic PIXEL_FX, so unlike the shipped Chroma Key it is not media-only. Measured against
+  a screen lit 6:1 across the frame: Pro keys 100% of both the lit and the shadowed half while
+  keeping 100% of the subject; the RGB-distance key clears the lit half and 0% of the shadowed half
+  at its default, and at tolerance 0.75 clears both halves and 100% of the subject with them.
+  **Still open on this table:** Light Wrap (9), Dispersion (10), Temporal Denoise (11),
+  VHS Tape (12), Compression Crunch (13).
 
 ## Build order (from the ranking pass)
 
