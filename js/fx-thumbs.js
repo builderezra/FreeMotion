@@ -215,6 +215,8 @@ window.FM = window.FM || {};
     letterbox: 'photo', border: 'photo', vignette: 'photo', tiltshift: 'photo',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
     halation: 'card',
+    // Dispersion blows the layer AWAY, so it needs an edge to blow away from and space to go.
+    dispersion: 'card',
     // Frame Stutter is shown by an orbit stepping instead of gliding, and an orbiting full-frame
     // subject just swings its own edges through the tile.
     framestutter: 'card',
@@ -277,6 +279,7 @@ window.FM = window.FM || {};
     },
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
     counter: kf01('progress'), textprogress: kf01('progress'),
+    dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit
     // radius 80) — every probe/strip frame showed empty background, so both cached as static no-ops.
     // Scale the motion to the thumb: a visible drift / a tight on-screen orbit.

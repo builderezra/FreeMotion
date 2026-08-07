@@ -632,6 +632,30 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Softness', min: 0, max: 80, step: 1, def: 20, unit: 'px' },
       { key: 'mode', label: 'Blend', options: [[0, 'Screen'], [1, 'Add']], def: 0 },
     ] },
+    // ---- batch 36: the disintegrate transition + real tape damage ----
+    // Dispersion — the layer tears apart along a noise front and blows away, with embers at the
+    // leading edge. Dissolve and Block Dissolve are alpha-only: they punch holes and the content
+    // never MOVES, which is why neither of them reads as disintegration.
+    { type: 'dispersion', label: 'Dispersion', desc: 'The layer tears apart along a noise front and blows away, glowing at the leading edge. Keyframe Progress 0 → 1 and that is the whole transition.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.45 },
+      { key: 'direction', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'distance', label: 'Travel', min: 0, max: 400, step: 5, def: 90, unit: 'px' },
+      { key: 'scale', label: 'Grain', min: 2, max: 200, step: 1, def: 26, unit: 'px' },
+      { key: 'softness', label: 'Edge', min: 0.05, max: 1, step: 0.02, def: 0.35 },
+      { key: 'glow', label: 'Embers', min: 0, max: 1, step: 0.02, def: 0.6 },
+    ], color: true, defColor: '#ff9a3c', colorLabel: 'Ember' },
+    // VHS Tape — actual tape degradation. CRT is a DISPLAY artifact and Glitch is DIGITAL
+    // corruption; neither can do the two things that say "tape": colour smearing sideways while the
+    // edges stay sharp, and a tracking band rolling through the picture.
+    { type: 'vhstape', label: 'VHS Tape', desc: 'Real tape damage: colour smears sideways while edges stay sharp, the picture wobbles line by line, and a tracking band rolls through it.', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
+      { key: 'chromableed', label: 'Colour smear', min: 0, max: 90, step: 1, def: 26, unit: 'px' },
+      { key: 'halo', label: 'Edge ringing', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'wobble', label: 'Line wobble', min: 0, max: 20, step: 0.5, def: 3, unit: 'px' },
+      { key: 'tracking', label: 'Tracking band', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'trackspeed', label: 'Band speed', min: 0, max: 3, step: 0.05, def: 0.4, unit: 'Hz' },
+      { key: 'headswitch', label: 'Head switch', min: 0, max: 1, step: 0.02, def: 0.6 },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1328,7 +1352,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1 };
+    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1436,6 +1460,140 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    /* Dispersion — the disintegrate transition. A noise front sweeps across the layer; ahead of it
+     * nothing has happened, behind it the pixels have blown away along one direction and faded out,
+     * with embers burning at the leading edge.
+     *
+     * Dissolve and Block Dissolve are alpha-only — they punch holes and the content never MOVES,
+     * which is exactly why neither of them reads as disintegration. The travel is the effect.
+     *
+     * The noise is bilinear-interpolated value noise on a `scale`-px lattice (the filmgrain hash,
+     * four lookups and a smoothstep), so the front has a shape rather than being per-pixel static.
+     * `e <= 0 continue` is the fast path: at any progress most of the frame is still untouched. */
+    dispersion: function (d, W, H, p, t, ps) {
+      const s = ps == null ? 1 : ps;
+      const prog = clamp01(p.progress == null ? 0.45 : FM.evalProp(p.progress, t));
+      if (prog <= 0) return;
+      const soft = Math.max(0.05, p.softness == null ? 0.35 : FM.evalProp(p.softness, t));
+      const dist = Math.max(0, (p.distance == null ? 90 : FM.evalProp(p.distance, t)) * s);
+      const ang = (p.direction == null ? 0 : FM.evalProp(p.direction, t)) * Math.PI / 180;
+      const scale = Math.max(2, (p.scale == null ? 26 : FM.evalProp(p.scale, t)) * s);
+      const glow = clamp01(p.glow == null ? 0.6 : FM.evalProp(p.glow, t));
+      const em = hexToRGB(p.color || '#ff9a3c');
+      const ux = Math.cos(ang), uy = Math.sin(ang);
+      const src = d.slice();
+      const inv = 1 / scale, gw = Math.ceil(W * inv) + 2;
+      const cellN = function (cx, cy) {
+        let h = ((cy * gw + cx) * 374761393) | 0;
+        h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+        return (h & 0xffff) / 65536;
+      };
+      const front = prog * (1 + soft);
+      for (let y = 0; y < H; y++) {
+        const fy = y * inv, y0 = fy | 0, ty = fy - y0;
+        const sy2 = ty * ty * (3 - 2 * ty);
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) << 2;
+          // NOTE: deliberately no "skip transparent" guard here. Debris has to be allowed to land
+          // OUTSIDE the layer's original silhouette — with that guard the effect erodes in place
+          // and never actually blows away, which is the whole difference from Dissolve.
+          const fx = x * inv, x0 = fx | 0, tx = fx - x0;
+          const sx2 = tx * tx * (3 - 2 * tx);
+          const n00 = cellN(x0, y0), n10 = cellN(x0 + 1, y0), n01 = cellN(x0, y0 + 1), n11 = cellN(x0 + 1, y0 + 1);
+          const n = (n00 + (n10 - n00) * sx2) + ((n01 + (n11 - n01) * sx2) - (n00 + (n10 - n00) * sx2)) * sy2;
+          const e = (front - n) / soft;
+          if (e <= 0) continue;                          // the front has not reached this pixel yet
+          if (e >= 1) { d[i + 3] = 0; continue; }        // gone
+          const off = e * e * dist;                      // accelerating away, not sliding at a constant rate
+          let sx3 = Math.round(x - ux * off), sy3 = Math.round(y - uy * off);
+          if (sx3 < 0) sx3 = 0; else if (sx3 >= W) sx3 = W - 1;
+          if (sy3 < 0) sy3 = 0; else if (sy3 >= H) sy3 = H - 1;
+          const si = (sy3 * W + sx3) << 2;
+          let r = src[si], g = src[si + 1], b = src[si + 2];
+          if (glow > 0) {
+            // MIX toward the ember rather than adding to it: on a bright subject an additive ember
+            // just clips all three channels to white and the burn never appears.
+            const k = glow * 4 * e * (1 - e);            // brightest halfway through a pixel's life
+            r += (em[0] - r) * k; g += (em[1] - g) * k; b += (em[2] - b) * k;
+          }
+          d[i] = r; d[i + 1] = g; d[i + 2] = b;
+          d[i + 3] = src[si + 3] * (1 - e);
+        }
+      }
+    },
+    /* VHS Tape — actual tape degradation, which is a different thing from CRT (a DISPLAY artifact)
+     * and from Glitch (DIGITAL corruption). The two tells nothing else here can make:
+     *   1. chroma smears sideways while the luma edge stays put — colour-under recording had about a
+     *      tenth of the luma bandwidth, so the picture stays sharp and the colour drags.
+     *   2. a tracking band rolls through the frame, wobbling and washing out the lines it crosses.
+     * Both are done with O(1) running sums along each row, so cost is one pass regardless of how
+     * wide the smear is set — no per-pixel taps at all. */
+    vhstape: function (d, W, H, p, t, ps) {
+      const s = ps == null ? 1 : ps;
+      const amt = clamp01(p.amount == null ? 0.7 : FM.evalProp(p.amount, t));
+      if (amt <= 0) return;
+      const bleed = Math.max(0, (p.chromableed == null ? 26 : FM.evalProp(p.chromableed, t)) * s * amt);
+      const halo = clamp01(p.halo == null ? 0.5 : FM.evalProp(p.halo, t)) * amt;
+      const wob = (p.wobble == null ? 3 : FM.evalProp(p.wobble, t)) * s * amt;
+      const trk = clamp01(p.tracking == null ? 0.5 : FM.evalProp(p.tracking, t)) * amt;
+      const trkSpd = p.trackspeed == null ? 0.4 : FM.evalProp(p.trackspeed, t);
+      const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
+      const src = d.slice();
+      const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
+      const k = Math.max(1, Math.round(bleed));
+      const frame = Math.floor(t * 30);
+      const rowNoise = function (yy) {                    // deterministic per row per frame
+        let h = ((yy * 7919 + frame * 104729) * 374761393) | 0;
+        h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+        return ((h & 0xffff) / 65536) - 0.5;
+      };
+      // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
+      // the time — a band that is always visible reads as a stripe painted on, not as a fault.
+      const cycle = H * 1.9;
+      const bandC = trkSpd === 0 ? -1e9 : ((t * trkSpd * cycle) % cycle) - H * 0.45;
+      const bandH = Math.max(2, H * 0.055);
+      const headY = H - Math.max(2, H * 0.028);
+      for (let y = 0; y < H; y++) {
+        // --- how far this line is pushed sideways
+        let shift = wob * rowNoise(y) * 2;
+        let wash = 0;
+        const bd = Math.abs(y - bandC);
+        if (bd < bandH) {
+          const w = 1 - bd / bandH;
+          shift += trk * w * W * 0.09 * (rowNoise(y + 5000) + 0.35);
+          wash = trk * w;
+        }
+        if (head > 0 && y >= headY) shift += head * W * 0.16 * (rowNoise(y + 9000) + 0.4);
+        const sh = Math.round(shift);
+        // --- row -> YCbCr, already shifted
+        for (let x = 0; x < W; x++) {
+          let sx = x - sh; if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+          const i = ((y * W) + sx) << 2;
+          const r = src[i], g = src[i + 1], b = src[i + 2];
+          Y[x] = 0.299 * r + 0.587 * g + 0.114 * b;
+          Cb[x] = -0.169 * r - 0.331 * g + 0.5 * b;
+          Cr[x] = 0.5 * r - 0.419 * g - 0.081 * b;
+        }
+        // --- chroma lag (running mean of the k pixels ENDING at x) + luma ringing (running mean of 5)
+        let sCb = 0, sCr = 0, s5 = 0;
+        for (let x = 0; x < W; x++) {
+          sCb += Cb[x]; sCr += Cr[x];
+          if (x >= k) { sCb -= Cb[x - k]; sCr -= Cr[x - k]; }
+          const nk = x + 1 < k ? x + 1 : k;
+          s5 += Y[x]; if (x >= 5) s5 -= Y[x - 5];
+          const n5 = x + 1 < 5 ? x + 1 : 5;
+          let yy = Y[x] + (Y[x] - s5 / n5) * halo * 1.6;   // overshoot at an edge = the tape's ringing
+          let cb = sCb / nk, cr = sCr / nk;
+          if (wash > 0) { yy = yy + (235 - yy) * wash * 0.35; cb *= 1 - wash * 0.8; cr *= 1 - wash * 0.8; }
+          const o = ((y * W) + x) << 2;
+          d[o] = yy + 1.402 * cr;
+          d[o + 1] = yy - 0.344 * cb - 0.714 * cr;
+          d[o + 2] = yy + 1.772 * cb;
+          let ax = x - sh; if (ax < 0) ax = 0; else if (ax >= W) ax = W - 1;
+          d[o + 3] = src[((y * W) + ax) << 2 | 3];
+        }
       }
     },
     /* Chroma Key Pro — the key that survives a badly lit screen.

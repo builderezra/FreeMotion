@@ -150,8 +150,15 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   Rounded Corners at radius 0 differs on 192. That is the plate round-trip (rasterise once, then
   blit) and it is inherent to the path, not a bug. Judge a canvas effect's no-op by "confined to the
   antialiased edge, delta <= 1", not by zero.
-  **Still open on this table:** Dispersion (10), Temporal Denoise (11), VHS Tape (12),
-  Compression Crunch (13).
+- v4.60 (round 10, part 6) — **Dispersion** (10) and **VHS Tape** (12). Dispersion needed one thing
+  the sketch does not say: do NOT early-out on a transparent source pixel. With that guard the effect
+  erodes in place and never blows away — debris has to be allowed to land outside the layer's
+  original silhouette, which is the whole difference from Dissolve. Also MIX toward the ember colour
+  rather than adding: on a bright subject an additive ember clips all three channels and never
+  appears (measured: 0 warm pixels before, 21628 after). VHS's chroma bleed default is 26px, not the
+  14 first tried — real colour-under has about a tenth of the luma bandwidth, and 14px at 1080p is
+  1.3% of the width, far too subtle to read. 2.25ms and 3.56ms; 0 differing bytes over 19 stacks.
+  **Still open on this table:** Temporal Denoise (11), Compression Crunch (13).
 
 ## Build order (from the ranking pass)
 
