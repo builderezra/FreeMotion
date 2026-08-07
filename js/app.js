@@ -1618,6 +1618,11 @@ window.FM = window.FM || {};
   };
 
   FM.layerMenuItems = function (layer) {
+    // DECLARED FIRST. The Duplicate labels below read selCount, and it used to be declared 36 lines
+    // further down next to the grouping entries — a const read before its declaration throws
+    // ReferenceError, so the whole menu died: nothing on right-click, and nothing from the ⋯ button
+    // with a layer selected. (Ezra: "the three dots don't work when a layer selected.")
+    const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
     const items = [
       { label: (selCount > 1 ? 'Duplicate ' + selCount + ' layers' : 'Duplicate'), action: () => FM.duplicateSelection() },
       { label: (selCount > 1 ? 'Duplicate ' + selCount + ' in place' : 'Duplicate in place'), action: () => FM.duplicateSelection(true) },
@@ -1654,8 +1659,7 @@ window.FM = window.FM || {};
     }
     // (Save audio as WAV / Remove vocals moved into the Volume section — discoverable there, and the
     //  ⋯ menu path was easy to miss on PC.)
-    // grouping + reusable saves
-    const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
+    // grouping + reusable saves (selCount is declared at the top of this function)
     items.push({ sep: true });
     if (layer.type === 'group') {
       items.push({ label: 'Edit group', action: () => FM.enterGroup(layer.id) });
