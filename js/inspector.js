@@ -1141,16 +1141,10 @@ window.FM = window.FM || {};
     const layers = ids.map(id => FM.layerById(FM.scene, id)).filter(Boolean);
     const rowOrder = FM.scene.layers.filter(l => ids.indexOf(l.id) >= 0);   // top→bottom as shown in the timeline
     const wrap = el('div', 'align-row');
-    // Group the multi-selection (AM) — the headline action for a multi-select, so it leads.
-    const grp = el('button', 'fx-add-btn', '⧉ Group ' + n + ' layers');
-    grp.addEventListener('click', (ev) => {
-      const r = ev.currentTarget.getBoundingClientRect();
-      if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, [
-        { label: 'Group', action: () => FM.groupSelection() },
-        { label: 'Masking Group — top layer clips the rest', action: () => FM.groupSelection({ mask: true }) },
-      ]); else FM.groupSelection();
-    });
-    wrap.appendChild(grp);
+    // NO Group button and NO bin here (Ezra): both already sit in the top bar the moment a second
+    // layer is selected, and a big "Group 3 layers" banner plus a red bin pushed the actual property
+    // cards — Effects, Blending, Move & Transform — down below the fold. What is left is the two
+    // things that have nowhere else to live: the clip actions and the timeline alignment.
     const done = () => { FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); };
     // move a clip in time: keyframes are absolute, so they must ride along (same rule as clip-drag v3.01)
     const setStart = (l, ns) => { const d = ns - l.start; if (!d) return; l.start = ns; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); };
@@ -1203,14 +1197,6 @@ window.FM = window.FM || {};
       done();
     });
     }
-    ab('Delete ' + n + ' layers', 'M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6', { danger: true }, () => {
-      ids.forEach(id => FM.deleteLayer(id, true));   // _nested: one teardown + ONE undo step for the whole set
-      if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
-      FM.scene.selectedIds = []; FM.scene.selectedId = null;
-      FM.selectMode = false;
-      FM.refreshAll();
-      if (FM.history) FM.history.commit();
-    });
     wrap.appendChild(bar);
 
     // ---- timeline alignment (AM bottom-right): time only, never canvas position ----
