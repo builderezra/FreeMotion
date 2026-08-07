@@ -1077,6 +1077,21 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // An EMPTY group (Add → Elements). Grouping otherwise requires selecting two layers first, so there
+  // was no way to make the container and then fill it — which is the order you actually work in when
+  // you know a section is coming. A childless group draws nothing and is never pruned, so it simply
+  // waits; parent layers to it, or drag them under it, and it starts behaving like any other group.
+  FM.addEmptyGroup = function () {
+    const P = FM.scene.project;
+    const g = FM.makeLayer('group', { name: 'Group', x: 0, y: 0, start: 0, duration: P.duration || 5 });
+    if (FM.groupContext) g.parent = FM.groupContext;   // made while editing a group → nests inside it
+    FM.scene.layers.unshift(g);
+    FM.selectLayer(g.id);
+    if (FM.toast) FM.toast('Empty group — parent layers to it, or drag them under it', 2400);
+    if (FM.history) FM.history.commit();
+    return g;
+  };
+
   // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
   // via the existing parent chain. Timeline shows the group as a collapsible row.
   // opts.mask → MASKING group: the top member clips the rest (composited as one unit in renderScene).
@@ -1596,7 +1611,7 @@ window.FM = window.FM || {};
     const name = prompt('Element name:', layers.length === 1 ? layers[0].name : layers.length + ' layers');
     if (!name || !name.trim()) return;
     const ok = await FM.elements.save(name.trim(), layers);
-    if (FM.toast) FM.toast(ok ? 'Element saved — find it under Add → Object / Element' : 'Could not save element');
+    if (FM.toast) FM.toast(ok ? 'Element saved — find it under Add → Elements, or the Elements tab on Home' : 'Could not save element');
   };
 
   /* ---------- layers live in the timeline now (AM-style); this is a thin alias ---------- */

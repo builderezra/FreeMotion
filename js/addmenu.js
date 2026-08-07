@@ -113,11 +113,19 @@ window.FM = window.FM || {};
       return [{ label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport }]
         .concat(libEntries(true));
     } },
-    { key: 'object', label: 'Object / Element', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: function () {
+    // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
+    // section on Home, so the tab is named after them rather than after the odds and ends beside them.
+    { key: 'object', label: 'Elements', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: function () {
       var base = [
         { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
         { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
         { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
+        // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
+        // make the container and then fill it. Drag layers onto it, or parent them to it.
+        { label: 'Empty group', icon: ico('<rect x="3" y="6" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M8 13h8M12 9v8"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
+        // …and the way to MAKE an element, sitting with the elements themselves instead of only in a
+        // ⋯ menu two levels away.
+        { label: 'Save selection as element…', icon: ico('<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z"/><path d="M19 17v5M16.5 19.5h5"/>'), add: function () { FM.saveElementPrompt && FM.saveElementPrompt(); } },
       ];
       // the user's saved Elements (reusable layer selections) insert at the playhead
       (FM.elements ? FM.elements.list() : []).forEach(function (e) {

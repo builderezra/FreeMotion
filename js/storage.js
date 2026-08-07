@@ -896,6 +896,33 @@ window.FM = window.FM || {};
       writeJSON(ELEM_INDEX, idx);
       return true;
     },
+    async getPack(eid) { try { const db = await openDB(); const p = await idbGet(db, 'elem:' + eid); db.close(); return p; } catch (e) { return null; } },
+    // Save a whole PROJECT's layers as one element — the Home screen's route, where there is no
+    // selection to work from. A watermark or logo you built once as its own little project becomes a
+    // thing you can drop into any edit. Media comes from IDB for a closed project (packLayers only
+    // knows the in-memory map, which is empty for anything but the project that is currently open).
+    async saveFromProject(projectId, name) {
+      const id = projectId || curId();
+      if (id === curId()) FM.storage.flushSync();
+      const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
+      const layers = doc.layers || []; if (!layers.length) return false;
+      const eid = newId('e');
+      const pack = { layers: JSON.parse(JSON.stringify(layers)), media: {} };
+      try {
+        const db = await openDB();
+        for (const l of pack.layers) {
+          const mem = (id === curId()) ? FM.media.get(l.id) : null;
+          if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
+          else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
+        }
+        await idbPut(db, 'elem:' + eid, pack);
+        db.close();
+      } catch (e) { return false; }
+      const idx = this.list();
+      idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null) });
+      writeJSON(ELEM_INDEX, idx);
+      return true;
+    },
     async remove(eid) {
       writeJSON(ELEM_INDEX, this.list().filter(t => t.id !== eid));
       try { const db = await openDB(); await idbDel(db, 'elem:' + eid); db.close(); } catch (e) {}

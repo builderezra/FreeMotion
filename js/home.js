@@ -510,6 +510,84 @@ window.FM = window.FM || {};
     return card;
   }
 
+  // An ELEMENT is a saved bundle of layers — a watermark, a logo, a lower-third — that you drop into
+  // any edit instead of rebuilding it or hunting for the project you made it in. Its card leads with
+  // INSERT, because that is the entire point of the thing; a template's leads with "new project".
+  function elementCard(e) {
+    const card = el('div', 'hm-card');   // div not button — same nested-button fix as projectCard
+    card.setAttribute('role', 'button'); card.tabIndex = 0;
+    const th = el('div', 'hm-thumb');
+    if (e.thumb) { const img = document.createElement('img'); img.src = e.thumb; img.alt = ''; th.appendChild(img); }
+    else th.appendChild(el('span', 'hm-thumb-empty', '✦'));
+    card.appendChild(th);
+    const body = el('div', 'hm-body');
+    body.appendChild(el('div', 'hm-name', e.name || 'Element'));
+    const n = e.count || 0;
+    body.appendChild(el('div', 'hm-meta', n + (n === 1 ? ' layer' : ' layers')));
+    card.appendChild(body);
+    const more = el('button', 'hm-card-more', '⋯');
+    more.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const r = more.getBoundingClientRect();
+      FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
+        { label: 'Add to the open project', action: use },
+        { sep: true },
+        { label: 'Delete element…', danger: true, action: async () => { if (!confirm('Delete element "' + e.name + '"?')) return; await FM.elements.remove(e.id); render(); } },
+      ]);
+    });
+    more.setAttribute('aria-label', 'Element actions');
+    card.appendChild(more);
+    async function use() {
+      // Elements go INTO a project, so there has to be one open. Home is reachable with no project
+      // loaded (first run, or after deleting the last one) — say so rather than failing silently.
+      if (!FM.projects.currentId || !FM.projects.currentId()) {
+        if (FM.toast) FM.toast('Open a project first, then add the element', 2200);
+        return;
+      }
+      const ok = await FM.elements.insert(e.id);
+      if (ok) { FM.home.close(); if (FM.toast) FM.toast('Added “' + e.name + '”'); }
+      else if (FM.toast) FM.toast('That element’s data is missing — save it again');
+    }
+    card.addEventListener('click', use);
+    keyActivate(card);
+    return card;
+  }
+
+  // The + button is per-TAB (Ezra: "the templates and elements sections should actually work when you
+  // press the create button, rn if you press the create button it creates a project not a template").
+  // Templates and elements are both made FROM a project, so both routes pick one — there is nothing
+  // else they could sensibly mean, and the alternative (a + that silently makes a project while you
+  // are looking at a list of templates) is the bug being fixed.
+  function pickProject(title, then) {
+    const list = FM.projects.list();
+    if (!list.length) { if (FM.toast) FM.toast('Make a project first — templates and elements are saved from one'); return; }
+    const items = list.slice(0, 14).map(p => ({ label: p.name || 'Untitled', action: () => then(p) }));
+    const btn = document.getElementById('hm-new'), r = btn.getBoundingClientRect();
+    FM.contextMenu.show(Math.max(8, Math.min(r.left - 150, window.innerWidth - 230)), Math.max(8, r.top - 12 - Math.min(14, items.length) * 34),
+      [{ label: title, disabled: true }, { sep: true }].concat(items));
+  }
+  function newFromTab() {
+    if (tab === 'templates') {
+      pickProject('Save which project as a template?', async (p) => {
+        const name = prompt('Template name:', p.name || 'Template'); if (!name || !name.trim()) return;
+        const ok = await FM.templates.save(name.trim(), p.id);
+        if (FM.toast) FM.toast(ok ? 'Saved template “' + name.trim() + '”' : 'Could not save that template');
+        render();
+      });
+      return;
+    }
+    if (tab === 'elements') {
+      pickProject('Save which project as an element?', async (p) => {
+        const name = prompt('Element name:', p.name || 'Element'); if (!name || !name.trim()) return;
+        const ok = await FM.elements.saveFromProject(p.id, name.trim());
+        if (FM.toast) FM.toast(ok ? 'Saved element “' + name.trim() + '”' : 'Could not save that element');
+        render();
+      });
+      return;
+    }
+    newProjectDialog();
+  }
+
   let _opening = false;
   async function openProject(id, keepOpen) {
     if (_opening) return false;   // ignore a second card tap while the first project's media is still decoding (two overlapping open() loads leaked media + raced refreshAll)
@@ -540,6 +618,9 @@ window.FM = window.FM || {};
     // header Select toggle (built once, kept in sync)
     const selBtn = document.getElementById('hm-select-btn');
     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = tab === 'projects' ? '' : 'none'; }
+    // the + means something different on each tab — say which, so it isn't a mystery button
+    const newBtn = document.getElementById('hm-new');
+    if (newBtn) newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project');
     if (tab === 'projects') {
       // Order follows Settings → Project sorting: most recently EDITED first (so the project you
       // just worked on is the front card), or plain A–Z by name.
@@ -574,7 +655,7 @@ window.FM = window.FM || {};
       }
       list.forEach(p => { shownIds.push(p.id); grid.appendChild(projectCard(p)); });
       pruneSelection();
-    } else {
+    } else if (tab === 'templates') {
       let list = FM.templates.list();
       if (query && list.length) {
         // templates carry no dates — name matching only, same forgiving scorer
@@ -586,8 +667,22 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No templates yet. On a project card, tap ⋯ → “Save as template…”.'));
+      if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No templates yet. Tap + to save a project as one, or use a project card’s ⋯ → “Save as template…”.'));
       list.forEach(t => grid.appendChild(templateCard(t)));
+    } else {
+      // ELEMENTS — same shape as the templates branch, including the forgiving name search.
+      let list = FM.elements.list();
+      if (query && list.length) {
+        const scored = list.map(e => ({ e: e, score: nameScore(e.name, query) })).sort((a, b) => b.score - a.score);
+        const strong = scored.filter(x => x.score >= 0.45);
+        const shown = strong.length ? strong : scored.slice(0, 5);
+        grid.appendChild(el('div', 'hm-note', strong.length ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + ' — best first') : 'Nothing matched “' + query + '” exactly. Closest elements:'));
+        shown.forEach(x => grid.appendChild(elementCard(x.e)));
+        renderSelBar();
+        return;
+      }
+      if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No elements yet. An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit. Tap + to save a whole project as one, or inside a project select the layers and use ⋯ → “Save selection as element…”.'));
+      list.forEach(e => grid.appendChild(elementCard(e)));
     }
     renderSelBar();
   }
@@ -690,7 +785,7 @@ window.FM = window.FM || {};
       if (!root) return;
       grid = root.querySelector('.hm-grid');
       root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
-      document.getElementById('hm-new').addEventListener('click', newProjectDialog);
+      document.getElementById('hm-new').addEventListener('click', newFromTab);   // per-tab: project / template / element
       // "Select" toggle in the top bar → enter/leave multi-select (bulk delete / duplicate)
       const top = root.querySelector('.hm-top');
       if (top && !document.getElementById('hm-select-btn')) {
