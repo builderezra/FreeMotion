@@ -1272,16 +1272,24 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   /* with the grab handle present, the floating button hides while the sheet is open (no overlap) */
   #insp-toggle.on { display: none; }
 
-  /* AM phone: the LEFT column is just an EYE in every state — the clip's NAME lives ON the
-     clip bar (no name/swatch on the left). Constant --head-w keeps clip-x / playhead in sync. */
-  :root { --head-w: 46px; }
-  .th-solo, .th-thumb, .th-name { display: none; }   /* eye-only */
+  /* AM phone: the left column is the EYE plus the layer's own preview — the clip's NAME still lives
+     ON the clip bar, so there's no name/swatch here. The preview is not decoration: it's the one
+     select target that isn't next to anything else (Ezra: "there's only the eye… it's hard to select
+     it when you accidentally press the arrow each time" — the ‹ › grips sit on the clip itself, so
+     reaching for a clip on a phone means reaching past them). Tapping anywhere in this column selects
+     the layer, and the picture tells you which layer you're about to get. --head-w stays a constant
+     the JS reads back, so clip-x / playhead / scrub maths follow it. */
+  :root { --head-w: 72px; }
+  .th-solo, .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);
-    justify-content: center; padding: 0; gap: 0; margin: 0;
+    justify-content: flex-start; padding: 0 7px; gap: 6px; margin: 0;
     background: var(--panel); border-radius: 0;
     border-right: 1px solid var(--line); box-shadow: none;
   }
+  .th-thumb { width: 34px; height: 21px; border: 1px solid var(--line); }
+  /* the selected layer's preview gets the ring, so the tap target is also the state readout */
+  .track-head.sel .th-thumb { border-color: var(--accent); }
   .track-head.sel { background: rgba(41,217,187,.10); box-shadow: none; }
   .clip-label { display: block; }                        /* phone: the name shows ON the clip */
   .clip.sel .clip-label { left: 17px; right: 17px; }     /* keep it clear of the ‹ › grip caps */
