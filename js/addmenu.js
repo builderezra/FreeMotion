@@ -242,6 +242,36 @@ window.FM = window.FM || {};
           return c;
         }
         // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots \u2014 not a vertical scroll.
+        /* ELEMENTS get a SEARCHABLE, SCROLLING list instead of the sideways pager. The pager is right
+         * for a fixed catalogue you can learn by shape \u2014 the 40-odd shapes, the handful of objects \u2014
+         * but your own elements are an open-ended pile you named yourself, and a page 2 you have to know
+         * to swipe to is the same as not having them (Ezra: "it seems it can only fit one and then the
+         * rest don't show... make a menu that has all of them, organised and easy to use if you have a
+         * lot of elements, with a search bar"). */
+        if (tab.key === 'object') {
+          bodyEl.classList.add('addmenu-body--list');
+          var q = '';
+          var search = document.createElement('input');
+          search.type = 'text'; search.className = 'addmenu-search'; search.placeholder = 'Search elements\u2026';
+          search.spellcheck = false; search.autocomplete = 'off';
+          var listWrap = document.createElement('div'); listWrap.className = 'addmenu-list';
+          var paint = function () {
+            listWrap.innerHTML = '';
+            var ql = q.trim().toLowerCase();
+            var shown = ql ? opts.filter(function (o) { return String(o.label || '').toLowerCase().indexOf(ql) >= 0; }) : opts;
+            if (!shown.length) {
+              var none = document.createElement('div'); none.className = 'addmenu-none';
+              none.textContent = 'Nothing matches \u201c' + q.trim() + '\u201d';
+              listWrap.appendChild(none); return;
+            }
+            var g = document.createElement('div'); g.className = 'addmenu-grid';
+            shown.forEach(function (o) { g.appendChild(makeCard(o)); });
+            listWrap.appendChild(g);
+          };
+          search.addEventListener('input', function () { q = search.value; paint(); });
+          bodyEl.appendChild(search); bodyEl.appendChild(listWrap); paint();
+          return;
+        }
         var perPage = iconOnly ? (variant === 'sheet' ? 15 : 18) : (variant === 'sheet' ? 9 : 12);   // shapes 5\u00d73 / 6\u00d73; others 3\u00d73 / 4\u00d73
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
         for (var i = 0; i < opts.length; i += perPage) {

@@ -1620,6 +1620,15 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 }
 /* Add-menu: the shape catalog is tall now — let the sheet body scroll instead of growing */
 .addmenu--sheet .addmenu-body { overflow: hidden; }
+/* …EXCEPT the Elements tab, which is a searchable list rather than a sideways pager: your own
+   elements are an open-ended pile, and a page you have to know to swipe to is the same as not
+   having them. This one scrolls. */
+.addmenu-body--list { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.addmenu--sheet .addmenu-body--list { overflow: hidden; }
+.addmenu-search { width: 100%; box-sizing: border-box; flex: 0 0 auto; padding: 9px 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm, 8px); color: var(--text); font-size: 13px; }
+.addmenu-search:focus { outline: none; border-color: var(--accent); }
+.addmenu-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.addmenu-none { padding: 18px 4px; color: var(--text-faint); font-size: 12.5px; }
 
 /* ---- Home screen (AM-style project browser) ---- */
 #home-screen { position: fixed; inset: 0; z-index: 200; background: var(--bg, #0b0e14); display: flex; flex-direction: column; }
