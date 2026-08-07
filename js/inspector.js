@@ -926,8 +926,7 @@ window.FM = window.FM || {};
   function masksBlock(layer) {
     const wrap = el('div', 'mask-block');
     wrap.appendChild(el('div', 'insp-sub-label', 'Masks'));
-    const masks = Array.isArray(layer.masks) ? layer.masks : [];
-    if (!masks.length) wrap.appendChild(el('div', 'insp-hint', 'A mask reveals part of this layer — add one from + Add Effect (under Matte / Mask / Key). Stack masks to combine, invert or feather the reveal.'));
+    const masks = Array.isArray(layer.masks) ? layer.masks : [];   // caller only renders this block when it's non-empty
     masks.forEach((mask, idx) => {
       const item = el('div', 'mask-item' + (mask.enabled === false ? ' mask-off' : ''));
       const head = el('div', 'mask-item-head');
@@ -2384,8 +2383,10 @@ window.FM = window.FM || {};
       const s = effectsSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
       body.appendChild(s);
-      // Masks live here, under the effect stack (Ezra: masks belong in Effects, not their own card).
-      if (maskableLayer(layer)) body.appendChild(masksBlock(layer));
+      // Masks live here, under the effect stack (Ezra: masks belong in Effects, not their own card) —
+      // but ONLY once the layer has one. An empty "Masks" heading whose entire content was a sentence
+      // pointing you back at the + Add Effect button directly above it was clutter explaining itself.
+      if (maskableLayer(layer) && layer.masks && layer.masks.length) body.appendChild(masksBlock(layer));
     } else if (key === 'audiofx') {
       const s = audioFxSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();

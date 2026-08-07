@@ -94,8 +94,20 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   (softness + colour either side, and both code paths now share one kernel).
 - v3.91 — audio → effect params (see above). Not from the effect list, but it was the
   highest-leverage item in this file.
+- v3.92 (round 5) — polarcoords (Direction — the missing polar→rect inverse, verified a true
+  inverse: 289 sample points return within 1px), temperature (green↔magenta tint axis +
+  preserve-luma), gamma (per-channel R/G/B trims over the master), vibrance, colorize.
+- v3.93 (round 6) — spectralmap (span/offset/saturation — the 300–360° hue branch was
+  unreachable), exposure (offset + highlight rolloff), colorize (lift + blend mode), duotone.
+- v3.94 (round 7) — tint (split-tone), posterize (where the bands fall), gradientmap
+  (handover point + dither to kill the banding).
+- v4.00 (round 8) — rgbsplit (angle, toward-edges, green shift — written into BOTH the
+  per-layer and adjustment-grade paths), pixelate (non-square blocks).
 
 ## Build order (from the ranking pass)
+
+**Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are
+the record of why each fallback is byte-identical. Round 9 starts from the proposal table.
 
 2. **wave** — wavelength, phase, vertical. Phase makes the ripple travel; `40/100 === 0.4` exact.
 3. **ripple** — wavelength, phase, falloff. Phase marches the rings outward; the point of a ripple.
