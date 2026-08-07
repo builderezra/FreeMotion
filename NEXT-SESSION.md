@@ -1,83 +1,73 @@
 # Next session — the open queue
 
-Rewritten 2026-08-07 at the end of the v4.30 session. **Everything above v4.09 is committed locally
-and NOT pushed** — Ezra pushes via GitHub Desktop. Twenty-one releases are waiting (v4.10 → v4.30).
+Rewritten 2026-08-07 at the end of the v4.52 session. **Everything above v4.09 is committed locally
+and NOT pushed** — Ezra pushes via GitHub Desktop. Forty-three releases are waiting (v4.10 → v4.52).
 
 Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
 ---
 
-## 1. Shape clips should take the shape's colour
+## 1. Effect thumbnails that actually show the effect  ← he asked for this last, and it is the live one
 
-A shape layer's clip in the timeline should be tinted with that shape's own fill, so the track reads
-at a glance instead of every clip being the same teal.
+Ezra, verbatim: *"We had a miscommunication a while back where I wanted you to create a picture for
+every effect that resembled the effect and I gave an example of a ball with the effects applied but
+you just did that for literally everything, I want you to tackle it again, and see if an effect isn't
+really being described by the picture, give it a better picture."*
 
-Where: `js/timeline.js` builds the clip bar; `layer.clipColor` already exists as a manual colour tag
-(set from the layer ⋯ menu) and `styles.css` has the `.clip` background. The fill lives at
-`layer.fill` for parametric shapes. Decide what wins when a manual `clipColor` is also set — the
-manual tag should, since it was chosen deliberately.
+`js/fx-thumbs.js` renders every browser tile by applying the effect to ONE generic mini scene — the
+ball. For a good number of effects that shows nothing useful:
 
-## 2. Tiles: the mirror toggle can't be turned back on
+- **warps** (wave, ripple, twirl, bulge, fisheye, polar, bend, curl, turbulent displace) need a GRID
+  or text to visibly deform; a ball just becomes a slightly different ball
+- **temporal** effects (motionflow, drift, orbit, spin, swing, pulse, wiggle, shake, echo) need motion
+  across frames — a still tile can't show them at all
+- **matte / key** (chromakey, lumakey, wipes, choker, fringe) need a subject on a contrasting
+  background, otherwise the tile is just the subject
+- **text** effects (counter, timecode, textspacing, texttransform, textprogress, textrandomizer) need
+  actual text
+- **3D** solids need a textured face, or every one of them looks like the same grey shape
+- **repeat / tiling** needs content with a recognisable edge so the repeat reads
 
-Ezra: *"the button in the title to make it mirror or not isn't working, if you press it it stops
-mirroring but then you can't undo it."* So the toggle is one-way. Look at the Tiles entry in
-`js/compositor.js` (`FM.EFFECTS` schema + the `tiles` pixel fn) and at how a `def: 0` option param
-round-trips through the inspector's `segRow` — a falsy value being treated as "absent" and falling
-back to the ON default is the obvious suspect.
+The job: audit all 175 tiles, decide per effect whether the current subject demonstrates it, and give
+the ones that don't a subject that does. Keep the ball where it genuinely reads (colour grades, blurs,
+glows, vignette — those are exactly what a ball is good for). This is a judgement pass, not a
+mechanical one: the test is "could someone tell what this effect does from the tile alone".
 
-## 3. Tiles should repeat past the visible frame
+## 2. EFFECTS-PLAN.md round 10 — the standing autonomous order
 
-Ezra: *"currently how you have the tiles will only make the tiles for what's on screen… if I drag the
-clip down it will just make repeat a short sliver of it, because that's what's on screen."* Tiles
-samples the composited frame, so anything off-frame is already gone by the time it runs. Needs an
-option that repeats the layer's own content rather than the visible crop — i.e. render the layer to
-its own plate first (the `drawTint` / `drawFogLayer` pattern in compositor.js) and tile THAT.
-
-## 4. The two motion blurs — separate them, and fix the broken one  ← the big one
-
-Ezra: *"there's two motion blur effects, one should only affect what's happening in the video, like if
-I upload a video it will apply the motion blur very well to the content of the video, and if I were to
-drag the clip around it wouldn't affect it. And then the other one for when you drag the clip around
-that doesn't read what's inside the clip. Now they honestly need a lot of work, the normal one that
-isn't just for the content currently is broken asf."*
-
-Two systems that currently overlap:
-- **Content motion blur** — reads movement *inside* the footage. Must ignore the clip's own transform.
-  `drawContentMotionBlur` in `js/compositor.js`.
-- **Transform motion blur** — reads the clip's own movement (position/rotation/scale keyframes). Must
-  ignore the footage. `drawMotionBlur` in `js/compositor.js`; `layer.motionBlur` is the flag.
-
-Do a real investigation before editing — this is the one item on the list that deserves a proper
-look rather than a patch. Then make which-is-which obvious in the UI (they are currently both just
-"motion blur" to a user).
-
-## 5. Effect descriptions + tags, shown on hold and searchable
-
-Every effect gets a description and tags, shown in the panel that appears when you HOLD an effect
-tile in the Add Effect browser (Ezra supplied a reference screenshot: name, a sentence, a row of
-tag chips). Searching the browser should then match descriptions and tags, not just names.
-
-Where: `js/fx-registry.js` holds the catalogue metadata (`CATEGORY_OF`, `FX_FEATURED`); the browser
-and its search are `js/fx-browser.js`. `FM.EFFECT_PRESETS` in `js/fx-presets.js` already carries a
-`desc` field per preset — the same idea, one level up. 175 effects need writing up; consider doing it
-in batches by category so it can be checked as it goes.
+Nine rounds shipped (v3.87 → v4.13). Round 10 starts from the proposal table in that file. The
+byte-identity rule and the three-gate harness are documented at the top of it, including the two traps
+that have caught me: `params:{}` renders at the LEGACY default (use `FM.fxRegistry.makeInstance`), and
+`makeInstance` stamps schema `def`s so a new instance can differ from an old one — decide that
+deliberately each time.
 
 ---
 
-## Long-standing, not blocked on Ezra
+## Not blocked, but lower value than the two above
 
-- **EFFECTS-PLAN.md rounds** — the standing autonomous order. Nine rounds shipped (v3.87 → v4.13);
-  round 10 starts from the proposal table in that file. The byte-identity rule and the three-gate
-  harness are documented at the top of it, including the two traps that have caught me: `params:{}`
-  renders at the LEGACY default (use `FM.fxRegistry.makeInstance`), and `makeInstance` stamps schema
-  `def`s so a new instance can differ from an old one — decide that deliberately each time.
-
-## Blocked on Ezra
-
-- **The + button centring on mobile.** Cannot reproduce — measured 0.00px off centre at 375px in both
-  themes. Needs a screenshot of what he's actually seeing.
+- **Effect descriptions.** 68 of 175 are hand-written (`DESCRIPTIONS` in `js/fx-registry.js`); the rest
+  fall back to a generated line stating family + controls. Upgrading more is a steady win — add to
+  that map, nothing else needs touching.
+- **Motion Blur (Footage) on a group.** Currently refused (`supportsLayer`) and stripped at render,
+  because a group reaches the effect stack already flattened with its transform baked in. Real support
+  means flattening the members with the group's transform excluded and re-applying it after the blur.
 
 ---
+
+## Verification harnesses worth reusing (they have caught real bugs)
+
+- **Export identity across all 175 effects.** `git show HEAD:js/compositor.js > _oldcomp.js`, then
+  `sed 's|js/compositor.js?v=NNN|_oldcomp.js|' index.html > _old.html`, load `_old.html` in a hidden
+  iframe and render the same scene through BOTH `FM.renderScene`s into UNSTAMPED canvases (that is the
+  export path). Zero differing bytes = safe. **Always warm up with a throwaway render first** — the
+  first call in a fresh window is cold and reports false differences.
+- **Reduced-scale geometry.** Render at scale 1, downscale, compare against a render at 0.5. Catches
+  anything that assumed the preview canvas is 1:1 with the project.
+- **Glide/momentum tests.** rAF is frozen when the Browser pane is hidden, AND a synchronous rAF stub
+  makes `dt` 0 so time-based physics collapse to nothing. Stub rAF with a VIRTUAL CLOCK that advances
+  16ms per frame.
+- **`FM._layerCTM(layer, t, scene)`** returns a layer's exact placement matrix — the cheapest way to
+  prove parenting, transforms or blur geometry without eyeballing a render.
 
 ## House rules (from CLAUDE.md — non-negotiable)
 
@@ -86,3 +76,9 @@ being asked. Verify then claim. Bump `index.html`'s version label + the `?v=` ca
 touched file + a POLISH-LOG.md entry per release. Commit locally; **never push**. Raise
 BEFORE-PUBLISHING.md whenever publishing comes up. Add any new AM-modelled screen to that file's list
 as you build it.
+
+## The test checklist
+
+Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
+v3.79 → v4.52. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
+than minting a new one.
