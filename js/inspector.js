@@ -277,6 +277,57 @@ window.FM = window.FM || {};
     return Math.ceil(span / 100 / step) * step;
   }
   // o: { min, max, step, unit, dflt, read(), apply(v), release() }. Returns the strip; strip._sync(v)
+  /* ---- momentum, shared by every push-the-ruler control -------------------------------------
+   * A flick keeps travelling and eases out, the way the timeline's scrub does. A slow deliberate
+   * drag stops dead where you let go — fine placement matters more than flourish, and a control that
+   * drifts after you release it is unusable for setting an exact number.
+   * Written once and attached to both scrubbers (the effect/keyframe ruler and the Move & Transform
+   * pad) so they cannot drift apart in feel. (Ezra: "every slider should have a level of glide like
+   * how the timeline works".)
+   *   applyDx(dx)  apply dx SCREEN px; return false when the value refused to move (hit its end), so
+   *                the glide dies at the wall instead of spinning against it.
+   *   onSettle()   called once when the whole gesture finishes — one history entry per gesture.
+   */
+  const GLIDE_MIN_FLICK = 0.6;    // px/ms — below this it was a positioning drag, not a flick
+  const GLIDE_MAX_V = 2.5;        // a hard flick travels a long way, not forever
+  function attachGlide(node, applyDx, onSettle) {
+    let drag = null, raf = 0;
+    const stop = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } };
+    const settle = () => { if (onSettle) onSettle(); };
+    node.addEventListener('pointerdown', e => {
+      stop();                                        // a fresh grab kills any in-flight glide
+      drag = { lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+    });
+    node.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dt = e.timeStamp - drag.lastT, dx = e.clientX - drag.lastX;
+      if (dt > 0) drag.v = drag.v * 0.35 + (dx / dt) * 0.65;   // px/ms, smoothed the way the timeline smooths its scrub
+      drag.lastX = e.clientX; drag.lastT = e.timeStamp;
+    });
+    const release = () => {
+      if (!drag) return;
+      let v = Math.max(-GLIDE_MAX_V, Math.min(GLIDE_MAX_V, isFinite(drag.v) ? drag.v : 0));
+      drag = null;
+      if (Math.abs(v) < GLIDE_MIN_FLICK) { settle(); return; }
+      let last = performance.now();
+      const step = (now) => {
+        // The panel rebuilds constantly (refresh, category change, deselect), which detaches this
+        // control while its glide is still in flight — and its closures would go on writing to the
+        // old layer's property from something nobody can see. Die with the element.
+        if (!node.isConnected) { raf = 0; settle(); return; }
+        const dt = Math.min(48, now - last); last = now;
+        v *= Math.pow(0.9, dt / 16.67);                          // same friction as the timeline's momentum
+        const alive = applyDx(v * dt);
+        if (alive && Math.abs(v) > 0.008) raf = requestAnimationFrame(step);
+        else { raf = 0; settle(); }
+      };
+      raf = requestAnimationFrame(step);
+    };
+    node.addEventListener('pointerup', release);
+    node.addEventListener('pointercancel', () => { if (!drag) return; drag = null; settle(); });   // OS-cancelled → settle where it is, never glide
+    return { stop: stop, cancelDrag: () => { drag = null; } };
+  }
+
   // re-scrolls the ruler (call after a typed value).
   function tickStrip(o) {
     const strip = el('div', 'fx-scrub');
@@ -298,23 +349,34 @@ window.FM = window.FM || {};
     strip.appendChild(ruler); strip.appendChild(el('div', 'fx-scrub-notch'));
     const sync = v => { ruler.style.transform = 'translateX(' + (-((v - o.min) / q) * TICK) + 'px)'; };
     sync(o.read());
-    let drag = null;
-    strip.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, v: o.read(), last: null }; try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
-    const end = () => { if (drag) { drag = null; o.release(); } };
-    // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
-    // hover would otherwise KEEP scrubbing. min/max = a hard wall: re-anchor the drag at the limit so
-    // reversing responds instantly (no overshoot dead zone); the ruler is finite so it can't scroll past.
+    let drag = null, cur = o.read(), lastApplied = null;
+    // Push dx SCREEN px through the ruler. `cur` carries the un-quantised position so a slow drag or a
+    // decaying glide accumulates sub-notch movement instead of losing it to rounding every frame.
     // REVERSED (AM): you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
-    // slides under the fixed centre line), drag RIGHT to lower it. So the delta is (drag.x − clientX).
+    // slides under the fixed centre line), drag RIGHT to lower it, hence the minus.
+    const applyDx = (dx) => {
+      const before = cur;
+      cur = Math.max(o.min, Math.min(o.max, cur - dx * q / TICK));
+      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / q) * q));   // land ON a notch (the grid can overshoot an off-grid max)
+      if (v !== lastApplied) { lastApplied = v; o.apply(v); sync(v); }
+      return Math.abs(cur - before) > 1e-9;   // false at a wall → the glide stops rather than spinning
+    };
+    const glide = attachGlide(strip, applyDx, () => { o.release(); });
+    strip.addEventListener('pointerdown', (e) => {
+      drag = { x: e.clientX };
+      cur = o.read(); lastApplied = null;          // re-read: the value may have been typed or keyframed since
+      try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault();
+    });
+    const end = () => { if (drag) { drag = null; glide.cancelDrag(); o.release(); } };
+    // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
+    // hover would otherwise KEEP scrubbing.
     strip.addEventListener('pointermove', (e) => {
       if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end();
-      const raw = drag.v + (drag.x - e.clientX) * q / TICK;
-      const clamped = Math.max(o.min, Math.min(o.max, raw));
-      if (raw !== clamped) { drag.x = e.clientX; drag.v = clamped; }
-      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((clamped - o.min) / q) * q));   // land ON a notch (the grid can overshoot an off-grid max)
-      if (v !== drag.last) { drag.last = v; o.apply(v); sync(v); }
+      const dx = e.clientX - drag.x; drag.x = e.clientX;
+      if (dx) applyDx(dx);
     });
-    strip.addEventListener('pointerup', end); strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
+    strip.addEventListener('pointerup', () => { drag = null; });   // attachGlide's own pointerup starts the glide and settles
+    strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
     strip._sync = sync;
     return strip;
   }
@@ -1557,10 +1619,24 @@ window.FM = window.FM || {};
     refresh(); box.appendChild(val); box.appendChild(lab);
     const clamp = v => { if (opts.min != null) v = Math.max(opts.min, v); if (opts.max != null) v = Math.min(opts.max, v); return v; };
     let drag = null;
-    val.addEventListener('pointerdown', e => { if (val.isContentEditable) return; drag = { x: e.clientX, v: getVal(), moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-    val.addEventListener('pointermove', e => { if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; if (moved) { commitH(); FM.inspector.refresh(); } return; } const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true; if (drag.moved) { const raw = drag.v + dx * (opts.scrub || 1); const v = clamp(raw); if (v !== raw) { drag.x = e.clientX; drag.v = v; } setVal(v); refresh(); if (opts.onScrub) opts.onScrub(); } });   // re-anchor at min/max: no overshoot dead zone
-    val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } else startEdit(); });
-    val.addEventListener('pointercancel', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)
+    // Dragging the number is a scrub too, so it flicks like every other one.
+    const applyDx = (dx) => {
+      const before = getVal(), v = clamp(before + dx * (opts.scrub || 1));
+      setVal(v); refresh(); if (opts.onScrub) opts.onScrub();
+      return Math.abs(getVal() - before) > 1e-9;
+    };
+    const glide = attachGlide(val, applyDx, () => { commitH(); FM.inspector.refresh(); });
+    val.addEventListener('pointerdown', e => { if (val.isContentEditable) { glide.cancelDrag(); return; } drag = { x: e.clientX, moved: false }; try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    val.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; glide.cancelDrag(); if (moved) { commitH(); FM.inspector.refresh(); } return; }
+      const dx = e.clientX - drag.x; drag.x = e.clientX;
+      if (!drag.moved && Math.abs(dx) > 2) drag.moved = true;
+      if (drag.moved && dx) applyDx(dx);
+    });
+    // A TAP (never moved) opens the type-in editor and must not glide — cancel the momentum first.
+    val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (!moved) { glide.cancelDrag(); startEdit(); } });
+    val.addEventListener('pointercancel', e => { if (!drag) return; const moved = drag.moved; drag = null; glide.cancelDrag(); try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
       const r = document.createRange(); r.selectNodeContents(val); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
@@ -1580,11 +1656,10 @@ window.FM = window.FM || {};
   // and a big change meant many short drags because a fast one was worth no more than a slow one.
   function mtScrub(getVal, setVal, scrub, onChange) {
     const strip = el('div', 'mt-scrub'); strip.appendChild(el('div', 'mt-scrub-ticks')); strip.appendChild(el('div', 'mt-scrub-mid'));
-    let drag = null, glideRAF = 0, offset = 0;
+    let drag = null, offset = 0;
     // Both background layers (coarse + fine ruling) scroll together. Only the X longhand is set, so
     // the shorthand's `center` Y survives; repeat-x means the offset can grow forever without a seam.
     const paint = () => { strip.style.backgroundPositionX = offset + 'px, ' + offset + 'px'; };
-    const stopGlide = () => { if (glideRAF) { cancelAnimationFrame(glideRAF); glideRAF = 0; } };
     // Apply dx SCREEN pixels of scrub. Returns false when the value refused to move (clamped at its
     // end) so the glide can die there instead of spinning against a wall.
     const applyDx = (dx) => {
@@ -1594,44 +1669,21 @@ window.FM = window.FM || {};
       if (onChange) onChange();
       return Math.abs(getVal() - before) > 1e-9;
     };
+    // Same momentum as every other scrubber — one implementation, so they cannot drift apart in feel.
+    const glide = attachGlide(strip, applyDx, () => { commitH(); if (onChange) onChange(); });
     strip.addEventListener('pointerdown', e => {
-      stopGlide();                                   // a fresh grab kills any in-flight glide
-      drag = { x: e.clientX, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+      drag = { x: e.clientX };
       try { strip.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault();
     });
     strip.addEventListener('pointermove', e => {
       if (!drag) return;
-      if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; commitH(); if (onChange) onChange(); return; }
-      const dx = e.clientX - drag.lastX, dt = e.timeStamp - drag.lastT;
-      if (dt > 0) drag.v = drag.v * 0.35 + (dx / dt) * 0.65;   // px/ms, smoothed the way the timeline smooths its scrub
-      drag.lastX = e.clientX; drag.lastT = e.timeStamp;
+      if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; glide.cancelDrag(); commitH(); if (onChange) onChange(); return; }
+      const dx = e.clientX - drag.x; drag.x = e.clientX;
       if (dx) applyDx(dx);
     });
-    const release = (e) => {
-      if (!drag) return;
-      const v0 = drag.v; drag = null;
-      try { strip.releasePointerCapture(e.pointerId); } catch (_) {}
-      let v = Math.max(-2.5, Math.min(2.5, isFinite(v0) ? v0 : 0));   // clamp: a hard flick glides a long way, not forever
-      // Only a real FLICK glides. A deliberate positioning drag runs well under 0.5 px/ms and has to
-      // stop dead where you let go, or fine placement becomes impossible; a flick is several px/ms.
-      if (Math.abs(v) < 0.6) { commitH(); if (onChange) onChange(); return; }
-      let last = performance.now();
-      const step = (now) => {
-        // The panel rebuilds constantly (refresh, category change, deselect), which detaches this
-        // strip while its glide is still in flight — and its closures would go on writing to the old
-        // layer's property from a control nobody can see. Die with the element.
-        if (!strip.isConnected) { glideRAF = 0; commitH(); return; }
-        const dt = Math.min(48, now - last); last = now;
-        v *= Math.pow(0.9, dt / 16.67);                                // same friction as the timeline's momentum
-        const alive = applyDx(v * dt);
-        if (alive && Math.abs(v) > 0.008) glideRAF = requestAnimationFrame(step);
-        else { glideRAF = 0; commitH(); if (onChange) onChange(); }    // ONE history entry for the whole gesture
-      };
-      glideRAF = requestAnimationFrame(step);
-    };
-    strip.addEventListener('pointerup', release);
-    strip.addEventListener('pointercancel', e => { if (!drag) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });   // OS-cancelled → settle where it is, never glide
+    strip.addEventListener('pointerup', e => { drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} });
+    strip.addEventListener('pointercancel', e => { if (!drag) return; drag = null; glide.cancelDrag(); try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
     return strip;
   }
 
