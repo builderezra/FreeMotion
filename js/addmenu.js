@@ -74,7 +74,9 @@ window.FM = window.FM || {};
       { label: 'Ellipse', icon: ico('<circle cx="12" cy="12" r="8"/>'), add: shp('ellipse') },
       { label: 'Triangle', icon: ico('<path d="M12 4l8 16H4z"/>'), add: shp('triangle') },
       { label: 'Star', icon: ico('<path d="M12 3l2.5 6 6.5.5-5 4.2 1.6 6.3L12 17l-5.6 3 1.6-6.3-5-4.2 6.5-.5z"/>'), add: shp('star') },
-      { label: 'Heart', icon: ico('<path d="M12 20s-7.5-4.9-9-9.2C1.9 7.6 4 5 6.7 5 8.9 5 10.6 6.4 12 8c1.4-1.6 3.1-3 5.3-3 2.7 0 4.8 2.6 3.7 5.8C19.5 15.1 12 20 12 20z"/>'), add: shp('heart') },
+      // traced from the same eight anchors as the shape itself (compositor S.heart), so the tile and
+      // what it makes can't drift apart
+      { label: 'Heart', icon: ico('<path d="M12 21.5C12 21.5 6.4 18.1 4.4 15C2.4 12 2 12.8 2 9.2C2 5.5 4 2.9 7.1 2.9C10.2 2.9 12 7.2 12 7.2C12 7.2 13.8 2.9 16.9 2.9C20 2.9 22 5.5 22 9.2C22 12.8 21.6 12 19.6 15C17.6 18.1 12 21.5 12 21.5Z"/>'), add: shp('heart') },
       { label: 'Hexagon', icon: ico('<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>'), add: shp('polygon', { name: 'Hexagon', extra: { sides: 6 } }) },
       { label: 'Pentagon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/>'), add: shp('polygon', { name: 'Pentagon', extra: { sides: 5 } }) },
       { label: 'Diamond', icon: ico('<path d="M12 3l8 9-8 9-8-9z"/>'), add: shp('polygon', { name: 'Diamond', extra: { sides: 4 } }) },

@@ -3863,7 +3863,15 @@ window.FM = window.FM || {};
     S.triangle = [[[0.5,0],[1,1],[0,1]]];
     // heart: round lobe domes need MANUAL tangents ([u,v,1,hx,hy]) — auto Catmull-Rom handles are
     // (next−prev)/6, far too short for a half-circle dome, which rendered the lobes as peaks.
-    S.heart = [[[0.5,0.96],[0.03,0.39,1,-0.005,-0.16],[0.26,0.05,1,0.15,0],[0.5,0.31],[0.74,0.05,1,0.15,0],[0.97,0.39,1,-0.005,0.16]]];
+    // Redrawn from Ezra's reference (v4.21). Four changes, all of them what makes that drawing read as
+    // a heart rather than a blob: the notch is SHALLOWER (0.245 not 0.31) so the two lobes nearly meet
+    // in a small sharp V, the lobes sit higher and fuller (0.02 not 0.05, reaching the full width at
+    // 0/1 not 0.03/0.97), the point reaches the very bottom of the box (1.0 not 0.96), and there is a
+    // new pair of anchors on the lower flanks — without them the widest point's handle had to serve
+    // both the dome above and the run down to the tip, and a handle long enough for a clean straight
+    // taper fattened the lobe. Eight points, mirror-exact about u=0.5, and Edit Points gets two more
+    // real handles on the part of the outline people actually reshape.
+    S.heart = [[[0.5,1],[0.12,0.66,1,-0.1,-0.16],[0,0.35,1,0,-0.19],[0.255,0.02,1,0.155,0],[0.5,0.245],[0.745,0.02,1,0.155,0],[1,0.35,1,0,0.19],[0.88,0.66,1,-0.1,0.16]]];
     S.plus = [[[0.33,0],[0.67,0],[0.67,0.33],[1,0.33],[1,0.67],[0.67,0.67],[0.67,1],[0.33,1],[0.33,0.67],[0,0.67],[0,0.33],[0.33,0.33]]];
     S.arrow = [[[0,0.3],[0.55,0.3],[0.55,0],[1,0.5],[0.55,1],[0.55,0.7],[0,0.7]]];
     S.chevron = [[[0,0],[0.55,0],[1,0.5],[0.55,1],[0,1],[0.45,0.5]]];
