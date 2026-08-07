@@ -1,121 +1,88 @@
-# Next session — parity re-audit, then build
+# Next session — the open queue
 
-Written 2026-07-10 by the planning session (Opus 4.8), for the follow-up session to execute.
-Ezra confirmed this plan. Work top-to-bottom.
+Rewritten 2026-08-07 at the end of the v4.30 session. **Everything above v4.09 is committed locally
+and NOT pushed** — Ezra pushes via GitHub Desktop. Twenty-one releases are waiting (v4.10 → v4.30).
 
----
-
-## Why this exists: PARITY.md cannot be trusted as a roadmap
-
-PARITY.md was generated **2026-06-23**, before v2.71 → v2.84 shipped. A 25-feature spot-check of
-rows it marks `❌ missing` found **24 of them already implemented**:
-
-| PARITY says ❌ missing | Reality |
-|---|---|
-| Bounce easing, Elastic easing | shipped v2.67 |
-| Layer grouping, Masking groups | shipped v2.33 / v2.38 (`drawGroupUnit`, `maskId`) |
-| Copy Background | shipped v2.55 (`FM.hasCopyBg`) |
-| Freehand drawing layer | shipped v2.39 (`js/draw-tool.js`) |
-| Pen tool / Edit Points | shipped v2.47 (`js/point-edit.js`) |
-| Convert to Outline | shipped v2.54 |
-| Time remapping / speed ramp | shipped v2.52 (`layerSourceAdvance`) |
-| Volume keyframe automation | shipped (`FM.layerVolume`) |
-| Audio import / audio layer | shipped v2.32 |
-| Extract audio | shipped v2.54 |
-| Eyedropper | shipped (`js/eyedropper.js`) |
-| Custom font import | shipped (`storage.js` FontFace + IDB) |
-| Timeline pinch zoom | shipped (`pinch` in `timeline.js`) |
-| Angular gradient | shipped v2.45 |
-| Elements / precomps | shipped v2.54 ("Save to My Elements") |
-| Clipping mask | shipped v2.54 |
-| Motion blur (content/optical-flow) | shipped v2.49 |
-| `touch-action:none` | shipped |
-| recentColors persistence | shipped |
-| Captions, motion tracker, crop tool | all shipped |
-
-Only `navigator.share` was genuinely absent. **BACKLOG.md is equally stale: 9 of its 12
-"quick wins" are already done.**
-
-> Caveat on method: the above were greps. They prove the code exists, not that every sub-feature is
-> complete. The conclusion isn't "exactly 24 rows are wrong" — it's that the matrix is wrong often
-> enough that **nothing downstream of it can be trusted.** Hence Step 1.
+Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
 ---
 
-## Step 1 — Re-audit (do this first; everything else depends on it)
+## 1. Shape clips should take the shape's colour
 
-Rewrite `PARITY.md` and `BACKLOG.md` with true statuses, verified against the actual source.
+A shape layer's clip in the timeline should be tinted with that shape's own fill, so the track reads
+at a glance instead of every clip being the same teal.
 
-**Scope optimization — only re-check the `❌` and `🟡` rows (~251 of 342).** Staleness runs one
-way: a feature marked `✅` in June did not un-ship. Skipping the 90 `✅` rows cuts the job ~25%.
+Where: `js/timeline.js` builds the clip bar; `layer.clipColor` already exists as a manual colour tag
+(set from the layer ⋯ menu) and `styles.css` has the `.clip` background. The fill lives at
+`layer.fill` for parametric shapes. Decide what wins when a manual `clipColor` is also set — the
+manual tag should, since it was chosen deliberately.
 
-**Method** (this is agent-heavy — Ezra has approved the cost):
-- Fan out across the 12 domain sections in parallel, one agent per domain.
-- Each agent reads the real code (`js/*.js`, `index.html`, `styles.css`) and assigns a status per
-  feature with a file:line citation. **No status without evidence.**
-- Adversarially verify: a second pass tries to *refute* each `❌ missing` claim (that's the
-  direction the errors run). A claim of "missing" survives only if the refuter can't find it.
-- Rewrite both docs. Update the "Where we stand" header counts and drop the stale line claiming the
-  app "is unusable on touch/mobile" — fourteen versions of mobile work have disproved it.
+## 2. Tiles: the mirror toggle can't be turned back on
 
-**Deliverable: a truthful, ranked list of what is genuinely still missing.** That list is the
-roadmap, and it replaces having to hunt Alight Motion for ideas.
+Ezra: *"the button in the title to make it mirror or not isn't working, if you press it it stops
+mirroring but then you can't undo it."* So the toggle is one-way. Look at the Tiles entry in
+`js/compositor.js` (`FM.EFFECTS` schema + the `tiles` pixel fn) and at how a `def: 0` option param
+round-trips through the inspector's `segRow` — a falsy value being treated as "absent" and falling
+back to the ON default is the obvious suspect.
+
+## 3. Tiles should repeat past the visible frame
+
+Ezra: *"currently how you have the tiles will only make the tiles for what's on screen… if I drag the
+clip down it will just make repeat a short sliver of it, because that's what's on screen."* Tiles
+samples the composited frame, so anything off-frame is already gone by the time it runs. Needs an
+option that repeats the layer's own content rather than the visible crop — i.e. render the layer to
+its own plate first (the `drawTint` / `drawFogLayer` pattern in compositor.js) and tile THAT.
+
+## 4. The two motion blurs — separate them, and fix the broken one  ← the big one
+
+Ezra: *"there's two motion blur effects, one should only affect what's happening in the video, like if
+I upload a video it will apply the motion blur very well to the content of the video, and if I were to
+drag the clip around it wouldn't affect it. And then the other one for when you drag the clip around
+that doesn't read what's inside the clip. Now they honestly need a lot of work, the normal one that
+isn't just for the content currently is broken asf."*
+
+Two systems that currently overlap:
+- **Content motion blur** — reads movement *inside* the footage. Must ignore the clip's own transform.
+  `drawContentMotionBlur` in `js/compositor.js`.
+- **Transform motion blur** — reads the clip's own movement (position/rotation/scale keyframes). Must
+  ignore the footage. `drawMotionBlur` in `js/compositor.js`; `layer.motionBlur` is the flag.
+
+Do a real investigation before editing — this is the one item on the list that deserves a proper
+look rather than a patch. Then make which-is-which obvious in the UI (they are currently both just
+"motion blur" to a user).
+
+## 5. Effect descriptions + tags, shown on hold and searchable
+
+Every effect gets a description and tags, shown in the panel that appears when you HOLD an effect
+tile in the Add Effect browser (Ezra supplied a reference screenshot: name, a sentence, a row of
+tag chips). Searching the browser should then match descriptions and tags, not just names.
+
+Where: `js/fx-registry.js` holds the catalogue metadata (`CATEGORY_OF`, `FX_FEATURED`); the browser
+and its search are `js/fx-browser.js`. `FM.EFFECT_PRESETS` in `js/fx-presets.js` already carries a
+`desc` field per preset — the same idea, one level up. 175 effects need writing up; consider doing it
+in batches by category so it can be checked as it goes.
 
 ---
 
-## Step 2 — Three verified-real quick wins (no audit needed; confirmed 2026-07-10)
+## Long-standing, not blocked on Ezra
 
-**1. Solo doesn't gate preview audio — preview and export disagree.**
-`solo` appears **zero times** in `js/app.js` and `js/audio-play.js`. Preview audio gates only on
-`layer.visible === false` (`app.js:432`, `:441`, `:467-468`; `audio-play.js:49`).
-But `exporter.js:98-101` *already* gates on solo (`soloActive && !layer.solo`).
-So: solo a layer → you still hear every layer in preview → export the file → only the soloed audio
-is there. Fix the preview side to mirror the exporter's gate.
+- **EFFECTS-PLAN.md rounds** — the standing autonomous order. Nine rounds shipped (v3.87 → v4.13);
+  round 10 starts from the proposal table in that file. The byte-identity rule and the three-gate
+  harness are documented at the top of it, including the two traps that have caught me: `params:{}`
+  renders at the LEGACY default (use `FM.fxRegistry.makeInstance`), and `makeInstance` stamps schema
+  `def`s so a new instance can differ from an old one — decide that deliberately each time.
 
-**2. No share sheet after export.** `exporter.js:11` `download()` builds a Blob URL and clicks an
-`<a download>`. On iOS that's an awkward flow. Add a `navigator.share({files:[...]})` path with the
-anchor-click as fallback. Mobile-first mandate; small change.
+## Blocked on Ezra
 
-**3. Speed slider isn't clamped** against remaining source length → last-frame freeze.
-Speed UI lives at `inspector.js:1478-1487`. Clamp the slider span against
-`(srcDur − trimStart)`. Note speed is keyframeable (`FM.toggleProp(layer,'speed',…)`), so clamp the
-evaluated value, not just the slider.
-
----
-
-## Step 3 — Build the top real gaps the audit surfaces
-
-Highest value first. Prior expectation (do **not** treat as settled — the audit decides): the
-**effects catalog breadth** is the one criticism in PARITY.md that probably has *not* gone stale.
-Directional blur, zoom/spin blur, sharpen, noise/grain, gradient map, wave warp, swirl, find-edges
-are each a self-contained compositor function + `fx-registry.js` entry, and they're visible wins.
+- **The + button centring on mobile.** Cannot reproduce — measured 0.00px off centre at 375px in both
+  themes. Needs a screenshot of what he's actually seeing.
 
 ---
 
 ## House rules (from CLAUDE.md — non-negotiable)
 
-- **Vanilla HTML/CSS/JS. No framework, no build step, no bundler, no TypeScript, no npm.**
-  Multi-file, plain `<script src>`. Match what the app already does.
-- **Mobile is the priority.** Verify every UI change at **~380px** in the built-in preview
-  (load → resize → screenshot → read console) *before* calling it done. Don't wait to be asked.
-  Skip the screenshot only for clearly non-visual logic changes.
-- **Verify, then claim.** If you say it works, you ran it. If you skipped a step, say so.
-- Ship each change as a **version bump** (`index.html:20`, single source of truth) plus a one-line
-  `POLISH-LOG.md` entry. Current: **v2.84**.
-- Run `/security-review` before shipping anything touching API keys, personal data, or HTML writes.
-- Commit locally; **do not push to `main` without Ezra's explicit say-so** (it deploys live to
-  builderezra.github.io/FreeMotion/).
-- Dev-only: `.claude/launch.json` (gitignored) runs `python3 -m http.server 8181` for the preview.
-
----
-
-## Still outstanding: mobile perf
-
-`PERF-PLAN.md` Phase 1 shipped as v2.84 (coalesced scrubbing, debounced resize, scratch-canvas
-guards). **Phase 2 (Fix A) is untouched and is the single biggest improvement to how the app feels
-on a phone**: the preview canvas renders every frame at full comp res (1080×1920 ≈ 2.07M px) even
-though a phone displays it at ~400px wide. Downscale the preview canvas to CSS box × devicePixelRatio
-(cap the long edge ~1280px), keeping `P.width/P.height` for the exporter only. The one thing to check
-is hit-test / selection coordinate mapping (`compositor.js` `layerSize`).
-
-Ezra chose to do the parity re-audit first. Fix A remains queued.
+Vanilla HTML/CSS/JS, no build step. Mobile-first, verify at ~380px in the browser preview without
+being asked. Verify then claim. Bump `index.html`'s version label + the `?v=` cache-busters on every
+touched file + a POLISH-LOG.md entry per release. Commit locally; **never push**. Raise
+BEFORE-PUBLISHING.md whenever publishing comes up. Add any new AM-modelled screen to that file's list
+as you build it.
