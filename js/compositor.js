@@ -1173,13 +1173,37 @@ window.FM = window.FM || {};
   // Scratch buffers are a DEPTH-INDEXED pool: stacking two pixel effects re-enters this function
   // (the inner drawLayer renders the remaining effects), and a single shared pair made the inner
   // call clear/draw the OUTER call's workspace — a ghost of the un-effected layer under the result.
+  /* ---- PREVIEW EFFECT RESOLUTION ------------------------------------------------------------
+   * Effect plates used to be allocated at PROJECT resolution no matter what the preview canvas
+   * actually was. That quietly disconnected the adaptive playback-quality tier from the thing that
+   * dominates a frame: the getImageData / per-pixel scan / putImageData round trip runs over the
+   * plate, not the canvas. So shrinking the canvas during playback bought almost nothing.
+   * Measured before this change — one layer, three effects, 1080x1920 comp:
+   *     into a 1080x1920 target  34.77 ms/frame
+   *     into a  270x480 target   32.10 ms/frame   (16x fewer canvas pixels, 7% cheaper)
+   * Plates now follow the target's scale, so the tier does what it was written to do.
+   *
+   * CAPPED AT 1, deliberately. Zoomed in, the preview canvas is SUPERSAMPLED (__fmRS up to 4);
+   * matching that would make effects up to 16x slower than they have ever been. At scale 1 every
+   * dimension below is exactly the value it was, the stamp resolves to 1, and the blit's explicit
+   * destination rect equals the plate's own size — so a 1:1 preview, every export, and every
+   * thumbnail (all unstamped canvases) stay byte-identical.
+   *
+   * The cost is that effects measured in PIXELS (grain size, scanline pitch, tile size) scale with
+   * the plate, so they read slightly differently in a reduced preview. That is the same trade the
+   * quality tier already makes and it never reaches the export. */
+  function plateScale(ctx) { return Math.min(1, ctx.canvas.__fmRS || 1); }
+
   const _pfPool = [];
   let _pfDepth = 0;
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    // PW/PH are project units (what everything DRAWS in); W/H are the plate's real pixels (what the
+    // pixel fn indexes). They are the same number at scale 1.
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _pfDepth++;
     try {
       if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
@@ -1189,20 +1213,21 @@ window.FM = window.FM || {};
       // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
       if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }
       if (pB.width !== W || pB.height !== H) { pB.width = W; pB.height = H; }
+      pA.__fmRS = ps; pA.__fmOX = 0; pA.__fmOY = 0;   // the nested drawLayer renders through baseT, and a nested effect inherits this scale
       const actx = pA.getContext('2d');
-      baseT(actx); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, PW, PH);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
       const img = actx.getImageData(0, 0, W, H);
-      fn(img.data, W, H, fx.params || {}, t);
+      fn(img.data, W, H, fx.params || {}, t, ps);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(pB, 0, 0);
+      ctx.drawImage(pB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(pB,0,0) at scale 1
       ctx.restore();
     } finally { _pfDepth--; }
   }
@@ -1457,8 +1482,8 @@ window.FM = window.FM || {};
         }
       };
     })(),
-    halftone: function (d, W, H, p, t) {
-      const size = Math.max(2, Math.round(FM.evalProp(p.size, t) || 8)), r2 = size / 2, s = d.slice();
+    halftone: function (d, W, H, p, t, ps) {
+      const size = Math.max(2, Math.round((FM.evalProp(p.size, t) || 8) * (ps || 1))), r2 = size / 2, s = d.slice();
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
@@ -1593,11 +1618,11 @@ window.FM = window.FM || {};
     // ---- batch 7 (pixel) ----
     mosaic: function(d,W,H,p,t){ var moBs=Math.round(FM.evalProp(p.size,t)||16); if(moBs<2)moBs=2; if(moBs>100)moBs=100; var moS=d.slice(),moW4=W*4; for(var moBy=0;moBy<H;moBy+=moBs){ var moY1=Math.min(moBy+moBs,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4; moSr+=moS[moI]; moSg+=moS[moI+1]; moSb+=moS[moI+2]; moSa+=moS[moI+3]; moN++; } } if(moN===0)continue; var moAr=moSr/moN,moAg=moSg/moN,moAb=moSb/moN,moAa=moSa/moN; for(var moY2=moBy;moY2<moY1;moY2++){ var moRow2=moY2*moW4; for(var moX2=moBx;moX2<moX1;moX2++){ var moJ=moRow2+moX2*4; d[moJ]=moAr; d[moJ+1]=moAg; d[moJ+2]=moAb; d[moJ+3]=moAa; } } } } },
     lensblur: function(d,W,H,p,t){ var lb_r=FM.evalProp(p.radius,t); lb_r=(lb_r==null?10:lb_r); if(lb_r<0)lb_r=0; if(lb_r>30)lb_r=30; if(lb_r<1)return; var lb_s=d.slice(),lb_w4=W*4,lb_ox=new Float64Array(16),lb_oy=new Float64Array(16),lb_k; for(lb_k=0;lb_k<16;lb_k++){var lb_a=lb_k*2.399963,lb_rd=lb_r*Math.sqrt((lb_k+0.5)/16);lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd;} for(var lb_y=0;lb_y<H;lb_y++){for(var lb_x=0;lb_x<W;lb_x++){var lb_sr=0,lb_sg=0,lb_sb=0,lb_sa=0; for(lb_k=0;lb_k<16;lb_k++){var lb_sx=lb_x+lb_ox[lb_k]|0,lb_sy=lb_y+lb_oy[lb_k]|0; if(lb_sx<0)lb_sx=0; else if(lb_sx>=W)lb_sx=W-1; if(lb_sy<0)lb_sy=0; else if(lb_sy>=H)lb_sy=H-1; var lb_si=lb_sy*lb_w4+lb_sx*4; lb_sr+=lb_s[lb_si];lb_sg+=lb_s[lb_si+1];lb_sb+=lb_s[lb_si+2];lb_sa+=lb_s[lb_si+3];} var lb_di=lb_y*lb_w4+lb_x*4; d[lb_di]=lb_sr/16;d[lb_di+1]=lb_sg/16;d[lb_di+2]=lb_sb/16;d[lb_di+3]=lb_sa/16;}} },
-    dots: function(d,W,H,p,t){ var dt_sz=FM.evalProp(p.size,t); if(dt_sz==null)dt_sz=16; dt_sz=Math.max(4,Math.min(80,dt_sz)); var dt_col=hexToRGB(p.color); var dt_cr=dt_sz*0.32, dt_r2=dt_cr*dt_cr, dt_a=0.85, dt_ia=1-dt_a, dt_w4=W*4; for(var dt_y=0;dt_y<H;dt_y++){ var dt_dcy=dt_y-(Math.floor(dt_y/dt_sz)*dt_sz+dt_sz/2); var dt_row=dt_y*dt_w4; for(var dt_x=0;dt_x<W;dt_x++){ var dt_i=dt_row+dt_x*4; if(d[dt_i+3]===0)continue; var dt_dcx=dt_x-(Math.floor(dt_x/dt_sz)*dt_sz+dt_sz/2); if(dt_dcx*dt_dcx+dt_dcy*dt_dcy<=dt_r2){ d[dt_i]=d[dt_i]*dt_ia+dt_col[0]*dt_a; d[dt_i+1]=d[dt_i+1]*dt_ia+dt_col[1]*dt_a; d[dt_i+2]=d[dt_i+2]*dt_ia+dt_col[2]*dt_a; } } } },
+    dots: function(d,W,H,p,t,ps){ var dt_sz=FM.evalProp(p.size,t); if(dt_sz==null)dt_sz=16; dt_sz=Math.max(4,Math.min(80,dt_sz)); dt_sz=Math.max(2,dt_sz*(ps||1)); var dt_col=hexToRGB(p.color); var dt_cr=dt_sz*0.32, dt_r2=dt_cr*dt_cr, dt_a=0.85, dt_ia=1-dt_a, dt_w4=W*4; for(var dt_y=0;dt_y<H;dt_y++){ var dt_dcy=dt_y-(Math.floor(dt_y/dt_sz)*dt_sz+dt_sz/2); var dt_row=dt_y*dt_w4; for(var dt_x=0;dt_x<W;dt_x++){ var dt_i=dt_row+dt_x*4; if(d[dt_i+3]===0)continue; var dt_dcx=dt_x-(Math.floor(dt_x/dt_sz)*dt_sz+dt_sz/2); if(dt_dcx*dt_dcx+dt_dcy*dt_dcy<=dt_r2){ d[dt_i]=d[dt_i]*dt_ia+dt_col[0]*dt_a; d[dt_i+1]=d[dt_i+1]*dt_ia+dt_col[1]*dt_a; d[dt_i+2]=d[dt_i+2]*dt_ia+dt_col[2]*dt_a; } } } },
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ var lgAmt=FM.evalProp(p.amount,t); if(lgAmt==null)lgAmt=0.6; lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } },
     longshadow: function(d,W,H,p,t){ var lsLen=FM.evalProp(p.length,t); if(lsLen==null)lsLen=30; lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=d.slice(); var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
-    halftonelines: function(d,W,H,p,t){ var htlSize=FM.evalProp(p.size,t); if(htlSize==null||isNaN(htlSize))htlSize=8; htlSize=Math.max(3,Math.min(40,Math.round(htlSize))); var htlW4=W*4; for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4; for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue; var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1; var htlThresh=(1-htlL)*htlSize; var htlV=(htlRowMod<htlThresh)?0:255; d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
+    halftonelines: function(d,W,H,p,t,ps){ var htlSize=FM.evalProp(p.size,t); if(htlSize==null||isNaN(htlSize))htlSize=8; htlSize=Math.max(3,Math.min(40,Math.round(htlSize))); htlSize=Math.max(1,Math.round(htlSize*(ps||1))); var htlW4=W*4; for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4; for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue; var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1; var htlThresh=(1-htlL)*htlSize; var htlV=(htlRowMod<htlThresh)?0:255; d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
     clouds: function(d,W,H,p,t){ var cl_amt=FM.evalProp(p.amount,t); if(cl_amt==null)cl_amt=0.6; cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=cl_x+cl_ox; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_y/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_y-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
     rays: function(d,W,H,p,t){ var raysCount=FM.evalProp(p.count,t); if(raysCount==null)raysCount=16; raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t){ var stp_size=FM.evalProp(p.size,t); if(stp_size==null)stp_size=16; stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size)); var stp_half=stp_period*0.5; var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2]; var stp_k=0.6,stp_ik=1-stp_k; for(var stp_y=0;stp_y<H;stp_y++){ var stp_row=stp_y*W*4; for(var stp_x=0;stp_x<W;stp_x++){ var stp_i=stp_row+stp_x*4; if(d[stp_i+3]<=0)continue; var stp_m=(stp_x+stp_y)%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
@@ -1612,7 +1637,7 @@ window.FM = window.FM || {};
     edgeglow: function(d,W,H,p,t){ var egAmt=FM.evalProp(p.amount,t); if(egAmt==null)egAmt=1.5; egAmt=Math.max(0,Math.min(4,egAmt)); if(egAmt<=0)return; var egCol=hexToRGB(p.color); if(!egCol)egCol=[0,255,234]; var egW4=W*4, egN=W*H, s=d.slice(); var egLum=new Float32Array(egN); var egi,egx,egy,egp; for(egi=0;egi<egN;egi++){ egp=egi*4; egLum[egi]=0.299*s[egp]+0.587*s[egp+1]+0.114*s[egp+2]; } var egEdge=new Float32Array(egN); for(egy=0;egy<H;egy++){ var egym=egy>0?egy-1:0, egyp=egy<H-1?egy+1:H-1; for(egx=0;egx<W;egx++){ var egxm=egx>0?egx-1:0, egxp=egx<W-1?egx+1:W-1; var egTL=egLum[egym*W+egxm], egT=egLum[egym*W+egx], egTR=egLum[egym*W+egxp], egL=egLum[egy*W+egxm], egR=egLum[egy*W+egxp], egBL=egyp*W+egxm, egB=egyp*W+egx, egBR=egyp*W+egxp; var egGx=(egTR+2*egR+egLum[egBR])-(egTL+2*egL+egLum[egBL]); var egGy=(egLum[egBL]+2*egLum[egB]+egLum[egBR])-(egTL+2*egT+egTR); egEdge[egy*W+egx]=Math.sqrt(egGx*egGx+egGy*egGy); } } var egRad=3, egDiv=egRad*2+1; var egTmp=new Float32Array(egN), egBlur=new Float32Array(egN); for(egy=0;egy<H;egy++){ var egAcc=0, egRow=egy*W, egk; for(egk=-egRad;egk<=egRad;egk++){ var egcx=egk<0?0:(egk>W-1?W-1:egk); egAcc+=egEdge[egRow+egcx]; } for(egx=0;egx<W;egx++){ egTmp[egRow+egx]=egAcc/egDiv; var egout=egx-egRad, egin=egx+egRad+1; var egoc=egout<0?0:(egout>W-1?W-1:egout); var egic=egin<0?0:(egin>W-1?W-1:egin); egAcc+=egEdge[egRow+egic]-egEdge[egRow+egoc]; } } for(egx=0;egx<W;egx++){ var egAccV=0, egj; for(egj=-egRad;egj<=egRad;egj++){ var egcy=egj<0?0:(egj>H-1?H-1:egj); egAccV+=egTmp[egcy*W+egx]; } for(egy=0;egy<H;egy++){ egBlur[egy*W+egx]=egAccV/egDiv; var egouty=egy-egRad, eginy=egy+egRad+1; var egocy=egouty<0?0:(egouty>H-1?H-1:egouty); var egicy=eginy<0?0:(eginy>H-1?H-1:eginy); egAccV+=egTmp[egicy*W+egx]-egTmp[egocy*W+egx]; } } var egcr=egCol[0], egcg=egCol[1], egcb=egCol[2]; for(egi=0;egi<egN;egi++){ egp=egi*4; if(d[egp+3]<=0)continue; var egg=(egBlur[egi]/255)*egAmt; if(egg<=0)continue; var egsr=egcr*egg, egsg=egcg*egg, egsb=egcb*egg; if(egsr>255)egsr=255; if(egsg>255)egsg=255; if(egsb>255)egsb=255; d[egp]=255-(255-d[egp])*(255-egsr)/255; d[egp+1]=255-(255-d[egp+1])*(255-egsg)/255; d[egp+2]=255-(255-d[egp+2])*(255-egsb)/255; } },
     contourlines: function(d,W,H,p,t){ var clLv=Math.round(FM.evalProp(p.levels,t)||8); if(clLv<2)clLv=2; if(clLv>24)clLv=24; var clS=d.slice(),clW4=W*4,clScl=clLv/255; var clBand=new Int16Array(W*H); for(var clI=0,clJ=0;clI<clS.length;clI+=4,clJ++){ var clLum=0.299*clS[clI]+0.587*clS[clI+1]+0.114*clS[clI+2],clB=Math.floor(clLum*clScl); if(clB>=clLv)clB=clLv-1; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ d[clIdx]=0; d[clIdx+1]=0; d[clIdx+2]=0; } } } },
     grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4; for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_h=(gr_x*73856093)^(gr_y*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216; var gr_h2=(gr_x*83492791)^(gr_y*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216; var gr_mul=1-gr_mot*(gr_n-0.5); if(gr_n<gr_thr){ gr_mul*=(0.25+0.6*gr_n2); } if(gr_mul<0)gr_mul=0; gr_d[gr_i]=gr_d[gr_i]*gr_mul; gr_d[gr_i+1]=gr_d[gr_i+1]*gr_mul; gr_d[gr_i+2]=gr_d[gr_i+2]*gr_mul; } } },
-    iridescence: function(d,W,H,p,t){ var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7; var iri_scP=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var iri_sc=iri_scP===100?120:120*(iri_scP/100); var iri_bd=p.bands==null?3:FM.evalProp(p.bands,t); var iri_sp=p.speed==null?0:FM.evalProp(p.speed,t); var iri_ph=iri_sp*t; iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return; for(var iri_y=0;iri_y<H;iri_y++){ var iri_row=iri_y*W*4; for(var iri_x=0;iri_x<W;iri_x++){ var iri_i=iri_row+iri_x*4; if(d[iri_i+3]<=0)continue; var iri_r=d[iri_i],iri_g=d[iri_i+1],iri_b=d[iri_i+2]; var iri_l=(0.299*iri_r+0.587*iri_g+0.114*iri_b)/255; var iri_h=(iri_l*iri_bd+(iri_x+iri_y)/iri_sc+iri_ph); iri_h=iri_h-Math.floor(iri_h); var iri_h6=iri_h*6; var iri_cr=Math.abs(iri_h6-3)-1; iri_cr=iri_cr<0?0:(iri_cr>1?1:iri_cr); var iri_cg=2-Math.abs(iri_h6-2); iri_cg=iri_cg<0?0:(iri_cg>1?1:iri_cg); var iri_cb=2-Math.abs(iri_h6-4); iri_cb=iri_cb<0?0:(iri_cb>1?1:iri_cb); var iri_sr=iri_cr*iri_l*255,iri_sg=iri_cg*iri_l*255,iri_sb=iri_cb*iri_l*255; d[iri_i]=iri_r+(iri_sr-iri_r)*iri_amt; d[iri_i+1]=iri_g+(iri_sg-iri_g)*iri_amt; d[iri_i+2]=iri_b+(iri_sb-iri_b)*iri_amt; } } },
+    iridescence: function(d,W,H,p,t,ps){ var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7; var iri_scP=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var iri_sc=(iri_scP===100?120:120*(iri_scP/100))*(ps||1); var iri_bd=p.bands==null?3:FM.evalProp(p.bands,t); var iri_sp=p.speed==null?0:FM.evalProp(p.speed,t); var iri_ph=iri_sp*t; iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return; for(var iri_y=0;iri_y<H;iri_y++){ var iri_row=iri_y*W*4; for(var iri_x=0;iri_x<W;iri_x++){ var iri_i=iri_row+iri_x*4; if(d[iri_i+3]<=0)continue; var iri_r=d[iri_i],iri_g=d[iri_i+1],iri_b=d[iri_i+2]; var iri_l=(0.299*iri_r+0.587*iri_g+0.114*iri_b)/255; var iri_h=(iri_l*iri_bd+(iri_x+iri_y)/iri_sc+iri_ph); iri_h=iri_h-Math.floor(iri_h); var iri_h6=iri_h*6; var iri_cr=Math.abs(iri_h6-3)-1; iri_cr=iri_cr<0?0:(iri_cr>1?1:iri_cr); var iri_cg=2-Math.abs(iri_h6-2); iri_cg=iri_cg<0?0:(iri_cg>1?1:iri_cg); var iri_cb=2-Math.abs(iri_h6-4); iri_cb=iri_cb<0?0:(iri_cb>1?1:iri_cb); var iri_sr=iri_cr*iri_l*255,iri_sg=iri_cg*iri_l*255,iri_sb=iri_cb*iri_l*255; d[iri_i]=iri_r+(iri_sr-iri_r)*iri_amt; d[iri_i+1]=iri_g+(iri_sg-iri_g)*iri_amt; d[iri_i+2]=iri_b+(iri_sb-iri_b)*iri_amt; } } },
     // ---- batch 11 (multi-param pixel) ----
     // (motionblur moved to CANVAS_FX: the per-pixel 9-tap JS loop cost ~28ms/frame at 1080×1920 —
     //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
@@ -1631,7 +1656,7 @@ window.FM = window.FM || {};
     flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = Math.floor(fl_tt * fl_spd); var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
     pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_speed*po_tt); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
     dissolve: function(d,W,H,p,t){ var dsAmt=FM.evalProp(p.amount,t); if(dsAmt==null)dsAmt=0.5; if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return; var dsThr=(dsAmt>=1)?4294967296:Math.floor(dsAmt*4294967296); for(var dsY=0;dsY<H;dsY++){ for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue; var dsH=(dsX*374761393+dsY*668265263)>>>0; dsH=(dsH^(dsH>>>13))>>>0; dsH=(dsH*1274126177)>>>0; dsH=(dsH^(dsH>>>16))>>>0; if(dsH<dsThr)d[dsI+3]=0; } } },
-    blockdissolve: function(d, W, H, p, t){ var bd_amt = FM.evalProp(p.amount, t); if(bd_amt==null) bd_amt = 0.5; bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = FM.evalProp(p.size, t); if(bd_size==null) bd_size = 16; bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return; var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
+    blockdissolve: function(d, W, H, p, t, ps){ var bd_amt = FM.evalProp(p.amount, t); if(bd_amt==null) bd_amt = 0.5; bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = FM.evalProp(p.size, t); if(bd_size==null) bd_size = 16; bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size*(ps||1)); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return; var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
     wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den; for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
     radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = W/2, rw_cy = H/2; for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
@@ -1665,7 +1690,7 @@ window.FM = window.FM || {};
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=cv(r,0.10,0.90), ng=cv(g,0.06,0.95), nb=cv(b,-0.12,1.10); d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
     lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15; var lx=W*(0.85+0.12*Math.sin(ph)), ly=H*(0.12+0.10*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H); for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*1.8; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
     letterbox: function(d,W,H,p,t){ var s=FM.evalProp(p.size,t); if(s==null)s=14; if(s<0)s=0; if(s>48)s=48; var bar=Math.round(H*s/100); if(bar<=0)return; for(var y=0;y<H;y++){ if(y>=bar && y<H-bar) continue; var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; d[i]=0; d[i+1]=0; d[i+2]=0; if(d[i+3]<255)d[i+3]=255; } } },
-    border: function(d,W,H,p,t){ var w=FM.evalProp(p.width,t); if(w==null)w=10; w=Math.round(w); if(w<1)w=1; var mx=Math.floor(Math.min(W,H)/2); if(w>mx)w=mx; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; for(var y=0;y<H;y++){ var ey=(y<w||y>=H-w); var row=y*W*4; for(var x=0;x<W;x++){ if(ey||x<w||x>=W-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } } },
+    border: function(d,W,H,p,t,ps){ var w=FM.evalProp(p.width,t); if(w==null)w=10; w=Math.round(w*(ps||1)); if(w<1)w=1; var mx=Math.floor(Math.min(W,H)/2); if(w>mx)w=mx; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; for(var y=0;y<H;y++){ var ey=(y<w||y>=H-w); var row=y*W*4; for(var x=0;x<W;x++){ if(ey||x<w||x>=W-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } } },
     // ---- batch 26 (AM parity fill-ins) ----
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
@@ -1793,15 +1818,17 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see plateScale — 1 for export/1:1, smaller for a reduced preview
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _wpDepth++;
     try {
       if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
       const wA = _wpPool[d].A, wB = _wpPool[d].B;
       if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
       if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
+      wA.__fmRS = ps; wA.__fmOX = 0; wA.__fmOY = 0;
       const actx = wA.getContext('2d');
-      baseT(actx); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, PW, PH);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
@@ -1810,7 +1837,7 @@ window.FM = window.FM || {};
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t);
+          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps);
           let sx = m[0] | 0, sy = m[1] | 0;
           if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
           if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
@@ -1824,7 +1851,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(wB, 0, 0);
+      ctx.drawImage(wB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(wB,0,0) at scale 1
       ctx.restore();
     } finally { _wpDepth--; }
   }
@@ -1966,7 +1993,7 @@ window.FM = window.FM || {};
     bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
     glass: function(x,y,W,H,cx,cy,maxR,p,t){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
     // ---- batch 9 (warp) ----
-    curl: function(x,y,W,H,cx,cy,maxR,p,t){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
+    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=Math.max(1,(p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)))*(ps||1)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
     fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t){ var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; var fwNx=Math.sin(x/57+y/40)+Math.sin(x/29-y/53)*0.6+Math.sin(x/15+y/19)*0.35; var fwNy=Math.cos(x/47-y/61)+Math.sin(x/35+y/27)*0.6+Math.cos(x/13-y/21)*0.35; return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
     // ---- batch 26: Tunnel — radial inversion about the centre (inside turns outside), blended by
@@ -1976,7 +2003,7 @@ window.FM = window.FM || {};
     gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10; var grCellW=W/grCount, grCellH=H/grCount; var grGx=(x-Math.floor(x/grCellW)*grCellW)/grCellW; var grGy=(y-Math.floor(y/grCellH)*grCellH)/grCellH; return [grGx*W, grGy*H]; },
     linearrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var lr_count=Math.round(FM.evalProp(p.count,t)||4); if(lr_count<1)lr_count=1; if(lr_count>12)lr_count=12; var lr_cellW=W/lr_count; var lr_lx=(x-Math.floor(x/lr_cellW)*lr_cellW)/lr_cellW; return [lr_lx*W, y]; },
     radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16; var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy); var rr_seg=Math.PI*2/rr_count; var rr_a=Math.atan2(rr_dy,rr_dx); var rr_a2=rr_a-Math.floor(rr_a/rr_seg)*rr_seg; return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
-    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; if(mt_size<1) mt_size=1; var mt_cix=Math.floor(x/mt_size); var mt_lx=x-mt_cix*mt_size; if(mt_cix&1) mt_lx=mt_size-mt_lx; var mt_ciy=Math.floor(y/mt_size); var mt_ly=y-mt_ciy*mt_size; if(mt_ciy&1) mt_ly=mt_size-mt_ly; var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
+    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; mt_size*=(ps||1); if(mt_size<1) mt_size=1; var mt_cix=Math.floor(x/mt_size); var mt_lx=x-mt_cix*mt_size; if(mt_cix&1) mt_lx=mt_size-mt_lx; var mt_ciy=Math.floor(y/mt_size); var mt_ly=y-mt_ciy*mt_size; if(mt_ciy&1) mt_ly=mt_size-mt_ly; var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
     // ---- batch 18 (warp) ----
     innerpinch: function(x,y,W,H,cx,cy,maxR,p,t){ var ip_a=FM.evalProp(p.amount,t); if(ip_a===null||ip_a===undefined)ip_a=0.5; if(ip_a<-1)ip_a=-1; if(ip_a>1)ip_a=1; var ip_dx=x-cx, ip_dy=y-cy; var ip_r=Math.hypot(ip_dx,ip_dy); var ip_rad=maxR*0.6; if(ip_rad<=0)return [x,y]; var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8; return [cx+ip_dx*ip_k, cy+ip_dy*ip_k]; },
     // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), AM featured ----
@@ -1985,7 +2012,7 @@ window.FM = window.FM || {};
     // Turbulent Displace: domain-warped value-noise field pushes each pixel — organic churn, distinct
     // from fractalwarp's plain sum-of-sines (this warps the noise input by more noise → curlier). t
     // scrolls the field so it boils over time. Deterministic (no random).
-    turbulentdisplace: function(x,y,W,H,cx,cy,maxR,p,t){ var td_a=FM.evalProp(p.amount,t); if(td_a==null)td_a=30; if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y]; var td_sc=FM.evalProp(p.scale,t); if(td_sc==null)td_sc=60; if(td_sc<10)td_sc=10; var td_ph=t*0.6; function td_n(u,v){ return Math.sin(u)*Math.cos(v*1.3)+Math.sin(u*2.1+v)*0.5+Math.cos(u*0.5-v*1.7)*0.35; } var td_wx=td_n(x/td_sc+td_ph, y/td_sc), td_wy=td_n(x/td_sc, y/td_sc-td_ph*0.8); var td_dx=td_n(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_n(x/td_sc-td_wy, y/td_sc+td_wx+1.7); return [x+td_dx*td_a, y+td_dy*td_a]; },
+    turbulentdisplace: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var td_a=FM.evalProp(p.amount,t); if(td_a==null)td_a=30; if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y]; var td_sc=FM.evalProp(p.scale,t); if(td_sc==null)td_sc=60; if(td_sc<10)td_sc=10; td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1)); var td_ph=t*0.6; function td_n(u,v){ return Math.sin(u)*Math.cos(v*1.3)+Math.sin(u*2.1+v)*0.5+Math.cos(u*0.5-v*1.7)*0.35; } var td_wx=td_n(x/td_sc+td_ph, y/td_sc), td_wy=td_n(x/td_sc, y/td_sc-td_ph*0.8); var td_dx=td_n(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_n(x/td_sc-td_wy, y/td_sc+td_wx+1.7); return [x+td_dx*td_a, y+td_dy*td_a]; },
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
     // sampled from a THINNER source band (compress in → stretch out), feathered at the edges so it
     // blends. y/height are % of frame. Outside the band = identity.
@@ -1995,7 +2022,7 @@ window.FM = window.FM || {};
     tileshift: function(x,y,W,H,cx,cy,maxR,p,t){ var ts_sz=FM.evalProp(p.size,t); if(ts_sz==null)ts_sz=120; if(ts_sz<8)ts_sz=8; var ts_off=FM.evalProp(p.amount,t); if(ts_off==null)ts_off=0.5; var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
     // Tile Rotate: chop into tiles, spin each tile's CONTENT about its own centre by Angle (× a subtle
     // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
-    tilerotate: function(x,y,W,H,cx,cy,maxR,p,t){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
+    tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
   };
 
   // ================== CANVAS_FX: 3D solids + Move/Transform ==================
@@ -2072,15 +2099,20 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see plateScale — 1 for export/1:1, smaller for a reduced preview
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     if (!_cfA) _cfA = document.createElement('canvas');
     if (!_cfB) _cfB = document.createElement('canvas');
     // resize only on change — assigning .width even to the same value frees+reallocates the ~8MB
     // backing store, and this runs per canvas-effect per FRAME (wiggle/3D/tiles… = constant churn)
     if (_cfA.width !== W || _cfA.height !== H) { _cfA.width = W; _cfA.height = H; }
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
+    // A is the drawLayer target, so it carries the plate scale. B deliberately does NOT: every
+    // canvas-effect fn works in the plate's own pixels (bbox, tile steps, offsets), so B must stay
+    // an identity surface or the fn's coordinates would be scaled a second time.
+    _cfA.__fmRS = ps; _cfA.__fmOX = 0; _cfA.__fmOY = 0;
     const actx = _cfA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -2099,17 +2131,17 @@ window.FM = window.FM || {};
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     baseT(bctx); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer, ps);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     baseT(ctx);
     // Nested canvas fx (two+ stacked): dst IS our scratch A, still holding this call's clean-layer
     // render — wipe it so only the effected result goes up, not a ghost of the plain layer under it.
-    if (ctx.canvas === _cfA) ctx.clearRect(0, 0, W, H);
+    if (ctx.canvas === _cfA) ctx.clearRect(0, 0, PW, PH);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    ctx.drawImage(_cfB, 0, 0);
+    ctx.drawImage(_cfB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(_cfB,0,0) at scale 1
     ctx.restore();
   }
   // ---- 3D layer tilt (rotationX / rotationY) -------------------------------------------------------
@@ -3048,12 +3080,12 @@ window.FM = window.FM || {};
       B.drawImage(A, 0, 0);
     },
     // ---- Move / Transform (motion about the layer's rendered bounds) ----
-    wiggle: function (A, B, W, H, bb, p, t, tl) {
-      const amt = fparam(p, 'amount', 40, t), spd = fparam(p, 'speed', 2, t);
+    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const amt = fparam(p, 'amount', 40, t) * (ps || 1), spd = fparam(p, 'speed', 2, t);
       B.save(); B.translate(amt * wnoise(tl * spd), amt * wnoise(tl * spd + 100)); B.drawImage(A, 0, 0); B.restore();
     },
-    shake: function (A, B, W, H, bb, p, t, tl) {
-      const amt = fparam(p, 'amount', 20, t), spd = fparam(p, 'speed', 12, t), tw = fparam(p, 'twist', 4, t);
+    shake: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const amt = fparam(p, 'amount', 20, t) * (ps || 1), spd = fparam(p, 'speed', 12, t), tw = fparam(p, 'twist', 4, t);
       // Fallbacks are the NO-OP values, not the schema defaults — an old instance (amount/speed/twist
       // only) must keep rendering byte-identical to the original smooth-noise shake.
       const zoom = Math.max(0, Math.min(60, fparam(p, 'zoom', 0, t)));
@@ -3126,12 +3158,13 @@ window.FM = window.FM || {};
       B.translate(px, py); B.scale(s, s); B.translate(-px, -py);
       B.drawImage(A, 0, 0); B.restore();
     },
-    drift: function (A, B, W, H, bb, p, t, tl) {
-      const vx = fparam(p, 'x', 120, t), vy = fparam(p, 'y', 0, t);
+    drift: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const k = ps || 1;   // the plate is in its own pixels — a distance in project px must ride the scale
+      const vx = fparam(p, 'x', 120, t) * k, vy = fparam(p, 'y', 0, t) * k;
       B.save(); B.translate(vx * tl, vy * tl); B.drawImage(A, 0, 0); B.restore();
     },
-    orbit: function (A, B, W, H, bb, p, t, tl) {
-      const r = fparam(p, 'radius', 80, t), spd = fparam(p, 'speed', 0.5, t);
+    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const r = fparam(p, 'radius', 80, t) * (ps || 1), spd = fparam(p, 'speed', 0.5, t);
       const a = 2 * Math.PI * spd * tl;
       B.save(); B.translate(r * Math.cos(a), r * Math.sin(a)); B.drawImage(A, 0, 0); B.restore();
     },
@@ -3316,13 +3349,16 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height, q = Math.max(2, Math.round(levels));
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);   // see plateScale
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const q = Math.max(2, Math.round(levels));
     if (!_psA) _psA = document.createElement('canvas');
     if (!_psB) _psB = document.createElement('canvas');
     if (_psA.width !== W || _psA.height !== H) { _psA.width = W; _psA.height = H; }
     if (_psB.width !== W || _psB.height !== H) { _psB.width = W; _psB.height = H; }
+    _psA.__fmRS = ps; _psA.__fmOX = 0; _psA.__fmOY = 0;
     const actx = _psA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'posterize'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -3334,8 +3370,8 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (ctx.canvas === _psA) ctx.clearRect(0, 0, W, H);   // two stacked Posterizes: clear our own scratch so B replaces, not double-composites (see drawTint)
-    ctx.drawImage(_psB, 0, 0);
+    if (ctx.canvas === _psA) ctx.clearRect(0, 0, PW, PH);   // two stacked Posterizes: clear our own scratch so B replaces, not double-composites (see drawTint)
+    ctx.drawImage(_psB, 0, 0, PW, PH);   // plate → project units; identical at scale 1
     ctx.restore();
   }
 
@@ -3382,13 +3418,16 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height, am = clamp01(amount), C = hexToRGB(colorHex || '#ff3366');
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);   // see plateScale
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const am = clamp01(amount), C = hexToRGB(colorHex || '#ff3366');
     if (!_tiA) _tiA = document.createElement('canvas');
     if (!_tiB) _tiB = document.createElement('canvas');
     if (_tiA.width !== W || _tiA.height !== H) { _tiA.width = W; _tiA.height = H; }
     if (_tiB.width !== W || _tiB.height !== H) { _tiB.width = W; _tiB.height = H; }
+    _tiA.__fmRS = ps; _tiA.__fmOX = 0; _tiA.__fmOY = 0;
     const actx = _tiA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'tint'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -3400,8 +3439,8 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (ctx.canvas === _tiA) ctx.clearRect(0, 0, W, H);   // two stacked Tints: ctx IS our scratch A (holds the clean layer) → clear so B replaces instead of double-compositing the edges
-    ctx.drawImage(_tiB, 0, 0);
+    if (ctx.canvas === _tiA) ctx.clearRect(0, 0, PW, PH);   // two stacked Tints: ctx IS our scratch A (holds the clean layer) → clear so B replaces instead of double-compositing the edges
+    ctx.drawImage(_tiB, 0, 0, PW, PH);
     ctx.restore();
   }
 
@@ -3412,13 +3451,16 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height, cut = clamp01(level) * 255;
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);   // see plateScale
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const cut = clamp01(level) * 255;
     if (!_thA) _thA = document.createElement('canvas');
     if (!_thB) _thB = document.createElement('canvas');
     if (_thA.width !== W || _thA.height !== H) { _thA.width = W; _thA.height = H; }
     if (_thB.width !== W || _thB.height !== H) { _thB.width = W; _thB.height = H; }
+    _thA.__fmRS = ps; _thA.__fmOX = 0; _thA.__fmOY = 0;
     const actx = _thA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'threshold'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -3430,8 +3472,8 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (ctx.canvas === _thA) ctx.clearRect(0, 0, W, H);   // two stacked Thresholds: clear our own scratch so B replaces, not double-composites (see drawTint)
-    ctx.drawImage(_thB, 0, 0);
+    if (ctx.canvas === _thA) ctx.clearRect(0, 0, PW, PH);   // two stacked Thresholds: clear our own scratch so B replaces, not double-composites (see drawTint)
+    ctx.drawImage(_thB, 0, 0, PW, PH);   // plate → project units; identical at scale 1
     ctx.restore();
   }
 
@@ -3442,13 +3484,16 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height, am = clamp01(amount), A = hexToRGB(shadowHex || '#241a52'), B = hexToRGB(hiHex || '#ff9e5e');
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);   // see plateScale
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const am = clamp01(amount), A = hexToRGB(shadowHex || '#241a52'), B = hexToRGB(hiHex || '#ff9e5e');
     if (!_duA) _duA = document.createElement('canvas');
     if (!_duB) _duB = document.createElement('canvas');
     if (_duA.width !== W || _duA.height !== H) { _duA.width = W; _duA.height = H; }
     if (_duB.width !== W || _duB.height !== H) { _duB.width = W; _duB.height = H; }
+    _duA.__fmRS = ps; _duA.__fmOX = 0; _duA.__fmOY = 0;
     const actx = _duA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'duotone'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -3460,8 +3505,8 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (ctx.canvas === _duA) ctx.clearRect(0, 0, W, H);   // two stacked Duotones: clear our own scratch so B replaces, not double-composites (see drawTint)
-    ctx.drawImage(_duB, 0, 0);
+    if (ctx.canvas === _duA) ctx.clearRect(0, 0, PW, PH);   // two stacked Duotones: clear our own scratch so B replaces, not double-composites (see drawTint)
+    ctx.drawImage(_duB, 0, 0, PW, PH);   // plate → project units; identical at scale 1
     ctx.restore();
   }
 

@@ -116,6 +116,16 @@ window.FM = window.FM || {};
     return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto' };
   };
 
+  /* The comp is almost always DISPLAYED smaller than its own pixel size — a 1080×1920 project sits
+   * in a stage a few hundred pixels wide, and on a phone in one barely 300 device pixels across.
+   * The old floor ("never render BELOW project res") meant painting ~2.1 megapixels to show ~0.1,
+   * and every pixel effect paid for all of them. Render a bit ABOVE display size instead and let
+   * the browser do the last short step: PREVIEW_SS is the supersample margin that keeps shape and
+   * text edges clean, and it never pushes past 1 (above that the canvas is already denser than the
+   * screen, so extra pixels buy nothing and cost real time).
+   * 'detail' playback quality keeps the old never-below-project floor for anyone who wants it. */
+  const PREVIEW_SS = 1.5;
+  const MIN_PREVIEW_SCALE = 0.34;
   function previewScale() {
     const P = FM.scene.project;
     const dpr = window.devicePixelRatio || 1;
@@ -123,11 +133,14 @@ window.FM = window.FM || {};
     const wrap = document.getElementById('canvas-wrap');
     const cssW = wrap ? wrap.clientWidth : 0;
     if (!cssW || !P.width) return 1;
+    const detail = ((FM.settings && FM.settings.get('playbackQuality')) || 'auto') === 'detail';
     // device pixels the comp actually occupies on screen, expressed per project pixel
     let s = (cssW * dpr * zoom) / P.width;
-    s = Math.max(1, Math.min(4, s));                       // never render BELOW project res, never above 4x
+    if (!detail && s < 1) s = Math.min(1, s * PREVIEW_SS);   // downscaling → keep a little headroom for edges
+    const floor = detail ? 1 : MIN_PREVIEW_SCALE;            // a floor at all, so a tiny window is still legible
+    s = Math.max(floor, Math.min(4, s));                     // never above 4x
     const budget = Math.sqrt(MAX_PREVIEW_PX / (P.width * P.height));
-    if (s > budget) s = Math.max(1, budget);
+    if (s > budget) s = Math.max(floor, budget);
     // While playing, the adaptive tier may take it BELOW project resolution — that's the trade, and
     // it's what keeps the playhead moving evenly on a phone.
     const q = playQualityFactor();
