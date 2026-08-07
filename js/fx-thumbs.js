@@ -245,6 +245,13 @@ window.FM = window.FM || {};
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 15; mv.params.speed = 3; hero.effects.unshift(mv); }
     },
+    // Frame Stutter has nothing to hold unless something is moving, and it only reads as STEPPY
+    // next to motion that would otherwise be smooth. Same inner-orbit trick as the footage blur.
+    framestutter: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 17; mv.params.speed = 1.4; hero.effects.unshift(mv); }
+      hero.effects[hero.effects.length - 1].params.rate = 4;
+    },
     // Copy Background aligns the copied backdrop to the COMP, so a straight rectangle sitting on
     // that backdrop is invisible — the tile just looks like the untouched picture. Rotating the
     // layer rotates the copy with it, which is what makes "this shape now holds what's behind it"

@@ -553,6 +553,26 @@ window.FM = window.FM || {};
       { key: 'spread', label: 'Spread', min: 0.5, max: 20, step: 0.5, def: 5, unit: '%' },
       { key: 'knee', label: 'Falloff', min: 1, max: 6, step: 0.1, def: 2.4 },
     ], color: true, defColor: '#ff3a14', colorLabel: 'Halo' },
+    // ---- batch 32: two time/impact effects ----
+    // Frame Stutter — hold each frame for 1/rate of a second. Stop-motion, anime step, or a strobe
+    // punched on the beat. Rate is keyframable, so 24 → 6 → 24 is two keyframes.
+    { type: 'framestutter', label: 'Frame Stutter', desc: 'Holds each frame instead of playing every one — the choppy stop-motion or anime step. Strobe blanks the gaps; Trail leaves a ghost of the frame before.', params: [
+      { key: 'rate', label: 'Frame rate', min: 1, max: 30, step: 0.5, def: 8, unit: 'fps' },
+      { key: 'mode', label: 'Mode', options: [[0, 'Hold'], [1, 'Strobe'], [2, 'Hold + Trail']], def: 0 },
+      { key: 'blend', label: 'Blend live', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'duty', label: 'Strobe on-time', min: 0.05, max: 1, step: 0.01, def: 0.5, overriddenBy: 'mode' },
+    ] },
+    // Shockwave — ONE expanding pressure ring that travels out and leaves frame. Keyframe Radius and
+    // that is the whole move. Not Circular Ripple, which is an infinite centre-locked standing sine.
+    { type: 'shockwave', label: 'Shockwave', desc: 'A single pressure ring that expands out of a point and leaves the frame. Keyframe the Radius — that is the whole move.', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 150, step: 1, def: 40, unit: '%' },
+      { key: 'width', label: 'Band', min: 1, max: 60, step: 1, def: 12, unit: '%' },
+      { key: 'strength', label: 'Strength', min: 0, max: 120, step: 1, def: 40, unit: 'px' },
+      { key: 'rim', label: 'Rim light', min: 0, max: 1, step: 0.02, def: 0.4 },
+      { key: 'chroma', label: 'Chroma split', min: 0, max: 1, step: 0.02, def: 0.35 },
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1248,7 +1268,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, halation: 1 };
+    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1356,6 +1376,59 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    /* Shockwave — one expanding pressure ring, not a standing wave. Circular Ripple is an infinite
+     * centre-locked sine over the whole frame; this is a single band that travels out and leaves.
+     * Cost tracks the RING, not the frame: only the annulus bounding box is walked, so a wave that
+     * has expanded past the corners costs nothing at all. */
+    shockwave: function (d, W, H, p, t, ps) {
+      const s = ps == null ? 1 : ps;
+      const maxR = Math.hypot(W, H) / 2 || 1;
+      const rad = (p.radius == null ? 40 : FM.evalProp(p.radius, t)) / 100 * maxR;
+      const wid = Math.max(1, (p.width == null ? 12 : FM.evalProp(p.width, t)) / 100 * maxR);
+      const str = (p.strength == null ? 40 : FM.evalProp(p.strength, t)) * s;
+      const rim = clamp01(p.rim == null ? 0.4 : FM.evalProp(p.rim, t));
+      const chroma = clamp01(p.chroma == null ? 0.35 : FM.evalProp(p.chroma, t));
+      const cx = W * (p.x == null ? 50 : FM.evalProp(p.x, t)) / 100;
+      const cy = H * (p.y == null ? 50 : FM.evalProp(p.y, t)) / 100;
+      if (str <= 0 && rim <= 0) return;
+      const R0 = Math.max(0, rad - wid), R1 = rad + wid;
+      const x0 = Math.max(0, Math.floor(cx - R1)), x1 = Math.min(W, Math.ceil(cx + R1) + 1);
+      const y0 = Math.max(0, Math.floor(cy - R1)), y1 = Math.min(H, Math.ceil(cy + R1) + 1);
+      if (x1 <= x0 || y1 <= y0) return;
+      const src = d.slice(), R0s = R0 * R0, R1s = R1 * R1;
+      for (let y = y0; y < y1; y++) {
+        const dy = y - cy, dy2 = dy * dy;
+        for (let x = x0; x < x1; x++) {
+          const dx = x - cx, r2 = dx * dx + dy2;
+          if (r2 < R0s || r2 > R1s) continue;
+          const r = Math.sqrt(r2);
+          const dr = (r - rad) / wid;                       // -1 behind the crest .. +1 ahead of it
+          // (1 - dr), not (1 - |dr|): the wake behind the ring is stronger than the front, which is
+          // what reads as pressure rather than as a symmetric bulge.
+          const g = Math.exp(-dr * dr * 2.2) * (1 - dr) * 0.5;
+          const ir = 1 / (r || 1), ux = dx * ir, uy = dy * ir;
+          const off = g * str;
+          const di = (y * W + x) * 4;
+          // Each channel samples from its own distance, so the ring fringes the way a real
+          // pressure front through glass does. chroma 0 makes all three offsets identical.
+          const kR = 1 + chroma * 0.28, kB = 1 - chroma * 0.28;
+          for (let ch = 0; ch < 3; ch++) {
+            const k = ch === 0 ? kR : (ch === 2 ? kB : 1);
+            let sx = Math.round(x - ux * off * k), sy = Math.round(y - uy * off * k);
+            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+            d[di + ch] = src[(sy * W + sx) * 4 + ch];
+          }
+          const sy0 = Math.round(y - uy * off), sx0 = Math.round(x - ux * off);
+          const ai = ((sy0 < 0 ? 0 : sy0 >= H ? H - 1 : sy0) * W + (sx0 < 0 ? 0 : sx0 >= W ? W - 1 : sx0)) * 4 + 3;
+          d[di + 3] = src[ai];
+          if (rim > 0) {
+            const lift = rim * Math.exp(-dr * dr * 6) * 255;
+            d[di] += lift; d[di + 1] += lift; d[di + 2] += lift;   // Uint8ClampedArray clamps for us
+          }
+        }
       }
     },
     solarize: function (d, W, H, p, t) {
@@ -2218,7 +2291,7 @@ window.FM = window.FM || {};
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -2835,6 +2908,45 @@ window.FM = window.FM || {};
       B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
       B.drawImage(_halC, 0, 0, W, H);
       B.restore();
+    },
+    /* ---- Frame Stutter -------------------------------------------------------------------------
+     * Hold each frame for 1/rate of a second: stop-motion, the anime step, or a strobe on the beat.
+     *
+     * It is temporal, so it keeps ONE held plate per layer in the same bounded LRU the footage blur
+     * uses — under its own ':fs' key, because a layer can carry both and they must not overwrite
+     * each other's canvas. Playback and export both advance frame by frame, so the held plate is
+     * always the frame from the start of the current quantum. Seeking straight into the middle of
+     * one shows the live frame instead of a stale one, which is the honest fallback: the next
+     * quantum boundary re-captures and it is correct from there on. */
+    framestutter: function (A, B, W, H, bb, p, t, tl, layer) {
+      if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }   // onion-skin ghosts must not touch the hold
+      const rate = Math.max(1, Math.min(30, p.rate == null ? 8 : FM.evalProp(p.rate, t)));
+      const mode = Math.round(FM.evalProp(p.mode, t) || 0);
+      const blend = clamp01(p.blend == null ? 0 : FM.evalProp(p.blend, t));
+      const duty = Math.max(0.05, Math.min(1, p.duty == null ? 0.5 : FM.evalProp(p.duty, t)));
+      const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
+      const phase = Math.max(0, tl) * rate;
+      const q = Math.floor(phase);
+      if (rec.t !== q) {
+        // New quantum: the frame before it becomes the trail, this frame becomes the hold.
+        if (mode === 2) {
+          let spare = rec.prev;
+          if (!spare) spare = document.createElement('canvas');
+          if (spare.width !== W || spare.height !== H) { spare.width = W; spare.height = H; }
+          const pc = spare.getContext('2d');
+          pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, W, H); pc.drawImage(rec.cv, 0, 0);
+          rec.prev = spare;
+        }
+        const c = rec.cv.getContext('2d');
+        c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
+        rec.t = q; rec.at = performance.now();
+      }
+      // Strobe: the layer is only visible for the first `duty` of each quantum. Leaving B empty is
+      // the point — the gap has to be a gap, not a dimmer frame.
+      if (mode === 1 && (phase - q) > duty) return;
+      if (mode === 2 && rec.prev) { B.globalAlpha = 0.45; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }
+      B.drawImage(rec.cv, 0, 0);
+      if (blend > 0) { B.globalAlpha = blend; B.drawImage(A, 0, 0); B.globalAlpha = 1; }
     },
     // ---- Motion Blur (Content) ----
     motionflow: function (A, B, W, H, bb, p, t, tl, layer) {

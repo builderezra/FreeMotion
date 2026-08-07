@@ -85,6 +85,8 @@ window.FM = window.FM || {};
     particles: 'proc',
     // batch 31 (the two grading gaps)
     levels: 'color', halation: 'color',
+    // batch 32 (time + impact)
+    framestutter: 'stylize', shockwave: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -122,7 +124,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['halation', 'levels', 'liquidglass', 'roundcorners', 'tiles', 'filmgrain', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace'];
+  FM.FX_FEATURED = ['shockwave', 'framestutter', 'halation', 'levels', 'liquidglass', 'roundcorners', 'tiles', 'filmgrain', 'shake', 'particles', 'displacemap', 'polardisplace'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
