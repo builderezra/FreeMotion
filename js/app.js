@@ -2530,7 +2530,7 @@ window.FM = window.FM || {};
       // 1-5 open the Add-menu tabs. Shift+1/2/3 always add Text / Freehand / Vector.
       else if (/^Digit[1-9]$/.test(e.code) && !mod) {
         const n = parseInt(e.code.slice(5), 10);
-        if (e.shiftKey) { if (n <= 3 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }
+        if (e.shiftKey) { if (n <= 4 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }   // 4 rail entries now: Text / Captions / Freehand / Vector
         else if (FM.scene.selectedId && FM.inspector && FM.inspector.openCategoryByIndex) {
           if (FM.inspector.openCategoryByIndex(n)) e.preventDefault();
         }

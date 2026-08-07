@@ -97,7 +97,6 @@ window.FM = window.FM || {};
         { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
         { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
         { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
-        { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
       ];
       // …then everything you've imported before, newest first. One tap re-adds it — no picker, no
       // trip through the Photos app. (A browser can't read the camera roll; this is the closest
@@ -145,10 +144,13 @@ window.FM = window.FM || {};
   ];
 
   // QUICK-ADD rail — one tap spawns/starts immediately. The instant-spawn tools live together on one
-  // row (AM): Text · Freehand Drawing · Vector Drawing. On a phone this rail is always visible, so
-  // Freehand Drawing is easy to find (it used to be a top tab that scrolled off-screen).
+  // row (AM): Text · Captions · Freehand Drawing · Vector Drawing. On a phone this rail is always
+  // visible, so Freehand Drawing is easy to find (it used to be a top tab that scrolled off-screen).
+  // Captions sits directly under Text (Ezra): it spawns instantly like the rest of the rail and it is
+  // a text tool, so burying it in the Media tab next to Import was the wrong shelf.
   var INSTANT = [
     { label: 'Text', icon: ico('<path d="M6 5h12M12 5v14M9 19h6"/>'), add: function () { FM.addTextLayer && FM.addTextLayer(); } },
+    { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
     { label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
     { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
@@ -307,7 +309,7 @@ window.FM = window.FM || {};
       if (b && !b.classList.contains('active')) b.click();
       _startTab = null;
     },
-    // Shift+1/2/3 → the instant rail: Text / Freehand Drawing / Vector Drawing.
+    // Shift+1..4 → the instant rail: Text / Captions / Freehand Drawing / Vector Drawing.
     instant: function (i) { if (INSTANT[i]) INSTANT[i].add(); },
   };
 })(window.FM);
