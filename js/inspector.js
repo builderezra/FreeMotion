@@ -2950,6 +2950,10 @@ window.FM = window.FM || {};
       if (title) title.textContent = 'Inspector';
       if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      // Every numbered category is a SINGLE-layer editor — it builds from the primary layer and writes
+      // to it alone. Left open while a second clip is selected it silently edits one of them, so
+      // selecting more drops straight back to the multi actions.
+      if (view !== 'home' && FM.selectionIds && FM.selectionIds().length >= 2) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
       // "Edit Text" IS the focused editor: opening the text element category launches the full-screen
       // text-edit mode OVER the grid, then leaves the inspector on the grid so ✓/Esc lands back on the
       // category list (Color & Fill, Border & Shadow, Effects, …) — not a one-off popup. Adding text
@@ -2969,9 +2973,14 @@ window.FM = window.FM || {};
         const multi = FM.selectionIds && FM.selectionIds().length >= 2;
         // multi-select: the multi bar's trim/split/delete act on the WHOLE selection — showing the
         // single-layer quick row above it too was a confusing near-duplicate (it hit only the primary)
-        if (!multi) root.appendChild(quickRow(layer));
+        // The numbered 1-9 grid is a set of SINGLE-layer editors: each card builds its panel from the
+        // primary layer and writes to that one only. With several clips selected they promise to edit
+        // the selection and don't, which is worse than not offering them (Ezra: "we've still got all
+        // the controls that don't need to exist when you select multiple layers"). A multi-selection
+        // gets the actions that genuinely apply to all of it — trim, split, move, align — and nothing
+        // that would quietly touch just one.
+        if (!multi) { root.appendChild(quickRow(layer)); root.appendChild(categoryGrid(layer)); }
         else root.appendChild(alignRow());
-        root.appendChild(categoryGrid(layer));
       } else if (view === 'transform' && FM._mtEasing && FM.buildEasingEditor) {
         // Easing curve editor — an INLINE sub-view of Move & Transform (same sheet), not a screen.
         const back = el('button', 'cat-back', '‹  Move & Transform');
