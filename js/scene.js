@@ -157,12 +157,19 @@ window.FM = window.FM || {};
    * truth so preview + export read keyframed volume the same way. */
   FM.layerVolume = function (layer, t) { return layer.muted ? 0 : (layer.volume == null ? 1 : evalProp(layer.volume, t)); };
 
-  /* Random vivid fill for freshly spawned shapes: any hue, but saturation 65-90% and lightness
-   * 45-62% so it always reads as a colour (never mud, near-black or washed-out white) on the dark UI.
+  /* Fill for freshly spawned shapes. The hue WALKS by the golden angle instead of being drawn fresh
+   * each time: consecutive spawns land as far apart on the wheel as it is possible to be, so a stack
+   * of shapes reads as a chosen palette rather than a pile of near-clashing randoms (Ezra: "the
+   * colours are kinda ugly"). The starting point is still random, so a project doesn't always open
+   * on the same colour, and saturation/lightness sit in a tight band so everything in one project
+   * feels like it belongs to the same set.
    * Math.random is fine here — the value is chosen ONCE at creation and stored on the layer, so
    * preview and export stay identical. */
+  const GOLDEN_ANGLE = 137.508;
+  let _hue = Math.random() * 360;
   FM.randomFill = function () {
-    const h = Math.random() * 360, s = 0.65 + Math.random() * 0.25, l = 0.45 + Math.random() * 0.17;
+    _hue = (_hue + GOLDEN_ANGLE) % 360;
+    const h = _hue, s = 0.70 + Math.random() * 0.12, l = 0.50 + Math.random() * 0.10;
     const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
     let r, g, b;
     if (h < 60) { r = c; g = x; b = 0; } else if (h < 120) { r = x; g = c; b = 0; }

@@ -266,14 +266,15 @@ window.FM = window.FM || {};
     return 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
   }
 
-  // A shape layer's clip is tinted with that shape's own fill so a track reads at a glance. The raw
-  // fill can't be used as-is: the clip carries a white label, so a pale yellow shape would wash the
-  // bar out and a near-black one would swallow it. Keep the HUE (that's what identifies the shape)
-  // and re-light it into the same band the assigned palette lives in. A grey/white shape has no hue
-  // to keep, so it stays neutral rather than being handed an invented red.
+  // A shape layer's clip is tinted with that shape's own fill so a track reads at a glance.
+  // The first cut forced every bar dark enough for a WHITE label, which is fine for blues and reds
+  // and turns yellow into olive mud (Ezra: "the colours are kinda ugly"). A bar can't carry a hue
+  // faithfully and be guaranteed dark at the same time — so the bar keeps the colour and the LABEL
+  // adapts instead (see labelInkFor). Lightness is still bounded, but only to keep the track
+  // coherent: nothing washes out to near-white or sinks to near-black.
+  // A grey/white shape has no hue to keep, so it stays neutral rather than being handed a red.
   // Fill is read at the clip's OWN start, not the playhead, so an animated fill doesn't make the bar
   // shimmer while you scrub. Keyframe times are absolute project seconds.
-  const LABEL_MIN_CONTRAST = 4;   // white label vs the LIGHTENED top of the bar; the text shadow covers the rest
   function shapeClipColor(layer) {
     if (!layer || layer.type !== 'shape') return null;
     const t0 = layer.start || 0;
@@ -284,17 +285,24 @@ window.FM = window.FM || {};
     if (!src) src = FM.evalProp(layer.fill, t0);            // outline-only / media shapes still carry a fill underneath
     const c = hexToHsl(src);
     if (!c) return null;
-    const s = c.s < 0.08 ? c.s : Math.max(0.35, Math.min(0.62, c.s));
-    let l = Math.max(0.30, Math.min(0.44, c.l));
-    // Walk the lightness down until the top of the gradient is dark enough for the white label.
-    // Blues pass on the first try; yellows and cyans take a few steps.
-    let hex = hslToHex(c.h, s, l);
-    for (let i = 0; i < 16 && l > 0.14; i++) {
-      if (1.05 / (relLum(shade(hex, 8)) + 0.05) >= LABEL_MIN_CONTRAST) break;
-      l -= 0.02;
-      hex = hslToHex(c.h, s, l);
-    }
-    return hex;
+    const s = c.s < 0.08 ? c.s : Math.max(0.45, Math.min(0.82, c.s));   // stay saturated — a desaturated bar is the muddy one
+    return hslToHex(c.h, s, Math.max(0.36, Math.min(0.58, c.l)));
+  }
+
+  // Which ink the clip's name should use on a given bar — the reason the bar no longer has to be
+  // darkened to suit a fixed white. Bright bars (yellow, lime, cyan) take dark text, dark bars take
+  // white, and the two are compared rather than split on a threshold: hues that sit in the middle
+  // (a hot pink, a mid orange) are close either way, and a fixed cutoff hands those the worse of
+  // the two. Measured against the MIDDLE of the bar's gradient, which is where the label actually
+  // sits — it is vertically centred, not against the lightest or darkest edge.
+  const INK_DARK = { color: '#0b1016', shadow: '0 1px 1px rgba(255,255,255,.45)' };
+  const INK_LIGHT = { color: '#ffffff', shadow: '0 1px 2px rgba(0,0,0,.9), 0 0 3px rgba(0,0,0,.65)' };
+  function labelInkFor(hex) {
+    const mid = /^#[0-9a-f]{6}$/i.test(hex) ? shade(hex, -6) : '#3a5a8c';   // the gradient runs +8 → -20
+    const L = relLum(mid);
+    const vsLight = 1.05 / (L + 0.05);
+    const vsDark = (L + 0.05) / (relLum(INK_DARK.color) + 0.05);
+    return vsDark > vsLight ? INK_DARK : INK_LIGHT;
   }
 
   function drawWaveform(canvas, peaks) {
@@ -857,6 +865,11 @@ window.FM = window.FM || {};
     const clabel = document.createElement('span');
     clabel.className = 'clip-label';
     clabel.textContent = layer.name;
+    // Ink is chosen per clip, not fixed white — that is what lets the bar above carry a genuinely
+    // bright colour instead of being darkened until a white label survives on it.
+    const ink = labelInkFor(col);
+    clabel.style.color = ink.color;
+    clabel.style.textShadow = ink.shadow;
     clip.appendChild(clabel);
     const rampSpeed = FM.isAnimated(layer.speed);   // animated speed is an OBJECT — never do arithmetic on it raw
     if (rampSpeed || (layer.speed && Math.abs(layer.speed - 1) > 1e-3)) {
