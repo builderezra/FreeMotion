@@ -1064,7 +1064,9 @@ window.FM = window.FM || {};
   // NOTE: this blurs the layer's TRANSFORM motion (pan/scale/rotate). It does NOT smear a video
   // clip's intrinsic subject motion — a forward video draws the same decoded frame per sub-sample
   // (per-sub-frame decode would need a full forward frame cache). Transform blur is the common use.
-  let _mbCv = null, _mbPlate = null;   // accumulator + per-sample plate (see the intra-plate 'lighter' fix)
+  // Depth-indexed pool, like _pfPool: a nested blur (a blurred layer inside a blurred group) would
+  // otherwise clear the outer call's workspace mid-flight.
+  const _mbPool = []; let _mbDepth = 0;
   // Returns TRUE when it drew the layer, FALSE when there was nothing to blur and the caller should
   // fall through to the ordinary single draw.
   function drawMotionBlur(ctx, layer, t, scene) {
@@ -1086,48 +1088,86 @@ window.FM = window.FM || {};
     const _travel = layerMotionBetween(layer, t - dt / 2, t + dt / 2, scene);
     if (_travel != null && _travel * plateScale(ctx) < 0.75) return false;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height;
-    if (!_mbCv) _mbCv = document.createElement('canvas');
-    if (!_mbPlate) _mbPlate = document.createElement('canvas');
-    const off = _mbCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
-    if (_mbPlate.width !== W || _mbPlate.height !== H) { _mbPlate.width = W; _mbPlate.height = H; }
-    const octx = off.getContext('2d');
-    baseT(octx); octx.clearRect(0, 0, W, H);
-    octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
-    // Collect only sub-times inside the clip's life, then renormalize opacity to that count: keeps
-    // brightness constant near clip in/out WITHOUT collapsing skipped samples onto one boundary time
-    // (which would reconstruct a sharp un-blurred frame — a visible seam).
-    const lo = layer.start, hi = layer.start + layer.duration - 1e-4;
-    const times = [];
-    for (let k = 0; k < samples; k++) {
-      const st = t + (k / (samples - 1) - 0.5) * dt;
-      if (st >= lo && st <= hi) times.push(st);
-    }
-    if (!times.length) times.push(Math.max(lo, Math.min(hi, t)));
-    // Each sub-frame renders NORMALLY (full opacity) to its own plate, and the PLATES composite
-    // additively at 1/K so overlapping samples sum to full. Setting blendMode:'add' on the layer proxy
-    // itself made the layer's OWN internal passes add against each other within one sub-frame — a
-    // bordered shape's fill 'lighter'-added over its under-stroke and whited out the border the moment
-    // motion blur was enabled, motion or not.
-    const tmp = Object.assign({}, layer, { motionBlur: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-    const pctx = _mbPlate.getContext('2d');
-    const sampleAlpha = 1 / times.length;
-    times.forEach(st => {
-      baseT(pctx); pctx.clearRect(0, 0, W, H);
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);
+
+    /* RE-PROJECTION, not N renders.
+     * The layer's whole placement is ONE affine matrix (applyLayerTransform + applyParentChain
+     * compose nothing but translate/rotate/scale/transform and never save()), so a sub-frame is the
+     * SAME picture sitting somewhere else. Rasterise the layer once at t, then push that plate
+     * through D = M(tau) · M(t)⁻¹ for each slice: one drawLayer and N cheap blits instead of N full
+     * renders of the layer and everything inside it.
+     * It also makes "transform blur ignores the footage" true by construction rather than by
+     * comment — the content is decoded once, so a reversed or frame-blended clip can no longer
+     * hand a different frame to each sub-sample. */
+    const Mt = layerCTM(layer, t, scene);
+    if (!Mt) return false;                                   // no DOMMatrix support → no blur, never a wrong picture
+    const det = Mt.a * Mt.d - Mt.b * Mt.c;
+    if (!isFinite(det) || Math.abs(det) < 1e-9) return false;   // degenerate (scale 0) — nothing to smear
+    let MtInv; try { MtInv = Mt.inverse(); } catch (e) { return false; }
+
+    // Slice count follows the actual travel: a 2px move does not need 24 samples, and a whip-pan
+    // wants every one it can get. 1.5 device px per slice keeps the trail continuous.
+    const travelPx = (_travel == null ? 0 : _travel) * ps;
+    const N = Math.max(2, Math.min(samples, Math.ceil(travelPx / 1.5)));
+
+    // The plate has to hold the layer where it sits at t PLUS room for where the slices push it, or
+    // the smear would be clipped at the comp edge. Margin is the travel itself, capped so a wild
+    // move cannot allocate the world.
+    const m = Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25);
+    const EW = Math.max(1, Math.round((PW + 2 * m) * ps)), EH = Math.max(1, Math.round((PH + 2 * m) * ps));
+    const d = _mbDepth++;
+    try {
+      if (!_mbPool[d]) _mbPool[d] = { plate: document.createElement('canvas'), acc: document.createElement('canvas') };
+      const plate = _mbPool[d].plate, acc = _mbPool[d].acc;
+      if (plate.width !== EW || plate.height !== EH) { plate.width = EW; plate.height = EH; }
+      plate.__fmRS = ps; plate.__fmOX = -m; plate.__fmOY = -m;   // plate pixel (0,0) IS project (-m,-m)
+      const pctx = plate.getContext('2d');
+      pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, EW, EH);
+      baseT(pctx);
       pctx.globalAlpha = 1; pctx.globalCompositeOperation = 'source-over'; pctx.filter = 'none';
-      drawLayer(pctx, tmp, st, scene);
-      octx.globalAlpha = sampleAlpha;
-      octx.globalCompositeOperation = 'lighter';
-      octx.drawImage(_mbPlate, 0, 0);
-    });
-    octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over';
-    ctx.save();
-    baseT(ctx);
-    ctx.globalAlpha = opacity;
-    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
-    ctx.filter = 'none';
-    ctx.drawImage(off, 0, 0);
-    ctx.restore();
+      // behaviors/wiggle are KEPT: this plate is rendered in REAL space and the delta cancels them.
+      // (drawContentMotionBlur nulls them because it renders in neutral space — opposite situation.)
+      const tmp = Object.assign({}, layer, { motionBlur: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(pctx, tmp, t, scene);
+
+      const AW = Math.max(1, Math.round(PW * ps)), AH = Math.max(1, Math.round(PH * ps));
+      if (acc.width !== AW || acc.height !== AH) { acc.width = AW; acc.height = AH; }
+      acc.__fmRS = ps; acc.__fmOX = 0; acc.__fmOY = 0;
+      const actx = acc.getContext('2d');
+      actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, AW, AH);
+      actx.imageSmoothingEnabled = true; actx.imageSmoothingQuality = 'high';
+
+      // MIDPOINT sub-times. The old endpoint-inclusive spacing double-counted the shutter boundary
+      // between consecutive frames. _clipStart matters because start/duration are SYNTHETIC on a
+      // flattened-group proxy.
+      const cs = (layer._clipStart != null) ? layer._clipStart : (layer.start || 0);
+      const lo = cs, hi = cs + (layer.duration || 0);
+      let drawn = 0;
+      for (let k = 0; k < N; k++) {
+        const tau = t + ((k + 0.5) / N - 0.5) * dt;
+        if (tau < lo || tau >= hi) continue;    // outside the clip's life — partial shutter coverage is real, so it simply contributes less
+        const Mk = layerCTM(layer, tau, scene);
+        if (!Mk) continue;
+        const D = new DOMMatrix([Mk.a, Mk.b, Mk.c, Mk.d, Mk.e, Mk.f]).multiply(MtInv);
+        actx.save();
+        baseT(actx);                                   // project space
+        actx.transform(D.a, D.b, D.c, D.d, D.e, D.f);  // …then where this slice sits
+        actx.globalAlpha = 1 / N;
+        actx.globalCompositeOperation = 'lighter';     // premultiplied mean; source-over would skew partial-coverage edges opaque
+        actx.drawImage(plate, -m, -m, PW + 2 * m, PH + 2 * m);
+        actx.restore();
+        drawn++;
+      }
+      if (!drawn) return false;                        // every slice fell outside the clip — let the plain draw handle it
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);              // acc already shares the target's pixel grid
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(acc, 0, 0);
+      ctx.restore();
+    } finally { _mbDepth--; }
     return true;
   }
   FM.layerHasMotionBlur = function (layer) { return !!(layer && layer.motionBlur && layer.motionBlur.enabled); };
