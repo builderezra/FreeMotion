@@ -165,16 +165,14 @@ window.FM = window.FM || {};
   }
   FM._colorField = colorField;
 
-  // Effect-stack presets: built-in starters (always present, showcase the effects) + the user's
-  // own saved stacks (persisted to localStorage, reusable across projects).
+  // Effect-stack presets — the user's own saved stacks only (localStorage, reusable across projects).
+  // The four shipped starters (VHS Glitch / Duotone / Dreamy / Comic) are GONE (Ezra: "in the presets
+  // menu remove the effects in there, like dreamy and shit"). They existed to showcase the effects
+  // back when there were a few dozen; with 175 of them and a browser that groups and searches, four
+  // fixed looks were just clutter you could not delete sitting on top of the presets you made.
   FM.fxPresets = {
     _key: 'fm.fxpresets',
-    builtins: [
-      { name: 'VHS Glitch', builtin: true, effects: [{ type: 'rgbsplit', enabled: true, params: { amount: 7 } }, { type: 'posterize', enabled: true, params: { levels: 4 } }] },
-      { name: 'Duotone', builtin: true, effects: [{ type: 'threshold', enabled: true, params: { level: 0.5 } }, { type: 'tint', enabled: true, params: { amount: 1, color: '#19c3ff' } }] },
-      { name: 'Dreamy', builtin: true, effects: [{ type: 'blur', enabled: true, params: { radius: 6 } }, { type: 'brightness', enabled: true, params: { amount: 1.15 } }, { type: 'saturate', enabled: true, params: { amount: 1.25 } }] },
-      { name: 'Comic', builtin: true, effects: [{ type: 'posterize', enabled: true, params: { levels: 3 } }, { type: 'rgbsplit', enabled: true, params: { amount: 2 } }] }
-    ],
+    builtins: [],
     saved() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
     list() { return this.builtins.concat(this.saved()); },
     _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { } },
