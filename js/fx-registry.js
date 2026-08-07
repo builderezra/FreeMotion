@@ -91,6 +91,8 @@ window.FM = window.FM || {};
     speedlines: 'proc', hslbands: 'color',
     // batch 34 (the scan bar + a key that survives bad lighting)
     timewarp: 'stylize', chromakeypro: 'matte',
+    // batch 35 (the compositing shot)
+    lightwrap: 'matte',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -128,7 +130,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['chromakeypro', 'timewarp', 'hslbands', 'speedlines', 'shockwave', 'framestutter', 'halation', 'levels', 'liquidglass', 'roundcorners', 'tiles', 'filmgrain'];
+  FM.FX_FEATURED = ['lightwrap', 'chromakeypro', 'timewarp', 'hslbands', 'speedlines', 'shockwave', 'framestutter', 'halation', 'levels', 'liquidglass', 'roundcorners', 'tiles'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],

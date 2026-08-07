@@ -208,7 +208,9 @@ window.FM = window.FM || {};
     touchup: 'photo',
     // Copy Background is the one effect whose subject must be BLANK: the point is that the layer
     // fills with whatever is underneath, so the backdrop has to be the interesting half.
-    copybg: 'backdrop',
+    // Light Wrap reads the layers UNDERNEATH, so like Copy Background its tile needs a plain shape
+    // over something worth wrapping.
+    copybg: 'backdrop', lightwrap: 'backdrop',
     // Whole-frame framing: these draw ON the comp edge, so the subject must reach it.
     letterbox: 'photo', border: 'photo', vignette: 'photo', tiltshift: 'photo',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.

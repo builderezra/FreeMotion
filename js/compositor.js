@@ -622,6 +622,16 @@ window.FM = window.FM || {};
       { key: 'edgedesat', label: 'Edge desaturate', min: 0, max: 1, step: 0.02, def: 0.35 },
       { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte']], def: 0 },
     ], color: true, defColor: '#00c23c', colorLabel: 'Key colour' },
+    // ---- batch 35: Light Wrap — the shot that makes a key look composited rather than pasted ----
+    // Every glow here blooms the layer's OWN pixels. This one reads the layers underneath and wraps
+    // their light around the subject's edge, which is what a real camera does and what the eye is
+    // checking for when a composite looks wrong.
+    { type: 'lightwrap', label: 'Light Wrap', desc: 'Wraps the light from the layers underneath around this layer’s edge, so a keyed subject sits IN the shot instead of on top of it.', params: [
+      { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.02, def: 0.9 },
+      { key: 'reach', label: 'Reach', min: 1, max: 80, step: 1, def: 18, unit: 'px' },
+      { key: 'radius', label: 'Softness', min: 0, max: 80, step: 1, def: 20, unit: 'px' },
+      { key: 'mode', label: 'Blend', options: [[0, 'Screen'], [1, 'Add']], def: 0 },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1318,7 +1328,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1 };
+    timewarp: 1, chromakeypro: 1, lightwrap: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -2418,7 +2428,7 @@ window.FM = window.FM || {};
     if (maxX < minX) return null;
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
-  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null;
+  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _lwA = null, _lwB = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -2439,7 +2449,7 @@ window.FM = window.FM || {};
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -3055,6 +3065,61 @@ window.FM = window.FM || {};
       B.globalAlpha = Math.min(1, amount * 0.35);
       B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
       B.drawImage(_halC, 0, 0, W, H);
+      B.restore();
+    },
+    /* ---- Light Wrap ------------------------------------------------------------------------------
+     * Bleeds the light from the layers UNDERNEATH around this layer's own edge. It is the shot that
+     * makes a key look composited rather than pasted on: a real lens wraps a bright background
+     * around a subject's silhouette, and its absence is what the eye reads as fake.
+     *
+     * Every other glow here (glow, softglow, lightglow, edgeglow, innerglow, halation) blooms the
+     * layer's OWN pixels — none of them can see the backdrop. This one gets it from `_bgSnap`, the
+     * same snapshot Copy Background uses, which is why the capture gate had to widen for it.
+     *
+     * The band is built with one composite op rather than a pixel pass: drawing the layer sharp and
+     * then subtracting a BLURRED copy with destination-out leaves alpha = sharp x (1 - blurred),
+     * which is 0 deep inside the subject, 0 outside it, and peaks exactly at the edge. */
+    lightwrap: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      B.drawImage(A, 0, 0);
+      const snap = layer && layer._bgSnap;
+      if (!snap || !snap.width) return;                       // nothing underneath to wrap
+      const s = ps == null ? 1 : ps;
+      const intensity = Math.max(0, p.intensity == null ? 0.9 : FM.evalProp(p.intensity, t));
+      if (intensity <= 0.001) return;
+      const reach = Math.max(0.5, (p.reach == null ? 18 : FM.evalProp(p.reach, t)) * s);
+      const soft = Math.max(0, (p.radius == null ? 20 : FM.evalProp(p.radius, t)) * s);
+      const add = Math.round(FM.evalProp(p.mode, t) || 0) === 1;
+      if (!_lwA) _lwA = document.createElement('canvas');
+      if (!_lwB) _lwB = document.createElement('canvas');
+      if (_lwA.width !== W || _lwA.height !== H) { _lwA.width = W; _lwA.height = H; }
+      if (_lwB.width !== W || _lwB.height !== H) { _lwB.width = W; _lwB.height = H; }
+      // 1) the edge band
+      const bandCtx = _lwA.getContext('2d');
+      bandCtx.setTransform(1, 0, 0, 1, 0, 0);
+      bandCtx.globalAlpha = 1; bandCtx.globalCompositeOperation = 'source-over'; bandCtx.filter = 'none';
+      bandCtx.clearRect(0, 0, W, H);
+      bandCtx.drawImage(A, 0, 0);
+      bandCtx.globalCompositeOperation = 'destination-out';
+      bandCtx.filter = 'blur(' + reach.toFixed(2) + 'px)';
+      bandCtx.drawImage(A, 0, 0);
+      bandCtx.filter = 'none'; bandCtx.globalCompositeOperation = 'source-over';
+      // 2) the backdrop, blurred, cut to that band
+      const wrapCtx = _lwB.getContext('2d');
+      wrapCtx.setTransform(1, 0, 0, 1, 0, 0);
+      wrapCtx.globalAlpha = 1; wrapCtx.globalCompositeOperation = 'source-over';
+      wrapCtx.clearRect(0, 0, W, H);
+      wrapCtx.filter = soft > 0.05 ? 'blur(' + soft.toFixed(2) + 'px)' : 'none';
+      try { wrapCtx.drawImage(snap, 0, 0, W, H); } catch (e) { return; }
+      wrapCtx.filter = 'none';
+      wrapCtx.globalCompositeOperation = 'destination-in';
+      wrapCtx.drawImage(_lwA, 0, 0);
+      wrapCtx.globalCompositeOperation = 'source-over';
+      // 3) lay it over the subject's edge
+      B.save();
+      B.globalCompositeOperation = add ? 'lighter' : 'screen';
+      B.globalAlpha = Math.min(1, intensity);
+      B.drawImage(_lwB, 0, 0);
+      if (intensity > 1) { B.globalAlpha = Math.min(1, intensity - 1); B.drawImage(_lwB, 0, 0); }
       B.restore();
     },
     /* ---- Time Warp Scan -------------------------------------------------------------------------
@@ -4435,6 +4500,14 @@ window.FM = window.FM || {};
   FM.layerHasGradient = function (layer) { return FM.fillModeOf(layer) === 'gradient' && !!layer.fillGradient; };
   // Copy Background: does this layer copy the backdrop below it?
   FM.hasCopyBg = function (layer) { return !!(layer.effects && layer.effects.some(function (e) { return e.type === 'copybg' && e.enabled !== false; })); };
+  /* Which effects need a snapshot of everything drawn BELOW this layer. Copy Background was the only
+   * one; Light Wrap needs the same picture for the opposite reason — it does not replace the layer
+   * with the backdrop, it bleeds the backdrop's light around the layer's own edge. The capture is
+   * gated because it is a full-frame blit per layer per frame, so only layers that ask for it pay. */
+  const BG_SNAP_FX = { copybg: 1, lightwrap: 1 };
+  FM.needsBgSnap = function (layer) {
+    return !!(layer.effects && layer.effects.some(function (e) { return BG_SNAP_FX[e.type] && e.enabled !== false; }));
+  };
   // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
   // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
   const _fillImg = {};
@@ -6105,7 +6178,7 @@ window.FM = window.FM || {};
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
-        if (FM.hasCopyBg(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far as this layer's content
+        if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far for Copy Background / Light Wrap
           if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = document.createElement('canvas');
           const _tw = target.canvas.width, _th = target.canvas.height;   // match the TARGET's pixels (may be supersampled), else the snapshot is a downscale
           if (L._bgSnap.width !== _tw || L._bgSnap.height !== _th) { L._bgSnap.width = _tw; L._bgSnap.height = _th; }

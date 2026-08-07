@@ -138,8 +138,20 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   a screen lit 6:1 across the frame: Pro keys 100% of both the lit and the shadowed half while
   keeping 100% of the subject; the RGB-distance key clears the lit half and 0% of the shadowed half
   at its default, and at tolerance 0.75 clears both halves and 100% of the subject with them.
-  **Still open on this table:** Light Wrap (9), Dispersion (10), Temporal Denoise (11),
-  VHS Tape (12), Compression Crunch (13).
+- v4.58 (round 10, part 5) — **Light Wrap** (9). The `_bgSnap` gate is widened as the sketch says,
+  but properly: `FM.hasCopyBg` stays what it is (it routes the copybg DRAW branch) and a new
+  `FM.needsBgSnap` with a `BG_SNAP_FX` set drives the CAPTURE. Any future backdrop-reading effect
+  adds one key. The edge band needs no pixel pass: draw the layer sharp, then subtract a BLURRED copy
+  with `destination-out`, which leaves alpha = sharp x (1 - blurred) — zero deep inside, zero outside,
+  peaking exactly at the edge. Measured on a dark subject over a warm backdrop: rim luma +56.8,
+  core +2.7, outside 0.00; 1.0ms against 0.55ms for the same frame with no effect.
+  **NOTE for future canvas effects:** a CANVAS_FX at a no-op setting is NOT byte-identical to having
+  no effect at all — Light Wrap at intensity 0 differs by +-1 on 169 antialiased edge pixels, and
+  Rounded Corners at radius 0 differs on 192. That is the plate round-trip (rasterise once, then
+  blit) and it is inherent to the path, not a bug. Judge a canvas effect's no-op by "confined to the
+  antialiased edge, delta <= 1", not by zero.
+  **Still open on this table:** Dispersion (10), Temporal Denoise (11), VHS Tape (12),
+  Compression Crunch (13).
 
 ## Build order (from the ranking pass)
 
