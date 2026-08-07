@@ -146,7 +146,15 @@ window.FM = window.FM || {};
       });
       clipNameM.addEventListener('change', function () { if (FM.history) FM.history.commit(); });
     }
-    if (mDup) mDup.addEventListener('click', function () { if (FM.duplicateSelection) FM.duplicateSelection(); });   // the whole selection, not just the primary
+    // PARENTING, not duplicate. This slot came from a screenshot Ezra sent of Alight Motion's top
+    // bar; the icon there opens a parent picker (a list of every layer you can attach to, each with
+    // its thumbnail), and it was read as a duplicate button. Duplicate has two other homes already —
+    // the transport row and the layer ⋯ menu — so nothing is lost by giving the slot back.
+    if (mDup) mDup.addEventListener('click', function () {
+      var L = curLayer(); if (!L) return;
+      var r = mDup.getBoundingClientRect();
+      if (FM.openParentPicker) FM.openParentPicker(L, Math.min(r.left - 60, window.innerWidth - 250), r.bottom + 6);
+    });
     // ⋯ More — the full clip menu (split, lock, reverse, replace media, reset, loop, blend, parent…),
     // the same set desktop reaches by right-clicking a clip. Anchored under the button, right-aligned.
     var mMore = document.getElementById('m-more');

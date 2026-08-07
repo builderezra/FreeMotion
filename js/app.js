@@ -452,11 +452,17 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
     if (FM.toast) FM.toast(hex ? 'Layer tagged' : 'Tag cleared', 900);
   };
+  // Each candidate shows its own THUMBNAIL, the same preview the timeline row carries, so you pick
+  // the layer you can see rather than one of three things called "Copy Copy 2" — which is exactly
+  // what Alight Motion's panel does in the screenshot Ezra sent.
   FM.openParentPicker = function (layer, x, y) {
+    const mkThumb = (L) => { const cv = document.createElement('canvas'); cv.className = 'ctx-thumb'; cv.width = 38; cv.height = 24; if (FM.renderThumb) { try { FM.renderThumb(L, cv); } catch (e) {} } return cv; };
+    const mkGlyph = (g) => { const s = document.createElement('span'); s.className = 'ctx-thumb ctx-thumb-glyph'; s.textContent = g; return s; };
     const cands = FM.scene.layers.filter(l => l.id !== layer.id && l.type !== 'camera' && !(FM.isAncestor && FM.isAncestor(FM.scene, layer.id, l.id)));
-    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', action: () => { layer.parent = null; FM.refreshAll(); if (FM.history) FM.history.commit(); } }, { sep: true }];
-    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), action: () => { layer.parent = c.id; if (!layer.parentMode) layer.parentMode = 'normal'; FM.refreshAll(); if (FM.history) FM.history.commit(); } }));
-    if (FM.contextMenu) FM.contextMenu.show(x, y, items);
+    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', iconEl: mkGlyph('⊘'), action: () => { layer.parent = null; FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Parent removed', 1200); } }, { sep: true }];
+    if (!cands.length) items.push({ label: 'No other layers to attach to', disabled: true });
+    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), iconEl: mkThumb(c), action: () => { layer.parent = c.id; if (!layer.parentMode) layer.parentMode = 'normal'; FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Parented to ' + (c.name || c.type), 1300); } }));
+    if (FM.contextMenu) FM.contextMenu.show(Math.max(8, x), y, items);
   };
 
   function syncTopBar() {
