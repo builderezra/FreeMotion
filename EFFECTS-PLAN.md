@@ -119,9 +119,19 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   Measured at 1080x1920: Levels 7.98ms, Halation 4.9-7.4ms, against solarize 8.69 / gamma 9.5 /
   vignette 10.3 — both at or below the getImageData floor every effect in that path already pays.
   Identity vs HEAD: 0 differing bytes on the adjustment path and on a mixed pixel/warp/canvas stack.
-  **Still open on this table:** Frame Stutter (3), Shockwave (4), Speed Lines (5), Time Warp Scan (6),
-  HSL Bands (7), Chroma Key Pro (8), Light Wrap (9), Dispersion (10), Temporal Denoise (11),
-  VHS Tape (12), Compression Crunch (13).
+- v4.55 (round 10, part 2) — **Frame Stutter** (3) and **Shockwave** (4). Frame Stutter keeps its
+  held plate in `_mfRec` under a `':fs'` key so it can share a layer with the footage blur without
+  either overwriting the other's canvas, and passes onion-skin ghosts straight through. Shockwave
+  walks only the annulus bbox. 0.03ms and ~8ms respectively; 0 differing bytes across ten stacks.
+- v4.56 (round 10, part 3) — **Speed Lines** (5) and **HSL Bands** (7). Speed Lines needed a change
+  from the sketch: the ink cannot be drawn under the layer (a full-frame clip hides it) NOR punched
+  straight out of B (that knocks a hole in the picture), so it builds on its own plate and composites
+  over — which also makes the Add blend mean "additive against the picture" rather than just against
+  itself. HSL Bands' fixed bands are **40 deg wide, not 30**: real skies sit near 215, 25 off the 240
+  nominal, and at 30 the default barely moved them. 1.27ms and 6.8ms; 0 differing bytes across
+  thirteen stacks.
+  **Still open on this table:** Time Warp Scan (6), Chroma Key Pro (8), Light Wrap (9),
+  Dispersion (10), Temporal Denoise (11), VHS Tape (12), Compression Crunch (13).
 
 ## Build order (from the ranking pass)
 

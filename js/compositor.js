@@ -573,6 +573,33 @@ window.FM = window.FM || {};
       { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
+    // ---- batch 33: manga impact lines + the HSL panel ----
+    // Speed Lines — tapered ink strokes driving in from the edge toward a clear disc around the
+    // subject. Radial Rays is a per-pixel cosine wash; this is drawn geometry, and the TAPER is
+    // what makes it read as ink rather than as light.
+    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge, with a clear disc left around your subject.', params: [
+      { key: 'count', label: 'Lines', min: 4, max: 200, step: 1, def: 64 },
+      { key: 'inner', label: 'Clear zone', min: 0, max: 80, step: 1, def: 26, unit: '%' },
+      { key: 'length', label: 'Length', min: 5, max: 100, step: 1, def: 55, unit: '%' },
+      { key: 'width', label: 'Weight', min: 1, max: 60, step: 1, def: 12, unit: 'px' },
+      { key: 'jitter', label: 'Scatter', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
+    ], color: true, defColor: '#0d0d12', colorLabel: 'Ink' },
+    // HSL Bands — push one colour band's hue, saturation and luminance. The saturation gate is the
+    // whole trick: weighting by the pixel's own saturation is what leaves skin and neutrals alone
+    // while a plain hue window would wreck them.
+    { type: 'hslbands', label: 'HSL Bands', desc: 'Retunes one colour band — its hue, saturation and brightness — and leaves the rest of the picture alone. Pick a band, or set your own centre and width.', params: [
+      { key: 'band', label: 'Band', options: [[0, 'Red'], [1, 'Orange'], [2, 'Yellow'], [3, 'Green'], [4, 'Aqua'], [5, 'Blue'], [6, 'Purple'], [7, 'Magenta'], [8, 'Custom']], def: 5 },
+      { key: 'hue', label: 'Hue', min: -180, max: 180, step: 1, def: 45, unit: '°' },
+      { key: 'sat', label: 'Saturation', min: -100, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'lum', label: 'Brightness', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'range', label: 'Range', min: 0.2, max: 3, step: 0.05, def: 1 },
+      { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band' },
+      { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band' },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1268,7 +1295,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1 };
+    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1376,6 +1403,62 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    /* HSL Bands — the CapCut/Lightroom HSL panel: retune ONE colour band and leave the rest alone.
+     * The weight is `hue proximity x the pixel's OWN saturation`, and that second term is the whole
+     * point — a plain hue window centred on orange also grabs skin and warm neutrals, which is the
+     * classic way this control ruins a shot. One pass, no slice, no taps; most of the frame exits at
+     * the hue test before any HSL round-trip. */
+    hslbands: function (d, W, H, p, t) {
+      const BAND_HUE = [0, 30, 60, 120, 180, 240, 280, 320];
+      const band = Math.round(FM.evalProp(p.band, t) || 0);
+      const custom = band >= 8;
+      const centre = custom ? (p.centre == null ? 200 : FM.evalProp(p.centre, t)) : BAND_HUE[band] || 0;
+      const range = Math.max(0.05, p.range == null ? 1 : FM.evalProp(p.range, t));
+      // Fixed bands are 40 deg wide, not 30: real skies and denim sit near 215, which is 25 off
+      // the 240 nominal, and a 30 deg half-width barely touched them.
+      const halfW = Math.max(1, (custom ? (p.width == null ? 30 : FM.evalProp(p.width, t)) : 40) * range);
+      const hueSh = (p.hue == null ? 45 : FM.evalProp(p.hue, t));
+      const satAdj = (p.sat == null ? 40 : FM.evalProp(p.sat, t)) / 100;
+      const lumAdj = (p.lum == null ? 0 : FM.evalProp(p.lum, t)) / 100;
+      if (hueSh === 0 && satAdj === 0 && lumAdj === 0) return;
+      const cut = halfW * 1.6;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        const dl = mx - mn;
+        if (dl === 0) continue;                       // pure neutral — no band owns it
+        let h;
+        if (mx === r) h = 60 * (((g - b) / dl) % 6);
+        else if (mx === g) h = 60 * ((b - r) / dl + 2);
+        else h = 60 * ((r - g) / dl + 4);
+        if (h < 0) h += 360;
+        let dh = Math.abs(h - centre); if (dh > 180) dh = 360 - dh;
+        if (dh > cut) continue;                       // the early-out that keeps this cheap
+        const L = (mx + mn) / 2;
+        const S = L > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn);
+        // smoothstep on hue distance, then gate by saturation so neutrals stay put
+        const u = dh >= halfW ? 0 : 1 - dh / halfW;
+        let w = u * u * (3 - 2 * u) * (S * 3 > 1 ? 1 : S * 3);
+        if (w <= 0.002) continue;
+        let nh = h + hueSh * w; nh = ((nh % 360) + 360) % 360;
+        let ns = S * (1 + satAdj * w); if (ns < 0) ns = 0; else if (ns > 1) ns = 1;
+        let nl = L + lumAdj * w * 0.5; if (nl < 0) nl = 0; else if (nl > 1) nl = 1;
+        const c2 = (1 - Math.abs(2 * nl - 1)) * ns;
+        const x2 = c2 * (1 - Math.abs(((nh / 60) % 2) - 1));
+        const m2 = nl - c2 / 2;
+        let rr, gg, bb;
+        const seg = (nh / 60) | 0;
+        if (seg === 0) { rr = c2; gg = x2; bb = 0; }
+        else if (seg === 1) { rr = x2; gg = c2; bb = 0; }
+        else if (seg === 2) { rr = 0; gg = c2; bb = x2; }
+        else if (seg === 3) { rr = 0; gg = x2; bb = c2; }
+        else if (seg === 4) { rr = x2; gg = 0; bb = c2; }
+        else { rr = c2; gg = 0; bb = x2; }
+        d[i] = (rr + m2) * 255; d[i + 1] = (gg + m2) * 255; d[i + 2] = (bb + m2) * 255;
       }
     },
     /* Shockwave — one expanding pressure ring, not a standing wave. Circular Ripple is an infinite
@@ -2270,7 +2353,7 @@ window.FM = window.FM || {};
     if (maxX < minX) return null;
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
-  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null;
+  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -2291,7 +2374,7 @@ window.FM = window.FM || {};
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -2907,6 +2990,72 @@ window.FM = window.FM || {};
       B.globalAlpha = Math.min(1, amount * 0.35);
       B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
       B.drawImage(_halC, 0, 0, W, H);
+      B.restore();
+    },
+    /* ---- Speed Lines --------------------------------------------------------------------------
+     * Tapered ink strokes driving in from the frame edge toward a clear disc around the subject.
+     * Drawn geometry, not a per-pixel wash: each stroke is a triangle wide at the outside and
+     * pointed at the inside, and that taper is the entire difference between "ink" and "light".
+     * Radial Rays is the cosine wash; this is the manga panel.
+     *
+     * Determinism: an integer-avalanche hash of the line index, the same trick Particles uses, so
+     * the same frame always draws the same lines — no Math.random, no per-frame drift on re-render. */
+    speedlines: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const count = Math.max(1, Math.round(p.count == null ? 64 : FM.evalProp(p.count, t)));
+      const maxR = Math.hypot(W, H) / 2 || 1;
+      const innerR = (p.inner == null ? 26 : FM.evalProp(p.inner, t)) / 100 * maxR;
+      const lenR = (p.length == null ? 55 : FM.evalProp(p.length, t)) / 100 * maxR;
+      const wid = Math.max(0.5, (p.width == null ? 12 : FM.evalProp(p.width, t)) * (ps == null ? 1 : ps));
+      const jit = clamp01(p.jitter == null ? 0.5 : FM.evalProp(p.jitter, t));
+      const spin = (p.spin == null ? 0 : FM.evalProp(p.spin, t)) * Math.PI / 180;
+      const cx = W * (p.x == null ? 50 : FM.evalProp(p.x, t)) / 100;
+      const cy = H * (p.y == null ? 50 : FM.evalProp(p.y, t)) / 100;
+      const add = Math.round(FM.evalProp(p.blend, t) || 0) === 1;
+      const rgb = hexToRGB(p.color || '#0d0d12');
+      const hash = function (n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return (n >>> 0) / 4294967296; };
+      // The ink is built on its OWN surface, because the clear zone has to erase ink without
+      // erasing the picture — a destination-out punch straight into B would knock a hole in the
+      // layer. Its own plate also lets Add mean "additive against the picture", which is what a
+      // white light-streak version needs; drawing the ink into B first can only ever blend normally.
+      if (!_slC) _slC = document.createElement('canvas');
+      if (_slC.width !== W || _slC.height !== H) { _slC.width = W; _slC.height = H; }
+      const B2 = _slC.getContext('2d');
+      B2.setTransform(1, 0, 0, 1, 0, 0);
+      B2.globalAlpha = 1; B2.globalCompositeOperation = 'source-over'; B2.filter = 'none';
+      B2.clearRect(0, 0, W, H);
+      B2.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+      const outR = maxR * 1.12;                      // start past the corner so strokes reach the edge
+      const step = (Math.PI * 2) / count;
+      for (let i = 0; i < count; i++) {
+        const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3);
+        const a = i * step + spin * (tl || 0) + (h1 - 0.5) * step * 2 * jit;
+        const tip = Math.min(outR - 2, innerR * (0.92 + 0.5 * h2 * jit));
+        const base = Math.min(outR, tip + lenR * (0.55 + 0.9 * h3));
+        if (base - tip < 1) continue;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const hw = wid * (0.35 + 0.85 * h2) * 0.5;
+        const nx = -sa * hw, ny = ca * hw;
+        B2.beginPath();
+        B2.moveTo(cx + ca * base + nx, cy + sa * base + ny);
+        B2.lineTo(cx + ca * base - nx, cy + sa * base - ny);
+        B2.lineTo(cx + ca * tip, cy + sa * tip);     // the point: one vertex, not a second edge
+        B2.closePath();
+        B2.fill();
+      }
+      // Punch the focus clear so the subject stays readable — the thing that separates a speed-line
+      // panel from a frame someone scribbled over. Feathered, so the strokes fade rather than stop.
+      if (innerR > 1) {
+        const gr = B2.createRadialGradient(cx, cy, innerR * 0.35, cx, cy, innerR * 1.25);
+        gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        B2.globalCompositeOperation = 'destination-out';
+        B2.fillStyle = gr;
+        B2.beginPath(); B2.arc(cx, cy, innerR * 1.25, 0, Math.PI * 2); B2.fill();
+        B2.globalCompositeOperation = 'source-over';
+      }
+      B.drawImage(A, 0, 0);                          // the picture...
+      B.save();
+      if (add) B.globalCompositeOperation = 'lighter';
+      B.drawImage(_slC, 0, 0);                       // ...then the ink over it
       B.restore();
     },
     /* ---- Frame Stutter -------------------------------------------------------------------------
