@@ -413,10 +413,12 @@ window.FM = window.FM || {};
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
     { type: 'tiles', label: 'Tiles', params: [
-      { key: 'mode', label: 'Layout', options: ['Extend', 'Grid'], def: 0 },   // Extend = clip stays put, copies fill outward; Grid = classic n×n shrink
+      // legacy = what an instance saved BEFORE this param existed still renders as, so the panel
+      // highlights the button that is actually drawing rather than the new default.
+      { key: 'mode', label: 'Layout', options: ['Extend', 'Grid'], def: 0, legacy: 1 },   // Extend = clip stays put, copies fill outward; Grid = classic n×n shrink
       { key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 },
       { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
-      { key: 'mirror', label: 'Mirror', options: ['Off', 'On'], def: 1 },      // mirrored copies join seamlessly — "the clip keeps going"
+      { key: 'mirror', label: 'Mirror', options: ['Off', 'On'], def: 1, legacy: 0 },      // mirrored copies join seamlessly — "the clip keeps going"
     ] },
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion

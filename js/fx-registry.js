@@ -122,6 +122,14 @@ window.FM = window.FM || {};
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
   FM.FX_FEATURED = ['liquidglass', 'roundcorners', 'tiles', 'filmgrain', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap'];
 
+  // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
+  // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
+  // and a bare string quietly indexes into the string itself ('Off'[0] === 'O', 'Off'[1] === 'f'),
+  // which shipped Tiles with buttons labelled "f"/"n" that wrote parseFloat('O') = NaN.
+  function normOptions(opts) {
+    return (opts || []).map(function (o, i) { return Array.isArray(o) ? o : [i, o]; });
+  }
+
   // Normalize a raw FM.EFFECTS def into the richer param[] schema (keeping real storage keys).
   function paramsOf(def) {
     const out = [];
@@ -132,11 +140,14 @@ window.FM = window.FM || {};
         // `toggle` is a tick box, not a two-button segment: it reads as ON/OFF rather than as a choice
         // between two equal options, which matters when the thing it switches on overrides other controls.
         if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, note: pp.note || '', keyframable: false });
-        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: pp.options, default: pp.def, keyframable: false });
+        // `legacy` is the value the RENDERER falls back to when the key is absent, which is not always
+        // the schema default (byte-identity: an old instance must keep rendering as it always did).
+        // The UI needs it so the highlighted button matches what actually draws.
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false });
         else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '' });
       });
     } else if (def.options) {
-      out.push({ key: def.param, label: def.label, type: 'segment', options: def.options, default: def.def, keyframable: false });
+      out.push({ key: def.param, label: def.label, type: 'segment', options: normOptions(def.options), default: def.def, legacy: def.legacy, keyframable: false });
     } else if (def.param) {
       out.push({ key: def.param, label: def.label, type: 'range', min: def.min, max: def.max, step: def.step, default: def.def, unit: def.unit || '', keyframable: true });
     }

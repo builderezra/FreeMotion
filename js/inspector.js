@@ -386,9 +386,18 @@ window.FM = window.FM || {};
     const row = el('div', 'fx-seg-row');
     row.appendChild(el('span', 'fx-scrub-label', p.label));
     const seg = el('div', 'fx-seg');
+    // An ABSENT param is not the same as 0. It renders at the effect's own fallback — `legacy` when
+    // the schema declares one (an old instance keeps its original look), otherwise the default. The
+    // old `|| 0` also swallowed a legitimately-selected 0, so option 0 could never light up.
+    const cur = fx.params[p.key] != null ? fx.params[p.key]
+      : (p.legacy != null ? p.legacy : (p.default != null ? p.default : 0));
     p.options.forEach(opt => {
-      const b = el('button', 'fx-seg-btn' + ((fx.params[p.key] || 0) == opt[0] ? ' on' : ''), opt[1]);
-      b.addEventListener('click', () => { fx.params[p.key] = parseFloat(opt[0]); FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); });
+      const b = el('button', 'fx-seg-btn' + (cur == opt[0] ? ' on' : ''), String(opt[1]));
+      b.addEventListener('click', () => {
+        const v = parseFloat(opt[0]);
+        fx.params[p.key] = isNaN(v) ? opt[0] : v;   // never write NaN — it reads back as "not this option, and not any other"
+        FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
+      });
       seg.appendChild(b);
     });
     row.appendChild(seg);
