@@ -419,6 +419,10 @@ window.FM = window.FM || {};
       { key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 },
       { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
       { key: 'mirror', label: 'Mirror', options: ['Off', 'On'], def: 1, legacy: 0 },      // mirrored copies join seamlessly — "the clip keeps going"
+      // What gets repeated. "On screen" is the original behaviour: it tiles whatever alpha survives
+      // inside the frame, so a clip dragged half off the edge repeats a sliver. "Whole clip" renders
+      // the layer past the frame first and repeats all of it.
+      { key: 'source', label: 'Repeat', options: ['On screen', 'Whole clip'], def: 1, legacy: 0 },
     ] },
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
@@ -2095,6 +2099,44 @@ window.FM = window.FM || {};
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
   const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
+   * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
+   * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
+   * bounds repeats a sliver — Ezra's "it will just make repeat a short sliver of it, because that's
+   * what's on screen."
+   * This re-renders the clean layer into a plate covering the comp PLUS a margin on every side,
+   * reusing the very same __fmOX/__fmOY origin machinery the viewport crop uses (there it moves the
+   * origin inward; here it moves outward). Returns the plate, the margin in project units, and the
+   * scale — or null when the layer is already inside the frame and the normal plate will do. */
+  let _expC = null;
+  function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH) {
+    const tr = layer.transform || {};
+    const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
+    const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
+    // Half the diagonal is the exact bound on how far the layer can reach from its anchor under ANY
+    // rotation, so it is both tight and safe. transform.x/y are ABSOLUTE project coordinates of the
+    // anchor (verified by render: a 200x200 shape at x:300,y:500 has its centroid at 299.5,499.5) —
+    // treating them as an offset from the comp centre inflated the plate and cost 3.4x.
+    const reach = 0.5 * Math.hypot(sz.w || 0, sz.h || 0) * sc;
+    const cx = FM.evalProp(tr.x, t) || 0, cy = FM.evalProp(tr.y, t) || 0;
+    // One symmetric margin, sized by whichever side actually overflows.
+    let mx = Math.max(0, Math.max(reach - cx, cx + reach - PW));
+    let my = Math.max(0, Math.max(reach - cy, cy + reach - PH));
+    if (mx < 2 && my < 2) return null;                          // nothing outside the frame — caller uses the normal plate
+    mx = Math.min(mx, PW * 0.6); my = Math.min(my, PH * 0.6);   // cost ceiling: at most ~4.8x the comp's pixels
+    const EW = Math.max(1, Math.round((PW + 2 * mx) * ps)), EH = Math.max(1, Math.round((PH + 2 * my) * ps));
+    if (!_expC) _expC = document.createElement('canvas');
+    if (_expC.width !== EW || _expC.height !== EH) { _expC.width = EW; _expC.height = EH; }
+    _expC.__fmRS = ps; _expC.__fmOX = -mx; _expC.__fmOY = -my;   // plate pixel (0,0) IS project (-mx,-my)
+    const ec = _expC.getContext('2d');
+    ec.setTransform(1, 0, 0, 1, 0, 0); ec.clearRect(0, 0, EW, EH);
+    baseT(ec);
+    ec.globalAlpha = 1; ec.globalCompositeOperation = 'source-over'; ec.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    drawLayer(ec, tmp, t, scene);
+    return { cv: _expC, mx: mx, my: my, ps: ps };
+  }
+
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -2131,7 +2173,11 @@ window.FM = window.FM || {};
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     baseT(bctx); bctx.clearRect(0, 0, W, H);
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer, ps);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
+    // Tiles' whole-clip repeat needs the layer's content from OUTSIDE the frame, which the normal
+    // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
+    // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
+    const expand = () => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH);
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer, ps, expand);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     baseT(ctx);
@@ -3008,10 +3054,11 @@ window.FM = window.FM || {};
       }
       B.restore();
     },
-    tiles: function (A, B, W, H, bb, p, t) {
+    tiles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
       const gap = Math.max(0, Math.min(0.4, fparam(p, 'gap', 8, t) / 100));
       const mirror = Math.round(fparam(p, 'mirror', 0, t)) === 1;   // fallback Off: old instances byte-identical
       const mode = Math.round(fparam(p, 'mode', 1, t));             // fallback 1 = Grid (classic): old instances byte-identical
+      const whole = Math.round(fparam(p, 'source', 0, t)) === 1;    // fallback On screen: old instances byte-identical
       if (mode === 1) {
         const n = Math.max(1, Math.min(8, Math.round(fparam(p, 'count', 3, t))));
         // Cell edges snap to WHOLE pixels. W/n is fractional for most project sizes (1080/3 is fine,
@@ -3044,13 +3091,33 @@ window.FM = window.FM || {};
       // fixed ±2 inset was compensating for a padded, 4x-downsampled measurement, and it could not:
       // the fast scan's slack varies with the content, so the leftover margin rode along inside
       // every copy and showed up as a gutter that the gap slider could not close.
-      const bx = bb.x, by = bb.y, bw = bb.w, bh = bb.h;
+      // WHOLE CLIP: the tile is cut from a plate that extends PAST the frame, so a clip dragged half
+      // off the edge repeats all of itself instead of the sliver that survived the crop. The plate's
+      // pixel (0,0) is project (-mx,-my), so its bbox shifts by the margin to land in A/B's space —
+      // the tiling loop below is unchanged and still works in A's pixels.
+      // src/sx/sy = where to CUT the tile from. bx/by = where that tile sits in A and B's pixel grid
+      // (they share one). For the normal plate those are the same rect. For the expanded plate they
+      // differ by the margin: its pixel (0,0) is project (-mx,-my), so a bbox at ex.x sits at
+      // ex.x - mx*ps in A's space. Everything below then works in A's pixels, unchanged.
+      let src = A, bw = bb.w, bh = bb.h;
+      let bx = bb.x, by = bb.y, sx = bb.x, sy = bb.y;
+      if (whole && expand) {
+        const ex = expand();
+        if (ex) {
+          let eb = null;
+          try { eb = alphaBBoxExact(ex.cv.getContext('2d').getImageData(0, 0, ex.cv.width, ex.cv.height).data, ex.cv.width, ex.cv.height); } catch (e) { eb = null; }
+          if (eb && eb.w > 2 && eb.h > 2) {
+            src = ex.cv; sx = eb.x; sy = eb.y; bw = eb.w; bh = eb.h;
+            bx = eb.x - Math.round(ex.mx * ex.ps); by = eb.y - Math.round(ex.my * ex.ps);
+          }
+        }
+      }
       if (bw < 8 || bh < 8 || (bx === 0 && by === 0 && bw >= W && bh >= H)) { B.drawImage(A, 0, 0); return; }   // tiny content / already full-frame → nothing to extend
       if (!_tileC) _tileC = document.createElement('canvas');
       if (_tileC.width !== bw || _tileC.height !== bh) { _tileC.width = bw; _tileC.height = bh; }
       const tc = _tileC.getContext('2d');
       baseT(tc); tc.clearRect(0, 0, bw, bh);
-      tc.drawImage(A, bx, by, bw, bh, 0, 0, bw, bh);
+      tc.drawImage(src, sx, sy, bw, bh, 0, 0, bw, bh);
       // Whole-pixel step. A fractional step means every copy lands on a fractional x/y, canvas
       // resamples it, and the soft resampled edge reads as a hairline seam between neighbours —
       // the same "gap" symptom from a different cause. At gap 0 the step IS the tile, so copies abut.

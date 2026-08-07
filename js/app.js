@@ -1458,15 +1458,20 @@ window.FM = window.FM || {};
     return 0;
   };
 
-  // MOVE: the clip slides so it STARTS at t. Length, trim and speed are all untouched — only when it
-  // plays changes. Keyframe times are absolute, so they ride along or the animation detaches from the
-  // picture (the same rule a clip drag follows).
+  // MOVE: the clip slides until the edge NEAREST the playhead meets it — the same rule EXTEND below
+  // already follows. Playhead parked BEFORE the clip, its start travels back to meet it; parked
+  // AFTER, its END travels forward. (Ezra: "if you do it from the right side it just makes the clip
+  // start from the playhead but it should just bring the end of the clip to the playhead.") Snapping
+  // the start to the playhead from the right threw the clip forward by its own length.
+  // Length, trim and speed are untouched — only when it plays changes. Keyframe times are absolute,
+  // so they ride along or the animation detaches from the picture (the rule a clip drag follows too).
   FM.moveClipTo = function (layer, t) {
     if (!layer) return false;
     if (t == null) t = FM.time;
-    const d = t - layer.start;
+    const anchor = FM.clipPlayheadSide(layer, t) > 0 ? layer.start + layer.duration : layer.start;
+    const d = t - anchor;
     if (Math.abs(d) < 1e-6) return false;
-    layer.start = t;
+    layer.start = layer.start + d;
     if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(layer, d);
     return true;
   };

@@ -1169,11 +1169,18 @@ window.FM = window.FM || {};
       // MOVE moves the selection as a BLOCK — the earliest clip lands on the playhead and every other
       // one keeps its offset from it. Snapping them all to the same start would destroy the timing you
       // built between them, which is the opposite of what a multi-select is for.
-      const first = Math.min.apply(null, layers.map(l => l.start));
-      const right = FM.time >= first;
+      // The SELECTION's near edge meets the playhead, exactly as a single clip's does — past the whole
+      // selection it's the last END that travels, otherwise the first start. Anchoring on the first
+      // start from the right threw the whole group forward by the selection's own length.
+      const groupShift = () => {
+        const firstStart = Math.min.apply(null, layers.map(l => l.start));
+        const lastEnd = Math.max.apply(null, layers.map(l => l.start + l.duration));
+        return FM.time - (FM.time >= lastEnd ? lastEnd : firstStart);
+      };
+      const right = groupShift() > 0;
       ab(right ? 'Move all ' + n + ' clips right to the playhead' : 'Move all ' + n + ' clips left to the playhead',
         right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16', {}, () => {
-        const d = FM.time - Math.min.apply(null, layers.map(l => l.start));
+        const d = groupShift();   // recomputed at press: the panel doesn't rebuild on scrub
         layers.forEach(l => setStart(l, l.start + d));
         done();
       });
