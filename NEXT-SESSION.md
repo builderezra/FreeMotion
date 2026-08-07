@@ -1,7 +1,7 @@
 # Next session — the open queue
 
 Rewritten 2026-08-07. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
-via GitHub Desktop. Fifty releases are waiting (v4.10 → v4.59).
+via GitHub Desktop. Fifty-two releases are waiting (v4.10 → v4.61).
 
 Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
@@ -14,26 +14,32 @@ instead of applying all 175 effects to one flat teal ball. The audit also found 
 rendering nothing because their defaults are sized for a real comp — Tile Shift and Tile Rotate were
 exact no-ops on a 96px thumbnail. See `SUBJECT_OF` and `OVERRIDES` in `js/fx-thumbs.js`.
 
-## 1. EFFECTS-PLAN.md round 10 — the standing autonomous order
+## 1. EFFECTS-PLAN.md round 11 — the standing autonomous order
 
-**Round 10 is under way and is the first round that adds NEW effects rather than params.** Shipped so
-far, off that file's BUILD NEXT table: **Levels + Halation (v4.54)**, **Frame Stutter + Shockwave
-(v4.55)**, **Speed Lines + HSL Bands (v4.56)**, **Time Warp Scan + Chroma Key Pro (v4.57)**,
-**Light Wrap (v4.58)** — nine of the thirteen.
+**Round 10 is COMPLETE. All thirteen effects on that file's BUILD NEXT table are shipped** (v4.54 →
+v4.61): Levels, Halation, Frame Stutter, Shockwave, Speed Lines, HSL Bands, Time Warp Scan, Chroma
+Key Pro, Light Wrap, Dispersion, VHS Tape, Compression Crunch, Temporal Denoise. The app is at 188
+effects.
 
-Still open on that table: **Dispersion (10)**, **Temporal Denoise (11)**, **VHS Tape (12)**,
-**Compression Crunch (13)**. All four are PIXEL_FX with real per-frame cost; read that file's
-"Perf claims I think are wrong" table before starting any of them.
+Round 11 starts from what is left in EFFECTS-PLAN.md:
 
-`FM.needsBgSnap` (v4.58) is now the gate for any effect that reads the layers UNDERNEATH — add a key
-to `BG_SNAP_FX` and it works. That is what Liquid Glass would need if it is ever redone properly.
+- the **WORTH DOING LATER** list — Luma Matte, Compound Blur, Corner Pin, LUT (.cube), Pixel Sort,
+  Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-an-offline-Analyse-pass, Curves. Each
+  entry says why it is bigger than a BUILD NEXT item; read the note before starting one.
+- the **full proposal table** of per-effect PARAM upgrades (~105 of them), which is what rounds 1-9
+  worked through. Those carry the byte-identity rule; new effects do not.
 
-The byte-identity rule and the three-gate harness are documented at the top of EFFECTS-PLAN.md,
-including the two traps that have caught me: `params:{}` renders at the LEGACY default (use
-`FM.fxRegistry.makeInstance`), and `makeInstance` stamps schema `def`s so a new instance can differ
-from an old one — decide that deliberately each time. For a NEW effect there is no legacy to match,
-so the check that matters is "0 differing bytes vs HEAD across a spread of existing effect stacks",
-which catches an accidental change to shared machinery.
+Two things learned in round 10 that belong here:
+
+- For a NEW effect there is no legacy value to match, so the identity check that matters is
+  **"0 differing bytes vs HEAD across a spread of EXISTING effect stacks"** — it catches an
+  accidental change to shared machinery, which is the only way a new effect can break an old project.
+- A **CANVAS_FX at a no-op setting is not byte-identical to having no effect at all**: the plate
+  round-trip (rasterise once, then blit) moves antialiased edge pixels by ±1. Light Wrap at intensity
+  0 differs on 169 of them, Rounded Corners at radius 0 on 192. Judge a canvas effect's no-op by
+  "confined to the antialiased edge, delta ≤ 1", not by zero.
+- `FM.needsBgSnap` / `BG_SNAP_FX` (v4.58) is the gate for any effect that reads the layers
+  UNDERNEATH. Add one key and it works.
 
 ---
 
@@ -74,5 +80,5 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.59. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
+v3.79 → v4.61. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
 than minting a new one.
