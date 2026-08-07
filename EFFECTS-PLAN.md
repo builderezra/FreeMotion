@@ -108,6 +108,20 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   dither (cell size, 2x2·4x4·8x8 matrix, mono output). All 12 new defs equal the constants
   they replaced, so makeInstance-seeded NEW instances are byte-identical too — the vignette
   trap flagged above, checked explicitly this round.
+- v4.54 (round 10, part 1 — the first NEW effects rather than new params) — **Levels** (#2 on the
+  BUILD NEXT table) and **Halation** (#1). Levels is a memoized 256-entry LUT exactly like
+  `gradeLUT`, per channel, and is wired into the ADJUSTMENT path too: `applyPixelFx` now falls
+  through to `PIXEL_FX` first, which is safe because none of the five existing PIXEL_ADJ types live
+  in that map (checked programmatically, not assumed — they all have their own `draw*` functions).
+  Halation builds its highlight mask at QUARTER resolution — 130k pixels at 1080p instead of 2M —
+  then rides `ctx.filter` for both radii. **Auto-levels from percentiles was dropped**: the param
+  schema has no button type to hang a one-tap action on, and a slider labelled "Auto" would be a lie.
+  Measured at 1080x1920: Levels 7.98ms, Halation 4.9-7.4ms, against solarize 8.69 / gamma 9.5 /
+  vignette 10.3 — both at or below the getImageData floor every effect in that path already pays.
+  Identity vs HEAD: 0 differing bytes on the adjustment path and on a mixed pixel/warp/canvas stack.
+  **Still open on this table:** Frame Stutter (3), Shockwave (4), Speed Lines (5), Time Warp Scan (6),
+  HSL Bands (7), Chroma Key Pro (8), Light Wrap (9), Dispersion (10), Temporal Denoise (11),
+  VHS Tape (12), Compression Crunch (13).
 
 ## Build order (from the ranking pass)
 
