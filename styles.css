@@ -1945,3 +1945,15 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .cam-tab svg { width: 22px; height: 22px; }
 .cam-tab:hover { color: var(--text); border-color: var(--accent-dim, var(--line)); }
 .cam-tab.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* Anchor-mode pivot marker: the After Effects crosshair-in-a-ring, centred on the anchor point.
+   Sits above the selection box so it stays readable over a bright layer. */
+.anchor-dot {
+  position: absolute; z-index: 6; pointer-events: none;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+  border: 2px solid var(--kf, #ffcc33);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.55), 0 0 8px rgba(0,0,0,.5);
+  background:
+    linear-gradient(var(--kf, #ffcc33), var(--kf, #ffcc33)) center/2px 100% no-repeat,
+    linear-gradient(var(--kf, #ffcc33), var(--kf, #ffcc33)) center/100% 2px no-repeat;
+}

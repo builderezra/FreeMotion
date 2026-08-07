@@ -9,7 +9,7 @@ window.FM = window.FM || {};
 
   let canvas, wrap, box;
   let drag = null;
-  let guideV = null, guideH = null;
+  let guideV = null, guideH = null, anchorDot = null;
 
   // Snap a value to the nearest target within threshold (canvas centre / edges).
   function snapTo(v, targets, thr) {
@@ -515,7 +515,7 @@ window.FM = window.FM || {};
     // grab cursor = "you're holding the player" (nothing selected → viewport pan; camera → scene pan)
     const cur = (!layer || layer.type === 'camera') ? 'grab' : 'default';
     if (canvas && canvas.style.cursor !== cur) canvas.style.cursor = cur;
-    if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) { box.style.display = 'none'; return; }   // camera pans globally — no box
+    if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) { box.style.display = 'none'; if (anchorDot) anchorDot.style.display = 'none'; return; }   // camera pans globally — no box
     const tr = layer.transform;
     let sc = FM.evalProp(tr.scale, t);
     let cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
@@ -560,6 +560,16 @@ window.FM = window.FM || {};
       tf += ' matrix(1,' + (sY * tanY / sX) + ',' + (sX * tanX / sY) + ',1,0,0)';
     }
     box.style.transform = tf;
+    // ANCHOR MODE: show the pivot on the canvas (Ezra: "when placing the anchor for movement it should
+    // show you where it is on the canvas"). Placing it blind was the whole problem — you nudged a pad,
+    // the layer did not move, and the only way to find out where the pivot had landed was to scale the
+    // layer and watch which way it went. transform.x/y IS the anchor, so this is the box's own
+    // transform-origin in wrap pixels; nothing new to compute and nothing that can disagree with it.
+    if (anchorDot) {
+      const showA = FM._mtMode === 'anchor' && layer.type !== 'group';
+      anchorDot.style.display = showA ? 'block' : 'none';
+      if (showA) { anchorDot.style.left = (cx * ds) + 'px'; anchorDot.style.top = (cy * ds) + 'px'; }
+    }
   }
 
   // Show the alignment guide lines from OUTSIDE a canvas drag (used by Move & Transform when its X/Y
@@ -591,7 +601,10 @@ window.FM = window.FM || {};
       wrap.appendChild(box);
       guideV = document.createElement('div'); guideV.className = 'snap-guide v'; guideV.style.display = 'none';
       guideH = document.createElement('div'); guideH.className = 'snap-guide h'; guideH.style.display = 'none';
-      wrap.appendChild(guideV); wrap.appendChild(guideH);
+      // The pivot marker for Anchor mode. transform.x/y IS the anchor point, so it needs no maths of
+      // its own — it goes exactly where the box's transform-origin already is.
+      anchorDot = document.createElement('div'); anchorDot.className = 'anchor-dot'; anchorDot.style.display = 'none';
+      wrap.appendChild(guideV); wrap.appendChild(guideH); wrap.appendChild(anchorDot);
       canvas.addEventListener('pointerdown', startMove);
       canvas.addEventListener('wheel', onWheel, { passive: false });
       window.addEventListener('pointermove', onMove);
