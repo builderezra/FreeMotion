@@ -272,6 +272,10 @@ window.FM = window.FM || {};
       { key: 'size', label: 'Grain size', min: 1, max: 6, step: 0.5, def: 2 },        // real grain clumps — it is not one pixel
       { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 15, unit: '%' },
       { key: 'shadows', label: 'In shadows', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      // Deliberately def 35, not 0: without it the response curve is zero at pure white, so grain did
+      // NOTHING on white text (Ezra: "film grain no work on text"). The FALLBACK is still 0, so every
+      // project saved before this keeps its exact pixels; only a newly added Film Grain gets the lift.
+      { key: 'highlights', label: 'In highlights', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     ] },
     { type: 'blocknoise', label: 'Block Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -1290,6 +1294,11 @@ window.FM = window.FM || {};
       const size = Math.max(1, fparam(p, 'size', 2, t));
       const chroma = fparam(p, 'color', 15, t) / 100;               // 0 = pure luminance grain
       const shadowKeep = fparam(p, 'shadows', 35, t) / 100;         // how much grain survives into the blacks
+      // …and the same for the whites. 4*L*(1-L) is zero at BOTH ends, and only the dark end had a
+      // floor — so on pure white (white text on nothing, a white card, a blown highlight) the effect
+      // was mathematically incapable of doing anything, which is exactly what it looked like.
+      const highKeep = fparam(p, 'highlights', 0, t) / 100;         // fallback 0 = the old curve, byte for byte
+      const flat = highKeep === 0;
       const frame = Math.floor(t * 24);                             // re-roll per frame: static grain reads as dirt on the lens
       const inv = 1 / size;
       const gw = Math.ceil(W * inv) + 1;
@@ -1307,7 +1316,10 @@ window.FM = window.FM || {};
           // shadow floor lifts the dark end back up by the user's amount.
           const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
           const mid = 4 * L * (1 - L);
-          const resp = mid + (1 - mid) * shadowKeep * (1 - L);
+          // The `flat` branch keeps the original expression EXACTLY — folding the highlight term in
+          // re-associates the multiply and moves the last bit even when it is zero.
+          const resp = flat ? mid + (1 - mid) * shadowKeep * (1 - L)
+                            : mid + (1 - mid) * (shadowKeep * (1 - L) + highKeep * L);
           const g = n * amt * resp;
           if (chroma <= 0) { d[i] += g; d[i + 1] += g; d[i + 2] += g; continue; }
           // colour grain: decorrelate the channels a little, scaled by the chroma amount
