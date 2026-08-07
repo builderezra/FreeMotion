@@ -32,6 +32,9 @@ Each of these was built from an AM screenshot and needs an original treatment:
 - **Editor chrome** — the top bar composition (back ‹, project name, ⚙, green export button), the
   transport row, and the timeline clip look.
 - **Terminology** — "Elements", "Object / Element", "Templates" as tab names follow AM's wording.
+- **Camera Options** (v4.25) — the three-screen structure (Camera View / Focus Blur / Fog), the icon
+  rail that switches between them, and the control names all come from AM screenshots. The optics
+  underneath are our own (a real pinhole lens driving the existing Z model); the screen layout is not.
 - **Clip-action row, playhead-outside state** (v4.17) — built from AM screenshots: the middle buttons
   swapping from trim/split to move-to-playhead / extend-to-playhead when the playhead leaves the clip,
   the two icon glyphs (box → bar, open box → bar), and the multi-select bar carrying the same pair

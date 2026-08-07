@@ -877,6 +877,8 @@ window.FM = window.FM || {};
     { key: 'editgroup', label: 'Edit Group', icon: 'M4 4h7v7H4zM13 13h7v7h-7zM13 7.5h3.5a1 1 0 0 1 1 1V12M11 16.5H7.5a1 1 0 0 1-1-1V12' },   // group only — opens the group's own timeline
     { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
+    // camera only — the Effects-style door into the lens, focus and fog (Ezra)
+    { key: 'cameraopts', label: 'Camera Options', icon: 'M3 8.5 8.5 4v3H14a6 6 0 0 1 0 12H9M3 8.5 8.5 13v-3' },
   ];
 
   // Alight Motion labels its element category after the layer kind: "Edit Text" for text,
@@ -1242,9 +1244,15 @@ window.FM = window.FM || {};
     const m = FM.media.get(layer.id);
     return !!m && (!m.width || !m.height);
   }
-  function catsFor(layer) { return catsForBase(layer); }
+  function catsFor(layer) {
+    const out = catsForBase(layer);
+    // Camera Options is whitelisted onto the camera. Every OTHER branch below builds its list by
+    // blacklist, so a new category leaks into all of them unless it is taken back out here — which is
+    // exactly what happened: the card turned up on shapes, text, media and groups.
+    return (layer && layer.type === 'camera') ? out : out.filter(c => c.key !== 'cameraopts');
+  }
   function catsForBase(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
-    if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform');
+    if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform' || c.key === 'cameraopts');
     // Groups composite as a flattened unit whenever they carry a look of their own, so effects,
     // blending/opacity and presets all act on the whole group — plus the door into its own timeline.
     if (layer.type === 'group') return CATEGORIES.filter(c => ['color', 'border', 'blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
@@ -1280,6 +1288,7 @@ window.FM = window.FM || {};
     if (v === 'speed') return ['video', 'shape', 'text', 'image'].indexOf(layer.type) >= 0;
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
+    if (v === 'cameraopts') return layer.type === 'camera';   // the lens belongs to the camera and nothing else
     // Past this point every view is a VISUAL one, and a song has no card for any of them — so nothing
     // may route into one either. A view persisted from the previously selected layer, or a timeline
     // double-click, would otherwise open a panel with no picture behind it. (Speed, Volume and Audio
@@ -2382,7 +2391,67 @@ window.FM = window.FM || {};
   }
   FM._textExtras = buildTextExtras;
 
+  // ===== CAMERA OPTIONS — Camera View · Focus Blur · Fog =====
+  // Three sub-screens behind one card, the way Move & Transform holds its modes: a rail of icons and
+  // a transient FM._camTab, so the tab you were last on never becomes a field saved into the project.
+  const CAM_TABS = [
+    { key: 'view',  label: 'Camera View', icon: 'M3 8.5 8.5 4v3H14a6 6 0 0 1 0 12H9M3 8.5 8.5 13v-3' },
+    { key: 'focus', label: 'Focus Blur',  icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9' },
+    { key: 'fog',   label: 'Fog',         icon: 'M4 16h16M6 19h12M7 13h10a5 5 0 0 0-10 0' },
+  ];
+  // The lens the compositor has always used is f = 2 × project height, which through the ordinary
+  // pinhole relation is 28.07° — so that is what Field of view reads on a camera nobody has touched,
+  // and nothing moves until you drag it. Wider = shorter focal length = stronger perspective, and
+  // every depth effect (z scaling, parallax, focus falloff) firms up together because all of them
+  // divide by f.
+  function camLegacyFov(P) { return +(2 * Math.atan((P.height || 1080) / 2 / Math.max(1, (P.height || 1080) * 2)) * 180 / Math.PI).toFixed(1); }
+  function camPanel(layer, body) {
+    const P = FM.scene.project;
+    const tab = CAM_TABS.some(c => c.key === FM._camTab) ? FM._camTab : 'view';
+    const rail = el('div', 'cam-rail');
+    CAM_TABS.forEach(c => {
+      const b = el('button', 'cam-tab' + (c.key === tab ? ' on' : ''));
+      b.innerHTML = svgIcon(c.icon); b.title = c.label;
+      b.addEventListener('click', () => { FM._camTab = c.key; FM.inspector.refresh(); });
+      rail.appendChild(b);
+    });
+    body.appendChild(rail);
+    body.appendChild(el('div', 'insp-sub-label', (CAM_TABS.find(c => c.key === tab) || {}).label));
+    if (tab === 'view') {
+      body.appendChild(rangeRow('Field of view', () => (layer.fov != null ? FM.evalProp(layer.fov, FM.time) : camLegacyFov(P)),
+        v => { layer.fov = Math.max(5, Math.min(160, v)); FM.requestRender(); }, 5, 160, 0.5));
+      // Distance IS the camera's own Z — it already exists, already keyframes, and already feeds the
+      // parallax maths. Giving it a second home here rather than a second field keeps one truth.
+      body.appendChild(rangeRow('Distance', () => -(layer.transform.z != null ? FM.evalProp(layer.transform.z, FM.time) : 0),
+        v => { FM.setTransform(layer, 'z', -Math.round(v), FM.time); FM.requestRender(); }, -2000, 4000, 5));
+      body.appendChild(el('div', 'insp-hint', 'Field of view is the lens. Wide (90°+) throws depth hard — layers at different Z separate and the camera’s pan gains real parallax. Narrow (20°) flattens the scene almost to 2D. Distance dollies the camera along Z; it is the same value as the camera’s own Z, so keyframing either animates the move.'));
+      return;
+    }
+    if (tab === 'focus') {
+      if (!layer.focus) layer.focus = { enabled: false, distance: 0, dof: 200, blur: 0.5 };
+      const f = layer.focus;
+      body.appendChild(checkRow('Focus blur', !!f.enabled, v => { f.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
+      if (!f.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to defocus layers by their depth. Give layers different Z values (Move & Transform → Move) and everything off the focus plane softens.')); return; }
+      body.appendChild(rangeRow('Focus distance', () => FM.evalProp(f.distance, FM.time) || 0, v => { f.distance = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
+      body.appendChild(rangeRow('Depth of field', () => FM.evalProp(f.dof, FM.time) || 200, v => { f.dof = Math.max(1, Math.round(v)); FM.requestRender(); }, 1, 3000, 5));
+      body.appendChild(rangeRow('Blur strength', () => FM.evalProp(f.blur, FM.time) || 0, v => { f.blur = Math.max(0, Math.min(2, v)); FM.requestRender(); }, 0, 2, 0.05));
+      body.appendChild(el('div', 'insp-hint', 'Focus distance is the Z that stays sharp. Depth of field is how far either side of it also stays sharp — past that the blur ramps up and tops out three widths out.'));
+      return;
+    }
+    if (!layer.fog) layer.fog = { enabled: false, color: '#ffffff', near: 0, far: Math.round((P.height || 1080) * 2) };
+    const g = layer.fog;
+    body.appendChild(checkRow('Fog', !!g.enabled, v => { g.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
+    if (!g.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to wash distant layers toward a colour — haze, dusk, underwater. Layers need different Z values for it to do anything.')); return; }
+    const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, 'Colour'));
+    cr.appendChild(colorField(() => g.color || '#ffffff', v => { g.color = v; FM.requestRender(); commitH(); }));
+    body.appendChild(cr);
+    body.appendChild(rangeRow('Near distance', () => FM.evalProp(g.near, FM.time) || 0, v => { g.near = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
+    body.appendChild(rangeRow('Far distance', () => FM.evalProp(g.far, FM.time) || 0, v => { g.far = Math.round(v); FM.requestRender(); }, -2000, 8000, 5));
+    body.appendChild(el('div', 'insp-hint', 'A layer at the near distance is untouched; at the far distance it is the fog colour outright; between the two it fades across. The wash clips to each layer’s own shape, so text stays text.'));
+  }
+
   function buildCategory(key, layer, body) {
+    if (key === 'cameraopts') { camPanel(layer, body); return; }
     if (key === 'transform') {
       body.appendChild(moveTransformPanel(layer));
       if (layer.type !== 'camera') body.appendChild(parentControl(layer));   // parenting lives with the transform it inherits (the camera ignores a parent) (#11)
@@ -2842,8 +2911,8 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }
-      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // "Edit Text" IS the focused editor: opening the text element category launches the full-screen
       // text-edit mode OVER the grid, then leaves the inspector on the grid so ✓/Esc lands back on the
       // category list (Color & Fill, Border & Shadow, Effects, …) — not a one-off popup. Adding text

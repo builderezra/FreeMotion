@@ -3340,6 +3340,42 @@ window.FM = window.FM || {};
   // Tint / colorize: map each pixel's luminance onto a colour (black→black, white→tint), blended
   // with the original by `amount` — a quick duotone/colour-wash look.
   let _tiA = null, _tiB = null;
+  // FOG (Camera Options): a flat colour laid over a layer by its DEPTH — far layers wash out toward
+  // it, near ones stay clean. It has to go on a plate rather than a fillRect inside drawLayer: the
+  // wash must clip to the layer's own alpha (source-atop, or it would tint the whole bounding box
+  // around a glyph or a star), and drawLayer has eight early-return branches, so there is no single
+  // point inside it where the content is known to be finished. Same shape as drawTint below, minus
+  // its per-pixel pass — one composited fillRect does the entire job.
+  let _fogA = null, _fogBusy = false;
+  function drawFogLayer(ctx, layer, t, scene, amt) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = P.width, H = P.height;
+    if (!_fogA) _fogA = document.createElement('canvas');
+    if (_fogA.width !== W || _fogA.height !== H) { _fogA.width = W; _fogA.height = H; }
+    const a = _fogA.getContext('2d');
+    baseT(a); a.clearRect(0, 0, W, H);
+    a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    _fogBusy = true;                                   // the plate's own draw must not re-enter here
+    try { drawLayer(a, tmp, t, scene); } finally { _fogBusy = false; }
+    a.save(); a.setTransform(1, 0, 0, 1, 0, 0);
+    a.globalCompositeOperation = 'source-atop';        // the wash clips to the layer's own pixels
+    a.globalAlpha = amt;
+    a.fillStyle = (_camLens && _camLens.fog && _camLens.fog.color) || '#ffffff';
+    a.fillRect(0, 0, W, H);
+    a.restore();
+    ctx.save();
+    baseT(ctx);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+    ctx.filter = 'none';
+    if (ctx.canvas === _fogA) ctx.clearRect(0, 0, W, H);   // nested plates: ctx IS our scratch → clear so this replaces rather than double-composites
+    ctx.drawImage(_fogA, 0, 0);
+    ctx.restore();
+  }
+
   function drawTint(ctx, layer, t, scene, amount, colorHex, fx) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -3749,7 +3785,10 @@ window.FM = window.FM || {};
     const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
     const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
     const zz = tr.z != null ? FM.evalProp(tr.z, t) : 0;
-    const _F = Math.max(1, (_P.height || 1080) * 2);              // focal length (~2× project height)
+    // Focal length. The camera's Field of view drives it when there IS a camera and it has been given
+    // one; everything else — no camera, an older camera, a thumbnail, an effect preview — keeps the
+    // fixed 2× lens this has always used, so nothing existing shifts by a pixel.
+    const _F = (_camLens && _camLens.F) || Math.max(1, (_P.height || 1080) * 2);   // focal length (~2× project height)
     const pscale = zz ? _F / Math.max(_F * 0.05, _F + zz) : 1;    // z>0 = farther (smaller), z<0 = nearer (bigger)
     const _vpx = (_P.width || 0) / 2, _vpy = (_P.height || 0) / 2;
     const accumRot = applyParentChain(ctx, layer, t, scene);   // inherit parent motion before the layer's own transform
@@ -4608,10 +4647,27 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(tr.opacity, t)));
     if (opacity <= 0) return;
 
+    // Fog rides its own plate, so it has to precede every other branch below — the wash must land on
+    // the finished layer whichever of the eight ways it draws.
+    if (!_fogBusy && scene) { const _fa = camFogAmt(layer, t); if (_fa > 0.002) { drawFogLayer(ctx, layer, t, scene, _fa); return; } }
+
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = effectFilter(layer, t);   // reset automatically by ctx.restore()
+    // FOCUS BLUR (Camera Options). Appended to the layer's own filter string rather than run as a
+    // pixel pass: this is the one hook every layer type already goes through, and a GPU-side blur
+    // costs no buffer. The radius is set BEFORE applyLayerTransform, so it lives in pre-transform
+    // space and the layer's own scale would multiply it — a far layer, already shrunk by z, would
+    // blur less the further away it got, which is backwards. Hence the divide by the effective scale.
+    const _dfc = camDefocus(layer, t);
+    if (_dfc > 0) {
+      const zz = layer.transform.z != null ? FM.evalProp(layer.transform.z, t) : 0;
+      const F = (_camLens && _camLens.F) || Math.max(1, ((scene && scene.project && scene.project.height) || 1080) * 2);
+      const ps = zz ? F / Math.max(F * 0.05, F + zz) : 1;
+      const px = (_dfc * _camLens.focus.s * 22) / Math.max(0.05, ps);
+      if (px > 0.3) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + px.toFixed(2) + 'px)';
+    }
     applyShadow(ctx, layer, t);
     applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
@@ -5046,6 +5102,73 @@ window.FM = window.FM || {};
   // Active camera's evaluated pan {x,y} + z-dolly, stashed by renderScene for the duration of its layer
   // loop so applyLayerTransform can add depth parallax; null whenever no camera is active (diff-free).
   let _camParallax = null;
+  // The camera's LENS + atmosphere for this frame: focal length (from field of view), the focus
+  // plane, and fog. Scoped to the layer loop exactly like _camParallax, so thumbnails, fx previews
+  // and any comp rendered without a camera keep the legacy fixed lens and no blur or fog at all.
+  let _camLens = null;
+
+  // ===== CAMERA OPTIONS (Alight Motion parity): Camera View · Focus Blur · Fog =====
+  // Resolve a camera's optics for one frame. EVERY field is absent-by-default and every fallback is
+  // the behaviour that shipped before this existed, so an older project renders byte-for-byte as it
+  // did: no fov → the fixed 2× focal length, focus.enabled off → no blur, fog.enabled off → no fog.
+  //
+  // FIELD OF VIEW ↔ focal length is the ordinary pinhole relation, f = (H/2) / tan(fov/2), with the
+  // project height as the sensor. The legacy lens (f = 2H) is therefore 28.07°, which is what the FOV
+  // control reads on a camera you have never touched — it is a long lens, which is exactly why Z
+  // parallax has always been subtle. Opening it up shortens f, and every depth effect (layer scale
+  // with z, camera parallax, focus falloff) strengthens together, because they all divide by f.
+  FM.cameraLens = function (cam, t, P) {
+    if (!cam) return null;
+    const H = Math.max(1, (P && P.height) || 1080);
+    const legacyF = Math.max(1, H * 2);
+    let F = legacyF;
+    if (cam.fov != null) {
+      const deg = FM.evalProp(cam.fov, t);
+      if (isFinite(deg) && deg > 0.5 && deg < 179) {
+        const half = (deg * Math.PI / 180) / 2;
+        const tan = Math.tan(half);
+        if (isFinite(tan) && tan > 1e-6) F = Math.max(1, (H / 2) / tan);
+      }
+    }
+    const out = { F: F };
+    const fc = cam.focus;
+    if (fc && fc.enabled) {
+      const d = FM.evalProp(fc.distance, t), r = FM.evalProp(fc.dof, t), s = FM.evalProp(fc.blur, t);
+      out.focus = {
+        d: isFinite(d) ? d : 0,
+        // Depth of field is the HALF-WIDTH of the sharp zone in z. Inside it nothing blurs at all;
+        // past it the blur ramps linearly and is capped, because an unbounded ctx.filter blur on a
+        // full-frame layer is the one thing here that can actually stall a phone.
+        r: Math.max(1, isFinite(r) ? r : 200),
+        s: Math.max(0, Math.min(2, isFinite(s) ? s : 0.5)),
+      };
+    }
+    const fg = cam.fog;
+    if (fg && fg.enabled) {
+      const n = FM.evalProp(fg.near, t), f = FM.evalProp(fg.far, t);
+      const near = isFinite(n) ? n : 0, far = isFinite(f) ? f : (H * 2);
+      out.fog = { color: fg.color || '#ffffff', near: near, far: (far === near ? near + 1 : far) };
+    }
+    return out;
+  };
+  // How much this layer is out of focus, 0..1 — distance from the focus plane past the sharp zone.
+  function camDefocus(layer, t) {
+    if (!_camLens || !_camLens.focus || !layer || !layer.transform) return 0;
+    const zz = layer.transform.z != null ? FM.evalProp(layer.transform.z, t) : 0;
+    if (!isFinite(zz)) return 0;
+    const f = _camLens.focus;
+    const off = Math.abs(zz - f.d) - f.r;
+    if (off <= 0) return 0;                              // inside the sharp zone
+    return Math.min(1, off / Math.max(1, f.r * 3));      // fully defocused three DOF widths out
+  }
+  // How much fog sits over this layer, 0..1 — its depth between the near and far planes.
+  function camFogAmt(layer, t) {
+    if (!_camLens || !_camLens.fog || !layer || !layer.transform) return 0;
+    const zz = layer.transform.z != null ? FM.evalProp(layer.transform.z, t) : 0;
+    if (!isFinite(zz)) return 0;
+    const g = _camLens.fog;
+    return Math.max(0, Math.min(1, (zz - g.near) / (g.far - g.near)));
+  }
   // ---- group units: a group with anything VISUAL of its own (masking, effects, opacity, blend,
   // shadow) is composited as ONE flattened unit, so all 152 effects / blending / presets act on the
   // group exactly like on a single layer. Plain transform-only groups keep the cheap per-member path.
@@ -5181,8 +5304,10 @@ window.FM = window.FM || {};
       const _cpy = _bv ? _bv(cam, 'y', FM.evalProp(_ct.y, t), t) : FM.evalProp(_ct.y, t);
       const _cpz = _ct.z != null ? FM.evalProp(_ct.z, t) : 0;
       _camParallax = { x: isFinite(_cpx) ? _cpx : 0, y: isFinite(_cpy) ? _cpy : 0, z: isFinite(_cpz) ? _cpz : 0 };
+      _camLens = FM.cameraLens(cam, t, P);
     } else {
       _camParallax = null;
+      _camLens = null;
     }
     target.save();
     baseT(target);
@@ -5216,6 +5341,7 @@ window.FM = window.FM || {};
     }
     target.restore();
     _camParallax = null;   // parallax is scoped to the layer loop above only
+    _camLens = null;
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2, tr = cam.transform;
       // Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear

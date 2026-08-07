@@ -409,6 +409,24 @@ window.FM = window.FM || {};
       };
     }).filter(Boolean);
   }
+
+  // Camera Options (fov / focus / fog) come in from an imported .fmproj as raw JSON. A non-finite
+  // number here is not cosmetic: fov feeds the focal length, and an Infinity or NaN reaching it NaNs
+  // every layer transform in the scene. Rebuilt from a schema — unknown keys never survive.
+  function sanitizeCamera(l) {
+    if (!l || l.type !== 'camera') { if (l) { delete l.fov; delete l.focus; delete l.fog; } return; }
+    const num = (v, lo, hi, dflt) => { const n = +v; return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt; };
+    if (l.fov != null) { const f = +l.fov; if (isFinite(f) && f > 0.5 && f < 179) l.fov = f; else delete l.fov; }
+    if (l.focus) {
+      const f = l.focus;
+      l.focus = { enabled: !!f.enabled, distance: num(f.distance, -100000, 100000, 0), dof: num(f.dof, 1, 100000, 200), blur: num(f.blur, 0, 2, 0.5) };
+    }
+    if (l.fog) {
+      const g = l.fog;
+      const near = num(g.near, -100000, 100000, 0), far = num(g.far, -100000, 200000, 2000);
+      l.fog = { enabled: !!g.enabled, color: safeColor(g.color) ? g.color : '#ffffff', near: near, far: (far === near ? near + 1 : far) };
+    }
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
@@ -416,6 +434,7 @@ window.FM = window.FM || {};
       sanitizeTrimRepeater(l);
       sanitizeBehaviors(l);
       sanitizeMasks(l);
+      sanitizeCamera(l);
       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
       if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
       if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour

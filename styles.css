@@ -1938,3 +1938,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .addmenu-dur { position: absolute; top: 4px; right: 4px; z-index: 1; font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .8); border-radius: 5px; padding: 1px 4px; }
 .addmenu-media--demo .addmenu-ic { opacity: .45; }
 .addmenu-media--demo { border-style: dashed; }
+
+/* ---- Camera Options: the three sub-screens (Camera View / Focus Blur / Fog) ---- */
+.cam-rail { display: flex; gap: 8px; margin: 0 0 12px; }
+.cam-tab { flex: 1; height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); cursor: pointer; }
+.cam-tab svg { width: 22px; height: 22px; }
+.cam-tab:hover { color: var(--text); border-color: var(--accent-dim, var(--line)); }
+.cam-tab.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
