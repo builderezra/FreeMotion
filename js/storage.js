@@ -711,6 +711,10 @@ window.FM = window.FM || {};
         FM.media.remove(l.id);
       });
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
+      // Motion Blur (Footage) keeps a per-layer canvas of the previous frame. Those belong to the
+      // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
+      // the store grew for the whole session and a re-used id could inherit a stranger's frame.
+      if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
       const ok = await FM.storage.load();

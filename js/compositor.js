@@ -2684,6 +2684,10 @@ window.FM = window.FM || {};
   const CANVAS_FX = {
     // ---- Motion Blur (Content) ----
     motionflow: function (A, B, W, H, bb, p, t, tl, layer) {
+      // Onion-skin ghosts render this same layer at t±0.2s, which drags the per-layer time record
+      // backwards and forwards until it resets on every paint — with onion skin on, the blur never
+      // ran at all. Pass the ghost frames through BEFORE any record is touched.
+      if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }
       const id = (layer && layer.id) || '_anon';
       const rec = _mfRec(id, W, H);
       const style = Math.round(FM.evalProp(p.style, t) || 0);
@@ -2710,6 +2714,7 @@ window.FM = window.FM || {};
       const reset = () => {
         const c = rec.cv.getContext('2d'); c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
         rec.t = t; rec.tPrev = -1; rec.prev = null; rec.at = performance.now();
+        rec.accSeeded = false;   // the trail is gone with the history it was built from
       };
       const done = () => { if (advance) rotate(); };   // repaint leaves the slots untouched
       if (amount <= 0.001 || (!ref && style !== 2)) {
@@ -2724,15 +2729,20 @@ window.FM = window.FM || {};
         done(); return;
       }
       if (style === 2) {   // ECHO TRAILS — long-exposure feedback
-        if (!rec.acc) { rec.acc = document.createElement('canvas'); rec.acc.width = W; rec.acc.height = H; }
+        if (!rec.acc) { rec.acc = document.createElement('canvas'); rec.acc.width = W; rec.acc.height = H; rec.accSeeded = false; }
         const ac = rec.acc.getContext('2d');
-        if (repaint) { B.drawImage(rec.acc, 0, 0); return; }   // same frame — the trail is already merged
-        if (!advance) { ac.clearRect(0, 0, W, H); ac.drawImage(A, 0, 0); B.drawImage(A, 0, 0); reset(); return; }
+        // accSeeded: switching Style to Echo while PAUSED created an empty accumulator and the repaint
+        // shortcut below handed that blank canvas straight out — the layer vanished until you scrubbed.
+        // An unseeded accumulator falls through to the !advance branch, which seeds it from A and shows
+        // the sharp frame.
+        if (repaint && rec.accSeeded) { B.drawImage(rec.acc, 0, 0); return; }   // same frame — the trail is already merged
+        if (!advance) { ac.clearRect(0, 0, W, H); ac.drawImage(A, 0, 0); rec.accSeeded = true; B.drawImage(A, 0, 0); reset(); return; }
         const persist = Math.min(0.96, 0.35 + amount * 0.3);
         ac.save(); ac.globalCompositeOperation = 'destination-in'; ac.fillStyle = 'rgba(0,0,0,' + persist + ')'; ac.fillRect(0, 0, W, H); ac.restore();
         // merge with LIGHTEN (per-channel max, AE Echo style) — an opaque new frame would otherwise
         // paint its background right over the trail and hide it
         ac.save(); ac.globalCompositeOperation = 'lighten'; ac.drawImage(A, 0, 0); ac.restore();
+        rec.accSeeded = true;
         B.drawImage(rec.acc, 0, 0);
         done(); return;
       }
@@ -2755,7 +2765,9 @@ window.FM = window.FM || {};
         }
         mc.putImageData(md, 0, 0);
         if (!_mfMov) _mfMov = document.createElement('canvas');
-        _mfMov.width = W; _mfMov.height = H;
+        // Guarded: assigning .width even to the SAME value frees and reallocates the backing store,
+        // and this runs every frame. Same rule every other scratch canvas here already follows.
+        if (_mfMov.width !== W || _mfMov.height !== H) { _mfMov.width = W; _mfMov.height = H; }
         const vc = _mfMov.getContext('2d');
         vc.clearRect(0, 0, W, H); vc.drawImage(A, 0, 0);
         vc.save(); vc.globalCompositeOperation = 'destination-in';
@@ -2782,22 +2794,36 @@ window.FM = window.FM || {};
           const bi = byv * F.gw + Math.min(F.gw - 1, (x * bScale / F.BS) | 0);
           const mvx = F.vx[bi] * vScale, mvy = F.vy[bi] * vScale;
           const len = Math.hypot(mvx, mvy);
-          if (len < 0.8) continue;   // static pixel — stays razor sharp
-          let r = 0, g = 0, b = 0, a = 0;
+          const o = (row + x) * 4;
+          // A static pixel is ERASED from the working canvas, not left alone. This canvas is at 480px
+          // and gets stretched back over the whole frame, so "leave it" meant "keep the downscaled
+          // version" — the old comment claiming it stayed razor sharp was simply false, and it is why
+          // the effect softened parts of the picture that never moved. Punched out here, the sharp
+          // full-resolution frame drawn underneath shows through instead.
+          if (len < 0.8) { d[o + 3] = 0; continue; }
+          let r = 0, g = 0, b = 0, a = 0, wsum = 0;
           for (let k = 0; k < samples; k++) {
             const f = k / (samples - 1) - 0.5;
             let sx2 = Math.round(x + mvx * f), sy2 = Math.round(y + mvy * f);
             sx2 = sx2 < 0 ? 0 : sx2 >= WW ? WW - 1 : sx2; sy2 = sy2 < 0 ? 0 : sy2 >= WH ? WH - 1 : sy2;
             const si = (sy2 * WW + sx2) * 4;
-            r += src[si]; g += src[si + 1]; b += src[si + 2]; a += src[si + 3];
+            // Weight each tap's COLOUR by its own alpha. Averaging straight (un-premultiplied) RGBA
+            // let every transparent tap contribute (0,0,0) and dragged edges toward black — the dark
+            // fringe around moving text.
+            const wa = src[si + 3];
+            r += src[si] * wa; g += src[si + 1] * wa; b += src[si + 2] * wa; a += wa; wsum += wa;
           }
-          const o = (row + x) * 4;
-          d[o] = r / samples; d[o + 1] = g / samples; d[o + 2] = b / samples; d[o + 3] = a / samples;
+          const inv = wsum > 0 ? 1 / wsum : 0;
+          d[o] = r * inv; d[o + 1] = g * inv; d[o + 2] = b * inv;
+          // Ramp the blurred layer in over the first bit of movement so the boundary between the
+          // sharp base and the smear is a gradient, not a hard step along the flow-block grid.
+          d[o + 3] = (a / samples) * Math.min(1, (len - 0.8) / 1.2);
         }
       }
       wc.putImageData(img, 0, 0);
+      B.drawImage(A, 0, 0);            // the sharp, full-resolution frame — style 1 already did this
       B.imageSmoothingEnabled = true;
-      B.drawImage(_mfW1, 0, 0, W, H);
+      B.drawImage(_mfW1, 0, 0, W, H);   // only the moving parts survive in here, over the top
       done();
     },
 

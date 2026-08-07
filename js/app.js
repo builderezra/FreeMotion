@@ -31,6 +31,13 @@ window.FM = window.FM || {};
     const gctx = ghostC.getContext('2d');
     // Parents included as invisible clones: resolvable by applyParentChain but never drawn; only `sel` renders.
     const mini = { project: Object.assign({}, P, { background: null }), layers: chain.map(pl => Object.assign({}, pl, { visible: false })).concat([sel]) };
+    // These ghost renders jump the clock +/-0.2s on the SAME layer object, which walks Motion Blur
+    // (Footage)'s per-layer time record backwards and forwards and leaves it resetting on every
+    // paint — with onion skin on, the effect never blurred at all. The flag tells it to pass the
+    // frame through untouched for the ghosts; cleared in the finally so a thrown render can't leave
+    // it stuck on.
+    FM._mfGhost = 1;
+    try {
     [-0.2, 0.2].forEach(dt => {
       const tt = FM.time + dt;
       if (tt < sel.start || tt > sel.start + sel.duration) return;
@@ -45,6 +52,7 @@ window.FM = window.FM || {};
       ctx.save(); if (FM.applyPreviewTransform) FM.applyPreviewTransform(ctx);
       ctx.globalAlpha = 0.4; ctx.drawImage(ghostC, 0, 0); ctx.restore();
     });
+    } finally { FM._mfGhost = 0; }
   }
   // Rule-of-thirds grid + title-safe margin guides (preview only, never exported).
   function drawGuides() {
