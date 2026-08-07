@@ -1,7 +1,7 @@
 # Next session — the open queue
 
 Rewritten 2026-08-07. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
-via GitHub Desktop. Forty-four releases are waiting (v4.10 → v4.53).
+via GitHub Desktop. Forty-seven releases are waiting (v4.10 → v4.56).
 
 Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
@@ -16,11 +16,21 @@ exact no-ops on a 96px thumbnail. See `SUBJECT_OF` and `OVERRIDES` in `js/fx-thu
 
 ## 1. EFFECTS-PLAN.md round 10 — the standing autonomous order
 
-Nine rounds shipped (v3.87 → v4.13). Round 10 starts from the proposal table in that file. The
-byte-identity rule and the three-gate harness are documented at the top of it, including the two traps
-that have caught me: `params:{}` renders at the LEGACY default (use `FM.fxRegistry.makeInstance`), and
-`makeInstance` stamps schema `def`s so a new instance can differ from an old one — decide that
-deliberately each time.
+**Round 10 is under way and is the first round that adds NEW effects rather than params.** Shipped so
+far, off that file's BUILD NEXT table: **Levels + Halation (v4.54)**, **Frame Stutter + Shockwave
+(v4.55)**, **Speed Lines + HSL Bands (v4.56)**.
+
+Still open on that table, in its own order: **Time Warp Scan (6)**, **Chroma Key Pro (8)**,
+**Light Wrap (9)**, **Dispersion (10)**, **Temporal Denoise (11)**, **VHS Tape (12)**,
+**Compression Crunch (13)**. Light Wrap needs the `_bgSnap` gate widened (compositor.js ~3013/4335)
+and proves that gate for Liquid Glass afterwards.
+
+The byte-identity rule and the three-gate harness are documented at the top of EFFECTS-PLAN.md,
+including the two traps that have caught me: `params:{}` renders at the LEGACY default (use
+`FM.fxRegistry.makeInstance`), and `makeInstance` stamps schema `def`s so a new instance can differ
+from an old one — decide that deliberately each time. For a NEW effect there is no legacy to match,
+so the check that matters is "0 differing bytes vs HEAD across a spread of existing effect stacks",
+which catches an accidental change to shared machinery.
 
 ---
 
@@ -61,5 +71,5 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.52. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
+v3.79 → v4.56. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
 than minting a new one.
