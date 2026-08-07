@@ -227,6 +227,76 @@ window.FM = window.FM || {};
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
   }
 
+  /* ---- shape clips wear the shape's own colour ---- */
+  // Only #rgb / #rrggbb / #rrggbbaa parse; anything else (rgb(), a named colour) returns null and
+  // the caller falls back to the assigned palette colour.
+  function hexToHsl(v) {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(String(v || '').trim());
+    if (!m) return null;
+    let h6 = m[1];
+    if (h6.length === 3) h6 = h6[0] + h6[0] + h6[1] + h6[1] + h6[2] + h6[2];
+    else if (h6.length === 8) h6 = h6.slice(0, 6);          // drop the alpha — the bar is always opaque
+    const n = parseInt(h6, 16);
+    const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+    let hue = 0, sat = 0;
+    if (d > 0) {
+      sat = d / (1 - Math.abs(2 * l - 1));
+      hue = 60 * (mx === r ? (((g - b) / d) % 6) : mx === g ? ((b - r) / d + 2) : ((r - g) / d + 4));
+      if (hue < 0) hue += 360;
+    }
+    return { h: hue, s: sat, l: l };
+  }
+  function hslToHex(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = x; b = 0; } else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; } else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; } else { r = c; g = 0; b = x; }
+    const hx = v => Math.round(Math.max(0, Math.min(1, v + m)) * 255).toString(16).padStart(2, '0');
+    return '#' + hx(r) + hx(g) + hx(b);
+  }
+
+  // WCAG relative luminance. HSL lightness is NOT perceptual: yellow at l=0.44 is roughly three
+  // times as bright as blue at the same l, so clamping l alone leaves a yellow bar unreadable under
+  // the white clip label. Contrast has to be measured, not assumed.
+  function relLum(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+  }
+
+  // A shape layer's clip is tinted with that shape's own fill so a track reads at a glance. The raw
+  // fill can't be used as-is: the clip carries a white label, so a pale yellow shape would wash the
+  // bar out and a near-black one would swallow it. Keep the HUE (that's what identifies the shape)
+  // and re-light it into the same band the assigned palette lives in. A grey/white shape has no hue
+  // to keep, so it stays neutral rather than being handed an invented red.
+  // Fill is read at the clip's OWN start, not the playhead, so an animated fill doesn't make the bar
+  // shimmer while you scrub. Keyframe times are absolute project seconds.
+  const LABEL_MIN_CONTRAST = 4;   // white label vs the LIGHTENED top of the bar; the text shadow covers the rest
+  function shapeClipColor(layer) {
+    if (!layer || layer.type !== 'shape') return null;
+    const t0 = layer.start || 0;
+    const mode = FM.fillModeOf ? FM.fillModeOf(layer) : 'solid';
+    let src = null;
+    if (mode === 'gradient' && layer.fillGradient) src = layer.fillGradient.c0;
+    else if (mode === 'none' || mode === 'media') src = (layer.stroke && layer.stroke.enabled) ? layer.stroke.color : null;
+    if (!src) src = FM.evalProp(layer.fill, t0);            // outline-only / media shapes still carry a fill underneath
+    const c = hexToHsl(src);
+    if (!c) return null;
+    const s = c.s < 0.08 ? c.s : Math.max(0.35, Math.min(0.62, c.s));
+    let l = Math.max(0.30, Math.min(0.44, c.l));
+    // Walk the lightness down until the top of the gradient is dark enough for the white label.
+    // Blues pass on the first try; yellows and cyans take a few steps.
+    let hex = hslToHex(c.h, s, l);
+    for (let i = 0; i < 16 && l > 0.14; i++) {
+      if (1.05 / (relLum(shade(hex, 8)) + 0.05) >= LABEL_MIN_CONTRAST) break;
+      l -= 0.02;
+      hex = hslToHex(c.h, s, l);
+    }
+    return hex;
+  }
+
   function drawWaveform(canvas, peaks) {
     const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
@@ -775,7 +845,9 @@ window.FM = window.FM || {};
     clip.className = 'clip' + (isSelected(layer.id) ? ' sel' : '') + (layer.reversed ? ' reversed' : '') + (layer.type === 'group' ? ' group-bar' : '');
     clip.style.left = (PAD + layer.start * pps) + 'px';
     clip.style.width = Math.max(8, layer.duration * pps) + 'px';
-    const col = layer.clipColor || '#3a5a8c';
+    // A clip colour that was CHOSEN (clipColorSet) beats the shape's fill — it was set deliberately.
+    // Every other clipColor is just the next entry off the spawn palette, so the fill wins over it.
+    const col = (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || layer.clipColor || '#3a5a8c';
     clip.style.background = 'linear-gradient(180deg, ' + shade(col, 8) + ', ' + shade(col, -20) + ')';
     clip.style.borderColor = shade(col, 24);
     clip.dataset.id = layer.id;

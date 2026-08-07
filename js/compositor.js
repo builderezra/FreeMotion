@@ -5476,7 +5476,12 @@ window.FM = window.FM || {};
       const mode = FM.traceShapePath(ctx, layer, pad, pad, iw, ih);
       if (mode === 'stroke') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
       const fmode = FM.fillModeOf(layer);
-      if (fmode === 'none') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#8b9bb4'; ctx.lineWidth = 2; ctx.stroke(); return; }
+      // Outline-only: the CANVAS strokes this with layer.stroke.color, so the thumb has to as well —
+      // it was using the (invisible) fill, which showed a colour the shape never actually renders.
+      if (fmode === 'none') {
+        const sc = (layer.stroke && layer.stroke.enabled && layer.stroke.color) || FM.evalProp(layer.fill, FM.time || 0) || '#8b9bb4';
+        ctx.strokeStyle = sc; ctx.lineWidth = 2; ctx.stroke(); return;
+      }
       if (fmode === 'media') {
         const fimg = getFillImage(layer);
         if (fimg && fimg.width) {

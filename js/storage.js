@@ -438,6 +438,7 @@ window.FM = window.FM || {};
       if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
       if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
       if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
+      if (l.clipColorSet != null) l.clipColorSet = !!l.clipColorSet;               // deliberate-choice flag: boolean only
       if (l.fillGradient) {
         if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
         if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';

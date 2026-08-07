@@ -54,7 +54,8 @@ window.FM = window.FM || {};
       case 'lineHeight': { var lh = clampNum(value, 0.5, 4); if (lh == null) return false; layer.lineHeight = lh; return true; }
       case 'color': { var c = hex(value, null); if (!c) return false; layer.color = c; return true; }
       case 'fill': { var f = hex(value, null); if (!f) return false; layer.fill = f; return true; }
-      case 'clipColor': { var cc = hex(value, null); if (!cc) return false; layer.clipColor = cc; return true; }
+      // clipColorSet marks this as a DELIBERATE choice, so it outranks a shape's own fill on the bar.
+      case 'clipColor': { var cc = hex(value, null); if (!cc) return false; layer.clipColor = cc; layer.clipColorSet = true; return true; }
       case 'text': { var t = str(value, 2000); if (t == null) return false; layer.text = t; return true; }
       case 'name': { var nm = str(value, 80); if (nm == null) return false; layer.name = nm; return true; }
       case 'align': { layer.align = snap(value, ['left', 'center', 'right'], layer.align || 'center'); return true; }
