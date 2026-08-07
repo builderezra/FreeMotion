@@ -1243,6 +1243,39 @@ window.FM = window.FM || {};
     if (FM.storage && FM.storage.save) FM.storage.save();   // persist the duplicated layer's media blob immediately
   };
 
+  // Duplicate EVERY selected layer, not just the primary (Ezra: "when I selected multiple stuff I
+  // can't duplicate all the stuff I have selected, I have to manually duplicate each thing"). Runs
+  // them one at a time because duplicateLayer awaits a media reload per layer, and a group already
+  // brings its whole subtree — so a descendant that is ALSO selected is skipped rather than copied
+  // twice. One undo step for the lot, and the copies end up selected so the next move applies to them.
+  FM.duplicateSelection = async function (inPlace) {
+    const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
+    if (!ids.length) return;
+    if (ids.length === 1) { await FM.duplicateLayer(ids[0], inPlace); return; }
+    const inside = {};
+    ids.forEach(id => {
+      const l = FM.layerById(FM.scene, id);
+      if (l && l.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(d => { inside[d.id] = 1; });
+    });
+    const todo = ids.filter(id => !inside[id]);
+    const made = [];
+    // duplicateLayer commits history itself, so the loop would leave one undo entry PER layer and
+    // reversing a single button press would take three presses of undo. Muted for the run, then one
+    // commit at the end — the whole duplication is one action, so it is one step back.
+    const hist = FM.history, realCommit = hist && hist.commit;
+    if (hist) hist.commit = function () {};
+    try {
+      for (const id of todo) {
+        await FM.duplicateLayer(id, inPlace);
+        if (FM.scene.selectedId && made.indexOf(FM.scene.selectedId) < 0) made.push(FM.scene.selectedId);
+      }
+    } finally { if (hist) hist.commit = realCommit; }
+    if (made.length) { FM.scene.selectedIds = made; FM.scene.selectedId = made[made.length - 1]; }
+    FM.refreshAll();
+    if (FM.history) FM.history.commit();
+    if (FM.toast) FM.toast('Duplicated ' + made.length + ' layers', 1600);
+  };
+
   // ---- copy / paste layers (in-memory clipboard; survives across the session) ----
   FM.clipboard = [];
   FM.copySelection = function () {
@@ -1538,8 +1571,8 @@ window.FM = window.FM || {};
 
   FM.layerMenuItems = function (layer) {
     const items = [
-      { label: 'Duplicate', action: () => FM.duplicateLayer(layer.id) },
-      { label: 'Duplicate in place', action: () => FM.duplicateLayer(layer.id, true) },
+      { label: (selCount > 1 ? 'Duplicate ' + selCount + ' layers' : 'Duplicate'), action: () => FM.duplicateSelection() },
+      { label: (selCount > 1 ? 'Duplicate ' + selCount + ' in place' : 'Duplicate in place'), action: () => FM.duplicateSelection(true) },
       { label: 'Copy', action: () => { const ids = FM.selectionIds ? FM.selectionIds() : []; if (!ids.includes(layer.id)) { FM.scene.selectedId = layer.id; FM.scene.selectedIds = [layer.id]; } FM.copySelection(); } },
       { label: 'Paste Style…', disabled: !(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(layer); } },
       { label: 'Split at playhead', action: () => FM.splitLayer(layer.id) },
@@ -1675,6 +1708,40 @@ window.FM = window.FM || {};
   }
 
   /* ---------- export ---------- */
+  // The export settings are yours, not the project's (Ezra: "make it so whatever quality settings you
+  // last used are remembered for when you make a new project"). They lived only in the DOM, so they
+  // survived reopening the dialog and nothing else — a new project, a reload or a second device put
+  // you back on the defaults and you re-picked 4K and 60fps every time.
+  //
+  // RESOLUTION is stored as the target SHORT SIDE, not as the scale factor the exporter uses: the
+  // scale only means anything relative to one project's size, so 0.5 remembered from a 4K project
+  // would silently mean 540p in a 1080p one. The short side survives the change of comp.
+  const EXP_PREFS = 'fm.exportPrefs';
+  function expPrefsRead() { try { return JSON.parse(localStorage.getItem(EXP_PREFS)) || {}; } catch (e) { return {}; } }
+  function expPrefsSave() {
+    const g = id => document.getElementById(id);
+    const res = g('exp-res'), opt = res && res.options[res.selectedIndex];
+    // "1080p — 608×1080" → 1080; "Full — 1080×1920" → 0, meaning native
+    const short = opt ? (parseInt(String(opt.textContent).trim(), 10) || 0) : 0;
+    try {
+      localStorage.setItem(EXP_PREFS, JSON.stringify({
+        format: (g('exp-format') || {}).value || 'mp4',
+        short: short,
+        fps: (g('exp-fps') || {}).value || '30',
+        quality: (g('exp-quality') || {}).value || '',
+      }));
+    } catch (e) {}
+  }
+  function expPrefsApply() {
+    const p = expPrefsRead(), g = id => document.getElementById(id);
+    const set = (id, v) => { const el = g(id); if (el && v != null && v !== '' && [].some.call(el.options, o => o.value === String(v))) el.value = String(v); };
+    set('exp-format', p.format); set('exp-fps', p.fps); set('exp-quality', p.quality);
+    const res = g('exp-res');
+    if (res && p.short) {   // match by short side; a project that can't reach it falls back to Full
+      const hit = [].find.call(res.options, o => parseInt(String(o.textContent).trim(), 10) === p.short);
+      if (hit) res.value = hit.value;
+    }
+  }
   function showExportDialog() {
     // Build resolution presets from THIS project's size. "p" = the shorter side (1080p portrait =
     // 1080 wide); value stays a SCALE factor so the exporter math is unchanged. Full first, then
@@ -1703,6 +1770,7 @@ window.FM = window.FM || {};
     }
     const soloCb = document.getElementById('exp-solo-clip');
     if (soloCb) { if (!selLayer) soloCb.checked = false; soloCb.disabled = !selLayer; }
+    expPrefsApply();   // after the resolution list is rebuilt for THIS project, so the match can land
     syncExportFormat();
     document.getElementById('export-dialog').classList.remove('hidden');
   }
@@ -1729,6 +1797,7 @@ window.FM = window.FM || {};
   }
 
   async function runExport() {
+    expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
     hideExportDialog();
     if (!FM.scene.layers.length) { alert('Add some media first.'); return; }
     const scale = parseFloat(document.getElementById('exp-res').value) || 1;
@@ -2060,7 +2129,7 @@ window.FM = window.FM || {};
         { label: 'Select All Layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
         { label: 'Group Selection', disabled: selN < 2, action: () => FM.groupSelection() },
         { label: 'Masking Group', disabled: selN < 2, action: () => FM.groupSelection({ mask: true }) },
-        { label: 'Duplicate Layer', disabled: !hasSel, action: () => { if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId); } },
+        { label: (selN > 1 ? 'Duplicate ' + selN + ' Layers' : 'Duplicate Layer'), disabled: !hasSel, action: () => FM.duplicateSelection() },
         { label: 'Copy Layer', disabled: !hasSel, action: () => { if (FM.copySelection) FM.copySelection(); } },
         { label: 'Save Preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
         { label: 'Save Selection as Element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
@@ -2307,7 +2376,7 @@ window.FM = window.FM || {};
       if (mod && (e.key === 'd' || e.key === 'D')) {
         if (inEdit) return;
         e.preventDefault();
-        if (FM.scene.selectedId) FM.duplicateLayer(FM.scene.selectedId);
+        if (FM.scene.selectedId) FM.duplicateSelection();
         return;
       }
       if (mod && (e.key === 'c' || e.key === 'C')) {

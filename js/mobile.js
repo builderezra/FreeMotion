@@ -146,7 +146,7 @@ window.FM = window.FM || {};
       });
       clipNameM.addEventListener('change', function () { if (FM.history) FM.history.commit(); });
     }
-    if (mDup) mDup.addEventListener('click', function () { var L = curLayer(); if (L && FM.duplicateLayer) FM.duplicateLayer(L.id); });
+    if (mDup) mDup.addEventListener('click', function () { if (FM.duplicateSelection) FM.duplicateSelection(); });   // the whole selection, not just the primary
     // ⋯ More — the full clip menu (split, lock, reverse, replace media, reset, loop, blend, parent…),
     // the same set desktop reaches by right-clicking a clip. Anchored under the button, right-aligned.
     var mMore = document.getElementById('m-more');
