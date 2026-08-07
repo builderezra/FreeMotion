@@ -204,7 +204,8 @@ window.FM = window.FM || {};
     plain.appendChild(pth);
     const ptxt = el('div', 'fxp-txt');
     ptxt.appendChild(el('div', 'fxp-name', 'Default'));
-    ptxt.appendChild(el('div', 'fxp-desc', 'Plain ' + reg.label + ' at its normal settings'));
+    // The effect's own sentence when it has one — far more use than "Plain <name> at its normal settings".
+    ptxt.appendChild(el('div', 'fxp-desc', reg.desc || ('Plain ' + reg.label + ' at its normal settings')));
     plain.appendChild(ptxt);
     plain.addEventListener('click', () => addEffect(reg.id));
     list.appendChild(plain);

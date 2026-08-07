@@ -684,6 +684,10 @@ window.FM = window.FM || {};
     wrap.appendChild(head);
     if (expanded) {
       const body = el('div', 'fx-ed-body');
+      // A one-line "what this actually does", above the controls. Two effects can have names that
+      // sound like the same thing (Directional Blur vs Motion Blur (Footage) vs the transform blur in
+      // Move & Transform) and no arrangement of sliders will tell you which is which.
+      if (reg.desc) body.appendChild(el('div', 'fx-desc', reg.desc));
       reg.params.forEach(p => {
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
@@ -2450,6 +2454,38 @@ window.FM = window.FM || {};
     body.appendChild(el('div', 'insp-hint', 'A layer at the near distance is untouched; at the far distance it is the fog colour outright; between the two it fades across. The wash clips to each layer’s own shape, so text stays text.'));
   }
 
+  /* TRANSFORM motion blur — the blur that reads the CLIP's own movement.
+   * This has been unreachable since v2.66: the checkbox and its two rows were pulled out of Edit
+   * Shape to match Alight Motion and never re-homed, so layer.motionBlur rendered and exported but
+   * nothing in the app could switch it on. (Ezra: "the normal one that isn't just for the content
+   * currently is broken asf" — he was reaching the EFFECT called Motion Blur, which is a hand-aimed
+   * smear and now says so on the tin.) Move & Transform is where it belongs: it is a property of how
+   * the layer moves, not a look you bolt on.
+   * Hidden on groups and cameras rather than shipped dead — drawGroupUnit never copies the flag onto
+   * the unit it draws, and the camera drives the composite instead of being drawn as a layer.
+   */
+  function motionBlurBlock(layer) {
+    if (!layer || layer.type === 'group' || layer.type === 'camera' || layer.type === 'null') return null;
+    if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
+    const mb = layer.motionBlur;
+    const wrap = el('div', 'insp-section');
+    wrap.appendChild(el('div', 'insp-sec-title', 'Motion Blur'));
+    wrap.appendChild(checkRow('Blur the clip’s own movement', !!mb.enabled, v => {
+      mb.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH();
+    }));
+    if (!mb.enabled) {
+      wrap.appendChild(el('div', 'insp-hint', 'Smears the clip along the path it travels — position, scale and rotation keyframes all count. It does not look inside the footage; for that use Motion Blur (Footage) in Effects.'));
+      return wrap;
+    }
+    // Shutter is the fraction of a frame the "camera" is open: 0.5 is a real 180° shutter.
+    wrap.appendChild(rangeRow('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
+      v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); }, 0, 1, 0.05));
+    wrap.appendChild(rangeRow('Samples', () => Math.round(mb.samples || 8),
+      v => { mb.samples = Math.max(2, Math.min(24, Math.round(v))); FM.requestRender(); }, 2, 24, 1));
+    wrap.appendChild(el('div', 'insp-hint', 'Shutter is how long the shutter stays open — 0.5 is the 180° shutter film uses. Samples is how many slices are averaged: more is smoother and slower. A clip that is not moving costs nothing.'));
+    return wrap;
+  }
+
   function buildCategory(key, layer, body) {
     if (key === 'cameraopts') { camPanel(layer, body); return; }
     if (key === 'transform') {
@@ -2461,6 +2497,7 @@ window.FM = window.FM || {};
       // dead switch. The CAMERA gets them since v3.46: its composite reads route through behaviorValue,
       // so a Wiggle on the camera is the one-tap whole-scene shake (with z-depth parallax riding it).
       if (layer.type !== 'group') { const bb = behaviorsBlock(layer); if (bb) body.appendChild(bb); }
+      const mbb = motionBlurBlock(layer); if (mbb) body.appendChild(mbb);
     } else if (key === 'volume') {
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {

@@ -165,6 +165,10 @@ window.FM = window.FM || {};
   (FM.EFFECTS || []).forEach(def => {
     REG[def.type] = {
       id: def.type, type: def.type, label: def.label,
+      // A plain-English sentence saying what the effect actually does. Generic on purpose — the two
+      // motion blurs need it most (their names alone cannot tell you which reads movement), but any
+      // effect that declares one gets it shown in the panel and in the browser.
+      desc: def.desc || '',
       category: CATEGORY_OF[def.type] || 'other',
       params: paramsOf(def),
       appliesTo: TEXT_ONLY[def.type] ? 'text' : (MEDIA_ONLY[def.type] ? 'media' : 'all'),

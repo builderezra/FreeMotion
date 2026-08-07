@@ -304,7 +304,12 @@ window.FM = window.FM || {};
     ] },
     { type: 'fractalwarp', label: 'Fractal Warp', param: 'amount', min: 0, max: 60, step: 1, def: 24, unit: 'px' },
     // ---- batch 11 (multi-param) ----
-    { type: 'motionblur', label: 'Motion Blur', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
+    // RENAMED, not re-implemented. This never read motion: it lays nine copies along an angle you
+    // set by hand, identical on a whip-pan and on a still frame. The Angle slider is the proof —
+    // something that knew the movement would not need to be told the direction. The type id stays
+    // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
+    { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
+      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
     { type: 'colorbalance', label: 'Color Balance', params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }] },
@@ -427,7 +432,8 @@ window.FM = window.FM || {};
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
     // (RSMB/AE Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
-    { type: 'motionflow', label: 'Motion Blur (Content)', params: [
+    { type: 'motionflow', label: 'Motion Blur (Footage)', desc: 'Blurs what MOVES INSIDE the clip. Moving, scaling or rotating the clip itself never smears it — for that, use Motion Blur in Move & Transform.',
+      params: [
       { key: 'style', label: 'Style', options: [[0, 'Pixel'], [1, 'Smear'], [2, 'Echo'], [3, 'Blend']], def: 0 },
       { key: 'amount', label: 'Shutter', min: 0, max: 2, step: 0.05, def: 1 },
       { key: 'samples', label: 'Quality', min: 4, max: 24, step: 1, def: 10 },
@@ -1059,13 +1065,26 @@ window.FM = window.FM || {};
   // clip's intrinsic subject motion — a forward video draws the same decoded frame per sub-sample
   // (per-sub-frame decode would need a full forward frame cache). Transform blur is the common use.
   let _mbCv = null, _mbPlate = null;   // accumulator + per-sample plate (see the intra-plate 'lighter' fix)
+  // Returns TRUE when it drew the layer, FALSE when there was nothing to blur and the caller should
+  // fall through to the ordinary single draw.
   function drawMotionBlur(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
-    if (opacity <= 0) return;
+    if (opacity <= 0) return true;   // invisible: drawing it again would be pointless, not wrong
     const mb = layer.motionBlur;
-    const samples = Math.max(2, Math.min(32, Math.round(mb.samples || 8)));
+    // evalProp, not `mb.samples || 8`: a KEYFRAMED shutter/samples is an object, Math.round of which
+    // is NaN — the sample loop then ran zero times and the layer silently vanished.
+    const _num = (v, d) => { const n = FM.evalProp(v, t); return isFinite(n) ? n : d; };
+    const samples = Math.max(2, Math.min(32, Math.round(_num(mb.samples, 8))));
     const fps = (scene && scene.project && scene.project.fps) || 30;
-    const dt = (mb.shutter != null ? mb.shutter : 0.5) / fps;   // shutter window in seconds
+    const dt = Math.max(0, Math.min(1, _num(mb.shutter, 0.5))) / fps;   // shutter window in seconds
+    /* NOTHING MOVING → NOTHING TO BLUR. Without this, switching it on cost a flat N full renders of
+     * the layer every frame whether it moved or not, and averaged N identical sub-frames back into
+     * the sharp original — all of the cost, none of the effect. Returning false hands the caller
+     * back to the ordinary single draw, which is byte-identical to blur-off.
+     * The threshold is in DEVICE pixels (× plateScale) so a reduced preview does not blur what the
+     * screen could not show anyway. */
+    const _travel = layerMotionBetween(layer, t - dt / 2, t + dt / 2, scene);
+    if (_travel != null && _travel * plateScale(ctx) < 0.75) return false;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     if (!_mbCv) _mbCv = document.createElement('canvas');
@@ -1109,8 +1128,9 @@ window.FM = window.FM || {};
     ctx.filter = 'none';
     ctx.drawImage(off, 0, 0);
     ctx.restore();
+    return true;
   }
-  FM.layerHasMotionBlur = function (layer) { return layer.motionBlur && layer.motionBlur.enabled; };
+  FM.layerHasMotionBlur = function (layer) { return !!(layer && layer.motionBlur && layer.motionBlur.enabled); };
 
   // The per-pixel post-process effects, and a dispatcher that applies one (the outermost pass).
   // Each draw* renders a clean copy of the layer with THIS effect instance removed (recursing
@@ -3940,6 +3960,49 @@ window.FM = window.FM || {};
     if (layer.flipH || layer.flipV) ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);   // mirror (⋯ → Flip) — flags, so scale keyframes stay untouched
   }
 
+  /* WHERE IS THIS LAYER, EXACTLY, AT TIME tau? Ask the transform stack instead of re-deriving it.
+   * applyLayerTransform + applyParentChain compose nothing but translate/rotate/scale/transform and
+   * never call save(), so the layer's whole placement — position, scale, rotation, skew, flip,
+   * z-perspective, parenting, wiggle, behaviors and the camera — really is ONE affine matrix, and a
+   * 1x1 scratch context will report it.
+   * Two things are load-bearing: the probe starts at IDENTITY (not baseT) so the matrix comes back in
+   * pure project space, and `scene` MUST be passed — applyLayerTransform sizes z-perspective off
+   * scene.project, so a probe without one would compute the perspective against a 1x1 comp. */
+  const _CTM_OK = (typeof DOMMatrix === 'function' && typeof CanvasRenderingContext2D !== 'undefined'
+    && typeof CanvasRenderingContext2D.prototype.getTransform === 'function');
+  let _ctmProbe = null;
+  function layerCTM(layer, tau, scene) {
+    if (!_CTM_OK) return null;
+    if (!_ctmProbe) { _ctmProbe = document.createElement('canvas'); _ctmProbe.width = _ctmProbe.height = 1; }
+    const c = _ctmProbe.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    try { applyLayerTransform(c, layer, tau, scene); } catch (e) { return null; }
+    return c.getTransform();
+  }
+  FM._layerCTM = layerCTM;   // exposed for the motion-blur tests
+
+  // How far does the layer's own outline travel between two times, in project px? Corner distance,
+  // not centre distance — a pure rotation or a scale moves no centre at all but smears plenty.
+  function layerMotionBetween(layer, t0, t1, scene) {
+    const A = layerCTM(layer, t0, scene), B = layerCTM(layer, t1, scene);
+    if (!A || !B) return null;
+    const sz = (FM.layerSize ? FM.layerSize(layer) : { w: 100, h: 100 });
+    const tr = layer.transform || {};
+    const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
+    const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
+    const w = sz.w || 0, h = sz.h || 0;
+    let worst = 0;
+    for (let i = 0; i < 4; i++) {
+      const lx = ((i & 1) ? 1 - ax : -ax) * w, ly = ((i & 2) ? 1 - ay : -ay) * h;
+      const ax0 = A.a * lx + A.c * ly + A.e, ay0 = A.b * lx + A.d * ly + A.f;
+      const bx0 = B.a * lx + B.c * ly + B.e, by0 = B.b * lx + B.d * ly + B.f;
+      const d = Math.hypot(bx0 - ax0, by0 - ay0);
+      if (d > worst) worst = d;
+    }
+    return worst;
+  }
+  FM._layerMotionBetween = layerMotionBetween;
+
   // ---- Data-driven shape library (AM parity) ----
   // Every entry is an ARRAY OF POLYGONS in normalized [0,1] space (multi-polygon shapes like the
   // sun's rays are several subpaths of one fill). Generated once at load; traceShapePath scales
@@ -4752,8 +4815,9 @@ window.FM = window.FM || {};
       if (outer && outer.type === 'motionflow' && layer.type !== '_flat') { drawContentMotionBlur(ctx, layer, t, scene, outer); return; }
       if (pp.length) { applyPostFx(ctx, layer, t, scene, outer); return; }
     }
-    // Motion blur wraps the whole layer (averaged sub-frames).
-    if (scene && layer.motionBlur && layer.motionBlur.enabled) { drawMotionBlur(ctx, layer, t, scene); return; }
+    // Motion blur wraps the whole layer (averaged sub-frames). It declines when the layer is not
+    // actually moving this frame, and then we simply carry on down the ordinary draw path.
+    if (scene && layer.motionBlur && layer.motionBlur.enabled) { if (drawMotionBlur(ctx, layer, t, scene)) return; }
     // A feathered mask needs an offscreen pass (clip() is hard-edged only).
     if (scene && layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0) { drawFeatheredMaskLayer(ctx, layer, t, scene); return; }
 
