@@ -15,11 +15,27 @@ window.FM = window.FM || {};
   function preview() { return document.getElementById('preview'); }
   function wrap() { return document.getElementById('canvas-wrap'); }
 
+  /* The preview canvas is NOT 1:1 with the project. It is supersampled when you zoom in, it may hold
+   * only the visible crop, and since the preview-resolution work it is usually SMALLER than the comp
+   * (a 1080-wide project painted into ~530 canvas pixels). The project extent it covers is
+   * canvas.width / __fmRS starting at __fmOX — never canvas.width starting at 0.
+   * These two functions used the raw backing size, so every point a stroke recorded was scaled by the
+   * render scale: at rs 0.49 a tap at the middle of the comp was stored at a quarter of the way in.
+   * Same maths as canvas-edit.js eventToProject/projSpan — points are project units everywhere. */
+  function projSpan() { var c = preview(); return (c.width / (c.__fmRS || 1)) || (FM.scene.project.width || 1); }
   function toProject(cx, cy) {
-    var c = preview(), r = c.getBoundingClientRect();
-    return [(cx - r.left) * (c.width / r.width), (cy - r.top) * (c.height / r.height)];
+    var c = preview(), r = c.getBoundingClientRect(), sc = c.__fmRS || 1;
+    return [
+      (c.__fmOX || 0) + ((cx - r.left) / r.width) * (c.width / sc),
+      (c.__fmOY || 0) + ((cy - r.top) / r.height) * (c.height / sc),
+    ];
   }
-  function dispScale() { var c = preview(), r = c.getBoundingClientRect(); return (r.width / c.width) || 1; }
+  // CSS px per PROJECT px.
+  function dispScale() { var c = preview(), r = c.getBoundingClientRect(); return (r.width / projSpan()) || 1; }
+  // The overlay covers the CANVAS, which may start part-way into the comp — so a project point has to
+  // have the crop origin taken back off before it is drawn. Zero on an uncropped preview.
+  function ox() { var c = preview(); return c.__fmOX || 0; }
+  function oy() { var c = preview(); return c.__fmOY || 0; }
 
   function syncOverlay() {
     var c = preview(), w = wrap();
@@ -38,7 +54,7 @@ window.FM = window.FM || {};
 
   function redraw() {
     if (!octx) return;
-    var s = dispScale();
+    var s = dispScale(), OX = ox(), OY = oy();   // project point -> overlay CSS px: (p - crop origin) * scale
     octx.clearRect(0, 0, overlay.width, overlay.height);
     var pts = FM.drawTool.points;
     if (!pts.length) { drawCursor(s); return; }   // the cursor exists BEFORE the first point — that is the point of it
@@ -46,12 +62,12 @@ window.FM = window.FM || {};
     octx.strokeStyle = FM.drawTool.color;
     octx.lineWidth = Math.max(1.5, FM.drawTool.stroke * s);
     octx.beginPath();
-    pts.forEach(function (p, i) { var x = p[0] * s, y = p[1] * s; if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y); });
-    if (FM.drawTool.mode === 'vector' && pts.length > 2) { octx.save(); octx.setLineDash([6, 5]); octx.lineWidth = 2; octx.strokeStyle = 'rgba(255,255,255,.55)'; octx.lineTo(pts[0][0] * s, pts[0][1] * s); octx.stroke(); octx.restore(); octx.beginPath(); pts.forEach(function (p, i) { var x = p[0] * s, y = p[1] * s; if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y); }); }
+    pts.forEach(function (p, i) { var x = (p[0] - OX) * s, y = (p[1] - OY) * s; if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y); });
+    if (FM.drawTool.mode === 'vector' && pts.length > 2) { octx.save(); octx.setLineDash([6, 5]); octx.lineWidth = 2; octx.strokeStyle = 'rgba(255,255,255,.55)'; octx.lineTo((pts[0][0] - OX) * s, (pts[0][1] - OY) * s); octx.stroke(); octx.restore(); octx.beginPath(); pts.forEach(function (p, i) { var x = (p[0] - OX) * s, y = (p[1] - OY) * s; if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y); }); }
     octx.stroke();
     if (FM.drawTool.mode === 'vector') {   // anchor dots
       octx.fillStyle = FM.drawTool.color;
-      pts.forEach(function (p, i) { octx.beginPath(); octx.arc(p[0] * s, p[1] * s, i === 0 ? 6 : 4.5, 0, 6.2832); octx.fill(); if (i === 0) { octx.strokeStyle = '#fff'; octx.lineWidth = 2; octx.stroke(); } });
+      pts.forEach(function (p, i) { octx.beginPath(); octx.arc((p[0] - OX) * s, (p[1] - OY) * s, i === 0 ? 6 : 4.5, 0, 6.2832); octx.fill(); if (i === 0) { octx.strokeStyle = '#fff'; octx.lineWidth = 2; octx.stroke(); } });
     }
     drawCursor(s);
   }
@@ -63,7 +79,8 @@ window.FM = window.FM || {};
   function drawCursor(s) {
     var t = FM.drawTool;
     if (t.mode !== 'vector' || !t.cursor || !octx) return;
-    var cx = t.cursor[0] * s, cy = t.cursor[1] * s, W = overlay.width, H = overlay.height;
+    var OX = ox(), OY = oy();
+    var cx = (t.cursor[0] - OX) * s, cy = (t.cursor[1] - OY) * s, W = overlay.width, H = overlay.height;
     octx.save();
     if (t.snapX != null || t.snapY != null) {
       octx.strokeStyle = 'rgba(41,217,187,.85)'; octx.lineWidth = 1; octx.setLineDash([5, 4]);
@@ -74,7 +91,7 @@ window.FM = window.FM || {};
     var pts = t.points;
     if (pts.length) {   // rubber band from the last anchor to the cursor
       octx.strokeStyle = 'rgba(255,255,255,.5)'; octx.lineWidth = 1.5; octx.setLineDash([4, 4]);
-      octx.beginPath(); octx.moveTo(pts[pts.length - 1][0] * s, pts[pts.length - 1][1] * s); octx.lineTo(cx, cy); octx.stroke();
+      octx.beginPath(); octx.moveTo((pts[pts.length - 1][0] - OX) * s, (pts[pts.length - 1][1] - OY) * s); octx.lineTo(cx, cy); octx.stroke();
       octx.setLineDash([]);
     }
     var locked = t.snapX != null || t.snapY != null;
@@ -273,6 +290,10 @@ window.FM = window.FM || {};
       window.addEventListener('pointerup', onUp, true);
       window.addEventListener('pointercancel', onUp, true);   // OS-cancelled stroke finalizes like a normal release instead of being silently lost
       window.addEventListener('resize', function () { if (FM.drawTool.active) syncOverlay(), redraw(); });
+      // The preview canvas can also be re-sized WITHOUT a window resize — the adaptive quality tier
+      // re-allocates it the moment a drag starts, which is exactly when you are drawing. The overlay
+      // is positioned and scaled off that canvas, so it has to follow or the stroke drifts mid-line.
+      FM.drawTool.sync = function () { if (FM.drawTool.active) { syncOverlay(); redraw(); } };
       // Enter finishes the drawing (same as Done); Escape cancels. Capture phase + stopPropagation
       // so the app's own Enter/Escape shortcuts don't also fire while you're mid-draw.
       window.addEventListener('keydown', function (e) {

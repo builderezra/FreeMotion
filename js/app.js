@@ -257,6 +257,10 @@ window.FM = window.FM || {};
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // assigning re-allocates the backing store, so only on a real change
     document.documentElement.style.setProperty('--comp-ar', P.width + ' / ' + P.height);   // canvas-wrap holds this aspect → preview always contains in the stage
     render();
+    // The drawing overlay is sized and positioned off this canvas, so it has to be told. Not just on
+    // window resize: the adaptive quality tier re-allocates the canvas mid-drag, which is precisely
+    // when a stroke is in progress.
+    if (FM.drawTool && FM.drawTool.sync) FM.drawTool.sync();
   }
   FM.previewCropInfo = function () { const c = previewCrop(); return c ? { crop: c, backing: canvas.width + '×' + canvas.height, scale: canvas.__fmRS } : null; };
   FM.resizeCanvas = resizeCanvas;
