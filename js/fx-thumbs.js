@@ -213,6 +213,9 @@ window.FM = window.FM || {};
     letterbox: 'photo', border: 'photo', vignette: 'photo', tiltshift: 'photo',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
     halation: 'card',
+    // Frame Stutter is shown by an orbit stepping instead of gliding, and an orbiting full-frame
+    // subject just swings its own edges through the tile.
+    framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot',
     // Geometry that reads better on a real picture than on an abstract lattice: these re-tile or
