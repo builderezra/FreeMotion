@@ -1238,6 +1238,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   /* Text-edit full-screen takeover (mobile): with the inspector grid + timeline hidden, give the whole
    * height to the stage so the canvas fills the screen. Desktop keeps its 3-row layout. */
   body.text-editing #app { grid-template-rows: 1fr !important; }
+  body.drawing #app { grid-template-rows: 1fr !important; }   /* full-screen canvas while drawing (see body.drawing above) */
   #canvas-wrap { max-width: 98%; max-height: 95%; }   /* contain in the stage with a small float margin (AM) */
   #stage { box-shadow: inset 0 -1px 0 var(--line); }
   #topbar { overflow-x: auto; overflow-y: hidden; gap: 8px; padding: 7px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -1752,6 +1753,17 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 /* ---- Freehand / Vector drawing overlay + toolbar (v2.39) ---- */
 #draw-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
 body.drawing #select-box { display: none !important; }
+/* DRAWING IS A FULL-SCREEN TAKEOVER (Ezra: "when you enter freehand drawing it should make the canvas
+   fill the screen so you can see it larger"). Neither the timeline nor the inspector can be used while
+   a stroke is in progress, and on a phone they were eating ~60% of the height — you were drawing into
+   a postage stamp. Same mechanism the text editor already uses. The stage keeps a bottom margin for the
+   floating draw bar; vector's bar is much taller because it carries the trackpad. */
+body.drawing #inspector-panel,
+body.drawing #timeline-panel { display: none !important; }
+body.drawing #main { grid-template-columns: 1fr !important; }
+body.drawing #stage { padding: 10px 0 104px; box-sizing: border-box; }
+body.drawing.draw-vector #stage { padding-bottom: 268px; }
+body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 #draw-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 170; display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 14px; background: rgba(10,14,20,.94); border: 1px solid var(--accent); box-shadow: 0 10px 30px rgba(0,0,0,.55); max-width: 94vw; }
 #draw-bar.hidden { display: none; }
 #draw-bar .db-hint { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }

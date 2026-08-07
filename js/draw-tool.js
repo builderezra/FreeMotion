@@ -162,6 +162,8 @@ window.FM = window.FM || {};
     if (overlay) overlay.style.display = 'none';
     if (bar) bar.classList.add('hidden');
     document.body.classList.remove('drawing');
+    document.body.classList.remove('draw-vector');
+    if (FM.resizeCanvas) FM.resizeCanvas();   // the stage shrinks back to its normal share of the window
   }
 
   function updateBar() {
@@ -241,6 +243,11 @@ window.FM = window.FM || {};
     FM.drawTool.cursor = mode === 'vector' ? [FM.scene.project.width / 2, FM.scene.project.height / 2] : null;
     if (FM.selectLayer) FM.selectLayer(null);
     document.body.classList.add('drawing');
+    document.body.classList.toggle('draw-vector', mode === 'vector');   // taller bar → deeper stage margin
+    // The class above hands the whole window to the stage, which changes the preview's box — so the
+    // canvas backing store AND the overlay both have to be re-measured before anything is drawn, or
+    // the strokes land at the old scale. getBoundingClientRect inside these forces the layout flush.
+    if (FM.resizeCanvas) FM.resizeCanvas();
     syncOverlay();
     overlay.style.display = 'block';
     redraw();
