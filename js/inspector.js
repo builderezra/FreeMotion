@@ -168,7 +168,7 @@ window.FM = window.FM || {};
   // Effect-stack presets — the user's own saved stacks only (localStorage, reusable across projects).
   // The four shipped starters (VHS Glitch / Duotone / Dreamy / Comic) are GONE (Ezra: "in the presets
   // menu remove the effects in there, like dreamy and shit"). They existed to showcase the effects
-  // back when there were a few dozen; with 175 of them and a browser that groups and searches, four
+  // back when there were a few dozen; with 177 of them and a browser that groups and searches, four
   // fixed looks were just clutter you could not delete sitting on top of the presets you made.
   FM.fxPresets = {
     _key: 'fm.fxpresets',

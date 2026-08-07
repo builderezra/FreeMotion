@@ -4,7 +4,7 @@
  * effects cache one 96² frame; effects that move (shake, wipes, glowscan…) are auto-detected
  * by diffing two probe frames and cache a 10-frame strip looped by ONE shared ticker.
  * Every effect names the SUBJECT that demonstrates it (see SUBJECT_OF) rather than sharing one
- * generic sample — a single subject cannot show 175 different things.
+ * generic sample — a single subject cannot show 177 different things.
  * Contract with fx-browser.js: FM.fxThumbs.mount(canvasEl, effectType) + FM.fxThumbs.stopAll().
  * Cache is kept for the whole session (~8-15MB at 96² for ~160 statics + ~30 strips — fine). */
 window.FM = window.FM || {};
@@ -27,7 +27,7 @@ window.FM = window.FM || {};
 
   /* ---- SUBJECTS ------------------------------------------------------------------------------
    * A thumbnail is only worth showing if you can tell WHAT THE EFFECT DOES from the tile alone.
-   * One generic subject cannot do that for 175 effects: a flat teal ball has no tonal range (so
+   * One generic subject cannot do that for 177 effects: a flat teal ball has no tonal range (so
    * Brightness, Contrast and Saturation all render the identical ball), no straight lines (so every
    * warp is just a slightly different ball) and no texture (so the 3D solids are all one blob).
    * So each effect names the subject that demonstrates IT — see SUBJECT_OF below.
@@ -211,6 +211,8 @@ window.FM = window.FM || {};
     copybg: 'backdrop',
     // Whole-frame framing: these draw ON the comp edge, so the subject must reach it.
     letterbox: 'photo', border: 'photo', vignette: 'photo', tiltshift: 'photo',
+    // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
+    halation: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot',
     // Geometry that reads better on a real picture than on an abstract lattice: these re-tile or

@@ -83,6 +83,8 @@ window.FM = window.FM || {};
     displacemap: 'distort', polardisplace: 'distort',
     // batch 30 (procedural particle system)
     particles: 'proc',
+    // batch 31 (the two grading gaps)
+    levels: 'color', halation: 'color',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -115,12 +117,12 @@ window.FM = window.FM || {};
   // nothing on an adjustment layer — a silent no-op — so this whitelist gates them out. (#6)
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
-    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1,
+    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['liquidglass', 'roundcorners', 'tiles', 'filmgrain', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace', 'tilerotate', 'palettemap'];
+  FM.FX_FEATURED = ['halation', 'levels', 'liquidglass', 'roundcorners', 'tiles', 'filmgrain', 'shake', 'particles', 'displacemap', 'polardisplace', 'lightning', 'turbulentdisplace'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
@@ -279,7 +281,7 @@ window.FM = window.FM || {};
       // effect that declares one gets it shown in the panel and in the browser. When one isn't
       // written, describeOf builds a truthful line from the catalogue rather than inventing prose.
       desc: def.desc || DESCRIPTIONS[def.type] || describeOf(def),
-      // Search keywords. DERIVED rather than hand-listed for 175 effects: the category, the words in
+      // Search keywords. DERIVED rather than hand-listed for 177 effects: the category, the words in
       // the label, the type id, and every control the effect exposes — which is what people actually
       // type ("radius", "angle", "shutter"). An effect can add its own with a `tags:` array.
       tags: tagsOf(def),

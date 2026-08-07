@@ -1,39 +1,20 @@
 # Next session — the open queue
 
-Rewritten 2026-08-07 at the end of the v4.52 session. **Everything above v4.09 is committed locally
-and NOT pushed** — Ezra pushes via GitHub Desktop. Forty-three releases are waiting (v4.10 → v4.52).
+Rewritten 2026-08-07. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
+via GitHub Desktop. Forty-four releases are waiting (v4.10 → v4.53).
 
 Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
 ---
 
-## 1. Effect thumbnails that actually show the effect  ← he asked for this last, and it is the live one
+## ~~1. Effect thumbnails that actually show the effect~~ — SHIPPED v4.53
 
-Ezra, verbatim: *"We had a miscommunication a while back where I wanted you to create a picture for
-every effect that resembled the effect and I gave an example of a ball with the effects applied but
-you just did that for literally everything, I want you to tackle it again, and see if an effect isn't
-really being described by the picture, give it a better picture."*
+Every tile now names the subject that demonstrates it (photo / card / grid / ball / text / keyshot)
+instead of applying all 175 effects to one flat teal ball. The audit also found ~40 tiles that were
+rendering nothing because their defaults are sized for a real comp — Tile Shift and Tile Rotate were
+exact no-ops on a 96px thumbnail. See `SUBJECT_OF` and `OVERRIDES` in `js/fx-thumbs.js`.
 
-`js/fx-thumbs.js` renders every browser tile by applying the effect to ONE generic mini scene — the
-ball. For a good number of effects that shows nothing useful:
-
-- **warps** (wave, ripple, twirl, bulge, fisheye, polar, bend, curl, turbulent displace) need a GRID
-  or text to visibly deform; a ball just becomes a slightly different ball
-- **temporal** effects (motionflow, drift, orbit, spin, swing, pulse, wiggle, shake, echo) need motion
-  across frames — a still tile can't show them at all
-- **matte / key** (chromakey, lumakey, wipes, choker, fringe) need a subject on a contrasting
-  background, otherwise the tile is just the subject
-- **text** effects (counter, timecode, textspacing, texttransform, textprogress, textrandomizer) need
-  actual text
-- **3D** solids need a textured face, or every one of them looks like the same grey shape
-- **repeat / tiling** needs content with a recognisable edge so the repeat reads
-
-The job: audit all 175 tiles, decide per effect whether the current subject demonstrates it, and give
-the ones that don't a subject that does. Keep the ball where it genuinely reads (colour grades, blurs,
-glows, vignette — those are exactly what a ball is good for). This is a judgement pass, not a
-mechanical one: the test is "could someone tell what this effect does from the tile alone".
-
-## 2. EFFECTS-PLAN.md round 10 — the standing autonomous order
+## 1. EFFECTS-PLAN.md round 10 — the standing autonomous order
 
 Nine rounds shipped (v3.87 → v4.13). Round 10 starts from the proposal table in that file. The
 byte-identity rule and the three-gate harness are documented at the top of it, including the two traps

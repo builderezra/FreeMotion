@@ -532,6 +532,27 @@ window.FM = window.FM || {};
       { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Triangle'], [3, 'Star'], [4, 'Streak']], def: 0 },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
     ], color: true, defColor: '#ffd23f', colorLabel: 'Start', color2: true, defColor2: '#ff5e5e', color2Label: 'End' },
+    // ---- batch 31: the two grading gaps ----
+    // Levels — set a real black and white point, per channel. Everything else in Color & Light
+    // pushes the image around; this is the one that says where 0 and 255 actually are.
+    { type: 'levels', label: 'Levels', desc: 'Sets where black and white actually fall. Pull the input points in to fill the range, or push the output points in to fade it.', params: [
+      { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0 },
+      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14 },
+      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236 },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.02, def: 1 },
+      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0 },
+      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255 },
+    ] },
+    // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
+    // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
+    // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
+    { type: 'halation', label: 'Halation', desc: 'The warm red bleed film gets around blown highlights — a tight core plus a wide wash, which is what reads as film rather than video.', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.1 },
+      { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.68 },
+      { key: 'tightness', label: 'Core', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'spread', label: 'Spread', min: 0.5, max: 20, step: 0.5, def: 5, unit: '%' },
+      { key: 'knee', label: 'Falloff', min: 1, max: 6, step: 0.1, def: 2.4 },
+    ], color: true, defColor: '#ff3a14', colorLabel: 'Halo' },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -619,6 +640,28 @@ window.FM = window.FM || {};
     }
     _grLUT = lut; _grSig = sig; return lut;
   }
+  /* Levels: out = outB + (outW - outB) * clamp((v - inB) / (inW - inB))^(1/gamma).
+   * Memoized on the param signature exactly like gradeLUT — the table is rebuilt only when a
+   * control actually moves, so scrubbing a static frame costs one 256-entry loop, not one per frame.
+   * gamma is the PHOTOSHOP sense: >1 lifts the midtones, which is the direction people expect the
+   * middle slider to go. */
+  let _lvLUT = null, _lvSig = null;
+  function levelsLUT(inB, inW, gam, outB, outW) {
+    const sig = inB + '|' + inW + '|' + gam + '|' + outB + '|' + outW;
+    if (_lvLUT && _lvSig === sig) return _lvLUT;
+    const lut = new Uint8ClampedArray(256);
+    // A collapsed or inverted input range would divide by ~0 and posterise to two values; clamp the
+    // span to one code value so the control degrades to "hard clip" instead of to NaN.
+    const span = (inW - inB) >= 1 ? (inW - inB) : 1;
+    const ig = 1 / (gam || 1), rng = outW - outB;
+    for (let v = 0; v < 256; v++) {
+      let n = (v - inB) / span;
+      n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, ig));
+      lut[v] = Math.round(outB + n * rng);
+    }
+    _lvLUT = lut; _lvSig = sig; return lut;
+  }
+
   let _grCanvas = null, _grLast = null;
   function gradeCanvas(src, w, h, lift, gamma, gain) {
     const tok = srcToken(src), sig = lift + '|' + gamma + '|' + gain;
@@ -1205,7 +1248,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1 };
+    touchup: 1, levels: 1, halation: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1298,6 +1341,23 @@ window.FM = window.FM || {};
 
   // Per-pixel effect functions. Each mutates the RGBA byte array in place. Read params via FM.evalProp.
   const PIXEL_FX = {
+    levels: function (d, W, H, p, t) {
+      const ch = Math.round(FM.evalProp(p.channel, t) || 0);
+      const inB = p.inblack == null ? 14 : FM.evalProp(p.inblack, t);
+      const inW = p.inwhite == null ? 236 : FM.evalProp(p.inwhite, t);
+      const gam = Math.max(0.05, p.gamma == null ? 1 : FM.evalProp(p.gamma, t));
+      const outB = p.outblack == null ? 0 : FM.evalProp(p.outblack, t);
+      const outW = p.outwhite == null ? 255 : FM.evalProp(p.outwhite, t);
+      const lut = levelsLUT(inB, inW, gam, outB, outW);
+      if (ch <= 0) {
+        for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
+      } else {
+        // One channel only — the move that kills a colour cast, because you can set that channel's
+        // own black point where the cast actually starts.
+        const o = ch - 1;
+        for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
     solarize: function (d, W, H, p, t) {
       // evalProp returns 0 (never null) for a missing prop, so branch on the raw param to actually
       // reach the 0.5 default when an instance has no threshold key (older/imported/AI nodes). (#19)
@@ -2137,7 +2197,7 @@ window.FM = window.FM || {};
     if (maxX < minX) return null;
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
-  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null;
+  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -2158,7 +2218,7 @@ window.FM = window.FM || {};
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -2722,6 +2782,60 @@ window.FM = window.FM || {};
   }
 
   const CANVAS_FX = {
+    /* ---- Halation ----------------------------------------------------------------------------
+     * Film's highlights bleed warm-red because light punches through the emulsion, scatters off the
+     * back of the base and re-exposes it from behind. The look is TWO radii at once: a tight core
+     * clinging to the blown area and a wide low wash across the frame. Every glow in this catalogue
+     * (glow / lightglow / softglow / edgeglow) has a single radius, which is exactly why none of
+     * them read as film.
+     *
+     * Only the highlight MASK is per-pixel, and it is built at quarter resolution — 130k pixels at
+     * 1080p instead of 2M — then both blurs and the upscale ride the compositor's own filter. */
+    halation: function (A, B, W, H, bb, p, t) {
+      const amount = Math.max(0, p.amount == null ? 0.8 : FM.evalProp(p.amount, t));
+      B.drawImage(A, 0, 0);
+      if (amount <= 0.001) return;
+      const thr = clamp01(p.threshold == null ? 0.68 : FM.evalProp(p.threshold, t));
+      const tight = clamp01(p.tightness == null ? 0.5 : FM.evalProp(p.tightness, t));
+      const spread = Math.max(0.5, p.spread == null ? 5 : FM.evalProp(p.spread, t));
+      const knee = Math.max(1, p.knee == null ? 2.4 : FM.evalProp(p.knee, t));
+      const rgb = hexToRGB(p.color || '#ff3a14');
+      const qw = Math.max(1, Math.round(W / 4)), qh = Math.max(1, Math.round(H / 4));
+      if (!_halC) _halC = document.createElement('canvas');
+      if (_halC.width !== qw || _halC.height !== qh) { _halC.width = qw; _halC.height = qh; }
+      const hc = _halC.getContext('2d', { willReadFrequently: true });
+      hc.setTransform(1, 0, 0, 1, 0, 0);
+      hc.globalAlpha = 1; hc.globalCompositeOperation = 'source-over'; hc.filter = 'none';
+      hc.clearRect(0, 0, qw, qh);
+      hc.drawImage(A, 0, 0, qw, qh);
+      let img;
+      try { img = hc.getImageData(0, 0, qw, qh); } catch (e) { return; }   // tainted source — leave the plate alone
+      const d = img.data, span = 1 - thr;
+      for (let i = 0; i < d.length; i += 4) {
+        // Luma of what the layer actually shows: a highlight that is 30% transparent is a 30%
+        // highlight, so fold alpha in rather than keying the un-composited colour.
+        const a = d[i + 3] / 255;
+        const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255 * a;
+        let e = span <= 0 ? (l >= 1 ? 1 : 0) : (l - thr) / span;
+        e = e <= 0 ? 0 : (e >= 1 ? 1 : Math.pow(e, knee));
+        d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = (e * 255) | 0;
+      }
+      hc.putImageData(img, 0, 0);
+      // Radii are in PLATE pixels, and W/H already carry the preview's render scale, so a reduced
+      // preview and a full export bleed by the same fraction of the frame without a ps term.
+      const minD = Math.min(W, H);
+      const rWide = Math.max(0.5, minD * spread / 100);
+      const rCore = Math.max(0.4, rWide * (0.06 + 0.24 * (1 - tight)));
+      B.save();
+      B.globalCompositeOperation = 'lighter';   // halation ADDS light; it never darkens
+      B.globalAlpha = Math.min(1, amount * 0.65);
+      B.filter = 'blur(' + rCore.toFixed(2) + 'px)';
+      B.drawImage(_halC, 0, 0, W, H);
+      B.globalAlpha = Math.min(1, amount * 0.35);
+      B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
+      B.drawImage(_halC, 0, 0, W, H);
+      B.restore();
+    },
     // ---- Motion Blur (Content) ----
     motionflow: function (A, B, W, H, bb, p, t, tl, layer) {
       // Onion-skin ghosts render this same layer at t±0.2s, which drags the per-layer time record
@@ -5250,9 +5364,14 @@ window.FM = window.FM || {};
   // Per-pixel post-fx that an adjustment layer can also apply to everything beneath it (matching
   // the layer-level draw* math exactly). Geometric post-fx (pixelate/mirror/rgbsplit) aren't done
   // here — they need a geometry pass, so they only apply per-layer for now.
-  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1 };
+  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1 };
   function applyPixelFx(d, fx, t, W, H) {
     const p = fx.params || {};
+    // Levels is the one grade people reach for on an adjustment layer — "set the black point for
+    // everything below" — and its pixel pass is already byte-in/byte-out, so the adjustment path can
+    // call it directly instead of carrying a second copy. (No overlap: none of the other PIXEL_ADJ
+    // types live in PIXEL_FX; they have their own draw* functions.)
+    if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, p, t, 1); return; }
     if (fx.type === 'rgbsplit') {
       const dd = Math.round(FM.evalProp(p.amount, t) || 0);
       if (dd > 0 && W && H) {
