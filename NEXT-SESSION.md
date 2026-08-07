@@ -1,7 +1,7 @@
 # Next session — the open queue
 
 Rewritten 2026-08-07. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
-via GitHub Desktop. Forty-seven releases are waiting (v4.10 → v4.56).
+via GitHub Desktop. Fifty releases are waiting (v4.10 → v4.59).
 
 Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
@@ -18,12 +18,15 @@ exact no-ops on a 96px thumbnail. See `SUBJECT_OF` and `OVERRIDES` in `js/fx-thu
 
 **Round 10 is under way and is the first round that adds NEW effects rather than params.** Shipped so
 far, off that file's BUILD NEXT table: **Levels + Halation (v4.54)**, **Frame Stutter + Shockwave
-(v4.55)**, **Speed Lines + HSL Bands (v4.56)**.
+(v4.55)**, **Speed Lines + HSL Bands (v4.56)**, **Time Warp Scan + Chroma Key Pro (v4.57)**,
+**Light Wrap (v4.58)** — nine of the thirteen.
 
-Still open on that table, in its own order: **Time Warp Scan (6)**, **Chroma Key Pro (8)**,
-**Light Wrap (9)**, **Dispersion (10)**, **Temporal Denoise (11)**, **VHS Tape (12)**,
-**Compression Crunch (13)**. Light Wrap needs the `_bgSnap` gate widened (compositor.js ~3013/4335)
-and proves that gate for Liquid Glass afterwards.
+Still open on that table: **Dispersion (10)**, **Temporal Denoise (11)**, **VHS Tape (12)**,
+**Compression Crunch (13)**. All four are PIXEL_FX with real per-frame cost; read that file's
+"Perf claims I think are wrong" table before starting any of them.
+
+`FM.needsBgSnap` (v4.58) is now the gate for any effect that reads the layers UNDERNEATH — add a key
+to `BG_SNAP_FX` and it works. That is what Liquid Glass would need if it is ever redone properly.
 
 The byte-identity rule and the three-gate harness are documented at the top of EFFECTS-PLAN.md,
 including the two traps that have caught me: `params:{}` renders at the LEGACY default (use
@@ -71,5 +74,5 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.56. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
+v3.79 → v4.59. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
 than minting a new one.
