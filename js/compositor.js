@@ -867,7 +867,15 @@ window.FM = window.FM || {};
     return oc;
   }
 
-  function effectFilter(layer, t) {
+  /* ps = plateScale(ctx): 1 for export and a 1:1 preview, smaller for a reduced one.
+   * Every LENGTH inside ctx.filter (and ctx.shadow*) is in DEVICE pixels — the current transform does
+   * not touch it. Measured: blur(10px) leaves the same 26-device-pixel edge ramp whether the context
+   * is scaled 1, 0.5 or 0.25, so on a preview rendered at quarter scale that blur covers 104 project
+   * pixels instead of 26 and the picture looks four times blurrier than the export. Multiplying the
+   * radius by ps puts it back in project space. At ps = 1 the arithmetic is a no-op, which is why
+   * exports cannot change. Any new length-valued filter added here needs the same treatment. */
+  function effectFilter(layer, t, ps) {
+    const S = ps == null ? 1 : ps;
     const parts = [];
     const fx = layer.effects;
     if (fx && fx.length) for (const e of fx) {
@@ -875,7 +883,7 @@ window.FM = window.FM || {};
       const p = e.params || {};
       const v = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
       switch (e.type) {
-        case 'blur': parts.push('blur(' + v('radius', 6) + 'px)'); break;
+        case 'blur': parts.push('blur(' + (v('radius', 6) * S) + 'px)'); break;
         case 'brightness': parts.push('brightness(' + v('amount', 1) + ')'); break;
         case 'contrast': parts.push('contrast(' + v('amount', 1) + ')'); break;
         case 'saturate': parts.push('saturate(' + v('amount', 1) + ')'); break;
@@ -888,7 +896,7 @@ window.FM = window.FM || {};
         case 'glow': {
           const gr = v('radius', 12), gc = (p.color || '#ffffff');
           const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
-          for (let gi = 0; gi < gp; gi++) parts.push('drop-shadow(0 0 ' + gr + 'px ' + gc + ')');
+          for (let gi = 0; gi < gp; gi++) parts.push('drop-shadow(0 0 ' + (gr * S) + 'px ' + gc + ')');
           break;
         }
       }
@@ -917,14 +925,19 @@ window.FM = window.FM || {};
   }
   // Set the ctx drop-shadow from a layer's (keyframeable) shadow at time t. Alpha (0-100%) folds into
   // the colour so shadow opacity animates. evalProp passes bare static values through unchanged.
-  function applyShadow(ctx, layer, t) {
+  // ps as in effectFilter — and the OFFSETS need it too, not just the blur. shadowOffsetX/Y are
+  // device-space by spec ("not affected by the current transformation matrix"), so on a quarter-scale
+  // preview a 40px offset put the shadow 156 project pixels from its layer instead of 39: the shadow
+  // visibly detaches, then snaps back on pause when the preview returns to full resolution.
+  function applyShadow(ctx, layer, t, ps) {
     const sh = layer.shadow;
     if (!sh || !sh.enabled) return;
+    const S = ps == null ? 1 : ps;
     const a = (sh.alpha == null ? 100 : (FM.evalProp(sh.alpha, t) || 0)) / 100;
     ctx.shadowColor = rgbaHex(FM.evalProp(sh.color, t) || '#000', a);
-    ctx.shadowBlur = FM.evalProp(sh.blur, t) || 0;
-    ctx.shadowOffsetX = FM.evalProp(sh.dx, t) || 0;
-    ctx.shadowOffsetY = FM.evalProp(sh.dy, t) || 0;
+    ctx.shadowBlur = (FM.evalProp(sh.blur, t) || 0) * S;
+    ctx.shadowOffsetX = (FM.evalProp(sh.dx, t) || 0) * S;
+    ctx.shadowOffsetY = (FM.evalProp(sh.dy, t) || 0) * S;
   }
 
   // ---- TEXT EFFECTS ----
@@ -6022,7 +6035,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    applyShadow(ctx, layer, t);
+    applyShadow(ctx, layer, t, plateScale(ctx));
     applyLayerTransform(ctx, layer, t, scene);
     if (!feathered) applyMaskClip(ctx, layer);   // feathered mask already baked into the content plate
     ctx.scale(1 / nscale, 1 / nscale);
@@ -6228,7 +6241,7 @@ window.FM = window.FM || {};
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
-    ctx.filter = effectFilter(layer, t);   // reset automatically by ctx.restore()
+    ctx.filter = effectFilter(layer, t, plateScale(ctx));   // reset automatically by ctx.restore()
     // FOCUS BLUR (Camera Options). Appended to the layer's own filter string rather than run as a
     // pixel pass: this is the one hook every layer type already goes through, and a GPU-side blur
     // costs no buffer. The radius is set BEFORE applyLayerTransform, so it lives in pre-transform
@@ -6240,9 +6253,10 @@ window.FM = window.FM || {};
       const F = (_camLens && _camLens.F) || Math.max(1, ((scene && scene.project && scene.project.height) || 1080) * 2);
       const ps = zz ? F / Math.max(F * 0.05, F + zz) : 1;
       const px = (_dfc * _camLens.focus.s * 22) / Math.max(0.05, ps);
-      if (px > 0.3) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + px.toFixed(2) + 'px)';
+      const pxs = px * plateScale(ctx);   // device-space like every other filter length — see effectFilter
+      if (pxs > 0.3) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + pxs.toFixed(2) + 'px)';
     }
-    applyShadow(ctx, layer, t);
+    applyShadow(ctx, layer, t, plateScale(ctx));
     applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
 
@@ -6628,7 +6642,7 @@ window.FM = window.FM || {};
     }
   }
   function applyAdjustment(ctx, layer, t, scene) {
-    const filter = effectFilter(layer, t), hasCss = filter && filter !== 'none';
+    const filter = effectFilter(layer, t, plateScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
     const ppfx = (layer.effects || []).filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
     const pixFx = (layer.effects || []).find(e => e.type === 'pixelate' && e.enabled !== false);
     if (!hasCss && !ppfx.length && !pixFx) return;
