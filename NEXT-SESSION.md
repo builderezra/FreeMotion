@@ -1,7 +1,7 @@
 # Next session — the open queue
 
 Rewritten 2026-08-07. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
-via GitHub Desktop. Fifty-two releases are waiting (v4.10 → v4.61).
+via GitHub Desktop. Fifty-five releases are waiting (v4.10 → v4.64).
 
 Work the list top-to-bottom; it is in the order Ezra asked for the items.
 
@@ -21,11 +21,25 @@ v4.61): Levels, Halation, Frame Stutter, Shockwave, Speed Lines, HSL Bands, Time
 Key Pro, Light Wrap, Dispersion, VHS Tape, Compression Crunch, Temporal Denoise. The app is at 188
 effects.
 
-Round 11 starts from what is left in EFFECTS-PLAN.md:
+**Round 11 is under way.** Shipped off the WORTH DOING LATER list: **Lens Distortion + Pixel Sort
+(v4.62)**, **Luma Matte (v4.63)**, **Compound Blur + Match Grade (v4.64)** — five of the ten. The app
+is at 193 effects.
 
-- the **WORTH DOING LATER** list — Luma Matte, Compound Blur, Corner Pin, LUT (.cube), Pixel Sort,
-  Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-an-offline-Analyse-pass, Curves. Each
-  entry says why it is bigger than a BUILD NEXT item; read the note before starting one.
+Still open on that list, and all five now need NEW UI rather than just a render branch:
+
+- **Curves** — needs a curve-editor param type in the registry. The biggest of the five and the most
+  used tool in any editor. Levels covers ~80% of it with sliders that already fit the schema.
+- **Corner Pin** — the homography solve is 20 lines; the ON-CANVAS DRAG HANDLES are the entire job
+  (`js/point-edit.js` is the pattern). Sliders alone would be unusable. Start the mesh at 8x8.
+- **LUT (.cube)** — a new file-type param, IndexedDB persistence, and a parser eating untrusted text
+  (`storage.js sanitizeImportedLayers` rules apply). A missing LUT id in an imported `.fmproj` must
+  degrade to identity, never throw.
+- **Defocus / Bokeh** — genuinely expensive (see flag F: 40-70ms full res). Quarter-res or export-only.
+- **Stabilize** — as an offline Analyse pass over `js/tracker.js`'s frame cache, baking a correction
+  curve. NOT as a live effect; see flag C.
+
+`dspSlot(W,H)` + `_dspLvl` (v4.63) is the scratch pool for anything that reads ANOTHER layer — Luma
+Matte, Compound Blur and Match Grade all sit on it. Corner Pin will not need it; a LUT will not either.
 - the **full proposal table** of per-effect PARAM upgrades (~105 of them), which is what rounds 1-9
   worked through. Those carry the byte-identity rule; new effects do not.
 
@@ -83,5 +97,5 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.61. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
+v3.79 → v4.64. Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
 than minting a new one.
