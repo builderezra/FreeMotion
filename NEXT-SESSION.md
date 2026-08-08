@@ -1,7 +1,10 @@
 # Next session — the open queue
 
-Rewritten 2026-08-08. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
-via GitHub Desktop. Fifty-seven releases are waiting (v4.10 → v4.66). The app is at **193 effects**.
+Rewritten 2026-08-08. **CHECK `git log --oneline origin/main..HEAD` BEFORE CLAIMING ANYTHING ABOUT
+PUSHING.** This file carried "fifty-seven releases are waiting (v4.10 → v4.66)" for weeks and it was
+wrong by a factor of eight — Ezra has been pushing all along via GitHub Desktop. As of 2026-08-08
+`origin/main` is at `4bfcd6b` and **8 commits are unpushed** (v4.62 → v4.67 plus two queue commits).
+The app is at **193 effects**.
 
 Work the list top-to-bottom.
 
@@ -31,6 +34,24 @@ Both fixed at the cause and verified; kept here only because the findings are re
   GPU-backed canvas reports ~0ms — the work is queued, not done. To get the true cost, force a
   flush with a 1×1 `getImageData` after the draw. The app's own measurement does not do this, which
   is why the tier never drops on this Mac but does on Ezra's PC.
+
+### v4.67 — fixing v4.66's own regressions (found by review, not by use)
+
+An adversarial review of the v4.66 commit found four defects in it, two of them making things WORSE
+than before the "fix". Lessons that generalise:
+
+- **The tier is not the resolution.** `playQualityFactor()` floors at tier 2 in 'smooth' and returns
+  1 in 'detail', and `previewScale()` then clamps with a 0.25 floor and `MAX_PREVIEW_PX`. So a tier
+  step can change no pixels at all. Any logic that reasons about "did lowering quality help?" must
+  ask `canvas.width * canvas.height`, never the tier or the factor.
+- **A timer-based lockout re-probes forever.** Anything that learns "this didn't help" should latch
+  and be released by a *condition* (the cost rising), not by a frame count.
+- **Dragging and playing are different cost regimes** — a drag has no video decode. Never carry a
+  measured cost-to-beat across that boundary; `notePlaybackCost` now resets on the switch.
+- **Verify a state machine by running it.** Extract the real function bodies out of js/app.js into a
+  harness (`osascript -l JavaScript` works; there is no node on this machine) and drive them frame by
+  frame. Reading the code missed all four; running it found all four in minutes. Keep the harness
+  idea — but stub the CANVAS too, or the no-op detection can't be exercised.
 
 ---
 
@@ -77,7 +98,33 @@ Two things learned in round 10 that belong here:
 
 ---
 
-## 2. Not blocked, but lower value than round 11
+## 2. Doc-audit findings, 2026-08-08 — real work these files were hiding
+
+A full audit of NEXT-SESSION / EFFECTS-PLAN / MISSION / BACKLOG / PARITY / QUALITY / PERF-PLAN turned
+up genuine work and a lot of drift. The items worth acting on, highest value first:
+
+- **The SOLO button has no UI at all.** BACKLOG's one high-severity bug, still real: zero `th-solo` in
+  `js/` or `index.html`, only four orphaned `.th-solo` rules at styles.css:1040-1042,1322. The engine
+  and the exporter both honour `layer.solo` — the feature is built and simply unreachable. Small job.
+- **Round 11 is six items, not five** — NEXT-SESSION dropped **Liquid Glass** off EFFECTS-PLAN's
+  WORTH DOING LATER list when it carried the rest forward.
+- **PERF-PLAN Fix F never shipped** — `ctx.filter` blur radii and `shadowBlur` are still in project
+  pixels, so they are wrong by the preview scale factor. It was written as a rider on Fix A, and Fix A
+  shipped without it.
+- **Frame-cache OOM on low-memory phones** — app.js still hardcodes `maxBytes: 384MB` with no
+  `navigator.deviceMemory` check anywhere in js/.
+- **PARITY.md / QUALITY.md numbers are stale on their face** — "~180 registered effects" (it is 193),
+  "no GIF, no share sheet, no audio DSP" (all three ship). BACKLOG lists ~12 things as open that
+  shipped months ago (particles, trim paths, multi-mask, luma matte, stereo pan, reverb/delay/EQ,
+  frame-sequence export, preview downscale, pinch/pan…). Its own upkeep rule — "when an item ships,
+  flip it to ✅ in PARITY.md and delete it here" — has not been followed in a long time.
+- **QUALITY.md's test plan is essentially unbuilt** — `tests/tests.js` is 119 lines with ~11
+  assertions, last touched 2026-06-26, against a 12-area plan; ~65 releases have shipped since.
+- **CLAUDE.md's "add each new AM-modelled screen to BEFORE-PUBLISHING.md as you go"** has not been
+  honoured since v4.25 — the v4.50/v4.59 effect-browser sheets and the v4.14 PC property cards are
+  all missing from that list.
+
+## 3. Not blocked, but lower value than round 11
 
 - ~~**Effect descriptions.**~~ DONE v4.65 — all 193 are hand-written, 0 fall back to `describeOf()`.
 - **Motion Blur (Footage) on a group.** Currently refused (`supportsLayer`) and stripped at render,
@@ -115,5 +162,5 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.64 (**v4.65 and v4.66 not added yet**). Every shipped feature gets an entry; re-publish the
+v3.79 → v4.64 (**v4.65, v4.66 and v4.67 not added yet**). Every shipped feature gets an entry; re-publish the
 SAME url (pass it as `url`) rather than minting a new one.

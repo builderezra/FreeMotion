@@ -106,12 +106,11 @@ window.FM = window.FM || {};
    * effectively never leaves it.
    */
   const PLAY_TIERS = [1, 0.8, 0.62, 0.48, 0.36, 0.28];
-  let _playTier = 0, _renderAvg = 0, _tierCooldown = 0, _lastPlayTier = 0;
+  let _playTier = 0, _renderAvg = 0, _tierCooldown = 0;
   // A tier drop has to EARN its place — see the payoff test in notePlaybackCost.
   const DROP_PAYOFF = 0.85;   // a drop must cut the average by 15%+ to be worth the softer picture
-  const DROP_LOCK = 600;      // measured frames to stop probing after a drop that didn't pay off
-  const LOCK_ESCAPE = 1.35;   // …unless the frame cost climbs this much above where we locked
-  let _dropFrom = 0, _dropLock = 0, _lockAt = 0, _skipCost = 0;
+  const LOCK_ESCAPE = 1.35;   // once locked, only a cost this much higher re-opens the question
+  let _dropFrom = 0, _dropPx = 0, _locked = 0, _lockAt = 0, _skipCost = 0, _costCtx = '';
 
   /* Playback is not the only time the picture is MOVING. Dragging the playhead, a layer on the
    * canvas, or a slider re-renders continuously too, and the same trade applies there: shed pixels
@@ -145,12 +144,22 @@ window.FM = window.FM || {};
   // Called once per rendered frame with the measured cost of that frame.
   function notePlaybackCost(ms) {
     if (!FM.playing && !_inMotion) return;
+    const mode = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
+    // 'detail' never trades sharpness, so the ladder controls nothing at all. Park it at the top
+    // rather than let it walk down a ladder that changes no pixels — a tier abandoned down there
+    // would bite the moment the mode went back to 'auto'.
+    if (mode === 'detail') { _playTier = 0; _dropFrom = 0; _locked = 0; return; }
+    // Playing and dragging are different cost regimes: a drag repaints a still frame with no video
+    // decode, so it is materially cheaper. What was learned in one must never be used to judge the
+    // other — a cost-to-beat carried out of a drag made playback undo a drop that was helping, then
+    // locked adaptation out while it stuttered. The bookkeeping starts fresh when the regime changes.
+    const ctx = FM.playing ? 'play' : 'drag';
+    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; }
     // The frame straight after a tier change repaints into a freshly allocated backing store and is
     // the dearest one in the run. Letting it seed the average makes every drop look like it made
     // things worse — which is exactly the judgement the payoff test below has to get right.
     if (_skipCost) { _skipCost = 0; return; }
     _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
-    if (_dropLock > 0) _dropLock--;
     if (_tierCooldown > 0) { _tierCooldown--; return; }
     const budget = 1000 / 60;                       // a frame's worth of time at display rate
     const before = _playTier;
@@ -163,26 +172,41 @@ window.FM = window.FM || {};
      * to lower the quality when i do something as simple as just have one simple video".
      * So a drop has to pay for itself. If it didn't, put the tier back and stop probing for a while;
      * climbing stays allowed throughout, so nothing gets stuck low. */
-    // The lock says "at this cost, pixels are not the problem" — so a materially heavier scene (a
-    // blur added, a second clip) has earned a fresh probe rather than 600 frames of stutter.
-    if (_dropLock && _renderAvg > _lockAt * LOCK_ESCAPE) _dropLock = 0;
+    // The lock is a LATCH, not a timer. It records "at this cost, resolution is not the bottleneck",
+    // so the question only re-opens when the scene gets materially heavier (a blur added, a second
+    // clip). An expiring lock re-probed forever — it softened the preview for a moment every ten
+    // seconds on exactly the plain video this was written to fix.
+    if (_locked && _renderAvg > _lockAt * LOCK_ESCAPE) _locked = 0;
+    /* A probe that did not actually change the rendered resolution proves nothing, so don't judge it
+     * — just carry on down the ladder. Ask the CANVAS rather than the tier, because there are two
+     * separate ways a tier step can move no pixels at all:
+     *   - 'smooth' mode floors the factor at tier 2, so stepping 0→1→2 changes nothing (judging that
+     *     read "no gain", undid it, and dead-ended the ladder before it ever reached tier 3);
+     *   - previewScale()'s 0.25 floor and MAX_PREVIEW_PX budget can clamp two different factors to
+     *     the same backing store on a big comp (a 2048² project clamps every tier below 0.735).
+     * The backing-store size is the one thing that is true in both cases. */
+    if (_dropFrom && canvas.width * canvas.height === _dropPx) _dropFrom = 0;
     if (_dropFrom && _renderAvg > _dropFrom * DROP_PAYOFF) {
-      _playTier--; _dropFrom = 0; _dropLock = DROP_LOCK; _lockAt = _renderAvg;               // it didn't pay — undo it
-    } else if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_dropLock) {
-      _dropFrom = _renderAvg; _playTier++;                                                   // struggling → shed pixels, and remember the cost to beat
+      _playTier--; _locked = 1; _lockAt = _dropFrom; _dropFrom = 0;   // didn't pay — undo, and remember the cost at the tier we came BACK to
+    } else if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_locked) {
+      _dropFrom = _renderAvg; _dropPx = canvas.width * canvas.height; _playTier++;   // struggling → shed pixels, remembering the cost AND the backing store to beat
     } else if (_renderAvg < budget * 0.30 && _playTier > 0) {
-      _dropFrom = 0; _playTier--;                                                            // lots of headroom → give detail back
+      _dropFrom = 0; _playTier--;                                     // lots of headroom → give detail back
     } else if (_renderAvg <= budget * 0.72) {
-      _dropFrom = 0;                                                                         // inside budget: the last drop did its job, stop judging it
+      _dropFrom = 0;                                                  // inside budget: the last drop did its job, stop judging it
     }
     // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
     // A drag is short and you're watching position, not detail, so it may find its level quickly.
     if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _skipCost = 1; resizeCanvas(); }
   }
   FM.playbackQualityInfo = function () {
-    return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto',
-      // the payoff test's working: what the last drop had to beat, and whether probing is locked out
-      dropFrom: +_dropFrom.toFixed(2), dropLock: _dropLock };
+    // `factor` is the tier's own value; `effective` is what previewScale() actually applies — the two
+    // differ in 'smooth' (floored at tier 2) and 'detail' (always 1), and it was reading the tier
+    // instead of the effective factor that hid a dead-ended ladder in smooth mode.
+    return { tier: _playTier, factor: PLAY_TIERS[_playTier], effective: playQualityFactor(),
+      avgFrameMs: +_renderAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto',
+      // the payoff test's working: what the last drop had to beat, and whether probing is latched off
+      dropFrom: +_dropFrom.toFixed(2), locked: !!_locked, lockAt: +_lockAt.toFixed(2), costCtx: _costCtx };
   };
 
   /* The comp is almost always DISPLAYED smaller than its own pixel size — a 1080×1920 project sits
@@ -788,9 +812,8 @@ window.FM = window.FM || {};
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
     lastTs = 0;
-    _renderAvg = 0; _tierCooldown = 8;          // let the first few frames settle before judging the machine
-    _lastPlayTier = -1;                          // force the canvas to re-size into playback quality
-    resizeCanvas();
+    _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
+    resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
     if (FM.audioFxLive) { FM.audioFxLive.resume(); FM.audioFxLive.syncAll(); }
     FM.scene.layers.forEach(layer => {
