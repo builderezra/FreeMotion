@@ -131,8 +131,17 @@ up genuine work and a lot of drift. The items worth acting on, highest value fir
   shipped months ago (particles, trim paths, multi-mask, luma matte, stereo pan, reverb/delay/EQ,
   frame-sequence export, preview downscale, pinch/pan…). Its own upkeep rule — "when an item ships,
   flip it to ✅ in PARITY.md and delete it here" — has not been followed in a long time.
-- **QUALITY.md's test plan is essentially unbuilt** — `tests/tests.js` is 119 lines with ~11
-  assertions, last touched 2026-06-26, against a 12-area plan; ~65 releases have shipped since.
+- **QUALITY.md's test plan is still mostly unbuilt** — but `tests/tests.js` is now **12 regression
+  tests, all green**, up from 3 regression + 5 stale "pending". Done 2026-08-08: the five pending
+  tests all passed (their BACKLOG gaps had shipped long ago) so they were graduated per the file's own
+  rule, and four new ones lock in the v4.66–v4.70 bugs. **Every new test was mutation-checked** — the
+  fix was reverted in memory and the test confirmed to go red — because a green test that cannot fail
+  is worse than no test. One of them was caught doing exactly that: it measured an ALPHA ramp on a
+  scene with an opaque background, so it read zero blur and would have passed forever.
+  Run it with: `fetch('tests/tests.js').then(r=>r.text()).then(eval).then(()=>FMTests.run())`.
+  Still open from the 12-area plan: responsive-overflow at 380px, screenshot baselines, audio import,
+  export round-trip. QUALITY.md line 95 claims "tests gate every commit" — that is aspirational, not
+  true, and nothing enforces it.
 - **CLAUDE.md's "add each new AM-modelled screen to BEFORE-PUBLISHING.md as you go"** has not been
   honoured since v4.25 — the v4.50/v4.59 effect-browser sheets and the v4.14 PC property cards are
   all missing from that list.

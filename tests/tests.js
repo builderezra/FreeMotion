@@ -57,29 +57,30 @@
     if (a !== b) throw new Error('layer ids changed across roundtrip: ' + a + ' vs ' + b);
   });
 
-  /* ---------------- cycle 1 (mobile) — should flip to GREEN this cycle ---------------- */
+  /* ---- graduated 2026-08-08: these shipped and went green, so per the header rule they are
+     regression tests now. They had been sitting as 'pending' long after the gap they encoded closed. ---- */
 
-  test('touch: #preview has touch-action:none', { item: 'mobile-touch', pending: true }, function () {
+  test('touch: #preview has touch-action:none', { item: 'mobile-touch' }, function () {
     var el = document.getElementById('preview');
     if (!el) throw new Error('#preview missing');
     var ta = getComputedStyle(el).touchAction;
     if (ta !== 'none') throw new Error('#preview touch-action="' + ta + '", expected none (drags would scroll the page)');
   });
 
-  test('touch: a selection-box handle has touch-action:none', { item: 'mobile-touch', pending: true }, function () {
+  test('touch: a selection-box handle has touch-action:none', { item: 'mobile-touch' }, function () {
     var el = document.querySelector('.sb-handle');
     if (!el) throw new Error('no .sb-handle in DOM');
     var ta = getComputedStyle(el).touchAction;
     if (ta !== 'none') throw new Error('.sb-handle touch-action="' + ta + '", expected none');
   });
 
-  test('mobile: inspector drawer toggle exists', { item: 'mobile-layout', pending: true }, function () {
+  test('mobile: inspector drawer toggle exists', { item: 'mobile-layout' }, function () {
     if (!document.getElementById('insp-toggle')) throw new Error('no #insp-toggle (inspector unreachable on phone)');
   });
 
-  /* ---------------- pending — future cycles ---------------- */
+  /* ---------------- (also graduated 2026-08-08) ---------------- */
 
-  test('blend: luminosity mode actually composites (not a normal-mode fallback)', { item: 'blend-modes', pending: true }, function () {
+  test('blend: luminosity mode actually composites (not a normal-mode fallback)', { item: 'blend-modes' }, function () {
     var blue = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#0000ff' });
     var red = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#ff0000' });
     red.blendMode = 'luminosity';
@@ -88,9 +89,88 @@
     if (p[0] > 200 && p[2] < 60) throw new Error('luminosity fell back to normal (got pure red) — mode not in BLEND map');
   });
 
-  test('audio: file input accepts audio/*', { item: 'audio-import', pending: true }, function () {
+  test('audio: file input accepts audio/*', { item: 'audio-import' }, function () {
     var fi = document.getElementById('file-input');
     if (!fi || !/audio/.test(fi.accept || '')) throw new Error('file-input accept lacks audio: "' + (fi && fi.accept) + '"');
+  });
+
+  /* ---------------- regression: bugs that shipped broken once (v4.66 → v4.70) ----------------
+   * Each of these encodes a defect that reached a release. Three were found by review rather than by
+   * using the app, and one was a regression introduced by the fix for another — so they are exactly
+   * the failures a suite is for. Keep them fast and synthetic; none of them touch media. */
+
+  test('preview: on-screen size does not depend on the canvas backing store', { item: 'preview-shrink' }, function () {
+    // v4.66: #canvas-wrap was content-sized, so it tracked canvas.width and the adaptive quality tier
+    // physically shrank the picture (measured 508px -> 302px) instead of only softening it.
+    var wrap = document.getElementById('canvas-wrap'), c = document.getElementById('preview');
+    if (!wrap || !c) throw new Error('#canvas-wrap / #preview missing');
+    var w0 = Math.round(wrap.getBoundingClientRect().width), ow = c.width, oh = c.height;
+    if (!(w0 > 0)) throw new Error('#canvas-wrap has no width to compare');
+    try {
+      c.width = Math.max(1, Math.round(ow * 0.28)); c.height = Math.max(1, Math.round(oh * 0.28));
+      void wrap.offsetHeight;
+      var w1 = Math.round(wrap.getBoundingClientRect().width);
+      if (Math.abs(w1 - w0) > 1) throw new Error('wrap went ' + w0 + 'px -> ' + w1 + 'px when the backing store shrank — dropping a quality tier would shrink the picture');
+    } finally { c.width = ow; c.height = oh; if (FM.resizeCanvas) FM.resizeCanvas(); }
+  });
+
+  test('preview: a blur covers the same picture at any render scale', { item: 'filter-scale' }, function () {
+    // v4.69: every length in ctx.filter / ctx.shadow* is DEVICE-space, so on a reduced preview a blur
+    // covered proportionally more of the frame than it will in the export.
+    function rampProjectPx(stamp) {
+      var W = 320, H = 240;
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 240, y: 120, shapeW: 160, shapeH: 240, fill: '#ffffff' });
+      L.effects = [{ type: 'blur', enabled: true, params: { radius: 8 } }];
+      var c = offscreen(Math.round(W * stamp), Math.round(H * stamp));
+      if (stamp !== 1) { c.__fmRS = stamp; c.__fmOX = 0; c.__fmOY = 0; }
+      var x = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L]), 0);
+      // Measure LUMA, not alpha: the project background is opaque, so alpha is 255 across the whole
+      // row and an alpha ramp would always read zero. (This test failed that way when first written.)
+      var row = x.getImageData(0, Math.round(120 * stamp), c.width, 1).data, i, max = 0;
+      for (i = 0; i < c.width; i++) max = Math.max(max, row[i * 4]);
+      if (!max) throw new Error('nothing rendered at render scale ' + stamp);
+      var lo = null, hi = null;
+      for (i = 0; i < c.width; i++) {
+        var a = row[i * 4];
+        if (lo === null && a >= max * 0.10) lo = i;
+        if (hi === null && a >= max * 0.90) { hi = i; break; }
+      }
+      if (lo === null || hi === null) throw new Error('no edge ramp found at render scale ' + stamp);
+      return (hi - lo) / stamp;                        // express the ramp in PROJECT pixels
+    }
+    var full = rampProjectPx(1), half = rampProjectPx(0.5);
+    if (!(full > 2)) throw new Error('no measurable blur at full scale (' + full + 'px) — test is not exercising the blur');
+    var ratio = half / full;
+    if (ratio > 1.5) throw new Error('a half-scale preview blurs ' + ratio.toFixed(2) + 'x wider than the export — filter lengths need * plateScale(ctx)');
+  });
+
+  test('frame cache: the memory budget follows the device', { item: 'frame-cache-oom' }, function () {
+    // v4.70: a flat 384MB of ImageBitmaps on every device is what OOM-kills mobile Safari.
+    if (!FM.frameCacheLimits) throw new Error('FM.frameCacheLimits missing');
+    var realDM = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory'), realMM = window.matchMedia;
+    function env(gb, fine) {
+      Object.defineProperty(navigator, 'deviceMemory', { value: gb, configurable: true });
+      window.matchMedia = function (q) { return { matches: /pointer: fine/.test(q) ? fine : false, media: q }; };
+      try { return FM.frameCacheLimits(); } finally {
+        delete navigator.deviceMemory;
+        if (realDM) Object.defineProperty(Navigator.prototype, 'deviceMemory', realDM);
+        window.matchMedia = realMM;
+      }
+    }
+    var MB = 1024 * 1024;
+    var desktop = env(8, true), phone = env(2, false), tablet = env(8, false);
+    if (desktop.maxBytes !== 384 * MB) throw new Error('an 8GB desktop must keep the full 384MB, got ' + (desktop.maxBytes / MB) + 'MB');
+    if (phone.maxBytes > 128 * MB) throw new Error('2GB phone budget too large: ' + (phone.maxBytes / MB) + 'MB');
+    if (tablet.maxBytes > 160 * MB) throw new Error('a touch OS must be capped whatever RAM it reports, got ' + (tablet.maxBytes / MB) + 'MB');
+    if (phone.maxDim > 640) throw new Error('phone frames should be <= 640px, got ' + phone.maxDim);
+  });
+
+  test('solo: the per-layer S button stays gone, export keeps its own', { item: 'solo-withdrawn' }, function () {
+    // Not a feature test — a guard. BACKLOG called the missing button a high-severity regression for a
+    // month; it was removed at Ezra's request in v1.75 (69563ae). Soloing lives in the export dialog.
+    if (document.querySelector('.th-solo')) throw new Error('a .th-solo button is back — it was removed deliberately in v1.75, do not restore it');
+    if (!document.getElementById('exp-solo-clip')) throw new Error('#exp-solo-clip missing — "Hide other layers" is the solo entry point that IS wanted');
   });
 
   /* ---------------- runner ---------------- */
