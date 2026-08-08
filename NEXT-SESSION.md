@@ -28,8 +28,9 @@ Both fixed at the cause and verified; kept here only because the findings are re
   Only part of a frame's cost is the pixels we control: on one 2048×2048 clip with no effects,
   13× fewer pixels bought just 32% less time (12.2ms → 8.3ms), tier steps in the noise. So it read
   "still slow", shed again, and walked 0→1→2→3→4→5 to 28% resolution for nothing. A drop must now cut
-  the average 15%+ or it is undone and probing locks out (`DROP_PAYOFF` / `DROP_LOCK` /
-  `LOCK_ESCAPE` in js/app.js). `FM.playbackQualityInfo()` now also reports `dropFrom` and `dropLock`.
+  the average 15%+ or it is undone and probing latches off (`DROP_PAYOFF` / `LOCK_ESCAPE` in
+  js/app.js; the `DROP_LOCK` frame counter this shipped with was replaced in v4.67 — see below).
+  `FM.playbackQualityInfo()` reports `dropFrom`, `locked`, `lockAt`, `costCtx` and `effective`.
 - **Measuring render cost in a browser is a trap.** `performance.now()` around `drawImage` to a
   GPU-backed canvas reports ~0ms — the work is queued, not done. To get the true cost, force a
   flush with a 1×1 `getImageData` after the draw. The app's own measurement does not do this, which
