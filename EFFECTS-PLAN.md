@@ -179,6 +179,16 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   verified a sorted row is a pure re-ordering (same colour multiset in and out). 2.5ms each,
   0 differing bytes over 23 stacks.
 
+- v4.63 (round 11, part 2) — **Luma Matte**, plus the pooled scratch this file said to build once.
+  The singleton `_dspA/_dspB/_dspM` corruption was REAL and is now measured, not theorised: stacking
+  a zero-strength second layer-picker effect changed 5,106 bytes. `dspSlot(W,H)` + `_dspLvl` is the
+  fix, same shape as `_pfPool`. **Compound Blur and Match Grade can now be written straight onto it.**
+  Luma Matte reads Luma/Alpha/R/G/B with invert, feather and black/white points; a transparent matte
+  pixel reads as BLACK, not as "keep", or a small matte shape would keep the whole frame.
+  **Warm-up depth matters more than this file said:** ONE throwaway render was not enough for the
+  displace path (it allocates three canvases on first use) and reported a false 168-byte difference.
+  Warm up 3-4 times on BOTH sides before comparing.
+
   **The BUILD NEXT table is now empty.** All thirteen shipped, v4.54 - v4.61. What remains in this
   file is the "WORTH DOING LATER" list (Luma Matte, Compound Blur, Corner Pin, LUT, Pixel Sort,
   Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-offline-analysis, Curves) and the

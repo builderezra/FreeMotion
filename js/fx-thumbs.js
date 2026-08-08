@@ -129,6 +129,14 @@ window.FM = window.FM || {};
     g.fillStyle = hl; g.fillRect(0, 0, S, S);
   }
 
+  // A matte: black hides, white keeps. A hard soft-edged disc so Luma Matte's tile reads as a CUT.
+  function paintMatte(g, S) {
+    g.fillStyle = '#000000'; g.fillRect(0, 0, S, S);
+    const r = g.createRadialGradient(S * 0.46, S * 0.46, S * 0.12, S * 0.46, S * 0.46, S * 0.42);
+    r.addColorStop(0, '#ffffff'); r.addColorStop(0.72, '#ffffff'); r.addColorStop(1, '#000000');
+    g.fillStyle = r; g.fillRect(0, 0, S, S);
+  }
+
   function paintKeyshot(g, S) {
     g.fillStyle = '#18c454'; g.fillRect(0, 0, S / 2, S);
     const gr = g.createLinearGradient(S / 2, 0, S, S);
@@ -222,6 +230,7 @@ window.FM = window.FM || {};
     framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot', chromakeypro: 'keyshot',
+    lumamatte: 'photo',
     // The scan bar has to have somewhere to sweep, and the frozen half only reads against a live
     // half — a full-frame subject with internal motion is the only thing that shows both.
     timewarp: 'photo',
@@ -330,6 +339,12 @@ window.FM = window.FM || {};
     // Both displacement effects fall back to self-displacing when no Map layer is chosen, which
     // reads as "smeared" rather than "displaced BY something". Give them a real map — mid-grey
     // (no push) with three soft blobs — and dial the throw down to the tile.
+    // Luma Matte does nothing until a matte layer is picked — which is correct, and useless in a
+    // tile. Give it one: a white disc on black, so the tile shows the picture cut to a circle.
+    lumamatte: function (layers, hero) {
+      layers.push(mkArt('_fxthumbMatte', paintMatte, SIZE, 48, 48));
+      hero.effects[0].params.source = '_fxthumbMatte';
+    },
     displacemap: function (layers, hero) {
       layers.push(mkArt('_fxthumbMap', paintMap, SIZE, 48, 48));
       hero.effects[0].params.source = '_fxthumbMap'; hero.effects[0].params.amount = 14;

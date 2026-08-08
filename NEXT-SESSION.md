@@ -60,7 +60,9 @@ Two things learned in round 10 that belong here:
   `sed 's|js/compositor.js?v=NNN|_oldcomp.js|' index.html > _old.html`, load `_old.html` in a hidden
   iframe and render the same scene through BOTH `FM.renderScene`s into UNSTAMPED canvases (that is the
   export path). Zero differing bytes = safe. **Always warm up with a throwaway render first** — the
-  first call in a fresh window is cold and reports false differences.
+  first call in a fresh window is cold and reports false differences — and ONE warm-up render is not
+  always enough. The displace path allocates three canvases on first use and reported a false
+  168-byte difference after a single warm-up; 3-4 on BOTH sides before comparing.
 - **Reduced-scale geometry.** Render at scale 1, downscale, compare against a render at 0.5. Catches
   anything that assumed the preview canvas is 1:1 with the project.
 - **Glide/momentum tests.** rAF is frozen when the Browser pane is hidden, AND a synchronous rAF stub

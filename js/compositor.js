@@ -699,6 +699,16 @@ window.FM = window.FM || {};
       { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical']], def: 0 },
       { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
     ] },
+    // Luma Matte — cut this layer out with ANOTHER layer's brightness. Alpha mattes already exist as
+    // masking groups and the Cutout blend modes; what did not was reading the LUMA of a layer that
+    // does not have to sit adjacent in the stack, plus invert, feather and a matte contrast.
+    { type: 'lumamatte', label: 'Luma Matte', layer: true, layerLabel: 'Matte layer', desc: 'Cuts this layer out using another layer’s brightness — white keeps, black hides. The matte can be anywhere in the stack, and Black/White point set how hard the cut is.', params: [
+      { key: 'channel', label: 'Read', options: [[0, 'Luma'], [1, 'Alpha'], [2, 'Red'], [3, 'Green'], [4, 'Blue']], def: 0 },
+      { key: 'invert', label: 'Invert', options: [[0, 'Off'], [1, 'On']], def: 0 },
+      { key: 'black', label: 'Black point', min: 0, max: 254, step: 1, def: 10 },
+      { key: 'white', label: 'White point', min: 1, max: 255, step: 1, def: 200 },
+      { key: 'feather', label: 'Feather', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1395,7 +1405,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1 };
+    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1411,6 +1421,7 @@ window.FM = window.FM || {};
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, p.level == null ? 0.5 : FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
+    if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
@@ -2598,18 +2609,107 @@ window.FM = window.FM || {};
   // coordinate function), this needs a second rendered image — the "map" — so it has its own render
   // path: render the target clean, render the chosen map layer, then push each pixel by the map's
   // colour there. `_dispDepth` guards against two maps referencing each other into an infinite loop. ----
-  let _dspA = null, _dspB = null, _dspM = null, _dispDepth = 0;
+  /* DEPTH-INDEXED SCRATCH POOL for every effect that references ANOTHER layer.
+   *
+   * These were three module singletons, and that was a real bug, not a theoretical one: stacking two
+   * layer-picker effects on one layer re-enters this function (the outer call's `drawLayer` renders
+   * the target with the inner effect still in its stack), and the inner call cleared and rewrote the
+   * outer call's workspace. Measured before the fix: adding a ZERO-STRENGTH second picker effect
+   * changed 5,106 bytes of the frame. It should change nothing.
+   *
+   * Same shape as `_pfPool` / the warp pool. Any future layer-referencing effect — Luma Matte,
+   * Compound Blur, Match Grade — takes a slot and is safe by construction. */
+  const _dspPool = [];
+  let _dspLvl = 0, _dispDepth = 0;
+  function dspSlot(W, H) {
+    const d = _dspLvl;
+    if (!_dspPool[d]) _dspPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas') };
+    const s = _dspPool[d];
+    if (s.A.width !== W || s.A.height !== H) { s.A.width = W; s.A.height = H; s.B.width = W; s.B.height = H; s.M.width = W; s.M.height = H; }
+    return s;
+  }
+  /* Luma Matte — cut this layer out with ANOTHER layer's brightness.
+   * Alpha track mattes already ship (masking groups + the Cutout blend modes). What did not exist is
+   * reading the LUMA of a layer that need not sit adjacent in the stack, with invert, feather and a
+   * black/white point to set how hard the cut is. Takes a pool slot, so it is safe stacked with a
+   * displacement map or with a second matte. */
+  function drawLumaMatte(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    const srcId = fx.params && fx.params.source;
+    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    // No matte chosen yet is not an error — it is the state every one of these effects starts in.
+    // Draw the layer untouched rather than blanking it, so picking the matte is a visible step
+    // forward instead of un-breaking something.
+    if (!mLayer || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
+    const slot = dspSlot(W, H);
+    _dspLvl++;
+    try {
+      const p = fx.params || {};
+      const chan = Math.round(FM.evalProp(p.channel, t) || 0);
+      const inv = Math.round(FM.evalProp(p.invert, t) || 0) === 1;
+      const blk = p.black == null ? 10 : FM.evalProp(p.black, t);
+      const wht = p.white == null ? 200 : FM.evalProp(p.white, t);
+      const feather = Math.max(0, p.feather == null ? 0 : FM.evalProp(p.feather, t));
+      const actx = slot.A.getContext('2d');
+      baseT(actx); actx.clearRect(0, 0, W, H);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
+      // the matte layer, at full opacity and with its own matte effects stripped so two cannot recurse
+      const mctx = slot.M.getContext('2d');
+      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+      const mtmp = Object.assign({}, mLayer, { blendMode: 'normal', effects: (mLayer.effects || []).filter(e => e.type !== 'lumamatte'), transform: Object.assign({}, mLayer.transform, { opacity: 1 }) });
+      drawLayer(mctx, mtmp, t, scene);
+      let img;
+      try { img = mctx.getImageData(0, 0, W, H); } catch (e) { drawLayer(ctx, clean, t, scene); return; }
+      const md = img.data, span = (wht - blk) >= 1 ? (wht - blk) : 1;
+      for (let i = 0; i < md.length; i += 4) {
+        let v;
+        if (chan === 1) v = md[i + 3];
+        else if (chan === 2) v = md[i];
+        else if (chan === 3) v = md[i + 1];
+        else if (chan === 4) v = md[i + 2];
+        else v = 0.299 * md[i] + 0.587 * md[i + 1] + 0.114 * md[i + 2];
+        // A transparent matte pixel reads as BLACK, not as "keep": an empty matte should hide the
+        // layer, the same way a black one does. Otherwise a small matte shape keeps the whole frame.
+        if (chan !== 1 && md[i + 3] === 0) v = 0;
+        let a = (v - blk) / span;
+        a = a <= 0 ? 0 : (a >= 1 ? 1 : a);
+        if (inv) a = 1 - a;
+        md[i] = 255; md[i + 1] = 255; md[i + 2] = 255; md[i + 3] = (a * 255) | 0;
+      }
+      mctx.setTransform(1, 0, 0, 1, 0, 0);
+      mctx.putImageData(img, 0, 0);
+      actx.setTransform(1, 0, 0, 1, 0, 0);
+      actx.globalCompositeOperation = 'destination-in';
+      actx.filter = feather > 0.05 ? 'blur(' + feather.toFixed(2) + 'px)' : 'none';
+      actx.drawImage(slot.M, 0, 0);
+      actx.filter = 'none'; actx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(slot.A, 0, 0);
+      ctx.restore();
+    } finally { _dspLvl--; }
+  }
+
   function drawDisplaceEffect(ctx, layer, t, scene, fx, polar) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = proj.width, H = proj.height;
-    if (!_dspA) _dspA = document.createElement('canvas');
-    if (!_dspB) _dspB = document.createElement('canvas');
-    if (!_dspM) _dspM = document.createElement('canvas');
-    if (_dspA.width !== W || _dspA.height !== H) { _dspA.width = W; _dspA.height = H; }
-    if (_dspB.width !== W || _dspB.height !== H) { _dspB.width = W; _dspB.height = H; }
-    if (_dspM.width !== W || _dspM.height !== H) { _dspM.width = W; _dspM.height = H; }
+    if (_dspLvl > 6) { drawLayer(ctx, Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) }), t, scene); return; }
+    const _slot = dspSlot(W, H);
+    const _dspA = _slot.A, _dspB = _slot.B, _dspM = _slot.M;
+    _dspLvl++;
+    try {
+    // (body below runs at this depth's own scratch; the finally restores the level)
     // 1) target layer, clean (this fx stripped) — the pixels we resample from
     const actx = _dspA.getContext('2d');
     baseT(actx); actx.clearRect(0, 0, W, H);
@@ -2673,6 +2773,7 @@ window.FM = window.FM || {};
     ctx.filter = 'none';
     ctx.drawImage(_dspB, 0, 0);
     ctx.restore();
+    } finally { _dspLvl--; }
   }
 
   const WARP_FX = {
