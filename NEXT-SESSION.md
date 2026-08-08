@@ -3,8 +3,8 @@
 Rewritten 2026-08-08. **CHECK `git log --oneline origin/main..HEAD` BEFORE CLAIMING ANYTHING ABOUT
 PUSHING.** This file carried "fifty-seven releases are waiting (v4.10 → v4.66)" for weeks and it was
 wrong by a factor of eight — Ezra has been pushing all along via GitHub Desktop. As of 2026-08-08
-`origin/main` is at `4bfcd6b` and **8 commits are unpushed** (v4.62 → v4.67 plus two queue commits).
-The app is at **193 effects**.
+`origin/main` is at `4bfcd6b`, so **v4.62 → v4.68 are unpushed**. Run the command for the live count
+rather than trusting this sentence. The app is at **193 effects**.
 
 Work the list top-to-bottom.
 
@@ -168,5 +168,6 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.64 (**v4.65, v4.66 and v4.67 not added yet**). Every shipped feature gets an entry; re-publish the
-SAME url (pass it as `url`) rather than minting a new one.
+**v3.79 → v4.68 — current as of 2026-08-08** (79 sections, 210 checks). Every shipped feature gets an
+entry; re-publish the SAME url (pass it as `url`) rather than minting a new one. Its header states
+which versions are pushed vs local, so correct that alongside the doc when it changes.
