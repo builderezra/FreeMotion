@@ -3,8 +3,9 @@
 Rewritten 2026-08-08. **CHECK `git log --oneline origin/main..HEAD` BEFORE CLAIMING ANYTHING ABOUT
 PUSHING.** This file carried "fifty-seven releases are waiting (v4.10 → v4.66)" for weeks and it was
 wrong by a factor of eight — Ezra has been pushing all along via GitHub Desktop. As of 2026-08-08
-`origin/main` is at `4bfcd6b`, so **v4.62 → v4.70 are unpushed**. Run the command for the live count
-rather than trusting this sentence. The app is at **193 effects**.
+Ezra pushes *while* you work, so any count written here is stale on arrival — as of the last check
+everything through v4.70 is pushed and `origin/main` == `HEAD`. Run the command; don't quote this line.
+The app is at **193 effects**.
 
 Work the list top-to-bottom.
 
