@@ -3,9 +3,14 @@
 _**Rebuilt 2026-07-10** from a full re-audit of the code (the 2026-06-23 list had gone badly stale: 120 of its 251
 open parity rows were wrong, and 9 of its 12 "quick wins" plus 6 of its 18 bugs were already shipped)._
 
-> ⚠️ The re-audit only re-checked rows marked `❌`/`🟡`, assuming a `✅` feature can't un-ship. **That was wrong** — the
-> solo button regressed (see the first bug below), found by accident rather than by the audit. The ~196 `✅` rows in
+> ⚠️ The re-audit only re-checked rows marked `❌`/`🟡`, assuming a `✅` feature can't un-ship. The ~196 `✅` rows in
 > PARITY.md have never been re-verified. A regression sweep over them is worth one session.
+>
+> ⚠️⚠️ **That sweep must check `git log` before calling anything a regression.** This file spent a month claiming the
+> missing solo button was a high-severity regression "almost certainly lost in the mobile timeline rebuild". It was
+> not lost — Ezra asked for it to be removed (`69563ae`, v1.75: *"Ezra didn't want the 'isolate one layer' toggle"*),
+> and `js/timeline.js` says so at the spot where it used to be built. A feature that is absent is not automatically a
+> bug. `git log -S'<the thing>'` answers "was this removed on purpose?" in one command.
 
 _Top of each list = build next. Effort: S/M/L. When an item ships: flip it to ✅ in PARITY.md, delete it here,
 add a POLISH-LOG.md line, and bump the version in `index.html`._
@@ -28,7 +33,7 @@ touch-usable mobile UI (`touch-action:none`, 6 `@media` blocks, bottom-sheet ins
 
 | Severity | Title | Domain | Detail |
 |---|---|---|---|
-| high | **REGRESSION: the solo button is gone from the UI** | UI | The engine still honours solo — `compositor.js:3097` skips non-soloed layers when drawing, `exporter.js:98` gates the audio mix. But `timeline.js` and `index.html` contain **zero** `th-solo` references (`styles.css` still has 4 orphaned `.th-solo` rules), so no button creates it. The only writer of `layer.solo` is `ai-ops.js:66`. Solo is unreachable from the UI — almost certainly lost in the mobile timeline rebuild. Restore the 'S' button on the track head. **Effort S.** |
+| ~~high~~ **NOT A BUG** | ~~REGRESSION: the solo button is gone from the UI~~ | UI | **Withdrawn 2026-08-08 — do not "fix" this.** The per-layer Solo 'S' button was removed deliberately at Ezra's request in `69563ae` (v1.75): *"Removed the per-layer Solo ('S') button from each track head (Ezra didn't want the 'isolate one layer' toggle)."* `js/timeline.js` carries a comment at the spot where it used to be built. Nor is `layer.solo` orphaned engine code: it powers the **"Hide other layers"** checkbox in the export dialog (`#exp-solo-clip`, `js/app.js:1972`), which solos the selected clip for the duration of the export and restores it in a `finally`. The compositor / exporter / audio-play gates exist to serve that. The four dead `.th-solo` CSS rules — the thing that made this look half-built — were removed in v4.68. |
 | low | **`overshoot`/`anticipate` easing exist only as stored beziers** | Keyframes | `EASES` keys are `linear, easeIn, easeOut, easeInOut, bounce, elastic, hold` — no `overshoot`/`anticipate`. `evalProp` falls back to `EASES[b.e] \|\| EASES.linear` when a keyframe has no `bez`. Both apply-paths currently write `bez`, so it works today — but a hand-edited, imported, or AI-generated scene silently animates **linear**. The scene model is explicitly meant to be AI-edited, so this is a real data-loss path. Add both to `EASES`. **Effort S.** |
 | low | Curved text collapses multi-line and ignores alignment | Text | `drawArcLine(ctx, lines.join(' '), …)` joins every line into one space-separated string, and `drawArcLine` forces `textAlign='center'`. Multi-line curved text loses its breaks; left/right align is silently dropped. **Effort M.** |
 | low | Gradient fill renders wrong on curved text | Text | With gradient + curve both on, the gradient is built for a flat axis-aligned bbox, then glyphs are rotated along the arc — so the gradient stays fixed in pre-arc space. Build it in arc space or sample per-glyph. **Effort M.** |

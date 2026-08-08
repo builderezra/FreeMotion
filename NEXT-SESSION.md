@@ -104,9 +104,14 @@ Two things learned in round 10 that belong here:
 A full audit of NEXT-SESSION / EFFECTS-PLAN / MISSION / BACKLOG / PARITY / QUALITY / PERF-PLAN turned
 up genuine work and a lot of drift. The items worth acting on, highest value first:
 
-- **The SOLO button has no UI at all.** BACKLOG's one high-severity bug, still real: zero `th-solo` in
-  `js/` or `index.html`, only four orphaned `.th-solo` rules at styles.css:1040-1042,1322. The engine
-  and the exporter both honour `layer.solo` — the feature is built and simply unreachable. Small job.
+- ~~**The SOLO button has no UI at all.**~~ **FALSE ALARM — investigated 2026-08-08, do not build it.**
+  BACKLOG called this a high-severity regression and the doc audit repeated it. Both were wrong: the
+  'S' button was removed *on purpose* at Ezra's request in `69563ae` (v1.75) — *"Ezra didn't want the
+  'isolate one layer' toggle"* — and `js/timeline.js` says so where it used to be built. `layer.solo`
+  is not orphaned either; it drives the **"Hide other layers"** export checkbox (`#exp-solo-clip`).
+  The four dead `.th-solo` CSS rules that made it look half-finished are gone as of v4.68.
+  **The lesson, for the PARITY regression sweep below: run `git log -S'<thing>'` before calling
+  anything a regression.** An absent feature is not automatically a bug.
 - **Round 11 is six items, not five** — NEXT-SESSION dropped **Liquid Glass** off EFFECTS-PLAN's
   WORTH DOING LATER list when it carried the rest forward.
 - **PERF-PLAN Fix F never shipped** — `ctx.filter` blur radii and `shadowBlur` are still in project

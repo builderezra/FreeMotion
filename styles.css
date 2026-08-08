@@ -1037,9 +1037,10 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .th-eye:hover { opacity: 1; }
 .th-eye.off { opacity: .45; }
 .th-thumb { width: 30px; height: 19px; flex: 0 0 auto; border-radius: 4px; background: #000; }
-.th-solo { flex: 0 0 auto; font-size: 10px; font-weight: 800; line-height: 1; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid var(--line); color: var(--text-faint); cursor: pointer; }
-.th-solo:hover { color: var(--text); }
-.th-solo.on { background: var(--kf); border-color: var(--kf); color: #1a1400; }
+/* (No .th-solo rules: the per-layer Solo 'S' button was removed at Ezra's request in v1.75, 69563ae.
+   The dead styling outlived it by a year and repeatedly read as "the button is missing, restore it" —
+   it was written up twice as a high-severity regression. Soloing still exists where he wanted it: the
+   "Hide other layers" checkbox in the export dialog.) */
 .clip-trim { position: absolute; top: 0; bottom: 0; width: 5px; z-index: 3; pointer-events: none; background: repeating-linear-gradient(45deg, rgba(255,255,255,.45) 0 2px, transparent 2px 4px); }
 .clip-trim.l { left: 0; } .clip-trim.r { right: 0; }
 .th-name { display: none; }   /* AM: the layer NAME lives ON the clip bar (.clip-label), never in the left head column */
@@ -1319,7 +1320,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      the layer, and the picture tells you which layer you're about to get. --head-w stays a constant
      the JS reads back, so clip-x / playhead / scrub maths follow it. */
   :root { --head-w: 72px; }
-  .th-solo, .th-name { display: none; }
+  .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);
     justify-content: flex-start; padding: 0 7px; gap: 6px; margin: 0;
