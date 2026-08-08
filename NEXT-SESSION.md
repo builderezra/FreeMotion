@@ -3,7 +3,7 @@
 Rewritten 2026-08-08. **CHECK `git log --oneline origin/main..HEAD` BEFORE CLAIMING ANYTHING ABOUT
 PUSHING.** This file carried "fifty-seven releases are waiting (v4.10 → v4.66)" for weeks and it was
 wrong by a factor of eight — Ezra has been pushing all along via GitHub Desktop. As of 2026-08-08
-`origin/main` is at `4bfcd6b`, so **v4.62 → v4.69 are unpushed**. Run the command for the live count
+`origin/main` is at `4bfcd6b`, so **v4.62 → v4.70 are unpushed**. Run the command for the live count
 rather than trusting this sentence. The app is at **193 effects**.
 
 Work the list top-to-bottom.
@@ -121,8 +121,11 @@ up genuine work and a lot of drift. The items worth acting on, highest value fir
   sites. Exports verified byte-identical; a 0.4-scale preview is 96-97% closer to its export.
   **Note the correction to the old note: the radii were in DEVICE pixels, not project pixels — the
   direction of the error was the opposite of what PERF-PLAN assumed.**
-- **Frame-cache OOM on low-memory phones** — app.js still hardcodes `maxBytes: 384MB` with no
-  `navigator.deviceMemory` check anywhere in js/.
+- ~~**Frame-cache OOM on low-memory phones**~~ — **DONE v4.70.** `FM.frameCacheLimits()` derives the
+  budget from `navigator.deviceMemory` (48MB/GB, clamped 64–384MB), falls back to the fine-pointer
+  test on Safari which never reports it, and applies a hard 160MB ceiling on any touch OS. Desktops
+  measured unchanged. Note `deviceMemory` is capped at 8 and describes the device CLASS, not free
+  memory — do not treat it as a live reading.
 - **PARITY.md / QUALITY.md numbers are stale on their face** — "~180 registered effects" (it is 193),
   "no GIF, no share sheet, no audio DSP" (all three ship). BACKLOG lists ~12 things as open that
   shipped months ago (particles, trim paths, multi-mask, luma matte, stereo pan, reverb/delay/EQ,

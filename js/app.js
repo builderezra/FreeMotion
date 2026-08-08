@@ -682,6 +682,31 @@ window.FM = window.FM || {};
     return pts.sort((a, b) => a - b);
   };
 
+  /* How many bytes of decoded frames we will hold, and at what resolution.
+   * The old flat 384MB was written to stop a long reversed clip OOM-killing mobile Safari — but
+   * 384MB of ImageBitmaps IS the thing that kills it. The two failure modes are not symmetric: a
+   * budget that is too small only shortens the span that reverses smoothly, while one that is too
+   * big loses the whole tab and the user's unsaved work. So phones get a fraction and desktops keep
+   * exactly what they had.
+   * navigator.deviceMemory is in GB and Chromium-only — Safari, the browser that actually does the
+   * killing, never reports it — so fall back to the same fine-pointer test home.js uses for "this
+   * machine has a keyboard". 48MB per GB puts an 8GB machine at the old 384MB and a 2GB phone at 96MB.
+   * Export is unaffected: it passes no opts at all and gets full source resolution. */
+  FM.frameCacheLimits = function () {
+    const gb = navigator.deviceMemory;                       // 0.25 … 8, Chromium only
+    const fine = !window.matchMedia || window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    let mb = gb ? Math.max(64, Math.min(384, Math.round(gb * 48))) : (fine ? 384 : 128);
+    // A touch OS reclaims memory from a background tab far more readily than a desktop one, and
+    // deviceMemory reports the DEVICE CLASS rather than what is actually free — so a tablet that
+    // reports 8GB still gets a mobile-sized ceiling instead of the desktop budget.
+    if (!fine) mb = Math.min(mb, 160);
+    // A phone's preview canvas is a few hundred device pixels wide, so 960 spends memory on detail it
+    // cannot show. 640 buys ~2.25x more CACHED FRAMES for the same bytes, and the frame COUNT is what
+    // decides how much of a reversed clip plays smoothly.
+    const maxDim = (!fine || mb <= 160) ? 640 : 960;
+    return { maxDim: maxDim, maxBytes: mb * 1024 * 1024 };
+  };
+
   // Decode a clip's frames once so reverse / frame-blend slow-mo plays + scrubs smoothly.
   FM.ensureReverseCache = async function (layer) {
     if (!layer || layer.type !== 'video') return;
@@ -690,7 +715,7 @@ window.FM = window.FM || {};
     const fps = Math.min(FM.scene.project.fps || 30, 24);
     FM.toast('Preparing frames…', 0);   // sticky progress toast — hidden by the finally below
     // Preview: downscale + byte-cap so a long reversed/slow clip can't OOM-kill mobile Safari.
-    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%', 0), { maxDim: 960, maxBytes: 384 * 1024 * 1024 }); }
+    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%', 0), FM.frameCacheLimits()); }
     finally { FM.hideToast(); }
     render();
   };
