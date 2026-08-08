@@ -112,8 +112,12 @@ up genuine work and a lot of drift. The items worth acting on, highest value fir
   The four dead `.th-solo` CSS rules that made it look half-finished are gone as of v4.68.
   **The lesson, for the PARITY regression sweep below: run `git log -S'<thing>'` before calling
   anything a regression.** An absent feature is not automatically a bug.
-- **Round 11 is six items, not five** — NEXT-SESSION dropped **Liquid Glass** off EFFECTS-PLAN's
-  WORTH DOING LATER list when it carried the rest forward.
+- ~~**Round 11 is six items, not five**~~ — **WRONG, and I repeated it here without checking.** The
+  audit was right that Liquid Glass is on EFFECTS-PLAN's list and wrong that it is outstanding: it
+  SHIPPED (`liquidglass`, `js/fx-registry.js:62`, `js/compositor.js:4337`). Round 11 has **five** left,
+  exactly as this file already said. EFFECTS-PLAN's row is now marked shipped.
+  *Tally for that audit: six findings, three real (Fix F, the frame cache, the doc drift) and three
+  wrong (solo, the DIRECTION of Fix F, this). Useful as a pointer, never as a fact.*
 - ~~**PERF-PLAN Fix F never shipped**~~ — **DONE v4.69.** Confirmed real by measurement first: every
   length in `ctx.filter` / `ctx.shadow*` is DEVICE-space (a `blur(10px)` leaves the same 26-device-px
   ramp at transform scale 1, 0.5 and 0.25), and `shadowOffsetX/Y` too, so a reduced preview blurred
