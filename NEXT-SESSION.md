@@ -1,58 +1,40 @@
 # Next session — the open queue
 
 Rewritten 2026-08-08. **Everything above v4.09 is committed locally and NOT pushed** — Ezra pushes
-via GitHub Desktop. Fifty-six releases are waiting (v4.10 → v4.65). The app is at **193 effects**.
+via GitHub Desktop. Fifty-seven releases are waiting (v4.10 → v4.66). The app is at **193 effects**.
 
 Work the list top-to-bottom.
 
 **Ezra turned `/loop` on and said "you can do everything without stopping" — so taste calls that
-would normally be his are mine to make. He paused the loop on 2026-08-08 to compact the chat.**
+would normally be his are mine to make.**
 
 ---
 
-## 1. TWO BUGS EZRA REPORTED 2026-08-08 — do these first, they are the live ones
+## DONE 2026-08-08 — the two bugs Ezra reported (v4.66)
 
-Verbatim: *"IT would be also good if you made it when the quality lowers for perfomance it doesnt
-make the picture smaller, so like if the quality goes down atleast zoom in the picture so it stays
-consistent. Also for some reason its having to lower the quality when i do something as simple as
-just have one simple video with no effects, idk how it cant even playback one video without issues"*
+Both fixed at the cause and verified; kept here only because the findings are reusable.
 
-### 1a. The preview gets SMALLER when the adaptive tier drops
-
-It must keep its on-screen size and only lose resolution. **NOT YET REPRODUCED** — investigate before
-changing anything. What is already established:
-
-- `#preview { width:100%; height:100% }` and `#canvas-wrap { aspect-ratio: var(--comp-ar) }`
-  (styles.css). So in the NON-crop path the display size is pinned by CSS and the backing store
-  shrinking should NOT shrink the picture. That path looks innocent — check it, don't assume.
-- The **crop path** in `resizeCanvas()` (js/app.js ~line 240) is the prime suspect. It pins the wrap
-  to `kw/kh` in PIXELS and positions the canvas `absolute` with percentage width/height. If a tier
-  change flips between cropped and uncropped, or the pinned px box goes stale, the picture moves and
-  resizes. `previewCrop()` bails on: `zoom < 1.35`, unlaid-out elements, scrolled out of view, and
-  `(u1-u0) > 0.92 && (v1-v0) > 0.92`. A tier change alters `s`, not the crop rect — so if the
-  reproduction only happens while zoomed in, it is this path.
-- Ask Ezra whether it happens zoomed OUT (crop path off) or only zoomed in. That single answer
-  splits the search in half.
-
-### 1b. Quality drops on ONE video with NO effects
-
-That should never need a tier drop. Where to look, all in js/app.js:
-
-- `notePlaybackCost(ms)` drops a tier when `_renderAvg > (1000/60)*0.72` — i.e. **12ms**. A 1080p
-  `drawImage(video)` plus the composite can exceed that on a first frame or during a decode stall,
-  and the measurement cannot tell a decode stall from real render cost.
-- `_tierCooldown = FM.playing ? 24 : 8` — once it drops, it is locked in for 24 frames, so a single
-  early stall sinks the whole playback.
-- `_renderAvg` is an EWMA seeded from the first sample (`_renderAvg ? ... : ms`), so one slow first
-  frame sets a bad starting point.
-- Likely fixes to weigh: seed `_renderAvg` from a median of the first few frames rather than the
-  first; ignore the first ~5 frames after play starts; or measure only the compositor's own time and
-  exclude the video decode wait. Verify with `FM.playbackQualityInfo()` — it reports tier, factor,
-  avgFrameMs and mode live.
+- **The preview shrank when the tier dropped.** Not the crop path (the prime suspect in the previous
+  version of this file — it was innocent). A canvas is a REPLACED element with an intrinsic size, and
+  `#canvas-wrap` was content-sized, so the wrap tracked `canvas.width`: 508px → 302px on the bottom
+  tier. Fixed with a constant `#canvas-wrap::before { width: 9999px }` spacer plus `#preview` moved
+  out of flow (`position:absolute`). **Do not reach for `container-type:size` + `cq` units on #stage
+  instead** — it reads tidier and works in the normal layouts, but drawing mode derives the stage's
+  height FROM the wrap, so containment zeroes it (measured: stage 763px → 114px).
+- **One plain video dragged the quality down.** The ladder's premise was wrong, not its arithmetic.
+  Only part of a frame's cost is the pixels we control: on one 2048×2048 clip with no effects,
+  13× fewer pixels bought just 32% less time (12.2ms → 8.3ms), tier steps in the noise. So it read
+  "still slow", shed again, and walked 0→1→2→3→4→5 to 28% resolution for nothing. A drop must now cut
+  the average 15%+ or it is undone and probing locks out (`DROP_PAYOFF` / `DROP_LOCK` /
+  `LOCK_ESCAPE` in js/app.js). `FM.playbackQualityInfo()` now also reports `dropFrom` and `dropLock`.
+- **Measuring render cost in a browser is a trap.** `performance.now()` around `drawImage` to a
+  GPU-backed canvas reports ~0ms — the work is queued, not done. To get the true cost, force a
+  flush with a 1×1 `getImageData` after the draw. The app's own measurement does not do this, which
+  is why the tier never drops on this Mac but does on Ezra's PC.
 
 ---
 
-## 2. EFFECTS-PLAN.md round 11 — the standing autonomous order
+## 1. EFFECTS-PLAN.md round 11 — the standing autonomous order
 
 **Round 10 is COMPLETE. All thirteen effects on that file's BUILD NEXT table are shipped** (v4.54 →
 v4.61): Levels, Halation, Frame Stutter, Shockwave, Speed Lines, HSL Bands, Time Warp Scan, Chroma
@@ -95,7 +77,7 @@ Two things learned in round 10 that belong here:
 
 ---
 
-## Not blocked, but lower value than the two above
+## 2. Not blocked, but lower value than round 11
 
 - ~~**Effect descriptions.**~~ DONE v4.65 — all 193 are hand-written, 0 fall back to `describeOf()`.
 - **Motion Blur (Footage) on a group.** Currently refused (`supportsLayer`) and stripped at render,
@@ -133,5 +115,5 @@ as you build it.
 ## The test checklist
 
 Lives at <https://claude.ai/code/artifact/8b77fe99-8b9f-4df8-83ce-001bfa87a9fc> and currently covers
-v3.79 → v4.64 (v4.65 not added yet). Every shipped feature gets an entry; re-publish the SAME url (pass it as `url`) rather
-than minting a new one.
+v3.79 → v4.64 (**v4.65 and v4.66 not added yet**). Every shipped feature gets an entry; re-publish the
+SAME url (pass it as `url`) rather than minting a new one.

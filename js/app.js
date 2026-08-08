@@ -107,6 +107,11 @@ window.FM = window.FM || {};
    */
   const PLAY_TIERS = [1, 0.8, 0.62, 0.48, 0.36, 0.28];
   let _playTier = 0, _renderAvg = 0, _tierCooldown = 0, _lastPlayTier = 0;
+  // A tier drop has to EARN its place — see the payoff test in notePlaybackCost.
+  const DROP_PAYOFF = 0.85;   // a drop must cut the average by 15%+ to be worth the softer picture
+  const DROP_LOCK = 600;      // measured frames to stop probing after a drop that didn't pay off
+  const LOCK_ESCAPE = 1.35;   // …unless the frame cost climbs this much above where we locked
+  let _dropFrom = 0, _dropLock = 0, _lockAt = 0, _skipCost = 0;
 
   /* Playback is not the only time the picture is MOVING. Dragging the playhead, a layer on the
    * canvas, or a slider re-renders continuously too, and the same trade applies there: shed pixels
@@ -140,18 +145,44 @@ window.FM = window.FM || {};
   // Called once per rendered frame with the measured cost of that frame.
   function notePlaybackCost(ms) {
     if (!FM.playing && !_inMotion) return;
+    // The frame straight after a tier change repaints into a freshly allocated backing store and is
+    // the dearest one in the run. Letting it seed the average makes every drop look like it made
+    // things worse — which is exactly the judgement the payoff test below has to get right.
+    if (_skipCost) { _skipCost = 0; return; }
     _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
+    if (_dropLock > 0) _dropLock--;
     if (_tierCooldown > 0) { _tierCooldown--; return; }
     const budget = 1000 / 60;                       // a frame's worth of time at display rate
     const before = _playTier;
-    if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1) _playTier++;        // struggling → shed pixels
-    else if (_renderAvg < budget * 0.30 && _playTier > 0) _playTier--;                        // lots of headroom → give detail back
+    /* DID THE LAST DROP ACTUALLY HELP? Only part of a frame's cost is the pixels we control.
+     * Decoding a video frame and handing it to the GPU costs the same whether it lands in a
+     * 1.2-megapixel canvas or a 0.09-megapixel one: measured on one plain 2048x2048 clip with no
+     * effects, thirteen times fewer pixels bought only 32% less time (12.2ms → 8.3ms) and the
+     * tier-to-tier steps were noise. Left alone the ladder reads "still slow", sheds again, and walks
+     * all the way to the bottom tier having achieved nothing but a soft preview — Ezra's "its having
+     * to lower the quality when i do something as simple as just have one simple video".
+     * So a drop has to pay for itself. If it didn't, put the tier back and stop probing for a while;
+     * climbing stays allowed throughout, so nothing gets stuck low. */
+    // The lock says "at this cost, pixels are not the problem" — so a materially heavier scene (a
+    // blur added, a second clip) has earned a fresh probe rather than 600 frames of stutter.
+    if (_dropLock && _renderAvg > _lockAt * LOCK_ESCAPE) _dropLock = 0;
+    if (_dropFrom && _renderAvg > _dropFrom * DROP_PAYOFF) {
+      _playTier--; _dropFrom = 0; _dropLock = DROP_LOCK; _lockAt = _renderAvg;               // it didn't pay — undo it
+    } else if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_dropLock) {
+      _dropFrom = _renderAvg; _playTier++;                                                   // struggling → shed pixels, and remember the cost to beat
+    } else if (_renderAvg < budget * 0.30 && _playTier > 0) {
+      _dropFrom = 0; _playTier--;                                                            // lots of headroom → give detail back
+    } else if (_renderAvg <= budget * 0.72) {
+      _dropFrom = 0;                                                                         // inside budget: the last drop did its job, stop judging it
+    }
     // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
     // A drag is short and you're watching position, not detail, so it may find its level quickly.
-    if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; resizeCanvas(); }
+    if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _skipCost = 1; resizeCanvas(); }
   }
   FM.playbackQualityInfo = function () {
-    return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto' };
+    return { tier: _playTier, factor: PLAY_TIERS[_playTier], avgFrameMs: +_renderAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto',
+      // the payoff test's working: what the last drop had to beat, and whether probing is locked out
+      dropFrom: +_dropFrom.toFixed(2), dropLock: _dropLock };
   };
 
   /* The comp is almost always DISPLAYED smaller than its own pixel size — a 1080×1920 project sits

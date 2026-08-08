@@ -133,10 +133,28 @@ body {
 }
 /* Canvas-wrap holds the comp's aspect ratio so the preview always CONTAINS within the stage
    (fits the limiting dimension, centred, never clipped) for ANY comp aspect or stage size.
-   #preview fills the wrap exactly so the on-canvas selection box (offset from the wrap) stays aligned. */
+   #preview fills the wrap exactly so the on-canvas selection box (offset from the wrap) stays aligned.
+   The wrap is CONTENT-sized and then clamped, and the ::before spacer is what it measures — never the
+   canvas. That is the whole point. A canvas is a replaced element with an intrinsic size, so while it
+   was the wrap's content the wrap tracked canvas.width, and the adaptive quality tier shrinking the
+   backing store shrank the PICTURE on screen (Ezra: "when the quality lowers it makes the picture
+   smaller" — measured at 508px -> 302px, a 40% collapse, on the bottom tier). A constant spacer makes
+   the on-screen size depend only on the stage and the comp aspect, so dropping a tier costs
+   resolution and nothing else. 9999px is simply "bigger than any stage", so max-width/max-height
+   always bind and do the containing exactly as they did before.
+   Every other child (#drop-hint, #view-bar, #select-box, handles) is absolutely positioned, so the
+   spacer is the only thing left in flow.
+   Sizing the wrap off #stage instead — container-type:size + cq units — looks tidier and does work in
+   the normal layouts, but it COLLAPSES drawing mode: there the stage's height comes from the wrap, so
+   size containment zeroes it (measured: stage 763px -> 114px). Don't reach for it again. */
 #canvas-wrap { position: relative; aspect-ratio: var(--comp-ar, 9 / 16); max-width: 92%; max-height: 92%; }
+#canvas-wrap::before { content: ""; display: block; width: 9999px; max-width: 100%; height: 0; }
 #preview {
   display: block;
+  /* Absolute so the canvas is out of flow and can't feed its intrinsic size back into the wrap (see
+     above). left/top rather than inset, so the crop branch in resizeCanvas() — which sets left/top/
+     width/height inline — isn't over-constrained by a right/bottom it never clears. */
+  position: absolute; left: 0; top: 0;
   width: 100%; height: 100%;
   background: #000;
   box-shadow: 0 12px 48px rgba(0,0,0,.6);
