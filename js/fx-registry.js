@@ -248,6 +248,141 @@ window.FM = window.FM || {};
     nightvision: 'Green phosphor, grain and a soft vignette.',
     sketch: 'Redraws the image as pencil lines.',
     copybg: 'Copies the layers underneath into this one, so it can be distorted or masked as a unit.',
+
+    // ---- the rest, written 2026-08-08. Every line says what the effect DOES, in the words someone
+    // would use before they knew its name. Where two effects are easy to confuse, the line says what
+    // separates them — that is the question a description is actually being asked. ----
+
+    // Colour & light
+    thermal: 'Maps brightness onto a heat palette — darks go cold, highlights go white-hot.',
+    lightglow: 'Blooms only the areas brighter than the threshold, so highlights glow and the rest stays put.',
+    darkglow: 'The inverse bloom — the DARK areas spread instead, which sinks a shot rather than lifting it.',
+    longshadow: 'Throws a long flat shadow off the layer at 45°, the way flat-design posters do.',
+    radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls.',
+    bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief.',
+    iridescence: 'An oil-slick sheen: hue cycles with brightness, so it shifts as the picture does.',
+    colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast.',
+    highlightsshadows: 'Recovers blown highlights and lifts crushed shadows without touching the midtones.',
+    gradientoverlay: 'Lays a colour gradient over the layer at any angle.',
+    faded: 'Lifts the blacks and drains the colour — the washed-out look of old film left in the sun.',
+    replacecolor: 'Finds one colour and swaps it for another, leaving everything else alone.',
+    spotcolor: 'Keeps ONE colour and drains the rest to grey — the red-coat-in-a-black-and-white-film shot.',
+    fourcolor: 'Blends four colours from the four corners, for a soft full-frame wash.',
+    spectralmap: 'Maps brightness across a stretch of the colour wheel — darks at one hue, lights at the other.',
+    palettemap: 'Snaps every colour to the nearest one in a small palette, like a poster print.',
+
+    // Distortion & warp
+    polarcoords: 'Wraps the frame around a circle, or unwraps a circle into a straight strip. The Direction switch is which way.',
+    bend: 'Curves the layer as though it were printed on a page being bent.',
+    glass: 'Refracts the picture through rippled glass — sharp edges break up, colour stays.',
+    curl: 'Swirls the picture in rings around a point, like a slow whirlpool.',
+    fractalwarp: 'Pushes the picture around with fractal noise — organic, not geometric.',
+    turbulentdisplace: 'The same idea with more control: Detail sets whether it is a slow churn or a fine crawl.',
+    hextiles: 'Rebuilds the picture out of flat hexagons.',
+    innerpinch: 'Squeezes the middle of the frame while the edges stay pinned.',
+    squeeze: 'Pinches the layer in at the waist, or bulges it out.',
+    tunnel: 'Pulls the frame into a receding tunnel around the centre.',
+    stretchseg: 'Grabs one horizontal band and stretches it — the glitchy pulled-taffy smear.',
+    tileshift: 'Chops the frame into tiles and slides alternate rows sideways.',
+    tilerotate: 'Chops the frame into tiles and rotates each one in place.',
+    displacemap: 'Pushes each pixel by the colour of another layer at that spot — red moves it sideways, green up and down.',
+    polardisplace: 'The same, in circles: another layer’s brightness pushes pixels toward or around the centre.',
+
+    // Procedural
+    checker: 'Draws a checkerboard over the layer.',
+    grid: 'Draws a grid of lines over the layer.',
+    dots: 'Covers the layer in a regular dot pattern.',
+    stripes: 'Covers the layer in even stripes.',
+    clouds: 'Generates soft drifting cloud noise — a sky, a fog bank, or a mask to drive something else.',
+    rays: 'Fires straight rays out of a point you place, like light through a gap.',
+    blocknoise: 'Random rectangular blocks of corruption — the look of a dropped signal.',
+    starfield: 'Scatters stars across the frame.',
+    grunge: 'Grimy blotches and speckle, for dirtying up something too clean.',
+    lensflare: 'A lens flare from a light you position, with the streaks and ghosts a real one throws.',
+    hexarray: 'A honeycomb of hexagons over the frame.',
+    fractalridges: 'Sharp ridged fractal noise — reads as rock, cloth or turbulence depending on scale.',
+    contourstrips: 'Slices the brightness range into flat bands and colours them, like a topographic map.',
+    voronoi: 'Breaks the frame into organic cells, the pattern of cracked mud or a giraffe’s coat.',
+    lightning: 'Draws branching lightning bolts across the layer.',
+
+    // Drawing & edge
+    halftonelines: 'Rebuilds the image out of lines of varying weight, like an engraving.',
+    crosshatch: 'Redraws the image in crossed pen strokes, denser where it is darker.',
+    contourlines: 'Draws a line wherever the brightness crosses a level — the picture as a contour map.',
+    edgeglow: 'Finds the edges and makes them glow in a colour you choose.',
+    electricedges: 'Edges that crackle and glow, and keep moving — a live-wire outline.',
+    glowscan: 'A band of light sweeps across the layer over and over.',
+    smoothedges: 'Feathers the layer’s outline so it fades out instead of stopping dead.',
+    roughenedges: 'Eats the layer’s outline away into a torn, ragged edge.',
+    smoothbevel: 'Rounds and lights the layer’s edge so it reads as a raised, moulded surface.',
+
+    // Blur
+    mosaic: 'Averages the picture into large blocks. Coarser and blockier than Pixelate.',
+    unsharpmask: 'Sharpening with a radius — you set how WIDE the detail it hardens is, not just how much.',
+    linstreaks: 'Smears the bright parts into straight streaks along an angle.',
+    spinstreaks: 'Smears the bright parts into arcs around the centre.',
+    zoomstreaks: 'Smears the bright parts outward from the centre, like a zoom during the exposure.',
+    innerblur: 'Blurs inward from the layer’s edge and leaves the middle sharp.',
+
+    // Matte / mask / key
+    wipe: 'Reveals or hides the layer behind a straight line at any angle. Keyframe Progress to run it.',
+    radialwipe: 'The same, but the line sweeps around like a clock hand.',
+    solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
+    mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
+    mattefringe: 'Draws a coloured band along the layer’s edge.',
+    touchup: 'Paints out a rectangle of the frame using the pixels around it — for a logo, a boom mic, a sign.',
+
+    // Repeat
+    gridrepeat: 'Repeats the layer in a grid.',
+    linearrepeat: 'Repeats the layer in a line.',
+    radialrepeat: 'Repeats the layer in a ring around the centre.',
+    mirrortile: 'Tiles the frame with alternating mirrored copies, so the joins are seamless.',
+
+    // Opacity / visibility
+    blink: 'Switches the layer on and off at a steady rate.',
+    flicker: 'Flickers the opacity irregularly, like a failing bulb.',
+    pulseopacity: 'Fades the layer smoothly in and out, over and over.',
+    dissolve: 'Punches random holes in the layer. Keyframe Amount to dissolve it away.',
+    blockdissolve: 'The same, in blocks rather than single pixels — a chunkier, more digital exit.',
+
+    // Move / transform
+    swing: 'Rocks the layer back and forth like a pendulum.',
+    spin: 'Rotates the layer continuously.',
+    pulse: 'Breathes the layer’s size in and out.',
+    drift: 'Slides the layer steadily in one direction, forever.',
+    orbit: 'Carries the layer round a circle without rotating it.',
+
+    // Text
+    counter: 'Counts a number up or down. Keyframe Progress and it animates between the two ends.',
+    textprogress: 'Types the text on, character by character, as Progress runs.',
+    textrandomizer: 'Scrambles the characters and resolves them into the real text.',
+    textspacing: 'Widens or tightens the gaps between letters.',
+    texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case or Sentence case without retyping it.',
+    timecode: 'Shows the running time of the clip, in the format you pick.',
+
+    // Stylize / other
+    solarize: 'Inverts everything above a brightness cut, the way overexposed film does.',
+    channelremap: 'Swaps the red, green and blue channels around. The fastest way to a completely alien palette.',
+
+    // 3D — every one of these turns the layer into a solid and wraps its own pixels on as the skin
+    cube3d: 'Wraps the layer onto a rotating cube.',
+    box3d: 'Wraps the layer onto a box you can set the proportions of.',
+    cylinder3d: 'Wraps the layer around a cylinder — a can, a column, a rolling banner.',
+    sphere3d: 'Wraps the layer onto a sphere, like a globe or a planet.',
+    ellipsoid3d: 'A sphere you can stretch — an egg, a capsule, a squashed ball.',
+    torus3d: 'Wraps the layer onto a ring doughnut.',
+    ring3d: 'A flat ring standing in space, textured with the layer.',
+    pyramid3d: 'Wraps the layer onto a four-sided pyramid.',
+    octahedron3d: 'Wraps the layer onto an eight-sided solid — two pyramids base to base.',
+    hexprism3d: 'Wraps the layer onto a six-sided prism.',
+    starprism3d: 'Wraps the layer onto a star-shaped prism — a star with depth.',
+    starpoly3d: 'Wraps the layer onto a spiked star ball.',
+    heart3d: 'Wraps the layer onto a solid heart.',
+    hollowbox3d: 'A box with no front, so you can see inside it.',
+    axiscross3d: 'Three bars crossing at right angles — a 3D plus sign, good as a scene axis.',
+    pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit.',
+    fliplayer: 'Mirrors the layer horizontally, vertically, or both.',
+    rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides.',
   };
 
   // Every control an effect exposes, as plain words — the vocabulary someone searches with.
