@@ -126,11 +126,16 @@ up genuine work and a lot of drift. The items worth acting on, highest value fir
   test on Safari which never reports it, and applies a hard 160MB ceiling on any touch OS. Desktops
   measured unchanged. Note `deviceMemory` is capped at 8 and describes the device CLASS, not free
   memory — do not treat it as a live reading.
-- **PARITY.md / QUALITY.md numbers are stale on their face** — "~180 registered effects" (it is 193),
-  "no GIF, no share sheet, no audio DSP" (all three ship). BACKLOG lists ~12 things as open that
-  shipped months ago (particles, trim paths, multi-mask, luma matte, stereo pan, reverb/delay/EQ,
-  frame-sequence export, preview downscale, pinch/pan…). Its own upkeep rule — "when an item ships,
-  flip it to ✅ in PARITY.md and delete it here" — has not been followed in a long time.
+- ~~**PARITY.md / QUALITY.md numbers are stale on their face**~~ — **DONE 2026-08-08.** Eleven BACKLOG
+  rows flipped, each verified against the source first rather than trusted from the audit: overshoot/
+  anticipate easing, luma matte, preview downscale, preview pinch/pan, trim-path, stereo panning,
+  multiple masks, PNG frame-sequence export, particles (shipped as a CANVAS_FX, not the layer type
+  the row described), reverb/delay/EQ/compressor, and GIF export — which was sitting in **Non-goals**
+  despite shipping in v3.39 with a hand-rolled LZW encoder. **Ripple delete, snap-to-grid, curves and
+  multi-stop gradients were checked too and are genuinely still open** — left alone.
+  PARITY's percentages were NOT recomputed (that needs a 342-row re-audit); they are now labelled as a
+  dated snapshot with the specific rows known to be wrong listed underneath, rather than quietly
+  guessed at. Its solo "proof" that ✅ rows can regress is also corrected — that example was false.
 - **QUALITY.md's test plan is still mostly unbuilt** — but `tests/tests.js` is now **12 regression
   tests, all green**, up from 3 regression + 5 stale "pending". Done 2026-08-08: the five pending
   tests all passed (their BACKLOG gaps had shipped long ago) so they were graduated per the file's own

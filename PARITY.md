@@ -6,11 +6,21 @@ adversarial refutation of every "missing" claim). **120 of the 251 then-open row
 gone badly stale across v2.71→v2.84._
 
 _**Caveat on that pass:** it re-checked only the `❌`/`🟡` rows, on the assumption that staleness runs one way and a
-`✅` feature does not un-ship. **That assumption is false.** "Layer solo" was marked ✅ and has since REGRESSED — the
-engine still honours `layer.solo` but the timeline button that set it is gone. Found by accident while fixing the
-solo/audio bug, not by the audit. **The ~196 `✅` rows have never been re-verified and may hide other regressions.**_
+`✅` feature does not un-ship. That assumption is untested — **the ~196 `✅` rows have never been re-verified.**_
 
-## Where we stand (as of 2026-07-10)
+_**Correction, 2026-08-08:** the example this caveat used to cite was wrong. "Layer solo" was said to have REGRESSED,
+because the engine honours `layer.solo` but no timeline button sets it. `git log -S` shows the button was removed
+deliberately at Ezra's request in `69563ae` (v1.75), and soloing is reachable from the export dialog's "Hide other
+layers". So the caveat stands as an untested assumption, not as a demonstrated failure — and whoever runs that sweep
+should check `git log -S'<the thing>'` before recording anything as a regression._
+
+## Where we stand (as of 2026-07-10 — NOT recomputed since; ~65 releases have shipped)
+
+> ⚠️ **These percentages are a 2026-07-10 snapshot and are now too low.** Recomputing them means re-auditing 342 rows,
+> which has not been done — so they are left as recorded rather than guessed at. Individually verified as out of date
+> on 2026-08-08: GIF export, the share sheet, PNG/frame-sequence export, stereo panning, reverb/delay/EQ/compressor,
+> multiple masks per layer, trim-path, preview downscale and preview pinch-zoom have all SHIPPED since. Treat any
+> single row here as unverified until you have checked it against the source.
 
 - **Core:** 87 / 109 done (**80%**)
 - **Common:** 76 / 153 done (50%)
@@ -19,14 +29,16 @@ solo/audio bug, not by the audit. **The ~196 `✅` rows have never been re-verif
 
 > FreeMotion has a strong core editor (timeline, keyframes + graph editor, groups/masking groups, parenting/camera/null,
 > speed ramping, project save/load, MP4/H.264 export) and — contrary to the June audit — a **deep effects catalog**
-> (~180 registered effects: blurs, glows, warps, faux-3D meshes, halftone, clouds, edge and colour work) and a
+> (193 registered effects: blurs, glows, warps, faux-3D meshes, halftone, clouds, edge and colour work) and a
 > **genuinely touch-usable mobile UI** (pinch-zoom, long-press reorder, bottom-sheet inspector, `touch-action:none`
 > across every drag surface).
 >
 > The real remaining gaps are narrower than they looked: **no true 3D** (camera FOV/Z, depth-of-field, lighting, mesh
-> import — all impractical on a 2D canvas without WebGL), **no audio DSP** (pan, pitch/time-stretch, reverb/EQ/delay,
-> beat detection), **export breadth** (no GIF, no alpha channel, no share sheet, no platform presets), and a handful of
-> cheap-but-absent effects and easing curves.
+> import — all impractical on a 2D canvas without WebGL) and a handful of cheap-but-absent effects.
+>
+> ~~no audio DSP~~ and ~~export breadth~~ are **no longer true** (corrected 2026-08-08): pan, reverb, delay, EQ and
+> compressor all ship in `js/audio-fx.js`; GIF, PNG frame-sequence and the OS share sheet all ship in `js/exporter.js`.
+> Still genuinely missing from those two: pitch/time-stretch, beat detection, alpha-channel export, platform presets.
 
 Legend: ✅ done · 🟡 partial · ❌ missing · ❔ unknown
 
