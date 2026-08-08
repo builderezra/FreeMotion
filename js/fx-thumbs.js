@@ -230,7 +230,7 @@ window.FM = window.FM || {};
     framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot', chromakeypro: 'keyshot',
-    lumamatte: 'photo',
+    lumamatte: 'photo', compoundblur: 'photo', matchgrade: 'photo',
     // The scan bar has to have somewhere to sweep, and the frozen half only reads against a live
     // half — a full-frame subject with internal motion is the only thing that shows both.
     timewarp: 'photo',
@@ -344,6 +344,17 @@ window.FM = window.FM || {};
     lumamatte: function (layers, hero) {
       layers.push(mkArt('_fxthumbMatte', paintMatte, SIZE, 48, 48));
       hero.effects[0].params.source = '_fxthumbMatte';
+    },
+    // Same for the other two layer-pickers: no source means no effect, which is honest and useless
+    // in a tile. The matte disc doubles as a blur map (white blurs, black stays sharp).
+    compoundblur: function (layers, hero) {
+      layers.push(mkArt('_fxthumbMatte', paintMatte, SIZE, 48, 48));
+      const p = hero.effects[0].params;
+      p.source = '_fxthumbMatte'; p.invert = 1; p.radius = 9;   // sharp in the middle, soft at the edge
+    },
+    matchgrade: function (layers, hero) {
+      layers.push(mkArt('_fxthumbGrid', paintGrid, SIZE, 48, 48));   // a cool, high-contrast reference
+      hero.effects[0].params.source = '_fxthumbGrid';
     },
     displacemap: function (layers, hero) {
       layers.push(mkArt('_fxthumbMap', paintMap, SIZE, 48, 48));

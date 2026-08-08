@@ -189,6 +189,16 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   displace path (it allocates three canvases on first use) and reported a false 168-byte difference.
   Warm up 3-4 times on BOTH sides before comparing.
 
+- v4.64 (round 11, part 3) — **Compound Blur** and **Match Grade**, exactly as this file predicted:
+  once the pool existed both were straightforward. Compound Blur is a stack of RAMP-masked blur
+  levels drawn sharpest-first, not a per-pixel variable-radius kernel; consecutive ramps cross-fade,
+  so there is no banding at the level boundaries, and the masks are built at quarter res with the
+  bilinear upscale doing the feathering (flag B's fix, and it lands at 2.9ms). Match Grade gathers
+  mean/sigma at quarter res — a mean does not need every pixel — and CAPS the contrast gain at 4x so
+  a near-flat source cannot explode.
+  **Warm-up, again:** cube3d reported a false 162-byte difference at four warm-ups and 0 at six,
+  across three passes. Use SIX per side, and re-run any non-zero result before believing it.
+
   **The BUILD NEXT table is now empty.** All thirteen shipped, v4.54 - v4.61. What remains in this
   file is the "WORTH DOING LATER" list (Luma Matte, Compound Blur, Corner Pin, LUT, Pixel Sort,
   Defocus/Bokeh, Lens Distortion, Match Grade, Stabilize-as-offline-analysis, Curves) and the

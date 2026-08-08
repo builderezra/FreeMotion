@@ -709,6 +709,19 @@ window.FM = window.FM || {};
       { key: 'white', label: 'White point', min: 1, max: 255, step: 1, def: 200 },
       { key: 'feather', label: 'Feather', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
     ] },
+    // Compound Blur — blur by another layer's brightness. A depth map gives a real rack focus; a
+    // gradient gives a tilt-shift along whatever line you draw. Every other blur here applies ONE
+    // radius to the whole layer and structurally cannot vary across the frame.
+    { type: 'compoundblur', label: 'Compound Blur', layer: true, layerLabel: 'Blur map', desc: 'Blurs this layer by how bright another layer is — white blurs most, black stays sharp. A depth map gives you a real rack focus; a gradient gives a tilt-shift along any line.', params: [
+      { key: 'radius', label: 'Max blur', min: 0, max: 120, step: 1, def: 26, unit: 'px' },
+      { key: 'levels', label: 'Steps', min: 2, max: 8, step: 1, def: 5 },
+      { key: 'invert', label: 'Invert map', options: [[0, 'Off'], [1, 'On']], def: 0 },
+    ] },
+    // Match Grade — push this layer's colour statistics toward another layer's.
+    { type: 'matchgrade', label: 'Match Grade', layer: true, layerLabel: 'Reference layer', desc: 'Pushes this clip\u2019s colour toward another one\u2019s — matches the average tone and the contrast. The quickest way to make two cameras agree; finish by hand with Levels or HSL Bands.', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'mode', label: 'Match', options: [[0, 'Colour + contrast'], [1, 'Colour only'], [2, 'Contrast only']], def: 0 },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1405,7 +1418,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1 };
+    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -1422,6 +1435,8 @@ window.FM = window.FM || {};
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
+    if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
+    if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
@@ -2623,9 +2638,9 @@ window.FM = window.FM || {};
   let _dspLvl = 0, _dispDepth = 0;
   function dspSlot(W, H) {
     const d = _dspLvl;
-    if (!_dspPool[d]) _dspPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas') };
+    if (!_dspPool[d]) _dspPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas'), C: document.createElement('canvas'), q: document.createElement('canvas') };
     const s = _dspPool[d];
-    if (s.A.width !== W || s.A.height !== H) { s.A.width = W; s.A.height = H; s.B.width = W; s.B.height = H; s.M.width = W; s.M.height = H; }
+    if (s.A.width !== W || s.A.height !== H) { s.A.width = W; s.A.height = H; s.B.width = W; s.B.height = H; s.M.width = W; s.M.height = H; s.C.width = W; s.C.height = H; }
     return s;
   }
   /* Luma Matte — cut this layer out with ANOTHER layer's brightness.
@@ -2689,6 +2704,168 @@ window.FM = window.FM || {};
       actx.filter = feather > 0.05 ? 'blur(' + feather.toFixed(2) + 'px)' : 'none';
       actx.drawImage(slot.M, 0, 0);
       actx.filter = 'none'; actx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(slot.A, 0, 0);
+      ctx.restore();
+    } finally { _dspLvl--; }
+  }
+
+  /* Compound Blur — blur THIS layer by how bright another layer is. A depth map makes a real
+   * rack-focus; a soft-edged shape makes a vignette blur; a gradient makes a tilt-shift that follows
+   * whatever line you draw. No blur here can do that: they all apply one radius to the whole layer.
+   *
+   * Built as a stack of ramp-masked blur levels rather than a per-pixel variable-radius blur, which
+   * would be a full kernel per pixel. Each level is drawn with a mask reading "how much this pixel
+   * wants AT LEAST this much blur", sharpest first, so the ramps overlap into a smooth gradient
+   * instead of banding at the level boundaries. Masks are built at QUARTER resolution and the
+   * bilinear upscale is what feathers them — the trick this file flagged as the fix for the cost. */
+  function drawCompoundBlur(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    const p = fx.params || {};
+    const srcId = p.source;
+    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const radius = Math.max(0, p.radius == null ? 26 : FM.evalProp(p.radius, t));
+    if (!mLayer || radius < 0.4 || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
+    const slot = dspSlot(W, H);
+    _dspLvl++;
+    try {
+      const inv = Math.round(FM.evalProp(p.invert, t) || 0) === 1;
+      const levels = Math.max(2, Math.min(8, Math.round(p.levels == null ? 5 : FM.evalProp(p.levels, t))));
+      const actx = slot.A.getContext('2d');
+      baseT(actx); actx.clearRect(0, 0, W, H);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
+      const mctx = slot.M.getContext('2d');
+      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+      drawLayer(mctx, Object.assign({}, mLayer, { blendMode: 'normal', effects: (mLayer.effects || []).filter(e => e.type !== 'compoundblur'), transform: Object.assign({}, mLayer.transform, { opacity: 1 }) }), t, scene);
+      const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
+      const q = slot.q;
+      if (q.width !== qw || q.height !== qh) { q.width = qw; q.height = qh; }
+      const qc = q.getContext('2d', { willReadFrequently: true });
+      qc.setTransform(1, 0, 0, 1, 0, 0); qc.globalAlpha = 1; qc.globalCompositeOperation = 'source-over'; qc.filter = 'none';
+      qc.clearRect(0, 0, qw, qh); qc.drawImage(slot.M, 0, 0, qw, qh);
+      let qi;
+      try { qi = qc.getImageData(0, 0, qw, qh); } catch (e) { drawLayer(ctx, clean, t, scene); return; }
+      const qd = qi.data, lum = new Float32Array(qw * qh);
+      for (let i = 0, j = 0; j < lum.length; i += 4, j++) {
+        const a = qd[i + 3] / 255;
+        let v = (0.299 * qd[i] + 0.587 * qd[i + 1] + 0.114 * qd[i + 2]) / 255 * a;
+        lum[j] = inv ? 1 - v : v;
+      }
+      const octx = slot.B.getContext('2d'), cctx = slot.C.getContext('2d');
+      octx.setTransform(1, 0, 0, 1, 0, 0); octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
+      octx.clearRect(0, 0, W, H);
+      octx.drawImage(slot.A, 0, 0);                     // level 0: the sharp layer underneath everything
+      for (let L = 1; L <= levels; L++) {
+        const r = radius * L / levels;
+        // "at least this blurry": a ramp, so consecutive levels cross-fade instead of banding
+        for (let i = 0, j = 0; j < lum.length; i += 4, j++) {
+          let a = (lum[j] - (L - 1) / levels) * levels;
+          qd[i] = 255; qd[i + 1] = 255; qd[i + 2] = 255;
+          qd[i + 3] = a <= 0 ? 0 : (a >= 1 ? 255 : (a * 255) | 0);
+        }
+        qc.putImageData(qi, 0, 0);
+        cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over';
+        cctx.clearRect(0, 0, W, H);
+        cctx.filter = 'blur(' + r.toFixed(2) + 'px)';
+        cctx.drawImage(slot.A, 0, 0);
+        cctx.filter = 'none';
+        cctx.globalCompositeOperation = 'destination-in';
+        cctx.imageSmoothingEnabled = true;              // the upscale IS the mask's feathering
+        cctx.drawImage(q, 0, 0, W, H);
+        cctx.globalCompositeOperation = 'source-over';
+        octx.drawImage(slot.C, 0, 0);
+      }
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(slot.B, 0, 0);
+      ctx.restore();
+    } finally { _dspLvl--; }
+  }
+
+  /* Match Grade — push this layer's colour statistics toward another layer's. Mean and standard
+   * deviation per channel: shift the mean, scale the spread. It is the fastest way to make two
+   * cameras agree, and it disappoints exactly when the two shots contain different things — which is
+   * why this file said to ship it AFTER Levels and HSL Bands, so a bad auto-match has good manual
+   * tools to fall back on. Both now exist.
+   *
+   * Statistics are gathered at QUARTER resolution: a mean and a sigma do not need every pixel, and
+   * that is the difference between one cheap pass and two full-frame readbacks. */
+  function drawMatchGrade(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const W = proj.width, H = proj.height;
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    const p = fx.params || {};
+    const srcId = p.source;
+    const rLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const amount = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t));
+    if (!rLayer || amount <= 0.002 || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
+    const slot = dspSlot(W, H);
+    _dspLvl++;
+    try {
+      const mode = Math.round(FM.evalProp(p.mode, t) || 0);   // 0 both, 1 colour only, 2 contrast only
+      const actx = slot.A.getContext('2d');
+      baseT(actx); actx.clearRect(0, 0, W, H);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
+      const mctx = slot.M.getContext('2d');
+      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+      drawLayer(mctx, Object.assign({}, rLayer, { blendMode: 'normal', effects: (rLayer.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, rLayer.transform, { opacity: 1 }) }), t, scene);
+      const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
+      const q = slot.q;
+      if (q.width !== qw || q.height !== qh) { q.width = qw; q.height = qh; }
+      const qc = q.getContext('2d', { willReadFrequently: true });
+      const stats = function (srcCanvas) {
+        qc.setTransform(1, 0, 0, 1, 0, 0); qc.globalCompositeOperation = 'source-over'; qc.filter = 'none';
+        qc.clearRect(0, 0, qw, qh); qc.drawImage(srcCanvas, 0, 0, qw, qh);
+        let d; try { d = qc.getImageData(0, 0, qw, qh).data; } catch (e) { return null; }
+        const s = [0, 0, 0], s2 = [0, 0, 0]; let n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 8) continue;                   // transparent pixels are not part of the picture
+          for (let k = 0; k < 3; k++) { const v = d[i + k]; s[k] += v; s2[k] += v * v; }
+          n++;
+        }
+        if (n < 8) return null;
+        const mean = [0, 0, 0], sd = [0, 0, 0];
+        for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
+        return { mean: mean, sd: sd };
+      };
+      const A = stats(slot.A), R = stats(slot.M);
+      if (!A || !R) { drawLayer(ctx, clean, t, scene); return; }
+      let img;
+      try { img = actx.getImageData(0, 0, W, H); } catch (e) { drawLayer(ctx, clean, t, scene); return; }
+      const d = img.data;
+      const gain = [1, 1, 1], off = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        // A near-flat source has no spread to scale — clamp the gain rather than exploding it.
+        const g = (mode === 1 || A.sd[k] < 1) ? 1 : Math.max(0.25, Math.min(4, R.sd[k] / A.sd[k]));
+        const target = mode === 2 ? A.mean[k] : R.mean[k];
+        gain[k] = 1 + (g - 1) * amount;
+        off[k] = A.mean[k] + (target - A.mean[k]) * amount;
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        d[i] = off[0] + (d[i] - A.mean[0]) * gain[0];
+        d[i + 1] = off[1] + (d[i + 1] - A.mean[1]) * gain[1];
+        d[i + 2] = off[2] + (d[i + 2] - A.mean[2]) * gain[2];
+      }
+      actx.setTransform(1, 0, 0, 1, 0, 0);
+      actx.putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
       ctx.globalAlpha = opacity;
