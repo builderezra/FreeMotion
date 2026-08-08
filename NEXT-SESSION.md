@@ -147,9 +147,12 @@ up genuine work and a lot of drift. The items worth acting on, highest value fir
   Still open from the 12-area plan: responsive-overflow at 380px, screenshot baselines, audio import,
   export round-trip. QUALITY.md line 95 claims "tests gate every commit" — that is aspirational, not
   true, and nothing enforces it.
-- **CLAUDE.md's "add each new AM-modelled screen to BEFORE-PUBLISHING.md as you go"** has not been
-  honoured since v4.25 — the v4.50/v4.59 effect-browser sheets and the v4.14 PC property cards are
-  all missing from that list.
+- ~~**CLAUDE.md's "add each new AM-modelled screen to BEFORE-PUBLISHING.md as you go"**~~ — **SWEPT
+  2026-08-08.** The gap was smaller than the audit implied: across v4.26 → v4.70 only **one** entry
+  records an AM origin (v4.44, the top-bar parenting button), and it is now on the list. Everything
+  else in that range was effects, render fixes or Ezra's own direction. Two panels need HIS eye
+  because the log doesn't say either way and the code can't tell you: the effect-browser hold sheet
+  (v4.50) and the preset sheet (v4.59). Ask him when publishing next comes up.
 
 ## 3. Not blocked, but lower value than round 11
 

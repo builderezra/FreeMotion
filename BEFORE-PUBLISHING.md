@@ -40,8 +40,19 @@ Each of these was built from an AM screenshot and needs an original treatment:
   the two icon glyphs (box → bar, open box → bar), and the multi-select bar carrying the same pair
   alongside the align set. The behaviour is worth keeping; the icon language is AM's and needs redrawing.
 
+- **Top-bar parenting button** (v4.44) — the button beside the bin. It came from an AM screenshot and
+  had been mis-read as "duplicate"; v4.44 corrected it to set parenting, which is what the screenshot
+  was actually showing. The glyph and its placement are AM's.
+
 Our own already: the logo and splash animation (Ezra's), the effect set and its internals, the
 slip ghost, the Apple-squircle corner rounding, the media library, and everything under the hood.
+
+_**Swept v4.26 → v4.70 on 2026-08-08** against POLISH-LOG. Only v4.44 above records an AM origin;
+everything else in that range was effects, render fixes or Ezra's own direction. Caveat: this sweep
+can only find what was written down at the time, so if a panel was built from a screenshot without
+saying so it is still missing here. The two worth Ezra's own eye are the **effect-browser hold sheet**
+(v4.50, the press-and-hold description/tag card) and the **preset sheet** (v4.59) — neither log entry
+claims an AM origin, and I can't tell from the code whether one was used._
 
 ## What "done" looks like
 
