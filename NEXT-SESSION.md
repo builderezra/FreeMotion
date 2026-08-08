@@ -3,7 +3,7 @@
 Rewritten 2026-08-08. **CHECK `git log --oneline origin/main..HEAD` BEFORE CLAIMING ANYTHING ABOUT
 PUSHING.** This file carried "fifty-seven releases are waiting (v4.10 → v4.66)" for weeks and it was
 wrong by a factor of eight — Ezra has been pushing all along via GitHub Desktop. As of 2026-08-08
-`origin/main` is at `4bfcd6b`, so **v4.62 → v4.68 are unpushed**. Run the command for the live count
+`origin/main` is at `4bfcd6b`, so **v4.62 → v4.69 are unpushed**. Run the command for the live count
 rather than trusting this sentence. The app is at **193 effects**.
 
 Work the list top-to-bottom.
@@ -114,9 +114,13 @@ up genuine work and a lot of drift. The items worth acting on, highest value fir
   anything a regression.** An absent feature is not automatically a bug.
 - **Round 11 is six items, not five** — NEXT-SESSION dropped **Liquid Glass** off EFFECTS-PLAN's
   WORTH DOING LATER list when it carried the rest forward.
-- **PERF-PLAN Fix F never shipped** — `ctx.filter` blur radii and `shadowBlur` are still in project
-  pixels, so they are wrong by the preview scale factor. It was written as a rider on Fix A, and Fix A
-  shipped without it.
+- ~~**PERF-PLAN Fix F never shipped**~~ — **DONE v4.69.** Confirmed real by measurement first: every
+  length in `ctx.filter` / `ctx.shadow*` is DEVICE-space (a `blur(10px)` leaves the same 26-device-px
+  ramp at transform scale 1, 0.5 and 0.25), and `shadowOffsetX/Y` too, so a reduced preview blurred
+  ~4x too much and shadows detached from their layers. Now multiplied by `plateScale(ctx)` at all five
+  sites. Exports verified byte-identical; a 0.4-scale preview is 96-97% closer to its export.
+  **Note the correction to the old note: the radii were in DEVICE pixels, not project pixels — the
+  direction of the error was the opposite of what PERF-PLAN assumed.**
 - **Frame-cache OOM on low-memory phones** — app.js still hardcodes `maxBytes: 384MB` with no
   `navigator.deviceMemory` check anywhere in js/.
 - **PARITY.md / QUALITY.md numbers are stale on their face** — "~180 registered effects" (it is 193),
