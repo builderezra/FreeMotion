@@ -2022,12 +2022,15 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
  *
  *     classic                          studio
  *     ┌──────────────┬──────┐          ┌───┬────────────────────┐
- *     │ top bar             │          │ r │      stage         │
- *     ├──────────────┼──────┤          │ a ├─────────┬──────────┤
- *     │ stage        │ insp │          │ i │  insp   │ timeline │
- *     ├──────────────┴──────┤          │ l │         │          │
- *     │ timeline            │          └───┴─────────┴──────────┘
+ *     │ top bar             │          │rail│     stage         │
+ *     ├──────────────┼──────┤          ├───┴─────────┬──────────┤
+ *     │ stage        │ insp │          │    insp     │ timeline │
+ *     ├──────────────┴──────┤          │             │          │
+ *     │ timeline            │          └─────────────┴──────────┘
  *     └─────────────────────┘
+ *
+ * The rail is chrome for the CANVAS, so it stops at the canvas — same as the floating view-bar. The
+ * bottom band runs the full width underneath it, which is the half that needs room to breathe.
  *
  * Why: adding and editing sit beside the clips instead of in the far top corner, and the top bar's
  * 50px row goes back to the canvas. Gated at 701px so the phone — which has its own sheet layout and
@@ -2042,9 +2045,9 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
     grid-template-columns: var(--rail-w) var(--insp-w) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) var(--tl-h, 232px);
   }
-  body.layout-studio #topbar          { grid-area: 1 / 1 / 3 / 2; }   /* rail spans both rows */
+  body.layout-studio #topbar          { grid-area: 1 / 1 / 2 / 2; }   /* rail: canvas row only, never the band */
   body.layout-studio #main            { grid-area: 1 / 2 / 2 / 4; }   /* stage takes the full width right of it */
-  body.layout-studio #inspector-panel { grid-area: 2 / 2 / 3 / 3; }
+  body.layout-studio #inspector-panel { grid-area: 2 / 1 / 3 / 3; }   /* band runs edge to edge, under the rail */
   body.layout-studio #timeline-panel  { grid-area: 2 / 3 / 3 / 4; }
 
   /* ---- the top bar, stood on its end ---- */
@@ -2053,15 +2056,24 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
     gap: 10px; padding: 12px 6px;
     border-bottom: 0; border-right: 1px solid var(--line);
     background: linear-gradient(90deg, #161a21, #12151b);
+    /* The rail is only as tall as the canvas now, so on a short window its content (Export sits at the
+       bottom on margin-top:auto) would spill down over the panel below — measured 20px on a 357px-tall
+       window. Scroll it instead; min-height:0 is what lets a grid item actually shrink and scroll. */
+    min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
   }
+  body.layout-studio #topbar::-webkit-scrollbar { display: none; }
   /* the wordmark can't fit 60px, so keep the ▶ and drop the text (the version pill still fits) */
   body.layout-studio .brand { flex-direction: column; gap: 4px; font-size: 0; line-height: 1; }
   body.layout-studio .brand::before { content: "▶"; font-size: 18px; color: var(--accent); }
   body.layout-studio .brand .ver { font-size: 8.5px; padding: 1px 5px; }
   body.layout-studio .top-actions { flex-direction: column; align-items: center; gap: 9px; width: 100%; }
   body.layout-studio .top-actions .spacer { display: none; }
-  /* Export keeps its accent and icon but loses the label — it is still the only green thing here. */
-  body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; margin-top: auto; }
+  /* Export keeps its accent and icon but loses the label — it is still the only green thing here.
+     NOT pinned to the bottom with margin-top:auto: the rail is only as tall as the canvas now, so on a
+     short window that pushed Export out of the rail entirely (measured: 20px past the end, sitting over
+     the panel below). Stacked normally it is always reachable, and on a tall monitor it stays with the
+     other controls instead of stranded a screen away from them. */
+  body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; }
 
   /* The project name has nowhere to live in a 60px rail, so it floats over the stage's top-left —
      same input, same handlers, just repositioned. */
@@ -2073,6 +2085,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   /* the inspector now borders the timeline on its right, and both sit under the stage */
   body.layout-studio #inspector-panel { border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
   body.layout-studio #timeline-panel  { border-top: 1px solid var(--line); }
-  /* the drag handle should grab the whole band, not just the timeline half */
-  body.layout-studio #tl-resizer { left: calc(-1 * var(--insp-w)); }
+  /* the drag handle should grab the whole band, not just the timeline half — the band now starts at
+     the window edge, so reach back across the inspector AND the rail's column */
+  body.layout-studio #tl-resizer { left: calc(-1 * (var(--rail-w) + var(--insp-w))); }
 }

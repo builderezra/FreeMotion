@@ -201,6 +201,18 @@
         var rows = getComputedStyle(app).gridTemplateRows.split(/\s+/).filter(Boolean);
         if (rows.length !== 2) throw new Error('Studio: #app should have 2 rows (stage + bottom band), got ' + rows.length + ' [' + rows.join(' ') + '] — the Studio grid template is not applying');
         if (!(bar.width >= 40 && bar.width <= 110)) throw new Error('Studio: #topbar should be a rail about --rail-w wide, got ' + Math.round(bar.width) + 'px');
+        // the rail is chrome for the CANVAS and must stop there — the band below needs its full width
+        if (!(bar.bottom <= ip.top + 2)) throw new Error('Studio: the rail runs down past the canvas into the bottom band (rail bottom ' + Math.round(bar.bottom) + ' vs band top ' + Math.round(ip.top) + ') — it should stop at the stage');
+        if (!(ip.left < 2)) throw new Error('Studio: the bottom band should reach the window edge, inspector left=' + Math.round(ip.left));
+        // …and the rail must never spill its controls over the panel below. The rail is only as tall as
+        // the canvas now, and on a short window its buttons genuinely need more room than that (measured
+        // 159px of content in a 125px rail), so "does everything fit" is a question about the window, not
+        // about the code — asserting the geometry made this test pass or fail purely on viewport height.
+        // What the code actually owes is a CLIPPING rail, which holds at every size.
+        // (Takes BOTH axes to break: overflow-x:hidden alone forces overflow-y:visible to compute as
+        // auto, so mutating only overflow-y cannot fail this — mutation-checked.)
+        var oy = getComputedStyle(document.getElementById('topbar')).overflowY;
+        if (oy === 'visible') throw new Error('Studio: the rail is overflow-y:visible — on a short window its buttons spill over the panel below instead of scrolling');
         if (!(bar.height > bar.width)) throw new Error('Studio: #topbar should be a vertical rail, got ' + Math.round(bar.width) + 'x' + Math.round(bar.height));
         if (!(stage.top < 2)) throw new Error('Studio: the stage should start at the top of the window (the top bar row is gone), got top=' + Math.round(stage.top));
       } else {
