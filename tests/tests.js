@@ -173,6 +173,46 @@
     if (!document.getElementById('exp-solo-clip')) throw new Error('#exp-solo-clip missing — "Hide other layers" is the solo entry point that IS wanted');
   });
 
+  test('layout: Studio re-places the same panels, and never touches the phone', { item: 'studio-layout' }, function () {
+    // v4.71. Studio is a pure grid re-placement of four regions that are all direct children of #app.
+    // The two things worth guarding: (1) the inspector is ONE node — a second copy would drift out of
+    // sync, and (2) the phone keeps its sheet layout no matter what the setting says.
+    var app = document.getElementById('app');
+    var insp = document.querySelectorAll('#inspector-panel');
+    if (insp.length !== 1) throw new Error('expected exactly one #inspector-panel, found ' + insp.length + ' — Studio must re-place the panel, never duplicate it');
+    if (insp[0].parentElement !== app) throw new Error('#inspector-panel must be a direct child of #app, else the grid cannot move it into the bottom band');
+
+    var had = document.body.classList.contains('layout-studio');
+    var desktop = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+    try {
+      document.body.classList.add('layout-studio');
+      var stage = document.getElementById('stage').getBoundingClientRect();
+      var ip = insp[0].getBoundingClientRect();
+      var bar = document.getElementById('topbar').getBoundingClientRect();
+      if (desktop) {
+        var tlb = document.getElementById('timeline-panel').getBoundingClientRect();
+        // bottom band: the inspector sits BELOW the stage and BESIDE the timeline
+        if (!(ip.top >= stage.bottom - 2)) throw new Error('Studio: inspector top ' + Math.round(ip.top) + ' should be at/below the stage bottom ' + Math.round(stage.bottom));
+        if (!(ip.right <= tlb.left + 2)) throw new Error('Studio: inspector should sit beside the timeline (its right ' + Math.round(ip.right) + ' vs timeline left ' + Math.round(tlb.left) + ') — that adjacency IS the feature');
+        // The Studio grid template itself must be live. "narrow top bar" is NOT enough to prove that:
+        // deleting the template leaves the grid-area rules pointing past the last column, which spawns
+        // implicit tracks and collapses the bar to ~13px — passing a width check while being broken.
+        // Two rows where classic has three IS the feature (the top bar's row handed to the canvas).
+        var rows = getComputedStyle(app).gridTemplateRows.split(/\s+/).filter(Boolean);
+        if (rows.length !== 2) throw new Error('Studio: #app should have 2 rows (stage + bottom band), got ' + rows.length + ' [' + rows.join(' ') + '] — the Studio grid template is not applying');
+        if (!(bar.width >= 40 && bar.width <= 110)) throw new Error('Studio: #topbar should be a rail about --rail-w wide, got ' + Math.round(bar.width) + 'px');
+        if (!(bar.height > bar.width)) throw new Error('Studio: #topbar should be a vertical rail, got ' + Math.round(bar.width) + 'x' + Math.round(bar.height));
+        if (!(stage.top < 2)) throw new Error('Studio: the stage should start at the top of the window (the top bar row is gone), got top=' + Math.round(stage.top));
+      } else {
+        // phone: the class must be inert — the inspector stays a fixed sheet
+        if (getComputedStyle(insp[0]).position !== 'fixed') throw new Error('phone: layout-studio changed the inspector out of its fixed sheet — the phone layout must be untouched');
+      }
+    } finally {
+      document.body.classList.toggle('layout-studio', had);
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {

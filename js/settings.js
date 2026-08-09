@@ -19,6 +19,9 @@ window.FM = window.FM || {};
     systemFonts: true,       // include the built-in font list in the text font picker
     layerDuration: 5,        // seconds given to a newly added photo / text / shape / drawing
     playbackQuality: 'auto', // 'auto' adapts to the machine | 'smooth' pins it low | 'detail' never drops
+    layout: 'classic',       // 'classic' = inspector down the right | 'studio' = left rail + inspector beside
+                             // the timeline. Desktop only: the CSS is gated behind (min-width: 701px), so a
+                             // phone keeps its sheet layout whatever this says.
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -34,6 +37,7 @@ window.FM = window.FM || {};
       if (saved.sort === 'name' || saved.sort === 'date') state.sort = saved.sort;
       if (saved.theme === 'glass' || saved.theme === 'classic') state.theme = saved.theme;
       if (['auto', 'smooth', 'detail'].indexOf(saved.playbackQuality) >= 0) state.playbackQuality = saved.playbackQuality;
+      if (saved.layout === 'classic' || saved.layout === 'studio') state.layout = saved.layout;
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
@@ -48,6 +52,10 @@ window.FM = window.FM || {};
     // restores the original stylesheet exactly — this is the one-tap undo for the whole look.
     document.documentElement.setAttribute('data-theme', state.theme === 'classic' ? 'classic' : 'glass');
     document.body.classList.toggle('demo-mode', !!state.demoMode);
+    // Studio layout is a pure re-placement of the same four regions (see the block at the end of
+    // styles.css). The class goes on unconditionally; the media query decides whether it means anything,
+    // so a phone is never affected and switching costs no reflow beyond the grid itself.
+    document.body.classList.toggle('layout-studio', state.layout === 'studio');
     touchRipples(state.showTouches);
     listeners.forEach(fn => { try { fn(state); } catch (e) {} });
   }
@@ -164,6 +172,16 @@ window.FM = window.FM || {};
       ]),
       hintRow('While playing, the preview renders at a lower resolution so the playhead keeps time, then snaps back to full detail the moment you pause. Auto measures your machine and uses as much detail as it can hold — Smooth pins it low for a slow device, Sharp never trades quality (for a fast computer).'),
     ));
+    // Desktop only — the Studio grid lives behind the same (min-width: 701px) gate, so offering the
+    // choice on a phone would be a switch that does nothing.
+    if (!window.matchMedia || window.matchMedia('(min-width: 701px)').matches) {
+      body.appendChild(group(
+        segmentRow('Layout', 'layout', [
+          { label: 'Classic', value: 'classic' }, { label: 'Studio', value: 'studio' },
+        ]),
+        hintRow('Classic puts the editing panel down the right-hand side. Studio moves it next to the timeline and turns the top bar into a rail on the far left — so adding and editing is a short trip from the clips instead of a reach to the top corner, and the canvas gets the height the top bar was using. Drag the top edge of the bottom band to trade canvas height for editing room.'),
+      ));
+    }
 
     const foot = el('div', 'set-foot');
     const ver = document.querySelector('.ver');

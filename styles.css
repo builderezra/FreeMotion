@@ -37,13 +37,21 @@ body {
 #app {
   display: grid;
   /* timeline height is a var so the drag-resizer + wide-screen media queries can grow it; the middle
-     row (1fr) absorbs the rest. Mobile overrides these rows entirely (see the phone breakpoint). */
-  grid-template-rows: 50px 1fr var(--tl-h, 232px);
-  grid-template-columns: minmax(0, 1fr);   /* cap the single column at the viewport so the 1080px canvas can't blow the layout wider than the screen */
+     row (1fr) absorbs the rest. Mobile overrides these rows entirely (see the phone breakpoint).
+     The four regions (top bar / stage / inspector / timeline) are all direct children and are PLACED
+     explicitly below, so switching to the Studio layout is a pure re-placement — no DOM moves, no
+     duplicated panels. minmax(0,…) on both axes keeps a 1080px canvas from blowing the layout out. */
+  grid-template-rows: 50px minmax(0, 1fr) var(--tl-h, 232px);
+  grid-template-columns: minmax(0, 1fr) var(--insp-w, 286px);
   height: 100vh;
   width: 100%;
   overflow: hidden;
 }
+/* Classic layout: top bar across the top, inspector down the right, timeline across the bottom. */
+#topbar          { grid-area: 1 / 1 / 2 / 3; }
+#main            { grid-area: 2 / 1 / 3 / 2; }
+#inspector-panel { grid-area: 2 / 2 / 3 / 3; }
+#timeline-panel  { grid-area: 3 / 1 / 4 / 3; }
 
 /* ---------- top bar ---------- */
 #topbar {
@@ -104,10 +112,12 @@ body {
 }
 .btn-accent:hover { filter: brightness(1.08); background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
 
-/* ---------- main 3-column ---------- */
+/* ---------- main (stage wrapper) ----------
+   Holds only #stage now — the inspector moved out to #app so the grid can place it either right of the
+   stage (classic) or beside the timeline (Studio). The inspector's WIDTH lives in --insp-w on #app. */
 #main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 286px;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
@@ -500,7 +510,7 @@ body.text-editing #timeline-panel { display: none !important; }
 /* Collapse the inspector's side column so the canvas fills the width, and pad the stage so the canvas
  * centres between the top toolbar and the docked text field. The #app ROW collapse is mobile-only
  * (in the max-width:700px block) — applying it on desktop would nuke the top bar + timeline layout. */
-body.text-editing #main { grid-template-columns: 1fr !important; }
+body.text-editing #app { grid-template-columns: minmax(0, 1fr) 0 !important; }
 body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
@@ -952,12 +962,12 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    of flinging its 7 buttons to the far corners of a wide monitor. Small laptops (<1100px) are untouched. */
 @media (min-width: 1100px) {
   :root { --tl-h: clamp(232px, 30vh, 300px); }
-  #main { grid-template-columns: minmax(0, 1fr) clamp(286px, 22vw, 340px); }
+  :root { --insp-w: clamp(286px, 22vw, 340px); }   /* inspector column width — #app places it, classic or Studio */
   #transport { max-width: 780px; margin-inline: auto; width: 100%; box-sizing: border-box; }
 }
 @media (min-width: 1600px) {
   :root { --tl-h: clamp(300px, 33vh, 460px); }
-  #main { grid-template-columns: minmax(0, 1fr) clamp(320px, 20vw, 380px); }
+  :root { --insp-w: clamp(320px, 20vw, 380px); }
 }
 /* AM transport: all 7 controls spread evenly across the FULL row width (play lands in the middle as the
    4th of 7). The side groups are display:contents so every button is a direct flex child + spreads. */
@@ -1263,6 +1273,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   /* Preview is a FIXED window (doesn't resize with the comp aspect); the timeline gets the rest. */
   :root { --stage-h: 40vh; }
   #app { grid-template-rows: auto var(--stage-h) 1fr; grid-template-columns: minmax(0, 1fr); }
+  /* Re-place for the single-column phone grid: the desktop rules span to column line 3, which would
+     conjure an implicit second column here. The inspector is a position:fixed sheet on phone, so it is
+     out of flow entirely and needs no track of its own. */
+  #topbar-m        { grid-area: 1 / 1 / 2 / 2; }
+  #main            { grid-area: 2 / 1 / 3 / 2; }
+  #timeline-panel  { grid-area: 3 / 1 / 4 / 2; }
+  #inspector-panel { grid-area: auto; }
   #tl-resizer { display: none; }   /* desktop-only: the phone timeline sizing is driven by --stage-h, not a drag handle */
   /* Text-edit full-screen takeover (mobile): with the inspector grid + timeline hidden, give the whole
    * height to the stage so the canvas fills the screen. Desktop keeps its 3-row layout. */
@@ -1801,7 +1818,7 @@ body.drawing #select-box { display: none !important; }
    floating draw bar; vector's bar is much taller because it carries the trackpad. */
 body.drawing #inspector-panel,
 body.drawing #timeline-panel { display: none !important; }
-body.drawing #main { grid-template-columns: 1fr !important; }
+body.drawing #app { grid-template-columns: minmax(0, 1fr) 0 !important; }
 body.drawing #stage { padding: 10px 0 104px; box-sizing: border-box; }
 body.drawing.draw-vector #stage { padding-bottom: 268px; }
 body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
@@ -1997,4 +2014,65 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   background:
     linear-gradient(var(--kf, #ffcc33), var(--kf, #ffcc33)) center/2px 100% no-repeat,
     linear-gradient(var(--kf, #ffcc33), var(--kf, #ffcc33)) center/100% 2px no-repeat;
+}
+
+/* ================================ Studio layout (desktop) ================================
+ * Settings → Layout → Studio. The SAME four regions as classic, placed differently by the grid —
+ * no DOM moves, no duplicated panels, so every existing handler keeps working:
+ *
+ *     classic                          studio
+ *     ┌──────────────┬──────┐          ┌───┬────────────────────┐
+ *     │ top bar             │          │ r │      stage         │
+ *     ├──────────────┼──────┤          │ a ├─────────┬──────────┤
+ *     │ stage        │ insp │          │ i │  insp   │ timeline │
+ *     ├──────────────┴──────┤          │ l │         │          │
+ *     │ timeline            │          └───┴─────────┴──────────┘
+ *     └─────────────────────┘
+ *
+ * Why: adding and editing sit beside the clips instead of in the far top corner, and the top bar's
+ * 50px row goes back to the canvas. Gated at 701px so the phone — which has its own sheet layout and
+ * a fixed-position inspector — is untouched no matter what the setting says.
+ */
+@media (min-width: 701px) {
+  body.layout-studio {
+    --rail-w: 60px;
+    --insp-w: clamp(300px, 24vw, 400px);
+  }
+  body.layout-studio #app {
+    grid-template-columns: var(--rail-w) var(--insp-w) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) var(--tl-h, 232px);
+  }
+  body.layout-studio #topbar          { grid-area: 1 / 1 / 3 / 2; }   /* rail spans both rows */
+  body.layout-studio #main            { grid-area: 1 / 2 / 2 / 4; }   /* stage takes the full width right of it */
+  body.layout-studio #inspector-panel { grid-area: 2 / 2 / 3 / 3; }
+  body.layout-studio #timeline-panel  { grid-area: 2 / 3 / 3 / 4; }
+
+  /* ---- the top bar, stood on its end ---- */
+  body.layout-studio #topbar {
+    flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: 10px; padding: 12px 6px;
+    border-bottom: 0; border-right: 1px solid var(--line);
+    background: linear-gradient(90deg, #161a21, #12151b);
+  }
+  /* the wordmark can't fit 60px, so keep the ▶ and drop the text (the version pill still fits) */
+  body.layout-studio .brand { flex-direction: column; gap: 4px; font-size: 0; line-height: 1; }
+  body.layout-studio .brand::before { content: "▶"; font-size: 18px; color: var(--accent); }
+  body.layout-studio .brand .ver { font-size: 8.5px; padding: 1px 5px; }
+  body.layout-studio .top-actions { flex-direction: column; align-items: center; gap: 9px; width: 100%; }
+  body.layout-studio .top-actions .spacer { display: none; }
+  /* Export keeps its accent and icon but loses the label — it is still the only green thing here. */
+  body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; margin-top: auto; }
+
+  /* The project name has nowhere to live in a 60px rail, so it floats over the stage's top-left —
+     same input, same handlers, just repositioned. */
+  body.layout-studio .proj-name {
+    position: fixed; top: 10px; left: calc(var(--rail-w) + 14px);
+    width: 220px; z-index: 30;
+  }
+
+  /* the inspector now borders the timeline on its right, and both sit under the stage */
+  body.layout-studio #inspector-panel { border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
+  body.layout-studio #timeline-panel  { border-top: 1px solid var(--line); }
+  /* the drag handle should grab the whole band, not just the timeline half */
+  body.layout-studio #tl-resizer { left: calc(-1 * var(--insp-w)); }
 }
