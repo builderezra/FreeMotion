@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=249">
-<link rel="stylesheet" href="theme-glass.css?v=9">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=250">
+<link rel="stylesheet" href="theme-glass.css?v=10">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -44,17 +44,35 @@
       if (skip && window.matchMedia && matchMedia('(hover: hover)').matches) skip.textContent = 'click to skip';
       sp.classList.remove('hidden');
       var gone = false;
-      function dismiss() {
+      // Two speeds, deliberately (v4.92). Ezra: "before the transition ends, make the background go
+      // from black to fade in with the new background design… instead of it feeling like it just goes
+      // from the intro to cutting in, it's a smooth transition."
+      //   - NATURAL end: start fading while the mark is still settling (see the timeupdate handler
+      //     below) and take ~900ms, so the black thins out and the home backdrop blooms up THROUGH
+      //     it. The video is left playing under the fade — pausing froze the last frame mid-dissolve.
+      //   - CUT (tap to skip, a video error, the hard cap): 280ms and the video stops. Making someone
+      //     wait a second after they asked to skip is worse than the cut ever was.
+      function dismiss(quick) {
         if (gone) return; gone = true;
-        try { vid.pause(); } catch (e) {}
+        if (quick) { try { vid.pause(); } catch (e) {} sp.classList.add('splash-cut'); }
         sp.classList.add('splash-out');
-        setTimeout(function () { sp.remove(); }, 380);
+        // home.js holds its entry animation until this fires, so the cards arrive as the black
+        // thins out instead of playing to nobody behind a still-opaque splash (measured: the whole
+        // stagger used to be over 200ms before the fade even started).
+        try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
+        setTimeout(function () { sp.remove(); }, quick ? 320 : 1000);
       }
-      vid.addEventListener('ended', dismiss);
-      vid.addEventListener('error', dismiss);
-      sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(); });
-      setTimeout(dismiss, 5000);            // hard cap — nothing holds the editor hostage
+      // Begin the hand-off BEFORE the last frame, not on it. `ended` stays as the backstop for a
+      // video whose duration never resolves (streaming, or a metadata-less file).
+      vid.addEventListener('timeupdate', function () {
+        var d = vid.duration;
+        if (d && isFinite(d) && d - vid.currentTime <= 0.9) dismiss();
+      });
+      vid.addEventListener('ended', function () { dismiss(); });
+      vid.addEventListener('error', function () { dismiss(true); });
+      sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
+      setTimeout(function () { dismiss(true); }, 5000);            // hard cap — nothing holds the editor hostage
       // NO poster attribute on the <video>: iOS renders its own play control over a video that has a
       // poster and is not playing, and with a 2.8MB file that state can last the whole splash. The
       // still is a separate <img> underneath instead, and the video only fades in once it is really
@@ -73,7 +91,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.91</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.92</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -225,7 +243,10 @@
            ON the chrome rather than in a black box. The ▶ mark stays as text beside it: it is the one
            part that still has to work at tiny sizes (the Studio rail shows only the ▶). alt carries
            the name so the header is still readable if the image ever fails to load. -->
-      <div class="hm-brand"><span class="hm-brand-mark">▶</span><img class="hm-brand-img" src="brand-wordmark.png?v=2" alt="FreeMotion" decoding="async"></div>
+      <!-- The wrapper exists so the glint has something to sit on: you cannot give an <img> a
+           pseudo-element, and the sheen has to be MASKED by the wordmark's own alpha or the band
+           would show in the gaps between the letters instead of travelling through them. -->
+      <div class="hm-brand"><span class="hm-brand-mark">▶</span><span class="hm-brand-wm"><img class="hm-brand-img" src="brand-wordmark.png?v=2" alt="FreeMotion" decoding="async"><span class="hm-brand-glint" aria-hidden="true"></span></span></div>
       <button class="hm-search-btn" id="hm-search-btn" aria-label="Search projects" aria-controls="hm-searchbar" aria-expanded="false" title="Search by name or date">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.4" y1="15.4" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
@@ -472,7 +493,7 @@
   <script src="js/history.js?v=25"></script>
   <script src="js/storage.js?v=86"></script>
   <script src="js/medialib.js?v=3"></script>
-  <script src="js/home.js?v=103"></script>
+  <script src="js/home.js?v=104"></script>
   <script src="js/graph-editor.js?v=108"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

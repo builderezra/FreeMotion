@@ -17,7 +17,12 @@
   .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
   .err { color: #c98; font-size: 12px; }
   .item { color: #6a7488; }
-  iframe { display: none; }
+  /* Parked off-screen, NOT display:none. Two tests measure real on-screen geometry (the preview's
+     size vs its backing store, and the edit-points overlay's hit area), and a display:none subtree
+     gives every element a 0x0 box — so those two could only ever report "no size to compare" and the
+     suite sat permanently at 19/21 for a reason that had nothing to do with the app. A real 900x760
+     box off the left edge is invisible and measurable. */
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
   .note { color: #6a7488; font-size: 11.5px; margin-top: 14px; }
 </style>
 </head>

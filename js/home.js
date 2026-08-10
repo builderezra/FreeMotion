@@ -630,6 +630,7 @@ window.FM = window.FM || {};
   }
 
   let shownIds = [];   // project ids visible in the grid right now (search-aware; Select-all uses it)
+  let introShown = false, introPending = false, introTimer = 0;   // the once-per-session entry stagger (see stampIntro)
   // A tick only counts while you can SEE the card. Without this, selecting three projects and then
   // typing a search would leave "3 selected" on the bar and Delete would take three projects that
   // are no longer on screen — the exact surprise the Select-all guard exists to prevent.
@@ -715,6 +716,78 @@ window.FM = window.FM || {};
       list.forEach(e => grid.appendChild(elementCard(e)));
     }
     renderSelBar();
+    if (introPending) { introPending = false; stampIntro(); }
+  }
+
+  /* First-open entry animation (v4.92). Ezra: "when all the projects and things on screen are loading
+   * for the first time after the transition, they load by fading in from bottom to top, don't do like
+   * a wave transition that effects everything but every individual project and then option fades in."
+   *
+   * So the delay is stamped per ELEMENT rather than animating one container — the top-bar buttons
+   * first, then the tabs, then each card, then the + last, each on its own beat. Reading order, which
+   * is also the order they'd assemble if you were building the screen by hand.
+   *
+   * The step is capped at 14 items: a 40-project library on a 55ms step would take 2.2s to finish
+   * arriving, and by then it stops reading as an entrance and starts reading as a slow app. Past the
+   * cap everything shares the last beat, which off-screen cards do anyway.
+   *
+   * Delay goes in a style attribute rather than an nth-child rule because the count is unknown and
+   * the cards are rebuilt on every render — CSS can't see how many there are. */
+  /* WHEN the entry plays, as opposed to what it does.
+   *
+   * On a cold launch the splash video covers the screen for ~3s, and home.open() runs the moment the
+   * scripts finish — so the first version of this played the entire stagger behind an opaque splash
+   * and was finished 200ms BEFORE the dissolve even started (measured: intro done at t=2101ms, fade
+   * began at t=2281ms). Nobody ever saw it. It now waits for the splash's own dismiss event and
+   * starts 150ms into the dissolve, while the black is still ~95% up — so the cards rise in through
+   * the clearing black rather than being revealed already in place.
+   *
+   * No splash (same-session reload, reduced motion, a skipped launch) → run immediately.
+   * The 6s fallback covers a splash that is torn down some other way; go() is idempotent. */
+  function armIntro() {
+    if (!root) return;
+    let ran = false;
+    const go = () => {
+      if (ran || !root) return;
+      ran = true;
+      root.classList.add('hm-intro');
+      // stamp directly rather than re-rendering: the cards are already built, and a rebuild would
+      // re-read every thumbnail out of IndexedDB for nothing
+      stampIntro();
+    };
+    if (!document.getElementById('splash')) { introPending = true; return; }   // render() will stamp
+    document.addEventListener('fm:splash-dismiss', () => setTimeout(go, 150), { once: true });
+    setTimeout(go, 6000);
+  }
+
+  function stampIntro() {
+    if (!root) return;
+    const seq = [];
+    root.querySelectorAll('.hm-top > *').forEach(n => seq.push(n));
+    root.querySelectorAll('.hm-tabs > *').forEach(n => seq.push(n));
+    if (grid) Array.prototype.forEach.call(grid.children, n => seq.push(n));
+    const step = 0.055, cap = 14;
+    seq.forEach((n, i) => {
+      n.classList.add('hm-in');
+      n.style.animationDelay = (0.05 + Math.min(i, cap) * step).toFixed(3) + 's';
+    });
+    const fab = document.getElementById('hm-new');
+    if (fab) {
+      fab.classList.add('hm-in-fab');
+      fab.style.animationDelay = (0.05 + Math.min(seq.length, cap + 1) * step).toFixed(3) + 's';
+    }
+    // Strip the whole thing once it has played. The class is what arms the animation, so leaving it
+    // on would restage the screen on every tab switch and every search keystroke. 2s is past the
+    // longest possible finish (0.05 + 15×0.055 delay + 0.55 duration ≈ 1.43s).
+    clearTimeout(introTimer);
+    introTimer = setTimeout(() => {
+      if (!root) return;
+      root.classList.remove('hm-intro');
+      root.querySelectorAll('.hm-in, .hm-in-fab').forEach(n => {
+        n.classList.remove('hm-in', 'hm-in-fab');
+        n.style.animationDelay = '';
+      });
+    }, 2000);
   }
 
   // Search bar show/hide. Closing always clears the query so reopening Home is never mysteriously filtered.
@@ -898,6 +971,9 @@ window.FM = window.FM || {};
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
       FM.projects.touchCurrent(true);   // fresh thumbnail for the card
       if (selectMode) { selectMode = false; selected.clear(); }
+      // First open of the session only — this is the arrival, not a screen you keep re-entering.
+      const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!introShown && !reduce) { introShown = true; armIntro(); }
       tab = 'projects';       // set BEFORE toggleSearch: clearing a live query re-renders, and doing that on a stale 'templates' tab built a grid we immediately throw away
       toggleSearch(false);    // Home always opens on the full library, never a stale filter
       // one-time: lift legacy inline thumbs out of the index into IDB, then re-render so cards refill

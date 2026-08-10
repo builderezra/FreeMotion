@@ -93,11 +93,28 @@ html[data-theme="glass"] .addmenu-tab.active {
   box-shadow: inset 0 1px 0 var(--glass-rim), 0 4px 16px rgba(90, 199, 237, .14);
 }
 
-/* Home + editor bars: translucent, but NO backdrop blur over the canvas (see header note). */
-html[data-theme="glass"] .hm-top,
+/* Editor bars: translucent, but NO backdrop blur over the canvas (see header note). */
 html[data-theme="glass"] #topbar,
 html[data-theme="glass"] .m-topbar {
   background: linear-gradient(180deg, rgba(10, 20, 26, .92), rgba(10, 20, 26, .74));
+  border-bottom: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 var(--glass-rim-soft);
+}
+
+/* The HOME top row is split out of that rule (v4.92). Ezra: "make the top row in the home menu look
+   less like a solid bar and actually just translucent but slightly darkening the background, still
+   separating it from what's below but keep the new Background design present on the whole screen."
+   At .92→.74 alpha it was effectively opaque and cut the gradient backdrop off at a hard line, so the
+   home screen read as two designs stacked. Now it's a thin darkening wash over a real backdrop blur:
+   the pools carry straight through the bar, and the separation comes from the blur plus the hairline
+   rule rather than from hiding what's behind.
+   The blur is affordable HERE and not on the editor bars for one reason: those sit over the canvas,
+   where a backdrop-filter forces a full readback of the composited frame on every repaint — 60 times
+   a second during playback. Behind this bar there is only a static gradient. */
+html[data-theme="glass"] .hm-top {
+  background: rgba(6, 14, 19, .38);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
   border-bottom: 1px solid var(--line-soft);
   box-shadow: inset 0 1px 0 var(--glass-rim-soft);
 }
@@ -124,113 +141,89 @@ html[data-theme="glass"] .hm-search-btn.on {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 4px 18px rgba(90, 199, 237, .28);
 }
 
-/* ---- the + button: a glass bead, lit from above ---------------------------------------------
-   Layered, in paint order: an outer coloured glow, the body gradient, a specular arc across the
-   top, and a bright inner rim. The glyph sits above all of it. */
+/* ---- the home + button -----------------------------------------------------------------------
+   v4.92: the painted bead is GONE. This button is now Ezra's glass orb render (same artwork as the
+   editor's + FAB), and every layer the bead used fought it — inset rims drew a hard edge around a
+   circle whose real rim is in the image, the gradient fill covered a middle that is deliberately
+   see-through, and backdrop-filter blurred the page behind an already-opaque render. What's left is
+   motion and the light it throws: the artwork is the material. */
 html[data-theme="glass"] #hm-new {
-  /* A LENS, not a bead: the material is translucent and samples what's behind it, so the button
-     picks up the page instead of sitting on top of it as a solid disc. Tint is faint — the colour
-     comes from the light it throws, not from filling it in. */
-  background:
-    radial-gradient(85% 62% at 50% 6%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 62%),
-    linear-gradient(180deg, rgba(139, 222, 246, .92), rgba(47, 157, 198, .74));
-  -webkit-backdrop-filter: saturate(190%) blur(14px) brightness(1.15);
-  backdrop-filter: saturate(190%) blur(14px) brightness(1.15);
-  color: #04222f;                                      /* dark glyph — highest contrast on a lit lens */
+  background: url('fab-plus.png?v=2') center / contain no-repeat;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .75),            /* the rim where light lands, top only */
-    inset 0 0 0 1px rgba(188, 230, 239, .22),          /* the glass edge all the way round */
-    inset 0 -10px 18px -8px rgba(3, 24, 34, .55),      /* thickness: the body curving away underneath */
-    0 12px 30px rgba(90, 199, 237, .22),               /* colour thrown onto the ground, softly */
-    0 4px 14px rgba(0, 0, 0, .5);
-  transition: transform .18s cubic-bezier(.3, .8, .3, 1), box-shadow .18s ease, background .18s ease;
+  /* the only shadow left is the colour it throws — outer-only, so it can't reach the + cut-out */
+  box-shadow: 0 0 22px rgba(90, 199, 237, .32);
+  transition: transform .18s cubic-bezier(.3, .8, .3, 1), filter .18s ease, box-shadow .18s ease;
 }
 html[data-theme="glass"] #hm-new:hover {
   transform: translateX(-50%) translateY(-2px);
-  background:
-    radial-gradient(85% 62% at 50% 6%, rgba(255, 255, 255, .66), rgba(255, 255, 255, 0) 62%),
-    linear-gradient(180deg, rgba(154, 230, 250, .96), rgba(58, 173, 214, .80));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .72),
-    inset 0 0 0 1px rgba(188, 230, 239, .30),
-    inset 0 -10px 18px -8px rgba(3, 24, 34, .55),
-    0 18px 40px rgba(90, 199, 237, .30),
-    0 5px 16px rgba(0, 0, 0, .5);
+  filter: var(--glass-edge) drop-shadow(0 16px 34px rgba(0, 0, 0, .55)) brightness(1.06);
+  box-shadow: 0 0 30px rgba(90, 199, 237, .42);
 }
 html[data-theme="glass"] #hm-new:active {
   transform: translateX(-50%) translateY(1px) scale(.955);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .45),
-    inset 0 0 0 1px rgba(188, 230, 239, .22),
-    inset 0 -6px 14px -6px rgba(3, 24, 34, .6),
-    0 6px 18px rgba(90, 199, 237, .18);
+  filter: var(--glass-edge) drop-shadow(0 6px 14px rgba(0, 0, 0, .5)) brightness(.94);
+  box-shadow: 0 0 14px rgba(90, 199, 237, .24);
 }
-/* A slow highlight drifting across the glass — the one moving thing, and it's barely there.
-   overflow:hidden is what keeps it INSIDE: the sheen is a full-size layer that slides past the
-   button's edges, so unclipped it read as a streak floating outside the circle. Clipping it to the
-   rounded box means the highlight travels across the glass and disappears at the rim, like light
-   crossing a real lens. (Outer box-shadows are unaffected — overflow only clips children.) */
+/* ---- the travelling sheen, shared by both orbs ------------------------------------------------
+   The home + and the editor's + FAB are the SAME artwork now, so they get one rule instead of two
+   slightly different ones that shimmered out of step.
+
+   MASKED BY THE ARTWORK, and that is the fix (v4.92). The sheen is a child painted on top of the
+   button, and the orb's + is transparent in the PNG — so a plain white band swept straight THROUGH
+   the cut-out and lit the plus up like a solid glyph for half of every cycle. (That's why the plus
+   looked filled in some screenshots and see-through in others: it depended purely on where the band
+   happened to be.) Masking the sheen with the same PNG confines it to the glass body, which is also
+   what light actually does — it reflects off the material, it doesn't pour through the hole.
+
+   The band therefore has to travel by BACKGROUND-POSITION, not transform: a transform moves an
+   element's mask along with it, so the sheen and its mask would slide together and nothing would
+   appear to move at all. Repainting a 58px box is nothing.
+
+   overflow + border-radius below are the backstop for a browser that drops the mask — the highlight
+   still can't escape the circle, which is what stopped it painting a square panel around the orb. */
 html[data-theme="glass"] #hm-new,
 html[data-theme="glass"] #add-fab { overflow: hidden; }
-html[data-theme="glass"] #hm-new::after {
+html[data-theme="glass"] #hm-new::after,
+html[data-theme="glass"] #add-fab::after {
   content: '';
-  position: absolute;
-  /* DOUBLE the button's size and centred on it. The mask (overflow:hidden above) is what shapes the
-     highlight; this layer just has to be big enough that a FULL-WIDTH band is always inside the
-     circle mid-sweep. Sized to the button, the clip left only a sliver visible. */
-  top: -50%; left: -50%;
-  width: 200%; height: 200%;
-  background: linear-gradient(115deg,
+  position: absolute; inset: 0;
+  background: linear-gradient(102deg,
     transparent 34%,
-    rgba(255, 255, 255, .10) 42%,
-    rgba(255, 255, 255, .38) 50%,
-    rgba(255, 255, 255, .10) 58%,
+    rgba(255, 255, 255, .10) 43%,
+    rgba(255, 255, 255, .40) 50%,
+    rgba(255, 255, 255, .10) 57%,
     transparent 66%);
-  animation: glass-sheen 7s linear infinite;
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  -webkit-mask: url('fab-plus.png?v=2') center / contain no-repeat;
+          mask: url('fab-plus.png?v=2') center / contain no-repeat;
+  animation: orb-sheen 6.4s ease-in-out infinite;
   pointer-events: none;
 }
-/* Travel is ±100% of the layer, i.e. its FULL width each way. At both ends the entire layer sits
-   clear of the button, so the band has completely left the glass before the loop resets — nothing
-   to cut out. (±40% only moved the band's CENTRE past the edge; the band is ~50px wide, so a third
-   of it was still on the button when the animation snapped back, which read as the glint being
-   switched off mid-motion.) linear, not ease-in-out: a glint that decelerates looks like it stalls. */
-@keyframes glass-sheen {
-  0%, 82% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+/* It rests for most of the loop and then crosses, rather than sweeping continuously — a light that
+   never stops moving reads as a loading spinner. Both ends put the band fully clear of the orb, so
+   nothing is cut off when the loop restarts. */
+@keyframes orb-sheen {
+  0%, 66% { background-position: -90% 0; }
+  100%    { background-position: 190% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  html[data-theme="glass"] #hm-new::after { animation: none; opacity: .18; transform: none; }
+  html[data-theme="glass"] #hm-new::after,
+  html[data-theme="glass"] #add-fab::after { animation: none; opacity: .16; }
 }
 
 /* The add FAB is Ezra's glass orb render (v4.89), so it no longer wants the painted bead: the artwork
    already IS the glass, and the old inset shadows / backdrop-filter assumed a solid fill — they drew a
-   bead edge around a button whose middle is deliberately see-through. The orb's + is cut to
-   transparent, so whatever is behind the button shows through it.
-   The SHINE stays (Ezra asked for it explicitly): the sweeping highlight below is a child layer, and
-   overflow:hidden above still clips it to the button, so light travels across the glass and vanishes
-   at the rim exactly as before. Outer glow is kept too — just no inner bead. */
+   bead edge around a button whose middle is deliberately see-through. */
 html[data-theme="glass"] #add-fab {
   background: url('fab-plus.png?v=2') center / contain no-repeat;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  box-shadow: none;
-  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, .55)) drop-shadow(0 0 16px rgba(120, 220, 255, .16));
+  box-shadow: 0 0 20px rgba(90, 199, 237, .3);
+  filter: var(--glass-edge) drop-shadow(0 8px 20px rgba(0, 0, 0, .55));
 }
-/* the travelling sheen, same treatment the other glass buttons get */
-html[data-theme="glass"] #add-fab::after {
-  content: '';
-  position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-  background: linear-gradient(74deg, transparent 42%, rgba(255,255,255,.34) 50%, transparent 58%);
-  transform: translateX(-38%);
-  animation: fab-sheen 5.2s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes fab-sheen {
-  0%, 62% { transform: translateX(-38%); }
-  86%, 100% { transform: translateX(38%); }
-}
-@media (prefers-reduced-motion: reduce) { html[data-theme="glass"] #add-fab::after { animation: none; opacity: .18; } }
 
 /* Accent-filled controls pick up the same crown highlight, so they read as one family. */
 html[data-theme="glass"] .btn-accent,

@@ -19,6 +19,30 @@
   --radius: 10px;
   --radius-sm: 7px;
   --head-w: 104px;   /* timeline track-head: eye + thumb + solo (the NAME is on the clip now, not here) */
+  /* ---- Liquid-glass edge light (v4.92) --------------------------------------------------------
+   * Ezra: "for the create button and for the open button… for the outline on the outside and for the
+   * cutouts on the inside give them the Liquid Glass type effect you do for everything else."
+   *
+   * These buttons are PNG renders, so an inset box-shadow can't touch them — it would ring the square
+   * element, not the artwork. drop-shadow() can, because it is computed from the element's ALPHA: one
+   * filter therefore lights the outer rim AND the inside of every cut-out (the + in the FAB, the
+   * letters in the OPEN badge), which is exactly how a real glass edge behaves.
+   *
+   * Blurs stay TIGHT, and that is the whole constraint. The FAB's + is only ~6px wide on a phone, and
+   * a drop-shadow can't tell an outer edge from the edge of a hole — measured at 3.2x zoom, a 9px
+   * ambient pass at .22 alpha filled the plus solid and destroyed the see-through cut Ezra asked for
+   * two versions ago ("make sure the plus in the middle is actually cropped out and you can see
+   * under"). So the ambient glow is NOT in here: it's an outer box-shadow on the round buttons, which
+   * paints outside the border box only and can never reach a cut-out. What's left is 0.5px of
+   * specular hairline and a 1.8px close bloom — enough to rim the plus without closing it. */
+  --glass-edge:
+    drop-shadow(0 0 0.5px rgba(226, 247, 255, .85))
+    drop-shadow(0 0 1.8px rgba(150, 225, 255, .45));
+  /* Same idea at badge scale. The OPEN lettering is ~3px tall, so even the 2.5px pass would swallow
+     the counters in the O and P — everything here is sub-pixel-to-1.6px. */
+  --glass-edge-sm:
+    drop-shadow(0 0 0.5px rgba(226, 247, 255, .9))
+    drop-shadow(0 0 1.6px rgba(150, 225, 255, .45));
 }
 
 * { box-sizing: border-box; }
@@ -888,7 +912,14 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   opacity: 1; transition: opacity .35s ease;
 }
 #splash.hidden { display: none; }
-#splash.splash-out { opacity: 0; }   /* keeps swallowing pointer/ghost-click events while fading — pointer-events:none let the post-touch synthesized click punch through to editor controls */
+/* keeps swallowing pointer/ghost-click events while fading — pointer-events:none let the post-touch
+   synthesized click punch through to editor controls.
+   The long curve (v4.92) is the hand-off into the home screen: the fade now STARTS ~0.9s before the
+   video's last frame (index.html), so black and the home backdrop overlap for most of a second
+   instead of swapping. ease-out would dump most of the opacity in the first 200ms and still read as a
+   cut; this curve holds the black up front and lets it thin out slowly. */
+#splash.splash-out { opacity: 0; transition: opacity .9s cubic-bezier(.45, 0, .55, 1); }
+#splash.splash-out.splash-cut { transition: opacity .28s ease; }   /* asked to skip → don't make them wait for the dissolve */
 #splash video, #splash-poster { position: absolute; }
 #splash-vid, #splash-poster {
   left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -1577,22 +1608,30 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   /* The FAB is Ezra's glass orb (v4.89). Its + is CUT THROUGH to transparent — the source render has
      the plus in the same black as its backdrop, so one luminance key punched out both and left the
      bevel — which means whatever is behind the button shows through the plus. That only works if the
-     button itself has no fill of its own, hence background:none and no border-radius ring: the orb IS
-     the shape. The old SVG glyph is hidden rather than removed so the button keeps its accessible
-     name and nothing else has to change. */
+     button itself has no fill of its own, hence background:none: the orb IS the shape. The old SVG
+     glyph is hidden rather than removed so the button keeps its accessible name. */
   #add-fab {
     display: flex; align-items: center; justify-content: center;
     position: fixed; right: 16px; bottom: 20px; z-index: 61;
-    /* 74px, not the old 54: the artwork is a heavily faceted glass sphere and at ~60px the facets,
-       concentric rings and iridescent rim all average out into a plain glossy disc — it stops
-       looking like the render it came from. This is the smallest size the glass still reads at. */
-    width: 74px; height: 74px; border: none; cursor: pointer; padding: 0;
+    /* 58px (v4.92). It was 74 so the render's facets wouldn't average out into a plain glossy disc,
+       but at that size it dominated the timeline — Ezra: "make it smaller coz the design looks funny
+       when it's so big". The edge light below is what carries the glass now, so the artwork's own
+       detail no longer has to do it alone. */
+    width: 58px; height: 58px; border: none; cursor: pointer; padding: 0;
+    /* border-radius is structural here, not decoration: the sheen (theme-glass.css) is a child layer
+       clipped by overflow:hidden, so with square corners it painted a faint SQUARE panel around the
+       round orb — the "square box" Ezra saw in the screenshot. 50% makes that clip follow the rim. */
+    border-radius: 50%;
     background: url('fab-plus.png?v=2') center / contain no-repeat;
-    filter: drop-shadow(0 6px 18px rgba(0,0,0,.55));
+    filter: var(--glass-edge) drop-shadow(0 6px 18px rgba(0,0,0,.55));
+    /* the colour the glass throws. A box-shadow, not a third drop-shadow, precisely because it
+       follows the BORDER BOX (a circle here) and paints only outside it — so the + stays open. */
+    box-shadow: 0 0 20px rgba(90, 199, 237, .3);
     -webkit-tap-highlight-color: transparent;
   }
   #add-fab svg { display: none; }
-  #add-fab:active { filter: brightness(.92); transform: translateY(1px); }
+  /* the edge has to be repeated here — `filter` is one property, so a bare brightness() would drop it */
+  #add-fab:active { filter: var(--glass-edge) drop-shadow(0 4px 10px rgba(0,0,0,.5)) brightness(.92); transform: translateY(1px); }
 
   /* AM has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */
   #insp-toggle { display: none; }
@@ -1726,7 +1765,8 @@ body.hm-selecting .hm-card { touch-action: none; }
   position: absolute; top: 5px; left: 5px;
   width: 33px; height: 22px; padding: 0; border-radius: 0;
   font-size: 0; color: transparent; background: url('open-badge.png?v=1') center / contain no-repeat;
-  filter: drop-shadow(0 1px 3px rgba(0,0,0,.55));
+  /* the edge light lands on the pill's outline AND inside the cut letters — at badge scale (v4.92) */
+  filter: var(--glass-edge-sm) drop-shadow(0 1px 3px rgba(0,0,0,.55));
 }
 .hm-body { flex: 1; min-width: 0; }
 .hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1749,10 +1789,14 @@ body.hm-selecting .hm-card { touch-action: none; }
 .hm-selbtn { padding: 8px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
 .hm-selbtn:disabled { opacity: .4; cursor: default; }
 .hm-selbtn.danger { background: #e0313122; border-color: #e0313166; color: #ff8a8a; }
-/* The glyph is an SVG and the box is a flex centre, so the + lands on the button's exact centre on
-   every device. As a text character it rode the resolved font's line box and sat visibly low. */
-#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 62px; height: 62px; border-radius: 50%; border: none; background: var(--accent); color: #0b0e14; cursor: pointer; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); -webkit-tap-highlight-color: transparent; }   /* centred like AM's + */
-#hm-new svg { width: 28px; height: 28px; display: block; }
+/* The home Create button is the SAME glass orb as the editor's + FAB (v4.92). Ezra: "the create
+   button still is the old design in the main menu, I think you forgot it's gotta be done there too."
+   It was — this one still had the flat accent disc. Everything the FAB does applies here: the orb's +
+   is cut through to transparent so the backdrop shows in it, which means the button can carry no fill
+   of its own; border-radius:50% keeps the sheen (theme-glass.css) clipped to the rim instead of a
+   square; and the SVG glyph is hidden, not removed, so the accessible name survives. */
+#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; background: url('fab-plus.png?v=2') center / contain no-repeat; color: transparent; cursor: pointer; filter: var(--glass-edge) drop-shadow(0 10px 24px rgba(0, 0, 0, .5)); box-shadow: 0 0 22px rgba(90, 199, 237, .32); -webkit-tap-highlight-color: transparent; }   /* centred like AM's +; the ambient glow is a box-shadow so it can't reach the + cut-out */
+#hm-new svg { display: none; }
 #hm-dialog { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
 #hm-dialog.hidden { display: none; }
 /* the card is a column so the options scroll while the title + Create row stay put on a phone */
@@ -2166,6 +2210,37 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    of being clipped by .hm-brand's overflow:hidden — at 375px the four action buttons and their gaps
    take ~242px of the 375, so the wordmark has ~108px to live in and must scale to fit. */
 .hm-brand-img { height: 24px; width: auto; max-width: 100%; object-fit: contain; display: block; min-width: 0; }
+/* The wrapper has to shrink exactly the way the bare <img> used to, or the 375px clipping bug comes
+   straight back: it is the flex item now, so it carries min-width:0 + flex-shrink, and the image's
+   max-width:100% then resolves against the shrunken wrapper. It wraps the image tightly (inline-flex,
+   no padding), which is what lets the glint's mask line up with the artwork by geometry alone. */
+.hm-brand-wm { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; }
+/* Glint (v4.92). Ezra: "make the FreeMotion text have a slight glint to it, so it's like shining like
+   how you used to have the create button in the home menu do, and add a very slight amount of
+   movement to the glint so it doesn't look stale."
+   The mask is the wordmark itself, so the highlight only exists ON the letters — an unmasked band
+   would sweep across the empty space between them and read as a rectangle passing over the logo.
+   The band is a child and moves by transform, so the mask stays put while the light travels
+   (a transform on the masked element would drag its mask along and nothing would move at all). */
+.hm-brand-glint {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  -webkit-mask: url('brand-wordmark.png?v=2') center / contain no-repeat;
+          mask: url('brand-wordmark.png?v=2') center / contain no-repeat;
+}
+.hm-brand-glint::after {
+  content: ''; position: absolute; top: -30%; bottom: -30%; left: -34%; width: 26%;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .72), rgba(255, 255, 255, 0));
+  transform: translateX(0) skewX(-14deg);
+  animation: hm-wm-glint 6.4s cubic-bezier(.5, 0, .5, 1) infinite;
+}
+/* It rests for two thirds of the cycle and then crosses — a band that swept continuously would be a
+   distraction in a header you look at every launch. 520% of the band's own 26% width carries it from
+   just off the left edge to just past the right. */
+@keyframes hm-wm-glint {
+  0%, 68% { transform: translateX(0) skewX(-14deg); }
+  100%    { transform: translateX(520%) skewX(-14deg); }
+}
+@media (prefers-reduced-motion: reduce) { .hm-brand-glint { display: none; } }
 @media (max-width: 700px) {
   /* the ▶ costs ~25px of a very tight row and the wordmark already reads as the brand — drop it here */
   .hm-brand-mark { display: none; }
@@ -2210,3 +2285,40 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   to   { transform: translate3d(4%, -3%, 0) scale(1.06); }
 }
 @media (prefers-reduced-motion: reduce) { #home-screen::after { animation: none; } }
+
+/* ---------------- Home entry (v4.92) ----------------
+ * Two requests, one sequence.
+ *
+ * 1. "make the background go from black to fade in with the new background design." #home-screen's
+ *    own fill is already near-black (--bg #0e1320) and the splash is pure #000, so blooming just the
+ *    gradient POOLS in is literally black → the design. It runs under the splash's own dissolve, so
+ *    what you see is the colour arriving as the black clears rather than being there behind it.
+ * 2. "they load by fading in from bottom to top, don't do like a wave transition that effects
+ *    everything but every individual project and then option fades in." So this is per-ELEMENT, not
+ *    one transform on a container: home.js stamps .hm-in and its own animation-delay on each top-bar
+ *    button, each tab, each card, then the + — every one rises on its own beat.
+ *
+ * Both are scoped to .hm-intro, which home.js adds for the first open of a session and strips ~2s
+ * later. Leaving it on would restage the whole screen every time you switched tabs.
+ *
+ * fill mode is BACKWARDS, not both: `both` would pin the finished transform to the keyframe's value,
+ * and #hm-new is centred with translateX(-50%) — forwards-filling `transform: none` onto it would
+ * shove the button half its width off centre the moment the animation ended. */
+@keyframes hm-bloom { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hm-rise {
+  from { opacity: 0; transform: translateY(15px); }
+  to   { opacity: 1; transform: none; }
+}
+/* the + keeps its centring transform in BOTH keyframes — it is layout, not animation */
+@keyframes hm-rise-fab {
+  from { opacity: 0; transform: translateX(-50%) translateY(18px) scale(.86); }
+  to   { opacity: 1; transform: translateX(-50%); }
+}
+#home-screen.hm-intro::before { animation: hm-bloom 1.15s ease-out backwards; }
+#home-screen.hm-intro::after  { animation: hm-bloom 1.7s ease-out backwards, hm-drift 48s ease-in-out infinite alternate; }
+#home-screen.hm-intro .hm-in     { animation: hm-rise .5s cubic-bezier(.22, .9, .32, 1) backwards; }
+#home-screen.hm-intro .hm-in-fab { animation: hm-rise-fab .55s cubic-bezier(.22, .9, .32, 1) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  #home-screen.hm-intro::before, #home-screen.hm-intro::after,
+  #home-screen.hm-intro .hm-in, #home-screen.hm-intro .hm-in-fab { animation: none; }
+}
