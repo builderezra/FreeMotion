@@ -1,7 +1,7 @@
 # Next session — the live queue
 
 Read this first if the session starts with "keep going", "go", or a vague pick-up.
-Top to bottom is the order Ezra asked for. **v4.80, everything below is unbuilt.**
+Top to bottom is the order Ezra asked for. **v4.81, everything below is unbuilt.**
 
 Standing: Ezra is working on the **PC Studio layout** now — *"from now on going to be talking mainly
 about pcs studio layout, so just dont change the other versions layout."* Classic desktop and the
@@ -30,20 +30,14 @@ audio import fix below was one.)
 - **v4.79b — every diamond is now deletable.** animatedProps and deleteKeyframesAt cover the same
   containers; 12 of 28 keyframed props used to be undeletable. Test `delete-parity`.
 - **v4.80 — object motion blur fully moved into Effects** (card with Shutter/Samples/×; M&T checkbox deleted).
+- **v4.81 — Elements browser** with search (js/elements-browser.js); saved elements no longer loose in the tab.
 - **BUG-HUNT.md** — 74 findings, 69 confirmed, from a 22-agent hunt. Nothing in it is fixed yet.
 
 ---
 
 ## The queue
 
-### 1. Elements tab — a real browser, not a loose list
-*"make sure all the elements are grouped together and not siting loose in the same menu that holds
-camera and all that, you need to press a button that opens up a new menu that is like the effects
-menu but for your elements, and has search and all that."* So: Elements tab keeps Camera / Null /
-Adjustment / Empty group, and the user's saved elements move behind one button that opens a
-full browser modelled on `js/fx-browser.js` — grid, search, categories.
-
-### 2. Tiles effect — only repeats what's on the canvas
+### 1. Tiles effect — only repeats what's on the canvas
 *"if I move the clip off screen the tiles only duplicate what's on the actual screen/canvas."*
 Screenshot: `~/.claude/uploads/a8308134-d9f7-4702-8894-2d76d40f5bf3/3835f848-IMG_2372.PNG` — shows
 blank/partial tiles instead of the clip repeating. The tile source is being sampled from the composited
@@ -51,7 +45,7 @@ frame rather than from the layer's own plate, so anything outside the canvas is 
 This has been "fixed" twice before (v2.35-era gap, and "Tiles should repeat beyond the visible frame")
 — so verify the actual sampling source this time, don't trust the earlier fix.
 
-### 3. Freehand drawing is buggy and moves the canvas
+### 2. Freehand drawing is buggy and moves the canvas
 *"still really buggy and puts the canvas in a weird spot."* `js/draw-tool.js` plus the
 `body.drawing` CSS (which collapses `#app` to a single row). Needs reproducing and watching, not
 reading — and now also needs checking against the Studio layout, where the stage geometry differs.
