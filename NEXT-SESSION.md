@@ -1,7 +1,7 @@
 # Next session — the live queue
 
 Read this first if the session starts with "keep going", "go", or a vague pick-up.
-Top to bottom is the order Ezra asked for. **v4.82, everything below is unbuilt.**
+Top to bottom is the order Ezra asked for. **v4.83 — the queue is empty.**
 
 Standing: Ezra is working on the **PC Studio layout** now — *"from now on going to be talking mainly
 about pcs studio layout, so just dont change the other versions layout."* Classic desktop and the
@@ -32,16 +32,17 @@ audio import fix below was one.)
 - **v4.80 — object motion blur fully moved into Effects** (card with Shutter/Samples/×; M&T checkbox deleted).
 - **v4.81 — Elements browser** with search (js/elements-browser.js); saved elements no longer loose in the tab.
 - **v4.82 — Tiles repeats the whole clip off-canvas** (0% -> 100% lit; the call was gated on the canvas bbox).
+- **v4.83 — drawing mode no longer wrecks the Studio layout** (stage was collapsing 1140px -> 233px).
 - **BUG-HUNT.md** — 74 findings, 69 confirmed, from a 22-agent hunt. Nothing in it is fixed yet.
 
 ---
 
 ## The queue
 
-### 1. Freehand drawing is buggy and moves the canvas
-*"still really buggy and puts the canvas in a weird spot."* `js/draw-tool.js` plus the
-`body.drawing` CSS (which collapses `#app` to a single row). Needs reproducing and watching, not
-reading — and now also needs checking against the Studio layout, where the stage geometry differs.
+**Empty.** Everything Ezra queued on 2026-08-09/10 is shipped (v4.73 → v4.83). Next work comes
+from him, or from BUG-HUNT.md — 69 confirmed findings, none of them fixed yet beyond the handful that
+overlapped these items.
+
 
 ---
 
