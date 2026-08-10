@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>screen harness</title>
+<style>
+  html, body { margin: 0; background: #05070b; }
+  iframe { border: 0; display: block; }
+  #err { position: fixed; left: 0; bottom: 0; font: 12px monospace; color: #ff8; background: #300; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<iframe id="f" src="../index.html"></iframe>
+<div id="err" style="display:none"></div>
+<script>
+/* Dev-only. Puts the REAL app into a named screen at a named size so it can be shot headlessly and
+   looked at. Not linked from the app, not shipped.
+     ?do=<recipe>&w=380&h=800
+   Runs against a throwaway Chrome profile, so the recipes add their own content freely.
+   Animations are killed so two captures of the same screen are byte-comparable — a paused animation
+   stops wherever it happens to be, which already once looked exactly like a real rendering bug. */
+var q = new URLSearchParams(location.search);
+var W = +(q.get('w') || 1280), H = +(q.get('h') || 860), DO = q.get('do') || 'home';
+var f = document.getElementById('f');
+f.style.width = W + 'px'; f.style.height = H + 'px';
+
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function until(fn, ms) {
+  var t0 = Date.now();
+  while (Date.now() - t0 < (ms || 12000)) { try { if (fn()) return true; } catch (e) {} await sleep(60); }
+  return false;
+}
+
+var RECIPES = {
+  async home(W2) {},
+  async 'home-templates'(W2, d) { d.querySelector('.hm-tab[data-tab="templates"]').click(); await sleep(400); },
+  async 'home-elements'(W2, d) { d.querySelector('.hm-tab[data-tab="elements"]').click(); await sleep(400); },
+  async 'home-search'(W2, d) { d.getElementById('hm-search-btn').click(); await sleep(400); },
+  async editor(W2, d, FM) { await openEditor(d, FM); },
+  async 'editor-selected'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.selectLayer(FM.scene.layers[0].id); await sleep(500);
+  },
+  async 'add-menu'(W2, d, FM) { await openEditor(d, FM); FM.selectLayer(null); await sleep(600); },
+  async 'add-menu-shapes'(W2, d, FM) {
+    await openEditor(d, FM); FM.selectLayer(null); await sleep(500);
+    var t = d.querySelector('.addmenu-tab[data-key="shape"]'); if (t) t.click(); await sleep(400);
+  },
+  async 'fx-browser'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.selectLayer(FM.scene.layers[0].id); await sleep(400);
+    if (FM.fxBrowser && FM.fxBrowser.open) FM.fxBrowser.open(); await sleep(700);
+  },
+  async 'export-dialog'(W2, d, FM) { await openEditor(d, FM); FM.showExportDialog(); await sleep(500); },
+  async settings(W2, d, FM) { await openEditor(d, FM); if (FM.settings && FM.settings.open) FM.settings.open(); await sleep(600); },
+};
+
+async function openEditor(d, FM) {
+  var card = d.querySelector('.hm-card');
+  if (card) { card.click(); await until(function () { return !FM.home.isOpen(); }, 12000); }
+  await sleep(700);
+  // A believable working document: an empty project shows an empty timeline and an empty inspector,
+  // which tells you nothing about how the layout holds up.
+  if (FM.scene.layers.length < 3) {
+    FM.scene.layers.length = 0;
+    FM.scene.layers.push(FM.makeLayer('text', { name: 'Title', text: 'Your Big Idea', x: FM.scene.project.width / 2, y: FM.scene.project.height * 0.32, size: 96 }));
+    FM.scene.layers.push(FM.makeLayer('shape', { shape: 'circle', name: 'Circle', x: FM.scene.project.width * 0.34, y: FM.scene.project.height * 0.62, shapeW: 260, shapeH: 260, fill: '#5ac7ed' }));
+    FM.scene.layers.push(FM.makeLayer('shape', { shape: 'star', name: 'Star', x: FM.scene.project.width * 0.68, y: FM.scene.project.height * 0.66, shapeW: 220, shapeH: 220, fill: '#7a5cff' }));
+    FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'Bar', x: FM.scene.project.width / 2, y: FM.scene.project.height * 0.86, shapeW: 520, shapeH: 90, fill: '#29d9bb' }));
+    FM.refreshAll();
+  }
+  await sleep(600);
+}
+
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async function () {
+    var ok = await until(function () { return w.FM && w.FM.scene && w.FM.home; }, 15000);
+    if (!ok) return fail('FM never initialised');
+    var st = d.createElement('style');
+    st.textContent = '*,*::before,*::after{animation:none!important;transition:none!important}' +
+                     '#home-screen.hm-preintro > *{opacity:1!important}';
+    d.head.appendChild(st);
+    await sleep(500);
+    var r = RECIPES[DO];
+    if (!r) return fail('unknown recipe: ' + DO);
+    try { await r(W, d, w.FM); } catch (e) { return fail(DO + ' → ' + (e && e.message)); }
+    await sleep(500);
+  })();
+});
+function fail(m) { var e = document.getElementById('err'); e.style.display = ''; e.textContent = 'HARNESS: ' + m; }
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>glow candidate harness</title>
+<style>
+  html, body { margin: 0; background: #05070b; }
+  iframe { border: 0; display: block; }
+</style>
+</head>
+<body>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only harness (not shipped, not linked from the app).
+   Loads the REAL home screen in an iframe so a glow candidate is judged against the real backdrop,
+   the real translucent bar and the real wordmark artwork — not a reconstruction that could flatter it.
+   ?c=A   → also injects /tests/_glow-A.css over the app's own styles (that file is the candidate).
+   ?w/?h  → iframe size, so the same candidate can be shot at phone and desktop widths.
+   Animations are PINNED at the 50% keyframe (the brightest point of the 7s breathe) so two shots of
+   the same candidate are comparable — otherwise every capture lands on a different frame. */
+var q = new URLSearchParams(location.search);
+var cand = q.get('c') || '';
+var f = document.getElementById('f');
+f.style.width = (+(q.get('w') || 380)) + 'px';
+f.style.height = (+(q.get('h') || 300)) + 'px';
+f.addEventListener('load', function () {
+  var d = f.contentDocument;
+  var s = d.createElement('style');
+  s.textContent =
+    '.hm-brand-halo,.hm-brand-glint,.hm-brand-wm::before,.hm-brand-wm::after,.hm-brand-img{' +
+      'animation-delay:-3.5s!important;animation-play-state:paused!important}' +
+    // The backdrop's 48s drift must be KILLED, not merely paused: paused stops it wherever it
+    // happens to be when this style lands, so two captures of the same page disagreed by ~10 levels
+    // of green across the whole bar — which reads exactly like the candidate dimming the backdrop.
+    '#home-screen::before,#home-screen::after{animation:none!important}' +
+    '#home-screen.hm-intro *{animation:none!important}';
+  d.head.appendChild(s);
+  if (cand) {
+    var l = d.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = '/tests/_glow-' + cand + '.css?t=' + Math.random();
+    d.head.appendChild(l);
+  }
+});
+</script>
+</body>
+</html>
