@@ -132,7 +132,7 @@ window.FM = window.FM || {};
     const l = layer(); if (!l) return null;
     const ss = subsOf(l)[sel.si], sp = ss && ss[sel.pi];
     if (!sp || sp[2] !== 1) return null;
-    const pt = evtToCanvas(e), thr = 13 / dispScale();
+    const pt = evtToCanvas(e), thr = (hitPx(e) - 1) / dispScale();
     const pc = toCanvas(l, sp[0], sp[1]);
     if (Math.hypot(pc.x - pt.x, pc.y - pt.y) < 10 / dispScale()) return null;
     const cc = FM.pointCtrl(ss, sel.pi, l.closed !== false);
@@ -143,10 +143,15 @@ window.FM = window.FM || {};
     return null;
   }
 
+  // 14 display px is a mouse-sized target. A fingertip covers ~9mm, so on touch it missed the point
+  // far more often than it hit it — and every miss used to close the panel. Give touch a target it
+  // can actually land on; a mouse keeps the tight one so dense points stay individually selectable.
+  function hitPx(e) { return (e && e.pointerType && e.pointerType !== 'mouse') ? 26 : 14; }
+
   function nearest(e) {
     const l = layer(); if (!l) return null;
     const pt = evtToCanvas(e);
-    const thr = 14 / dispScale();       // ~14 display px
+    const thr = hitPx(e) / dispScale();
     const subs = subsOf(l);
     let best = null, bestD = thr;
     subs.forEach((pts, si) => pts.forEach((p, pi) => {
@@ -191,7 +196,14 @@ window.FM = window.FM || {};
       return;
     }
     const hit = nearest(e);
-    if (!hit) return;
+    if (!hit) {
+      // A MISS still belongs to the point editor. Letting it through put the tap on the canvas
+      // handler underneath, which reads a tap on empty space as "deselect" — so a finger that landed
+      // a few px off a point closed the whole edit panel (Ezra: "I tap on the canvas to select the
+      // point it just closes the edit menu"). While Edit Points is open the canvas is ours; swallow it.
+      e.preventDefault(); e.stopPropagation();
+      return;
+    }
     e.preventDefault(); e.stopPropagation();
     const subs = subsOf(l);
     if (hit.kind === 'mid') {   // insert a vertex ON the curve, then drag it (inherits smoothness)
@@ -239,6 +251,8 @@ window.FM = window.FM || {};
 
   FM.pointEdit = {
     isActive() { return !!active; },
+    // exposed so the touch target can be regression-tested without touching the live scene
+    hitRadius(pointerType) { return hitPx({ pointerType: pointerType }); },
     isEmbedded() { return !!(active && active.embedded); },
     layerId() { return active ? active.layerId : null; },
     onChange(fn) { if (cbs.indexOf(fn) < 0) cbs.push(fn); },

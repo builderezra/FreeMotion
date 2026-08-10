@@ -247,6 +247,20 @@
     });
   });
 
+  test('edit points: a finger gets a bigger target than a mouse', { item: 'point-hit-radius' }, function () {
+    // v4.75. The hit radius was a flat 14 display px — mouse-sized. A fingertip missed far more often
+    // than it hit, and every miss used to fall through the overlay to the canvas handler, which read it
+    // as "deselect" and shut the whole edit panel. The miss is swallowed now (verified by dispatching a
+    // touch pointerdown at the overlay centre: defaultPrevented true, zero events reaching #stage); this
+    // guards the other half — that touch actually gets a reachable target.
+    if (!FM.pointEdit || !FM.pointEdit.hitRadius) throw new Error('FM.pointEdit.hitRadius missing');
+    var mouse = FM.pointEdit.hitRadius('mouse'), touch = FM.pointEdit.hitRadius('touch');
+    var pen = FM.pointEdit.hitRadius('pen');
+    if (!(touch > mouse)) throw new Error('touch target (' + touch + ') should exceed mouse (' + mouse + ')');
+    if (!(touch >= 22)) throw new Error('touch target ' + touch + 'px is still smaller than a fingertip');
+    if (pen !== touch) throw new Error('pen should get the coarse target too, got ' + pen);
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {
