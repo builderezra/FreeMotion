@@ -133,6 +133,15 @@ window.FM = window.FM || {};
     if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => slots.push({ c: layer.crop, k: k }));       // crop keyframes (they draw diamonds via animatedProps — must be deletable too)
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => slots.push({ c: layer.shadow, k: k }));   // shadow keyframes
     (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
+    // Everything below draws a diamond via FM.animatedProps (js/scene.js) but used to be missing here,
+    // so those keyframes were UNDELETABLE — you could see them on the clip and nothing would remove
+    // them. Confirmed in BUG-HUNT. The two lists have to cover the same containers, and that matters
+    // more now every slider owns its own track: a track you can create must be a track you can clear.
+    if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => slots.push({ c: layer.trimPath, k: k }));            // stroke draw-on
+    if (layer.stroke && layer.stroke.dash) slots.push({ c: layer.stroke.dash, k: 'offset' });                         // marching ants
+    if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => slots.push({ c: layer.repeater, k: k }));   // shape repeater
+    (layer.masks || []).forEach(m => { if (m) slots.push({ c: m, k: 'path' }); });                                    // pen-mask path (moving reveal / roto)
+    (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
     slots.forEach(({ c, k }) => {
       const p = c[k];
       if (!FM.isAnimated(p)) return;
@@ -1287,6 +1296,8 @@ window.FM = window.FM || {};
   }
 
   FM.timeline = {
+    // exposed so the suite can prove delete-parity with FM.animatedProps without faking a double-click
+    deleteKeyframesAt: deleteKeyframesAt,
     init() {
       rulerEl = document.getElementById('tl-ruler');
       tracksEl = document.getElementById('tl-tracks');

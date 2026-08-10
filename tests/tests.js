@@ -300,6 +300,35 @@
     }
   });
 
+  test('keyframes: everything that draws a diamond can also be deleted', { item: 'delete-parity' }, function () {
+    // v4.79. FM.animatedProps decides what draws a diamond on the clip; deleteKeyframesAt decides what
+    // a delete can reach. They had drifted — trimPath, stroke.dash.offset, repeater, mask paths and
+    // audioFx params drew diamonds you could never remove. Any container in one list must be in both,
+    // and it matters more now that every slider owns its own track.
+    if (!FM.animatedProps) throw new Error('FM.animatedProps missing');
+    var kf = function (v) { return { kf: [{ t: 1, v: v, e: 'linear' }] }; };
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+    L.transform.x = kf(10);
+    L.trimPath = { start: kf(0), end: kf(1), offset: kf(0) };
+    L.stroke = { width: kf(2), color: kf('#fff'), dash: { enabled: true, offset: kf(0) } };
+    L.repeater = { enabled: true, copies: kf(3), offsetX: kf(4), offsetY: kf(0), rotation: kf(0), scale: kf(1), opacity: kf(1) };
+    L.masks = [{ id: 'm1', enabled: true, path: kf([[0, 0], [1, 1]]) }];
+    L.crop = { x: kf(0), y: kf(0), w: kf(1), h: kf(1) };
+    L.shadow = { blur: kf(1), dx: kf(0), dy: kf(0), alpha: kf(1), color: kf('#000') };
+    L.effects = [{ type: 'blur', enabled: true, params: { radius: kf(5) } }];
+    L.audioFx = [{ type: 'gain', enabled: true, params: { gain: kf(1) } }];
+    L.volume = kf(1); L.speed = kf(1); L.fill = kf('#fff');
+
+    var before = FM.animatedProps(L).length;
+    if (before < 20) throw new Error('scene did not build the animated props (' + before + ') — test is not exercising anything');
+    if (!FM.timeline || !FM.timeline.deleteKeyframesAt) throw new Error('FM.timeline.deleteKeyframesAt not exposed');
+    FM.timeline.deleteKeyframesAt(L, 1);
+    var left = FM.animatedProps(L);
+    if (left.length) {
+      throw new Error(left.length + ' of ' + before + ' keyframed properties survived a delete at their own time — they draw diamonds that nothing can remove');
+    }
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {
