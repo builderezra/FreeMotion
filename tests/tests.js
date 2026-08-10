@@ -1030,6 +1030,48 @@
     } finally { sp.className = was; }
   });
 
+  test('a menu trigger toggles: tapping it again closes the menu', { item: 'menu-toggle' }, function () {
+    // v5.17. Ezra: "when you tap on something that opens up the menu… tapping on it again should
+    // close it, currently it just infinitely reopens." One tap fires TWO events: the pointerdown
+    // lands outside the open menu and closes it, then the click runs the trigger's handler which
+    // re-opens it. Fixed once in FM.contextMenu rather than in a dozen triggers.
+    // Four cases, because three of them broke while getting the fourth right:
+    //   · same trigger twice        → closes (the ask)
+    //   · a DIFFERENT trigger       → opens ITS menu, does not just close (first attempt broke this)
+    //   · the very first menu       → must toggle too (the document listeners were registered lazily
+    //                                 inside ensure(), so the first trigger was never recorded)
+    //   · menu already closed       → tapping the last trigger OPENS, never toggles a stale opener
+    if (!FM.contextMenu || !FM.contextMenu.isOpen) throw new Error('FM.contextMenu.isOpen is missing');
+    const a = document.getElementById('btn-more'), b = document.getElementById('btn-parent');
+    if (!a || !b) throw new Error('need two real menu triggers (#btn-more, #btn-parent)');
+    const tap = el => {
+      const r = el.getBoundingClientRect();
+      const o = { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 1, isPrimary: true };
+      el.dispatchEvent(new PointerEvent('pointerdown', o));
+      el.dispatchEvent(new PointerEvent('pointerup', o));
+      el.dispatchEvent(new MouseEvent('click', o));
+    };
+    const hadSel = FM.scene.selectedId;
+    if (!hadSel && FM.scene.layers.length) FM.selectLayer(FM.scene.layers[0].id);   // both triggers need a selection
+    try {
+      FM.contextMenu.hide();
+      tap(a);
+      if (!FM.contextMenu.isOpen()) throw new Error('the first tap did not open a menu at all');
+      tap(a);
+      if (FM.contextMenu.isOpen()) throw new Error('tapping the same trigger again did not close the menu — this is the reported bug');
+      tap(a);
+      if (!FM.contextMenu.isOpen()) throw new Error('a third tap did not re-open it');
+      tap(b);
+      if (!FM.contextMenu.isOpen()) throw new Error('tapping a DIFFERENT trigger while a menu was open closed everything instead of opening its own menu');
+      FM.contextMenu.hide();
+      tap(b);
+      if (!FM.contextMenu.isOpen()) throw new Error('with no menu showing, tapping the last-used trigger toggled a stale opener shut instead of opening');
+    } finally {
+      FM.contextMenu.hide();
+      if (!hadSel) FM.selectLayer(null); else FM.selectLayer(hadSel);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
