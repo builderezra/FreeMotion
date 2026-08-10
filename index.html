@@ -8,7 +8,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=262">
+<link rel="stylesheet" href="styles.css?v=263">
 <link rel="stylesheet" href="theme-glass.css?v=14">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -113,7 +113,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.01</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.02</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -215,7 +215,10 @@
         </div>
       </div>
       <!-- AM-style centred timecode pill, below the transport. -->
-      <div id="tc-bar"><span id="time-readout">00:00:00</span></div>
+      <!-- The rate chip sits beside the timecode and only appears when playback ISN'T at 1x, or while
+           the jump buttons are in speed mode. Without it, a project left at 0.5x looks like a slow
+           render rather than a deliberate setting. -->
+      <div id="tc-bar"><span id="time-readout">00:00:00</span><span id="rate-chip" class="hidden">1×</span></div>
       <!-- Non-AM controls kept OFF the row (per Ezra) but still in the DOM so app.js/timeline.js keep
            their handlers; reached from the ⋯ More menu. Hidden, never shown directly. -->
       <div id="transport-extra" style="display:none">
@@ -546,7 +549,7 @@
   <script src="js/contextmenu.js?v=37"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions.js?v=46"></script>
-  <script src="js/app.js?v=199"></script>
+  <script src="js/app.js?v=200"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=4"></script>
   <script src="js/mobile.js?v=26"></script>

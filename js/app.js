@@ -2428,17 +2428,87 @@ window.FM = window.FM || {};
     playBtn.addEventListener('click', () => { if (playLpFired) { playLpFired = false; return; } FM.togglePlay(); });
     // Skip ◀ / ▶| step to the PREVIOUS / NEXT snap point (benchmark or selected-clip edge), falling back
     // to the project start / end when there's nothing closer.
-    document.getElementById('btn-tostart').addEventListener('click', () => {
+    const toStart = document.getElementById('btn-tostart');
+    const toEnd = document.getElementById('btn-toend');
+    const jumpBack = () => {
       const t = FM.time, eps = 1e-3;
       const before = FM.timelineSnapPoints().filter(p => p < t - eps);
       FM.pause(); FM.setTime(before.length ? before[before.length - 1] : 0);
-    });
-    const toEnd = document.getElementById('btn-toend');
-    if (toEnd) toEnd.addEventListener('click', () => {
+    };
+    const jumpFwd = () => {
       const t = FM.time, eps = 1e-3;
       const next = FM.timelineSnapPoints().find(p => p > t + eps);
       FM.pause(); FM.setTime(next != null ? next : FM.scene.project.duration);
+    };
+
+    /* ---- SPEED MODE (v5.02) --------------------------------------------------------------------
+     * Ezra: "if you hold those down, it'll change the play speed… when you hold down one of the
+     * buttons, it switches it to a different button that is, like, a plus indicator… and you can spam
+     * tap it to make the speed go up. And then once you hold on it again, it switches it back."
+     *
+     * So it is a MODE, not a hold-to-repeat: hold either jump button and BOTH morph — left to −,
+     * right to + — and stay morphed until you hold again. That is what makes spam-tapping work, and
+     * it is why both flip together rather than only the one you held: a + you can tap ten times with
+     * no − beside it is a trap.
+     *
+     * The ladder is deliberately finer than the ⋯ menu's 0.25/0.5/1/2/4. That list was built for a
+     * menu where each pick costs a trip through two levels, so big jumps made sense; here each step
+     * is one tap, and doubling on every tap overshoots instantly. */
+    const RATES = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8];
+    let speedMode = false;
+    const rateChip = document.getElementById('rate-chip');
+    // Captured from the DOM rather than hardcoded: the skip glyphs are a <line>+<polygon> pair in
+    // index.html, and a hand-copied duplicate here would silently stop matching the moment either is
+    // touched — restoring the button would quietly draw the wrong mark.
+    const ICON_BACK = toStart ? (toStart.querySelector('svg') || {}).innerHTML || '' : '';
+    const ICON_FWD  = toEnd ? (toEnd.querySelector('svg') || {}).innerHTML || '' : '';
+    const ICON_MINUS = '<path d="M5 12h14"/>';
+    const ICON_PLUS  = '<path d="M12 5v14M5 12h14"/>';
+    function syncRateUI() {
+      const r = FM.previewRate || 1;
+      if (rateChip) {
+        rateChip.textContent = (Number.isInteger(r) ? r : r) + '×';
+        rateChip.classList.toggle('hidden', !speedMode && Math.abs(r - 1) < 1e-6);
+        rateChip.classList.toggle('armed', speedMode);
+      }
+      [toStart, toEnd].forEach(b => { if (b) b.classList.toggle('speed-mode', speedMode); });
+      const paint = (b, d) => { if (b) { const sv = b.querySelector('svg'); if (sv) sv.innerHTML = d; } };
+      paint(toStart, speedMode ? ICON_MINUS : ICON_BACK);
+      paint(toEnd, speedMode ? ICON_PLUS : ICON_FWD);
+      if (toStart) toStart.title = speedMode ? 'Slower — tap to step down. Hold to go back to skip.' : 'Skip to previous benchmark / clip edge · hold for playback speed';
+      if (toEnd) toEnd.title = speedMode ? 'Faster — tap to step up. Hold to go back to skip.' : 'Skip to next benchmark / clip edge · hold for playback speed';
+    }
+    function stepRate(dir) {
+      const cur = FM.previewRate || 1;
+      // nearest rung, then move one — so an odd rate set from the ⋯ menu still lands on the ladder
+      let i = 0, best = Infinity;
+      RATES.forEach((v, k) => { const d = Math.abs(v - cur); if (d < best) { best = d; i = k; } });
+      if (Math.abs(RATES[i] - cur) < 1e-6) i += dir; else if (dir > 0 && RATES[i] < cur) i += 1; else if (dir < 0 && RATES[i] > cur) i -= 1;
+      i = Math.max(0, Math.min(RATES.length - 1, i));
+      FM.setPreviewRate(RATES[i]);
+      const pr = document.getElementById('preview-rate'); if (pr) pr.value = String(RATES[i]);
+      syncRateUI();
+    }
+    FM.toggleSpeedMode = function (on) { speedMode = on == null ? !speedMode : !!on; syncRateUI(); };
+    // Hold on EITHER button toggles the mode. The click handler below checks a flag the hold sets, so
+    // the release that ends a hold never also fires the tap action underneath it.
+    [toStart, toEnd].forEach(b => {
+      if (!b) return;
+      let lp = null, fired = false;
+      b._lpFired = () => fired;
+      b.addEventListener('pointerdown', () => {
+        fired = false;
+        lp = setTimeout(() => { lp = null; fired = true; FM.toggleSpeedMode(); }, 480);
+      });
+      const end = () => { if (lp) { clearTimeout(lp); lp = null; } };
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, end));
+      b.addEventListener('click', () => {
+        if (fired) { fired = false; return; }   // that click was the end of a hold
+        if (speedMode) stepRate(b === toEnd ? 1 : -1);
+        else (b === toEnd ? jumpFwd : jumpBack)();
+      });
     });
+    syncRateUI();
     const loopBtn = document.getElementById('btn-loop');
     if (loopBtn) loopBtn.addEventListener('click', () => { FM.loop = !FM.loop; syncLoopUI(); });
     const splitBtn = document.getElementById('btn-split');

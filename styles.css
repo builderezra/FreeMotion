@@ -946,6 +946,21 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   text-align: center; color: rgba(232, 236, 244, .45); font-size: 12px; letter-spacing: .4px;
   text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
 }
+/* Speed mode on the jump buttons (v5.02). The morphed pair is tinted so it's obvious at a glance
+   that those two controls are no longer skip — otherwise a − where ◀| used to be is a button you
+   press expecting to jump and instead slow the playback down. */
+.tbtn.speed-mode { color: var(--accent); background: var(--accent-soft); }
+.tbtn.speed-mode:hover { background: rgba(90, 199, 237, .22); }
+/* The rate chip beside the timecode. Hidden at 1x unless speed mode is armed — a permanent "1×" is
+   noise, but a silent 0.5× is the kind of thing you lose ten minutes to. */
+#rate-chip {
+  margin-left: 8px; padding: 2px 8px; border-radius: 7px;
+  font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim);
+}
+#rate-chip.armed { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+#rate-chip.hidden { display: none; }
+
 /* ---- clip-nudge pair, straddling the playhead (v5.01) ----------------------------------------
  * Ezra drew an arrow from the inspector's two clip buttons down to a pair of marks either side of
  * the playhead: "i feel its close the where you will be dragging so itll be easy to click, one on
