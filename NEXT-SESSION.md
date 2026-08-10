@@ -83,6 +83,10 @@ reading — and now also needs checking against the Studio layout, where the sta
 
 ## How to work here
 
+- **The projects on this machine are all throwaway tests** — Ezra, 2026-08-10: *"I honestly don't care
+  if you wreck any of my projects at the moment, none of them are anything more than tests."* So tests
+  and harnesses may add, mutate and delete layers freely; still restore state in a `finally` out of
+  basic hygiene, but don't skip a worthwhile test to protect a project.
 - Verify by RUNNING, not reading — the harness lesson has paid off repeatedly. Mutation-check every
   new test assertion: three in a row this session looked fine and could not actually fail.
 - `index.html`'s version label is the source of truth. Bump it, bump the `?v=` on every file touched,
