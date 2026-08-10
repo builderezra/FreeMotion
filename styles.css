@@ -2089,3 +2089,18 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      the window edge, so reach back across the inspector AND the rail's column */
   body.layout-studio #tl-resizer { left: calc(-1 * (var(--rail-w) + var(--insp-w))); }
 }
+
+/* Per-slider keyframe diamond inside a Move & Transform value box (v4.78). Each slider owns its own
+   track now — X and Y are independent — so the ◆ has to live ON the row, not just on the mode. */
+.mt-vbox { position: relative; }
+.mt-vbox-kf {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; background: transparent; cursor: pointer; border-radius: 5px;
+  color: var(--text-faint); opacity: .55; transition: opacity .12s, color .12s, background .12s;
+}
+.mt-vbox-kf svg { width: 9px; height: 9px; fill: currentColor; }
+.mt-vbox-kf:hover { opacity: 1; background: rgba(255,255,255,.07); }
+.mt-vbox-kf.anim { color: var(--accent); opacity: .75; }          /* animated, but no key right here */
+.mt-vbox-kf.on { color: var(--accent); opacity: 1; }              /* a keyframe sits at the playhead */
+.mt-vbox-kf.on svg { filter: drop-shadow(0 0 3px var(--accent-soft, rgba(47,208,181,.6))); }

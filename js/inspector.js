@@ -1617,6 +1617,32 @@ window.FM = window.FM || {};
     const fmtS = () => round(getVal(), dp).toFixed(dp) + (opts.unit || '');
     const refresh = () => { if (!val.isContentEditable) val.textContent = fmtS(); };
     refresh(); box.appendChild(val); box.appendChild(lab);
+    // Per-slider keyframe diamond (Ezra: "Every single Individual slider needs to have its own key
+    // frames … moving the clip around and zooming in need to be seperate"). It keys ONLY opts.kfKey,
+    // so X and Y are genuinely independent tracks — unlike the mode-level ◆, which keys every channel
+    // in MT_PRIMARY at once and is what tied them together. The data model always supported this:
+    // FM.setTransform/toggleKeyframe work on a single property.
+    if (opts.kfKey && opts.layer) {
+      const kL = opts.layer, kKey = opts.kfKey;
+      const kf = el('button', 'mt-vbox-kf');
+      kf.type = 'button';
+      kf.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 .8 9.2 5 5 9.2.8 5z"/></svg>';
+      const on = FM.hasKeyframeAt(kL.transform[kKey], FM.time);
+      if (on) kf.classList.add('on');
+      else if (FM.isAnimated(kL.transform[kKey])) kf.classList.add('anim');
+      kf.title = (on ? 'Remove the ' : 'Add a ') + labelText + ' keyframe at the playhead';
+      kf.setAttribute('aria-label', kf.title);
+      kf.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (kL.transform[kKey] == null) kL.transform[kKey] = MT_DEF[kKey];
+        FM.toggleKeyframe(kL, kKey, FM.time);
+        FM.requestRender();
+        if (FM.timeline) FM.timeline.rebuild();
+        FM.inspector.refresh();
+        commitH();
+      });
+      box.appendChild(kf);
+    }
     const clamp = v => { if (opts.min != null) v = Math.max(opts.min, v); if (opts.max != null) v = Math.min(opts.max, v); return v; };
     let drag = null;
     // Dragging the number is a scrub too, so it flicks like every other one.
@@ -1935,9 +1961,9 @@ window.FM = window.FM || {};
     center.appendChild(values); center.appendChild(control);
 
     if (mode === 'move') {
-      const bx = mtVBox('X', () => mtEval(layer, 'x'), (v, typed) => mtSetXY(layer, 'x', v, typed), { dp: 1, scrub: 1 });
-      const by = mtVBox('Y', () => mtEval(layer, 'y'), (v, typed) => mtSetXY(layer, 'y', v, typed), { dp: 1, scrub: 1 });
-      const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2 });
+      const bx = mtVBox('X', () => mtEval(layer, 'x'), (v, typed) => mtSetXY(layer, 'x', v, typed), { dp: 1, scrub: 1, kfKey: 'x', layer: layer });
+      const by = mtVBox('Y', () => mtEval(layer, 'y'), (v, typed) => mtSetXY(layer, 'y', v, typed), { dp: 1, scrub: 1, kfKey: 'y', layer: layer });
+      const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2, kfKey: 'z', layer: layer });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
       // 2D trackpad
       const pad = el('div', 'mt-trackpad');
@@ -2012,12 +2038,12 @@ window.FM = window.FM || {};
       // live in three unconnected places. One line here connects them at the moment Z is in hand.
       if (layer.type !== 'camera') control.appendChild(el('div', 'insp-hint', 'Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move with parallax.'));
     } else if (mode === 'rotate') {
-      const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5 });
+      const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5, kfKey: 'rotation', layer: layer });
       // Snap near-zero tilt to EXACT 0 — a scrubbed-back residual (±1e-6°) is invisible but flips the
       // renderer onto the full plate+quad 3D path and breaks the touched-then-reverted diff-free case.
       const snap0 = v => (Math.abs(v) < 0.01 ? 0 : v);
-      const btx = mtVBox('X tilt', () => mtEval(layer, 'rotationX'), v => mtSet(layer, 'rotationX', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
-      const bty = mtVBox('Y tilt', () => mtEval(layer, 'rotationY'), v => mtSet(layer, 'rotationY', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180 });
+      const btx = mtVBox('X tilt', () => mtEval(layer, 'rotationX'), v => mtSet(layer, 'rotationX', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180, kfKey: 'rotationX', layer: layer });
+      const bty = mtVBox('Y tilt', () => mtEval(layer, 'rotationY'), v => mtSet(layer, 'rotationY', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180, kfKey: 'rotationY', layer: layer });
       refreshables.push(brot, btx, bty); values.append(brot, btx, bty);
       const dial = el('div', 'mt-dial'); const ring = el('div', 'mt-dial-ring'); const knob = el('div', 'mt-dial-knob'); const read = el('div', 'mt-dial-read');
       ring.appendChild(knob); dial.appendChild(ring); dial.appendChild(read);
@@ -2120,8 +2146,8 @@ window.FM = window.FM || {};
       control.appendChild(reset);
       control.appendChild(el('div', 'insp-hint', 'Scaling and rotation happen around this point. The layer stays where it is — only its pivot moves.'));
     } else if (mode === 'skew') {
-      const bsx = mtVBox('X Skew', () => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
-      const bsy = mtVBox('Y Skew', () => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 });
+      const bsx = mtVBox('X Skew', () => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80, kfKey: 'skewX', layer: layer });
+      const bsy = mtVBox('Y Skew', () => mtEval(layer, 'skewY'), v => mtSet(layer, 'skewY', v), { dp: 2, unit: '°', scrub: 0.2, min: -80, max: 80 , kfKey: 'skewY', layer: layer});
       refreshables.push(bsx, bsy); values.append(bsx, bsy);
       control.classList.add('mt-control-dual');
       control.appendChild(mtScrub(() => mtEval(layer, 'skewX'), v => mtSet(layer, 'skewX', Math.max(-80, Math.min(80, v))), 0.2, () => bsx._refresh()));
