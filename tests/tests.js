@@ -261,6 +261,45 @@
     if (pen !== touch) throw new Error('pen should get the coarse target too, got ' + pen);
   });
 
+  test('edit points: a missed tap never escapes to the canvas', { item: 'point-miss-swallow' }, function () {
+    // v4.75. THE bug: a tap that missed a point returned out of onDown without stopping the event, so
+    // it reached the canvas handler underneath, which reads a tap on empty space as "deselect" — and
+    // the whole edit panel shut. This drives the real overlay with a real PointerEvent rather than
+    // asserting on source. It builds a throwaway layer and removes it again in the finally.
+    if (!FM.pointEdit || !FM.pointEdit.start) throw new Error('FM.pointEdit missing');
+    var scene = FM.scene, hadSel = scene.selectedId, added = null, wasActive = FM.pointEdit.isActive();
+    try {
+      added = FM.makeLayer('shape', { shape: 'star', x: (scene.project.width / 2) | 0, y: (scene.project.height / 2) | 0, shapeW: 160, shapeH: 160, fill: '#ffd24a' });
+      scene.layers.unshift(added);
+      if (FM.selectLayer) FM.selectLayer(added.id);
+      FM.pointEdit.start(added.id);
+      var ov = document.getElementById('pe-overlay');
+      if (!ov) throw new Error('point-edit overlay never appeared');
+      var r = ov.getBoundingClientRect();
+      if (!(r.width > 0)) throw new Error('overlay has no size to aim at');
+
+      var escaped = 0, spy = function () { escaped++; };
+      var stage = document.getElementById('stage');
+      stage.addEventListener('pointerdown', spy);
+      // dead centre of a star's bounding box = between the arms, guaranteed miss
+      var ev = new PointerEvent('pointerdown', {
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+        pointerId: 1, pointerType: 'touch', bubbles: true, cancelable: true });
+      ov.dispatchEvent(ev);
+      stage.removeEventListener('pointerdown', spy);
+
+      if (!ev.defaultPrevented) throw new Error('a missed tap was not consumed by the point editor');
+      if (escaped) throw new Error('a missed tap reached #stage (' + escaped + 'x) — the canvas handler will deselect and close the panel');
+      if (!FM.pointEdit.isActive()) throw new Error('the point editor closed on a missed tap');
+      if (FM.scene.selectedId !== added.id) throw new Error('the layer was deselected by a missed tap');
+    } finally {
+      try { if (FM.pointEdit.isActive() && !wasActive) FM.pointEdit.stop(); } catch (e) {}
+      if (added) { var i = scene.layers.indexOf(added); if (i >= 0) scene.layers.splice(i, 1); }
+      if (FM.selectLayer) FM.selectLayer(hadSel || null);
+      if (FM.requestRender) FM.requestRender();
+    }
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {
