@@ -1583,8 +1583,11 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   #add-fab {
     display: flex; align-items: center; justify-content: center;
     position: fixed; right: 16px; bottom: 20px; z-index: 61;
-    width: 62px; height: 62px; border: none; cursor: pointer; padding: 0;
-    background: url('fab-plus.png?v=1') center / contain no-repeat;
+    /* 74px, not the old 54: the artwork is a heavily faceted glass sphere and at ~60px the facets,
+       concentric rings and iridescent rim all average out into a plain glossy disc — it stops
+       looking like the render it came from. This is the smallest size the glass still reads at. */
+    width: 74px; height: 74px; border: none; cursor: pointer; padding: 0;
+    background: url('fab-plus.png?v=2') center / contain no-repeat;
     filter: drop-shadow(0 6px 18px rgba(0,0,0,.55));
     -webkit-tap-highlight-color: transparent;
   }

@@ -211,7 +211,7 @@ html[data-theme="glass"] #hm-new::after {
    overflow:hidden above still clips it to the button, so light travels across the glass and vanishes
    at the rim exactly as before. Outer glow is kept too — just no inner bead. */
 html[data-theme="glass"] #add-fab {
-  background: url('fab-plus.png?v=1') center / contain no-repeat;
+  background: url('fab-plus.png?v=2') center / contain no-repeat;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
