@@ -35,14 +35,51 @@ audio import fix below was one.)
 - **v4.83 — drawing mode no longer wrecks the Studio layout** (stage was collapsing 1140px -> 233px).
 - **v4.84 — undo/redo grey out** when there is nothing behind or ahead.
 - **v4.85 — love heart re-cut** and judged by an outside agent (0.04% mirror mismatch, 0.944 IoU vs the emoji heart).
-- **BUG-HUNT.md** — 74 findings, 69 confirmed, from a 22-agent hunt. Nothing in it is fixed yet.
+
+### v4.86 – v5.05 (the 2026-08-10 run)
+- **Home screen visuals.** Top row centred (v4.86); the glass wordmark replaced the text (v4.87); the
+  gradient backdrop (v4.88) — **do not change it, he said so explicitly**; glass FAB + OPEN badge
+  (v4.89–4.91); the wordmark's travelling glint replaced by a real GLOW that lights the bar around it
+  (v4.97). The home top row is translucent over a backdrop blur so the gradient runs the full height.
+- **The two + buttons are different objects now.** Home keeps the orb (`fab-plus.png`); the editor
+  uses Ezra's faceted glass CROSS (`fab-cross.png`), editor-only by his instruction. Both 58/64px.
+- **Three separate bugs on those buttons, each found only on his phone:** the sheen painting unmasked
+  (mask SHORTHAND with `/contain` is fragile in WebKit — longhands + a clip-path guarantee now);
+  `overflow:hidden` CLIPPING the glow into a square (filter is applied before the element's clip —
+  WebKit honours that order, Chrome does not, which is why desktop checks never saw it); and the
+  cross being a third of the orb's saturation and 17° outside the app's cyan (regraded in v5.00 by a
+  9-agent judged pass — now sat 0.488 / hue 196° against the accent's 197°).
+- **iOS launch flash fixed** (v4.93): a standalone web app with no matching `apple-touch-startup-image`
+  gets a WHITE launch screen. Added 12 iPhone sizes, all solid #000. **He may need to delete and
+  re-add the home-screen shortcut for iOS to pick them up.**
+- **Splash → home is a dissolve** (v4.92/4.93), and the home content is held back until the splash
+  starts clearing — the first cut played the whole entrance behind an opaque splash.
+- **Playhead + play + timecode all sit on TRUE SCREEN CENTRE** in every layout (v4.97); the transport
+  is a 1fr/auto/1fr grid with the view button pinned far right. `--tl-panel-left` is the one
+  measurement all three come off.
+- **Add menu consolidated** (v4.98/v4.99): Elements is the FIRST tab and absorbed Text / Captions /
+  Freehand / Vector from the old top row (moved, not copied); search gone from Elements; "Browse
+  elements" → **Custom elements**; "Save selection" removed (it acts on a selection, and that menu
+  only appears when nothing is selected).
+- **Car wheels rebuilt** (v4.99) — arch and tyre are concentric now, even gap ring, real hubcap.
+- **Settings cog on PC** (v4.99) → opens **app Settings** (mobile's cog opens CANVAS settings; flagged
+  to him, he hasn't objected). **Save frame (PNG)** moved into Export ▸ Format. Hidden clips dim.
+- **v5.01** clip nudge pair straddles the playhead (desktop only — phone keeps them in the inspector).
+- **v5.02** hold either jump button → both morph to −/+ for playback speed; rate chip by the timecode.
+- **v5.03** view-options popup gained speed / loop / export marks / timeline zoom (hold = max).
+- **v5.04** Select works on all three home tabs. The trap is closed: Select-all no longer falls back
+  to `FM.projects.list()`, which would have ticked PROJECTS on the Templates tab.
+- **v5.05** shape icons back to 34px — my own regression, a CSS specificity leak from the Elements
+  card trim.
+- **BUG-HUNT.md** — 74 findings, 69 confirmed, from a 22-agent hunt. **Nothing in it is fixed yet.**
 
 ---
 
 ## The queue
 
-**v5.04.** Every live ask from 2026-08-10 is shipped, and Select mode now works on all three home
-tabs. What is left is standing work only.
+**v5.05 — working tree clean, 25/25 green.** Every live ask from 2026-08-10 is shipped. What is
+left is standing work only, and an autonomous /loop is armed to work item 3 (BUG-HUNT.md) unless
+Ezra says otherwise.
 
 ### 1. Standing: empty the ⋯ menu, one item at a time
 "most of the options in the three dot menu are pointless. Don't remove the three dot menu yet, but
