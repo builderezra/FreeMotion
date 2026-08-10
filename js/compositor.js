@@ -7072,7 +7072,10 @@ window.FM = window.FM || {};
     const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
     const gs = FM.evalProp(group.transform.scale, t) || 1;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
+    const seen = new Set();
     (function walk(gid, ox, oy) {
+      if (seen.has(gid)) return;   // every other parent walk in the app carries a seen/hop guard; this
+      seen.add(gid);               // one did not, so one bad group turned into an unopenable project.
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
         if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }

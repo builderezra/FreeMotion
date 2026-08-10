@@ -1160,8 +1160,13 @@ window.FM = window.FM || {};
     if (FM.canvasEdit) FM.canvasEdit.update();
   };
 
+  // Scoped to the open group (Edit Group), not the whole project. Selecting layers you cannot even
+  // see was wrong twice over: "Select All → Group Selection" swept the group you were INSIDE into its
+  // own new child and bricked the project (a parent cycle — see FM.groupSelection), and "Select All →
+  // Delete" inside a group deleted every layer in the document rather than the group's contents.
   FM.selectAll = function () {
-    const ids = FM.scene.layers.map(l => l.id);
+    const pool = FM.groupContext ? FM.groupDescendants(FM.groupContext) : FM.scene.layers;
+    const ids = pool.map(l => l.id);
     FM.scene.selectedIds = ids;
     FM.scene.selectedId = ids.length ? ids[0] : null;
     FM.refreshAll();   // FM.* so the multi-select chrome (Group button, sel-multi class, top bar) syncs
@@ -1257,7 +1262,19 @@ window.FM = window.FM || {};
   FM.groupSelection = function (opts) {
     opts = opts || {};
     const ids = FM.selectionIds();
-    const members = FM.scene.layers.filter(l => ids.includes(l.id) && l.type !== 'camera');
+    // A group can never contain something it lives INSIDE. FM.selectAll used to hand back every layer
+    // in the project, so "Select All → Group Selection" while editing a group made the open group a
+    // member of its own new child: G.parent === G2 while G2.parent === G. The first parent walk after
+    // that threw, and because the cycle lives in FM.scene.layers the autosave persisted it — the
+    // project could not be opened or deleted again. selectAll is scoped now; this is the second lock
+    // on the same door, because ANY future path that offers an ancestor as a member is the same brick.
+    const ancestors = new Set();
+    for (let a = FM.groupContext, hops = 0; a && hops < 64; hops++) {
+      ancestors.add(a);
+      const up = FM.scene.layers.find(l => l.id === a);
+      a = up && up.parent;
+    }
+    const members = FM.scene.layers.filter(l => ids.includes(l.id) && l.type !== 'camera' && !ancestors.has(l.id));
     if (members.length < 2) return;
     const start = Math.min.apply(null, members.map(l => l.start));
     const end = Math.max.apply(null, members.map(l => l.start + l.duration));
@@ -1267,7 +1284,11 @@ window.FM = window.FM || {};
     if (opts.mask) g.maskGroup = true;
     if (FM.groupContext) g.parent = FM.groupContext;   // grouping while editing a group nests inside it
     // Re-parent only top-level members — a child whose parent is also being grouped keeps it.
-    members.forEach(l => { if (!l.parent || !ids.includes(l.parent)) l.parent = g.id; });
+    // Tested against MEMBERS, not the raw selection: a layer can be selected and still be refused as
+    // a member (a camera, or an ancestor caught by the guard above), and if its children checked the
+    // selection they would keep pointing at a non-member and the new group would come out empty.
+    const memberIds = new Set(members.map(l => l.id));
+    members.forEach(l => { if (!l.parent || !memberIds.has(l.parent)) l.parent = g.id; });
     // Pull members contiguous directly under the group row (top-most member's slot).
     const topIdx = FM.scene.layers.findIndex(l => members.includes(l));
     FM.scene.layers = FM.scene.layers.filter(l => !members.includes(l));
@@ -1315,8 +1336,12 @@ window.FM = window.FM || {};
     else FM.refreshAll();
   };
   FM.groupDescendants = function (id) {
-    const out = [];
-    const walk = gid => FM.scene.layers.forEach(l => { if (l.parent === gid) { out.push(l); if (l.type === 'group') walk(l.id); } });
+    const out = [], seen = new Set();
+    const walk = gid => {
+      if (seen.has(gid)) return;   // a parent cycle would recurse until the stack blew
+      seen.add(gid);
+      FM.scene.layers.forEach(l => { if (l.parent === gid) { out.push(l); if (l.type === 'group') walk(l.id); } });
+    };
     walk(id);
     return out;
   };

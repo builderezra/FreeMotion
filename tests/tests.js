@@ -588,6 +588,79 @@
     }
   });
 
+  test('grouping inside a group cannot build a parent cycle', { item: 'group-cycle' }, function () {
+    // BUG-HUNT.md's only CRITICAL finding, fixed in v5.06. "Select All → Group Selection" while
+    // editing a group used to sweep the OPEN group into its own new child: G.parent === G2 while
+    // G2.parent === G. FM.groupBounds was the one parent walk with no cycle guard, so it blew the
+    // stack — and because the cycle lived in FM.scene.layers the autosave persisted it, leaving a
+    // project that threw on load and could not be opened OR deleted. Three guards, all asserted here.
+    const savedScene = FM.scene, savedCtx = FM.groupContext;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    // Never let a test scene reach a real project: grouping commits, and commit() autosaves.
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    function cycles() {
+      const byId = {}; FM.scene.layers.forEach(l => { byId[l.id] = l; });
+      return FM.scene.layers.some(l => {
+        let cur = l, seen = {}, hops = 0;
+        while (cur && cur.parent) {
+          if (seen[cur.id]) return true;
+          seen[cur.id] = 1; cur = byId[cur.parent];
+          if (++hops > 256) return true;
+        }
+        return false;
+      });
+    }
+    function fresh() {
+      // groupContext MUST be cleared with the scene. Leaving it pointing at the previous case's group
+      // made the next Select All resolve against an id that no longer exists → an empty selection →
+      // groupSelection returning early, and case 2 silently asserted nothing. Mutation testing caught
+      // that: removing the ancestor guard did not turn this test red until this line existed.
+      FM.groupContext = null;
+      FM.scene = { project: { width: 640, height: 480, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'One', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'Two', x: 200, y: 140, shapeW: 60, shapeH: 60, fill: '#0f0' }));
+    }
+    try {
+      // 1. Select All is scoped to the open group — the fix at the source.
+      fresh();
+      FM.selectAll(); FM.groupSelection();
+      const gid = FM.scene.selectedId;
+      FM.groupContext = gid;
+      FM.selectAll();
+      if (FM.selectionIds().indexOf(gid) >= 0) throw new Error('Select All inside a group selected the group itself');
+      if (FM.selectionIds().length !== 2) throw new Error('Select All inside a group selected ' + FM.selectionIds().length + ' layers, expected the 2 members');
+      FM.groupSelection();
+      if (cycles()) throw new Error('grouping via Select All inside a group still builds a parent cycle');
+
+      // 2. Even handed an ancestor directly, groupSelection must refuse it.
+      fresh();
+      FM.selectAll(); FM.groupSelection();
+      const g2 = FM.scene.selectedId;
+      FM.groupContext = g2;
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);   // the open group included on purpose
+      FM.scene.selectedId = g2;
+      FM.groupSelection();
+      if (cycles()) throw new Error('groupSelection accepted an ancestor as a member and built a cycle');
+      // Refusing the ancestor must not leave the new group EMPTY: its children decide whether to
+      // re-parent by looking at the member set, not at the raw selection the ancestor is still in.
+      const made = FM.scene.selectedId;
+      const kids = FM.scene.layers.filter(l => l.parent === made).length;
+      if (kids < 2) throw new Error('the new group came out with ' + kids + ' members, expected 2');
+
+      // 3. And a cycle from ANY future path must degrade, not blow the stack.
+      FM.scene = { project: { width: 640, height: 480, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const A = FM.makeLayer('group', { name: 'A' }), B = FM.makeLayer('group', { name: 'B' });
+      A.parent = B.id; B.parent = A.id;
+      FM.scene.layers.push(A, B);
+      FM.groupBounds(A, FM.scene, 0);      // threw RangeError before the seen-guard
+      FM.groupDescendants(A.id);
+    } finally {
+      FM.scene = savedScene; FM.groupContext = savedCtx;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
