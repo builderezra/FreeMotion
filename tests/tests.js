@@ -372,6 +372,35 @@
     if (litPct(-60, onScreen) > 5) throw new Error('"On screen" mode now repeats off-frame content — the two modes have collapsed into one');
   });
 
+  test('drawing mode gives the canvas MORE room, in either layout', { item: 'drawing-grid' }, function () {
+    // v4.83. The generic drawing rule forces #app to TWO columns, which was written for classic
+    // (stage | inspector). Studio has THREE and places its regions by explicit column lines, so the
+    // override collided: measured, the rail swelled 60px -> 967px and the stage collapsed to 233px and
+    // jumped to x=967 — Ezra's "puts the canvas in a weird spot". Drawing must never shrink or move the
+    // stage; it exists to give the canvas the whole window.
+    var desktop = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+    if (!desktop) return;                       // phone drawing collapses rows instead; not this rule
+    var app = document.getElementById('app'), stage = document.getElementById('stage');
+    var hadStudio = document.body.classList.contains('layout-studio');
+    var hadDrawing = document.body.classList.contains('drawing');
+    try {
+      [['classic', false], ['studio', true]].forEach(function (pair) {
+        document.body.classList.toggle('layout-studio', pair[1]);
+        var b = stage.getBoundingClientRect();
+        document.body.classList.add('drawing');
+        var d = stage.getBoundingClientRect();
+        document.body.classList.remove('drawing');
+        if (!(b.width > 0)) throw new Error(pair[0] + ': stage has no width to compare');
+        if (d.width < b.width - 2) throw new Error(pair[0] + ': drawing SHRANK the stage ' + Math.round(b.width) + 'px -> ' + Math.round(d.width) + 'px — the grid override is fighting this layout');
+        if (Math.abs(d.left - b.left) > 4) throw new Error(pair[0] + ': drawing MOVED the stage from x=' + Math.round(b.left) + ' to x=' + Math.round(d.left));
+      });
+    } finally {
+      document.body.classList.toggle('layout-studio', hadStudio);
+      document.body.classList.toggle('drawing', hadDrawing);
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {

@@ -2088,6 +2088,14 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   /* the drag handle should grab the whole band, not just the timeline half — the band now starts at
      the window edge, so reach back across the inspector AND the rail's column */
   body.layout-studio #tl-resizer { left: calc(-1 * (var(--rail-w) + var(--insp-w))); }
+
+  /* DRAWING MODE. The generic rule (`body.drawing #app { grid-template-columns: minmax(0,1fr) 0 }`)
+     was written for classic's TWO columns — stage | inspector. Studio has THREE, and its regions are
+     placed by explicit column lines, so forcing two collided badly: measured, the rail swelled from
+     60px to 967px and the stage collapsed to 233px and jumped to x=967, which is Ezra's "puts the
+     canvas in a weird spot". Keep the rail its own width, collapse the inspector column, and give
+     everything else to the stage (which spans columns 2-3). */
+  body.layout-studio.drawing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
 }
 
 /* Per-slider keyframe diamond inside a Move & Transform value box (v4.78). Each slider owns its own
