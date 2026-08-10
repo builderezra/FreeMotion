@@ -991,6 +991,45 @@
     if (o.effects[0].params.source) throw new Error('a source pointing outside the pack survived as ' + o.effects[0].params.source);
   });
 
+  test('the home screen is never left invisible waiting for a splash that will not dismiss', { item: 'preintro-stuck' }, function () {
+    // v5.16, and a live report: "when i exit a project nothing loads, i can still press on the screen
+    // and load projects but they just arent visibly there… it happens if i refresh while in a
+    // project." The splash plays once per SESSION, so on a refresh the boot script returns early and
+    // never removes #splash's `hidden` class, never wires dismiss(), never dispatches
+    // fm:splash-dismiss. armIntro tested for the ELEMENT rather than for a splash that is actually
+    // up, took the "wait for it" branch, and applied .hm-preintro — `opacity: 0` on every child of
+    // #home-screen. Six seconds of an invisible-but-clickable home screen until the backstop fired.
+    // Refreshing inside a project is what exposes it: home is not opened at boot, so armIntro runs
+    // for the first time on the way OUT of the project, long after the splash slot has passed.
+    const root = document.getElementById('home-screen');
+    if (!root) throw new Error('#home-screen missing');
+    if (root.classList.contains('hm-preintro')) throw new Error('#home-screen is stuck in .hm-preintro right now — its content is invisible');
+
+    // The rule itself must still bite when it is legitimately applied, or this test proves nothing.
+    root.classList.add('hm-preintro');
+    const probe = document.createElement('div');
+    root.appendChild(probe);
+    const hidden = getComputedStyle(probe).opacity;
+    root.removeChild(probe);
+    root.classList.remove('hm-preintro');
+    if (hidden !== '0') throw new Error('.hm-preintro no longer hides its children (opacity ' + hidden + ') — this test is checking nothing');
+
+    // And the condition: a #splash that is present-but-hidden, or already dissolving, must NOT be
+    // treated as "a splash is up". This is the exact state a refresh leaves behind.
+    const sp = document.getElementById('splash');
+    if (!sp) throw new Error('#splash element is missing from index.html — armIntro keys off it');
+    if (!FM.home._splashIsUp) throw new Error('FM.home._splashIsUp is not exposed — this test would only be checking its own copy of the condition');
+    const was = sp.className;
+    try {
+      sp.className = 'hidden';
+      if (FM.home._splashIsUp()) throw new Error('a hidden #splash still counts as "up" — the home screen gets blanked on every repeat load, which is the reported bug');
+      sp.className = 'splash-out';
+      if (FM.home._splashIsUp()) throw new Error('a dissolving #splash still counts as "up" — its dismiss event has already fired, so nothing will ever clear .hm-preintro');
+      sp.className = '';
+      if (!FM.home._splashIsUp()) throw new Error('a visible #splash is no longer recognised — the entrance would play behind an opaque splash again');
+    } finally { sp.className = was; }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

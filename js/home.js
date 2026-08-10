@@ -782,9 +782,32 @@ window.FM = window.FM || {};
    *
    * No splash (same-session reload, reduced motion, a skipped launch) → run immediately.
    * The 6s fallback covers a splash that is torn down some other way; go() is idempotent. */
+  // Is there a splash still to come down? Present-but-hidden and mid-dissolve both mean NO, and
+  // getting that wrong is what blanked the home screen (see the comment in armIntro). Its own
+  // function so the regression test can put the DOM in each state and call the real thing, rather
+  // than re-implementing the condition and asserting against its own copy.
+  function splashIsUp() {
+    const sp = document.getElementById('splash');
+    return !!sp && !sp.classList.contains('hidden') && !sp.classList.contains('splash-out');
+  }
+
   function armIntro() {
     if (!root) return;
-    if (!document.getElementById('splash')) { introPending = true; return; }   // no splash → render() stamps
+    // "Is there a splash to wait for?" — and that is NOT the same question as "does #splash exist".
+    // The boot script plays the splash ONCE PER SESSION (sessionStorage 'fm.splashed'), and on a
+    // repeat load it returns before `sp.classList.remove('hidden')`, so the element is still sitting
+    // in the DOM — hidden, display:none, with no listeners, no timers, and no dismiss() ever wired
+    // up. Testing for the element alone took the "splash is up" branch on every one of those loads:
+    // .hm-preintro went on (which is `opacity: 0` for every child of #home-screen) and the code then
+    // waited for an fm:splash-dismiss that nothing would ever dispatch. The 6s backstop eventually
+    // cleared it, so the symptom was a home screen that was INVISIBLE BUT STILL CLICKABLE for six
+    // seconds — Ezra: "when i exit a project nothing loads, i can still press on the screen and load
+    // projects but they just arent visibly there… it happens if i refresh while in a project."
+    // (Refreshing inside a project is what separates the two cases: home is not opened at boot, so
+    // this runs for the first time later, on the way OUT of the project, long after the splash slot
+    // has passed.) `splash-out` is checked too: mid-dissolve the event has already been dispatched,
+    // and a listener added after it would wait just as forever.
+    if (!splashIsUp()) { introPending = true; return; }   // nothing to wait for → render() stamps
     // Splash is up. Hide the content NOW (see .hm-preintro in styles.css) — leaving it visible is
     // what made the dissolve show a finished screen behind a still-playing logo.
     root.classList.add('hm-preintro');
@@ -1040,5 +1063,6 @@ window.FM = window.FM || {};
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
     },
     isOpen() { return root && !root.classList.contains('hidden'); },
+    _splashIsUp: splashIsUp,   // exposed for the regression test — see armIntro
   };
 })(window.FM);
