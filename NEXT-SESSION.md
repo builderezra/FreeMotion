@@ -29,11 +29,25 @@ audio import fix below was one.)
 
 ## The queue
 
-### 1. Motion blur for the OBJECT, not just the footage
+### 1. Motion blur for the OBJECT, not just the footage  — AND  ### 3 below are ONE job
 *"I'm only seeing motion blur footage, we need a motion blur for the actual object like we discussed."*
-Related to the long-standing task #48: transform blur can't smear effect- or camera-driven motion.
-There should be a motion blur that smears the layer's own movement (position/rotation/scale
-keyframes), listed distinctly from Motion Blur (Footage).
+
+**MEASURED 2026-08-10 — the object blur ALREADY EXISTS AND WORKS.** `layer.motionBlur`
+(js/inspector.js:2519, the Move & Transform toggle) genuinely smears the layer's own transform motion.
+Test: a 60px white square keyframed x 40->280 over 2s, sampled at t=1, shutter 0.9, 12 samples —
+lit span 60px -> 64px with 6 partially-lit pixels along the centre row. 4px is the CORRECT physics
+(120px/s * 0.9/30fps = 3.6px), not a bug.
+
+So **item 3's premise is wrong — do NOT just delete the toggle**, that would remove a working feature.
+The real problem is DISCOVERABILITY: Ezra looks in the Effects list, where he finds only
+`motionflow` "Motion Blur (Footage)" (compositor.js:435) and `motionblur` "Directional Blur" (:311).
+The object blur is a checkbox hidden in Move & Transform.
+
+**The job:** surface the existing transform blur in the Effects list as its own entry (e.g. "Motion
+Blur (Object)") sitting beside Motion Blur (Footage), driving the same `layer.motionBlur` state so
+old projects keep working — then remove the Move & Transform toggle (item 3) because the control
+has MOVED, not vanished. Fix the cross-reference in motionflow's description too, which currently
+points at "Motion Blur in Move & Transform".
 
 ### 2. Every individual slider gets its own keyframes
 *"The key frames are still not as individual as I want. Every single Individual slider needs to have
