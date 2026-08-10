@@ -1072,6 +1072,52 @@
     }
   });
 
+  test('a two-finger twist rotates the layer, and a plain pinch does not', { item: 'pinch-twist' }, function () {
+    // v5.18. Ezra: "When pinching to zoom you should be able to pitch and twist to change the angle
+    // as well." The two must not bleed into each other: fingers always rotate a little while they
+    // pinch, so the twist only engages past a 7° dead zone, and the threshold is subtracted after
+    // that so the angle starts from zero instead of jumping. Both directions are asserted, because
+    // the failure mode nobody notices is a resize that quietly skews the layer a few degrees.
+    const pv = document.getElementById('preview');
+    if (!pv) throw new Error('#preview missing');
+    const savedScene = FM.scene;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'T', x: 160, y: 120, shapeW: 80, shapeH: 80, fill: '#f00' });
+      FM.scene.layers.push(L); FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+      const r = pv.getBoundingClientRect();
+      if (!r.width) throw new Error('#preview has no size to aim at');
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const ev = (type, id, x, y) => pv.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y, button: 0 }));
+      const at = (deg, rad) => [cx + Math.cos(deg * Math.PI / 180) * rad, cy + Math.sin(deg * Math.PI / 180) * rad];
+      const rot = () => FM.evalProp(L.transform.rotation, FM.time) || 0;
+      const scl = () => FM.evalProp(L.transform.scale, FM.time) || 1;
+
+      // 1. pure twist, constant separation → rotation moves, scale must not
+      let a = at(180, 80), b = at(0, 80);
+      ev('pointerdown', 1, a[0], a[1]); ev('pointerdown', 2, b[0], b[1]);
+      for (let k = 1; k <= 8; k++) { const d = 40 * k / 8; a = at(180 + d, 80); b = at(d, 80); ev('pointermove', 1, a[0], a[1]); ev('pointermove', 2, b[0], b[1]); }
+      ev('pointerup', 1, a[0], a[1]); ev('pointerup', 2, b[0], b[1]);
+      const twisted = rot(), scaleAfterTwist = scl();
+      if (twisted < 25 || twisted > 40) throw new Error('a 40° twist gave ' + twisted + '° of rotation (expected ~33 — 40 less the 7° dead zone)');
+      if (Math.abs(scaleAfterTwist - 1) > 0.05) throw new Error('twisting also changed the scale to ' + scaleAfterTwist);
+
+      // 2. pure pinch, constant angle → scale moves, rotation must not budge at all
+      FM.setTransform(L, 'rotation', 0, FM.time); FM.setTransform(L, 'scale', 1, FM.time);
+      ev('pointerdown', 1, cx - 60, cy); ev('pointerdown', 2, cx + 60, cy);
+      for (let k = 1; k <= 8; k++) { const R = 60 + 60 * k / 8; ev('pointermove', 1, cx - R, cy); ev('pointermove', 2, cx + R, cy); }
+      ev('pointerup', 1, cx - 120, cy); ev('pointerup', 2, cx + 120, cy);
+      if (Math.abs(rot()) > 0.01) throw new Error('a straight pinch rotated the layer by ' + rot() + '° — the dead zone is not holding');
+      if (scl() < 1.6) throw new Error('the pinch did not scale (got ' + scl() + ', expected ~2)');
+    } finally {
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

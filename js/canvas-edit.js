@@ -196,6 +196,12 @@ window.FM = window.FM || {};
       midX: (q[0].x + q[1].x) / 2, midY: (q[0].y + q[1].y) / 2,
       scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y,
       u: vpOriginScreen(),   // transform-origin in screen space → keeps the content UNDER the fingers
+      // TWIST (Ezra: "when pinching to zoom you should be able to pitch and twist to change the angle
+      // as well"). The angle of the line between the two fingers, so its CHANGE is the rotation.
+      // vpPtrs is a Map and iterates in insertion order, so q[0]/q[1] mean the same finger here and
+      // in every move — swap them and the angle would flip by 180° mid-gesture.
+      ang0: Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x),
+      twisting: false,
     };
     // WITH A LAYER SELECTED the pinch resizes THAT LAYER instead of zooming the view (Ezra: "dragging
     // or pinching on the canvas won't affect the size or position of the canvas but the layer you have
@@ -206,6 +212,7 @@ window.FM = window.FM || {};
     if (sel && sel.type !== 'camera' && !sel.locked) {
       vpPinch.layer = sel;
       vpPinch.startScale = FM.evalProp(sel.transform.scale, FM.time) || 0.0001;
+      vpPinch.startRot = FM.evalProp(sel.transform.rotation, FM.time) || 0;
       // a group scales about its visible bounds centre, so its members don't fly off-frame —
       // same pivot the corner handle builds in startHandle
       if (sel.type === 'group' && FM.groupBounds) {
@@ -337,6 +344,18 @@ window.FM = window.FM || {};
             FM.shiftTransform(L, 'y', Math.round(P.cy + (P.g0y - P.cy) * k), FM.time);
           }
           FM.shiftTransform(L, 'scale', sc, FM.time);
+          // …and the twist. Fingers always rotate a little while they pinch, so without a dead zone
+          // every resize would also skew the layer a few degrees. Past 7° the twist LATCHES and the
+          // threshold is subtracted from then on, so the angle starts moving from zero rather than
+          // jumping by 7 the moment it engages.
+          const ang = Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x);
+          let dDeg = ((((ang - vpPinch.ang0) * 180 / Math.PI) + 180) % 360 + 360) % 360 - 180;
+          const DEAD = 7;
+          if (!vpPinch.twisting && Math.abs(dDeg) > DEAD) vpPinch.twisting = true;
+          if (vpPinch.twisting) {
+            const eff = dDeg - Math.sign(dDeg) * DEAD;
+            FM.shiftTransform(L, 'rotation', Math.round((vpPinch.startRot + eff) * 10) / 10, FM.time);
+          }
           vpPinch.moved = true;
           FM.requestRender();
           if (FM.canvasEdit) FM.canvasEdit.update();
