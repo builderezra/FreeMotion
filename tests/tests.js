@@ -431,6 +431,26 @@
 
   /* ---------------- runner ---------------- */
 
+  test('the + FAB never gets an overflow clip (it slices the glow into a box)', { item: 'fab-glow-clip' }, function () {
+    // v4.95. Twice reported as "there's a box around the logo". The cause is CSS paint order: filter
+    // is applied BEFORE the element's own clip, so an overflow:hidden on this button cuts its glow
+    // off dead straight at the border box — a soft halo that stops on a hard line reads as a grey
+    // panel around the artwork. WebKit enforces that order; Chrome does not, so a desktop check
+    // cannot see the damage and this has to be asserted on the property rather than on pixels.
+    // The orb (#hm-new) is deliberately exempt: its clip is a circle concentric with a circular
+    // render and its ambient glow is a box-shadow, which overflow never touches.
+    var f = document.getElementById('add-fab');
+    if (!f) throw new Error('#add-fab missing');
+    var ov = getComputedStyle(f);
+    ['overflow', 'overflowX', 'overflowY'].forEach(function (k) {
+      if (ov[k] === 'hidden' || ov[k] === 'clip' || ov[k] === 'scroll' || ov[k] === 'auto') {
+        throw new Error('#add-fab has ' + k + ':' + ov[k] + ' — that clips its drop-shadow glow to a square');
+      }
+    });
+    // and the glow it is protecting has to actually be there, or the assertion guards nothing
+    if (ov.filter.indexOf('drop-shadow') < 0) throw new Error('#add-fab lost its drop-shadow glow: ' + ov.filter);
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

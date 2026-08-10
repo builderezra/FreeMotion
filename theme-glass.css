@@ -183,8 +183,31 @@ html[data-theme="glass"] #hm-new:active {
 
    overflow + border-radius below are the backstop for a browser that drops the mask — the highlight
    still can't escape the circle, which is what stopped it painting a square panel around the orb. */
-html[data-theme="glass"] #hm-new,
-html[data-theme="glass"] #add-fab { overflow: hidden; }
+/* ---- THE BOX (v4.95). ----------------------------------------------------------------------
+ * Ezra, twice: "There's a box around the logo I sent you, looks shit… Still the exact same mate."
+ * It was never the sheen — v4.94's mask and clip-path work changed nothing, because they were
+ * fixing the wrong thing. It is THIS LINE.
+ *
+ * Read out of the pixels in his screenshot rather than guessed at: inside the box the yellow clip
+ * fits ~16% cyan plus ~16% black composited over it — which is exactly the glow pass and the two
+ * shadow passes of #add-fab's filter — and the interior is a soft blob that is darkest near the
+ * cross, bounded by a HARD step precisely on the 64px border box. A soft centre with a straight
+ * edge is a shadow being CLIPPED, not a square being painted.
+ *
+ * Which is spec-correct: filter is applied first, then the element's clip. overflow:hidden is that
+ * clip, so WebKit cuts the glow off at the border box and leaves a straight edge where the falloff
+ * should have continued. Chrome doesn't cut it, which is the entire reason this only ever appeared
+ * on his phone and never in my checks — I was looking at a browser that ignores the clip.
+ *
+ * The orb never showed it for two separate reasons, both of which hid the bug: its clip is a CIRCLE
+ * concentric with a circular render, and its wide ambient glow is a box-shadow, which overflow does
+ * not touch at all. Only the cross puts big drop-shadow passes inside a square clip.
+ *
+ * overflow is simply removed from the FAB. It was doing nothing anyway — the sheen is inset:0, so it
+ * cannot paint outside the button whether or not anything clips it. The orb keeps its copy: there
+ * the clip is a useful fallback if masking ever fails, and its own drop-shadows are sub-2px, so
+ * clipping them at the rim is invisible. */
+html[data-theme="glass"] #hm-new { overflow: hidden; }
 html[data-theme="glass"] #hm-new::after,
 html[data-theme="glass"] #add-fab::after {
   content: '';

@@ -37,7 +37,10 @@
     var frame = document.getElementById('app');
     frame.addEventListener('load', function () {
       var w = frame.contentWindow;
-      fetch('tests.js').then(function (r) { return r.text(); }).then(function (src) {
+      // no-store, not a plain fetch: the browser was serving tests.js from cache, so the runner
+      // could report green against a version of the suite that no longer exists on disk. A test
+      // harness that silently tests stale code is worse than no harness.
+      fetch('tests.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (src) {
         var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
         if (!w.FMTests) throw new Error('FMTests did not load (is FM initialised?)');
         return w.FMTests.run();

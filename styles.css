@@ -1624,6 +1624,12 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
        box would have made it read noticeably smaller than the button it replaced. */
     width: 64px; height: 64px; border: none; cursor: pointer; padding: 0;
     border-radius: 0;
+    /* NEVER give this element an overflow clip. Per spec the filter below is applied first and the
+       element's clip second, so any overflow:hidden here slices the glow off dead straight at the
+       border box — a soft halo ending on a hard line, which is the "box" Ezra reported twice. WebKit
+       enforces that order; Chrome does not, so the damage is invisible on desktop. Declared
+       explicitly rather than just left unset so a later rule can't quietly bring it back. */
+    overflow: visible;
     background: url('fab-cross.png?v=1') center / contain no-repeat;
     /* Order is not arbitrary. --glass-edge has to come FIRST so its hairline is computed from the
        artwork's crisp alpha — put a soft pass before it and the "rim" is derived from a blurred
