@@ -71,7 +71,16 @@ first. Which row he means needs confirming from the image (top bar vs the transp
 actual boxes rather than eyeballing the CSS. Check BOTH layouts — in Studio the top bar is a vertical
 rail, so "the top row" may mean the transport.
 
-### 2. Replace the "FreeMotion" wordmark in the menu with his image
+### 2. Two design carry-overs Ezra should decide on (not bugs)
+- **The + FAB and the OPEN badge lose their faceting at button size.** Both are his glass renders,
+  correctly keyed with their + / letters cut through to transparent (verified: centre alpha 0).
+  But at 74px and 33x22 the facets, concentric rings and iridescent rim average into a plain glossy
+  shape. v4.91 went 62px -> 74px with a 256px asset and more contrast, which helped a little. This is
+  scale, not processing — the detail needs well over 100px. Options offered: leave it, go bigger
+  (~100-110px), or supply a simpler-faceted source that survives small sizes. HIS CALL, don't guess.
+- He said explicitly: **do not change the home background** (v4.88). It already drifts on a 48s cycle.
+
+### 3. Replace the "FreeMotion" wordmark in the menu with his image
 Source: `~/.claude/uploads/a8308134-d9f7-4702-8894-2d76d40f5bf3/dfd50b9c-FullSizeRender.jpeg`.
 He wants it to REPLACE the text "FreeMotion" in the menu. Two jobs before it goes in:
 (a) get the quality as high as possible — it's a JPEG photo, so it will need upscaling/cleanup, and
