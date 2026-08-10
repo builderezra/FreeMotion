@@ -1684,6 +1684,25 @@ window.FM = window.FM || {};
           t0 = setTimeout(() => { applyInnerWidth(); FM.timeline.updatePlayhead(); }, 60);
         }).observe(panelEl);
       }
+      /* The clip-nudge pair beside the playhead (v5.01). Same two actions the inspector used to
+         carry — slide the clip to the playhead, or stretch its near edge out to meet it — moved to
+         where your hand already is. They straddle #tl-centerline, so the gap between them is the
+         playhead itself, and each one's icon points the way the clip will actually travel. */
+      const nudge = document.getElementById('tl-nudge');
+      if (nudge) {
+        const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
+        const act = (fn) => () => {
+          const layer = FM.selectedLayer && FM.selectedLayer(FM.scene);
+          if (!layer) return;
+          if (fn(layer, FM.time)) {
+            FM.requestRender(); FM.timeline.rebuild();
+            if (FM.inspector) FM.inspector.refresh();
+            if (FM.history) FM.history.commit();
+          } else if (FM.toast) FM.toast('No more source to extend into', 1500);
+        };
+        L.addEventListener('click', act((l, t) => FM.moveClipTo(l, t)));
+        R.addEventListener('click', act((l, t) => FM.extendClipTo(l, t)));
+      }
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       let resizeRebuildTimer = 0;
       window.addEventListener('resize', () => {
@@ -1733,8 +1752,31 @@ window.FM = window.FM || {};
       } else loopRegionEl.classList.add('hidden');
     },
 
+    // Shown only while a clip is selected AND the playhead sits off it — the same condition that used
+    // to decide whether the inspector row offered these. Off the clip, "trim" and "split" can't do
+    // anything; these two can, which is the whole reason the pair swaps in.
+    syncNudge() {
+      const box = document.getElementById('tl-nudge');
+      if (!box) return;
+      const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      const side = layer && FM.clipPlayheadSide ? FM.clipPlayheadSide(layer) : 0;
+      box.classList.toggle('hidden', !side);
+      if (!side) return;
+      const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
+      const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
+      const ico = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+      // closed box = the whole clip travels; open-ended box = that edge stretches. Identical icons to
+      // the ones the inspector used, so the gesture is the one Ezra already knows.
+      L.innerHTML = ico(right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16');
+      R.innerHTML = ico(right ? 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16' : 'M12 8h8v8h-8M12 12H6M8 10l-2 2 2 2M3 4v16');
+      L.title = right ? 'Move clip right to the playhead' : 'Move clip left to the playhead';
+      R.title = right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead';
+      L.setAttribute('aria-label', L.title); R.setAttribute('aria-label', R.title);
+    },
+
     updatePlayhead() {
       if (!tracksEl) return;
+      FM.timeline.syncNudge();
       const pps = pxPerSec();
       // UNIVERSAL fixed-centre (phone + desktop): #tl-centerline is a CSS-pinned static line at 50vw
       // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits

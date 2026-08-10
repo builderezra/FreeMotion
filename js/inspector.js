@@ -1173,13 +1173,22 @@ window.FM = window.FM || {};
     quickSideSig = homeRowSig();   // what this row was built for — syncPlayhead rebuilds when it stops matching
     if (side) {
       const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
-      row.appendChild(qbtn(right ? 'Move clip right to the playhead' : 'Move clip left to the playhead',
+      /* These two are ALSO rendered beside the playhead on the timeline (#tl-nudge, v5.01) — Ezra
+       * moved them there because that is where your hand already is while you drag. They are hidden
+       * here on desktop by CSS rather than removed, so the phone (whose timeline is too narrow for a
+       * floating pair, and whose layout is off-limits) keeps them exactly where they have always
+       * been. One home per platform, never two at once. */
+      const mv = qbtn(right ? 'Move clip right to the playhead' : 'Move clip left to the playhead',
         right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16',
-        {}, () => { if (FM.moveClipTo(layer, FM.time)) after(); }));
+        {}, () => { if (FM.moveClipTo(layer, FM.time)) after(); });
+      mv.classList.add('qr-nudge');
+      row.appendChild(mv);
       // open-ended box = that edge stretches; closed box above = the whole clip travels
-      row.appendChild(qbtn(right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead',
+      const ex = qbtn(right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead',
         right ? 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16' : 'M12 8h8v8h-8M12 12H6M8 10l-2 2 2 2M3 4v16',
-        {}, () => { if (FM.extendClipTo(layer, FM.time)) after(); else if (FM.toast) FM.toast('No more source to extend into', 1500); }));
+        {}, () => { if (FM.extendClipTo(layer, FM.time)) after(); else if (FM.toast) FM.toast('No more source to extend into', 1500); });
+      ex.classList.add('qr-nudge');
+      row.appendChild(ex);
     } else {
       // trim START to playhead (drop everything before the playhead)
       // disabled state is evaluated at BUILD, but the panel doesn't rebuild on scrub — leave the

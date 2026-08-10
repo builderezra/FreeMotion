@@ -946,6 +946,38 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   text-align: center; color: rgba(232, 236, 244, .45); font-size: 12px; letter-spacing: .4px;
   text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
 }
+/* ---- clip-nudge pair, straddling the playhead (v5.01) ----------------------------------------
+ * Ezra drew an arrow from the inspector's two clip buttons down to a pair of marks either side of
+ * the playhead: "i feel its close the where you will be dragging so itll be easy to click, one on
+ * each side." So the GAP between them is the playhead — they frame the line rather than sitting
+ * near it, which is what makes the pairing read at a glance.
+ * Same `calc(50vw - var(--tl-panel-left))` the centre line uses, so they track it exactly in every
+ * layout instead of needing their own offset maths. They live in the ruler band, above the clips and
+ * below the timecode, which is the strip Ezra marked. Desktop only — the phone keeps them in the
+ * inspector (see .qr-nudge below); a floating pair on a 375px timeline would cover the clips. */
+#tl-nudge {
+  position: absolute; z-index: 14;
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: 69px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 26px;   /* 26px straddles the 2px line with clearance both sides */
+  pointer-events: none;                            /* only the buttons take clicks — the ruler under them still scrubs */
+}
+#tl-nudge.hidden { display: none; }
+#tl-nudge button {
+  pointer-events: auto;
+  width: 30px; height: 24px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-3); border: 1px solid var(--line);
+  border-radius: 7px; color: var(--text); cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+}
+#tl-nudge button svg { width: 16px; height: 16px; display: block; }
+#tl-nudge button:hover { border-color: var(--accent); color: var(--accent); }
+#tl-nudge button:active { transform: translateY(1px); }
+/* one home per platform: the floating pair is desktop-only, the inspector copy is phone-only */
+@media (max-width: 700px) { #tl-nudge { display: none !important; } }
+@media (min-width: 701px) { .qr-btn.qr-nudge { display: none; } }
+
 /* A hidden layer's clip, dimmed so the timeline says WHY nothing is rendering (v4.99). Deliberately
    not opacity alone: at low opacity the clip's own colour washes toward the panel behind it and two
    different hidden clips stop being distinguishable. brightness+saturate keeps the hue identifiable

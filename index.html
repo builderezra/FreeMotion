@@ -8,7 +8,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=261">
+<link rel="stylesheet" href="styles.css?v=262">
 <link rel="stylesheet" href="theme-glass.css?v=14">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -113,7 +113,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.00</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.01</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -245,6 +245,16 @@
       <!-- Phone only: a fixed-centre playhead that lives OUTSIDE the scroller, so it can never move.
            The timeline content scrolls underneath it (AM behaviour). Positioned by timeline.js. -->
       <div id="tl-centerline" aria-hidden="true"></div>
+      <!-- The clip-nudge pair (v5.01). Ezra drew an arrow from the inspector's two clip buttons to a
+           pair of marks flanking the playhead: "i feel its close the where you will be dragging so
+           itll be easy to click, one on each side." They straddle the centre line so the gap between
+           them IS the playhead, and they only exist while a clip is selected and the playhead is off
+           it — the same condition that made them appear in the inspector. timeline.js fills the
+           icons and the titles, because which way the clip travels depends on which side you are on. -->
+      <div id="tl-nudge" class="hidden">
+        <button id="tl-nudge-l" type="button"></button>
+        <button id="tl-nudge-r" type="button"></button>
+      </div>
     </footer>
   </div>
 
@@ -503,9 +513,9 @@
   <script src="js/fx-registry.js?v=62"></script>
   <script src="js/fx-presets.js?v=2"></script>
   <script src="js/fx-thumbs.js?v=14"></script>
-  <script src="js/timeline.js?v=111"></script>
+  <script src="js/timeline.js?v=112"></script>
   <script src="js/addmenu.js?v=23"></script>
-  <script src="js/inspector.js?v=202"></script>
+  <script src="js/inspector.js?v=203"></script>
   <script src="js/fx-browser.js?v=24"></script>
   <script src="js/elements-browser.js?v=1"></script>
   <script src="js/color-wheel.js?v=53"></script>
