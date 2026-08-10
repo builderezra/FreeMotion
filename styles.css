@@ -2126,3 +2126,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 /* Elements browser (v4.81) — reuses the effect browser's chrome; only the real element thumbnail
    needs anything of its own. */
 #el-browser .elb-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+
+/* Undo / redo with nothing behind or ahead of them (v4.84). Greyed rather than hidden — the control
+   should stay where your eye expects it, just visibly unavailable. pointer-events stays ON so a tap
+   still lands (undo()/redo() already no-op at the ends); disabling it would make the button feel
+   broken rather than empty. */
+#btn-undo.is-off, #btn-redo.is-off { opacity: .3; cursor: default; }
+#btn-undo.is-off:hover, #btn-redo.is-off:hover { background: transparent; }

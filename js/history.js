@@ -41,11 +41,26 @@ window.FM = window.FM || {};
     if (FM.seekVideosToTime) FM.seekVideosToTime();
   }
 
+  /* Grey the transport's undo/redo when there is nothing behind or ahead (Ezra). The state already
+   * existed — index > 0 and index < stack.length - 1 are exactly the guards undo()/redo() use — it
+   * was simply never shown, so both buttons always looked live and pressing them did nothing at the
+   * ends of the stack. Kept in here rather than in app.js so every path that moves the stack
+   * (commit, undo, redo, reset) updates the buttons through one call and none can drift. */
+  function syncButtons() {
+    const u = document.getElementById('btn-undo'), r = document.getElementById('btn-redo');
+    const canU = index > 0, canR = index < stack.length - 1;
+    if (u) { u.classList.toggle('is-off', !canU); u.setAttribute('aria-disabled', canU ? 'false' : 'true'); }
+    if (r) { r.classList.toggle('is-off', !canR); r.setAttribute('aria-disabled', canR ? 'false' : 'true'); }
+  }
+
   FM.history = {
+    canUndo() { return index > 0; },
+    canRedo() { return index < stack.length - 1; },
+    syncButtons: syncButtons,
     // reset() runs on open/load/boot — its commit must not count as a user edit, or merely VIEWING
     // a project would bump it to the top of the home list (the autosave it schedules is harmless:
     // it rewrites the just-loaded doc).
-    reset() { stack.length = 0; index = -1; this.commit(); if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty(); },
+    reset() { stack.length = 0; index = -1; this.commit(); if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty(); syncButtons(); },
     commit() {
       if (suppress) return;
       const s = snap();
@@ -59,8 +74,9 @@ window.FM = window.FM || {};
       let bytes = 0; for (let i = 0; i < stack.length; i++) bytes += stack[i].length;
       while (bytes > 48000000 && stack.length > 8) { bytes -= stack[0].length; stack.shift(); index--; }
       if (FM.storage) FM.storage.autosave();
+      syncButtons();   // a new edit drops the redo tail, so redo greys out here too
     },
-    undo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } },   // persist so a hard kill after undo can't resurrect the edit
-    redo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } },
+    undo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit
+    redo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },
   };
 })(window.FM);

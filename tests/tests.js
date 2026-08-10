@@ -401,6 +401,34 @@
     }
   });
 
+  test('undo / redo grey out when there is nothing behind or ahead', { item: 'undo-affordance' }, function () {
+    // v4.84. The state always existed (index > 0 / index < stack.length - 1 are the guards undo() and
+    // redo() already used) but was never shown, so both buttons looked live at the ends of the stack
+    // and pressing them did nothing.
+    if (!FM.history || !FM.history.canUndo) throw new Error('FM.history.canUndo missing');
+    var u = document.getElementById('btn-undo'), r = document.getElementById('btn-redo');
+    if (!u || !r) throw new Error('transport undo/redo buttons missing');
+    var grey = function (b) { return b.classList.contains('is-off'); };
+    var agree = function (where) {
+      if (grey(u) === FM.history.canUndo()) throw new Error(where + ': undo button greyed=' + grey(u) + ' but canUndo=' + FM.history.canUndo());
+      if (grey(r) === FM.history.canRedo()) throw new Error(where + ': redo button greyed=' + grey(r) + ' but canRedo=' + FM.history.canRedo());
+    };
+    FM.history.reset();
+    if (FM.history.canUndo()) throw new Error('a freshly reset history should have nothing to undo');
+    agree('fresh');
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+    FM.scene.layers.unshift(L);
+    FM.history.commit();
+    if (!FM.history.canUndo()) throw new Error('after an edit there should be something to undo');
+    if (FM.history.canRedo()) throw new Error('a fresh edit must leave nothing to redo');
+    agree('after edit');
+    FM.history.undo();
+    if (!FM.history.canRedo()) throw new Error('after undo there should be something to redo');
+    agree('after undo');
+    FM.history.redo();
+    agree('after redo');
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {
