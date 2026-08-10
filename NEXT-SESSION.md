@@ -62,13 +62,20 @@ Four pieces, all in js/home.js. Fewer than all four ships a visibly broken Selec
 Verify by RUNNING: enter select on each tab, tick two, confirm the bar counts 2, delete, confirm the
 right things went and the other tabs are untouched.
 
-### 2. Two design calls for Ezra (not bugs — do not guess)
-- **The + FAB and OPEN badge lose their faceting at button size.** Both are his glass renders, keyed
-  correctly with the + / letters cut through to transparent (verified centre alpha 0). At 74px and
-  33x22 the facets and iridescent rim average into a plain glossy shape. v4.91 went 62→74px with a
-  256px asset and more contrast; it helped a little. This is SCALE, not processing — the detail needs
-  well over 100px. Options put to him: leave it, go bigger (~100-110px), or a simpler-faceted source.
+### 2. Standing design constraints (do not guess at these)
 - **Do NOT change the home background.** He said so explicitly. It already drifts on a 48s cycle.
+- **The orbs are SMALL now and that is his call, not a bug.** v4.91 had gone 62→74px to keep the
+  render's faceting legible; he came back with "make it smaller coz the design looks funny when it's
+  so big", so v4.92 is 58px for both the home create button and the editor FAB. The faceting question
+  is closed — the liquid-glass edge light carries the glass at that size instead. Don't quietly grow
+  them back.
+- **The + and the OPEN letters must stay SEE-THROUGH.** "make sure the plus in the middle is actually
+  cropped out and you can see under." Two separate things have flooded that cut-out and both are easy
+  to reintroduce: (a) a wide `drop-shadow` pass — the filter follows alpha and cannot tell an outer
+  edge from a hole, so anything past ~2px of blur closes a 6px plus; the ambient glow is a
+  `box-shadow` for exactly this reason. (b) the travelling sheen — it is a child painted OVER the
+  background image, so without `mask: url(fab-plus.png)` it sweeps straight through the hole. Check
+  both by parking the sheen mid-sweep (`background-position: 46% 0`) over a bright backdrop.
 
 ### 3. Standing: BUG-HUNT.md
 69 confirmed findings, essentially untouched. That is the backlog when he has no specific ask.
