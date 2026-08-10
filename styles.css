@@ -1574,15 +1574,21 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .m-export:active { filter: brightness(.92); }
 
   /* AM green + FAB (add) — bottom-right, above the timeline */
+  /* The FAB is Ezra's glass orb (v4.89). Its + is CUT THROUGH to transparent — the source render has
+     the plus in the same black as its backdrop, so one luminance key punched out both and left the
+     bevel — which means whatever is behind the button shows through the plus. That only works if the
+     button itself has no fill of its own, hence background:none and no border-radius ring: the orb IS
+     the shape. The old SVG glyph is hidden rather than removed so the button keeps its accessible
+     name and nothing else has to change. */
   #add-fab {
     display: flex; align-items: center; justify-content: center;
     position: fixed; right: 16px; bottom: 20px; z-index: 61;
-    width: 54px; height: 54px; border-radius: 50%; border: none; cursor: pointer;
-    background: var(--am-green); color: #04210f;
-    box-shadow: 0 6px 20px rgba(0,0,0,.5), 0 0 0 4px rgba(30,215,96,.14);
+    width: 62px; height: 62px; border: none; cursor: pointer; padding: 0;
+    background: url('fab-plus.png?v=1') center / contain no-repeat;
+    filter: drop-shadow(0 6px 18px rgba(0,0,0,.55));
     -webkit-tap-highlight-color: transparent;
   }
-  #add-fab svg { width: 26px; height: 26px; }
+  #add-fab svg { display: none; }
   #add-fab:active { filter: brightness(.92); transform: translateY(1px); }
 
   /* AM has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */

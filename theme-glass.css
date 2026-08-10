@@ -203,21 +203,34 @@ html[data-theme="glass"] #hm-new::after {
   html[data-theme="glass"] #hm-new::after { animation: none; opacity: .18; transform: none; }
 }
 
-/* the mobile add FAB gets the same bead treatment */
+/* The add FAB is Ezra's glass orb render (v4.89), so it no longer wants the painted bead: the artwork
+   already IS the glass, and the old inset shadows / backdrop-filter assumed a solid fill — they drew a
+   bead edge around a button whose middle is deliberately see-through. The orb's + is cut to
+   transparent, so whatever is behind the button shows through it.
+   The SHINE stays (Ezra asked for it explicitly): the sweeping highlight below is a child layer, and
+   overflow:hidden above still clips it to the button, so light travels across the glass and vanishes
+   at the rim exactly as before. Outer glow is kept too — just no inner bead. */
 html[data-theme="glass"] #add-fab {
-  background:
-    radial-gradient(85% 62% at 50% 6%, rgba(255, 255, 255, .52), rgba(255, 255, 255, 0) 62%),
-    linear-gradient(180deg, rgba(150, 243, 228, .92), rgba(41, 168, 146, .76));
-  -webkit-backdrop-filter: saturate(190%) blur(14px) brightness(1.15);
-  backdrop-filter: saturate(190%) blur(14px) brightness(1.15);
-  color: #032a24;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .72),
-    inset 0 0 0 1px rgba(185, 232, 225, .22),
-    inset 0 -10px 18px -8px rgba(2, 30, 26, .55),
-    0 12px 30px rgba(92, 224, 200, .20),
-    0 4px 14px rgba(0, 0, 0, .5);
+  background: url('fab-plus.png?v=1') center / contain no-repeat;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, .55)) drop-shadow(0 0 16px rgba(120, 220, 255, .16));
 }
+/* the travelling sheen, same treatment the other glass buttons get */
+html[data-theme="glass"] #add-fab::after {
+  content: '';
+  position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: linear-gradient(74deg, transparent 42%, rgba(255,255,255,.34) 50%, transparent 58%);
+  transform: translateX(-38%);
+  animation: fab-sheen 5.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes fab-sheen {
+  0%, 62% { transform: translateX(-38%); }
+  86%, 100% { transform: translateX(38%); }
+}
+@media (prefers-reduced-motion: reduce) { html[data-theme="glass"] #add-fab::after { animation: none; opacity: .18; } }
 
 /* Accent-filled controls pick up the same crown highlight, so they read as one family. */
 html[data-theme="glass"] .btn-accent,
