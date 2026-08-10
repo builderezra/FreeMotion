@@ -3192,6 +3192,19 @@ window.FM = window.FM || {};
     // tiles spaces its copies BY this rectangle, so it needs the exact one for the same reason
     else if (fx.type === 'tiles') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
+    // Tiles in "Whole clip" mode builds its OWN plate reaching past the frame and takes its rect from
+    // THAT (the `whole && expand` branch in tiles() overwrites src/sx/sy/bw/bh/bx/by wholesale). But
+    // the call below is gated on the CANVAS bbox, so a clip dragged fully off-frame never got the
+    // chance to look: no on-screen alpha -> no bbox -> fn never ran -> the tiles rendered NOTHING
+    // (measured: centred 100% of the frame lit, half-off 100%, fully off 0%). This is why the two
+    // previous attempts at this bug changed nothing — both were downstream of a call that never
+    // happened. Hand it a placeholder rect so it runs; it replaces it from the expanded plate, and
+    // if that plate comes back empty the existing guards fall through to a clean passthrough.
+    if (fx.type === 'tiles' && (!bbox || bbox.w <= 2 || bbox.h <= 2)) {
+      const _src = fx.params ? fx.params.source : 1;
+      const _srcIdx = Array.isArray(_src) ? _src[0] : (_src == null ? 1 : _src);   // options land as an index, sometimes [idx,label]
+      if (_srcIdx !== 0) bbox = { x: 0, y: 0, w: W, h: H };                        // 0 = "On screen", which SHOULD stay empty
+    }
     // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases.
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
     // frame — the exact churn line 1500's guard avoids for A); the clearRect does the reset either way.

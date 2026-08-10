@@ -345,6 +345,33 @@
     if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
   });
 
+  test('tiles: "Whole clip" repeats a clip that is entirely off-canvas', { item: 'tiles-offcanvas' }, function () {
+    // v4.82. Tiles' "Whole clip" mode builds its own plate reaching past the frame — but the call was
+    // gated on the CANVAS bbox, so a clip dragged fully off-frame had no on-screen alpha, the effect
+    // function never ran, and the tiles rendered NOTHING. Measured before the fix: centred 100% of the
+    // frame lit, half off 100%, fully off 0%. Two earlier fixes missed it because both were downstream
+    // of a call that never happened.
+    var d = (FM.EFFECTS || []).filter(function (e) { return e.type === 'tiles'; })[0];
+    if (!d) throw new Error('tiles effect missing from the registry');
+    var P = {}; (d.params || []).forEach(function (q) { P[q.key] = q.def; });
+    function litPct(x, params) {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: x, y: 120, shapeW: 70, shapeH: 70, fill: '#ffd24a' });
+      L.effects = [{ type: 'tiles', enabled: true, params: params }];
+      var c = offscreen(320, 240), g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, scene([L]), 0);
+      var im = g.getImageData(0, 0, 320, 240).data, n = 0;
+      for (var i = 0; i < im.length; i += 4) if (im[i] + im[i + 1] + im[i + 2] > 40) n++;
+      return n / (im.length / 4) * 100;
+    }
+    var whole = Object.assign({}, P);                      // source defaults to 1 = Whole clip
+    var off = litPct(-60, whole), centre = litPct(160, whole);
+    if (!(off > 60)) throw new Error('a clip fully off-canvas tiled ' + off.toFixed(1) + '% of the frame — "Whole clip" is repeating emptiness again');
+    if (!(centre > 60)) throw new Error('the ordinary centred case broke: ' + centre.toFixed(1) + '% lit');
+    // …and "On screen" must still mean on screen — fixing the blank must not merge the two modes
+    var onScreen = Object.assign({}, P, { source: 0 });
+    if (litPct(-60, onScreen) > 5) throw new Error('"On screen" mode now repeats off-frame content — the two modes have collapsed into one');
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {
