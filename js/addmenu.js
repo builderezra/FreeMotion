@@ -78,8 +78,53 @@ window.FM = window.FM || {};
     });
   }
 
+  /* The four instant-spawn tools. These no longer render as their own rail — they are the head of the
+   * Elements tab's list (see above). Kept as a named array because the Shift+1..4 shortcuts index it
+   * and FM.addmenu.instant() is the public entry point for them. */
+  var INSTANT = [
+    { label: 'Text', icon: ico('<path d="M6 5h12M12 5v14M9 19h6"/>'), add: function () { FM.addTextLayer && FM.addTextLayer(); } },
+    { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
+    { label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
+    { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
+  ];
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
+    /* ELEMENTS is the FIRST tab now (Ezra: "move the elements section to the far left so shapes isnt
+     * the first thing that gets opened anymore") and it absorbed the old top row. Text, Captions,
+     * Freehand Drawing and Vector Drawing used to sit in a separate always-visible rail above the
+     * tabs; they are MOVED here, not copied — the rail is gone, so there is exactly one place to find
+     * each of them and the panel got a whole row of its height back.
+     * They lead the list because they are the things you reach for most, and because with Elements
+     * opening by default they are the first thing on screen when the Add menu appears — one tap, same
+     * as the rail gave, without the rail. */
+    { key: 'object', label: 'Elements', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: function () {
+      var base = INSTANT.concat([
+        { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
+        { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
+        { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
+        // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
+        // make the container and then fill it. Drag layers onto it, or parent them to it.
+        { label: 'Empty group', icon: ico('<rect x="3" y="6" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M8 13h8M12 9v8"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
+      ]);
+      // "Save selection as element…" is gone from here — it acts on a SELECTION, and this menu only
+      // ever appears when nothing is selected, so the one state it needed was the one state it could
+      // never be in. It still lives on the layer ⋯ menu, where a selection exists.
+      //
+      // The user's saved elements USED to be pushed onto this same list, so three structural layer
+      // types and every element you had ever saved sat loose in one flat grid (Ezra: "make sure all
+      // the elements are grouped together and not siting loose in the same menu that holds camera and
+      // all that"). They live behind one button, which opens a real browser with its own search.
+      var saved = (FM.elements ? FM.elements.list() : []) || [];
+      base.push({
+        label: saved.length ? 'Custom elements (' + saved.length + ')' : 'Custom elements',
+        icon: ico('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/>'),
+        add: function () {
+          if (FM.elementsBrowser) FM.elementsBrowser.open();
+          else if (FM.toast) FM.toast('Elements browser unavailable');
+        },
+      });
+      return base;
+    } },
     { key: 'shape', label: 'Shape', icon: ico('<rect x="4" y="4" width="9" height="9" rx="1.5"/><circle cx="16" cy="16" r="5"/>'), options: [
       // The pair Ezra asked for, first and side by side: the same square, sharp corners vs Apple's.
       // Both spawn a TRUE square (aspect forced 1:1) so the only difference you see is the corner.
@@ -134,33 +179,6 @@ window.FM = window.FM || {};
     } },
     // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
     // section on Home, so the tab is named after them rather than after the odds and ends beside them.
-    { key: 'object', label: 'Elements', icon: ico('<path d="M10 3l5.5 9H4.5z"/><circle cx="16.5" cy="15.5" r="4.5"/>'), options: function () {
-      var base = [
-        { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
-        { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
-        { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'), add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); } },
-        // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
-        // make the container and then fill it. Drag layers onto it, or parent them to it.
-        { label: 'Empty group', icon: ico('<rect x="3" y="6" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M8 13h8M12 9v8"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
-        // …and the way to MAKE an element, sitting with the elements themselves instead of only in a
-        // ⋯ menu two levels away.
-        { label: 'Save selection as element…', icon: ico('<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z"/><path d="M19 17v5M16.5 19.5h5"/>'), add: function () { FM.saveElementPrompt && FM.saveElementPrompt(); } },
-      ];
-      // The user's saved elements USED to be pushed onto this same list, so three structural layer
-      // types and every element you had ever saved sat loose in one flat grid (Ezra: "make sure all
-      // the elements are grouped together and not siting loose in the same menu that holds camera and
-      // all that"). They live behind one button now, which opens a real browser with search.
-      var saved = (FM.elements ? FM.elements.list() : []) || [];
-      base.push({
-        label: saved.length ? 'Browse elements (' + saved.length + ')' : 'Browse elements',
-        icon: ico('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/>'),
-        add: function () {
-          if (FM.elementsBrowser) FM.elementsBrowser.open();
-          else if (FM.toast) FM.toast('Elements browser unavailable');
-        },
-      });
-      return base;
-    } },
     { key: 'template', label: 'Template', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         return { label: t.name, icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
@@ -169,18 +187,6 @@ window.FM = window.FM || {};
       if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });
       return out;
     } },
-  ];
-
-  // QUICK-ADD rail — one tap spawns/starts immediately. The instant-spawn tools live together on one
-  // row (AM): Text · Captions · Freehand Drawing · Vector Drawing. On a phone this rail is always
-  // visible, so Freehand Drawing is easy to find (it used to be a top tab that scrolled off-screen).
-  // Captions sits directly under Text (Ezra): it spawns instantly like the rest of the rail and it is
-  // a text tool, so burying it in the Media tab next to Import was the wrong shelf.
-  var INSTANT = [
-    { label: 'Text', icon: ico('<path d="M6 5h12M12 5v14M9 19h6"/>'), add: function () { FM.addTextLayer && FM.addTextLayer(); } },
-    { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
-    { label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
-    { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
 
   var _startTab = null;   // set by openTab() so a keyboard shortcut can jump straight to a tab
@@ -269,37 +275,13 @@ window.FM = window.FM || {};
           }
           return c;
         }
-        // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots \u2014 not a vertical scroll.
-        /* ELEMENTS get a SEARCHABLE, SCROLLING list instead of the sideways pager. The pager is right
-         * for a fixed catalogue you can learn by shape \u2014 the 40-odd shapes, the handful of objects \u2014
-         * but your own elements are an open-ended pile you named yourself, and a page 2 you have to know
-         * to swipe to is the same as not having them (Ezra: "it seems it can only fit one and then the
-         * rest don't show... make a menu that has all of them, organised and easy to use if you have a
-         * lot of elements, with a search bar"). */
-        if (tab.key === 'object') {
-          bodyEl.classList.add('addmenu-body--list');
-          var q = '';
-          var search = document.createElement('input');
-          search.type = 'text'; search.className = 'addmenu-search'; search.placeholder = 'Search elements\u2026';
-          search.spellcheck = false; search.autocomplete = 'off';
-          var listWrap = document.createElement('div'); listWrap.className = 'addmenu-list';
-          var paint = function () {
-            listWrap.innerHTML = '';
-            var ql = q.trim().toLowerCase();
-            var shown = ql ? opts.filter(function (o) { return String(o.label || '').toLowerCase().indexOf(ql) >= 0; }) : opts;
-            if (!shown.length) {
-              var none = document.createElement('div'); none.className = 'addmenu-none';
-              none.textContent = 'Nothing matches \u201c' + q.trim() + '\u201d';
-              listWrap.appendChild(none); return;
-            }
-            var g = document.createElement('div'); g.className = 'addmenu-grid';
-            shown.forEach(function (o) { g.appendChild(makeCard(o)); });
-            listWrap.appendChild(g);
-          };
-          search.addEventListener('input', function () { q = search.value; paint(); });
-          bodyEl.appendChild(search); bodyEl.appendChild(listWrap); paint();
-          return;
-        }
+        // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots — not a vertical scroll.
+        /* The Elements tab used to get its own search field and scrolling list, because every saved
+         * element was dumped into it. Nothing open-ended lives here any more — it is nine fixed
+         * entries, all visible at once — so the field searched a list you could already see whole.
+         * Ezra: "in the elements section get rid of the search bar, that should only be in the browse
+         * element section." The real search is in the Custom elements browser, over the pile that
+         * actually needs one. */
         var perPage = iconOnly ? (variant === 'sheet' ? 15 : 18) : (variant === 'sheet' ? 9 : 12);   // shapes 5\u00d73 / 6\u00d73; others 3\u00d73 / 4\u00d73
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
         for (var i = 0; i < opts.length; i += perPage) {
@@ -338,12 +320,12 @@ window.FM = window.FM || {};
       });
       main.appendChild(tabsEl); main.appendChild(bodyEl); drawBody();
 
+      /* The rail is EMPTY of tools now. Text / Captions / Freehand Drawing / Vector Drawing moved into
+       * the Elements tab (which opens first), so this row of cards would have been a duplicate of what
+       * is already on screen — Ezra: "i want them moved not duplicated". The element itself stays
+       * because the phone sheet hangs its ✕ here; CSS collapses it when it holds nothing, so the panel
+       * gets the whole row back instead of an empty strip. */
       var side = document.createElement('div'); side.className = 'addmenu-side';
-      INSTANT.forEach(function (it) {
-        var c = card(it, 'addmenu-card addmenu-quick');
-        c.addEventListener('click', function () { it.add(); after(); });
-        side.appendChild(c);
-      });
       if (variant === 'sheet' && opts.onClose) {
         var x = document.createElement('button');
         x.className = 'addmenu-close'; x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.textContent = '✕';

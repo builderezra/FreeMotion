@@ -881,7 +881,11 @@ window.FM = window.FM || {};
     lane.className = 'track-lane';
 
     const clip = document.createElement('div');
-    clip.className = 'clip' + (isSelected(layer.id) ? ' sel' : '') + (layer.reversed ? ' reversed' : '') + (layer.type === 'group' ? ' group-bar' : '');
+    // A hidden layer used to look EXACTLY like a visible one on the timeline — the only tell was the
+    // struck-through eye way over in the track head, which you don't look at while you're wondering
+    // why nothing is rendering. Ezra: "when you make a clip hidden it darkens the layer on the
+    // timeline so you dont get confused and miss why its hidden."
+    clip.className = 'clip' + (isSelected(layer.id) ? ' sel' : '') + (layer.reversed ? ' reversed' : '') + (layer.type === 'group' ? ' group-bar' : '') + (layer.visible === false ? ' clip-hidden' : '');
     clip.style.left = (PAD + layer.start * pps) + 'px';
     clip.style.width = Math.max(8, layer.duration * pps) + 'px';
     // A clip colour that was CHOSEN (clipColorSet) beats the shape's fill — it was set deliberately.

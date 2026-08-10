@@ -571,6 +571,11 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .addmenu--panel { flex-direction: column; }
 .addmenu--panel .addmenu-side { flex-direction: row; flex-wrap: wrap; order: -1; }
 .addmenu--panel .addmenu-side > .addmenu-card { flex: 1 1 0; min-width: 70px; }
+/* :empty collapses the rail once its tools moved into the Elements tab (v4.98). Without this the row
+   still claimed its gap and padding, so removing the buttons would have freed no space at all — which
+   was the whole point of moving them. Any variant that still puts something in the rail (the phone
+   sheet's ✕) is unaffected, because then it isn't empty. */
+.addmenu-side:empty { display: none; }
 
 /* Mobile bottom-sheet: AM layout — content on the left, quick-add rail on the right. */
 .addmenu-host { padding: 0 12px 6px; }
@@ -941,6 +946,19 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   text-align: center; color: rgba(232, 236, 244, .45); font-size: 12px; letter-spacing: .4px;
   text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
 }
+/* A hidden layer's clip, dimmed so the timeline says WHY nothing is rendering (v4.99). Deliberately
+   not opacity alone: at low opacity the clip's own colour washes toward the panel behind it and two
+   different hidden clips stop being distinguishable. brightness+saturate keeps the hue identifiable
+   while pushing it well below every visible neighbour, and the dashed rim makes it read as switched
+   off rather than merely dark. Selection still wins — a hidden clip you have selected keeps its
+   outline, because you need to see what you're editing even while it's invisible on the canvas. */
+.clip.clip-hidden {
+  filter: brightness(.42) saturate(.55);
+  outline: 1px dashed rgba(233, 240, 248, .35); outline-offset: -3px;
+}
+.clip.clip-hidden .clip-label { opacity: .8; font-style: italic; }
+.clip.clip-hidden.sel { filter: brightness(.55) saturate(.7); }
+
 /* SLIP ghost — the full source filmstrip shown on the row during a slip drag */
 .slip-ghost {
   position: absolute; z-index: 5; pointer-events: none;
@@ -1935,7 +1953,19 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .addmenu-pager::-webkit-scrollbar { display: none; }
 .addmenu-page { flex: 0 0 100%; scroll-snap-align: start; box-sizing: border-box; }
 .addmenu-page .addmenu-grid { grid-template-columns: repeat(3, 1fr); }
-.addmenu--panel .addmenu-page .addmenu-grid { grid-template-columns: repeat(4, 1fr); }
+/* FIVE across on the PC panel (v4.98), not four. The Elements tab now carries nine entries — the four
+   instant tools that used to be their own row, plus the four structural layers and Custom elements —
+   and at four columns that is three rows, which ran off the bottom of the panel and hid Custom
+   elements entirely. Five columns is two rows with a spare slot, and the cards below are trimmed to
+   suit: Ezra, "you can also make the buttons smaller in that area so they all fit nice and easily."
+   The label may wrap to two lines now instead of ellipsing — at this width "Freehand Drawing" was
+   truncating to "Freehand Dra…", which is the one label in the menu you cannot guess from its icon. */
+.addmenu--panel .addmenu-page .addmenu-grid { grid-template-columns: repeat(5, 1fr); }
+.addmenu--panel .addmenu-page .addmenu-card { padding: 8px 3px; gap: 4px; }
+.addmenu--panel .addmenu-page .addmenu-card .addmenu-ic svg { width: 19px; height: 19px; }
+.addmenu--panel .addmenu-page .addmenu-card .addmenu-lbl {
+  white-space: normal; max-width: none; overflow: visible; font-size: 9.8px; line-height: 1.1;
+}
 /* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like AM */
 .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(5, 1fr); }
 .addmenu--panel .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
@@ -2211,7 +2241,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      short window that pushed Export out of the rail entirely (measured: 20px past the end, sitting over
      the panel below). Stacked normally it is always reachable, and on a tall monitor it stays with the
      other controls instead of stranded a screen away from them. */
-  body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; }
+  /* justify-content is the fix, not the sizing (v4.99). The label is hidden with font-size:0 rather
+     than removed, so the "Export" text node still occupies a slot in the flex row — with the default
+     flex-start the icon was shoved against the left edge and the dead text took the rest. Measured:
+     icon centre x=16 inside a button whose centre is x=29.5, so it sat 13.5px off inside its own
+     button. Ezra: "on PC at the moment, the export button isn't centered. It looks really bad." */
+  body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; justify-content: center; }
 
   /* The project name has nowhere to live in a 60px rail, so it floats over the stage's top-left —
      same input, same handlers, just repositioned. */

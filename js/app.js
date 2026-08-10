@@ -1992,6 +1992,17 @@ window.FM = window.FM || {};
     expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
     hideExportDialog();
     if (!FM.scene.layers.length) { alert('Add some media first.'); return; }
+    /* "This frame (PNG)" is an export of one frame, so it lives on the format list — but it shares
+       nothing else with the encoders: no range, no fps, no bitrate, no progress overlay to show for
+       an operation that finishes instantly. Handled and returned right here, before any of that is
+       computed, rather than threaded through the encoder branch as a special case that has to be
+       skipped at five later points. (Ezra: "The button to save a frame as a PNG should just be inside
+       of the export menu when you press the export button.") */
+    if (((document.getElementById('exp-format') || {}).value) === 'frame') {
+      if (FM.snapshotPNG) FM.snapshotPNG();
+      else if (FM.toast) FM.toast('Frame capture unavailable');
+      return;
+    }
     const scale = parseFloat(document.getElementById('exp-res').value) || 1;
     const fps = parseInt(document.getElementById('exp-fps').value, 10) || 30;
     const qEl = document.getElementById('exp-quality');
@@ -2254,7 +2265,8 @@ window.FM = window.FM || {};
       return [
         { label: 'Canvas settings…', action: () => clickHidden('btn-canvas') },   // size + aspect + frame rate + background
         { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
-        { label: 'Save frame (PNG)', action: () => clickHidden('btn-snapshot') },
+        // 'Save frame (PNG)' moved to Export ▸ Format ▸ "This frame (PNG)" — first of the ⋯ menu's
+        // entries to find a real home. Ezra is emptying this menu one item at a time.
         { sep: true },
         // Timeline controls that AM keeps off the play row — relocated here so they stay reachable.
         { label: (FM.loop ? '✓ ' : '') + 'Loop playback', action: () => clickHidden('btn-loop') },
@@ -2276,6 +2288,11 @@ window.FM = window.FM || {};
         { label: 'Keyboard shortcuts', mobileHide: true, action: () => clickHidden('btn-help') },
       ];
     };
+    const setBtn = document.getElementById('btn-settings');
+    if (setBtn) setBtn.addEventListener('click', () => {
+      if (FM.settings && FM.settings.open) FM.settings.open();
+      else if (FM.toast) FM.toast('Settings unavailable');
+    });
     const moreBtn = document.getElementById('btn-more');
     if (moreBtn) moreBtn.addEventListener('click', () => {
       const r = moreBtn.getBoundingClientRect();

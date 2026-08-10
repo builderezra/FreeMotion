@@ -240,7 +240,8 @@ window.FM = window.FM || {};
       if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, [
         { label: 'Open project…', action: function () { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); } },
         { label: 'Save project', action: function () { if (FM.storage && FM.storage.exportFile) FM.storage.exportFile(); } },
-        { label: 'Save frame (PNG)', action: function () { if (FM.snapshotPNG) FM.snapshotPNG(); } },
+        // 'Save frame (PNG)' now lives in Export ▸ Format ▸ "This frame (PNG)", the same place the
+        // desktop menu sends you — Ezra asked for it to be there, not in two menus at once.
         { sep: true },
         { label: 'Shortcuts', action: function () { if (FM.shortcuts) FM.shortcuts.toggle(); } },
       ]);
