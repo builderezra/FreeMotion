@@ -37,6 +37,25 @@ window.FM = window.FM || {};
     if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
     try { m._mes.connect(FM.audioCtx().destination); } catch (e) {}
     m._afxSig = '';
+    m._afxInsts = null;
+  }
+
+  // Is the live chain still the one this layer describes? The signature answers that for STRUCTURE,
+  // which is only half the question: buildAudioFxChain captures each effect instance BY REFERENCE and
+  // applyAt reads b.inst.params forever after, so the chain is also tied to those exact objects.
+  // history.restore() does `FM.scene.layers = JSON.parse(str).layers`, which replaces every instance
+  // with a fresh object of identical shape — byte-identical signature, completely different objects.
+  // Without the identity half, undo was inaudible: the chain kept driving itself from the orphaned
+  // pre-undo instances, and every later slider drag edited the new object while the chain read the old
+  // one, so preview silently stopped responding at all (export, which builds fresh, disagreed).
+  // Identity is compared over the WHOLE audioFx array rather than the built subset, so this never has
+  // to re-derive buildAudioFxChain's filter; a normal param drag mutates in place and stays equal.
+  function chainIsCurrent(m, layer) {
+    if (!m || !m._afxChain) return false;
+    if (m._afxSig !== signature(layer)) return false;
+    const list = (layer && layer.audioFx) || [];
+    const cached = m._afxInsts;
+    return !!cached && cached.length === list.length && cached.every((x, i) => x === list[i]);
   }
 
   FM.audioFxLive = {
@@ -56,17 +75,21 @@ window.FM = window.FM || {};
       const mes = sourceFor(m);
       if (!mes) return;
       const sig = signature(layer);
-      if (m._afxChain && m._afxSig === sig) return;
+      if (chainIsCurrent(m, layer)) return;
       try { mes.disconnect(); } catch (e) {}
       if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
       const chain = FM.buildAudioFxChain(ctx, layer);
-      if (!chain) { try { mes.connect(ctx.destination); } catch (e) {} m._afxSig = ''; return; }
+      if (!chain) { try { mes.connect(ctx.destination); } catch (e) {} m._afxSig = ''; m._afxInsts = null; return; }
       mes.connect(chain.input);
       chain.output.connect(ctx.destination);
       m._afxChain = chain;
       m._afxSig = sig;
+      m._afxInsts = ((layer.audioFx) || []).slice();   // the exact objects the chain now reads from
       chain.applyAt(FM.time || 0);
     },
+
+    // Exposed so the invariant above can be asserted without standing up a real audio graph.
+    isChainCurrent(m, layer) { return chainIsCurrent(m, layer); },
 
     syncAll() {
       const layers = (FM.scene && FM.scene.layers) || [];

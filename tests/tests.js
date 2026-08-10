@@ -767,6 +767,39 @@
     } finally { FM.clearClipStrip(m); }
   });
 
+  test('undo invalidates a live audio-effect chain', { item: 'afx-undo' }, function () {
+    // v5.09. buildAudioFxChain captures each effect instance BY REFERENCE and applyAt reads
+    // b.inst.params forever after, but sync() decided whether to rebuild from a signature that is
+    // deliberately structure-only (type + enabled — params "ride applyAt"). history.restore() does
+    // `FM.scene.layers = JSON.parse(str).layers`, which swaps every instance for a fresh object of
+    // identical shape: byte-identical signature, completely different objects. So undo was INAUDIBLE
+    // — the chain kept driving itself from the orphaned pre-undo instances — and from then on the
+    // inspector edited the new object while the chain read the old one, so preview stopped responding
+    // to that effect entirely while export (which builds fresh) rendered the correct value.
+    // Asserted on the decision itself; standing up a real MediaElementSource needs a playing <video>.
+    if (!FM.audioFxLive || !FM.audioFxLive.isChainCurrent) throw new Error('FM.audioFxLive.isChainCurrent is missing');
+    const layer = FM.makeLayer('video', { name: 'clip' });
+    layer.audioFx = [{ type: 'reverb', enabled: true, params: { mix: 0.3 } }];
+    const m = { _afxChain: { fake: true }, _afxSig: null, _afxInsts: null };
+
+    // A chain built now is current, and stays current across an in-place param edit (a slider drag
+    // must NOT churn the graph — that is the whole reason the signature ignores params).
+    m._afxInsts = layer.audioFx.slice();
+    m._afxSig = 'reverb1|';   // signature() is private: type + (enabled ? '1' : '0') + '|'
+    if (!FM.audioFxLive.isChainCurrent(m, layer)) throw new Error('a freshly built chain reports stale');
+    layer.audioFx[0].params.mix = 0.9;
+    if (!FM.audioFxLive.isChainCurrent(m, layer)) throw new Error('an in-place param edit forced a chain rebuild — that would click on every slider drag');
+
+    // Now the undo: same shape, same signature, new objects.
+    layer.audioFx = JSON.parse(JSON.stringify(layer.audioFx));
+    if (FM.audioFxLive.isChainCurrent(m, layer)) throw new Error('chain reports current after its instances were replaced — undo would stay inaudible');
+
+    // Structure changes must still invalidate (the original signature check has to survive).
+    m._afxInsts = layer.audioFx.slice();
+    layer.audioFx[0].enabled = false;
+    if (FM.audioFxLive.isChainCurrent(m, layer)) throw new Error('disabling an effect no longer invalidates the chain');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
