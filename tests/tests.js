@@ -881,6 +881,37 @@
     });
   });
 
+  test('an overshooting ease cannot switch off every filter on a layer', { item: 'filter-clamp' }, function () {
+    // v5.13. effectFilter concatenated raw evalProp results into a CSS filter list with no domain
+    // clamp. One out-of-domain function makes the WHOLE list a parse error, and an invalid string
+    // assigned to ctx.filter is silently ignored — so a single negative frame dropped every filter
+    // effect on the layer at once. The built-in Overshoot ease peaks at ~1.096, so on a DECREASING
+    // keyframe pair it undershoots by ~10% of the span, which is below zero for any fade-to-0.
+    // The exporter calls the same function, so the flash was baked into the MP4 as previewed.
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: '#ffffff' });
+    L.effects = [{ type: 'grayscale', enabled: true, params: { amount: 1 } },
+                 { type: 'brightness', enabled: true, params: { amount: -0.2 } }];
+    const f = FM.effectFilter(L, 0, 1);
+    if (/\(-/.test(f)) throw new Error('filter string still carries a negative value: ' + f);
+    // …and prove it through an actual render: a white shape under grayscale+brightness(0) is black,
+    // whereas an ignored filter string leaves it white.
+    const c = offscreen(320, 240);
+    const s = scene([L]);
+    FM.renderScene(c.getContext('2d'), s, 0);
+    const p = px(c.getContext('2d'), 160, 120);
+    if (p[0] > 60 || p[1] > 60 || p[2] > 60) throw new Error('the layer rendered at [' + p[0] + ',' + p[1] + ',' + p[2] + '] — both filters were dropped, so the invalid string was handed to ctx.filter');
+    // Blur radius and the glow's radius take the same treatment.
+    const B = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 100, fill: '#fff' });
+    B.effects = [{ type: 'blur', enabled: true, params: { radius: -8 } },
+                 { type: 'glow', enabled: true, params: { radius: -5, passes: 1 } }];
+    const fb = FM.effectFilter(B, 0, 1);
+    if (/\(-|\s-/.test(fb)) throw new Error('blur/glow radius not clamped: ' + fb);
+    // hue-rotate must NOT be clamped — negative degrees are legal and meaningful.
+    const H = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 100, fill: '#fff' });
+    H.effects = [{ type: 'hue', enabled: true, params: { deg: -90 } }];
+    if (FM.effectFilter(H, 0, 1).indexOf('-90deg') < 0) throw new Error('hue-rotate lost its sign: ' + FM.effectFilter(H, 0, 1));
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -882,19 +882,32 @@ window.FM = window.FM || {};
       if (e.enabled === false) continue;
       const p = e.params || {};
       const v = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
+      // CLAMPED, and this matters more than it looks. blur/brightness/contrast/saturate/grayscale/
+      // sepia/invert and drop-shadow's radius all require a non-negative value; ONE out-of-domain
+      // function makes the whole filter list a parse error, and assigning an invalid string to
+      // ctx.filter is silently IGNORED — the context keeps what it had, which after save+baseT is
+      // 'none'. So a single negative frame switched off EVERY filter effect on that layer, not just
+      // the one that went negative. Reaching a negative value takes one click: the built-in Overshoot
+      // ease peaks at ~1.096, so on a DECREASING pair it undershoots the target by ~10% of the span —
+      // below zero whenever the end keyframe is 0, which is what "fade brightness to 0" or "blur out
+      // to sharp" is. Measured: brightness 1→0 with Overshoot rendered FULL WHITE from t=0.8 to t=1.9
+      // of a 2s fade. The exporter calls this same function, so it baked into the MP4 exactly as
+      // previewed — no way for anyone to tell it was a bug rather than their own keyframes.
+      // hue-rotate is the one function here that legally takes any sign.
+      const nn = (k, d) => { const x = v(k, d); return Number.isFinite(x) ? Math.max(0, x) : d; };
       switch (e.type) {
-        case 'blur': parts.push('blur(' + (v('radius', 6) * S) + 'px)'); break;
-        case 'brightness': parts.push('brightness(' + v('amount', 1) + ')'); break;
-        case 'contrast': parts.push('contrast(' + v('amount', 1) + ')'); break;
-        case 'saturate': parts.push('saturate(' + v('amount', 1) + ')'); break;
-        case 'hue': parts.push('hue-rotate(' + v('deg', 0) + 'deg)'); break;
-        case 'grayscale': parts.push('grayscale(' + v('amount', 1) + ')'); break;
-        case 'sepia': parts.push('sepia(' + v('amount', 1) + ')'); break;
-        case 'invert': parts.push('invert(' + v('amount', 1) + ')'); break;
+        case 'blur': parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;
+        case 'brightness': parts.push('brightness(' + nn('amount', 1) + ')'); break;
+        case 'contrast': parts.push('contrast(' + nn('amount', 1) + ')'); break;
+        case 'saturate': parts.push('saturate(' + nn('amount', 1) + ')'); break;
+        case 'hue': { const hv = v('deg', 0); parts.push('hue-rotate(' + (Number.isFinite(hv) ? hv : 0) + 'deg)'); break; }
+        case 'grayscale': parts.push('grayscale(' + nn('amount', 1) + ')'); break;
+        case 'sepia': parts.push('sepia(' + nn('amount', 1) + ')'); break;
+        case 'invert': parts.push('invert(' + nn('amount', 1) + ')'); break;
         // Bloom is STACKED drop-shadows: one pass is a halo, three is a glow that actually reads as
         // light. Passes 1 emits the single shadow it always did, character for character.
         case 'glow': {
-          const gr = v('radius', 12), gc = (p.color || '#ffffff');
+          const gr = nn('radius', 12), gc = (p.color || '#ffffff');
           const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
           for (let gi = 0; gi < gp; gi++) parts.push('drop-shadow(0 0 ' + (gr * S) + 'px ' + gc + ')');
           break;
@@ -908,7 +921,8 @@ window.FM = window.FM || {};
     if (layer.colorGrade && !fillOwnsColor(layer)) {
       const cg = layer.colorGrade;
       if (cg.hue) parts.push('hue-rotate(' + cg.hue + 'deg)');
-      if (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) parts.push('saturate(' + cg.sat + ')');
+      // saturate() has the same non-negative domain, and the colour-grade panel is another way in.
+      if (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) parts.push('saturate(' + Math.max(0, cg.sat) + ')');
     }
     return parts.length ? parts.join(' ') : 'none';
   }
