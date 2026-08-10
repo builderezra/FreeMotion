@@ -2067,8 +2067,12 @@ window.FM = window.FM || {};
       const setH = px => { const f = px / Math.max(1, sz.h); if (link) { mtSet(layer, 'scale', f); if (layer.transform.scaleX != null) mtSet(layer, 'scaleX', 1); if (layer.transform.scaleY != null) mtSet(layer, 'scaleY', 1); } else mtSet(layer, 'scaleY', f / Math.max(1e-4, mtEval(layer, 'scale'))); };
       // scrub 0.35 instead of 1: size was the worst offender for "expands too quickly" (Ezra), because
       // one finger pixel moved the layer a whole project pixel of width.
-      const bw = mtVBox('Width', () => sz.w * effX(), setW, { dp: 1, scrub: 0.35, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
-      const bh = mtVBox('Height', () => sz.h * effY(), setH, { dp: 1, scrub: 0.35, min: 0, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      // Which channel each row's ◆ keys follows the LINK state, because that is what the row actually
+      // writes: linked, both Width and Height drive the uniform `scale`, so both diamonds key `scale`
+      // (clicking either is the same keyframe — correct, there is only one channel). Unlinked, Width
+      // owns scaleX and Height owns scaleY, so they become independent tracks like X and Y.
+      const bw = mtVBox('Width', () => sz.w * effX(), setW, { dp: 1, scrub: 0.35, min: 0, kfKey: link ? 'scale' : 'scaleX', layer: layer, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
+      const bh = mtVBox('Height', () => sz.h * effY(), setH, { dp: 1, scrub: 0.35, min: 0, kfKey: link ? 'scale' : 'scaleY', layer: layer, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const linkBtn = el('button', 'mt-link' + (link ? ' on' : '')); linkBtn.innerHTML = MT_ICONS.link; linkBtn.title = link ? 'Aspect ratio linked' : 'Aspect ratio unlinked';
       linkBtn.addEventListener('click', () => { FM._mtLink = !link; FM.inspector.refresh(); });
       refreshables.push(bw, bh); values.append(bw, linkBtn, bh);
