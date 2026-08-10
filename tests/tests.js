@@ -557,6 +557,37 @@
     }
   });
 
+  test('shape tiles keep their big icons; only the labelled cards are trimmed', { item: 'shape-icon-size' }, function () {
+    // v5.05. Trimming the Elements grid's cards used a 4-class selector, which outranks the shape
+    // grid's own 2-class `.addmenu-card--ico` rule — so it also shrank every shape icon from 34px to
+    // 19px. Ezra: "all of the shape icons have gone small." A pure-CSS specificity accident with no
+    // JS involved, which is exactly the kind that no behavioural test would ever notice, so this
+    // asserts the rendered sizes of both card kinds against each other.
+    const panel = document.querySelector('.addmenu--panel');
+    if (!panel) throw new Error('the desktop add menu is not rendered — deselect first?');
+    const tab = k => [].find.call(panel.querySelectorAll('.addmenu-tab'), b => b.dataset.key === k);
+    const iconW = () => {
+      const c = panel.querySelector('.addmenu-page .addmenu-card');
+      const sv = c && c.querySelector('.addmenu-ic svg');
+      return sv ? Math.round(sv.getBoundingClientRect().width) : 0;
+    };
+    const shapeTab = tab('shape'), objTab = tab('object');
+    if (!shapeTab || !objTab) throw new Error('shape / elements tab missing');
+    const was = (panel.querySelector('.addmenu-tab.active') || {}).dataset;
+    try {
+      shapeTab.click();
+      const shape = iconW();
+      objTab.click();
+      const labelled = iconW();
+      if (!shape || !labelled) throw new Error('could not measure a card icon (shape=' + shape + ', labelled=' + labelled + ')');
+      if (shape < 30) throw new Error('shape tile icons are ' + shape + 'px — they should be ~34px (the Elements trim leaked onto them)');
+      if (labelled > 26) throw new Error('labelled card icons are ' + labelled + 'px — the Elements grid trim is not applying');
+      if (shape <= labelled) throw new Error('shape icons (' + shape + 'px) should be BIGGER than labelled-card icons (' + labelled + 'px)');
+    } finally {
+      const back = tab(was && was.key ? was.key : 'object'); if (back) back.click();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

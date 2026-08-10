@@ -2021,9 +2021,14 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
    The label may wrap to two lines now instead of ellipsing — at this width "Freehand Drawing" was
    truncating to "Freehand Dra…", which is the one label in the menu you cannot guess from its icon. */
 .addmenu--panel .addmenu-page .addmenu-grid { grid-template-columns: repeat(5, 1fr); }
-.addmenu--panel .addmenu-page .addmenu-card { padding: 8px 3px; gap: 4px; }
-.addmenu--panel .addmenu-page .addmenu-card .addmenu-ic svg { width: 19px; height: 19px; }
-.addmenu--panel .addmenu-page .addmenu-card .addmenu-lbl {
+/* :not(.addmenu-card--ico) is load-bearing (v5.05). Without it these three rules also matched the
+   SHAPE grid's icon-only tiles — and at four class selectors they outrank `.addmenu-card--ico`'s two,
+   so they quietly shrank every shape icon from 34px to 19px. Ezra: "all of the shape icons have gone
+   small." The trimming is only ever meant for the labelled cards in the Elements/Media/Audio grids,
+   which is exactly what this now says. */
+.addmenu--panel .addmenu-page .addmenu-card:not(.addmenu-card--ico) { padding: 8px 3px; gap: 4px; }
+.addmenu--panel .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-ic svg { width: 19px; height: 19px; }
+.addmenu--panel .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-lbl {
   white-space: normal; max-width: none; overflow: visible; font-size: 9.8px; line-height: 1.1;
 }
 /* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like AM */
