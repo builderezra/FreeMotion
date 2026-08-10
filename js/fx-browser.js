@@ -168,6 +168,48 @@ window.FM = window.FM || {};
     return wrap;
   }
 
+  // ---- "Motion Blur (Object)" as an addable entry ----
+  // Ezra: "I'm only seeing motion blur footage, we need a motion blur for the actual object."
+  // It already existed and WORKED — it was just a checkbox buried in Move & Transform, while he
+  // (reasonably) goes looking in the effects list, where the only two hits are Motion Blur (Footage),
+  // which blurs movement INSIDE the clip, and Directional Blur, which ignores movement entirely.
+  // Same pseudo-entry trick as Mask: this drives layer.motionBlur rather than pushing an effect
+  // instance, so every existing project keeps rendering and exporting exactly as before.
+  function enableObjectBlur() {
+    const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
+    if (!layer) { FM.fxBrowser.close(); return; }
+    if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
+    const already = !!layer.motionBlur.enabled;
+    layer.motionBlur.enabled = true;
+    FM.fxBrowser.close();
+    if (FM.inspector) FM.inspector.refresh();
+    if (FM.requestRender) FM.requestRender();
+    if (!already && FM.history) FM.history.commit();
+    if (FM.toast) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Move & Transform'
+                                   : 'Motion Blur (Object) on — smears this layer’s own movement', 2200);
+  }
+  function objectBlurTile() {
+    const wrap = el('button', 'fxb-tile');
+    wrap.title = 'Motion Blur (Object) — smears the layer’s OWN movement (position, scale, rotation)';
+    const t = el('div', 'fxb-thumb'); t.dataset.cat = 'blur';
+    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 96; cv.height = 96;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#1c2536'; g.fillRect(0, 0, 96, 96);
+    // a square trailing its own ghosts — the thing the effect actually does
+    for (let i = 6; i >= 0; i--) {
+      g.globalAlpha = (1 - i / 7) * 0.85;
+      g.fillStyle = '#2fd0b5';
+      g.fillRect(20 + i * 6, 34, 28, 28);
+    }
+    g.globalAlpha = 1;
+    cv.classList.add('ready');
+    t.appendChild(cv);
+    wrap.appendChild(t);
+    wrap.appendChild(el('span', 'fxb-tile-name', 'Motion Blur (Object)'));
+    wrap.addEventListener('click', enableObjectBlur);
+    return wrap;
+  }
+
   // navigator.clipboard needs a secure context — hidden-textarea copy covers plain file:// use.
   function fallbackCopy(text, done) {
     const ta = document.createElement('textarea');
@@ -374,6 +416,7 @@ window.FM = window.FM || {};
     view.appendChild(top);
     const grid = el('div', 'fxb-grid');
     if (cat.key === 'matte') grid.appendChild(maskTile());   // Mask leads its home category
+    if (cat.key === 'blur') grid.appendChild(objectBlurTile());   // …and the object blur leads Blur, beside Motion Blur (Footage)
     FM.fxRegistry.byCategory(cat.key).forEach(reg => grid.appendChild(tile(reg, null)));
     const scroller = el('div', 'fxb-catview-scroll'); scroller.appendChild(grid);
     view.appendChild(scroller);
@@ -407,6 +450,9 @@ window.FM = window.FM || {};
     // match the label, the type id, OR the category name — so "3d", "blur" or "warp" surface
     // the whole family, not just effects that happen to carry the word in their title
     if ('mask'.indexOf(needle) >= 0 || needle.indexOf('mask') >= 0) grid.appendChild(maskTile());   // the pseudo-entry is searchable too
+    // …and so is the object blur. Match the words someone would actually type when the clip they
+    // MOVED isn't smearing: "motion", "blur", "object", plus its controls.
+    if (/motion|blur|object|smear|shutter|transform/.test(needle)) grid.appendChild(objectBlurTile());
     // Name, id, category, DESCRIPTION and TAGS — so "shutter", "angle" or "smear" find the thing you
     // meant even when the word never appears in its title. (Ezra: "when you search for effects it
     // will also show effects with descriptions matching what you searched".)
