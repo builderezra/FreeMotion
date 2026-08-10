@@ -1818,6 +1818,8 @@ window.FM = window.FM || {};
       if (zl) zl.textContent = (zoom < 1 ? (Math.round(zoom * 100) / 100) : (Math.round(zoom * 10) / 10)) + '×';
     },
     zoomBy(f, anchorTime) { this.setZoom(zoom * f, anchorTime); },
+    // exposed so the view bar can dim its arrows at the ends of the range (setZoom clamps to 0.02–12)
+    getZoom() { return zoom; },
     stopMomentum() { stopMomentum(); },
   };
 })(window.FM);

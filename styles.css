@@ -946,6 +946,19 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   text-align: center; color: rgba(232, 236, 244, .45); font-size: 12px; letter-spacing: .4px;
   text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
 }
+/* View-bar second group (v5.03): rate, loop, export marks, timeline zoom. Reuses .vb-btn / .vb-z so
+   the new controls are the same object as the ones already there — a separate look would have made
+   the bar read as two toolbars that happen to touch. */
+.vb-sep { height: 1px; align-self: stretch; margin: 3px 6px; background: var(--line); }
+/* COLUMN, like the canvas-zoom group above them — the view bar is a narrow vertical strip, and a row
+   here pushed "− 1.25× +" straight out of its left edge. */
+#vb-rate, #vb-tlzoom { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#vb-ratelabel { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-dim); min-width: 30px; text-align: center; }
+.vb-btn.on { color: var(--accent); background: var(--accent-soft); }
+/* dim, not disabled: at the end of the zoom range or with no marks set, the button still responds —
+   it just has nothing left to do, and a truly disabled control gives no feedback when you press it */
+.vb-btn.dim, .vb-z.dim { opacity: .38; }
+
 /* Speed mode on the jump buttons (v5.02). The morphed pair is tinted so it's obvious at a glance
    that those two controls are no longer skip — otherwise a − where ◀| used to be is a button you
    press expecting to jump and instead slow the playback down. */

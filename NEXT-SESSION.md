@@ -41,41 +41,19 @@ audio import fix below was one.)
 
 ## The queue
 
-**v5.00.** Items 1-3 are the live asks, newest first; 4-7 are standing work.
+**v5.03.** The three live asks from 2026-08-10 are shipped (clip-nudge pair beside the playhead,
+hold-a-jump-button for speed, the view bar's second group). What is left is standing work.
 
-### 1. Timeline extend buttons → beside the playhead  (screenshot, not started)
-Ezra circled the two clip buttons at the top of the inspector (the "move clip to playhead" /
-"extend clip to playhead" pair, js/inspector.js:1172-1183) and drew an arrow to the timeline, with
-two marks flanking the centre playhead line just under the timecode pill: "move the two extend
-buttons to where i highlighted, i feel its close the where you will be dragging so itll be easy to
-click, one on each side. make sure it looks nice."
-They are CONTEXTUAL — they only exist when a clip is selected AND the playhead is off it (see
-FM.clipPlayheadSide). So this is not a move of two static buttons: it needs a small floating pair
-pinned either side of #tl-centerline that appears/disappears on the same condition, and the
-inspector row must lose them so they aren't in two places.
-
-### 2. Hold the jump buttons to change playback speed  (not started)
-"if you hold those down, it'll change the play speed. If you hold the one on the right, it'll make
-the play speed faster. And if you hold the one on the left, it makes it slower. Make it so that when
-you hold down one of the buttons, it switches it to a different button that is, like, a plus
-indicator… and you can spam tap it to make the speed go up. And then once you hold on it again, it
-switches it back to the jump buttons. And then for the left one, it can be a minus button."
-So: hold #btn-tostart / #btn-toend → that button MORPHS into − / + and stays morphed; tap to step the
-speed; hold again to morph back. FM.setPreviewRate / FM.previewRate already exist (rates 0.25 · 0.5 ·
-1 · 2 · 4 — probably wants finer steps). Needs a visible speed readout somewhere while morphed.
-
-### 3. View-options menu (the ⛶ button) should carry the transport extras  (not started)
-Add to that popup: playback speed, loop playback, mark export start / end, clear export marks, and
-zoom timeline in/out. The zoom pair should be an up arrow and a down arrow, and HOLDING one jumps
-straight to max zoom in / max zoom out. All of these currently live in the ⋯ menu
-(FM.projectMoreItems, js/app.js:~2255) — this is the next batch of that menu to be rehomed.
-
-### 4. Standing: empty the ⋯ menu, one item at a time
+### 1. Standing: empty the ⋯ menu, one item at a time
 "most of the options in the three dot menu are pointless. Don't remove the three dot menu yet, but
 we're gonna slowly work through finding the actual home for all the things in that menu so we can
-get rid of it eventually." Save frame (PNG) was the first — it went into Export ▸ Format.
+get rid of it eventually." Rehomed so far: **Save frame (PNG)** → Export ▸ Format ▸ "This frame (PNG)" (v4.99), and
+**playback speed · loop · mark export start/end · clear marks · timeline zoom** → the view-options
+popup (v5.03). All of those are still ALSO in the ⋯ menu — Ezra asked to empty it gradually, not to
+cut it over, so nothing has been deleted from it yet. Deleting the migrated entries is the next step
+whenever he says the new homes feel right.
 
-### 5. Select mode in the Templates and Elements tabs  (SCOPED, not started)
+### 2. Select mode in the Templates and Elements tabs  (SCOPED, not started)
 *"Need the select option in templates and elements sections."* Projects-only today, enforced at
 js/home.js:643 — `if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }`
 
@@ -94,7 +72,7 @@ Four pieces, all in js/home.js. Fewer than all four ships a visibly broken Selec
 Verify by RUNNING: enter select on each tab, tick two, confirm the bar counts 2, delete, confirm the
 right things went and the other tabs are untouched.
 
-### 6. Standing design constraints (do not guess at these)
+### 3. Standing design constraints (do not guess at these)
 - **Do NOT change the home background.** He said so explicitly. It already drifts on a 48s cycle.
 - **The orbs are SMALL now and that is his call, not a bug.** v4.91 had gone 62→74px to keep the
   render's faceting legible; he came back with "make it smaller coz the design looks funny when it's
@@ -109,7 +87,7 @@ right things went and the other tabs are untouched.
   background image, so without `mask: url(fab-plus.png)` it sweeps straight through the hole. Check
   both by parking the sheen mid-sweep (`background-position: 46% 0`) over a bright backdrop.
 
-### 7. Standing: BUG-HUNT.md
+### 4. Standing: BUG-HUNT.md
 69 confirmed findings, essentially untouched. That is the backlog when he has no specific ask.
 
 ---

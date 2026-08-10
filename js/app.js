@@ -2385,6 +2385,7 @@ window.FM = window.FM || {};
         if (FM._reviewing) { FM.pause(); return; }       // reviewing → a plain TAP stops it (no popup); FM.pause reverts the icon
         const open = viewBar.classList.toggle('hidden') === false;
         amFitBtn.classList.toggle('active', open);
+        if (open && FM.syncViewBar) FM.syncViewBar();   // rate / loop / mark state can all change while it's shut
         const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open
       });
     }
@@ -2396,6 +2397,67 @@ window.FM = window.FM || {};
     if (vbLayers) vbLayers.addEventListener('click', () => { if (FM.toast) FM.toast('Layers — coming soon', 1400); });   // function TBD (matches AM placement)
     const vbCam = document.getElementById('vb-camera');
     if (vbCam) vbCam.addEventListener('click', () => { if (FM.addCameraLayer) FM.addCameraLayer(); });
+    /* ---- view bar, second group (v5.03) --------------------------------------------------------
+     * Ezra: "add the playback speed buttons in the menu that pops up when you press on the view
+     * options button, along side loop playback, mark export start and mark export end, clear export
+     * marks, and zoom timeline in buttons… if you hold them in they max zoom or max zoom out."
+     * All of these were ⋯ entries; this is the second batch of that menu to find a real home. They
+     * are LEFT in the ⋯ menu for now — Ezra asked to empty it gradually, not to cut it over. */
+    const vbRateLbl = document.getElementById('vb-ratelabel');
+    const syncViewBar = () => {
+      if (vbRateLbl) vbRateLbl.textContent = (FM.previewRate || 1) + '×';
+      const lb = document.getElementById('vb-loop'); if (lb) lb.classList.toggle('on', !!FM.loop);
+      const P = FM.scene && FM.scene.project;
+      const marked = !!(P && (P.loopIn != null || P.loopOut != null));
+      const mc = document.getElementById('vb-markclear'); if (mc) mc.classList.toggle('dim', !marked);
+      const zi = document.getElementById('vb-tlin'), zo = document.getElementById('vb-tlout');
+      const z = FM.timeline && FM.timeline.getZoom ? FM.timeline.getZoom() : null;
+      if (z != null) { if (zi) zi.classList.toggle('dim', z >= 11.99); if (zo) zo.classList.toggle('dim', z <= 0.0201); }
+    };
+    FM.syncViewBar = syncViewBar;
+    const bindVb = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', () => { fn(); syncViewBar(); }); return b; };
+    bindVb('vb-slower', () => stepViewRate(-1));
+    bindVb('vb-faster', () => stepViewRate(1));
+    bindVb('vb-loop', () => { FM.loop = !FM.loop; if (typeof syncLoopUI === 'function') syncLoopUI(); });
+    bindVb('vb-markin', markRegionIn);
+    bindVb('vb-markout', markRegionOut);
+    bindVb('vb-markclear', clearRegion);
+    // The same ladder the transport's speed mode uses, so the two controls can't disagree.
+    function stepViewRate(dir) {
+      const R = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8], cur = FM.previewRate || 1;
+      let i = 0, best = Infinity;
+      R.forEach((v, k) => { const d = Math.abs(v - cur); if (d < best) { best = d; i = k; } });
+      if (Math.abs(R[i] - cur) < 1e-6) i += dir; else if (dir > 0 && R[i] < cur) i += 1; else if (dir < 0 && R[i] > cur) i -= 1;
+      i = Math.max(0, Math.min(R.length - 1, i));
+      FM.setPreviewRate(R[i]);
+      const pr = document.getElementById('preview-rate'); if (pr) pr.value = String(R[i]);
+      const chip = document.getElementById('rate-chip');
+      if (chip) { chip.textContent = R[i] + '×'; chip.classList.toggle('hidden', Math.abs(R[i] - 1) < 1e-6 && !chip.classList.contains('armed')); }
+    }
+    /* Timeline zoom: TAP steps, HOLD runs to the end of the range. Implemented as hold-to-JUMP rather
+     * than hold-to-repeat because the range is 0.02–12 — a repeat fast enough to cross that is too
+     * fast to stop on anything useful, and Ezra asked for "max zoom or max zoom out", not "keep
+     * going while I hold". */
+    [['vb-tlin', 1], ['vb-tlout', -1]].forEach(([id, dir]) => {
+      const b = document.getElementById(id);
+      if (!b) return;
+      let lp = null, fired = false;
+      b.addEventListener('pointerdown', () => {
+        fired = false;
+        lp = setTimeout(() => {
+          lp = null; fired = true;
+          if (FM.timeline && FM.timeline.setZoom) FM.timeline.setZoom(dir > 0 ? 12 : 0.02, FM.time);
+          if (FM.toast) FM.toast(dir > 0 ? 'Timeline zoomed all the way in' : 'Timeline zoomed all the way out', 1200);
+          syncViewBar();
+        }, 480);
+      });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (lp) { clearTimeout(lp); lp = null; } }));
+      b.addEventListener('click', () => {
+        if (fired) { fired = false; return; }
+        if (FM.timeline && FM.timeline.zoomBy) FM.timeline.zoomBy(dir > 0 ? 1.35 : 1 / 1.35, FM.time);
+        syncViewBar();
+      });
+    });
     const vbZin = document.getElementById('vb-zoomin');
     if (vbZin) vbZin.addEventListener('click', () => FM.zoomCanvasStep(1));
     const vbZout = document.getElementById('vb-zoomout');
