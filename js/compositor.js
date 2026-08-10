@@ -5634,10 +5634,16 @@ window.FM = window.FM || {};
     S.check = [
       // outer
       [
+        // Smoothed 2026-08-10 (Ezra: "some jagged edges, try to keep it looking the same"). Every point
+        // is unmoved — the only change is which ones are marked smooth. The trace left the three ENDS as
+        // hard corners, which is where the faceting was: a chopped flat elbow at the bottom, an angular
+        // nub on the left tail and a cut-off top-right tip. Those are round in a drawn tick, so they are
+        // smooth now. The inner V (index 4) stays a corner — that one is meant to be sharp, and rounding
+        // it is what would actually change the shape.
         [0.9603,0.0031,1],[0.7983,0.1066,1],[0.6215,0.2694,1],[0.4632,0.4636,1],[0.3277,0.7021],[0.2447,0.5712,1],
-        [0.1451,0.4689,1],[0.0801,0.4601],[0.0196,0.5154,1],[0.0002,0.5779,1],[0.0125,0.6398,1],[0.1813,0.8384,1],
-        [0.2661,0.976],[0.3441,0.9988],[0.4241,0.9329,1],[0.5519,0.6583,1],[0.7238,0.3688,1],[0.8962,0.1487,1],
-        [0.9945,0.0536],[0.9945,0.0154],[0.9658,0.0013]
+        [0.1451,0.4689,1],[0.0801,0.4601,1],[0.0196,0.5154,1],[0.0002,0.5779,1],[0.0125,0.6398,1],[0.1813,0.8384,1],
+        [0.2661,0.976,1],[0.3441,0.9988,1],[0.4241,0.9329,1],[0.5519,0.6583,1],[0.7238,0.3688,1],[0.8962,0.1487,1],
+        [0.9945,0.0536,1],[0.9945,0.0154,1],[0.9658,0.0013,1]
       ],
     ];
     S.thumbsup = [
