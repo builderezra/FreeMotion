@@ -4,8 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreeMotion</title>
-<link rel="stylesheet" href="styles.css?v=250">
-<link rel="stylesheet" href="theme-glass.css?v=10">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
+     iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
+     the ground colour inline means the earliest possible paint is already black. -->
+<style>html,body{background:#000}</style>
+<link rel="stylesheet" href="styles.css?v=251">
+<link rel="stylesheet" href="theme-glass.css?v=11">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,6 +18,24 @@
 <meta name="apple-mobile-web-app-title" content="FreeMotion">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
+<!-- iOS standalone launch screens. Ezra: "when i open up freemotion as a web shortcut on my phone
+     it flashes white for a second." That white IS iOS: a home-screen web app with no matching
+     apple-touch-startup-image gets a blank white launch screen while the page boots, and the media
+     query has to match the device metrics EXACTLY or it falls back to that white. Each file is solid
+     #000 — the same ground the splash video sits on — so launch screen and first frame are one
+     continuous black and there is no seam. ~1KB each. -->
+<link rel="apple-touch-startup-image" media="(device-width:320px) and (device-height:568px) and (-webkit-device-pixel-ratio:2) and (orientation:portrait)" href="launch/l-640x1136.png">
+<link rel="apple-touch-startup-image" media="(device-width:375px) and (device-height:667px) and (-webkit-device-pixel-ratio:2) and (orientation:portrait)" href="launch/l-750x1334.png">
+<link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:736px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1242x2208.png">
+<link rel="apple-touch-startup-image" media="(device-width:375px) and (device-height:812px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1125x2436.png">
+<link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:896px) and (-webkit-device-pixel-ratio:2) and (orientation:portrait)" href="launch/l-828x1792.png">
+<link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:896px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1242x2688.png">
+<link rel="apple-touch-startup-image" media="(device-width:390px) and (device-height:844px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1170x2532.png">
+<link rel="apple-touch-startup-image" media="(device-width:428px) and (device-height:926px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1284x2778.png">
+<link rel="apple-touch-startup-image" media="(device-width:393px) and (device-height:852px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1179x2556.png">
+<link rel="apple-touch-startup-image" media="(device-width:430px) and (device-height:932px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1290x2796.png">
+<link rel="apple-touch-startup-image" media="(device-width:402px) and (device-height:874px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1206x2622.png">
+<link rel="apple-touch-startup-image" media="(device-width:440px) and (device-height:956px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1320x2868.png">
 </head>
 <body>
   <!-- Splash: the FreeMotion logo animation, once per session (fresh tab / PWA cold launch).
@@ -91,7 +113,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.92</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.93</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -493,7 +515,7 @@
   <script src="js/history.js?v=25"></script>
   <script src="js/storage.js?v=86"></script>
   <script src="js/medialib.js?v=3"></script>
-  <script src="js/home.js?v=104"></script>
+  <script src="js/home.js?v=105"></script>
   <script src="js/graph-editor.js?v=108"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

@@ -1604,34 +1604,39 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .m-export .m-ico { width: 20px; height: 20px; }
   .m-export:active { filter: brightness(.92); }
 
-  /* AM green + FAB (add) — bottom-right, above the timeline */
-  /* The FAB is Ezra's glass orb (v4.89). Its + is CUT THROUGH to transparent — the source render has
-     the plus in the same black as its backdrop, so one luminance key punched out both and left the
-     bevel — which means whatever is behind the button shows through the plus. That only works if the
-     button itself has no fill of its own, hence background:none: the orb IS the shape. The old SVG
-     glyph is hidden rather than removed so the button keeps its accessible name. */
+  /* The + FAB (add) — bottom-right, above the timeline.
+     v4.92a: this is Ezra's faceted glass CROSS render, and it lives here only — "make that the button
+     that shows up but only inside projects not the home menu". The home Create button keeps the orb,
+     so the two + buttons are now deliberately different objects rather than the same one twice.
+
+     Three things change because the artwork is a cross and not a disc:
+       - border-radius goes back to 0. A 50% radius would clip the arm tips clean off.
+       - the ambient glow moves from box-shadow to drop-shadow. box-shadow follows the BORDER BOX,
+         which for a cross is a square — it would draw a square halo with visible corners. The reason
+         the orb couldn't use drop-shadow (a wide pass floods its cut-out plus) doesn't apply here:
+         this cross is solid, there is no hole to fill.
+       - the sheen is masked with THIS image (theme-glass.css), not the orb's.
+     The SVG glyph stays hidden rather than removed so the button keeps its accessible name. */
   #add-fab {
     display: flex; align-items: center; justify-content: center;
     position: fixed; right: 16px; bottom: 20px; z-index: 61;
-    /* 58px (v4.92). It was 74 so the render's facets wouldn't average out into a plain glossy disc,
-       but at that size it dominated the timeline — Ezra: "make it smaller coz the design looks funny
-       when it's so big". The edge light below is what carries the glass now, so the artwork's own
-       detail no longer has to do it alone. */
-    width: 58px; height: 58px; border: none; cursor: pointer; padding: 0;
-    /* border-radius is structural here, not decoration: the sheen (theme-glass.css) is a child layer
-       clipped by overflow:hidden, so with square corners it painted a faint SQUARE panel around the
-       round orb — the "square box" Ezra saw in the screenshot. 50% makes that clip follow the rim. */
-    border-radius: 50%;
-    background: url('fab-plus.png?v=2') center / contain no-repeat;
-    filter: var(--glass-edge) drop-shadow(0 6px 18px rgba(0,0,0,.55));
-    /* the colour the glass throws. A box-shadow, not a third drop-shadow, precisely because it
-       follows the BORDER BOX (a circle here) and paints only outside it — so the + stays open. */
-    box-shadow: 0 0 20px rgba(90, 199, 237, .3);
+    /* 64, where the orb is 58: a cross covers ~44% of its box against a disc's 79%, so matching the
+       box would have made it read noticeably smaller than the button it replaced. */
+    width: 64px; height: 64px; border: none; cursor: pointer; padding: 0;
+    border-radius: 0;
+    background: url('fab-cross.png?v=1') center / contain no-repeat;
+    filter: var(--glass-edge)
+            drop-shadow(0 0 11px rgba(90, 199, 237, .34))
+            drop-shadow(0 6px 16px rgba(0, 0, 0, .6));
+    box-shadow: none;
     -webkit-tap-highlight-color: transparent;
   }
   #add-fab svg { display: none; }
   /* the edge has to be repeated here — `filter` is one property, so a bare brightness() would drop it */
-  #add-fab:active { filter: var(--glass-edge) drop-shadow(0 4px 10px rgba(0,0,0,.5)) brightness(.92); transform: translateY(1px); }
+  #add-fab:active {
+    filter: var(--glass-edge) drop-shadow(0 0 7px rgba(90, 199, 237, .28)) drop-shadow(0 3px 8px rgba(0, 0, 0, .55)) brightness(.92);
+    transform: translateY(1px);
+  }
 
   /* AM has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */
   #insp-toggle { display: none; }
@@ -2304,6 +2309,16 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
  * fill mode is BACKWARDS, not both: `both` would pin the finished transform to the keyframe's value,
  * and #hm-new is centred with translateX(-50%) — forwards-filling `transform: none` onto it would
  * shove the button half its width off centre the moment the animation ended. */
+/* v4.92a — hold the CONTENT back while the splash is still on screen.
+ * Ezra: "it glitches and flashes the home screen for a second."
+ * That was this dissolve, and the diagnosis is in his screen recording: the home screen was fully
+ * built and painted from the moment the scripts ran, so the instant the splash began thinning you
+ * saw a complete project list ghosting through a logo animation that was still moving — and then, at
+ * +150ms, every element snapped to opacity 0 to begin its entrance. Both halves read as a glitch.
+ * With this, the only thing the dissolve reveals is the home BACKGROUND (near-black), the gradient
+ * blooms up through the clearing black, and the content arrives after. What he asked for originally.
+ * Applied from the first frame, not at dismiss time — that's the whole point. */
+#home-screen.hm-preintro > * { opacity: 0; }
 @keyframes hm-bloom { from { opacity: 0; } to { opacity: 1; } }
 @keyframes hm-rise {
   from { opacity: 0; transform: translateY(15px); }

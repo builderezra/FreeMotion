@@ -197,10 +197,18 @@ html[data-theme="glass"] #add-fab::after {
     transparent 66%);
   background-size: 260% 100%;
   background-repeat: no-repeat;
-  -webkit-mask: url('fab-plus.png?v=2') center / contain no-repeat;
-          mask: url('fab-plus.png?v=2') center / contain no-repeat;
   animation: orb-sheen 6.4s ease-in-out infinite;
   pointer-events: none;
+}
+/* Each button masks the sheen with its OWN artwork — the two are different objects now (v4.92a):
+   the home + is the orb, the editor + is the faceted cross. */
+html[data-theme="glass"] #hm-new::after {
+  -webkit-mask: url('fab-plus.png?v=2') center / contain no-repeat;
+          mask: url('fab-plus.png?v=2') center / contain no-repeat;
+}
+html[data-theme="glass"] #add-fab::after {
+  -webkit-mask: url('fab-cross.png?v=1') center / contain no-repeat;
+          mask: url('fab-cross.png?v=1') center / contain no-repeat;
 }
 /* It rests for most of the loop and then crosses, rather than sweeping continuously — a light that
    never stops moving reads as a loading spinner. Both ends put the band fully clear of the orb, so
@@ -214,15 +222,18 @@ html[data-theme="glass"] #add-fab::after {
   html[data-theme="glass"] #add-fab::after { animation: none; opacity: .16; }
 }
 
-/* The add FAB is Ezra's glass orb render (v4.89), so it no longer wants the painted bead: the artwork
-   already IS the glass, and the old inset shadows / backdrop-filter assumed a solid fill — they drew a
-   bead edge around a button whose middle is deliberately see-through. */
+/* The add FAB is Ezra's faceted glass CROSS render (v4.92a) — a different object from the home orb,
+   and editor-only by his instruction. No painted bead and no backdrop-filter: the artwork already IS
+   the glass. box-shadow is explicitly none because it follows the border box, which for a cross is a
+   square — the glow is a drop-shadow instead, so it hugs the arms. */
 html[data-theme="glass"] #add-fab {
-  background: url('fab-plus.png?v=2') center / contain no-repeat;
+  background: url('fab-cross.png?v=1') center / contain no-repeat;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  box-shadow: 0 0 20px rgba(90, 199, 237, .3);
-  filter: var(--glass-edge) drop-shadow(0 8px 20px rgba(0, 0, 0, .55));
+  box-shadow: none;
+  filter: var(--glass-edge)
+          drop-shadow(0 0 13px rgba(90, 199, 237, .36))
+          drop-shadow(0 8px 20px rgba(0, 0, 0, .6));
 }
 
 /* Accent-filled controls pick up the same crown highlight, so they read as one family. */

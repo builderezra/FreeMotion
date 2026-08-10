@@ -746,18 +746,22 @@ window.FM = window.FM || {};
    * The 6s fallback covers a splash that is torn down some other way; go() is idempotent. */
   function armIntro() {
     if (!root) return;
+    if (!document.getElementById('splash')) { introPending = true; return; }   // no splash → render() stamps
+    // Splash is up. Hide the content NOW (see .hm-preintro in styles.css) — leaving it visible is
+    // what made the dissolve show a finished screen behind a still-playing logo.
+    root.classList.add('hm-preintro');
     let ran = false;
     const go = () => {
       if (ran || !root) return;
       ran = true;
+      root.classList.remove('hm-preintro');
       root.classList.add('hm-intro');
       // stamp directly rather than re-rendering: the cards are already built, and a rebuild would
       // re-read every thumbnail out of IndexedDB for nothing
       stampIntro();
     };
-    if (!document.getElementById('splash')) { introPending = true; return; }   // render() will stamp
     document.addEventListener('fm:splash-dismiss', () => setTimeout(go, 150), { once: true });
-    setTimeout(go, 6000);
+    setTimeout(go, 6000);   // a splash torn down some other way must never leave the screen blank
   }
 
   function stampIntro() {
