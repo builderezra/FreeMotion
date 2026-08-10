@@ -2137,3 +2137,18 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    broken rather than empty. */
 #btn-undo.is-off, #btn-redo.is-off { opacity: .3; cursor: default; }
 #btn-undo.is-off:hover, #btn-redo.is-off:hover { background: transparent; }
+
+/* Home wordmark (v4.87). Height-driven so the image tracks the type it replaced; width auto keeps the
+   render's own aspect. max-width stops a wide lockup from crowding the action buttons on a narrow
+   phone — it shrinks instead of pushing them off. */
+.hm-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hm-brand-mark { font-size: 17px; line-height: 1; color: var(--text); flex: none; }
+/* height-driven so it tracks the type it replaced, but min-width:0 + max-width let it SHRINK instead
+   of being clipped by .hm-brand's overflow:hidden — at 375px the four action buttons and their gaps
+   take ~242px of the 375, so the wordmark has ~108px to live in and must scale to fit. */
+.hm-brand-img { height: 24px; width: auto; max-width: 100%; object-fit: contain; display: block; min-width: 0; }
+@media (max-width: 700px) {
+  /* the ▶ costs ~25px of a very tight row and the wordmark already reads as the brand — drop it here */
+  .hm-brand-mark { display: none; }
+  .hm-brand-img { height: 20px; }
+}
