@@ -124,13 +124,27 @@ window.FM = window.FM || {};
     return p;
   };
 
+  // Decode strip frames at FILMSTRIP size, not source size. Every consumer of m.stripFrames draws
+  // into a 32px-tall canvas (drawFilmstrip and the slip ghost, both H = 32), so a full-resolution
+  // decode was throwing away ~99.9% of the pixels it paid for: 8 frames of 1080p is ~66MB of native
+  // ImageBitmap surface per clip, ~265MB for 4K. 64px is 2x the tile, so the downscale into 32px is
+  // still supersampled. Falls back to an uncapped decode if the element has not reported its size.
+  const STRIP_H = 64;
+  function stripSize(el, m) {
+    const w = el.videoWidth || el.naturalWidth || m.width || 0;
+    const h = el.videoHeight || el.naturalHeight || m.height || 0;
+    if (!w || !h || h <= STRIP_H) return null;
+    return { resizeHeight: STRIP_H, resizeWidth: Math.max(1, Math.round(w * STRIP_H / h)), resizeQuality: 'medium' };
+  }
+
   async function _extractStrip(m, count) {
     if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return m && m.stripFrames;
     count = count || 8;
     m._stripBuilding = true;
     try {
       if (m.kind === 'image') {
-        try { m.stripFrames = [await createImageBitmap(m.el)]; } catch (e) { m.stripFrames = []; }
+        const opt = stripSize(m.el, m);
+        try { m.stripFrames = [opt ? await createImageBitmap(m.el, opt) : await createImageBitmap(m.el)]; } catch (e) { m.stripFrames = []; }
       } else {
         const el = m.el;
         if (el.readyState < 2) {   // wait for it to become decodable (don't spin / retry forever)
@@ -140,9 +154,10 @@ window.FM = window.FM || {};
         if (el.readyState >= 2) {
           const dur = (isFinite(m.duration) && m.duration > 0) ? m.duration : (el.duration || 1);
           const wasTime = el.currentTime, wasMuted = el.muted; el.muted = true;
+          const opt = stripSize(el, m);
           for (let i = 0; i < count; i++) {
             await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)));
-            try { frames.push(await createImageBitmap(el)); } catch (e) {}
+            try { frames.push(opt ? await createImageBitmap(el, opt) : await createImageBitmap(el)); } catch (e) {}
           }
           try { el.currentTime = wasTime; } catch (e) {}
           el.muted = wasMuted;
@@ -154,6 +169,13 @@ window.FM = window.FM || {};
   };
 
   FM.clearClipStrip = function (m) {
-    if (m && m.stripFrames) { m.stripFrames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} }); m.stripFrames = null; }
+    if (!m || !m.stripFrames) return;
+    m.stripFrames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} });
+    // UNDEFINED, not null. Both the build guard above and the timeline's own "should I build?" test
+    // are `stripFrames === undefined` — the sentinel for "never built" — while null means "built and
+    // came back empty, do not retry". Deleting a clip keeps its media record alive for undo, so
+    // parking it at null would release the bitmaps and then permanently refuse to rebuild them: the
+    // restored clip would show a blank bar forever. undefined releases the memory AND allows a rebuild.
+    delete m.stripFrames;
   };
 })(window.FM);

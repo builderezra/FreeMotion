@@ -716,6 +716,57 @@
     }
   });
 
+  test('deleting a clip releases its filmstrip bitmaps, and they can rebuild', { item: 'strip-release' }, function () {
+    // v5.08. FM.clearClipStrip existed but had ZERO call sites — grep over the whole repo returned
+    // only its own definition. Every teardown released the neighbouring frame cache and skipped this
+    // one, and deleteLayer deliberately KEEPS the media record for undo, so the bitmaps stayed
+    // reachable rather than merely uncollected. ImageBitmaps are native memory, invisible to the JS
+    // heap and to GC pressure, so it just accumulated until iOS jetsammed the tab.
+    const savedScene = FM.scene;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    let closed = 0;
+    const fake = () => ({ close: function () { closed++; } });
+    let id = null;
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'clip', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#f00' });
+      FM.scene.layers.push(L);
+      id = L.id;
+      const rec = { kind: 'video', width: 1920, height: 1080, duration: 4, stripFrames: [fake(), fake(), fake()] };
+      FM.media.set(id, rec);
+
+      FM.deleteLayer(id);
+      if (closed !== 3) throw new Error('deleteLayer closed ' + closed + ' of 3 filmstrip bitmaps');
+      // The record survives on purpose (undo restores the layer), so the sentinel it is left at
+      // decides whether the restored clip can ever draw a filmstrip again.
+      const after = FM.media.get(id);
+      if (after && 'stripFrames' in after) throw new Error('stripFrames left as ' + JSON.stringify(after.stripFrames) + ' — must be undefined so the strip can rebuild after undo');
+    } finally {
+      if (id && FM.media.remove) { try { FM.media.remove(id); } catch (e) {} }
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
+  test('filmstrip frames decode at strip size, not source size', { item: 'strip-release' }, async function () {
+    // The other half of the same leak: the decode was uncapped, so 8 frames of a 1080p clip cost
+    // ~66MB of native surface (~265MB at 4K) to be drawn into a 32px-tall canvas. Asserted against a
+    // real decode rather than by reading the options object.
+    const src = document.createElement('canvas');
+    src.width = 1920; src.height = 1080;
+    const c = src.getContext('2d'); c.fillStyle = '#c33'; c.fillRect(0, 0, 1920, 1080);
+    const m = { kind: 'image', el: src, width: 1920, height: 1080, duration: 1 };
+    await FM.buildClipStrip(m, 1);
+    const f = m.stripFrames && m.stripFrames[0];
+    if (!f) throw new Error('no strip frame was produced');
+    try {
+      if (f.height > 96) throw new Error('strip frame decoded at ' + f.width + 'x' + f.height + ' — the filmstrip canvas is 32px tall, so this should be capped near 64');
+      if (Math.abs((f.width / f.height) - (1920 / 1080)) > 0.05) throw new Error('strip frame aspect is wrong: ' + f.width + 'x' + f.height);
+    } finally { FM.clearClipStrip(m); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

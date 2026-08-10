@@ -561,6 +561,7 @@ window.FM = window.FM || {};
     const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);   // blobs the Media library holds survive a project reset
     (FM.scene.layers || []).forEach(l => {
       const m = FM.media.get(l.id); if (m && FM.clearFrameCache) FM.clearFrameCache(m);
+      if (m && FM.clearClipStrip) FM.clearClipStrip(m);   // filmstrip ImageBitmaps are native memory, not JS heap — nothing else releases them
       dropAudioGraph(m);
       if (FM.media.remove) FM.media.remove(l.id);
       if (FM.storage && FM.storage.removeMedia && !libKeys.has(l.id)) { try { FM.storage.removeMedia(l.id); } catch (e) {} }
@@ -1198,7 +1199,7 @@ window.FM = window.FM || {};
     // Stop native/synth audio + drop the (rebuildable) frame cache — but DON'T destroy the media
     // registry entry or its IDB blob: undo restores the layer JSON, and a wiped blob = permanently
     // blank clip + lost footage (same fix as deleteLayer). Orphans are reaped by the boot sweep.
-    set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.audioFxLive) FM.audioFxLive.release(id); } });
+    set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.clearClipStrip) FM.clearClipStrip(m); if (FM.audioFxLive) FM.audioFxLive.release(id); } });
     FM.scene.layers = FM.scene.layers.filter(l => !set.has(l.id));
     FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
@@ -1223,7 +1224,7 @@ window.FM = window.FM || {};
       FM.scene.layers.filter(l => l.parent === id).forEach(child => FM.deleteLayer(child.id, true));
     }
     const m = FM.media.get(id);
-    if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.audioFxLive) FM.audioFxLive.release(id); }   // stop a deleted forward clip's native audio (#6)
+    if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.clearClipStrip) FM.clearClipStrip(m); if (FM.audioFxLive) FM.audioFxLive.release(id); }   // stop a deleted forward clip's native audio (#6)
     FM.scene.layers = FM.scene.layers.filter(l => l.id !== id);
     // Deliberately KEEP the media registry entry and its IndexedDB blob: undo restores the layer's
     // JSON only, so destroying media here made an undone delete come back permanently BLANK (the
@@ -1542,6 +1543,7 @@ window.FM = window.FM || {};
     if (!layer || !nrec) return false;
     const old = FM.media.get(id);
     if (old && FM.clearFrameCache) FM.clearFrameCache(old);
+    if (old && FM.clearClipStrip) FM.clearClipStrip(old);
     dropAudioGraph(old);   // the new rec brings a new element, so the old source node has nothing left to feed
     FM.media.set(id, nrec);
     layer.type = nrec.kind;                          // video ↔ image as needed
