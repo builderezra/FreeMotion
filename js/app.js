@@ -1416,6 +1416,14 @@ window.FM = window.FM || {};
           if (!bh || !bh.params) return;
           ['targetId', 'sourceId'].forEach(k => { if (bh.params[k] && idMap[bh.params[k]]) bh.params[k] = idMap[bh.params[k]]; });
         });
+        // Same rule for an effect's layer ref (Luma Matte / Compound Blur / Match Grade /
+        // Displacement Map): a source INSIDE the duplicated subtree must follow the copy. A source
+        // outside it is deliberately left alone — that layer is still in the scene, and both the
+        // original and the copy legitimately matte off it.
+        if (Array.isArray(l.effects)) l.effects.forEach(fx => {
+          if (fx && fx.params && fx.params.source && idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
+        });
+        if (l.karaokeOf && idMap[l.karaokeOf]) l.karaokeOf = idMap[l.karaokeOf];
       });
     }
     const idx = FM.scene.layers.findIndex(l => l.id === id);
@@ -1515,6 +1523,16 @@ window.FM = window.FM || {};
           else if (!FM.layerById(FM.scene, id0)) bh.params[k] = '';
         });
       });
+      // …and an effect's layer ref, by the same three-way rule.
+      if (Array.isArray(copy.effects)) copy.effects.forEach(fx => {
+        if (!fx || !fx.params || !fx.params.source) return;
+        if (idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
+        else if (!FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';
+      });
+      if (copy.karaokeOf) {
+        if (idMap[copy.karaokeOf]) copy.karaokeOf = idMap[copy.karaokeOf];
+        else if (!FM.layerById(FM.scene, copy.karaokeOf)) copy.karaokeOf = null;
+      }
       if (entry.file && entry.kind && entry.kind !== 'text') {
         let nrec = null;
         try {

@@ -531,8 +531,25 @@ window.FM = window.FM || {};
       if (b.params.targetId) b.params.targetId = map[b.params.targetId] || '';
       if (b.params.sourceId) b.params.sourceId = map[b.params.sourceId] || '';
     } }); });
+    // EFFECTS carry cross-layer refs too, and this was the class that got missed. Every effect
+    // declared `layer: true` in the registry stores a layer id in params.source — Luma Matte,
+    // Compound Blur, Match Grade, Displacement Map, Polar Displacement. Unremapped, the copy's id
+    // pointed at a layer that does not exist in the new scene, and the compositor's lookup simply
+    // returns undefined and falls through to drawing the layer PLAIN: the full uncut rectangle
+    // instead of the matte, no blur map, no grade. No error and no toast, and the broken ref is
+    // autosaved into the copy, so the duplicated / imported / templated project silently renders
+    // differently from the original and stays that way. karaokeOf is the same unremapped class.
+    out.forEach(l => {
+      if (Array.isArray(l.effects)) l.effects.forEach(fx => {
+        if (fx && fx.params && fx.params.source) fx.params.source = map[fx.params.source] || '';
+      });
+      if (l.karaokeOf) l.karaokeOf = map[l.karaokeOf] || null;
+    });
     return { layers: out, map };
   }
+  // Exposed for the regression suite: the cross-layer-ref remap is pure and worth asserting directly,
+  // and the alternative — duplicating a real project to check it — writes to IndexedDB.
+  FM.storage._reIdLayers = reIdLayers;
   // Snapshot layers + their in-memory media Files into a storable pack.
   function packLayers(layers) {
     const media = {};

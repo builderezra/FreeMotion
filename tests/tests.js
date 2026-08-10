@@ -563,8 +563,17 @@
     // 19px. Ezra: "all of the shape icons have gone small." A pure-CSS specificity accident with no
     // JS involved, which is exactly the kind that no behavioural test would ever notice, so this
     // asserts the rendered sizes of both card kinds against each other.
+    // The add menu only exists while NOTHING is selected, and the suite runs against whatever state
+    // the app happens to be in. Deselect first and put the selection back afterwards, rather than
+    // failing with "deselect first?" — a test that depends on unstated setup is a flaky test.
+    const hadSel = FM.scene.selectedId;
+    const hadSelIds = (FM.scene.selectedIds || []).slice();
+    if (hadSel) { FM.selectLayer(null); }
     const panel = document.querySelector('.addmenu--panel');
-    if (!panel) throw new Error('the desktop add menu is not rendered — deselect first?');
+    if (!panel) {
+      if (hadSel) { FM.scene.selectedIds = hadSelIds; FM.selectLayer(hadSel); }
+      throw new Error('the desktop add menu is not rendered even with nothing selected');
+    }
     const tab = k => [].find.call(panel.querySelectorAll('.addmenu-tab'), b => b.dataset.key === k);
     const iconW = () => {
       const c = panel.querySelector('.addmenu-page .addmenu-card');
@@ -585,6 +594,7 @@
       if (shape <= labelled) throw new Error('shape icons (' + shape + 'px) should be BIGGER than labelled-card icons (' + labelled + 'px)');
     } finally {
       const back = tab(was && was.key ? was.key : 'object'); if (back) back.click();
+      if (hadSel) { FM.scene.selectedIds = hadSelIds; FM.selectLayer(hadSel); }
     }
   });
 
@@ -948,6 +958,37 @@
         if (L.transform.anchorX && L.transform.anchorX.kf) throw new Error('the AI op path still writes a keyframed anchor');
       } finally { FM.scene = saved; }
     }
+  });
+
+  test('duplicating or importing a project keeps its effect layer references', { item: 'reid-fxsrc' }, function () {
+    // v5.15. reIdLayers minted fresh ids and remapped exactly two classes of cross-layer reference:
+    // l.parent and behaviors[].params.targetId/sourceId. It never touched effects[].params.source —
+    // the layer id every effect declared `layer: true` writes (Luma Matte, Compound Blur, Match Grade,
+    // Displacement Map, Polar Displacement). In the copy that id pointed at a layer that does not
+    // exist, the compositor's lookup returned undefined, and it fell through to drawing the layer
+    // PLAIN: the full uncut rectangle instead of the matte. No error, no toast, and the dead ref was
+    // autosaved — so the duplicate rendered differently from the original, permanently. One code path
+    // covers Duplicate project, .fmotion.json import, template use/insert and element insert.
+    if (!FM.storage || !FM.storage._reIdLayers) throw new Error('FM.storage._reIdLayers is not exposed for testing');
+    const matte = FM.makeLayer('shape', { shape: 'rect', name: 'Matte', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#fff' });
+    const subject = FM.makeLayer('shape', { shape: 'rect', name: 'Subject', x: 60, y: 60, shapeW: 80, shapeH: 80, fill: '#f00' });
+    subject.effects = [{ type: 'lumamatte', enabled: true, params: { source: matte.id } }];
+    subject.behaviors = [{ type: 'follow', params: { targetId: matte.id } }];
+    const res = FM.storage._reIdLayers([matte, subject]);
+    const out = res.layers;
+    const newMatte = out.find(l => l.name === 'Matte'), newSubject = out.find(l => l.name === 'Subject');
+    if (!newMatte || !newSubject) throw new Error('re-id lost a layer');
+    if (newMatte.id === matte.id) throw new Error('re-id did not mint a new id');
+    if (newSubject.behaviors[0].params.targetId !== newMatte.id) throw new Error('behaviour targetId was not remapped — the control case is broken');
+    if (newSubject.effects[0].params.source !== newMatte.id) {
+      throw new Error('effect source still points at ' + newSubject.effects[0].params.source + ' (the ORIGINAL matte) instead of the copy — the matte silently does nothing in the duplicate');
+    }
+    // A reference to something outside the pack must be CLEARED, not left dangling at a live id in
+    // some other project.
+    const orphan = FM.makeLayer('shape', { shape: 'rect', name: 'Orphan', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#00f' });
+    orphan.effects = [{ type: 'lumamatte', enabled: true, params: { source: 'layer_not_in_this_pack' } }];
+    const o = FM.storage._reIdLayers([orphan]).layers[0];
+    if (o.effects[0].params.source) throw new Error('a source pointing outside the pack survived as ' + o.effects[0].params.source);
   });
 
   async function run() {
