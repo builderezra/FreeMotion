@@ -1,7 +1,7 @@
 # Next session — the live queue
 
 Read this first if the session starts with "keep going", "go", or a vague pick-up.
-Top to bottom is the order Ezra asked for. **v4.81, everything below is unbuilt.**
+Top to bottom is the order Ezra asked for. **v4.82, everything below is unbuilt.**
 
 Standing: Ezra is working on the **PC Studio layout** now — *"from now on going to be talking mainly
 about pcs studio layout, so just dont change the other versions layout."* Classic desktop and the
@@ -31,45 +31,14 @@ audio import fix below was one.)
   containers; 12 of 28 keyframed props used to be undeletable. Test `delete-parity`.
 - **v4.80 — object motion blur fully moved into Effects** (card with Shutter/Samples/×; M&T checkbox deleted).
 - **v4.81 — Elements browser** with search (js/elements-browser.js); saved elements no longer loose in the tab.
+- **v4.82 — Tiles repeats the whole clip off-canvas** (0% -> 100% lit; the call was gated on the canvas bbox).
 - **BUG-HUNT.md** — 74 findings, 69 confirmed, from a 22-agent hunt. Nothing in it is fixed yet.
 
 ---
 
 ## The queue
 
-### 1. Tiles — "Whole clip" is on by default and does NOT work  (REPRODUCED + DIAGNOSED 2026-08-10)
-*"if I move the clip off screen the tiles only duplicate what's on the actual screen/canvas."*
-Screenshot: `~/.claude/uploads/a8308134-d9f7-4702-8894-2d76d40f5bf3/3835f848-IMG_2372.PNG`
-
-**Measured** (320x240 project, 70x70 shape, Tiles at its DEFAULT params — mode Extend, count 3,
-mirror On, source "Whole clip"), % of frame lit:
-  clip at x=160 (centred)      -> 100%   tiles fill the frame, correct
-  clip at x=-10  (half off)    -> 100%   still correct
-  clip at x=-60  (fully off)   ->   0%   NOTHING renders  <-- the bug
-
-**Why the earlier fix didn't take.** The `source` param already exists and already defaults to
-1 = "Whole clip" (js/compositor.js:430), described as "renders the layer past the frame first and
-repeats all of it". It is ON and it still fails, because the bbox Tiles spaces its copies by is
-computed from the CANVAS-SIZED plate and ignores `source` entirely:
-
-    js/compositor.js:3193
-    else if (fx.type === 'tiles') { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); }
-
-`actx` is W x H = the canvas. A layer drawn off-canvas is clipped away before Tiles ever sees it, so
-alpha is empty, bbox is null, and there is nothing to repeat. That is why this has now been "fixed"
-twice without working — both fixes were downstream of the clip.
-
-**The fix** has to make the source plate bigger than the canvas when source = "Whole clip", so the
-layer survives being off-frame. Note `tiles:` (js/compositor.js:4472) already takes an `expand`
-argument — `function (A, B, W, H, bb, p, t, tl, layer, ps, expand)` — so the plumbing for an expanded
-plate may already exist; find who passes it and what CFX_NO_BBOX (js/compositor.js:3127) does here,
-since the comment there says tiles was deliberately REMOVED from that list to anchor on "the clip's
-real alpha bounds" — which is the thing that is failing.
-
-**Verify with the numbers above, not by reading**: the fully-off case must go from 0% to ~100%, and
-the centred case must stay 100% (don't fix off-screen by breaking the normal case).
-
-### 2. Freehand drawing is buggy and moves the canvas
+### 1. Freehand drawing is buggy and moves the canvas
 *"still really buggy and puts the canvas in a weird spot."* `js/draw-tool.js` plus the
 `body.drawing` CSS (which collapses `#app` to a single row). Needs reproducing and watching, not
 reading — and now also needs checking against the Studio layout, where the stage geometry differs.
