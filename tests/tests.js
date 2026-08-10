@@ -505,6 +505,58 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
+  test('Select all on a non-project tab ticks THAT tab, never the projects', { item: 'select-cross-tab' }, async function () {
+    // v5.04. Select used to be projects-only, and every part of it was hardwired to FM.projects —
+    // including a `shownIds.length ? shownIds : FM.projects.list()` fallback in Select all. Opening
+    // Select on the Templates tab without also filling shownIds for that tab would therefore have
+    // ticked the PROJECT list and handed those ids to Delete. This asserts the property that stops
+    // that: what gets ticked is what is on screen.
+    if (!FM.home || !FM.templates) throw new Error('FM.home / FM.templates missing');
+    const grid = document.querySelector('.hm-grid');
+    if (!grid) throw new Error('home grid missing — is the home screen built?');
+    // Seed two templates so there is something to tick, and put the store back in finally: this test
+    // frame shares localStorage with the real app, so a throw mid-way must not leave junk behind.
+    const before = FM.templates.list();
+    const projectCount = FM.projects.list().length;
+    if (projectCount < 1) throw new Error('need at least one project for this test to mean anything');
+    try {
+      localStorage.setItem('fm.templates', JSON.stringify([
+        { id: 'test_t1', name: 'ZZ test template 1', width: 1080, height: 1920, duration: 1 },
+        { id: 'test_t2', name: 'ZZ test template 2', width: 1080, height: 1920, duration: 1 },
+      ]));
+      FM.home.open();
+      await new Promise(r => setTimeout(r, 60));
+      const tab = [].find.call(document.querySelectorAll('.hm-tab'), b => b.dataset.tab === 'templates');
+      if (!tab) throw new Error('templates tab missing');
+      tab.click();
+      const selBtn = document.getElementById('hm-select-btn');
+      if (!selBtn) throw new Error('Select button missing');
+      if (getComputedStyle(selBtn).display === 'none') throw new Error('Select is not offered on the Templates tab');
+      selBtn.click();
+      const all = [].find.call(document.querySelectorAll('.hm-selbtn'), b => b.textContent === 'Select all');
+      if (!all) throw new Error('Select all button missing');
+      all.click();
+      const cards = document.querySelectorAll('.hm-grid .hm-card').length;
+      const ticked = document.querySelectorAll('.hm-grid .hm-check.on').length;
+      const label = (document.querySelector('.hm-selcount') || {}).textContent || '';
+      const n = parseInt(label, 10);
+      if (cards !== 2) throw new Error('expected the 2 seeded templates on screen, saw ' + cards);
+      if (ticked !== 2) throw new Error('Select all ticked ' + ticked + ' of ' + cards + ' template cards');
+      if (n !== 2) throw new Error('the bar says "' + label + '" — it should count the 2 templates');
+      if (n === projectCount && projectCount !== 2) throw new Error('the bar counted the PROJECTS (' + projectCount + '), not the templates');
+      // and Duplicate must not be offered here: neither store has one, so the button would throw
+      if ([].some.call(document.querySelectorAll('.hm-selbtn'), b => b.textContent === 'Duplicate')) {
+        throw new Error('Duplicate is offered on the Templates tab, but FM.templates has no duplicate()');
+      }
+    } finally {
+      localStorage.setItem('fm.templates', JSON.stringify(before));
+      const cancel = [].find.call(document.querySelectorAll('.hm-selbtn'), b => b.textContent === 'Cancel');
+      if (cancel) cancel.click();
+      const pt = [].find.call(document.querySelectorAll('.hm-tab'), b => b.dataset.tab === 'projects');
+      if (pt) pt.click();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

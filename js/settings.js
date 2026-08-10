@@ -204,7 +204,11 @@ window.FM = window.FM || {};
       if (!scrim) build();
       // rebuild the controls each open so they always show the live values
       scrim.remove(); scrim = null; panel = null; build();
-      requestAnimationFrame(() => { scrim.classList.add('open'); });
+      // guard: close() nulls scrim, and a close in the SAME frame as the open (a double-tap, or a
+      // script driving both) left this callback holding a dead reference — "Cannot read properties
+      // of null (reading 'classList')". Harmless to skip: if it's already closed there is nothing to
+      // animate open. Surfaced by the new PC settings cog making open/close reachable back-to-back.
+      requestAnimationFrame(() => { if (scrim) scrim.classList.add('open'); });
       escBound = e => { if (e.key === 'Escape') { e.preventDefault(); FM.settings.close(); } };
       document.addEventListener('keydown', escBound);
     },

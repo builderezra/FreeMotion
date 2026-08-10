@@ -41,8 +41,8 @@ audio import fix below was one.)
 
 ## The queue
 
-**v5.03.** The three live asks from 2026-08-10 are shipped (clip-nudge pair beside the playhead,
-hold-a-jump-button for speed, the view bar's second group). What is left is standing work.
+**v5.04.** Every live ask from 2026-08-10 is shipped, and Select mode now works on all three home
+tabs. What is left is standing work only.
 
 ### 1. Standing: empty the ⋯ menu, one item at a time
 "most of the options in the three dot menu are pointless. Don't remove the three dot menu yet, but
@@ -53,26 +53,7 @@ popup (v5.03). All of those are still ALSO in the ⋯ menu — Ezra asked to emp
 cut it over, so nothing has been deleted from it yet. Deleting the migrated entries is the next step
 whenever he says the new homes feel right.
 
-### 2. Select mode in the Templates and Elements tabs  (SCOPED, not started)
-*"Need the select option in templates and elements sections."* Projects-only today, enforced at
-js/home.js:643 — `if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }`
-
-Four pieces, all in js/home.js. Fewer than all four ships a visibly broken Select:
-1. **Drop/relax that guard** so selectMode survives a tab change.
-2. **templateCard(t) :490 and elementCard(e) :527** need what projectCard already does at
-   :227/:236/:303/:306 — the `hm-sel` class, the `hm-check` tick, ⋯ suppressed while selecting, and a
-   click that toggles selection instead of opening.
-3. **The select bar (:456-486)** deletes/duplicates PROJECTS — `FM.projects.remove`/`.duplicate`. It
-   must branch per tab to FM.templates / FM.elements. Duplicate may not even apply to elements.
-4. **shownIds (:632, pushed only at :671 and :686 — both project paths)** must be populated for those
-   tabs. THIS IS THE TRAP: if it isn't, the pruning at :637 silently clears the selection, and
-   "Select all" falls back to `FM.projects.list()` — so ticking templates would select PROJECTS and
-   Delete would destroy them.
-
-Verify by RUNNING: enter select on each tab, tick two, confirm the bar counts 2, delete, confirm the
-right things went and the other tabs are untouched.
-
-### 3. Standing design constraints (do not guess at these)
+### 2. Standing design constraints (do not guess at these)
 - **Do NOT change the home background.** He said so explicitly. It already drifts on a 48s cycle.
 - **The orbs are SMALL now and that is his call, not a bug.** v4.91 had gone 62→74px to keep the
   render's faceting legible; he came back with "make it smaller coz the design looks funny when it's
@@ -87,7 +68,7 @@ right things went and the other tabs are untouched.
   background image, so without `mask: url(fab-plus.png)` it sweeps straight through the hole. Check
   both by parking the sheen mid-sweep (`background-position: 46% 0`) over a bright backdrop.
 
-### 4. Standing: BUG-HUNT.md
+### 3. Standing: BUG-HUNT.md
 69 confirmed findings, essentially untouched. That is the backlog when he has no specific ask.
 
 ---

@@ -454,17 +454,29 @@ window.FM = window.FM || {};
   function exitSelect() { selectMode = false; selected.clear(); const b = document.getElementById('hm-selbar'); if (b) b.remove(); render(); }
 
   // Bottom action bar shown while selecting: Delete (n) · Duplicate (n) · Select all · Cancel.
+  /* Per-tab from v5.04. Everything here used to be hardwired to FM.projects, which was safe only
+   * because Select could not be entered anywhere else. Now that it can, each action has to resolve
+   * against the list actually on screen — otherwise "Delete 3" on the Templates tab would have gone
+   * looking for three template ids in the PROJECT store. */
+  function selKind() {
+    if (tab === 'templates') return { noun: 'template', store: FM.templates, canDuplicate: false };
+    if (tab === 'elements') return { noun: 'element', store: FM.elements, canDuplicate: false };
+    return { noun: 'project', store: FM.projects, canDuplicate: true };
+  }
   function renderSelBar() {
     let bar = document.getElementById('hm-selbar');
     if (!selectMode) { if (bar) bar.remove(); return; }
     if (!bar) { bar = el('div', 'hm-selbar'); bar.id = 'hm-selbar'; root.appendChild(bar); }
     bar.innerHTML = '';
+    const K = selKind();
     const n = selected.size;
     const count = el('span', 'hm-selcount', n + ' selected');
     const all = el('button', 'hm-selbtn', 'Select all');
-    // "all" = everything CURRENTLY LISTED — with a search active, ticking projects you can't see
-    // (and then hitting Delete) would be a nasty surprise
-    all.addEventListener('click', () => { (shownIds.length ? shownIds : FM.projects.list().map(p => p.id)).forEach(id => selected.add(id)); renderSelBar(); render(); });
+    // "all" = everything CURRENTLY LISTED — with a search active, ticking things you can't see (and
+    // then hitting Delete) would be a nasty surprise. No fallback to a store's full list any more:
+    // an empty shownIds now means the grid is genuinely empty, and "select all of nothing" is
+    // nothing. The old `|| FM.projects.list()` fallback was the trap that made this dangerous.
+    all.addEventListener('click', () => { shownIds.forEach(id => selected.add(id)); renderSelBar(); render(); });
     const dup = el('button', 'hm-selbtn', 'Duplicate');
     dup.disabled = !n;
     dup.addEventListener('click', async () => { if (!n) return; const ids = [...selected]; if (FM.toast) FM.toast('Duplicating ' + ids.length + '…'); for (const id of ids) await FM.projects.duplicate(id); exitSelect(); });
@@ -472,19 +484,39 @@ window.FM = window.FM || {};
     del.disabled = !n;
     del.addEventListener('click', async () => {
       if (!n) return; let ids = [...selected];
-      if (!confirm('Delete ' + ids.length + ' project' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
+      if (!confirm('Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
       if (FM.toast) FM.toast('Deleting ' + ids.length + '…');
-      // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
-      // refreshAll) whenever it deletes the open one, so deleting it first made every other doomed
-      // project get fully opened in turn — order it last so that expensive switch happens once.
-      const cur = FM.projects.currentId();
-      ids = ids.sort((a, b) => (a === cur ? 1 : 0) - (b === cur ? 1 : 0));
-      for (const id of ids) await FM.projects.remove(id);
+      if (K.noun === 'project') {
+        // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
+        // refreshAll) whenever it deletes the open one, so deleting it first made every other doomed
+        // project get fully opened in turn — order it last so that expensive switch happens once.
+        const cur = FM.projects.currentId();
+        ids = ids.sort((a, b) => (a === cur ? 1 : 0) - (b === cur ? 1 : 0));
+      }
+      for (const id of ids) await K.store.remove(id);
       exitSelect();
     });
     const cancel = el('button', 'hm-selbtn', 'Cancel');
     cancel.addEventListener('click', exitSelect);
-    bar.appendChild(count); bar.appendChild(el('span', 'hm-selspacer')); bar.appendChild(all); bar.appendChild(dup); bar.appendChild(del); bar.appendChild(cancel);
+    bar.appendChild(count); bar.appendChild(el('span', 'hm-selspacer')); bar.appendChild(all);
+    // Duplicate is projects-only: neither FM.templates nor FM.elements has one, and a button that
+    // throws is worse than a button that isn't there.
+    if (K.canDuplicate) bar.appendChild(dup);
+    bar.appendChild(del); bar.appendChild(cancel);
+  }
+
+  /* Everything a card needs to take part in Select, factored out of projectCard so templates and
+   * elements behave identically instead of approximately (v5.04). Three things have to move together
+   * or Select looks broken: the tick, the outline, and the click. The fourth — hiding ⋯ — matters
+   * because the check occupies that corner, and two overlapping controls in one corner on a phone is
+   * a coin flip about which one you hit. */
+  function selectify(card, th, id, defaultAction) {
+    if (selectMode) {
+      if (selected.has(id)) card.classList.add('hm-sel');
+      th.appendChild(el('span', 'hm-check' + (selected.has(id) ? ' on' : ''), selected.has(id) ? '✓' : ''));
+    }
+    card.addEventListener('click', () => { if (selectMode) toggleSel(id); else defaultAction(); });
+    return !selectMode;   // caller uses this to decide whether to append its ⋯ button
   }
 
   function templateCard(t) {
@@ -510,13 +542,12 @@ window.FM = window.FM || {};
       ]);
     });
     more.setAttribute('aria-label', 'Template actions');
-    card.appendChild(more);
     async function use() {
       if (FM.toast) FM.toast('Creating project…');
       const ok = await FM.templates.useAsNew(t.id);
       if (ok) FM.home.close(); else if (FM.toast) FM.toast('Could not load that template');
     }
-    card.addEventListener('click', use);
+    if (selectify(card, th, t.id, use)) card.appendChild(more);
     keyActivate(card);
     return card;
   }
@@ -547,7 +578,6 @@ window.FM = window.FM || {};
       ]);
     });
     more.setAttribute('aria-label', 'Element actions');
-    card.appendChild(more);
     async function use() {
       // Elements go INTO a project, so there has to be one open. Home is reachable with no project
       // loaded (first run, or after deleting the last one) — say so rather than failing silently.
@@ -559,7 +589,7 @@ window.FM = window.FM || {};
       if (ok) { FM.home.close(); if (FM.toast) FM.toast('Added “' + e.name + '”'); }
       else if (FM.toast) FM.toast('That element’s data is missing — save it again');
     }
-    card.addEventListener('click', use);
+    if (selectify(card, th, e.id, use)) card.appendChild(more);
     keyActivate(card);
     return card;
   }
@@ -629,7 +659,12 @@ window.FM = window.FM || {};
     } finally { _opening = false; }
   }
 
-  let shownIds = [];   // project ids visible in the grid right now (search-aware; Select-all uses it)
+  // ids visible in the grid right now, whichever tab is showing (search-aware; Select-all uses it).
+  // It MUST be filled on every tab, not just projects. Two things read it and both fail dangerously
+  // if it is stale: pruneSelection() drops every tick whose id isn't in here, and Select-all falls
+  // back to FM.projects.list() when it is empty — so on the Templates tab an unfilled shownIds would
+  // have made "Select all" tick your PROJECTS and Delete destroy them.
+  let shownIds = [];
   let introShown = false, introPending = false, introTimer = 0;   // the once-per-session entry stagger (see stampIntro)
   // A tick only counts while you can SEE the card. Without this, selecting three projects and then
   // typing a search would leave "3 selected" on the bar and Delete would take three projects that
@@ -641,14 +676,17 @@ window.FM = window.FM || {};
   }
   function render() {
     if (!grid) return;
-    if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
+    // Select works on EVERY tab now (v5.04). What does NOT survive a tab change is the SELECTION —
+    // ids are only meaningful within their own list, and carrying three ticked project ids into the
+    // Templates tab is how "delete 3" ends up deleting the wrong three things. The tab handler
+    // clears the set; the MODE stays on, which is what you want when you're tidying up two lists.
     document.body.classList.toggle('hm-selecting', selectMode);   // CSS hands card drags to paint-select instead of scrolling
     grid.innerHTML = '';
     shownIds = [];
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     // header Select toggle (built once, kept in sync)
     const selBtn = document.getElementById('hm-select-btn');
-    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = tab === 'projects' ? '' : 'none'; }
+    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = ''; }
     // the + means something different on each tab — say which, so it isn't a mystery button
     const newBtn = document.getElementById('hm-new');
     if (newBtn) newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project');
@@ -694,12 +732,12 @@ window.FM = window.FM || {};
         const strong = scored.filter(x => x.score >= 0.45);
         const shown = strong.length ? strong : scored.slice(0, 5);
         grid.appendChild(el('div', 'hm-note', strong.length ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + ' — best first') : 'Nothing matched “' + query + '” exactly. Closest templates:'));
-        shown.forEach(x => grid.appendChild(templateCard(x.t)));
+        shown.forEach(x => { shownIds.push(x.t.id); grid.appendChild(templateCard(x.t)); });
         renderSelBar();
         return;
       }
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No templates yet. Tap + to save a project as one, or use a project card’s ⋯ → “Save as template…”.'));
-      list.forEach(t => grid.appendChild(templateCard(t)));
+      list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
     } else {
       // ELEMENTS — same shape as the templates branch, including the forgiving name search.
       let list = FM.elements.list();
@@ -708,12 +746,12 @@ window.FM = window.FM || {};
         const strong = scored.filter(x => x.score >= 0.45);
         const shown = strong.length ? strong : scored.slice(0, 5);
         grid.appendChild(el('div', 'hm-note', strong.length ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + ' — best first') : 'Nothing matched “' + query + '” exactly. Closest elements:'));
-        shown.forEach(x => grid.appendChild(elementCard(x.e)));
+        shown.forEach(x => { shownIds.push(x.e.id); grid.appendChild(elementCard(x.e)); });
         renderSelBar();
         return;
       }
       if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No elements yet. An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit. Tap + to save a whole project as one, or inside a project select the layers and use ⋯ → “Save selection as element…”.'));
-      list.forEach(e => grid.appendChild(elementCard(e)));
+      list.forEach(e => { shownIds.push(e.id); grid.appendChild(elementCard(e)); });
     }
     renderSelBar();
     if (introPending) { introPending = false; stampIntro(); }
@@ -891,7 +929,11 @@ window.FM = window.FM || {};
       root = document.getElementById('home-screen');
       if (!root) return;
       grid = root.querySelector('.hm-grid');
-      root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+      root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => {
+        // keep select MODE across tabs, drop the SELECTION — see the note in render()
+        if (tab !== b.dataset.tab) selected.clear();
+        tab = b.dataset.tab; render();
+      }));
       document.getElementById('hm-new').addEventListener('click', newFromTab);   // per-tab: project / template / element
       // "Select" toggle in the top bar → enter/leave multi-select (bulk delete / duplicate)
       const top = root.querySelector('.hm-top');
