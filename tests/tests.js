@@ -912,6 +912,44 @@
     if (FM.effectFilter(H, 0, 1).indexOf('-90deg') < 0) throw new Error('hue-rotate lost its sign: ' + FM.effectFilter(H, 0, 1));
   });
 
+  test('a keyframed anchor cannot make a layer vanish', { item: 'anchor-kf' }, function () {
+    // v5.14. The compositor reads transform.anchorX/anchorY as RAW NUMBERS in eight places, never
+    // through evalProp — that is deliberate, and the inspector withholds the ◆ button for the anchor
+    // because of it. Nothing enforced the contract: the AI op path advertised the anchor as
+    // keyframeable and wrote `transform.anchorX = {kf:[…]}` straight onto the layer. `-sw * {kf:[…]}`
+    // is NaN, so the traced path is NaN and the layer draws nothing — no exception, nothing to see,
+    // and the object serialises into the save, so the layer stays gone across reloads.
+    // Count the SHAPE's own colour, not alpha: the scene paints an opaque background, so every
+    // pixel on the canvas has alpha 255 whether the layer drew or not — an alpha count measures
+    // nothing and passes no matter what. (Mutation testing caught that; the first version of this
+    // test could not fail.)
+    function lit(layer) {
+      const c = offscreen(320, 240);
+      FM.renderScene(c.getContext('2d'), scene([layer]), 0);
+      const d = c.getContext('2d').getImageData(0, 0, 320, 240).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 150 && d[i + 1] < 80 && d[i + 2] < 80) n++;
+      return n;
+    }
+    const mk = () => FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 90, fill: '#ff0000' });
+    const plain = lit(mk());
+    if (plain < 1000) throw new Error('the control layer only lit ' + plain + ' pixels — the test scene is wrong');
+    const kfd = mk();
+    kfd.transform.anchorX = { kf: [{ t: 0, v: 0.5 }, { t: 2, v: 0 }] };
+    const after = lit(kfd);
+    if (after < plain * 0.9) throw new Error('a keyframed anchorX dropped the layer from ' + plain + ' to ' + after + ' lit pixels');
+    // …and the op path that produced such an object must refuse to write it.
+    if (FM.aiOps && FM.aiOps.applyOps) {
+      const L = mk(); L.id = 'anchor-kf-probe';
+      const saved = FM.scene;
+      try {
+        FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [L], selectedId: L.id, selectedIds: [L.id] };
+        FM.aiOps.applyOps([{ op: 'addKeyframe', layer: L.id, path: 'transform.anchorX', keys: [{ t: 0, v: 0.5 }, { t: 2, v: 0 }] }]);
+        if (L.transform.anchorX && L.transform.anchorX.kf) throw new Error('the AI op path still writes a keyframed anchor');
+      } finally { FM.scene = saved; }
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

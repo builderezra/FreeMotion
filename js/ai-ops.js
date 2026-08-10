@@ -325,6 +325,11 @@ window.FM = window.FM || {};
             if (typeof o.path === 'string' && o.path.indexOf('transform.') === 0) {
               key = o.path.slice(10);
               if (!Object.prototype.hasOwnProperty.call(TRANSFORM_RANGE, key)) { drop(o.op, ref, 'bad transform path'); break; }
+              // setProp on the anchor is fine; KEYFRAMING it is not. The compositor reads the anchor as
+              // a raw number by design (the inspector withholds the ◆ button for the same reason), so a
+              // {kf} object there is NaN and the layer draws nothing at all — and it saves that way.
+              // The compositor now guards the read as well; this stops the bad object being written.
+              if (key === 'anchorX' || key === 'anchorY') { drop(o.op, ref, 'anchor cannot be keyframed'); break; }
               container = layer.transform; range = TRANSFORM_RANGE[key];
             } else if (typeof o.path === 'string' && o.path.indexOf('effect:') === 0) {
               var pr = o.path.split(':'); var fxi = parseInt(pr[1], 10); var pkey = pr[2];

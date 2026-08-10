@@ -1501,6 +1501,17 @@ window.FM = window.FM || {};
    * quality tier already makes and it never reaches the export. */
   function plateScale(ctx) { return Math.min(1, ctx.canvas.__fmRS || 1); }
 
+  /* The anchor is deliberately read as a RAW NUMBER everywhere in the compositor — never through
+     FM.evalProp — and the inspector withholds the ◆ button for it because of exactly that. Nothing
+     enforced the contract, though: the AI op path advertised anchorX/anchorY as keyframeable and
+     wrote `transform.anchorX = {kf:[…]}` straight onto the layer, and an imported project could
+     carry the same object. `-sw * {kf:[…]}` is NaN, so the whole traced path is NaN and the layer
+     draws NOTHING — measured at 6000 lit pixels before and 0 after, with no exception thrown to
+     explain it, and the {kf} object serialises into the save so the layer stays gone across reloads.
+     One guarded read, used at every site, turns that from permanent loss into a no-op. */
+  function anchorX(tr) { const v = tr && tr.anchorX; return (typeof v === 'number' && isFinite(v)) ? v : 0.5; }
+  function anchorY(tr) { const v = tr && tr.anchorY; return (typeof v === 'number' && isFinite(v)) ? v : 0.5; }
+
   const _pfPool = [];
   let _pfDepth = 0;
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
@@ -5418,8 +5429,8 @@ window.FM = window.FM || {};
     if (!A || !B) return null;
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: 100, h: 100 });
     const tr = layer.transform || {};
-    const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
-    const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
+    const ax = anchorX(tr);
+    const ay = anchorY(tr);
     const w = sz.w || 0, h = sz.h || 0;
     let worst = 0;
     for (let i = 0; i < 4; i++) {
@@ -6091,8 +6102,8 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: W, h: H });
-    const ax = (typeof layer.transform.anchorX === 'number') ? layer.transform.anchorX : 0.5;
-    const ay = (typeof layer.transform.anchorY === 'number') ? layer.transform.anchorY : 0.5;
+    const ax = anchorX(layer.transform);
+    const ay = anchorY(layer.transform);
     const nscale = Math.min(1, (W * 0.92) / Math.max(1, sz.w), (H * 0.92) / Math.max(1, sz.h));   // fit content into the plate (constant per clip → transform-independent flow)
     if (!_mbcA) _mbcA = document.createElement('canvas');
     if (_mbcA.width !== W || _mbcA.height !== H) { _mbcA.width = W; _mbcA.height = H; }
@@ -6153,7 +6164,7 @@ window.FM = window.FM || {};
     if (M) a.setTransform(M.a, M.b, M.c, M.d, M.e, M.f);   // same transform as the layer → footprint in screen space
     a.fillStyle = '#fff';
     if (layer.type === 'shape') {
-      const sw = layer.shapeW || 400, sh = layer.shapeH || 300, ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;
+      const sw = layer.shapeW || 400, sh = layer.shapeH || 300, ox = -sw * anchorX(tr), oy = -sh * anchorY(tr);
       const mode = FM.traceShapePath(a, layer, ox, oy, sw, sh);
       if (mode === 'stroke') { a.lineWidth = (layer.stroke && layer.stroke.width) || 8; a.strokeStyle = '#fff'; a.lineCap = 'round'; a.stroke(); }
       else a.fill();
@@ -6168,7 +6179,7 @@ window.FM = window.FM || {};
       // clip covers the whole frame instead of just the crop.
       const cr = FM.cropOf ? FM.cropOf(layer, t) : null, sz = FM.layerSize ? FM.layerSize(layer) : { w: W, h: H };
       const w = (cr && cr.w) || sz.w, h = (cr && cr.h) || sz.h;
-      a.fillRect(-w * tr.anchorX, -h * tr.anchorY, w, h);
+      a.fillRect(-w * anchorX(tr), -h * anchorY(tr), w, h);
     }
     a.setTransform(1, 0, 0, 1, 0, 0);   // _bgSnap already IS this pixel grid — copy it 1:1, no remap
     a.globalCompositeOperation = 'source-in';   // keep the backdrop ONLY inside the footprint
@@ -6419,7 +6430,7 @@ window.FM = window.FM || {};
       }
     } else if (layer.type === 'shape') {
       const sw = layer.shapeW || 400, sh = layer.shapeH || 300;
-      const ox = -sw * tr.anchorX, oy = -sh * tr.anchorY;   // top-left of the shape box (anchor-relative)
+      const ox = -sw * anchorX(tr), oy = -sh * anchorY(tr);   // top-left of the shape box (anchor-relative)
       const stk = layer.stroke;
 
       // ---- Trim Paths + dashed stroke: build the ONE dash pattern that shapes the BORDER stroke ----
@@ -6473,7 +6484,7 @@ window.FM = window.FM || {};
         const rr = FM.evalProp(_rep.rotation, t); rRot = (isFinite(rr) ? rr : 0) * Math.PI / 180;
         rScl = FM.evalProp(_rep.scale, t); rScl = isFinite(rScl) ? rScl : 1;
         rOpac = FM.evalProp(_rep.opacity, t); rOpac = clamp01(isFinite(rOpac) ? rOpac : 1);
-        const aX = _rep.anchorX != null ? _rep.anchorX : 0.5, aY = _rep.anchorY != null ? _rep.anchorY : 0.5;
+        const aX = anchorX(_rep), aY = anchorY(_rep);
         pvx = ox + aX * sw; pvy = oy + aY * sh;   // rotate/scale pivot, in shape-local px
       }
 
@@ -6557,7 +6568,7 @@ window.FM = window.FM || {};
         // yet keeps showing the original clip, and audio-only clips (0×0) can't be filled.
         const fmode = FM.fillModeOf(layer);
         if (fmode !== 'none' && !(fmode === 'media' && !layer.fillImage) && w > 0 && h > 0) {
-          const fx0 = -cw * tr.anchorX, fy0 = -ch * tr.anchorY;
+          const fx0 = -cw * anchorX(tr), fy0 = -ch * anchorY(tr);
           ctx.beginPath(); ctx.rect(fx0, fy0, cw, ch);
           paintFillInPath(ctx, layer, t, fx0, fy0, cw, ch);
           ctx.restore();
@@ -6631,14 +6642,14 @@ window.FM = window.FM || {};
         try {
           // Sample the crop sub-rect (cr.x,cr.y,cr.w,cr.h) of the full source into the frame box (cw×ch)
           // at 1:1 density — shrinking the frame shows LESS of the media, it doesn't scale the content.
-          if (cr.full) ctx.drawImage(src, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
+          if (cr.full) ctx.drawImage(src, -cw * anchorX(tr), -ch * anchorY(tr), cw, ch);
           else {
             // cr is in FULL source pixels, but src may be a DOWNSCALED cache bitmap (reversed /
             // frame-blend frames are capped ~960px) — scale the sample rect to src's real density
             const sw = src.videoWidth || src.naturalWidth || src.width || 0;
             const sh = src.videoHeight || src.naturalHeight || src.height || 0;
             const kx = (m && m.width && sw) ? sw / m.width : 1, ky = (m && m.height && sh) ? sh / m.height : 1;
-            ctx.drawImage(src, cr.x * kx, cr.y * ky, cr.w * kx, cr.h * ky, -cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
+            ctx.drawImage(src, cr.x * kx, cr.y * ky, cr.w * kx, cr.h * ky, -cw * anchorX(tr), -ch * anchorY(tr), cw, ch);
           }
         } catch (e) { /* frame not ready */ }
         // vignette: radial darkening over the clip's (cropped) bounds (not a CSS filter)
@@ -6649,7 +6660,7 @@ window.FM = window.FM || {};
           // (a fading clip used to leave its vignette ring floating at full strength).
           ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
-          const gx = -cw * tr.anchorX + cw / 2, gy = -ch * tr.anchorY + ch / 2, rad = Math.hypot(cw, ch) / 2;
+          const gx = -cw * anchorX(tr) + cw / 2, gy = -ch * anchorY(tr) + ch / 2, rad = Math.hypot(cw, ch) / 2;
           // NOTE the fallback is 45 here and 35 in the pixel path — the two have always disagreed.
           // Keeping each one's own legacy number means no existing project moves; a NEW vignette now
           // carries size 35 from the schema, so from here on both paths agree on one number.
@@ -6659,7 +6670,7 @@ window.FM = window.FM || {};
           grad.addColorStop(0, 'rgba(0,0,0,0)');
           grad.addColorStop(1, 'rgba(0,0,0,' + amt + ')');
           ctx.fillStyle = grad;
-          ctx.fillRect(-cw * tr.anchorX, -ch * tr.anchorY, cw, ch);
+          ctx.fillRect(-cw * anchorX(tr), -ch * anchorY(tr), cw, ch);
         }
       }
     }
