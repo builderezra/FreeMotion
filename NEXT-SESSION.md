@@ -30,7 +30,27 @@ audio import fix below was one.)
 
 ## The queue
 
-### 1. Every individual slider gets its own keyframes
+### 1. Per-slider keyframes — FINISH IT (Scale rows + delete/copy parity)
+**v4.78 shipped the main half**: every Move & Transform slider now has its own ◆ keying only its own
+property, X and Y fully independent (verified: keying X leaves y a plain number). It needed no scene
+migration — the data model always keyed one property at a time. Two pieces are LEFT:
+
+**(a) The Scale mode rows still have no ◆.** X/Y/Z, Rotation/X tilt/Y tilt and X/Y Skew all got one
+via `opts.kfKey` on `mtVBox` (js/inspector.js:1612). Scale's rows are Width/Height (js/inspector.js
+~2044), which are DERIVED — `setW` writes through to scale/scaleX/scaleY rather than being a raw
+transform key — so they need the mapping worked out before a ◆ can key the right channel. Do that.
+
+**(b) delete/copy parity**, still outstanding and now more important because each slider is its own
+track: `deleteKeyframesAt`/`propKey` (js/timeline.js:125-146) cover FEWER containers than
+`FM.animatedProps` (js/scene.js:280-297) — BUG-HUNT confirmed it. Every new track must be individually
+deletable, or you can make a keyframe you cannot remove.
+
+The anchor sliders get NO diamond on purpose: the compositor reads anchorX/anchorY as raw numbers, so
+a {kf} anchor NaNs the layer out of existence (BUG-HUNT, confirmed). Leave them alone until that is
+fixed separately.
+
+<!-- original request, kept for wording -->
+### (was) Every individual slider gets its own keyframes
 *"The key frames are still not as individual as I want. Every single Individual slider needs to have
 its own key frames. For instance — moving the clip around and zooming in the clip in move and
 transform need to be seperate."* Today position and scale share a keyframe track. Each slider
