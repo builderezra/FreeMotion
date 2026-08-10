@@ -41,61 +41,37 @@ audio import fix below was one.)
 
 ## The queue
 
+**v4.91.** Everything Ezra asked for on 2026-08-09/10 is shipped except the one item below.
+
 ### 1. Select mode in the Templates and Elements tabs  (SCOPED, not started)
-*"Need the select option in templates and elements sections."* Today it is projects-only, and the
-guard is explicit — js/home.js:643:
+*"Need the select option in templates and elements sections."* Projects-only today, enforced at
+js/home.js:643 — `if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }`
 
-    if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
+Four pieces, all in js/home.js. Fewer than all four ships a visibly broken Select:
+1. **Drop/relax that guard** so selectMode survives a tab change.
+2. **templateCard(t) :490 and elementCard(e) :527** need what projectCard already does at
+   :227/:236/:303/:306 — the `hm-sel` class, the `hm-check` tick, ⋯ suppressed while selecting, and a
+   click that toggles selection instead of opening.
+3. **The select bar (:456-486)** deletes/duplicates PROJECTS — `FM.projects.remove`/`.duplicate`. It
+   must branch per tab to FM.templates / FM.elements. Duplicate may not even apply to elements.
+4. **shownIds (:632, pushed only at :671 and :686 — both project paths)** must be populated for those
+   tabs. THIS IS THE TRAP: if it isn't, the pruning at :637 silently clears the selection, and
+   "Select all" falls back to `FM.projects.list()` — so ticking templates would select PROJECTS and
+   Delete would destroy them.
 
-Four coordinated pieces, all in js/home.js. Doing fewer than all four leaves Select visibly broken:
-1. **Drop/relax that guard** so selectMode survives a tab change (or is per-tab).
-2. **templateCard(t) at :490 and elementCard(e) at :527** need what projectCard already does at
-   :227/:236/:303/:306 — the `hm-sel` class when selected, the `hm-check` tick in the corner, the ⋯
-   suppressed while selecting, and a click that toggles selection instead of opening.
-3. **The select bar (:458-460, enterSelect :453 / exitSelect :454)** currently deletes PROJECTS. Its
-   actions have to branch on the tab: FM.templates.remove / FM.elements.remove rather than
-   FM.projects. Check which bulk actions even make sense per tab — duplicate may not.
-4. **shownIds / the pruning at :637** must be populated for those tabs too, or the "forget selections
-   that scrolled away" logic silently clears the selection.
+Verify by RUNNING: enter select on each tab, tick two, confirm the bar counts 2, delete, confirm the
+right things went and the other tabs are untouched.
 
-Verify by RUNNING: enter select on each tab, tick two items, confirm the bar counts 2, delete, and
-confirm the right things went and the OTHER tabs' data is untouched.
+### 2. Two design calls for Ezra (not bugs — do not guess)
+- **The + FAB and OPEN badge lose their faceting at button size.** Both are his glass renders, keyed
+  correctly with the + / letters cut through to transparent (verified centre alpha 0). At 74px and
+  33x22 the facets and iridescent rim average into a plain glossy shape. v4.91 went 62→74px with a
+  256px asset and more contrast; it helped a little. This is SCALE, not processing — the detail needs
+  well over 100px. Options put to him: leave it, go bigger (~100-110px), or a simpler-faceted source.
+- **Do NOT change the home background.** He said so explicitly. It already drifts on a 48s cycle.
 
-
-Everything from the 2026-08-09/10 run shipped (v4.73 → v4.85, including the re-cut heart). These three
-came in on 2026-08-10 while the heart was being judged, and are UNSTARTED. In his order:
-
-### 1. Top-row buttons aren't centred
-Screenshot: `~/.claude/uploads/a8308134-d9f7-4702-8894-2d76d40f5bf3/76deff75-IMG_2378.PNG` — look at it
-first. Which row he means needs confirming from the image (top bar vs the transport row); measure the
-actual boxes rather than eyeballing the CSS. Check BOTH layouts — in Studio the top bar is a vertical
-rail, so "the top row" may mean the transport.
-
-### 2. Two design carry-overs Ezra should decide on (not bugs)
-- **The + FAB and the OPEN badge lose their faceting at button size.** Both are his glass renders,
-  correctly keyed with their + / letters cut through to transparent (verified: centre alpha 0).
-  But at 74px and 33x22 the facets, concentric rings and iridescent rim average into a plain glossy
-  shape. v4.91 went 62px -> 74px with a 256px asset and more contrast, which helped a little. This is
-  scale, not processing — the detail needs well over 100px. Options offered: leave it, go bigger
-  (~100-110px), or supply a simpler-faceted source that survives small sizes. HIS CALL, don't guess.
-- He said explicitly: **do not change the home background** (v4.88). It already drifts on a 48s cycle.
-
-### 3. Replace the "FreeMotion" wordmark in the menu with his image
-Source: `~/.claude/uploads/a8308134-d9f7-4702-8894-2d76d40f5bf3/dfd50b9c-FullSizeRender.jpeg`.
-He wants it to REPLACE the text "FreeMotion" in the menu. Two jobs before it goes in:
-(a) get the quality as high as possible — it's a JPEG photo, so it will need upscaling/cleanup, and
-(b) REMOVE THE BACKGROUND so it sits on top of the app's dark chrome instead of in a white box.
-Note the brand text appears in `.brand` (index.html ~line 76) and the Studio rail already reduces it
-to a ▶ glyph — so whatever replaces it has to work at rail size (~60px wide) as well as full width.
-No npm/build step: it has to end up as an inlined asset (data URI or a committed PNG with alpha).
-
-### 3. The main menu background is boring — stylise it
-*"might be nice to stylise it abit with fitting colour gradients, try to make it not feel like stale
-image as it will be very seeable on pc. Just get something that looks nice and if it's bad don't
-stress coz I can give you something."* So: a tasteful gradient treatment on the home screen, sized for
-a big PC display. He is relaxed about the outcome — offer it, don't gold-plate it. Keep it CSS
-(no image asset) so it costs nothing to load and adapts to any window size.
-
+### 3. Standing: BUG-HUNT.md
+69 confirmed findings, essentially untouched. That is the backlog when he has no specific ask.
 
 ---
 
