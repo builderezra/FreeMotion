@@ -800,6 +800,40 @@
     if (FM.audioFxLive.isChainCurrent(m, layer)) throw new Error('disabling an effect no longer invalidates the chain');
   });
 
+  test('an adjustment layer grades the whole frame at every preview scale', { item: 'adj-scale' }, function () {
+    // v5.10. applyAdjustment allocated its plate at PROJECT size and left it unstamped, so baseT
+    // resolved to the identity and the frame snapshot was an unscaled 1:1 blit — but the preview
+    // canvas is not project-sized: it is P.width * s for the adaptive playback tier, which drops as
+    // low as 0.28 on a phone. The result was a graded square in the top-left corner covering rs² of
+    // the frame, shrinking as the tier dropped, snapping back to correct the moment playback stopped.
+    // Export was always right, so preview and export disagreed exactly while the grade was being
+    // judged. Measured here the same way it was found: the fraction of pixels the grade actually
+    // changed, at three render scales.
+    const W = 200, H = 120;
+    function gradedFraction(rs) {
+      const cv = offscreen(Math.round(W * rs), Math.round(H * rs));
+      cv.__fmRS = rs; cv.__fmOX = 0; cv.__fmOY = 0;
+      const c = cv.getContext('2d');
+      const base = FM.makeLayer('shape', { shape: 'rect', name: 'bg', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#808080' });
+      const adj = FM.makeLayer('adjustment', { name: 'grade' });
+      // Threshold is a PIXEL_ADJ: mid-grey is pushed to pure white everywhere it reaches.
+      adj.effects = [{ type: 'threshold', enabled: true, params: { level: 0.2, softness: 0 } }];
+      const s = scene([adj, base], { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' } });
+      FM.renderScene(c, s, 0);
+      const d = c.getImageData(0, 0, cv.width, cv.height).data;
+      let hit = 0, tot = 0;
+      for (let i = 0; i < d.length; i += 4) { tot++; if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200) hit++; }
+      return tot ? hit / tot : 0;
+    }
+    const full = gradedFraction(1);
+    if (full < 0.9) throw new Error('the grade does not cover the frame even at 1:1 (' + Math.round(full * 100) + '%) — the test scene is wrong, not the app');
+    [0.62, 0.36].forEach(rs => {
+      const f = gradedFraction(rs);
+      // Before the fix these landed on rs² — 38% and 13%.
+      if (f < 0.9) throw new Error('at render scale ' + rs + ' the grade covers only ' + Math.round(f * 100) + '% of the frame (rs² would be ' + Math.round(rs * rs * 100) + '%)');
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

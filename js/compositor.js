@@ -6719,27 +6719,44 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = scene.project, W = P.width, H = P.height;
+    // The grade plate lives on the TARGET's pixel grid, not the project's — the same rule
+    // drawManualBlendLayer and the Copy Background snapshot already follow. It used to be allocated at
+    // project size and left unstamped, so baseT(a) resolved to the identity and the snapshot
+    // `a.drawImage(ctx.canvas, 0, 0)` was an unscaled 1:1 blit of a canvas that is NOT project-sized:
+    // resizeCanvas() sets canvas.width = P.width * s for the playback quality tier (down to 0.28) and
+    // renderScene stamps __fmRS. So a 0.36-scale canvas was copied into the top-left 36%x36% of a
+    // project-sized buffer, graded there, then blitted back through baseT — leaving the grade covering
+    // only the top-left rs² of the visible frame, measured at 100% -> 64% -> 38% -> 13% across the
+    // tiers. It snapped back to correct the moment playback stopped and the tier returned to 1, and
+    // export was always right, so preview and export disagreed exactly while you were judging a grade.
+    // The zoomed/cropped preview (__fmRS up to 6, __fmOX/__fmOY non-zero) was broken the same way.
+    const cw = ctx.canvas.width, ch = ctx.canvas.height, rs = ctx.canvas.__fmRS || 1;
     if (!_adjCv) _adjCv = document.createElement('canvas');
-    if (_adjCv.width !== W || _adjCv.height !== H) { _adjCv.width = W; _adjCv.height = H; }   // cleared below
+    if (_adjCv.width !== cw || _adjCv.height !== ch) { _adjCv.width = cw; _adjCv.height = ch; }   // cleared below
+    _adjCv.__fmRS = rs;
+    _adjCv.__fmOX = ctx.canvas.__fmOX || 0; _adjCv.__fmOY = ctx.canvas.__fmOY || 0;
     const a = _adjCv.getContext('2d');
-    baseT(a); a.clearRect(0, 0, W, H); a.globalAlpha = 1; a.filter = 'none';
-    a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below)
+    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
+    a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below), now 1:1
     if (ppfx.length) {                             // per-pixel post-fx grade the whole snapshot, in stack order
-      const img = a.getImageData(0, 0, W, H), d = img.data;
-      ppfx.forEach(fx => applyPixelFx(d, fx, t, W, H));
+      const img = a.getImageData(0, 0, cw, ch), d = img.data;
+      ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch));
       a.putImageData(img, 0, 0);
     }
     if (pixFx) {                                   // pixelate the whole scene below (down- then up-scale the snapshot)
       const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
       if (size > 1) {
-        const sw = Math.max(1, Math.round(W / size)), sh = Math.max(1, Math.round(H / size));
+        // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
+        // device pixels — otherwise the blocks would change size with the quality tier, and on a
+        // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
+        const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
         if (!_adjTmp) _adjTmp = document.createElement('canvas');
         _adjTmp.width = sw; _adjTmp.height = sh;
         const tctx = _adjTmp.getContext('2d');
         tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
         tctx.drawImage(_adjCv, 0, 0, sw, sh);              // downscale (block-average)
-        a.imageSmoothingEnabled = false; a.clearRect(0, 0, W, H);
-        a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, W, H);    // upscale → blocky
+        a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
+        a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, cw, ch);  // upscale → blocky
         a.imageSmoothingEnabled = true;
       }
     }
@@ -6748,10 +6765,17 @@ window.FM = window.FM || {};
     // runs for adjustments (they return early and grade via this path), so it's applied here on the snapshot.
     if (scene && typeof hasPenMask === 'function' && hasPenMask(layer)) {
       const mc = FM.buildMaskAlpha(layer, t, W, H);
-      if (mc) { a.globalCompositeOperation = 'destination-in'; try { a.drawImage(mc, 0, 0); } catch (e) {} a.globalCompositeOperation = 'source-over'; }
+      if (mc) {
+        a.save();
+        baseT(a);   // the mask is built in PROJECT pixels; the plate is in the target's device pixels
+        a.globalCompositeOperation = 'destination-in';
+        try { a.drawImage(mc, 0, 0); } catch (e) {}
+        a.restore();
+        a.globalCompositeOperation = 'source-over';
+      }
     }
     ctx.save();
-    baseT(ctx);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);             // the plate is already on the target's pixel grid
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = 'source-over';
     ctx.filter = hasCss ? filter : 'none';
