@@ -77,9 +77,52 @@ audio import fix below was one.)
 
 ## The queue
 
-**v5.05 — working tree clean, 25/25 green.** Every live ask from 2026-08-10 is shipped. What is
-left is standing work only, and an autonomous /loop is armed to work item 3 (BUG-HUNT.md) unless
-Ezra says otherwise.
+**v5.14 — working tree clean, 34/34 green.** The 2026-08-10 overnight run. Ezra's live ask that
+night was the wordmark glow ("looks shit, work hard on it with multiple agents"); that shipped as
+v5.12. Everything else is the BUG-HUNT backlog, worked in severity order, one commit each.
+
+### 0. Shipped overnight 2026-08-10 → 11 (v5.06–v5.14)
+
+- **v5.06 — the project-bricking group cycle.** BUG-HUNT's only CRITICAL. Select All → Group
+  Selection inside a group made the open group a member of its own new child; the parent cycle blew
+  the stack in FM.groupBounds and the AUTOSAVE PERSISTED IT, so the project could not be opened,
+  closed or deleted afterwards and took the others down with it. Three guards: selectAll is scoped to
+  the open group, groupSelection refuses an ancestor as a member, and groupBounds/groupDescendants got
+  the seen-guard every other parent walk already had.
+- **v5.07 — editor shortcuts under a full-screen overlay.** Backspace on the home screen ran
+  deleteSelected() on the project behind it and autosaved. Silent data loss.
+- **v5.08 — filmstrip bitmaps.** FM.clearClipStrip had ZERO call sites; deleted clips pinned ~66MB
+  (1080p) / ~265MB (4K) of native memory each, for the session. Wired into all four teardowns and
+  capped the decode at 64px tall (the strip canvas is 32px).
+- **v5.09 — undo vs the live audio-effect chain.** The rebuild key was structure-only, but the chain
+  captures effect instances BY REFERENCE and history.restore() replaces them all. Undo was inaudible
+  and later slider edits did nothing in preview while export rendered the right value.
+- **v5.10 — adjustment layers graded rs² of the frame.** The plate was project-sized and blitted back
+  through baseT, so during playback only the top-left corner was graded: 100% → 64% → 38% → 13% down
+  the quality tiers, correct again the moment playback stopped.
+- **v5.11 — Export/Canvas dialogs were unreachable on a phone.** z-index 50 under the inspector
+  sheet's 55; measured at 380x720, both dialog buttons hit-tested to the sheet.
+- **v5.12 — the wordmark glow, rebuilt.** Five candidates designed independently against the real
+  home screen, three judges on different lenses. Details in POLISH-LOG.
+- **v5.13 — a negative filter value killed EVERY filter on the layer.** One click (the built-in
+  Overshoot ease on any fade-to-0) made brightness go negative, which voids the whole CSS filter
+  string; ctx.filter silently ignores an invalid string. It baked into exports exactly as previewed.
+- **v5.14 — a keyframed anchor erased a layer for good.** The compositor reads the anchor as a raw
+  number by design, but the AI op path advertised it as keyframeable; `-sw * {kf}` is NaN, the layer
+  drew nothing, and the object saved.
+
+### Tools built overnight (untracked, in tests/, delete freely)
+
+- `tests/_shot.sh` — headless Chrome screenshot of any local URL at 2x. This is what made the design
+  work possible: agents could SEE their own output instead of reasoning about CSS.
+- `tests/_glow.html` — loads the real home screen with a candidate stylesheet over it.
+- `tests/_view.html?do=<recipe>&w=&h=` — puts the REAL app into any screen (home, its three tabs,
+  editor, editor-selected, add-menu, add-menu-shapes, fx-browser, export-dialog, settings) with a
+  believable document in it, for screenshotting. Recipes are cheap to add.
+- One hard-won harness lesson: **kill animations for a comparison shot, do not pause them.** A paused
+  animation stops wherever it happens to be, and two captures of the identical page disagreed by ~10
+  levels of green across the whole bar — which reads exactly like a real rendering bug. I nearly
+  filed one before bisecting it.
 
 ### 1. Standing: empty the ⋯ menu, one item at a time
 "most of the options in the three dot menu are pointless. Don't remove the three dot menu yet, but
@@ -106,7 +149,20 @@ whenever he says the new homes feel right.
   both by parking the sheen mid-sweep (`background-position: 46% 0`) over a bright backdrop.
 
 ### 3. Standing: BUG-HUNT.md
-69 confirmed findings, essentially untouched. That is the backlog when he has no specific ask.
+69 confirmed findings. **Nine are now fixed** (the CRITICAL plus eight HIGHs — see the shipped list
+above); the file itself has NOT been annotated, so cross-check against POLISH-LOG before starting an
+item. That is the backlog whenever he has no specific ask. Worth knowing before you pick one up:
+- The biggest remaining block is one root cause — **lengths measured in PLATE pixels while the plate
+  shrinks with the playback quality tier**. 41 of 84 measurable effects are affected (stroke, glass,
+  motionblur, mattechoker, the warp family, particles). v4.69 fixed it for ctx.filter and shadows and
+  v5.10 for adjustment layers; the rest of the plateScale family is still open and is the single
+  highest-value thing left in the file.
+- **Mutation-test every new assertion.** Three tests tonight looked correct and could not fail: one
+  counted "lit pixels" by alpha on a scene with an opaque background (76800 of 76800 either way), one
+  carried a stale groupContext between cases so half of it asserted nothing, and one walked the
+  stylesheet with `if (r.cssRules) recurse; else read;` — a CSSStyleRule now has its own empty
+  cssRules list for CSS nesting, so it skipped every rule in the sheet. All three were caught by
+  reverting the fix and watching the test stay green, and only by that.
 
 ---
 
