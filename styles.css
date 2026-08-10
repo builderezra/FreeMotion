@@ -1625,17 +1625,30 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     width: 64px; height: 64px; border: none; cursor: pointer; padding: 0;
     border-radius: 0;
     background: url('fab-cross.png?v=1') center / contain no-repeat;
+    /* Order is not arbitrary. --glass-edge has to come FIRST so its hairline is computed from the
+       artwork's crisp alpha — put a soft pass before it and the "rim" is derived from a blurred
+       silhouette and reads as a smudge. Then the light it throws, then the two shadows that seat it:
+       a tight dark contact right underneath, and a long soft one further down. Ezra: "make sure it
+       also has like glow and depth to it so it doesn't look plastered on" — the contact shadow is
+       what stops it looking like a sticker, and the wide one is what lifts it off the timeline. */
     filter: var(--glass-edge)
-            drop-shadow(0 0 11px rgba(90, 199, 237, .34))
-            drop-shadow(0 6px 16px rgba(0, 0, 0, .6));
+            drop-shadow(0 0 16px rgba(90, 199, 237, .40))
+            drop-shadow(0 3px 4px rgba(3, 16, 22, .55))
+            drop-shadow(0 12px 22px rgba(0, 0, 0, .5));
     box-shadow: none;
     -webkit-tap-highlight-color: transparent;
   }
   #add-fab svg { display: none; }
   /* the edge has to be repeated here — `filter` is one property, so a bare brightness() would drop it */
+  /* pressed: the shadows pull IN and the glow dims — it moves toward the surface rather than just
+     getting darker, which is the same read as a physical button being pushed down */
   #add-fab:active {
-    filter: var(--glass-edge) drop-shadow(0 0 7px rgba(90, 199, 237, .28)) drop-shadow(0 3px 8px rgba(0, 0, 0, .55)) brightness(.92);
-    transform: translateY(1px);
+    filter: var(--glass-edge)
+            drop-shadow(0 0 9px rgba(90, 199, 237, .3))
+            drop-shadow(0 1px 2px rgba(3, 16, 22, .5))
+            drop-shadow(0 4px 9px rgba(0, 0, 0, .45))
+            brightness(.93);
+    transform: translateY(2px) scale(.97);
   }
 
   /* AM has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */

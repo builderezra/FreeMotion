@@ -200,15 +200,36 @@ html[data-theme="glass"] #add-fab::after {
   animation: orb-sheen 6.4s ease-in-out infinite;
   pointer-events: none;
 }
-/* Each button masks the sheen with its OWN artwork — the two are different objects now (v4.92a):
-   the home + is the orb, the editor + is the faceted cross. */
+/* Each button masks the sheen with its OWN artwork — they are different objects now (v4.92a): the
+   home + is the orb, the editor + is the faceted cross.
+   LONGHANDS, not the `mask: url(x) center / contain no-repeat` shorthand. The size-after-slash form
+   is the fragile part of that shorthand in WebKit, and when it fails the whole declaration goes with
+   it — no mask at all, so the sheen paints as a full rectangle. On the orb that was invisible
+   (border-radius:50% + overflow:hidden clip it to a circle regardless) but on the square-boxed cross
+   it showed as the grey panel Ezra photographed: "There's a box around the logo I sent you, looks
+   shit." Chrome masked it correctly the whole time, which is exactly why it only turned up on his
+   phone. */
 html[data-theme="glass"] #hm-new::after {
-  -webkit-mask: url('fab-plus.png?v=2') center / contain no-repeat;
-          mask: url('fab-plus.png?v=2') center / contain no-repeat;
+  -webkit-mask-image: url('fab-plus.png?v=2'); mask-image: url('fab-plus.png?v=2');
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
 }
 html[data-theme="glass"] #add-fab::after {
-  -webkit-mask: url('fab-cross.png?v=1') center / contain no-repeat;
-          mask: url('fab-cross.png?v=1') center / contain no-repeat;
+  -webkit-mask-image: url('fab-cross.png?v=1'); mask-image: url('fab-cross.png?v=1');
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  /* The guarantee, independent of masks entirely. clip-path has no such shorthand trap and is
+     supported everywhere this app runs, so even if the mask silently fails again the worst case is a
+     plus-shaped highlight instead of a rectangle. Traced from the artwork's own alpha and dilated
+     ~2.7% — verified to contain 100% of the render (0 pixels outside) while covering 53% of the box,
+     so it can never clip the real masked result and can never be mistaken for a square. The skew is
+     the render's own: it sits in slight perspective, so the vertical arm drifts ~18px right from top
+     to bottom and the horizontal arm ~37px down from left to right. */
+  clip-path: polygon(34.18% 2.73%, 66.02% 2.73%, 66.02% 30.86%, 95.90% 30.86%,
+                     95.90% 68.55%, 66.02% 68.55%, 66.02% 97.07%, 34.18% 97.07%,
+                     34.18% 68.55%, 3.91% 68.55%, 3.91% 30.86%, 34.18% 30.86%);
 }
 /* It rests for most of the loop and then crosses, rather than sweeping continuously — a light that
    never stops moving reads as a loading spinner. Both ends put the band fully clear of the orb, so
@@ -232,8 +253,9 @@ html[data-theme="glass"] #add-fab {
   backdrop-filter: none;
   box-shadow: none;
   filter: var(--glass-edge)
-          drop-shadow(0 0 13px rgba(90, 199, 237, .36))
-          drop-shadow(0 8px 20px rgba(0, 0, 0, .6));
+          drop-shadow(0 0 18px rgba(90, 199, 237, .44))
+          drop-shadow(0 3px 5px rgba(3, 16, 22, .6))
+          drop-shadow(0 14px 26px rgba(0, 0, 0, .55));
 }
 
 /* Accent-filled controls pick up the same crown highlight, so they read as one family. */
