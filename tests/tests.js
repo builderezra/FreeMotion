@@ -329,6 +329,22 @@
     }
   });
 
+  test('elements: saved elements live behind a searchable browser, not loose in the tab', { item: 'elements-browser' }, function () {
+    // v4.81. Saved elements used to be pushed onto the SAME list as Camera / Null / Adjustment /
+    // Empty group, so structural layer types and everything you had ever saved sat in one flat grid
+    // (Ezra: "make sure all the elements are grouped together and not siting loose"). They are behind
+    // one button now, and the browser's whole reason to exist is the search.
+    if (!FM.elementsBrowser) throw new Error('FM.elementsBrowser missing — the Browse elements button has nothing to open');
+    if (!FM.elementsBrowser.open || !FM.elementsBrowser.close) throw new Error('elementsBrowser has no open/close');
+    var all = [{ id: 'a', name: 'Logo sting' }, { id: 'b', name: 'Lower third' }, { id: 'c', name: 'Logo outro' }];
+    var m = FM.elementsBrowser._match;
+    if (m(all, '').length !== 3) throw new Error('an empty query should list everything, got ' + m(all, '').length);
+    if (m(all, 'logo').length !== 2) throw new Error('"logo" should match 2, got ' + m(all, 'logo').length);
+    if (m(all, 'LOGO').length !== 2) throw new Error('search must be case-insensitive');
+    if (m(all, 'third').length !== 1) throw new Error('"third" should match 1, got ' + m(all, 'third').length);
+    if (m(all, 'zzz').length !== 0) throw new Error('a non-match should return nothing');
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {

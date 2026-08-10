@@ -143,10 +143,18 @@ window.FM = window.FM || {};
         // ⋯ menu two levels away.
         { label: 'Save selection as element…', icon: ico('<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z"/><path d="M19 17v5M16.5 19.5h5"/>'), add: function () { FM.saveElementPrompt && FM.saveElementPrompt(); } },
       ];
-      // the user's saved Elements (reusable layer selections) insert at the playhead
-      (FM.elements ? FM.elements.list() : []).forEach(function (e) {
-        base.push({ label: e.name, icon: ico('<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z"/>'), elementId: e.id,
-          add: function () { FM.elements.insert(e.id); } });
+      // The user's saved elements USED to be pushed onto this same list, so three structural layer
+      // types and every element you had ever saved sat loose in one flat grid (Ezra: "make sure all
+      // the elements are grouped together and not siting loose in the same menu that holds camera and
+      // all that"). They live behind one button now, which opens a real browser with search.
+      var saved = (FM.elements ? FM.elements.list() : []) || [];
+      base.push({
+        label: saved.length ? 'Browse elements (' + saved.length + ')' : 'Browse elements',
+        icon: ico('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/>'),
+        add: function () {
+          if (FM.elementsBrowser) FM.elementsBrowser.open();
+          else if (FM.toast) FM.toast('Elements browser unavailable');
+        },
       });
       return base;
     } },

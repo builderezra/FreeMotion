@@ -2114,3 +2114,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   color: var(--text-faint); font-size: 15px; cursor: pointer;
 }
 .insp-sec-x:hover { color: var(--text); border-color: var(--text-faint); }
+
+/* Elements browser (v4.81) — reuses the effect browser's chrome; only the real element thumbnail
+   needs anything of its own. */
+#el-browser .elb-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
