@@ -834,6 +834,53 @@
     });
   });
 
+  test('the modal layer outranks every piece of phone chrome', { item: 'modal-z' }, function () {
+    // v5.11. The three app modals shared one z-index of 50, written before any of the phone chrome
+    // existed; the inspector sheet is 55, #ai-panel 58, #toast 60, #add-fab 61, #add-sheet 63. Neither
+    // #app nor #main creates a stacking context, so dialog and sheet competed in the ROOT context and
+    // the sheet won. Measured at 380x720 with two layers multi-selected — which is the one state that
+    // keeps the phone Export button visible AND holds the sheet open — elementFromPoint at the centre
+    // of "Export MP4" and of "Cancel" both returned the sheet: a dialog with no reachable buttons,
+    // where tapping Export dismissed the sheet instead.
+    // Read from the STYLESHEET, not from computed style: the chrome's z-indexes live inside phone
+    // media queries, so at the runner's 900px width they would all compute to auto and this would
+    // pass against anything.
+    const declared = {};
+    const walk = rules => {
+      for (let i = 0; i < rules.length; i++) {
+        const r = rules[i];
+        // Recurse AND read — not either/or. A CSSStyleRule now carries its own (usually empty)
+        // cssRules list for CSS nesting, so "if (r.cssRules) continue" skips every plain rule in the
+        // sheet and this test found nothing at all to compare.
+        if (r.cssRules && r.cssRules.length) walk(r.cssRules);
+        if (!r.selectorText || !r.style || !r.style.zIndex) continue;
+        const z = parseInt(r.style.zIndex, 10);
+        if (!isFinite(z)) continue;
+        r.selectorText.split(',').forEach(sel => {
+          sel = sel.trim();
+          if (declared[sel] == null || z > declared[sel]) declared[sel] = z;
+        });
+      }
+    };
+    let seen = 0;
+    for (let i = 0; i < document.styleSheets.length; i++) {
+      try { walk(document.styleSheets[i].cssRules); seen++; } catch (e) {}   // a cross-origin sheet would throw
+    }
+    if (!seen) throw new Error('could not read any stylesheet');
+    const modal = declared['#export-dialog'];
+    if (modal == null) throw new Error('no z-index declared for #export-dialog');
+    ['#inspector-panel', '#ai-panel', '#toast', '#add-fab', '#add-sheet'].forEach(sel => {
+      const z = declared[sel];
+      if (z == null) return;   // that chrome may have been renamed; the others still hold the line
+      if (modal <= z) throw new Error(sel + ' is z-index ' + z + ', at or above the modal layer (' + modal + ') — its buttons would be unreachable on a phone');
+    });
+    // …and the modal must still sit UNDER the things that legitimately cover everything.
+    ['#home-screen', '#ctx-menu'].forEach(sel => {
+      const z = declared[sel];
+      if (z != null && modal >= z) throw new Error('the modal layer (' + modal + ') is at or above ' + sel + ' (' + z + '), which must stay on top');
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

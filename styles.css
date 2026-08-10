@@ -1328,8 +1328,18 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 
 /* ---------- overlays ---------- */
 .hidden { display: none !important; }
+/* z-index 100, not 50. Every piece of phone chrome added after this rule was written stacks above
+   50 — the inspector sheet is 55, #ai-panel 58, #toast 60, #add-fab 61, #add-sheet 63 — and neither
+   #app nor #main creates a stacking context, so the dialog and the sheet competed in the ROOT context
+   and the sheet won. Measured at 380x720 with 2+ layers multi-selected (which keeps #m-export visible
+   AND holds the sheet open at 52vh): the export card spans y=163..557 while the opaque sheet covers
+   y=500..720, and elementFromPoint at the centre of both "Export MP4" and "Cancel" returned the
+   sheet's close handle. A headless dialog with no reachable buttons, where tapping Export dismissed
+   the sheet instead. 100 clears every one of those and still sits under the things that must stay on
+   top: #home-screen 200, .set-scrim 220, #shortcuts-overlay 230, #ctx-menu 300. (Home's own "Export
+   video…" opens the project first, so it is never showing this dialog over the home screen.) */
 #export-overlay, #export-dialog, #canvas-dialog {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 100;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,.65); backdrop-filter: blur(3px);
 }
