@@ -1714,7 +1714,17 @@ body.hm-selecting .hm-card { touch-action: none; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .hm-thumb-empty { font-size: 26px; opacity: .25; }
 .hm-dur { position: absolute; bottom: 5px; left: 5px; font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 2px 6px; }
-.hm-open-badge { position: absolute; top: 5px; left: 5px; font-size: 8.5px; font-weight: 800; letter-spacing: .7px; color: #0b0e14; background: var(--accent); border-radius: 6px; padding: 2px 5px; }
+/* OPEN badge (v4.90) — Ezra's glass pill render. Same construction as the + FAB: the word is cut in
+   the same black as the backdrop, so one luminance key punched out the background AND the letters,
+   and the project thumbnail shows through them. The text stays in the DOM for screen readers and is
+   hidden with a 0 font-size rather than display:none, so the badge keeps its accessible name.
+   Sized off the artwork's own 1.495 aspect so the pill can't stretch. */
+.hm-open-badge {
+  position: absolute; top: 5px; left: 5px;
+  width: 33px; height: 22px; padding: 0; border-radius: 0;
+  font-size: 0; color: transparent; background: url('open-badge.png?v=1') center / contain no-repeat;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.55));
+}
 .hm-body { flex: 1; min-width: 0; }
 .hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* AM-style meta chips: aspect · resolution · fps · layers — wraps to 2 lines on a phone */
