@@ -2550,15 +2550,19 @@ window.FM = window.FM || {};
     if (!layer || layer.type === 'group' || layer.type === 'camera' || layer.type === 'null') return null;
     if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
     const mb = layer.motionBlur;
+    // OFF = render nothing. This block lives in EFFECTS now, and an effect you have not added should
+    // not occupy a card there — it is switched on from + Add Effect → Motion Blur (Object), the same
+    // as every other effect. (It used to be a checkbox in Move & Transform, which is exactly why Ezra
+    // could not find it: "I'm only seeing motion blur footage".)
+    if (!mb.enabled) return null;
     const wrap = el('div', 'insp-section');
-    wrap.appendChild(el('div', 'insp-sec-title', 'Motion Blur'));
-    wrap.appendChild(checkRow('Blur the clip’s own movement', !!mb.enabled, v => {
-      mb.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH();
-    }));
-    if (!mb.enabled) {
-      wrap.appendChild(el('div', 'insp-hint', 'Smears the clip along the path it travels — position, scale and rotation keyframes all count. It does not look inside the footage; for that use Motion Blur (Footage) in Effects.'));
-      return wrap;
-    }
+    const head = el('div', 'insp-sec-title', 'Motion Blur (Object)');
+    // × is how you turn it OFF now that the checkbox is gone — same gesture as removing an effect.
+    const rm = el('button', 'insp-sec-x', '×');
+    rm.type = 'button'; rm.title = 'Remove Motion Blur (Object)';
+    rm.addEventListener('click', () => { mb.enabled = false; FM.requestRender(); FM.inspector.refresh(); commitH(); });
+    head.appendChild(rm);
+    wrap.appendChild(head);
     // Shutter is the fraction of a frame the "camera" is open: 0.5 is a real 180° shutter.
     wrap.appendChild(rangeRow('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
       v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); }, 0, 1, 0.05));
@@ -2579,7 +2583,6 @@ window.FM = window.FM || {};
       // dead switch. The CAMERA gets them since v3.46: its composite reads route through behaviorValue,
       // so a Wiggle on the camera is the one-tap whole-scene shake (with z-depth parallax riding it).
       if (layer.type !== 'group') { const bb = behaviorsBlock(layer); if (bb) body.appendChild(bb); }
-      const mbb = motionBlurBlock(layer); if (mbb) body.appendChild(mbb);
     } else if (key === 'volume') {
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {
@@ -2725,6 +2728,9 @@ window.FM = window.FM || {};
       pwrap.appendChild(sv);
       body.appendChild(pwrap);
     } else if (key === 'effects') {
+      // Motion Blur (Object) sits with the effects because that is where people look for it, and
+      // because it reads as one: added from the browser, removed with an ×.
+      const mbb = motionBlurBlock(layer); if (mbb) body.appendChild(mbb);
       const s = effectsSection(layer);
       const h4 = s.querySelector('h4'); if (h4) h4.remove();
       body.appendChild(s);

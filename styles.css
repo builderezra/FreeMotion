@@ -2104,3 +2104,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .mt-vbox-kf.anim { color: var(--accent); opacity: .75; }          /* animated, but no key right here */
 .mt-vbox-kf.on { color: var(--accent); opacity: 1; }              /* a keyframe sits at the playhead */
 .mt-vbox-kf.on svg { filter: drop-shadow(0 0 3px var(--accent-soft, rgba(47,208,181,.6))); }
+
+/* × on an inspector section header — how Motion Blur (Object) is switched off now that its old
+   Move & Transform checkbox is gone (v4.80). */
+.insp-sec-title { display: flex; align-items: center; gap: 8px; }
+.insp-sec-x {
+  margin-left: auto; width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 1px solid var(--line); border-radius: 6px; background: transparent;
+  color: var(--text-faint); font-size: 15px; cursor: pointer;
+}
+.insp-sec-x:hover { color: var(--text); border-color: var(--text-faint); }
