@@ -451,6 +451,32 @@
     if (ov.filter.indexOf('drop-shadow') < 0) throw new Error('#add-fab lost its drop-shadow glow: ' + ov.filter);
   });
 
+  test('the playhead line and the play button share one centre, in both desktop layouts', { item: 'playhead-play-centre' }, function () {
+    // v4.96. #tl-centerline is absolutely positioned inside #timeline-panel, so it was pinned with
+    // `left: 50vw` — which measures from the PANEL's left edge, not the screen's. Identical while the
+    // panel spans the viewport (phone, classic), but in Studio the panel begins after the rail and the
+    // inspector, so the playhead sat a full 406px right of the play button and the timecode pill at
+    // 1440px wide. Ezra: "on pc i want the play button and the playhead centred still."
+    // Asserting the RELATIONSHIP rather than a pixel value is the point — it holds in every layout and
+    // at every width, so it cannot be satisfied by hard-coding an offset that only fits one of them.
+    var line = document.getElementById('tl-centerline'), play = document.getElementById('btn-play');
+    if (!line || !play) throw new Error('#tl-centerline or #btn-play missing');
+    if (getComputedStyle(line).display === 'none') throw new Error('#tl-centerline is not being drawn');
+    var body = document.body, was = body.classList.contains('layout-studio');
+    var bad = [];
+    [false, true].forEach(function (studio) {
+      // toggle the CLASS directly — never FM.settings.set, which would write through to the real
+      // localStorage this test frame shares with the app and change Ezra's chosen layout
+      body.classList.toggle('layout-studio', studio);
+      var l = line.getBoundingClientRect(), p = play.getBoundingClientRect();
+      if (!p.width) { bad.push((studio ? 'studio' : 'classic') + ': play button has no box to measure'); return; }
+      var dx = Math.abs(l.left - (p.left + p.width / 2));
+      if (dx > 1.5) bad.push((studio ? 'studio' : 'classic') + ': playhead is ' + Math.round(dx) + 'px off the play button');
+    });
+    body.classList.toggle('layout-studio', was);
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

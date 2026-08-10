@@ -25,8 +25,16 @@ window.FM = window.FM || {};
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
-  function recomputePad() { PAD = Math.max(0, window.innerWidth / 2 - HEAD_W); }
-  function centreX() { return window.innerWidth / 2; }   // viewport-x the current time always sits at
+  // The x the current time sits at is the TIMELINE PANEL's centre, not the viewport's (v4.96). Those
+  // are the same thing on a phone and in the classic desktop layout, where the panel spans the screen
+  // — but in Studio the panel starts after the left rail and the inspector, and using innerWidth put
+  // the content's centre 406px right of the panel's own middle at 1440px wide. #tl-centerline is
+  // pinned at 50% of that same panel in CSS, so both come off one measurement and cannot drift apart.
+  function panelW() {
+    const p = document.getElementById('timeline-panel');
+    return (p && p.clientWidth) || window.innerWidth;
+  }
+  function recomputePad() { PAD = Math.max(0, panelW() / 2 - HEAD_W); }
   // NOTE: #tl-centerline is pinned ENTIRELY in CSS (left: 50vw). JS never positions it, so it
   // physically cannot move — reading getBoundingClientRect per-frame was what let it drift on real
   // iOS (URL-bar collapse shifts the viewport mid-drag). JS only scrolls the content under the line.

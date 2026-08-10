@@ -1007,6 +1007,28 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   padding: 4px 14px; border-bottom: 1px solid var(--line-soft);
 }
 .t-side { display: contents; }
+/* DESKTOP transport (v4.96). Ezra: "you can move in all the buttons so they fit, they dont need to
+   keep the same spacing anymore, and you can move the view options button to the far right."
+   Phone keeps the rule above — seven controls spread edge to edge, which is right on a 375px row.
+   On a monitor that spread flung them into the corners, and pinning the view button right would then
+   have dragged play off centre with it (six remaining buttons split 3/2 around it).
+   So: a 1fr / auto / 1fr grid. The two flanking columns are equal BY CONSTRUCTION, so play is dead
+   centre no matter how many buttons end up on either side — which is what makes it safe to take the
+   view button out of the row entirely. It's absolutely positioned, so it doesn't count as a child at
+   all. And the width cap is dropped here: the cluster is now sized by its own contents, so it hugs
+   play instead of stretching to 780px, and "far right" means the real edge of the panel. */
+@media (min-width: 701px) {
+  #transport {
+    position: relative;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    max-width: none; margin-inline: 0; width: auto;
+  }
+  .t-side { display: flex; align-items: center; gap: 6px; }
+  .t-left  { justify-content: flex-end; }
+  .t-right { justify-content: flex-start; }
+  #btn-play { margin: 0 12px; }
+  #btn-amfit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); }
+}
 /* AM-style centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
 #tc-bar { display: flex; justify-content: center; align-items: center; }
 #tc-bar #time-readout {
@@ -1174,7 +1196,16 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    JS never positions it (avoids iOS URL-bar drift). Spans the timeline area below the 40px transport. */
 #tl-centerline {
   position: absolute; width: 0; z-index: 12; display: block;
-  left: 50vw; top: 66px; bottom: 0;   /* 40px transport + 26px timecode row → starts at the timeline */
+  /* 50% of #timeline-panel, NOT 50vw (v4.96). This line is absolutely positioned inside the panel, so
+     a viewport unit measures from the panel's left edge — fine while the panel spans the screen (phone
+     and the classic desktop layout), but in Studio the panel starts after the rail and the inspector,
+     so 50vw put the playhead a full 406px right of where it belonged: measured at 1440px wide, the
+     line sat at x=1126 while the play button and the timecode pill sat at 923. Ezra: "on pc i want the
+     play button and the playhead centred still."
+     The scroll maths in timeline.js recomputePad() is derived from the same panel width, so the line
+     and the content it scrolls under stay locked together. Where the panel IS the viewport, 50% and
+     50vw are identical — the phone and classic layouts don't move a pixel. */
+  left: 50%; top: 66px; bottom: 0;   /* 40px transport + 26px timecode row → starts at the timeline */
   border-left: 2px solid #eaf0f8; pointer-events: none;
   box-shadow: 0 0 6px rgba(255,255,255,.45);
 }
