@@ -44,6 +44,12 @@ transform need to be seperate."* Today position and scale share a keyframe track
 rows. Note BUG-HUNT's confirmed finding: `deleteKeyframesAt`/`propKey` already cover FEWER containers
 than `animatedProps`, so the delete/copy paths need to be part of this, not an afterthought.
 
+**DECIDED 2026-08-10 (asked Ezra directly): EVERY slider fully separate, INCLUDING X and Y.** Not
+Position-as-one. So x, y, scale/scaleX/scaleY, rotation, skewX/skewY, opacity, anchor each get their
+own independent keyframe track and their own diamond. He was shown the trade-off (a diagonal move now
+needs a keyframe on both X and Y) and chose full separation anyway — do not quietly re-merge them.
+Old projects must keep playing: migrate lazily rather than rewriting saved scenes on load.
+
 ### 3. Remove the motion blur toggle in Move & Transform
 *"pretty sure it doesn't even work."* Verify first, then remove it (don't just hide it).
 
