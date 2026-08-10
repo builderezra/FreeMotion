@@ -1863,14 +1863,38 @@ window.FM = window.FM || {};
   };
 
   /* ---------- import ---------- */
+  // What KIND of media is this? file.type is not trustworthy on a phone: picking a song out of the
+  // iOS/Android Files app very often hands back an EMPTY type (.m4a, .flac, .opus and friends), and
+  // the old three-way startsWith() chain then matched nothing and dropped the file on the floor with
+  // no error — "import audio does nothing". Fall back to the extension, the same way the drop handler
+  // (FM.loadDropped, ~line 1542) and the font importer already do.
+  const RE_VIDEO = /\.(mp4|m4v|mov|webm|mkv|avi|3gp|ogv)$/i;
+  const RE_AUDIO = /\.(mp3|m4a|aac|wav|flac|ogg|oga|opus|aif|aiff|caf|wma|amr|mp4a)$/i;
+  const RE_IMAGE = /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif|svg|tiff?)$/i;
+  function mediaKind(file) {
+    const t = (file.type || '').toLowerCase(), n = file.name || '';
+    if (t.startsWith('video')) return 'video';
+    if (t.startsWith('image')) return 'image';
+    if (t.startsWith('audio')) return 'audio';
+    if (RE_VIDEO.test(n)) return 'video';
+    if (RE_AUDIO.test(n)) return 'audio';
+    if (RE_IMAGE.test(n)) return 'image';
+    return '';
+  }
+  FM.mediaKind = mediaKind;
+
   async function handleFiles(files) {
     for (const file of files) {
       try {
-        if (file.type.startsWith('video')) FM.addMediaLayer(await FM.loadVideoFile(file));
-        else if (file.type.startsWith('image')) FM.addMediaLayer(await FM.loadImageFile(file));
+        const kind = mediaKind(file);
+        if (kind === 'video') FM.addMediaLayer(await FM.loadVideoFile(file));
+        else if (kind === 'image') FM.addMediaLayer(await FM.loadImageFile(file));
         // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a
         // 0×0-picture clip already gets the waveform lane, live mix, keyframed volume and export mix.
-        else if (file.type.startsWith('audio')) FM.addMediaLayer(await FM.loadVideoFile(file));
+        else if (kind === 'audio') FM.addMediaLayer(await FM.loadVideoFile(file));
+        // Never fail silently: an unusable file used to vanish without a word, which reads as the
+        // importer being broken rather than the file being unsupported.
+        else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
       } catch (e) { console.error(e); alert(e.message || 'Could not load ' + file.name); }
     }
   }

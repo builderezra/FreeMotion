@@ -225,6 +225,28 @@
     }
   });
 
+  test('import: a file with no MIME type is classified by extension', { item: 'typeless-import' }, function () {
+    // v4.73. Picking a song out of the phone's Files app very often hands back an EMPTY file.type
+    // (.m4a/.flac/.opus especially). handleFiles used to be a three-way file.type.startsWith() chain,
+    // so a typeless file matched nothing and was dropped with no error at all — "import audio does
+    // nothing". Classification now falls back to the extension.
+    if (!FM.mediaKind) throw new Error('FM.mediaKind missing');
+    var cases = [
+      [{ name: 'song.m4a', type: '' }, 'audio'],
+      [{ name: 'song.mp3', type: '' }, 'audio'],
+      [{ name: 'track.flac', type: '' }, 'audio'],
+      [{ name: 'voice.opus', type: '' }, 'audio'],
+      [{ name: 'clip.mov', type: '' }, 'video'],
+      [{ name: 'pic.heic', type: '' }, 'image'],
+      [{ name: 'song.mp3', type: 'audio/mpeg' }, 'audio'],   // a real type still wins
+      [{ name: 'notes.txt', type: '' }, ''],                 // genuinely unusable → caller warns
+    ];
+    cases.forEach(function (c) {
+      var got = FM.mediaKind(c[0]);
+      if (got !== c[1]) throw new Error(c[0].name + ' (type "' + c[0].type + '") classified as "' + got + '", expected "' + c[1] + '"');
+    });
+  });
+
   /* ---------------- runner ---------------- */
 
   async function run() {

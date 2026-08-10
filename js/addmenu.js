@@ -10,7 +10,24 @@ window.FM = window.FM || {};
   function ico(inner) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
   }
-  function fileImport() { var fi = document.getElementById('file-input'); if (fi) fi.click(); }
+  // The one file input is shared, so narrow `accept` to what this entry is actually asking for and put
+  // it back afterwards. Two reasons this matters on a phone: a picker limited to audio doesn't bury
+  // songs among the camera roll, and — the actual bug Ezra hit — iOS greys audio out in Files when the
+  // accept list also carries image/* and video/*. Explicit EXTENSIONS go in beside the wildcard because
+  // mobile pickers match those far more reliably than they map audio/* onto a UTI (.m4a in particular).
+  var ACCEPT_ALL = 'video/*,image/*,audio/*';
+  var ACCEPT_AUDIO = 'audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.oga,.opus,.aif,.aiff,.caf,.wma,.amr';
+  function pickFiles(accept) {
+    var fi = document.getElementById('file-input');
+    if (!fi) return;
+    fi.setAttribute('accept', accept || ACCEPT_ALL);
+    fi.click();
+    // restore on the next tick — the click has already opened the picker with the value above, and
+    // leaving it narrowed would silently break the next Import media
+    setTimeout(function () { fi.setAttribute('accept', ACCEPT_ALL); }, 0);
+  }
+  function fileImport() { pickFiles(ACCEPT_ALL); }
+  function audioImport() { pickFiles(ACCEPT_AUDIO); }
 
   function shp(kind, opts) { return function () { FM.addShapeLayer && FM.addShapeLayer(kind, opts); }; }
 
@@ -109,7 +126,7 @@ window.FM = window.FM || {};
       // timeline — exactly how the Media tab has always treated clips and photos (Ezra: "when you add
       // a song like adding media it stays in the audios section"). They used to land in Media, mixed
       // in among the video thumbnails with no artwork to tell them apart.
-      return [{ label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport }]
+      return [{ label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport }]
         .concat(libEntries(true));
     } },
     // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
