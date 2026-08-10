@@ -2152,3 +2152,42 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   .hm-brand-mark { display: none; }
   .hm-brand-img { height: 20px; }
 }
+
+/* ---------------- Home backdrop (v4.88) ----------------
+ * Ezra: the home screen "is a bit boring… might be nice to stylise it a bit with fitting colour
+ * gradients, try to make it not feel like a stale image as it will be very seeable on pc."
+ *
+ * Three very low-opacity radial pools rather than one linear wash: a linear gradient on a tall PC
+ * window reads as a flat band and is exactly the "stale image" feel to avoid, whereas offset pools
+ * give the corners different weight and the eye something to travel across. Colours are the app's
+ * own — the teal accent and the violet/cyan already in the glass wordmark — so it reads as this app
+ * rather than generic stock chrome.
+ *
+ * It sits in a ::before UNDER the content (z-index 0 vs the list's own stacking), is pointer-events
+ * none, and never touches the cards themselves, so nothing behind the project rows changes contrast.
+ * Sized in vmax so a wide desktop window gets pools in proportion rather than four tiny dots.
+ */
+/* NOT position:relative — the base rule at the top of this file makes #home-screen a FIXED
+   full-screen overlay, and re-declaring position here (later in the file, so it wins) dropped it
+   back into normal flow and the whole home screen vanished behind the editor. Only the stacking
+   context is needed, and isolation gives that without touching position. */
+#home-screen { isolation: isolate; }
+#home-screen::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(78vmax 58vmax at 12% -8%,  rgba(41, 217, 187, .16), transparent 62%),
+    radial-gradient(66vmax 52vmax at 96% 8%,   rgba(122, 92, 255, .14), transparent 60%),
+    radial-gradient(88vmax 62vmax at 62% 108%, rgba(38, 132, 255, .13), transparent 64%);
+}
+/* A second, slowly drifting pool keeps it from reading as a fixed image without ever being something
+   you'd notice moving — one full cycle is 48s and it only travels a few percent. */
+#home-screen::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(52vmax 44vmax at 30% 78%, rgba(41, 217, 187, .10), transparent 60%);
+  animation: hm-drift 48s ease-in-out infinite alternate;
+}
+@keyframes hm-drift {
+  from { transform: translate3d(-3%, 2%, 0) scale(1); }
+  to   { transform: translate3d(4%, -3%, 0) scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) { #home-screen::after { animation: none; } }
