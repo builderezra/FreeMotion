@@ -25,16 +25,30 @@ window.FM = window.FM || {};
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
-  // The x the current time sits at is the TIMELINE PANEL's centre, not the viewport's (v4.96). Those
-  // are the same thing on a phone and in the classic desktop layout, where the panel spans the screen
-  // — but in Studio the panel starts after the left rail and the inspector, and using innerWidth put
-  // the content's centre 406px right of the panel's own middle at 1440px wide. #tl-centerline is
-  // pinned at 50% of that same panel in CSS, so both come off one measurement and cannot drift apart.
-  function panelW() {
+  // The current time sits at TRUE SCREEN CENTRE (v4.97). Ezra: "i meant i want the play head and
+  // button centred to the screen not the timeline."
+  //
+  // The complication is that the line and the content live in different coordinate spaces.
+  // #tl-centerline is absolutely positioned inside #timeline-panel, and the content's x is also
+  // measured from that panel — but in Studio the panel starts after the left rail and the inspector,
+  // so "half the viewport" from the panel's edge is NOT half the viewport from the screen's. Neither
+  // the original `innerWidth/2` (which landed at panelLeft + innerWidth/2 = 1126px on a 1440 screen)
+  // nor v4.96's panel-centre (923px) was screen centre (720px).
+  //
+  // So panelLeft is measured once here and published as --tl-panel-left. CSS subtracts it from 50vw
+  // for the line, and the same number is subtracted here for the content — one measurement, two
+  // consumers, so they cannot drift apart. It is written on every recompute (init, rebuild, resize,
+  // and the ResizeObserver below that catches a layout switch), never per frame during a drag: the
+  // iOS URL-bar drift this file warns about came from per-frame rect reads, not from this.
+  function panelLeft() {
     const p = document.getElementById('timeline-panel');
-    return (p && p.clientWidth) || window.innerWidth;
+    return p ? p.getBoundingClientRect().left : 0;
   }
-  function recomputePad() { PAD = Math.max(0, panelW() / 2 - HEAD_W); }
+  function recomputePad() {
+    const L = panelLeft();
+    document.documentElement.style.setProperty('--tl-panel-left', L + 'px');
+    PAD = Math.max(0, window.innerWidth / 2 - L - HEAD_W);
+  }
   // NOTE: #tl-centerline is pinned ENTIRELY in CSS (left: 50vw). JS never positions it, so it
   // physically cannot move — reading getBoundingClientRect per-frame was what let it drift on real
   // iOS (URL-bar collapse shifts the viewport mid-drag). JS only scrolls the content under the line.
@@ -1654,6 +1668,18 @@ window.FM = window.FM || {};
         abortGestures();   // RESTORE half-applied clip/trim/kf edits — never leave them in the scene
         dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
+      // A LAYOUT switch (classic ⇄ Studio, or drawing mode collapsing the inspector column) moves the
+      // panel sideways without firing a window resize, which would leave --tl-panel-left stale and put
+      // the playhead back off-centre. Observing the panel catches every one of those. Writing the var
+      // can't change the panel's own size, so this cannot feed back into itself.
+      const panelEl = document.getElementById('timeline-panel');
+      if (panelEl && window.ResizeObserver) {
+        let t0 = 0;
+        new ResizeObserver(() => {
+          clearTimeout(t0);
+          t0 = setTimeout(() => { applyInnerWidth(); FM.timeline.updatePlayhead(); }, 60);
+        }).observe(panelEl);
+      }
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       let resizeRebuildTimer = 0;
       window.addEventListener('resize', () => {

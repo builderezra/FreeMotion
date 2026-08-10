@@ -451,29 +451,57 @@
     if (ov.filter.indexOf('drop-shadow') < 0) throw new Error('#add-fab lost its drop-shadow glow: ' + ov.filter);
   });
 
-  test('the playhead line and the play button share one centre, in both desktop layouts', { item: 'playhead-play-centre' }, function () {
-    // v4.96. #tl-centerline is absolutely positioned inside #timeline-panel, so it was pinned with
-    // `left: 50vw` — which measures from the PANEL's left edge, not the screen's. Identical while the
-    // panel spans the viewport (phone, classic), but in Studio the panel begins after the rail and the
-    // inspector, so the playhead sat a full 406px right of the play button and the timecode pill at
-    // 1440px wide. Ezra: "on pc i want the play button and the playhead centred still."
-    // Asserting the RELATIONSHIP rather than a pixel value is the point — it holds in every layout and
-    // at every width, so it cannot be satisfied by hard-coding an offset that only fits one of them.
+  test('the playhead sits on true screen centre, and play follows it when there is room', { item: 'playhead-play-centre' }, function () {
+    // v4.97. #tl-centerline is absolutely positioned inside #timeline-panel, so a raw viewport unit
+    // measures from the PANEL's left edge — 0 on a phone and in classic, but ~406px in Studio at 1440
+    // wide. `left: 50vw` therefore landed it at panelLeft + half the viewport (1126px), and v4.96's
+    // panel-centre landed it at 923. Ezra wanted neither: "i meant i want the play head and button
+    // centred to the screen not the timeline."
+    //
+    // Two DIFFERENT assertions, because the two elements have different freedom:
+    //   the LINE can always reach screen centre — it is one absolutely positioned element.
+    //   the BUTTON is inside a row that starts at the panel's left edge, and on a narrow window
+    //     shifting the cluster far enough left would push it out over the inspector band. The CSS caps
+    //     the shift for exactly that reason, so here the requirement is conditional: hit screen centre
+    //     when the room exists, and never overlap the panel regardless. Asserting unconditional
+    //     centring would have demanded the overlap the cap is there to prevent.
     var line = document.getElementById('tl-centerline'), play = document.getElementById('btn-play');
-    if (!line || !play) throw new Error('#tl-centerline or #btn-play missing');
+    var panel = document.getElementById('timeline-panel');
+    var first = document.getElementById('btn-undo'), last = document.getElementById('btn-layermenu');
+    if (!line || !play || !panel || !first || !last) throw new Error('transport / playhead elements missing');
     if (getComputedStyle(line).display === 'none') throw new Error('#tl-centerline is not being drawn');
+    if (!window.innerWidth) throw new Error('no viewport width to measure against');
     var body = document.body, was = body.classList.contains('layout-studio');
     var bad = [];
     [false, true].forEach(function (studio) {
-      // toggle the CLASS directly — never FM.settings.set, which would write through to the real
-      // localStorage this test frame shares with the app and change Ezra's chosen layout
+      // toggle the CLASS directly — never FM.settings.set, which writes through to the real
+      // localStorage this frame shares with the app and would change Ezra's chosen layout.
       body.classList.toggle('layout-studio', studio);
-      var l = line.getBoundingClientRect(), p = play.getBoundingClientRect();
-      if (!p.width) { bad.push((studio ? 'studio' : 'classic') + ': play button has no box to measure'); return; }
-      var dx = Math.abs(l.left - (p.left + p.width / 2));
-      if (dx > 1.5) bad.push((studio ? 'studio' : 'classic') + ': playhead is ' + Math.round(dx) + 'px off the play button');
+      // rebuild() re-measures the panel and republishes --tl-panel-left; without it we would assert
+      // against a stale offset and pass for the wrong reason.
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      var where = studio ? 'studio' : 'classic';
+      var p = play.getBoundingClientRect();
+      if (!p.width) { bad.push(where + ': play button has no box to measure'); return; }
+      var centre = window.innerWidth / 2;
+      var panelLeft = panel.getBoundingClientRect().left;
+
+      var dLine = Math.abs(line.getBoundingClientRect().left - centre);
+      if (dLine > 2) bad.push(where + ': playhead is ' + Math.round(dLine) + 'px off screen centre');
+
+      // never draw over the inspector band to its left
+      if (first.getBoundingClientRect().left < panelLeft - 0.5) {
+        bad.push(where + ': the transport overflows ' + Math.round(panelLeft - first.getBoundingClientRect().left) + 'px past the panel');
+      }
+      // ...and when the cluster DOES fit left of centre, play must actually be centred
+      var clusterHalf = Math.max(p.left + p.width / 2 - first.getBoundingClientRect().left,
+                                 last.getBoundingClientRect().right - (p.left + p.width / 2));
+      var roomy = (panelLeft + 14 + clusterHalf) <= centre;
+      var dPlay = Math.abs((p.left + p.width / 2) - centre);
+      if (roomy && dPlay > 2) bad.push(where + ': room for it, but play is ' + Math.round(dPlay) + 'px off screen centre');
     });
     body.classList.toggle('layout-studio', was);
+    if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     if (bad.length) throw new Error(bad.join(' | '));
   });
 

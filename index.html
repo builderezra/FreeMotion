@@ -8,7 +8,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=254">
+<link rel="stylesheet" href="styles.css?v=256">
 <link rel="stylesheet" href="theme-glass.css?v=13">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -113,7 +113,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.96</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v4.97</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -268,7 +268,7 @@
       <!-- The wrapper exists so the glint has something to sit on: you cannot give an <img> a
            pseudo-element, and the sheen has to be MASKED by the wordmark's own alpha or the band
            would show in the gaps between the letters instead of travelling through them. -->
-      <div class="hm-brand"><span class="hm-brand-mark">▶</span><span class="hm-brand-wm"><img class="hm-brand-img" src="brand-wordmark.png?v=2" alt="FreeMotion" decoding="async"><span class="hm-brand-glint" aria-hidden="true"></span></span></div>
+      <div class="hm-brand"><span class="hm-brand-mark">▶</span><span class="hm-brand-wm"><span class="hm-brand-halo" aria-hidden="true"></span><img class="hm-brand-img" src="brand-wordmark.png?v=2" alt="FreeMotion" decoding="async"><span class="hm-brand-glint" aria-hidden="true"></span></span></div>
       <button class="hm-search-btn" id="hm-search-btn" aria-label="Search projects" aria-controls="hm-searchbar" aria-expanded="false" title="Search by name or date">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.4" y1="15.4" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
@@ -491,7 +491,7 @@
   <script src="js/fx-registry.js?v=62"></script>
   <script src="js/fx-presets.js?v=2"></script>
   <script src="js/fx-thumbs.js?v=14"></script>
-  <script src="js/timeline.js?v=109"></script>
+  <script src="js/timeline.js?v=110"></script>
   <script src="js/addmenu.js?v=22"></script>
   <script src="js/inspector.js?v=202"></script>
   <script src="js/fx-browser.js?v=24"></script>

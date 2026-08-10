@@ -1028,6 +1028,25 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .t-right { justify-content: flex-start; }
   #btn-play { margin: 0 12px; }
   #btn-amfit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); }
+  /* Push the grid's centre column out to TRUE SCREEN CENTRE (v4.97), matching the playhead above it.
+     The row lives inside the timeline panel, which in Studio starts after the rail and the inspector,
+     so its own middle sits right of the screen's by exactly that offset. Padding the right edge by
+     the same amount shifts the content box's centre left by half of it — landing play on 50vw.
+     min() caps the shift so the cluster stays inside the padded content box. I first wrote that the cap
+     was preventing the row from spilling left over the inspector — it isn't, and the mutation test
+     proved it: a `1fr auto 1fr` track has an auto minimum, so the tracks never shrink below their
+     content and the row overflows to the RIGHT rather than the left. What the cap actually buys is a
+     predictable narrow-window result — past that point play stops chasing screen centre (which it
+     cannot reach anyway once the cluster is wider than the room left of it) instead of the grid
+     silently overflowing its own box. In classic and on a phone --tl-panel-left is 0, so this whole
+     expression collapses to the plain 14px and nothing moves.
+     #btn-amfit is unaffected — it is absolutely positioned, so `right` is measured from the padding
+     box edge, not from the padded content. It stays on the real far right. */
+  #transport { padding-right: max(14px, min(calc(14px + var(--tl-panel-left, 0px)), calc(100% - 290px))); }
+  /* The timecode is the playhead's own readout and sits directly above it, so it has to make the same
+     journey — otherwise it stays on the panel's centre and floats 200px away from the line it reports.
+     Same construction, same cap, smaller reserve because the pill is only ~80px wide. */
+  #tc-bar { padding-right: max(0px, min(var(--tl-panel-left, 0px), calc(100% - 180px))); }
 }
 /* AM-style centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
 #tc-bar { display: flex; justify-content: center; align-items: center; }
@@ -1196,16 +1215,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    JS never positions it (avoids iOS URL-bar drift). Spans the timeline area below the 40px transport. */
 #tl-centerline {
   position: absolute; width: 0; z-index: 12; display: block;
-  /* 50% of #timeline-panel, NOT 50vw (v4.96). This line is absolutely positioned inside the panel, so
-     a viewport unit measures from the panel's left edge — fine while the panel spans the screen (phone
-     and the classic desktop layout), but in Studio the panel starts after the rail and the inspector,
-     so 50vw put the playhead a full 406px right of where it belonged: measured at 1440px wide, the
-     line sat at x=1126 while the play button and the timecode pill sat at 923. Ezra: "on pc i want the
-     play button and the playhead centred still."
-     The scroll maths in timeline.js recomputePad() is derived from the same panel width, so the line
-     and the content it scrolls under stay locked together. Where the panel IS the viewport, 50% and
-     50vw are identical — the phone and classic layouts don't move a pixel. */
-  left: 50%; top: 66px; bottom: 0;   /* 40px transport + 26px timecode row → starts at the timeline */
+  /* TRUE SCREEN CENTRE (v4.97). Ezra: "i meant i want the play head and button centred to the screen
+     not the timeline." This line is absolutely positioned inside #timeline-panel, so a raw viewport
+     unit measures from the PANEL's left edge — which is 0 on a phone and in the classic layout, but
+     406px in Studio at 1440 wide. Subtracting the panel's own offset converts panel-space back to
+     screen-space. timeline.js publishes --tl-panel-left from a single measurement and derives the
+     content's scroll offset from the same number, so the line and the strip beneath it stay locked. */
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: 66px; bottom: 0;   /* 40px transport + 26px timecode row → starts at the timeline */
   border-left: 2px solid #eaf0f8; pointer-events: none;
   box-shadow: 0 0 6px rgba(255,255,255,.45);
 }
@@ -2259,7 +2275,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 /* Home wordmark (v4.87). Height-driven so the image tracks the type it replaced; width auto keeps the
    render's own aspect. max-width stops a wide lockup from crowding the action buttons on a narrow
    phone — it shrinks instead of pushing them off. */
-.hm-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* overflow:visible undoes the ellipsis clip declared on .hm-brand higher up (v4.97). That clip was for
+   the old TEXT wordmark; the brand is an image now and shrinks on its own via max-width + min-width:0,
+   which is what fixed the "FreeMoti" clipping at 375px. Leaving the clip in place would have swallowed
+   the glow below — the halo's whole job is to spill past the letters, and a clip on the box it lives in
+   cuts it off at the glyphs. (Exactly what overflow:hidden was doing to the + button's glow.) */
+.hm-brand { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: visible; }
 .hm-brand-mark { font-size: 17px; line-height: 1; color: var(--text); flex: none; }
 /* height-driven so it tracks the type it replaced, but min-width:0 + max-width let it SHRINK instead
    of being clipped by .hm-brand's overflow:hidden — at 375px the four action buttons and their gaps
@@ -2270,32 +2291,50 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    max-width:100% then resolves against the shrunken wrapper. It wraps the image tightly (inline-flex,
    no padding), which is what lets the glint's mask line up with the artwork by geometry alone. */
 .hm-brand-wm { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; }
-/* Glint (v4.92). Ezra: "make the FreeMotion text have a slight glint to it, so it's like shining like
-   how you used to have the create button in the home menu do, and add a very slight amount of
-   movement to the glint so it doesn't look stale."
-   The mask is the wordmark itself, so the highlight only exists ON the letters — an unmasked band
-   would sweep across the empty space between them and read as a rectangle passing over the logo.
-   The band is a child and moves by transform, so the mask stays put while the light travels
-   (a transform on the masked element would drag its mask along and nothing would move at all). */
+/* GLOW, not a glint (v4.97). Ezra: "earlier i said i wanted a shine to the free motion text and you
+   did add a little glint thing but thats no what i meant, i meant like a glow that shines the area
+   around it brighter type thing."
+   So the wordmark should LIGHT ITS SURROUNDINGS, not have a highlight travel across its face. Two
+   layers do that, and they have to be separate because they do opposite jobs:
+
+   .hm-brand-halo — a soft radial pool sitting BEHIND the artwork, wider and taller than the letters,
+   on `screen` blend so it adds light to the backdrop instead of covering it. This is the part that
+   makes the area around the wordmark brighter. It is deliberately unmasked: the whole point is that
+   it spills past the glyphs onto the bar.
+
+   .hm-brand-glint — kept, but demoted. Now it is a masked bloom sitting ON the letters so the source
+   of the light is visibly the wordmark itself; without it the halo reads as a stain behind flat type.
+   It breathes with the halo rather than sweeping, because a travelling band was the thing he was
+   telling me he didn't want.
+
+   Both pulse on ONE shared 7s cycle so they read as a single light source, and the movement is only
+   in brightness and scale — nothing translates. */
+.hm-brand-halo {
+  position: absolute; left: -18%; right: -18%; top: -75%; bottom: -75%;
+  pointer-events: none; z-index: -1;
+  background: radial-gradient(closest-side ellipse,
+    rgba(150, 226, 255, .50), rgba(110, 200, 255, .26) 42%, rgba(90, 199, 237, .10) 66%, transparent 78%);
+  mix-blend-mode: screen;
+  animation: hm-wm-breathe 7s ease-in-out infinite;
+  will-change: opacity, transform;
+}
 .hm-brand-glint {
-  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
-  -webkit-mask: url('brand-wordmark.png?v=2') center / contain no-repeat;
-          mask: url('brand-wordmark.png?v=2') center / contain no-repeat;
+  position: absolute; inset: 0; pointer-events: none;
+  -webkit-mask-image: url('brand-wordmark.png?v=2'); mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  background: rgba(198, 240, 255, .5);
+  mix-blend-mode: screen;
+  animation: hm-wm-breathe 7s ease-in-out infinite;
 }
-.hm-brand-glint::after {
-  content: ''; position: absolute; top: -30%; bottom: -30%; left: -34%; width: 26%;
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .72), rgba(255, 255, 255, 0));
-  transform: translateX(0) skewX(-14deg);
-  animation: hm-wm-glint 6.4s cubic-bezier(.5, 0, .5, 1) infinite;
+@keyframes hm-wm-breathe {
+  0%, 100% { opacity: .55; transform: scale(.97); }
+  50%      { opacity: 1;   transform: scale(1.03); }
 }
-/* It rests for two thirds of the cycle and then crosses — a band that swept continuously would be a
-   distraction in a header you look at every launch. 520% of the band's own 26% width carries it from
-   just off the left edge to just past the right. */
-@keyframes hm-wm-glint {
-  0%, 68% { transform: translateX(0) skewX(-14deg); }
-  100%    { transform: translateX(520%) skewX(-14deg); }
+@media (prefers-reduced-motion: reduce) {
+  .hm-brand-halo, .hm-brand-glint { animation: none; opacity: .8; transform: none; }
 }
-@media (prefers-reduced-motion: reduce) { .hm-brand-glint { display: none; } }
 @media (max-width: 700px) {
   /* the ▶ costs ~25px of a very tight row and the wordmark already reads as the brand — drop it here */
   .hm-brand-mark { display: none; }
