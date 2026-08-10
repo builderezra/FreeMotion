@@ -239,7 +239,7 @@ html[data-theme="glass"] #hm-new::after {
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
 }
 html[data-theme="glass"] #add-fab::after {
-  -webkit-mask-image: url('fab-cross.png?v=1'); mask-image: url('fab-cross.png?v=1');
+  -webkit-mask-image: url('fab-cross.png?v=2'); mask-image: url('fab-cross.png?v=2');
   -webkit-mask-position: center; mask-position: center;
   -webkit-mask-size: contain; mask-size: contain;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
@@ -271,7 +271,7 @@ html[data-theme="glass"] #add-fab::after {
    the glass. box-shadow is explicitly none because it follows the border box, which for a cross is a
    square — the glow is a drop-shadow instead, so it hugs the arms. */
 html[data-theme="glass"] #add-fab {
-  background: url('fab-cross.png?v=1') center / contain no-repeat;
+  background: url('fab-cross.png?v=2') center / contain no-repeat;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;

@@ -1695,7 +1695,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
        enforces that order; Chrome does not, so the damage is invisible on desktop. Declared
        explicitly rather than just left unset so a later rule can't quietly bring it back. */
     overflow: visible;
-    background: url('fab-cross.png?v=1') center / contain no-repeat;
+    background: url('fab-cross.png?v=2') center / contain no-repeat;
     /* Order is not arbitrary. --glass-edge has to come FIRST so its hairline is computed from the
        artwork's crisp alpha — put a soft pass before it and the "rim" is derived from a blurred
        silhouette and reads as a smudge. Then the light it throws, then the two shadows that seat it:
