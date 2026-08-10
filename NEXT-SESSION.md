@@ -41,6 +41,27 @@ audio import fix below was one.)
 
 ## The queue
 
+### 1. Select mode in the Templates and Elements tabs  (SCOPED, not started)
+*"Need the select option in templates and elements sections."* Today it is projects-only, and the
+guard is explicit — js/home.js:643:
+
+    if (tab !== 'projects' && selectMode) { selectMode = false; selected.clear(); }   // select is projects-only
+
+Four coordinated pieces, all in js/home.js. Doing fewer than all four leaves Select visibly broken:
+1. **Drop/relax that guard** so selectMode survives a tab change (or is per-tab).
+2. **templateCard(t) at :490 and elementCard(e) at :527** need what projectCard already does at
+   :227/:236/:303/:306 — the `hm-sel` class when selected, the `hm-check` tick in the corner, the ⋯
+   suppressed while selecting, and a click that toggles selection instead of opening.
+3. **The select bar (:458-460, enterSelect :453 / exitSelect :454)** currently deletes PROJECTS. Its
+   actions have to branch on the tab: FM.templates.remove / FM.elements.remove rather than
+   FM.projects. Check which bulk actions even make sense per tab — duplicate may not.
+4. **shownIds / the pruning at :637** must be populated for those tabs too, or the "forget selections
+   that scrolled away" logic silently clears the selection.
+
+Verify by RUNNING: enter select on each tab, tick two items, confirm the bar counts 2, delete, and
+confirm the right things went and the OTHER tabs' data is untouched.
+
+
 Everything from the 2026-08-09/10 run shipped (v4.73 → v4.85, including the re-cut heart). These three
 came in on 2026-08-10 while the heart was being judged, and are UNSTARTED. In his order:
 
