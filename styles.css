@@ -2401,54 +2401,147 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    max-width:100% then resolves against the shrunken wrapper. It wraps the image tightly (inline-flex,
    no padding), which is what lets the glint's mask line up with the artwork by geometry alone. */
 .hm-brand-wm { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; }
-/* GLOW, not a glint (v4.97). Ezra: "earlier i said i wanted a shine to the free motion text and you
+/* GLOW, not a glint (v5.12). Ezra: "earlier i said i wanted a shine to the free motion text and you
    did add a little glint thing but thats no what i meant, i meant like a glow that shines the area
-   around it brighter type thing."
-   So the wordmark should LIGHT ITS SURROUNDINGS, not have a highlight travel across its face. Two
-   layers do that, and they have to be separate because they do opposite jobs:
+   around it brighter type thing." Then, of the first attempt at that: "looks shit."
+   He was right. That version was a radial-gradient in a box inset -18%/-75%, so it was far taller
+   than wide and its corners cut off — a grey-white rectangular fog with a findable edge — plus a flat
+   rgba(198,240,255,.5) masked wash on `screen` over the glyphs, which raises every pixel by the same
+   amount and is precisely how a glass render turns into a pale silhouette. Measured against the bare
+   artwork it DARKENED the letters' contrast while adding a stain behind them.
 
-   .hm-brand-halo — a soft radial pool sitting BEHIND the artwork, wider and taller than the letters,
-   on `screen` blend so it adds light to the backdrop instead of covering it. This is the part that
-   makes the area around the wordmark brighter. It is deliberately unmasked: the whole point is that
-   it spills past the glyphs onto the bar.
+   This version is the merge of five independently-designed candidates, each rendered against the real
+   home screen and scored by three judges on different lenses. They picked three different winners but
+   all three "what should it steal" notes agreed, and the measurements settled it (luminance vs the
+   bare artwork, sampled in 20px columns through the wordmark and out along the bar):
+     · the letterform-bloom candidate got +19.5 just past the word but −20 / −11 / −10 ON the glyph
+       columns — real area light, chalky grey letters
+     · the backlit-glass candidate got +35 on the glyphs but its light was gone within 10px
+   So: the backlit-glass structure, with the ambient pushed out to reach like the first one, and a
+   0.5px specular edge from the restraint candidate to re-sharpen what the inner bloom softens.
+   Result: glyph band 93.3 (bare artwork 82.3), bar just past the word 35.6 (bare 33.3).
 
-   .hm-brand-glint — kept, but demoted. Now it is a masked bloom sitting ON the letters so the source
-   of the light is visibly the wordmark itself; without it the halo reads as a stain behind flat type.
-   It breathes with the halo rather than sweeping, because a travelling band was the thing he was
-   telling me he didn't want.
+   EVERY lit layer is the artwork's own alpha, blurred. There is not one gradient-in-a-box in here,
+   which is what guarantees no straight edge can appear anywhere. Two mechanics it depends on:
 
-   Both pulse on ONE shared 7s cycle so they read as a single light source, and the movement is only
-   in brightness and scale — nothing translates. */
-.hm-brand-halo {
-  position: absolute; left: -18%; right: -18%; top: -75%; bottom: -75%;
-  pointer-events: none; z-index: -1;
-  background: radial-gradient(closest-side ellipse,
-    rgba(150, 226, 255, .50), rgba(110, 200, 255, .26) 42%, rgba(90, 199, 237, .10) 66%, transparent 78%);
+   1. `filter` is applied BEFORE the element's own mask, so a masked element cannot be blurred in
+      place — the mask cuts the blur straight back to the glyph and nothing escapes. Each step is a
+      PARENT carrying filter + blend over a CHILD carrying the mask. The blend must be on the filtered
+      parent too: a filter isolates its group, so a blend declared inside it never reaches the backdrop.
+   2. a child's filter COMPOSES with its parent's — blur(8px) inside blur(3px) is sqrt(8²+3²) ≈ 8.5px,
+      not 8px. The four steps are grouped in the two parents with that in mind.
+
+   Mask LONGHANDS only, never the `mask:` shorthand with /contain: that shorthand is unreliable in
+   WebKit and has already shipped one bug in this app. */
+
+/* The artwork sits ABOVE the emitters so the hot core hides behind the glyphs and only its spill
+   shows — that is what reads as backlit rather than as a wash lying on the letters. The two-stop
+   0.5px specular is the same glass language as the + button and the OPEN badge; drop-shadow follows
+   ALPHA, so anything past ~2px here would start closing the counters of e / o / a. */
+.hm-brand-img {
+  position: relative; z-index: 1;
+  filter:
+    drop-shadow(0 0 0.5px rgba(226, 247, 255, .85))
+    drop-shadow(0 0 1.4px rgba(150, 225, 255, .40));
+}
+
+/* ---- tight pair: the hot rim, 3px and 8.5px ---- */
+.hm-brand-glint {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none;
+  background: none;
+  -webkit-mask-image: none; mask-image: none;   /* the old flat wash off; masks move to the children */
+  filter: blur(3px);
   mix-blend-mode: screen;
   animation: hm-wm-breathe 7s ease-in-out infinite;
+  will-change: opacity;
+}
+.hm-brand-glint::before,
+.hm-brand-glint::after,
+.hm-brand-halo::before,
+.hm-brand-halo::after {
+  content: ""; position: absolute; inset: 0;
+  -webkit-mask-image: url('brand-wordmark.png?v=2');
+          mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-size: contain;      mask-size: contain;
+  -webkit-mask-position: center;   mask-position: center;
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+}
+/* nearly white for the first 2-3px off the edge, so it reads as light and not as coloured paint */
+.hm-brand-glint::before { background: rgba(188, 241, 255, .94); }
+/* the knee of the curve; `screen` so it ADDS to the core inside the group instead of covering it */
+.hm-brand-glint::after {
+  background: rgba(132, 214, 255, .62);
+  filter: blur(8px);
+  mix-blend-mode: screen;
+}
+
+/* ---- wide pair: the ambient the BAR picks up, 30px and ~44px ----
+   This is the half that answers the actual brief. The alphas come DOWN as the radii go up, so the
+   energy is spread further rather than piled higher — piling it higher is how you get fog back. */
+.hm-brand-halo {
+  position: absolute; inset: 0; z-index: 0;
+  left: 0; right: 0; top: 0; bottom: 0;   /* undo the old -18%/-75% box… */
+  background: none;                        /* …and the radial fog inside it */
+  pointer-events: none;
+  filter: blur(30px);
+  mix-blend-mode: screen;
+  transform: scale(1.06);
+  animation: hm-wm-ambient 7s ease-in-out infinite;
   will-change: opacity, transform;
 }
-.hm-brand-glint {
-  position: absolute; inset: 0; pointer-events: none;
-  -webkit-mask-image: url('brand-wordmark.png?v=2'); mask-image: url('brand-wordmark.png?v=2');
-  -webkit-mask-position: center; mask-position: center;
-  -webkit-mask-size: contain; mask-size: contain;
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  background: rgba(198, 240, 255, .5);
+.hm-brand-halo::before { background: rgba(96, 196, 240, .78); }
+.hm-brand-halo::after {
+  background: rgba(64, 158, 212, .46);
+  filter: blur(32px);
   mix-blend-mode: screen;
+}
+
+/* ---- sharp pass: the glass lighting up from within ----
+   `overlay` SCALES the artwork's own values (dark toward darker, bright toward white) instead of
+   adding a flat amount, so the facets keep their contrast. This is the one thing the old glint got
+   backwards. */
+.hm-brand-wm::after {
+  content: ""; position: absolute; inset: 0; z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, .80), rgba(200, 242, 255, .64) 42%, rgba(140, 216, 250, .52));
+  -webkit-mask-image: url('brand-wordmark.png?v=2');
+          mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-size: contain;      mask-size: contain;
+  -webkit-mask-position: center;   mask-position: center;
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+  mix-blend-mode: overlay;
   animation: hm-wm-breathe 7s ease-in-out infinite;
 }
+
+/* One shared 7s cycle so it reads as a single light source. Brightness and scale only — nothing
+   translates across the letters, because a travelling band is the thing he rejected. Small amplitude
+   on purpose: a logo that visibly throbs is worse than one that sits still. */
 @keyframes hm-wm-breathe {
-  0%, 100% { opacity: .55; transform: scale(.97); }
-  50%      { opacity: 1;   transform: scale(1.03); }
+  0%, 100% { opacity: .80; }
+  50%      { opacity: 1; }
+}
+@keyframes hm-wm-ambient {
+  0%, 100% { opacity: .50; transform: scale(1.03); }
+  50%      { opacity: .72; transform: scale(1.08); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hm-brand-halo, .hm-brand-glint { animation: none; opacity: .8; transform: none; }
+  .hm-brand-glint, .hm-brand-halo, .hm-brand-wm::after { animation: none; }
+  .hm-brand-glint { opacity: .92; }
+  .hm-brand-halo  { opacity: .64; transform: scale(1.06); }
 }
 @media (max-width: 700px) {
   /* the ▶ costs ~25px of a very tight row and the wordmark already reads as the brand — drop it here */
   .hm-brand-mark { display: none; }
   .hm-brand-img { height: 20px; }
+  /* …and because the wordmark is 20px tall here instead of 24px, every glow radius comes down with
+     it. Desktop-scale blurs on 20px letters start closing the counters of e / o / a and the whole
+     lockup goes to mush — the radii have to track the type, not the layout. */
+  .hm-brand-glint        { filter: blur(2.4px); }
+  .hm-brand-glint::after { filter: blur(6.5px); }
+  .hm-brand-halo         { filter: blur(24px); }
+  .hm-brand-halo::after  { filter: blur(26px); }
 }
 
 /* ---------------- Home backdrop (v4.88) ----------------
