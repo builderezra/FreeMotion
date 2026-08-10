@@ -2732,6 +2732,20 @@ window.FM = window.FM || {};
       // Backspace deletes the selected LAYER while you're trying to fix a digit. (#1)
       const tgt = e.target;
       const inEdit = !!(tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'SELECT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable));
+      // A full-screen overlay owns the screen, but the PROJECT BEHIND IT IS STILL LOADED, still has a
+      // selection, and still autosaves. Nothing here checked for that, so every bare-key editor
+      // shortcut reached a document the user could not see: on the home/project browser, Backspace —
+      // the habitual "go back" key, and where focus lands after the back button — ran deleteSelected(),
+      // which commits, and commit() autosaves. The layer was gone next time they opened the project,
+      // with no visible cause. Space was as bad in a quieter way: playback started behind an opaque
+      // overlay, audio coming from nowhere. The overlay's own buttons are not INPUT/SELECT/TEXTAREA,
+      // so `inEdit` above never covered any of this.
+      // Escape is deliberately still allowed through: it is how several of these overlays close.
+      const overlayOwnsScreen =
+        (FM.home && FM.home.isOpen && FM.home.isOpen()) ||
+        (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) ||
+        !!document.querySelector('#fx-browser:not(.hidden), #afx-browser:not(.hidden), #export-dialog:not(.hidden), #canvas-dialog:not(.hidden)');
+      if (overlayOwnsScreen && e.code !== 'Escape') return;
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();

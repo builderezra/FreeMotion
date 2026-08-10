@@ -661,6 +661,61 @@
     }
   });
 
+  test('editor key shortcuts cannot reach the project under a full-screen overlay', { item: 'overlay-keys' }, function () {
+    // v5.07. The global keydown handler only bailed out for modifier combos and for editable targets,
+    // so with the home browser (or any dialog) covering the screen, the still-loaded project behind it
+    // was fully reachable: Backspace — the habitual "go back" key, and exactly where focus sits after
+    // the back button — ran deleteSelected(), which commits, and commit() autosaves. Silent data loss
+    // with no visible cause. #export-dialog stands in for the overlay family here because showing it
+    // is a pure class toggle with no side effects; the guard treats every one of them the same way.
+    const savedScene = FM.scene;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    const dlg = document.getElementById('export-dialog');
+    const wasHidden = dlg ? dlg.classList.contains('hidden') : true;
+    // The app boots with the home browser up, so the home branch of the guard would swallow the
+    // control leg and the test could never tell "guarded correctly" from "the key never arrived".
+    // Reporting home's state is stubbed instead of really opening/closing it: home.open() rebuilds the
+    // list and can write a project thumbnail, which is a real side effect for a test to have.
+    const homeIsOpen = FM.home.isOpen;
+    const key = code => document.body.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: code === 'Space' ? ' ' : 'Backspace', bubbles: true, cancelable: true }));
+    try {
+      if (!dlg) throw new Error('#export-dialog is missing — the overlay guard has nothing to key off');
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'One', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#f00' }));
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'Two', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0' }));
+      FM.scene.selectedId = FM.scene.layers[0].id;
+      FM.scene.selectedIds = [FM.scene.layers[0].id];
+
+      // 1. The home / project browser — the route that actually loses work.
+      dlg.classList.add('hidden');
+      FM.home.isOpen = function () { return true; };
+      key('Backspace');
+      if (FM.scene.layers.length !== 2) throw new Error('Backspace deleted a layer with the home browser up');
+
+      // 2. A dialog overlay, and Space as well as Backspace.
+      FM.home.isOpen = function () { return false; };
+      dlg.classList.remove('hidden');
+      key('Backspace');
+      if (FM.scene.layers.length !== 2) throw new Error('Backspace deleted a layer with a dialog up');
+      key('Space');
+      if (FM.playing) { FM.pause(); throw new Error('Space started playback with a dialog up'); }
+
+      // 3. …and the guard must be scoped, not a blanket kill: with everything closed the key works.
+      dlg.classList.add('hidden');
+      FM.scene.selectedId = FM.scene.layers[0].id;
+      FM.scene.selectedIds = [FM.scene.layers[0].id];
+      key('Backspace');
+      if (FM.scene.layers.length !== 1) throw new Error('Backspace no longer deletes with nothing up (layers=' + FM.scene.layers.length + ') — the guard is too broad, or the test never delivered the key');
+    } finally {
+      FM.home.isOpen = homeIsOpen;
+      if (dlg) dlg.classList.toggle('hidden', wasHidden);
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
