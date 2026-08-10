@@ -39,6 +39,27 @@ transform need to be seperate."* Today position and scale share a keyframe track
 rows. Note BUG-HUNT's confirmed finding: `deleteKeyframesAt`/`propKey` already cover FEWER containers
 than `animatedProps`, so the delete/copy paths need to be part of this, not an afterthought.
 
+**SCOUTED 2026-08-10 — this is a UI-ONLY change. The data model already does what he wants.**
+`FM.setTransform(layer, key, value, time)` (js/scene.js) keys exactly ONE property, and
+`transform.x` / `transform.y` / `scaleX` / `scaleY` are already independent `{kf:[…]}` objects. So
+NOTHING in the scene format, the renderer, save/load or export needs to change, and old projects keep
+playing untouched — there is no migration to write.
+
+The grouping is entirely in the inspector:
+- `MT_PROPS`  (js/inspector.js:1591) = which channels a MODE owns —
+  move:['x','y','z'], rotate:['rotation','rotationX','rotationY'], scale:['scale','scaleX','scaleY'],
+  skew:['skewX','skewY'], anchor:[] (anchor stays empty — a {kf} anchor NaNs the draw, see BUG-HUNT).
+- `MT_PRIMARY` (js/inspector.js:1595) = which of those the ONE mode diamond keys by default —
+  move:['x','y'] is exactly why moving keyframes X and Y together.
+- js/inspector.js:1883 is where the diamond filters props through MT_PRIMARY.
+
+**The job:** give every slider ROW its own ◆ that keys only its own property (via setTransform), and
+stop the mode-level diamond from keying siblings. Keep the mode ◆ only if it reads as "key everything
+in this mode"; otherwise drop it so there is exactly one diamond per slider. Then make
+`deleteKeyframesAt`/`propKey` (js/timeline.js:125-146) cover the same property set as
+`FM.animatedProps` (js/scene.js:280-297) — BUG-HUNT confirmed they already diverge, and splitting the
+tracks makes that gap bite harder, since each new track needs to be individually deletable.
+
 **DECIDED 2026-08-10 (asked Ezra directly): EVERY slider fully separate, INCLUDING X and Y.** Not
 Position-as-one. So x, y, scale/scaleX/scaleY, rotation, skewX/skewY, opacity, anchor each get their
 own independent keyframe track and their own diamond. He was shown the trade-off (a diagonal move now
