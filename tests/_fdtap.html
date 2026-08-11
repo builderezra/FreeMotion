@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>fill-drag tap probe</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+pre{padding:8px;white-space:pre-wrap}iframe{position:fixed;left:-9999px;top:0;border:0}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. The fill-drag tool (queue 33) was REJECTED in verification for this: a TAP on #fd-overlay
+   — or any press ending within 6px of where it began — deselected the layer and closed Colour & Fill.
+   Cause: app.js's deselectOnEmptyTap listens on DOCUMENT in the CAPTURE phase, so the overlay's own
+   stopPropagation() cannot reach it; it spares a surface only by naming it in a KEEP selector list, and
+   #fd-overlay was not in it. Worse than before the tool existed, since canvas-edit only deselected a
+   stationary tap OFF the layer — here a tap ON the shape you are editing kills it.
+   This asserts the fix, and is written to FAIL when #fd-overlay is removed from that list. */
+var f = document.getElementById('f'), o = document.getElementById('o');
+f.style.width = '390px'; f.style.height = '844px';
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async () => {
+    for (var i = 0; i < 250 && !(w.FM && w.FM.scene && w.FM.inspector); i++) await sleep(60);
+    var FM = w.FM, log = [], fails = 0;
+    function ok(c, m) { log.push((c ? 'PASS  ' : 'FAIL  ') + m); if (!c) fails++; }
+
+    var card = d.querySelector('.hm-card'); if (card) { card.click(); await sleep(1500); }
+    var P = FM.scene.project;
+    var L = FM.makeLayer('shape', { name: 'grad', shape: 'rect', x: P.width / 2, y: P.height / 2 });
+    // A gradient fill is what arms the tool.
+    L.fillMode = 'gradient';
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.refreshAll(); await sleep(200);
+    FM.selectLayer(L.id); await sleep(200);
+    // Drive the tool directly. Going through the inspector needs the exact fill-tab state, and a probe
+    // that fails to open a panel proves nothing about the tap — which is what the first run did.
+    FM.fillDrag.start(L.id, 'gradient'); await sleep(300);
+
+    var ov = d.getElementById('fd-overlay');
+    log.push('overlay present: ' + !!ov + (ov ? ('  rect=' + JSON.stringify(ov.getBoundingClientRect().toJSON ? ov.getBoundingClientRect().toJSON() : {})) : ''));
+    if (!ov) { log.push('NOTE: the fill-drag overlay never appeared, so this probe cannot test the tap. Not a pass.'); o.textContent = log.join('\n'); return; }
+
+    var r = ov.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    function ev(type, ex, ey, buttons) {
+      ov.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 4,
+        isPrimary: true, pointerType: 'touch', clientX: ex, clientY: ey, buttons: buttons == null ? 1 : buttons }));
+    }
+    // A TAP: down and up in the same place. This is the gesture that was losing the layer.
+    ev('pointerdown', x, y); await sleep(30); ev('pointerup', x, y, 0); await sleep(150);
+    ok(FM.scene.selectedId === L.id, 'a TAP on the fill overlay keeps the layer selected (selectedId=' + FM.scene.selectedId + ')');
+    ok(!!d.getElementById('fd-overlay'), '…and the tool is still up afterwards');
+
+    // A 4px nudge — still inside the 6px "stationary" threshold, so it takes the same path.
+    if (FM.scene.selectedId !== L.id) { FM.selectLayer(L.id); FM.inspector.openCategory('fill'); await sleep(400); }
+    var ov2 = d.getElementById('fd-overlay');
+    if (ov2) {
+      ev('pointerdown', x, y); await sleep(20);
+      ov2.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 4, pointerType: 'touch', clientX: x + 4, clientY: y, buttons: 1 }));
+      await sleep(20); ev('pointerup', x + 4, y, 0); await sleep(150);
+      ok(FM.scene.selectedId === L.id, 'a 4px NUDGE also keeps the layer (selectedId=' + FM.scene.selectedId + ')');
+    }
+
+    log.push('');
+    log.push(fails ? ('RESULT ' + fails + ' FAILED') : 'RESULT all passed');
+    o.textContent = log.join('\n');
+  })();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FreeMotion — fill-drag probe (queue 33)</title>
+<style>
+  body { font: 12px/1.5 ui-monospace, monospace; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 12px; }
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+  pre { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<iframe id="app" src="../index.html"></iframe>
+<script>
+/* Queue item 33 probe — drag on the canvas to position a gradient or image fill.
+   Measures RENDERED PIXELS, not model numbers: it renders the scene offscreen at project size and
+   locates the fill's own feature (a white bar in the picture / the bright core of a radial gradient)
+   RELATIVE TO THE SHAPE, so a drag that merely moved the LAYER reads as zero shift and fails. */
+const out = document.getElementById('out');
+const frame = document.getElementById('app');
+const R = [];
+function chk(name, pass, detail) { R.push({ name, pass: !!pass, detail }); }
+function show() {
+  const bad = R.filter(r => !r.pass).length;
+  out.textContent = 'PROBE ' + (R.length - bad) + '/' + R.length + (bad ? ' — FAIL' : ' — PASS') + '\n\n' +
+    R.map(r => (r.pass ? 'ok   ' : 'FAIL ') + r.name + '\n       ' + r.detail).join('\n');
+}
+
+frame.addEventListener('load', async () => {
+  const win = frame.contentWindow, doc = frame.contentDocument, FM = win.FM;
+  try {
+    if (!FM) throw new Error('FM not loaded');
+    await new Promise(r => setTimeout(r, 400));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();   // boot lands on the project list; the probe needs the editor
+    const sp = doc.getElementById('splash'); if (sp) sp.remove();          // launch splash covers the stage in a fresh profile
+    await new Promise(r => setTimeout(r, 300));
+
+    const PW = 640, PH = 360;
+    const off = doc.createElement('canvas'); off.width = PW; off.height = PH;
+    const octx = off.getContext('2d');
+    const render = () => { octx.clearRect(0, 0, PW, PH); FM.renderScene(octx, FM.scene, FM.time); return octx.getImageData(0, 0, PW, PH); };
+
+    // ---- a 1200x300 picture: black with a white bar centred at source x=600 -------------------
+    const src = doc.createElement('canvas'); src.width = 1200; src.height = 300;
+    const sc = src.getContext('2d');
+    sc.fillStyle = '#000'; sc.fillRect(0, 0, 1200, 300);
+    sc.fillStyle = '#fff'; sc.fillRect(596, 0, 8, 300);
+    const PIC = src.toDataURL('image/png');
+    // A second, narrower picture for the clamp test: 600x300 cover-fitted into the 400x300 box
+    // overflows by only 100px a side (limit 0.25 box widths), so its centre bar is still inside the
+    // shape when the pan is pinned at the clamp — the wide PIC's bar leaves the shape entirely there.
+    const src2 = doc.createElement('canvas'); src2.width = 600; src2.height = 300;
+    const s2 = src2.getContext('2d');
+    s2.fillStyle = '#000'; s2.fillRect(0, 0, 600, 300);
+    s2.fillStyle = '#fff'; s2.fillRect(296, 0, 8, 300);
+    const PIC2 = src2.toDataURL('image/png');
+
+    /* EVERY measurement below is RELATIVE TO THE SHAPE, located from its magenta inside-border.
+       That is deliberate and it is the whole point of this probe: before the fix, dragging on the
+       canvas moved the LAYER, so an absolute "the bar is 40px further right" reading passed against
+       unfixed code and proved nothing. Anchoring to the shape means only the fill moving counts. */
+    function shapeBox(img) {   // bounding box of the magenta (255,0,255) border, in project px
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, n = 0;
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+        const i = (y * PW + x) * 4;
+        if (img.data[i] > 200 && img.data[i + 1] < 90 && img.data[i + 2] > 200) {
+          n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+      return n ? { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, n } : null;
+    }
+    // centre-of-mass x of WHITE pixels on one row (project px), null if none
+    function barX(img, y) {
+      let s = 0, n = 0;
+      for (let x = 0; x < PW; x++) { const i = (y * PW + x) * 4; if (img.data[i] > 200 && img.data[i + 1] > 200 && img.data[i + 2] > 200) { s += x; n++; } }
+      return n ? s / n : null;
+    }
+    function bright(img, thr) {
+      let sx = 0, sy = 0, n = 0;
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+        const i = (y * PW + x) * 4;
+        if (img.data[i] >= thr && img.data[i + 1] >= thr && img.data[i + 2] >= thr) { sx += x; sy += y; n++; }
+      }
+      return n ? { x: sx / n, y: sy / n, n } : null;
+    }
+    // backdrop pixels showing through the interior of the shape = the fill failed to cover it
+    function holesIn(img, sb) {
+      if (!sb) return -1;
+      let n = 0;
+      for (let y = Math.ceil(sb.cy - sb.h / 2 + 8); y <= Math.floor(sb.cy + sb.h / 2 - 8); y++)
+        for (let x = Math.ceil(sb.cx - sb.w / 2 + 8); x <= Math.floor(sb.cx + sb.w / 2 - 8); x++) {
+          const i = (y * PW + x) * 4;
+          if (img.data[i + 1] > 180 && img.data[i] < 90 && img.data[i + 2] < 90) n++;
+        }
+      return n;
+    }
+    // the fill feature's offset FROM THE SHAPE'S OWN CENTRE
+    function barRel(img) { const b = shapeBox(img), x = barX(img, 180); return (b && x != null) ? { d: x - b.cx, bar: x, shape: b.cx } : null; }
+    function coreRel(img) { const b = shapeBox(img), c = bright(img, 246); return (b && c) ? { dx: c.x - b.cx, dy: c.y - b.cy, core: c, shape: b } : null; }
+
+    function setScene(over) {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 320, y: 180, shapeW: 400, shapeH: 300, fill: '#3a7bd5' });
+      Object.assign(L, JSON.parse(JSON.stringify(over)));   // makeLayer only copies the props it knows
+      L.stroke = { enabled: true, width: 4, color: '#ff00ff', position: 'inside' };   // a findable frame = the shape's own position
+      FM.scene.project.width = PW; FM.scene.project.height = PH;
+      /* GREEN backdrop, not black. renderScene paints project.background opaque before anything else,
+         so "is this pixel transparent?" can never be true and a hole test against alpha is vacuous —
+         it passed with the clamp deliberately removed. A colour the fill never contains is a real
+         detector: black+white picture, magenta frame, white→black gradient, green nowhere. */
+      FM.scene.project.background = '#00ff00';
+      FM.scene.layers = [L];
+      FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+      FM.selectLayer(L.id);
+      FM.resizeCanvas();
+      FM.inspector.openCategory('color');
+      return L;
+    }
+
+    // pointer drag over the preview, expressed in PROJECT px
+    function pdrag(x0, y0, dx, dy, steps) {
+      const cv = doc.getElementById('preview'), r = cv.getBoundingClientRect();
+      const k = FM.previewDispScale();
+      const ox = cv.__fmOX || 0, oy = cv.__fmOY || 0;
+      const cX = p => r.left + (p - ox) * k, cY = p => r.top + (p - oy) * k;
+      const ov = doc.getElementById('fd-overlay');
+      const target = ov || cv;
+      const mk = (type, px, py) => new win.PointerEvent(type, { clientX: cX(px), clientY: cY(py), pointerId: 7, isPrimary: true, bubbles: true, cancelable: true, button: 0, buttons: 1, pointerType: 'mouse' });
+      target.dispatchEvent(mk('pointerdown', x0, y0));
+      const N = steps || 4;
+      for (let i = 1; i <= N; i++) {
+        const e = mk('pointermove', x0 + dx * i / N, y0 + dy * i / N);
+        win.dispatchEvent(e); target.dispatchEvent(e);
+      }
+      const up = mk('pointerup', x0 + dx, y0 + dy);
+      win.dispatchEvent(up); target.dispatchEvent(up);
+      return { overlay: !!ov, rs: cv.__fmRS, dispScale: k };
+    }
+
+    // ================= 1. MEDIA PAN, full preview scale =========================================
+    {
+      const L = setScene({ fillMode: 'media', fillImage: PIC });
+      let img = null;
+      for (let i = 0; i < 60; i++) { img = render(); if (barRel(img)) break; await new Promise(r => setTimeout(r, 60)); }
+      const r0 = barRel(img);
+      chk('picture decodes; bar + shape frame both render', !!r0, r0 ? ('bar ' + r0.bar + ', shape centre ' + r0.shape + ', offset ' + r0.d) : 'bar or magenta frame missing');
+      const x0 = FM.evalProp(L.transform.x, FM.time);
+      const info = pdrag(320, 180, 40, 0);
+      await new Promise(r => setTimeout(r, 60));
+      const r1 = barRel(render());
+      const x1 = FM.evalProp(L.transform.x, FM.time);
+      const shift = (r0 && r1) ? (r1.d - r0.d) : NaN;
+      chk('media: +40px drag pans the picture +40px WITHIN the shape',
+        Math.abs(shift - 40) <= 2,
+        'overlay=' + info.overlay + ' rs=' + info.rs + '  bar-minus-shape ' + (r0 && r0.d) + ' -> ' + (r1 && r1.d) + '  shift=' + shift + ' (want 40±2)');
+      chk('media: the drag did NOT move the layer', Math.abs(x1 - x0) < 0.5,
+        'transform.x ' + x0 + ' -> ' + x1);
+      chk('media: the pan is stored on the layer',
+        typeof L.fillImgX !== 'undefined', 'layer.fillImgX = ' + JSON.stringify(L.fillImgX));
+    }
+
+    // ================= 2. GRADIENT CENTRE, full preview scale ===================================
+    {
+      const L = setScene({ fillMode: 'gradient', fillGradient: { enabled: true, type: 'radial', c0: '#ffffff', c1: '#000000' } });
+      const g0 = coreRel(render());
+      chk('gradient core + shape frame render', !!g0, g0 ? ('core offset ' + g0.dx.toFixed(1) + ',' + g0.dy.toFixed(1) + ' n=' + g0.core.n) : 'no bright core / no frame');
+      const info = pdrag(320, 180, 60, -30);
+      await new Promise(r => setTimeout(r, 60));
+      const g1 = coreRel(render());
+      const dx = (g0 && g1) ? g1.dx - g0.dx : NaN, dy = (g0 && g1) ? g1.dy - g0.dy : NaN;
+      chk('gradient: +60,-30 drag moves the centre by +60,-30 WITHIN the shape',
+        Math.abs(dx - 60) <= 3 && Math.abs(dy + 30) <= 3,
+        'overlay=' + info.overlay + '  core-minus-shape moved ' + dx + ',' + dy + ' (want 60,-30 ±3)');
+    }
+
+    // ================= 3. REDUCED PREVIEW SCALE ================================================
+    {
+      frame.style.width = '380px'; frame.style.height = '740px';
+      await new Promise(r => setTimeout(r, 250));
+      const L = setScene({ fillMode: 'media', fillImage: PIC });
+      FM.resizeCanvas();
+      await new Promise(r => setTimeout(r, 250));
+      const cv = doc.getElementById('preview');
+      const rs = cv.__fmRS;
+      let img = null;
+      for (let i = 0; i < 60; i++) { img = render(); if (barRel(img)) break; await new Promise(r => setTimeout(r, 60)); }
+      const r0 = barRel(img);
+      // The point is that the render scale is NOT 1:1 — a gesture measured in screen px has to be
+      // converted either way. Which side of 1 it lands on depends on devicePixelRatio, so run this
+      // file at dpr 1 (reduced, ~0.58/0.87) AND dpr 2 (supersampled, ~1.16/1.77) to cover both.
+      chk('preview is genuinely not at 1:1 render scale', Math.abs(rs - 1) > 0.05,
+        '__fmRS = ' + rs + (rs < 1 ? ' (REDUCED)' : ' (SUPERSAMPLED)') + ' — canvas ' + cv.width + 'x' + cv.height + ' for a ' + PW + 'px project, dpr=' + win.devicePixelRatio);
+      const info = pdrag(320, 180, 40, 0);
+      await new Promise(r => setTimeout(r, 60));
+      const r1 = barRel(render());
+      const shift = (r0 && r1) ? (r1.d - r0.d) : NaN;
+      chk('media @reduced scale: +40 project px still pans the picture +40px',
+        Math.abs(shift - 40) <= 2,
+        'rs=' + rs + ' dispScale=' + info.dispScale + '  bar-minus-shape ' + (r0 && r0.d) + ' -> ' + (r1 && r1.d) + '  shift=' + shift + ' (want 40±2)');
+      frame.style.width = '900px'; frame.style.height = '760px';
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    // ================= 4. CLAIMING / RELEASING THE CANVAS =======================================
+    {
+      const L = setScene({ fillMode: 'media', fillImage: PIC });
+      await new Promise(r => setTimeout(r, 120));
+      const cv = doc.getElementById('preview'), r = cv.getBoundingClientRect();
+      const ov = doc.getElementById('fd-overlay');
+      chk('an overlay claims the canvas while the Media tab is open', !!ov, 'fd-overlay = ' + (ov ? 'present z=' + win.getComputedStyle(ov).zIndex : 'ABSENT'));
+      // Geometry, not stylesheet presence. A canvas with no CSS box sits at its INTRINSIC BACKING size
+      // at its static position — an overlay twice the comp's size, offset down-right, still swallowing
+      // every tap. That is what a cached styles.css produced at devicePixelRatio 2, so assert the box.
+      const wrapEl = doc.getElementById('canvas-wrap'), wrEl = wrapEl.getBoundingClientRect();
+      const orr = ov && ov.getBoundingClientRect();
+      chk('the overlay box exactly covers the comp (survives a stale stylesheet)',
+        !!orr && Math.abs(orr.left - wrEl.left) <= 1 && Math.abs(orr.top - wrEl.top) <= 1 &&
+        Math.abs(orr.width - wrEl.width) <= 1 && Math.abs(orr.height - wrEl.height) <= 1,
+        orr ? ('overlay ' + [orr.left, orr.top, orr.width, orr.height].map(n => n.toFixed(1)).join(',') +
+          '  wrap ' + [wrEl.left, wrEl.top, wrEl.width, wrEl.height].map(n => n.toFixed(1)).join(',') +
+          '  dpr=' + win.devicePixelRatio) : 'no overlay');
+      // the fill overlay must sit UNDER the selection handles so scale/wrap handles still work
+      const box = doc.getElementById('select-box');
+      const h = doc.querySelector('.sb-handle.sb-nw');
+      let topAtHandle = null, topAtMiddle = null;
+      if (h) { const hr = h.getBoundingClientRect(); topAtHandle = doc.elementFromPoint(hr.left + hr.width / 2, hr.top + hr.height / 2); }
+      topAtMiddle = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      chk('corner scale handle is still the top hit target', !!(topAtHandle && topAtHandle.classList.contains('sb-handle')),
+        'elementFromPoint(nw handle) = ' + (topAtHandle ? (topAtHandle.id || topAtHandle.className) : 'null'));
+      chk('the middle of the canvas belongs to the fill overlay', !!(topAtMiddle && topAtMiddle.id === 'fd-overlay'),
+        'elementFromPoint(canvas centre) = ' + (topAtMiddle ? (topAtMiddle.id || topAtMiddle.className) : 'null'));
+      // switching back to a Solid fill must release it
+      L.fillMode = 'solid'; FM.inspector.refresh();
+      await new Promise(r2 => setTimeout(r2, 60));
+      chk('switching to the Solid tab releases the canvas', !!ov && !doc.getElementById('fd-overlay'),
+        'had overlay = ' + !!ov + '; after tab switch = ' + (doc.getElementById('fd-overlay') ? 'STILL THERE' : 'gone'));
+    }
+
+    // ================= 5. LAYER DELETED WHILE ACTIVE ===========================================
+    {
+      const L = setScene({ fillMode: 'media', fillImage: PIC });
+      await new Promise(r => setTimeout(r, 120));
+      const had = !!doc.getElementById('fd-overlay');
+      let threw = '';
+      try { FM.deleteSelected(); } catch (e) { threw = String(e && e.message || e); }
+      await new Promise(r => setTimeout(r, 220));
+      const stillThere = !!doc.getElementById('fd-overlay');
+      const stillActive = !!(FM.fillDrag && FM.fillDrag.isActive && FM.fillDrag.isActive());
+      chk('deleting the layer mid-drag-tool tears the overlay down cleanly',
+        had && !threw && !stillThere && !stillActive,
+        'had overlay=' + had + ' threw=' + (threw || 'no') + ' overlay=' + (stillThere ? 'ORPHANED' : 'gone') + ' isActive=' + stillActive);
+    }
+
+    // ================= 6. KEYFRAMABLE — measured in the OUTPUT ==================================
+    {
+      const L = setScene({ fillMode: 'gradient', fillGradient: { enabled: true, type: 'radial', c0: '#ffffff', c1: '#000000' } });
+      await new Promise(r => setTimeout(r, 60));
+      const g = L.fillGradient;
+      L.duration = 5;
+      FM.time = 0;
+      FM.toggleProp(g, 'ox', 0, 0);            // ◆ at t=0 turns the dragged offset into an animated prop
+      FM.time = 1;
+      pdrag(320, 180, 100, 0);                  // …and dragging at t=1 upserts a keyframe there
+      const anim = !!FM.isAnimated(g.ox);   // only ox was armed above; oy stays a plain number, exactly like an animated transform.x beside a static y
+      FM.time = 0; const a = coreRel(render());
+      FM.time = 1; const b = coreRel(render());
+      FM.time = 0.5; const m = coreRel(render());
+      FM.time = 0;
+      const halfway = (a && b && m) ? (m.dx - a.dx) / ((b.dx - a.dx) || 1) : NaN;
+      chk('gradient centre keyframes: dragging at t=1 animates it, and the OUTPUT interpolates',
+        anim && Math.abs(b.dx - a.dx - 100) <= 4 && Math.abs(halfway - 0.5) < 0.08,
+        'animated=' + anim + '  core offset t0=' + (a && a.dx.toFixed(1)) + ' t1=' + (b && b.dx.toFixed(1)) +
+        ' t0.5=' + (m && m.dx.toFixed(1)) + '  → midpoint fraction ' + halfway.toFixed(3) + ' (want 0.5)');
+      const props = FM.animatedProps(L);
+      chk('the position keyframes reach the timeline', props.indexOf(g.ox) >= 0,
+        'FM.animatedProps() returned ' + props.length + ' animated props, gradient.ox included = ' + (props.indexOf(g.ox) >= 0));
+      FM.time = 0;
+    }
+
+    // ================= 7. ROTATED + SCALED LAYER ===============================================
+    // A screen gesture has to be un-rotated and un-scaled into the fill box's own units and then come
+    // back out through the renderer's transform landing exactly where the finger went.
+    {
+      const L = setScene({ fillMode: 'gradient', fillGradient: { enabled: true, type: 'radial', c0: '#ffffff', c1: '#000000' } });
+      L.transform.rotation = 30; L.transform.scale = 0.6;
+      FM.requestRender();
+      await new Promise(r => setTimeout(r, 80));
+      const g0 = coreRel(render());
+      pdrag(320, 180, 50, 0);
+      await new Promise(r => setTimeout(r, 60));
+      const g1 = coreRel(render());
+      const dx = (g0 && g1) ? g1.dx - g0.dx : NaN, dy = (g0 && g1) ? g1.dy - g0.dy : NaN;
+      chk('rotated 30° + scaled 0.6: a +50,0 screen drag still moves the fill +50,0 on screen',
+        Math.abs(dx - 50) <= 4 && Math.abs(dy) <= 4,
+        'core-minus-shape moved ' + (isFinite(dx) ? dx.toFixed(2) : dx) + ',' + (isFinite(dy) ? dy.toFixed(2) : dy) + ' (want 50,0 ±4)');
+    }
+
+    // ================= 8. ZOOMED VIEWPORT ======================================================
+    // At >1.35x the preview switches to a CROPPED canvas with a non-zero __fmOX/__fmOY origin. A
+    // gesture that ignored that origin drifts by hundreds of px; this is where it would show.
+    {
+      const L = setScene({ fillMode: 'media', fillImage: PIC });
+      FM.viewport.scale = 2; FM.viewport.apply();
+      await new Promise(r => setTimeout(r, 900));   // refreshPreviewScale is debounced
+      const cv = doc.getElementById('preview');
+      let img = null;
+      for (let i = 0; i < 40; i++) { img = render(); if (barRel(img)) break; await new Promise(r => setTimeout(r, 60)); }
+      const r0 = barRel(img);
+      const info = pdrag(320, 180, 40, 0);
+      await new Promise(r => setTimeout(r, 60));
+      const r1 = barRel(render());
+      const shift = (r0 && r1) ? (r1.d - r0.d) : NaN;
+      const ov = doc.getElementById('fd-overlay');
+      chk('zoomed viewport 2x: +40 project px still pans the picture +40px',
+        Math.abs(shift - 40) <= 2,
+        'zoom=' + FM.viewport.scale + ' __fmOX=' + cv.__fmOX + ' __fmRS=' + cv.__fmRS + '  shift=' + shift + ' (want 40±2)');
+      // …and the overlay still lines up with the comp instead of being double-scaled by the zoom
+      const wrap = doc.getElementById('canvas-wrap');
+      chk('overlay stays glued to the wrap under zoom (not double-scaled)',
+        !!ov && Math.abs(ov.clientWidth - wrap.clientWidth) <= 1 && Math.abs(ov.clientHeight - wrap.clientHeight) <= 1,
+        ov ? ('overlay ' + ov.clientWidth + 'x' + ov.clientHeight + ' vs wrap ' + wrap.clientWidth + 'x' + wrap.clientHeight) : 'no overlay');
+      FM.viewport.reset();
+      await new Promise(r => setTimeout(r, 600));
+    }
+
+    // ================= 9. CLAMP: the picture can never be dragged off its own clip ==============
+    // 600x300 cover-fitted into a 400x300 box overflows by 100px each side → limit = 0.25 box widths.
+    // A model that ran past the limit would draw the clamped picture but store the overshoot, and the
+    // drag back would then do nothing until the invisible excess had been unwound.
+    {
+      const L = setScene({ fillMode: 'media', fillImage: PIC2 });
+      let img = null;
+      for (let i = 0; i < 60; i++) { img = render(); if (barRel(img)) break; await new Promise(r => setTimeout(r, 60)); }
+      pdrag(320, 180, 2000, 0);                   // shove it far past the edge
+      await new Promise(r => setTimeout(r, 60));
+      const stored = FM.evalProp(L.fillImgX, FM.time);
+      const lim = FM.fillPanLimit(L, FM.time);
+      const atEdge = barRel(render());
+      chk('media pan clamps to the cover overflow instead of running away',
+        Math.abs(stored - lim.x) < 1e-6 && Math.abs(stored - 0.25) < 1e-6,
+        'stored=' + stored + ' limit=' + lim.x + ' (600x300 into 400x300 → 0.25 box widths = 100px)');
+      // no hole: at the clamp the picture must still cover the whole shape, so no backdrop shows through
+      const im = render(), sb = shapeBox(im);
+      chk('at the clamp the picture still fills the shape (no backdrop showing through)',
+        holesIn(im, sb) === 0, 'green (backdrop) px inside the shape: ' + holesIn(im, sb));
+      pdrag(320, 180, -40, 0);
+      await new Promise(r => setTimeout(r, 60));
+      const back = barRel(render());
+      const d = (atEdge && back) ? back.d - atEdge.d : NaN;
+      chk('dragging back from the clamp responds immediately (no dead zone)', Math.abs(d + 40) <= 2,
+        'bar-minus-shape moved ' + d + ' (want -40±2)');
+      // A value that never went through the tool — an old project, a keyframe interpolating past the
+      // edge, a hand edit — must not be able to paint a hole either. y's limit here is exactly 0.
+      L.fillImgX = 5; L.fillImgY = 5;
+      const im3 = render(), sb3 = shapeBox(im3), h3 = holesIn(im3, sb3);
+      chk('a pan written straight into the model still cannot paint a hole (renderer clamps too)',
+        h3 === 0, 'fillImgX/Y forced to 5 (limits ' + lim.x + '/' + lim.y + ') → green (backdrop) px inside the shape: ' + h3);
+    }
+
+    // ================= 10. THE NEW PANEL CONTROLS ACTUALLY FIT ==================================
+    // Checked in the phone drawer AND in body.layout-studio, where the inspector is a short wide
+    // band. Deliberately NOT "does the panel avoid scrolling": a row is allowed to be below the fold
+    // and you scroll to it. What is not allowed is the row shrinking below a touch target or being
+    // clipped sideways to make it look like it fits.
+    for (const layout of ['default', 'studio']) {
+      if (layout === 'studio') { doc.body.classList.add('layout-studio'); frame.style.width = '1440px'; frame.style.height = '900px'; }
+      else { doc.body.classList.remove('layout-studio'); frame.style.width = '380px'; frame.style.height = '800px'; }
+      await new Promise(r => setTimeout(r, 300));
+      const L = setScene({ fillMode: 'media', fillImage: PIC });
+      await new Promise(r => setTimeout(r, 250));
+      const btn = doc.querySelector('.fill-pos-reset'), kf = doc.querySelector('.fill-pos .fill-kf');
+      const root = btn && btn.closest('#insp-body, .insp-body, #inspector-body, #inspector-panel, .panel-body');
+      const br = btn && btn.getBoundingClientRect(), kr = kf && kf.getBoundingClientRect(), rr = root && root.getBoundingClientRect();
+      chk('[' + layout + '] the Position row rendered', !!btn && !!kf, 'Centre = ' + !!btn + ', ◆ = ' + !!kf + ', container = ' + (root ? (root.id || root.className) : 'none'));
+      chk('[' + layout + '] Centre is a real touch target, not shrunk to fit',
+        !!br && br.height >= 32 && br.width >= 44, br ? (br.width.toFixed(1) + 'x' + br.height.toFixed(1) + ' (want >=44x32)') : 'missing');
+      chk('[' + layout + '] ◆ keyframe button is tappable', !!kr && kr.height >= 20 && kr.width >= 20,
+        kr ? (kr.width.toFixed(1) + 'x' + kr.height.toFixed(1)) : 'missing');
+      chk('[' + layout + '] neither control is clipped sideways by its container',
+        !!br && !!kr && !!rr && br.right <= rr.right + 1 && br.left >= rr.left - 1 && kr.right <= rr.right + 1 && root.scrollWidth <= root.clientWidth + 1,
+        br && rr ? ('Centre ' + br.left.toFixed(0) + '–' + br.right.toFixed(0) + ', ◆ ends ' + kr.right.toFixed(0) +
+          ', container ' + rr.left.toFixed(0) + '–' + rr.right.toFixed(0) + '; scrollWidth ' + root.scrollWidth + ' vs clientWidth ' + root.clientWidth) : 'missing');
+    }
+    doc.body.classList.remove('layout-studio');
+    frame.style.width = '900px'; frame.style.height = '760px';
+    await new Promise(r => setTimeout(r, 250));
+
+    // ================= 11. GROUP FILL (the `world: true` branch) ================================
+    // A flattened group's fill is painted over the WHOLE project frame, not in any layer-local box,
+    // so fillBoxOf hands back project size + identity and the drag must NOT undo a layer transform.
+    // The group's silhouette is recoloured source-atop, so the magenta frame trick can't survive it —
+    // instead assert the core moved in absolute project px AND the group itself did not move, which
+    // together say the same thing.
+    {
+      // The group carries a transform of its own ON PURPOSE. The flattened silhouette is filled in
+      // project space, so that transform must NOT enter the gesture mapping — with it wrongly divided
+      // back out, a 0.5-scaled group would move its fill twice as far as the finger.
+      const G = FM.makeLayer('group', { x: 60, y: 0, scale: 0.5 });
+      G.fillMode = 'gradient'; G.fillGradient = { enabled: true, type: 'radial', c0: '#ffffff', c1: '#000000' };
+      const S = FM.makeLayer('shape', { shape: 'rect', x: 320, y: 180, shapeW: 1200, shapeH: 700, fill: '#808080' });
+      S.parent = G.id;
+      FM.scene.project.width = PW; FM.scene.project.height = PH; FM.scene.project.background = '#00ff00';
+      FM.scene.layers = [G, S];
+      FM.scene.selectedId = G.id; FM.scene.selectedIds = [G.id];
+      FM.selectLayer(G.id); FM.resizeCanvas(); FM.inspector.openCategory('color');
+      await new Promise(r => setTimeout(r, 250));
+      const ov = doc.getElementById('fd-overlay');
+      const c0 = bright(render(), 246);
+      const gx0 = FM.evalProp(G.transform.x, FM.time), gy0 = FM.evalProp(G.transform.y, FM.time);
+      pdrag(320, 180, 55, -25);
+      await new Promise(r => setTimeout(r, 80));
+      const c1 = bright(render(), 246);
+      const gx1 = FM.evalProp(G.transform.x, FM.time), gy1 = FM.evalProp(G.transform.y, FM.time);
+      const dx = (c0 && c1) ? c1.x - c0.x : NaN, dy = (c0 && c1) ? c1.y - c0.y : NaN;
+      chk('group: Colour & Fill opens the drag tool on a group too', !!ov, 'fd-overlay = ' + (ov ? 'present' : 'ABSENT'));
+      chk('group: +55,-25 drag moves the group fill by +55,-25, and the group stays put',
+        Math.abs(dx - 55) <= 3 && Math.abs(dy + 25) <= 3 && Math.abs(gx1 - gx0) < 0.5 && Math.abs(gy1 - gy0) < 0.5,
+        'core moved ' + (isFinite(dx) ? dx.toFixed(2) : dx) + ',' + (isFinite(dy) ? dy.toFixed(2) : dy) +
+        ' (want 55,-25 ±3); group transform ' + gx0 + ',' + gy0 + ' → ' + gx1 + ',' + gy1);
+    }
+
+    // ================= 12. TEXT WRAP HANDLES (v5.40) SURVIVE ====================================
+    {
+      const T = FM.makeLayer('text', { text: 'Wrap me', x: 320, y: 180, fontSize: 64 });
+      T.fillMode = 'gradient'; T.fillGradient = { enabled: true, type: 'radial', c0: '#ffffff', c1: '#000000' };
+      FM.scene.layers = [T]; FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+      FM.selectLayer(T.id); FM.resizeCanvas(); FM.inspector.openCategory('color');
+      await new Promise(r => setTimeout(r, 200));
+      const ov = doc.getElementById('fd-overlay');
+      const wh = doc.querySelector('.sb-handle.sb-wrap.sb-e');
+      let top = null;
+      if (wh) { const hr = wh.getBoundingClientRect(); top = doc.elementFromPoint(hr.left + hr.width / 2, hr.top + hr.height / 2); }
+      chk('text: the v5.40 wrap handle is still the top hit target with the fill drag open',
+        !!ov && !!top && top.classList.contains('sb-wrap'),
+        'overlay=' + !!ov + '  elementFromPoint(e wrap handle) = ' + (top ? (top.id || top.className) : 'null'));
+    }
+  } catch (e) {
+    chk('probe ran', false, String(e && e.stack || e));
+  }
+  show();
+});
+</script>
+</body>
+</html>

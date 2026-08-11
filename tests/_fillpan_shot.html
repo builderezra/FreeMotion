@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>fill-drag visual</title>
+<style>html,body{margin:0;background:#0d0f13} iframe{border:0;display:block}</style></head>
+<body>
+<iframe id="app" src="../index.html"></iframe>
+<script>
+/* Sets up a shape with a MEDIA fill (or ?mode=gradient), opens Colour & Fill, drags the fill, and
+   leaves the editor on screen so a screenshot shows the overlay marker in place.
+   ?w=380 phone, ?w=1280&studio=1 for the PC Studio layout. */
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 380), H = +(q.get('h') || 780);
+const MODE = q.get('mode') || 'media';
+const f = document.getElementById('app');
+f.style.width = W + 'px'; f.style.height = H + 'px';
+f.addEventListener('load', async () => {
+  const win = f.contentWindow, doc = f.contentDocument, FM = win.FM;
+  await new Promise(r => setTimeout(r, 500));
+  if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+  const sp = doc.getElementById('splash'); if (sp) sp.remove();
+  if (q.get('studio')) doc.body.classList.add('layout-studio');
+  await new Promise(r => setTimeout(r, 400));
+
+  const c = doc.createElement('canvas'); c.width = 900; c.height = 600;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 900, 600);
+  gr.addColorStop(0, '#ff8a3d'); gr.addColorStop(.5, '#4d7dff'); gr.addColorStop(1, '#29d9bb');
+  g.fillStyle = gr; g.fillRect(0, 0, 900, 600);
+  g.fillStyle = 'rgba(255,255,255,.9)';
+  for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(90 + i * 95, 300 + Math.sin(i) * 130, 26, 0, 7); g.fill(); }
+
+  const L = FM.makeLayer('shape', { shape: 'rect', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, shapeW: 420, shapeH: 320, fill: '#3a7bd5' });
+  L.cornerRadius = 28;
+  if (MODE === 'gradient') { L.fillMode = 'gradient'; L.fillGradient = { enabled: true, type: 'radial', c0: '#ffd740', c1: '#20243a' }; }
+  else { L.fillMode = 'media'; L.fillImage = c.toDataURL('image/jpeg', .9); }
+  FM.scene.layers = [L]; FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+  FM.selectLayer(L.id); FM.resizeCanvas(); FM.inspector.openCategory('color');
+  await new Promise(r => setTimeout(r, 700));
+
+  // drag the fill so the marker sits off-centre with its leash visible
+  const cv = doc.getElementById('preview'), r = cv.getBoundingClientRect(), k = FM.previewDispScale();
+  const ov = doc.getElementById('fd-overlay');
+  if (ov) {
+    const cx = p => r.left + (p - (cv.__fmOX || 0)) * k, cy = p => r.top + (p - (cv.__fmOY || 0)) * k;
+    const P = FM.scene.project, x0 = P.width / 2, y0 = P.height / 2;
+    const mk = (t, px, py) => new win.PointerEvent(t, { clientX: cx(px), clientY: cy(py), pointerId: 3, isPrimary: true, bubbles: true, cancelable: true, buttons: 1, pointerType: 'mouse' });
+    ov.dispatchEvent(mk('pointerdown', x0, y0));
+    for (let i = 1; i <= 5; i++) win.dispatchEvent(mk('pointermove', x0 + 12 * i, y0 - 7 * i));
+    win.dispatchEvent(mk('pointerup', x0 + 60, y0 - 35));
+  }
+  await new Promise(r2 => setTimeout(r2, 500));
+  document.title = 'ready ' + (ov ? 'overlay' : 'NO-OVERLAY');
+});
+</script>
+</body></html>

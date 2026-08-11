@@ -255,7 +255,7 @@ window.FM = window.FM || {};
       const tr = layer.transform || {};
       const data = {
         effects: clone(layer.effects || []),
-        fill: layer.fill, fillMode: layer.fillMode, fillOpacity: layer.fillOpacity, fillImage: layer.fillImage, fillGradient: clone(layer.fillGradient), stroke: clone(layer.stroke),
+        fill: layer.fill, fillMode: layer.fillMode, fillOpacity: layer.fillOpacity, fillImage: layer.fillImage, fillImgX: clone(layer.fillImgX), fillImgY: clone(layer.fillImgY), fillGradient: clone(layer.fillGradient), stroke: clone(layer.stroke),
         shadow: clone(layer.shadow), blendMode: layer.blendMode, colorGrade: clone(layer.colorGrade),
         cornerRadius: layer.cornerRadius,
         transform: {
@@ -276,6 +276,7 @@ window.FM = window.FM || {};
       if (d.fillMode != null && (layer.type === 'shape' || layer.type === 'text')) layer.fillMode = d.fillMode;
       if (d.fillOpacity != null) layer.fillOpacity = d.fillOpacity;
       if (d.fillImage !== undefined && layer.type === 'shape') { if (d.fillImage) layer.fillImage = d.fillImage; else delete layer.fillImage; }
+      if (d.fillImage !== undefined && layer.type === 'shape') ['fillImgX', 'fillImgY'].forEach(k => { if (d[k] !== undefined) layer[k] = clone(d[k]); });
       if (d.fillGradient !== undefined && (layer.type === 'shape' || layer.type === 'text')) layer.fillGradient = clone(d.fillGradient);
       if (d.stroke && (layer.type === 'shape' || layer.type === 'text')) layer.stroke = clone(d.stroke);
       if (d.shadow) layer.shadow = clone(d.shadow);
@@ -1133,7 +1134,8 @@ window.FM = window.FM || {};
       if ('fillMode' in src) target.fillMode = src.fillMode;
       if ('fillOpacity' in src) target.fillOpacity = src.fillOpacity;
       if ('fillImage' in src) { if (src.fillImage) target.fillImage = src.fillImage; else delete target.fillImage; }
-      if ('fillGradient' in src) target.fillGradient = clone(src.fillGradient);
+      ['fillImgX', 'fillImgY'].forEach(k => { if (k in src) target[k] = clone(src[k]); });   // the picture's pan travels with the picture
+      if ('fillGradient' in src) target.fillGradient = clone(src.fillGradient);              // (carries the gradient's ox/oy)
       if ('colorGrade' in src) target.colorGrade = clone(src.colorGrade);
     }
     if (cats.border) { target.stroke = clone(src.stroke); target.shadow = clone(src.shadow); }
@@ -1550,6 +1552,53 @@ window.FM = window.FM || {};
     inp.click();
   }
 
+  /* Which fill (if any) the on-canvas drag tool should own for this layer right now. Media only
+   * counts once a picture has actually been chosen — until then the tab is just a file picker and
+   * there is nothing on the canvas to move. */
+  function fillDragMode(layer) {
+    if (!layer) return null;
+    const m = FM.fillModeOf ? FM.fillModeOf(layer) : layer.fillMode;
+    if (m === 'gradient' && layer.fillGradient) return 'gradient';
+    if (m === 'media' && layer.fillImage) return 'media';
+    return null;
+  }
+  FM._fillDragMode = fillDragMode;
+
+  /* "Position" row for the Gradient / Media tabs: the ◆ that animates the offset, and a Reset.
+   * The drag itself happens on the CANVAS (fill-drag.js) — this row exists so the gesture is
+   * discoverable, undoable to centre, and keyframeable without a second UI for it. */
+  function fillPosRow(layer, mode) {
+    const wrap = el('div', 'fill-pos');
+    const head = el('div', 'prop-row');
+    head.appendChild(el('label', null, 'Position'));
+    const ref = FM.fillDrag.propRef(layer, mode);
+    const kfBtn = el('button', 'fill-kf');
+    const paintKf = () => {
+      const anim = ref.keys.some(k => FM.isAnimated(ref.obj && ref.obj[k]));
+      const at = anim && ref.keys.some(k => FM.hasKeyframeAt(ref.obj && ref.obj[k], FM.time));
+      kfBtn.textContent = at ? '◆' : '◇';
+      kfBtn.classList.toggle('on', !!anim);
+      kfBtn.classList.toggle('here', !!at);
+      kfBtn.title = anim ? ('Position keyframes — tap to ' + (at ? 'remove the one here' : 'add one here'))
+        : 'Animate the fill position: add a keyframe at the playhead';
+    };
+    paintKf();
+    kfBtn.addEventListener('click', () => {
+      if (!ref.obj) return;
+      ref.keys.forEach(k => FM.toggleProp(ref.obj, k, FM.time, 0));
+      paintKf(); FM.requestRender(); commitH(); if (FM.timeline) FM.timeline.rebuild();
+    });
+    head.appendChild(kfBtn);
+    const rs = el('button', 'fill-pos-reset', 'Centre');
+    rs.addEventListener('click', () => { FM.fillDrag.reset(); FM.inspector.refresh(); });
+    head.appendChild(rs);
+    wrap.appendChild(head);
+    wrap.appendChild(el('div', 'insp-hint', mode === 'gradient'
+      ? 'Drag on the canvas to move the gradient. The corner handles still scale the layer.'
+      : 'Drag on the canvas to reposition the picture inside the shape.'));
+    return wrap;
+  }
+
   function fillPanel(layer, body) {
     if (!layer.fillMode) layer.fillMode = FM.fillModeOf ? FM.fillModeOf(layer) : 'solid';
     if (layer.fillOpacity == null) layer.fillOpacity = 1;
@@ -1639,6 +1688,7 @@ window.FM = window.FM || {};
         body.appendChild(r);
       });
       if (g.type !== 'radial') body.appendChild(rangeRow('Angle', () => g.angle || 0, v => { g.angle = v; paintPrev(); }, 0, 360, 1));
+      if (FM.fillDrag) { FM.fillDrag.start(layer.id, 'gradient'); body.appendChild(fillPosRow(layer, 'gradient')); }
       body.appendChild(opacityRow());
       return;
     }
@@ -1651,6 +1701,7 @@ window.FM = window.FM || {};
         const rm = el('button', 'btn fill-media-rm', 'Remove image');
         rm.addEventListener('click', () => { delete layer.fillImage; layer.fillMode = 'solid'; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         body.appendChild(rm);
+        if (FM.fillDrag) { FM.fillDrag.start(layer.id, 'media'); body.appendChild(fillPosRow(layer, 'media')); }
         body.appendChild(opacityRow());
       }
       body.appendChild(el('div', 'insp-hint', 'The picture fills the shape — cover-fit and clipped to its outline.'));
@@ -3312,6 +3363,7 @@ window.FM = window.FM || {};
         // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
         lastLayerId = null;
         if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded()) FM.pointEdit.stop();   // deselect ends Edit Points
+        if (FM.fillDrag && FM.fillDrag.isActive()) FM.fillDrag.stop();                                   // …and hands the canvas back from the fill drag
         if (title) title.textContent = 'Add';
         if (FM.addMenu) FM.addMenu.render(root, { variant: 'panel' });
         else root.appendChild(el('div', 'empty', 'Select a layer to edit it.'));
@@ -3336,6 +3388,11 @@ window.FM = window.FM || {};
       // Embedded Edit-Points lifecycle: the overlay lives exactly as long as the Edit Points view —
       // leaving the view (back / other category / other layer / deselect) tears it down.
       if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded() && (view !== 'element' || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.stop();
+      // Same contract for the fill-position drag: it lives exactly as long as Colour & Fill's
+      // Gradient/Media tab is open ON THIS LAYER. Leaving the view, switching tab, selecting another
+      // layer or clearing the picture all release the canvas here, one frame before the panel rebuilds.
+      if (FM.fillDrag && FM.fillDrag.isActive() &&
+        (view !== 'color' || FM.fillDrag.layerId() !== layer.id || FM.fillDrag.mode() !== fillDragMode(layer))) FM.fillDrag.stop();
       // The old header row (thumbnail + name + duplicate + delete) is gone: the thumbnail lives on
       // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
       // now the top-bar name field. So the inspector goes straight to the actions.

@@ -1207,6 +1207,7 @@ window.FM = window.FM || {};
     // otherwise orphaned the overlay and left its "Done" button dead over a deleted layer.
     if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
     if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
+    if (FM.fillDrag && FM.fillDrag.isActive && FM.fillDrag.isActive()) FM.fillDrag.stop();
     if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
     if (FM.touchupTool && FM.touchupTool.isOpen && FM.touchupTool.isOpen()) FM.touchupTool.close();
     // Cascade groups → their members (mirror deleteLayer) — deleting a group row must not leave its
@@ -1231,6 +1232,7 @@ window.FM = window.FM || {};
     if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // don't leave a dead tracking overlay
     if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
     if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
+    if (FM.fillDrag && FM.fillDrag.isActive && FM.fillDrag.isActive()) FM.fillDrag.stop();
     if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.layerId() === id) FM.textEdit.stop();   // don't leave a dead text editor over a deleted layer
     if (FM.groupContext === id && FM.exitGroup) FM.exitGroup(true);   // deleting the group you're inside
     // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
@@ -2937,7 +2939,15 @@ window.FM = window.FM || {};
         // full-screen TOOL overlays: the eyedropper's sample tap and the crop/touch-up box drags land on
         // these, and without them here that tap read as "empty background" → deselect → the open colour
         // picker / effect panel vanished mid-pick (the "colour picker closes my menu" bug)
-        ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar';
+        // #fd-overlay is the fill-drag surface and belongs here for exactly the reason the comment
+        // above describes — it was left off when that tool landed, and a verifier measured the same
+        // bug returning: a TAP (or any press ending within 6px of its start) anywhere on the comp,
+        // INCLUDING on the shape being edited, deselected the layer and closed Colour & Fill. That is
+        // strictly worse than before the tool existed, since canvas-edit only ever deselected a
+        // stationary tap OFF the layer — and the tool's own hint invites the gesture that breaks it.
+        // This listener is on document in the CAPTURE phase, so the overlay's own stopPropagation()
+        // cannot reach it; being named here is the only thing that spares a surface.
+        ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar, #fd-overlay';
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }

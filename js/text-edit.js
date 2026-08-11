@@ -289,6 +289,7 @@ window.FM = window.FM || {};
       if (active) teardown();
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
       if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
+      if (FM.fillDrag && FM.fillDrag.isActive && FM.fillDrag.isActive()) FM.fillDrag.stop();
       // Close higher z-index overlays so the editor (z:80) isn't shadowed by them.
       if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();

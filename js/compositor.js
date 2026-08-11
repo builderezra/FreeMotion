@@ -5244,10 +5244,24 @@ window.FM = window.FM || {};
     ctx.restore();
   }
 
+  /* Fill POSITION (v5.46 — drag on the canvas while Colour & Fill's Gradient/Media tab is open).
+   * Both offsets are stored NORMALISED to the fill box: 1.0 = one box width. That unit is the whole
+   * trick. The box is already expressed in the ctx's own transform space at every call site (shape
+   * local px, media source px, project px for a flattened group), so frac × box.w lands in the same
+   * space automatically — no plateScale factor, no drift when the preview renders at 0.34× or 4×,
+   * and no re-derivation when the layer is scaled, rotated or skewed. */
+  function clampAbs(v, m) { return v > m ? m : (v < -m ? -m : v); }
+  // How far a cover-fitted picture may pan before its own edge would enter the clip (normalised).
+  function panLimit(w, h, dw, dh) { return { x: Math.max(0, (dw - w) / 2) / (w || 1), y: Math.max(0, (dh - h) / 2) / (h || 1) }; }
+
   // Two-stop gradient (linear/radial) spanning a box {x,y,w,h} in the current transform space.
   function buildGradient(ctx, grad, box, t) {
     const c0 = FM.evalProp(grad.c0, t || 0) || '#ffffff', c1 = FM.evalProp(grad.c1, t || 0) || '#000000';
-    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    // grad.ox/oy move the gradient's CENTRE (radial core / conic pivot / the midpoint the linear ramp
+    // is built around). Read through evalProp so a keyframed centre animates like any other prop.
+    const gox = (FM.evalProp(grad.ox, t || 0) || 0) * box.w;
+    const goy = (FM.evalProp(grad.oy, t || 0) || 0) * box.h;
+    const cx = box.x + box.w / 2 + gox, cy = box.y + box.h / 2 + goy;
     let g;
     if (grad.type === 'radial') {
       g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, Math.hypot(box.w, box.h) / 2));
@@ -5278,6 +5292,46 @@ window.FM = window.FM || {};
     return layer.fillMode != null && layer.fillMode !== 'none';
   }
   FM.layerHasGradient = function (layer) { return FM.fillModeOf(layer) === 'gradient' && !!layer.fillGradient; };
+
+  /* The exact box paintFillInPath / buildGradient are handed for this layer, in the layer's own
+   * local units. fill-drag.js converts a screen gesture into the normalised fill offsets through
+   * this, so the drag gain can never drift from what the renderer actually uses. Deliberately NOT
+   * FM.layerSize(): that one answers a different question (the selection box) and for text it
+   * measures a taller box than the gradient is built in — close enough to look right and wrong
+   * enough to make a vertical drag lag the finger.
+   * `world: true` marks a box that is already in PROJECT space (a flattened group's silhouette is
+   * painted over the whole frame), so the caller must not undo any layer transform for it. */
+  FM.fillBoxOf = function (layer, t) {
+    t = t || 0;
+    if (layer.type === 'group') { const P = FM.scene.project; return { w: P.width || 1, h: P.height || 1, world: true }; }
+    if (layer.type === 'shape') return { w: layer.shapeW || 400, h: layer.shapeH || 300 };
+    if (layer.type === 'text') {
+      // Mirror the text branch's own measurement, effects and all — same font string, same
+      // applyTextEffects pass, same line breaking, same total+fs height.
+      const c = document.createElement('canvas').getContext('2d');
+      c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
+      let src = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
+      const te = FM.applyTextEffects(layer, src, (layer.letterSpacing || 0), t, FM.scene);
+      src = te.text;
+      if ('letterSpacing' in c) c.letterSpacing = te.letterSpacing + 'px';
+      const lines = FM.textLines(c, layer, src);
+      const fs = layer.fontSize || 96, lh = fs * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
+      let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, c.measureText(l).width); });
+      return { w: maxW, h: total + fs };
+    }
+    const m = FM.media.get(layer.id), cr = FM.cropOf(layer, t);
+    return { w: (cr && cr.w) || (m && m.width) || 100, h: (cr && cr.h) || (m && m.height) || 100 };
+  };
+  /* How far a media fill may pan before the picture's own edge would show, in the same normalised
+   * units the offsets are stored in. The drag tool clamps against this so the model matches the
+   * pixels: without it the value keeps growing past what paintFillInPath will draw and dragging back
+   * does nothing until you have unwound the excess. null = picture not decoded yet (don't clamp). */
+  FM.fillPanLimit = function (layer, t) {
+    const img = getFillImage(layer); if (!img || !img.width) return null;
+    const b = FM.fillBoxOf(layer, t);
+    const sc = Math.max(b.w / img.width, b.h / img.height);
+    return panLimit(b.w, b.h, img.width * sc, img.height * sc);
+  };
   // Copy Background: does this layer copy the backdrop below it?
   FM.hasCopyBg = function (layer) { return !!(layer.effects && layer.effects.some(function (e) { return e.type === 'copybg' && e.enabled !== false; })); };
   /* Which effects need a snapshot of everything drawn BELOW this layer. Copy Background was the only
@@ -5328,7 +5382,13 @@ window.FM = window.FM || {};
         ctx.save(); ctx.clip();                                        // clip to the traced outline
         const sc = Math.max(w / fimg.width, h / fimg.height);          // cover-fit inside the box
         const dw = fimg.width * sc, dh = fimg.height * sc;
-        try { ctx.drawImage(fimg, ox + (w - dw) / 2, oy + (h - dh) / 2, dw, dh); } catch (e) {}
+        // PAN. Clamped to the cover overflow so the picture can never be dragged off its own clip and
+        // leave a hole — and clamped HERE, at the one place that knows the decoded picture's aspect,
+        // so a hand-edited or keyframed value can't paint an empty shape either.
+        const lim = panLimit(w, h, dw, dh);
+        const px = clampAbs(FM.evalProp(layer.fillImgX, t) || 0, lim.x) * w;
+        const py = clampAbs(FM.evalProp(layer.fillImgY, t) || 0, lim.y) * h;
+        try { ctx.drawImage(fimg, ox + (w - dw) / 2 + px, oy + (h - dh) / 2 + py, dw, dh); } catch (e) {}
         ctx.restore();
       } else { ctx.fillStyle = FM.evalProp(layer.fill, t) || '#3a7bd5'; ctx.fill(); }   // still decoding → placeholder
     } else {

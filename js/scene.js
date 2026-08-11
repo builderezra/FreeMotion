@@ -290,6 +290,8 @@ window.FM = window.FM || {};
     if (isAnimated(layer.speed)) out.push(layer.speed);     // speed-ramp keyframes show on the clip
     if (isAnimated(layer.fill)) out.push(layer.fill);       // colour keyframes show on the clip
     if (isAnimated(layer.color)) out.push(layer.color);
+    if (layer.fillGradient) ['ox', 'oy'].forEach(k => { if (isAnimated(layer.fillGradient[k])) out.push(layer.fillGradient[k]); });   // gradient centre (dragged on the canvas)
+    ['fillImgX', 'fillImgY'].forEach(k => { if (isAnimated(layer[k])) out.push(layer[k]); });   // media-fill pan
     if (layer.stroke) { if (isAnimated(layer.stroke.width)) out.push(layer.stroke.width); if (isAnimated(layer.stroke.color)) out.push(layer.stroke.color); }   // border (keyframeable)
     if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => { if (isAnimated(layer.crop[k])) out.push(layer.crop[k]); });   // crop keyframes — omitting them left crop animation behind on clip moves and undeletable
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => { if (isAnimated(layer.shadow[k])) out.push(layer.shadow[k]); });   // shadow (keyframeable)
