@@ -575,8 +575,9 @@
       throw new Error('the desktop add menu is not rendered even with nothing selected');
     }
     const tab = k => [].find.call(panel.querySelectorAll('.addmenu-tab'), b => b.dataset.key === k);
+    const card = () => panel.querySelector('.addmenu-page .addmenu-card');
     const iconW = () => {
-      const c = panel.querySelector('.addmenu-page .addmenu-card');
+      const c = card();
       const sv = c && c.querySelector('.addmenu-ic svg');
       return sv ? Math.round(sv.getBoundingClientRect().width) : 0;
     };
@@ -586,16 +587,314 @@
     try {
       shapeTab.click();
       const shape = iconW();
+      const shapeHasLabel = !!(card() && card().querySelector('.addmenu-lbl'));
       objTab.click();
       const labelled = iconW();
+      const fit = panel.classList.contains('addmenu--fit');
       if (!shape || !labelled) throw new Error('could not measure a card icon (shape=' + shape + ', labelled=' + labelled + ')');
-      if (shape < 30) throw new Error('shape tile icons are ' + shape + 'px — they should be ~34px (the Elements trim leaked onto them)');
-      if (labelled > 26) throw new Error('labelled card icons are ' + labelled + 'px — the Elements grid trim is not applying');
-      if (shape <= labelled) throw new Error('shape icons (' + shape + 'px) should be BIGGER than labelled-card icons (' + labelled + 'px)');
+      /* v5.69 rewrote the second half of this test, and it is worth being explicit about why.
+       * The accident being guarded is unchanged: the LABELLED cards' trim must never size the SHAPE
+       * grid's art. What changed is how the two are sized. Both card kinds are now measured against
+       * the panel (QUEUE 50), each from its own config in js/addmenu.js FIT_CFG — so "labelled icons
+       * are trimmed to 19px" stopped being an invariant and became one particular panel size, and
+       * so did "shape icons are the bigger of the two": Elements' nine entries can be given room
+       * that Shape's seventy cannot, and measured, a 1280x800 classic panel draws 46px labelled
+       * icons beside 37px shape ones. Both are big; neither is the 19px leak.
+       * So: assert the leak itself is absent (the shape grid stays icon-only and its art stays large,
+       * within the plan's own floor of 30px), and keep the ORIGINAL relative check for the
+       * un-measured fallback path, which still uses the fixed 34px/19px numbers. */
+      if (shape < 28) throw new Error('shape tile icons are ' + shape + 'px — the labelled-card trim has leaked onto them again (they should be 30px+)');
+      if (shapeHasLabel) throw new Error('a shape tile grew a label — the shape grid is being sized as a labelled card, which is the same leak by another route');
+      if (fit) {
+        if (labelled > 46) throw new Error('labelled card icons are ' + labelled + 'px — past FIT_CFG.lbl.icoMax (46), so something outside the plan is sizing them');
+      } else {
+        if (labelled > 26) throw new Error('labelled card icons are ' + labelled + 'px — the Elements grid trim is not applying');
+        if (shape <= labelled) throw new Error('shape icons (' + shape + 'px) should be BIGGER than labelled-card icons (' + labelled + 'px)');
+      }
     } finally {
       const back = tab(was && was.key ? was.key : 'object'); if (back) back.click();
       if (hadSel) { FM.scene.selectedIds = hadSelIds; FM.selectLayer(hadSel); }
     }
+  });
+
+  /* ---- QUEUE 50 / 51 / 42: the PC Add panel ------------------------------------------------------
+   * Three tests, one shared setup. All of them need the panel, which only exists on a desktop-width
+   * window with NOTHING selected, so each deselects and puts the selection back the way the
+   * shape-icon test above does. */
+  function addPanel() {
+    const p = document.querySelector('.addmenu--panel');
+    if (!p) throw new Error('the desktop add menu is not rendered even with nothing selected');
+    return p;
+  }
+  const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  function panelState(p) {
+    const host = p.closest('.panel');
+    const pager = p.querySelector('.addmenu-pager');
+    const cards = pager.querySelectorAll('.addmenu-page')[0].querySelectorAll('.addmenu-card');
+    const sv = cards[0] && cards[0].querySelector('.addmenu-ic svg, .addmenu-ic');
+    return {
+      fit: p.classList.contains('addmenu--fit'),
+      ico: sv ? sv.getBoundingClientRect().width : 0,
+      cardH: cards[0] ? cards[0].getBoundingClientRect().height : 0,
+      pages: pager.querySelectorAll('.addmenu-page').length,
+      over: host.scrollHeight - host.clientHeight,
+      panelH: host.clientHeight,
+      boxW: p.querySelector('.addmenu-body').clientWidth,
+      pagerBottom: pager.getBoundingClientRect().bottom,
+      hostBottom: host.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(host).paddingBottom) || 0),
+    };
+  }
+
+  test('add panel: a bigger panel never draws a smaller icon, and never scrolls', { item: 'addfit-monotonic' }, async function () {
+    /* QUEUE 50. Ezra, with a screenshot: "the add section on pc … needs to actually fill up the
+     * screen space it has properly … Make the icons get smaller or bigger depending on how zoomed
+     * in you have that area."  The first cut did the OPPOSITE at some steps: handing the panel more
+     * room could hand back a SMALLER icon, because the plan flipped to a denser grid and the score
+     * preferred the flip. Measured on the shipped version, classic 1280x800, Elements: panel 278px
+     * planned 20.25px icons and panel 282px — four pixels TALLER — planned 18px ones.
+     * So: walk the panel from short to tall and assert the icon is non-decreasing. The one licence
+     * is a strict page-count DROP, where a genuinely denser grid is the point (five of nine entries
+     * on two pages, versus all nine on one) — everything else must not shrink.
+     * The panel is driven by --tl-h, which is exactly what the timeline resizer writes. */
+    const hadSel = FM.scene.selectedId, hadSelIds = (FM.scene.selectedIds || []).slice();
+    if (hadSel) FM.selectLayer(null);
+    const root = document.documentElement;
+    const hadTl = root.style.getPropertyValue('--tl-h');
+    // --insp-w on BODY, not on <html>: Studio sets it in a `body.layout-studio` rule, and an inline
+    // value on <html> would be shadowed by that for everything inside body.
+    const hadIw = document.body.style.getPropertyValue('--insp-w');
+    const p0 = addPanel();
+    const wasTab = (p0.querySelector('.addmenu-tab.active') || {}).dataset;
+    async function sweep(tabKey) {
+      const t = document.querySelector('.addmenu-tab[data-key="' + tabKey + '"]');
+      if (!t) throw new Error(tabKey + ' tab missing');
+      t.click();
+      const seen = [];
+      // 8px steps, not 20: the inversions this guards are 4px wide (panel 278 -> 282), and a coarse
+      // sweep walks straight over them. 36 steps is about a second and catches every measured one.
+      for (let tl = 480; tl >= 200; tl -= 8) {          // shrinking the timeline GROWS the panel
+        root.style.setProperty('--tl-h', tl + 'px');
+        await nextFrame();
+        const s = panelState(addPanel());
+        s.tl = tl;
+        seen.push(s);
+        if (s.fit && s.over > 1) {
+          throw new Error('the fitted Add panel scrolls by ' + s.over.toFixed(0) + 'px on ' + tabKey +
+                          ' at --tl-h ' + tl + ' (panel ' + s.panelH.toFixed(0) +
+                          'px) — the grid is being planned against a box it does not fit in');
+        }
+        if (s.fit && s.pagerBottom > s.hostBottom + 1.5) {
+          throw new Error('the tile grid runs ' + (s.pagerBottom - s.hostBottom).toFixed(0) +
+                          'px past the bottom of the panel on ' + tabKey + ' at --tl-h ' + tl);
+        }
+      }
+      const fitted = seen.filter(s => s.fit);
+      if (fitted.length < 4) throw new Error('the measured fit engaged for only ' + fitted.length + ' of ' +
+                                             seen.length + ' panel heights on ' + tabKey + ' — nothing was actually tested');
+      for (let i = 1; i < fitted.length; i++) {
+        const a = fitted[i - 1], b = fitted[i];
+        if (b.panelH < a.panelH) continue;             // only compare in the growing direction
+        if (b.ico < a.ico - 0.5 && b.pages >= a.pages) {
+          throw new Error('a TALLER panel drew a SMALLER ' + tabKey + ' icon: ' + a.panelH.toFixed(0) +
+                          'px panel → ' + a.ico.toFixed(1) + 'px icon (' + a.pages + ' pages), then ' +
+                          b.panelH.toFixed(0) + 'px panel → ' + b.ico.toFixed(1) + 'px icon (' + b.pages + ' pages)');
+        }
+        if (b.pages > a.pages) {
+          throw new Error('a TALLER panel needs MORE ' + tabKey + ' pages: ' + a.panelH.toFixed(0) + 'px → ' +
+                          a.pages + ', then ' + b.panelH.toFixed(0) + 'px → ' + b.pages);
+        }
+      }
+      return fitted;
+    }
+    try {
+      const obj = await sweep('object');
+      /* And the other half of the same sentence — "make the icons get smaller or BIGGER" — which
+       * monotonicity alone does not test: a solver that pins every tile at its floor is perfectly
+       * monotonic and perfectly useless (that is exactly what HEAD does, a flat 19px at every panel
+       * size). Elements is the tab that shows it: measured, classic, tile box 257 wide, its art runs
+       * 20.2px at a 310px panel to 46px at 510px. Two gates, and both are about the sweep having
+       * somewhere to go: on a 640px-tall window the panel never exceeds 390px, and on a 1080px one
+       * even the SHORTEST panel in the sweep is already at FIT_CFG.lbl.icoMax, where by definition
+       * nothing can grow further. */
+      const big = obj[obj.length - 1], small = obj[0];
+      if (big.panelH > 480 && big.panelH - small.panelH > 150 && small.ico < 40) {
+        if (!(big.ico > small.ico + 4)) {
+          throw new Error('the Elements icons never grew: ' + small.panelH.toFixed(0) + 'px panel → ' +
+                          small.ico.toFixed(1) + 'px, ' + big.panelH.toFixed(0) + 'px panel → ' +
+                          big.ico.toFixed(1) + 'px. More room has to buy bigger art, not just more of it.');
+        }
+      }
+      // …and the same walk on the tab that pages hardest, with the panel widened the way a bigger
+      // monitor widens it, because that is where the grid has the most freedom to get it wrong.
+      document.body.style.setProperty('--insp-w', '400px');
+      await sweep('shape');
+    } finally {
+      if (hadIw) document.body.style.setProperty('--insp-w', hadIw); else document.body.style.removeProperty('--insp-w');
+      if (hadTl) root.style.setProperty('--tl-h', hadTl); else root.style.removeProperty('--tl-h');
+      await nextFrame();
+      const back = document.querySelector('.addmenu-tab[data-key="' + ((wasTab && wasTab.key) || 'object') + '"]');
+      if (back) back.click();
+      if (hadSel) { FM.scene.selectedIds = hadSelIds; FM.selectLayer(hadSel); }
+    }
+  });
+
+  test('add panel: pages can be turned with a mouse, and the dots stay decoration', { item: 'addfit-pager' }, async function () {
+    /* QUEUE 50, second half. The pager answers to a HORIZONTAL scroll delta, which a phone swipe
+     * produces and a wheel mouse cannot. The fit legitimately draws 3-6 page Shape tabs at the
+     * smaller PC bands, so on the panel the dot row is flanked by real ‹ › buttons and the row
+     * itself is a click target. The DOTS must stay 6px spans with nothing but a class — an earlier
+     * attempt made them 6x6 <button>s, which measured a 2px hit reach and put pageCount extra
+     * items in the tab order. This asserts both halves at once. */
+    const hadSel = FM.scene.selectedId, hadSelIds = (FM.scene.selectedIds || []).slice();
+    if (hadSel) FM.selectLayer(null);
+    const root = document.documentElement;
+    const hadTl = root.style.getPropertyValue('--tl-h');
+    const hadIw = document.body.style.getPropertyValue('--insp-w');
+    /* elementFromPoint answers for the whole page, so the home screen — a full-window overlay the
+       suite may well be sitting on — would "cover" every control in the editor underneath it and
+       make this assert something it does not mean. Put it away for the duration. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    /* …and the boot splash is the same hazard one layer up. It is a full-window overlay with no
+       pointer-events:none, and in a headless runner its <video> never plays, so the 5s hard-cap
+       dismiss is still pending long after the suite starts — elementFromPoint then answers #splash
+       for every control on the page. In a real browser it is long gone before anyone opens the Add
+       panel, so making it pointer-transparent for the duration is what a user's screen actually
+       looks like, not a hidden failure. Restored in the finally either way. */
+    const sp = document.getElementById('splash');
+    const hadSpPe = sp ? sp.style.pointerEvents : null;
+    if (sp) sp.style.pointerEvents = 'none';
+    const p0 = addPanel();
+    const wasTab = (p0.querySelector('.addmenu-tab.active') || {}).dataset;
+    try {
+      document.querySelector('.addmenu-tab[data-key="shape"]').click();
+      let p = addPanel();
+      /* Force it to page. On a big monitor all 67 shapes fit on one page — which is the point of the
+         fit — so squeeze the panel the two ways a user can: the inspector column narrows on a
+         smaller window, and the timeline resizer eats the height. */
+      const squeeze = [[null, 420], [286, 420], [286, Math.round(innerHeight * 0.6)], [286, Math.round(innerHeight * 0.68)]];
+      for (let i = 0; i < squeeze.length && p.querySelectorAll('.addmenu-page').length < 2; i++) {
+        if (squeeze[i][0]) document.body.style.setProperty('--insp-w', squeeze[i][0] + 'px');
+        root.style.setProperty('--tl-h', squeeze[i][1] + 'px');
+        await nextFrame();
+        p = addPanel();
+      }
+      const pager = p.querySelector('.addmenu-pager');
+      const dots = p.querySelector('.addmenu-dots');
+      const pageCount = pager.querySelectorAll('.addmenu-page').length;
+      if (pageCount < 2) throw new Error('could not get the Shape tab to page at this window size — nothing to test');
+      if (!dots) throw new Error('a ' + pageCount + '-page tab drew no page indicator at all');
+
+      const btns = dots.querySelectorAll('.addmenu-pgbtn');
+      if (btns.length !== 2) throw new Error('expected prev/next page buttons on the PC panel, found ' + btns.length);
+      for (const b of btns) {
+        const r = b.getBoundingClientRect();
+        if (r.width < 24 || r.height < 24) throw new Error('a page button is ' + r.width + 'x' + r.height + ' — under a 24px target');
+        const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!(t === b || b.contains(t))) throw new Error('a page button is covered at its own centre by ' + (t && t.className));
+      }
+      const dotEls = dots.querySelectorAll('.addmenu-dot');
+      for (const d of dotEls) {
+        const names = d.getAttributeNames().join(',');
+        if (d.tagName !== 'SPAN') throw new Error('a page dot is a <' + d.tagName + '> — it is decoration, the buttons are the control');
+        if (names !== 'class') throw new Error('a page dot carries attributes beyond class: ' + names);
+        if (d.tabIndex !== -1) throw new Error('a page dot is in the tab order (tabIndex ' + d.tabIndex + ')');
+        const r = d.getBoundingClientRect();
+        if (Math.round(r.width) !== 6 || Math.round(r.height) !== 6) throw new Error('a page dot is ' + r.width + 'x' + r.height + ', not the 6px mark');
+      }
+      const at = () => Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+      const lit = () => [].findIndex.call(dots.querySelectorAll('.addmenu-dot'), d => d.classList.contains('on'));
+      pager.scrollLeft = 0; await nextFrame();
+      btns[1].click(); await nextFrame();
+      if (at() !== 1) throw new Error('the next-page button did not turn the page (still on page ' + (at() + 1) + ')');
+      if (lit() !== 1) throw new Error('the page dots did not follow the next-page button (lit dot ' + lit() + ')');
+      btns[0].click(); await nextFrame();
+      if (at() !== 0) throw new Error('the previous-page button did not turn the page back (on page ' + (at() + 1) + ')');
+      // a click on the ROW, not on the 6px mark, is what gives the dots a usable hit area
+      const last = dotEls[pageCount - 1].getBoundingClientRect(), row = dots.getBoundingClientRect();
+      dots.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: last.left + last.width / 2,
+                                                   clientY: row.top + row.height / 2 }));
+      await nextFrame();
+      if (at() !== pageCount - 1) throw new Error('clicking the dot row did not jump to the last page (landed on ' + (at() + 1) + ' of ' + pageCount + ')');
+      // and a plain vertical wheel — the only gesture a wheel mouse has — turns one page
+      pager.scrollLeft = 0; await nextFrame();
+      const ev = new WheelEvent('wheel', { deltaY: 120, deltaX: 0, bubbles: true, cancelable: true });
+      const wentThrough = pager.dispatchEvent(ev);
+      await nextFrame();
+      if (wentThrough) throw new Error('a wheel over the tile grid was not taken by the pager');
+      if (at() !== 1) throw new Error('a wheel over the tile grid did not turn the page (on page ' + (at() + 1) + ')');
+    } finally {
+      if (hadIw) document.body.style.setProperty('--insp-w', hadIw); else document.body.style.removeProperty('--insp-w');
+      if (hadTl) root.style.setProperty('--tl-h', hadTl); else root.style.removeProperty('--tl-h');
+      await nextFrame();
+      const back = document.querySelector('.addmenu-tab[data-key="' + ((wasTab && wasTab.key) || 'object') + '"]');
+      if (back) back.click();
+      if (hadSel) { FM.scene.selectedIds = hadSelIds; FM.selectLayer(hadSel); }
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      if (sp) { if (hadSpPe) sp.style.pointerEvents = hadSpPe; else sp.style.removeProperty('pointer-events'); }
+    }
+  });
+
+  test('add menu: the last TAB is remembered across a reload, the page inside it is not', { item: 'addmenu-memory' }, async function () {
+    /* QUEUE 51. Ezra: "whatever i had open last in the add section should re open, like if i add a
+     * shape then exit out of editing the shape it should still have the shape section open."
+     * That is the TAB. The first cut also persisted the pager index to the same localStorage key,
+     * so a reload came back on Shape page 3 of 5 with nothing on screen to say why the start of the
+     * list was missing — an extrapolation past what was asked for. The page now lives in a closure
+     * that dies with the document, which is exactly what this asserts: it survives a re-render, and
+     * it is NOT in storage, so no reload can bring it back. */
+    const KEY = 'fm.addmenu';
+    const hadSel = FM.scene.selectedId, hadSelIds = (FM.scene.selectedIds || []).slice();
+    const hadMem = localStorage.getItem(KEY);
+    if (hadSel) FM.selectLayer(null);
+    try {
+      addPanel();
+      document.querySelector('.addmenu-tab[data-key="audio"]').click();
+      let mem = JSON.parse(localStorage.getItem(KEY) || '{}');
+      if (mem.tab !== 'audio') throw new Error('clicking the Audio tab did not record it (' + localStorage.getItem(KEY) + ')');
+
+      document.querySelector('.addmenu-tab[data-key="shape"]').click();
+      await nextFrame();
+      let p = addPanel(), pager = p.querySelector('.addmenu-pager');
+      if (pager.querySelectorAll('.addmenu-page').length > 1) {
+        pager.scrollLeft = pager.clientWidth;                       // page 2
+        pager.dispatchEvent(new Event('scroll'));
+        await nextFrame();
+        mem = JSON.parse(localStorage.getItem(KEY) || '{}');
+        if (mem.page !== undefined) throw new Error('the pager page was written to localStorage (' + localStorage.getItem(KEY) + ') — a reload would land on it');
+        // …but it must survive a re-render inside this session
+        FM.inspector.refresh();
+        await nextFrame(); await nextFrame();
+        p = addPanel(); pager = p.querySelector('.addmenu-pager');
+        const back = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+        if (back !== 1) throw new Error('the pager page was lost across a re-render (came back on page ' + (back + 1) + ')');
+      }
+      // a value left behind by the version that DID persist the page must still open its tab
+      localStorage.setItem(KEY, '{"tab":"audio","page":{"shape":3}}');
+      FM.inspector.refresh();
+      await nextFrame();
+      const active = (addPanel().querySelector('.addmenu-tab.active') || {}).dataset.key;
+      if (active !== 'audio') throw new Error('an old {tab,page} value stopped the tab being restored (opened ' + active + ')');
+      const after = JSON.parse(localStorage.getItem(KEY) || '{}');
+      if (after.page !== undefined) throw new Error('the dead page map was left in storage: ' + localStorage.getItem(KEY));
+    } finally {
+      if (hadMem === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, hadMem);
+      if (hadSel) { FM.scene.selectedIds = hadSelIds; FM.selectLayer(hadSel); }
+      else if (FM.inspector) FM.inspector.refresh();
+    }
+  });
+
+  test('the Elements tab icon is not a triangle and a circle', { item: 'elements-icon' }, function () {
+    /* QUEUE 42. Ezra: "I actually meant just the little logo for the elements section, coz rn its a
+     * triangle and circle." One icon table, shared by the panel and the phone sheet, so this holds
+     * on both. Asserting the SHAPE of the mark rather than its bytes: no circle, and more than one
+     * stroke, which is what the old two-primitive mark could not satisfy. */
+    const tab = document.querySelector('.addmenu-tab[data-key="object"]');
+    if (!tab) throw new Error('the Elements tab is not on screen');
+    const svg = tab.querySelector('.addmenu-ic svg');
+    if (!svg) throw new Error('the Elements tab has no icon');
+    if (svg.querySelector('circle')) throw new Error('the Elements icon still draws a circle');
+    if (svg.querySelectorAll('path').length < 2) throw new Error('the Elements icon is a single primitive again');
   });
 
   test('grouping inside a group cannot build a parent cycle', { item: 'group-cycle' }, function () {

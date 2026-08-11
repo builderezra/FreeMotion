@@ -2520,26 +2520,108 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
    suit: Ezra, "you can also make the buttons smaller in that area so they all fit nice and easily."
    The label may wrap to two lines now instead of ellipsing — at this width "Freehand Drawing" was
    truncating to "Freehand Dra…", which is the one label in the menu you cannot guess from its icon. */
-.addmenu--panel .addmenu-page .addmenu-grid { grid-template-columns: repeat(5, 1fr); }
+.addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-grid { grid-template-columns: repeat(5, 1fr); }
 /* :not(.addmenu-card--ico) is load-bearing (v5.05). Without it these three rules also matched the
    SHAPE grid's icon-only tiles — and at four class selectors they outrank `.addmenu-card--ico`'s two,
    so they quietly shrank every shape icon from 34px to 19px. Ezra: "all of the shape icons have gone
    small." The trimming is only ever meant for the labelled cards in the Elements/Media/Audio grids,
-   which is exactly what this now says. */
-.addmenu--panel .addmenu-page .addmenu-card:not(.addmenu-card--ico) { padding: 8px 3px; gap: 4px; }
-.addmenu--panel .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-ic svg { width: 19px; height: 19px; }
-.addmenu--panel .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-lbl {
+   which is exactly what this now says.
+   :not(.addmenu--fit) (v5.69) hands the whole job to the MEASURED layout further down whenever that
+   is live, instead of fighting it on specificity — these fixed 19px/9.8px numbers are what the fit
+   replaces, and they stay put as the fallback for the phone sheet and for a panel too small to
+   measure. */
+.addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-card:not(.addmenu-card--ico) { padding: 8px 3px; gap: 4px; }
+.addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-ic svg { width: 19px; height: 19px; }
+.addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-lbl {
   white-space: normal; max-width: none; overflow: visible; font-size: 9.8px; line-height: 1.1;
 }
 /* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like AM */
 .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(5, 1fr); }
-.addmenu--panel .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
+.addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
 .addmenu-card--ico { padding: 12px 4px; }
 .addmenu-card--ico .addmenu-ic svg, .addmenu-card--ico .addmenu-ic { width: 34px; height: 34px; }
 .addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
 .addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
 .addmenu-dot.on { background: var(--accent); }
+/* ---- PC ONLY: the dot row becomes a real pager (QUEUE 50, v5.70) --------------------------------
+   The phone swipes the strip; a wheel mouse cannot, because the strip answers to a HORIZONTAL
+   scroll delta. So the panel — and only the panel, js/addmenu.js builds none of this for the sheet —
+   flanks the dots with ‹ › buttons and makes the whole row a click target that jumps to the nearest
+   dot. The DOTS THEMSELVES ARE UNTOUCHED: still 6px spans, still not focusable, still not in the
+   accessibility tree; the hit area belongs to the row and the buttons, which is what an earlier
+   attempt at this got wrong by restyling the dot itself into a 6x6 <button>. */
+/* 24 + 2 = FIT_DOTS in js/addmenu.js. Change one, change the other. */
+.addmenu-dots--pc { min-height: 24px; align-items: center; margin-top: 2px; cursor: pointer; }
+.addmenu-pgbtn {
+  width: 24px; height: 24px; flex: 0 0 24px; display: flex; align-items: center; justify-content: center;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-dim);
+  font-size: 16px; line-height: 1; cursor: pointer; transition: background .15s, color .15s;
+}
+.addmenu-pgbtn:hover { background: var(--panel-2); color: var(--text); }
 .addmenu-quick .addmenu-lbl { white-space: normal; max-width: none; line-height: 1.12; }   /* let "Freehand Drawing" show fully in the narrow rail */
+
+/* ---- QUEUE 50 (v5.69): PC ONLY — the tile grid is MEASURED against the panel ------------------
+   Ezra: "the add section on pc on the left needs to actually fill up the screen space it has
+   properly … rn it has lots of space and i still need to scroll on it to see them all which is
+   weird. Make the icons get smaller or bigger depending on how zoomed in you have that area."
+   Every number below arrives from js/addmenu.js's planGrid(), which reads the panel's real box —
+   columns, row height, icon size and label size all come from it, per tab, because Elements has
+   nine entries and Shape has seventy and they want different grids out of the same space.
+   `.addmenu--fit` is only ever set on the PANEL variant behind a (min-width: 701px) check, and the
+   whole block is inside the SAME media query besides — two independent reasons the phone sheet can
+   never reach one of these rules, because "don't touch the phone layout" was the one instruction
+   Ezra gave twice. If the panel is too small to measure, the class is absent and the fixed layout
+   above is still there, untouched.
+   The row height is a STATED px value (not a percentage): the tiles' box is derived from the
+   panel's clientHeight, which comes from #app's grid, so nothing here asks a parent to size itself
+   from the children it is sizing. */
+@media (min-width: 701px) {
+  .addmenu--fit .addmenu-body { flex: 0 0 auto; }
+  .addmenu--fit .addmenu-pager { height: var(--am-pager); }
+  /* --am-pager is the WHOLE measured box now, not the height of the rows the plan drew, and the
+     grid centres itself inside it. Two reasons, one each way:
+       · vertically, the leftover used to fall out as a single block of nothing beneath the last
+         row — up to 70px while the tab was still paging. Centring splits it, so what is left reads
+         as margin rather than as a panel that stopped early.
+       · horizontally, `repeat(var(--am-cols), 1fr)` stretched every column to fill, which meant a
+         tile could not stay at its maxW: the grid grew the cards until a further column fitted and
+         then snapped them all narrower. Stating the column width and centring the track is what
+         lets planGrid clamp a tile at 118px and hand the slack back as an even margin. */
+  .addmenu--fit .addmenu-page .addmenu-grid,
+  .addmenu--fit .addmenu-page .addmenu-grid--ico {
+    grid-template-columns: repeat(var(--am-cols), var(--am-cw));
+    grid-auto-rows: var(--am-row);
+    gap: var(--am-gap);
+    height: 100%;
+    justify-content: center;
+    align-content: center;
+  }
+  .addmenu--fit .addmenu-card { padding: var(--am-pad); gap: var(--am-icogap); height: 100%; box-sizing: border-box; }
+  .addmenu--fit .addmenu-card .addmenu-ic,
+  .addmenu--fit .addmenu-card .addmenu-ic svg { width: var(--am-ico); height: var(--am-ico); }
+  .addmenu--fit .addmenu-card .add-emoji { font-size: var(--am-ico); line-height: 1; }
+  /* The label gets its OWN reserved band, and the icon is sized from what is left — that is what
+     stops the fit from being bought by squeezing the text out of the card. Two lines is the budget
+     planGrid() reserves; only user-supplied names (a clip's filename) can reach the clip, and those
+     have the tooltip, exactly as before. (This used to credit tests/_addfit.html with asserting it.
+     That file does not exist and never did. Measured instead, top-level in headless Chrome across
+     classic 800x600 / 1024x640 / 1280x720 / 1440x900 and studio 1280x720 / 1920x1080 / 2560x1440:
+     zero ellipsed labels, and zero labels whose painted box leaves its card vertically.) */
+  /* overflow VISIBLE and max-width NONE, both copied deliberately from the non-fit rule above.
+     The base `.addmenu-lbl` carries `overflow:hidden; text-overflow:ellipsis`, and every panel
+     rule since v5.05 has undone it — because a word that is a hair wider than its tile is far
+     more readable spilling a few px into the 8px gutter than cut to "Capti…". The first cut of
+     the fit re-imposed hidden/100%, and at the 45px tiles this size actually draws that turned
+     Captions -> "Capti…", Freehand Drawing -> "Freeh…/Drawi…", Adjustment -> "Adjus…" and Custom
+     elements -> "Custom elem…" — five of the nine Elements tiles, all of which pristine HEAD
+     renders in full at the very same 45px width. Screenshotted at 1024x640 classic, both trees.
+     The vertical budget is still real: planGrid() reserves `lines` of label and sizes the icon
+     from what is left, and the probe asserts no label is ellipsed AND none overruns its band. */
+  .addmenu--fit .addmenu-card .addmenu-lbl {
+    font-size: var(--am-fs); line-height: 1.2; white-space: normal; max-width: none;
+    max-height: var(--am-lblh); overflow: visible; text-overflow: clip;
+  }
+}
 
 /* ---- Freehand / Vector drawing overlay + toolbar (v2.39) ---- */
 #draw-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
@@ -2845,7 +2927,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   /* …and a STATED height on the body, not a percentage. A percentage max-height resolves against a
      parent that has no definite height of its own, so it silently does nothing — the same circular
      dependency that defeated three attempts at the phone sheet before v5.46 used a number. */
-  body.layout-studio .addmenu--panel .addmenu-body {
+  /* …and :not(.addmenu--fit) because v5.69 replaced this cap with a measurement. 128px was a
+     constant standing in for the band's height, and the band is 269px at 1440x900 and 356px at
+     1920x1080 — so it was a scrollbar and a big empty strip AT THE SAME TIME, which is exactly what
+     Ezra photographed. When planGrid() can measure the panel it sets the tile area's height itself
+     and nothing scrolls; this stays as the fallback for a panel too small to plan for. */
+  body.layout-studio .addmenu--panel:not(.addmenu--fit) .addmenu-body {
     max-height: 128px;
     overflow-y: auto;
     overscroll-behavior: contain;

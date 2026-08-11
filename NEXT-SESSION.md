@@ -4,7 +4,7 @@ Read this first if the session starts with "keep going", "go", or a vague pick-u
 Top to bottom is the order Ezra asked for. **He numbers his requests and expects them done in that
 order; new asks go to the BOTTOM of the list.**
 
-State at handoff: **v5.72**, **83/83 regression tests green**, tree clean, 0 unpushed.
+State at handoff: **v5.73**, **87/87 regression tests green**, tree clean, 0 unpushed.
 
 ---
 
@@ -68,16 +68,8 @@ keeps working exactly as before.
    v5.65. Actual words need Whisper via transformers.js — fully offline, but a large one-time model
    download and slow on a phone. Present the size and the device tradeoff; never switch it on by default.
 
-## TWO ITEMS BUILT, VERIFIED-EXCEPT-ONE-THING, NOT LANDED
+## ONE ITEM BUILT, NOT LANDED  (the Add-menu trio LANDED in v5.73)
 
-- **Add menu trio (#50 + #51 + #42)** — see task notes for the full numbers. The win is large and
-  independently reproduced (Studio 11 layout failures -> 0; 2560x1440 Shape 4 pages -> 1). Blocked on
-  two things: the page dots became 6x6px `<button>`s with a measured 2px hit reach (revert
-  `createElement('button')` to `'span'` — verifier-tested, 7 failures -> 0, layout still green), and an
-  undisclosed regression where 1024x640 classic went from a perfect single page to 2 pages of 6
-  (FIT_CFG.lbl.minW 56 / hMin 65 forbids HEAD's 5x45px grid). Fix both, then land.
-  NOTE: the diff carries a literal multiplication sign where the repo stores the HTML escape on the
-  perPage line — normalise that one character or `git apply` fails outright.
 - **Project-open slide (#55)** — rejected twice. First attempt re-laid-out the whole home screen at
   DOUBLE WIDTH for the entire 280ms push on every phone; the second was rejected too and its reason has
   not been read yet. Read the verifier's report before re-briefing.
