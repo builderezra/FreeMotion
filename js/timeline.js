@@ -1951,6 +1951,7 @@ window.FM = window.FM || {};
       }
       const t = FM.time;
       const sL = timelineEl ? timelineEl.scrollLeft : 0;
+      const visW = timelineEl ? timelineEl.clientWidth : 0;   // read in the same layout pass as scrollLeft
       // Light the live keyframe the playhead is sitting on. Half a frame of tolerance, because a
       // keyframe's time and FM.time are both floats and an exact compare would flicker.
       const kfTol = 0.5 / Math.max(1, (FM.scene.project && FM.scene.project.fps) || 30);
@@ -1971,9 +1972,22 @@ window.FM = window.FM || {};
         const label = clipEl.querySelector('.clip-label');
         if (label) {
           const base = clipEl.classList.contains('sel') ? 17 : 9;
-          const off = sL - (parseFloat(clipEl.style.left) || 0);          // >0 → clip start is left of view
+          const clipLeft = parseFloat(clipEl.style.left) || 0;
+          const off = sL - clipLeft;                                      // >0 → clip start is left of view
           const maxLeft = Math.max(base, (parseFloat(clipEl.style.width) || 0) - 34);
-          label.style.left = Math.min(Math.max(base, off + base), maxLeft) + 'px';
+          const lLeft = Math.min(Math.max(base, off + base), maxLeft);
+          label.style.left = lLeft + 'px';
+          // …and the mirror of that on the RIGHT. The label box is sized off the CLIP (left:9/right:9),
+          // so on a clip wider than the screen a long layer name had the whole clip to run in: it
+          // never hit its own ellipsis, it just kept going past the ≡ reorder handle and off the
+          // right edge (IMG_2445, "Black hshshsh…"). Cap it at the visible viewport instead, minus the
+          // handle's 30px + its 5px inset + 4px of clearance, and text-overflow finally has an edge
+          // to bite on. Same coordinate space as the sticky-left above, so it holds at any scroll,
+          // any zoom, any head width — and on desktop, where the scroller is narrower than the window.
+          if (visW > 0) {
+            const vx = HEAD_W + clipLeft + lLeft - sL;                    // label's x within the scroller viewport
+            label.style.maxWidth = Math.max(0, visW - 39 - vx) + 'px';
+          }
         }
       });
     },
