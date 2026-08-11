@@ -1118,6 +1118,45 @@
     }
   });
 
+  test('adding a camera does not move layers that have depth', { item: 'cam-parallax' }, function () {
+    // v5.20. Depth parallax was driven by the camera's ABSOLUTE position instead of its displacement
+    // from the frame centre, so every z != 0 layer picked up a constant offset of centre*(1-pscale) —
+    // merely ADDING a camera, before touching it, threw the scene's depth out and put the vanishing
+    // point at the frame's bottom-right corner (2cx, 2cy) instead of the middle. At 1080x1920 a
+    // z=-1000 layer jumped 190px left and 338px up. This asserts both halves: a camera at rest moves
+    // nothing, and a camera that DOES pan still parallaxes by depth (the obvious wrong "fix" is to
+    // drop the parallax altogether, which would also pass the first half).
+    const W = 320, H = 240;
+    function centroidX(layers) {
+      const c = offscreen(W, H), ctx = c.getContext('2d');
+      FM.renderScene(ctx, scene(layers, { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' } }), 0);
+      const d = ctx.getImageData(0, 0, W, H).data;
+      let sx = 0, n = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (d[i] > 150 && d[i + 1] < 90 && d[i + 2] < 90) { sx += x; n++; }
+      }
+      return n ? sx / n : null;
+    }
+    const mk = z => { const L = FM.makeLayer('shape', { shape: 'rect', name: 'R', x: W / 2, y: H / 2, shapeW: 24, shapeH: 12, fill: '#ff0000' }); L.transform.z = z; return L; };
+    const depths = [-120, -60, 60, 240];
+    depths.forEach(z => {
+      const bare = centroidX([mk(z)]);
+      const rest = centroidX([mk(z), FM.makeLayer('camera', { name: 'Cam', x: W / 2, y: H / 2 })]);
+      if (bare == null || rest == null) throw new Error('nothing rendered at z=' + z);
+      if (Math.abs(rest - bare) > 1) throw new Error('a camera AT REST moved the z=' + z + ' layer by ' + (rest - bare).toFixed(1) + 'px');
+    });
+    // …and depth must still do something when the camera actually moves.
+    const restNear = centroidX([mk(-120), FM.makeLayer('camera', { name: 'C', x: W / 2, y: H / 2 })]);
+    const panNear  = centroidX([mk(-120), FM.makeLayer('camera', { name: 'C', x: W / 2 + 40, y: H / 2 })]);
+    const restFar  = centroidX([mk(240),  FM.makeLayer('camera', { name: 'C', x: W / 2, y: H / 2 })]);
+    const panFar   = centroidX([mk(240),  FM.makeLayer('camera', { name: 'C', x: W / 2 + 40, y: H / 2 })]);
+    const dNear = panNear - restNear, dFar = panFar - restFar;
+    if (!(dNear < -45)) throw new Error('a near layer (z=-120) barely parallaxed on a 40px pan: ' + dNear.toFixed(1) + 'px');
+    if (!(dFar > -33)) throw new Error('a far layer (z=240) moved too much on a 40px pan: ' + dFar.toFixed(1) + 'px');
+    if (!(dNear < dFar)) throw new Error('near did not move more than far (' + dNear.toFixed(1) + ' vs ' + dFar.toFixed(1) + ')');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

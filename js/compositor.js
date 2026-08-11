@@ -7015,7 +7015,17 @@ window.FM = window.FM || {};
       const _cpx = _bv ? _bv(cam, 'x', FM.evalProp(_ct.x, t), t) : FM.evalProp(_ct.x, t);
       const _cpy = _bv ? _bv(cam, 'y', FM.evalProp(_ct.y, t), t) : FM.evalProp(_ct.y, t);
       const _cpz = _ct.z != null ? FM.evalProp(_ct.z, t) : 0;
-      _camParallax = { x: isFinite(_cpx) ? _cpx : 0, y: isFinite(_cpy) ? _cpy : 0, z: isFinite(_cpz) ? _cpz : 0 };
+      // Parallax is driven by the camera's DISPLACEMENT FROM THE FRAME CENTRE, not by its absolute
+      // position. Stashing the absolute value gave every z != 0 layer a constant DC offset of
+      // centre*(1 - pscale) — so merely ADDING a camera, before touching it, threw the whole scene's
+      // depth out: the vanishing point sat at the frame's bottom-right corner (2cx, 2cy) instead of
+      // the middle. Measured at 1080x1920 with a camera at rest: a z=-1000 layer jumped 190px left
+      // and 338px up, z=+1000 jumped 111 right and 198 down, every value matching centre*(1-pscale)
+      // to under half a pixel. The camera's own composite already centres on (cx, cy), so the pan
+      // that the layer loop should parallax against is the offset from there, and a camera parked at
+      // the centre must contribute exactly nothing.
+      const _ccx = P.width / 2, _ccy = P.height / 2;
+      _camParallax = { x: isFinite(_cpx) ? _cpx - _ccx : 0, y: isFinite(_cpy) ? _cpy - _ccy : 0, z: isFinite(_cpz) ? _cpz : 0 };
       _camLens = FM.cameraLens(cam, t, P);
     } else {
       _camParallax = null;
