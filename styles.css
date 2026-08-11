@@ -152,15 +152,26 @@ body {
      into a muddy smudge that read as a sticker stuck on a button — the "simply plastered on" look
      Ezra asked me to avoid. On a dark tinted body it reads as the object it is, and the word keeps
      the button unambiguous on a pointer device. */
-  background: rgba(41, 217, 187, .10);
-  border: 1px solid rgba(92, 224, 200, .42);
-  color: var(--am-green);
+  /* v5.63. Ezra: "on pc the export button has a green outline and looks shit, and coz its got a grey
+     arrow icon its hard to tell that it isnt just a blue blob."
+     Two separate faults, both here:
+     · TWO ARROWS. index.html still renders the original inline <svg class="ico"> AND ::before paints
+       the crystal artwork, so a flat grey arrow sat on top of the crystal's own arrow. The phone
+       button has hidden its .m-ico since v5.57; the desktop one never did, which is why only PC
+       looked wrong. Hidden below.
+     · The mint border and mint label were what was left of the old accent button. With the artwork
+       carrying the identity they just ring it in a colour it does not contain. Neutral hairline, and
+       the word takes the normal text colour. */
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line);
+  color: var(--text);
   /* the shine layer below is absolutely placed over the ::before icon, and `isolate` keeps its
      blending inside this button instead of reaching the toolbar painted behind it */
   position: relative;
   isolation: isolate;
 }
-#btn-export:hover { background: rgba(41, 217, 187, .17); border-color: var(--am-green); filter: none; }
+#btn-export .ico { display: none; }   /* the crystal artwork already IS the arrow — see the note above */
+#btn-export:hover { background: rgba(255, 255, 255, .08); border-color: var(--line-soft); filter: none; }
 #btn-export::before {
   content: ""; flex: 0 0 auto; width: 24px; height: 24px;
   background: url('export-btn.png?v=1') center / contain no-repeat;

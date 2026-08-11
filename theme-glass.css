@@ -295,12 +295,17 @@ html[data-theme="glass"] .set-switch.on {
    it loads after styles.css so it won. Only the DESKTOP pill keeps a tinted body, and even that is a
    dark one so the artwork inside it can be seen. */
 html[data-theme="glass"] .m-export { background: url('export-btn.png?v=1') center / contain no-repeat; box-shadow: none; }
+/* v5.63. This file loads AFTER styles.css, so it held its own copy of the mint ring and kept
+   repainting it after styles.css dropped it — the THIRD fix this file has silently eaten. Ezra saw
+   the outline still there after it had been removed. Neutral now, matching styles.css, and the glass
+   theme contributes only what is actually glassy: the inner top light and a soft ambient drop. */
 html[data-theme="glass"] #btn-export {
-  background: rgba(41, 217, 187, .10);
-  border: 1px solid rgba(92, 224, 200, .45);
-  color: var(--am-green);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 3px 12px rgba(92, 224, 200, .16);
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid var(--line);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 3px 12px rgba(0, 0, 0, .28);
 }
+html[data-theme="glass"] #btn-export .ico { display: none; }
 
 /* Thumbnails and media get a hairline rim so they sit IN the glass rather than on it. */
 html[data-theme="glass"] .hm-thumb,
