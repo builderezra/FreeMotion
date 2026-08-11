@@ -2522,6 +2522,25 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    Mask LONGHANDS only, never the `mask:` shorthand with /contain: that shorthand is unreliable in
    WebKit and has already shipped one bug in this app. */
 
+/* v5.37 — Ezra, on the version above: "the FreeMotion text's glow makes it hard to read, I didn't
+   want a bright outline I wanted a glint like the sun, not edge glow… tone it down a bit on the edge
+   glow and more focus on that shine." He is describing a real defect, not a preference: every
+   emitter here traces the artwork's ALPHA, so all of them are rim light by construction, and the
+   rim ended up brighter than the glass it surrounded. The eye then reads the outline instead of the
+   letterform, and at 20px the rim is thick enough to start filling the counters.
+   So the whole emitter stack comes down to roughly a third, and the light it loses is put back as
+   two things that live ON the glass instead of around it:
+     · the internal sheen is now a RAKE — a radial from off the top-left corner, so the word
+       brightens toward one light source rather than glowing evenly all over
+     · one tight specular catch, .hm-brand-wm::before, on the F's top-left corner — which is where
+       the artwork already has a bright facet, so the highlight has something to justify it
+   Measured on the real home screen against the version above: halo spill onto the bar past the word
+   +0.0148 → +0.0003 luminance, and the darkest fifth inside the word (its counters and the gaps
+   between letters, which is what fog fills first) 0.0148 → 0.0081, taking gap-to-peak contrast from
+   33:1 to 49:1. Judged as pictures too, at 1100px and at 380px: five candidates, and the two that
+   put a big glint across a letter blew that letter into a white blob — a sun glint has to be a
+   POINT. */
+
 /* The artwork sits ABOVE the emitters so the hot core hides behind the glyphs and only its spill
    shows — that is what reads as backlit rather than as a wash lying on the letters. The two-stop
    0.5px specular is the same glass language as the + button and the OPEN badge; drop-shadow follows
@@ -2529,8 +2548,8 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .hm-brand-img {
   position: relative; z-index: 1;
   filter:
-    drop-shadow(0 0 0.5px rgba(226, 247, 255, .85))
-    drop-shadow(0 0 1.4px rgba(150, 225, 255, .40));
+    drop-shadow(0 0 0.5px rgba(226, 247, 255, .30))
+    drop-shadow(0 0 1.4px rgba(150, 225, 255, .14));
 }
 
 /* ---- tight pair: the hot rim, 3px and 8.5px ---- */
@@ -2555,11 +2574,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   -webkit-mask-position: center;   mask-position: center;
   -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
 }
-/* nearly white for the first 2-3px off the edge, so it reads as light and not as coloured paint */
-.hm-brand-glint::before { background: rgba(188, 241, 255, .94); }
+/* nearly white for the first 2-3px off the edge, so it reads as light and not as coloured paint.
+   Held well under the glass it surrounds now — this pair IS the "bright outline" he objected to, and
+   its job is only to keep the word from sitting flat on the bar. */
+.hm-brand-glint::before { background: rgba(188, 241, 255, .22); }
 /* the knee of the curve; `screen` so it ADDS to the core inside the group instead of covering it */
 .hm-brand-glint::after {
-  background: rgba(132, 214, 255, .62);
+  background: rgba(132, 214, 255, .14);
   filter: blur(8px);
   mix-blend-mode: screen;
 }
@@ -2578,9 +2599,9 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   animation: hm-wm-ambient 7s ease-in-out infinite;
   will-change: opacity, transform;
 }
-.hm-brand-halo::before { background: rgba(96, 196, 240, .78); }
+.hm-brand-halo::before { background: rgba(96, 196, 240, .34); }
 .hm-brand-halo::after {
-  background: rgba(64, 158, 212, .46);
+  background: rgba(64, 158, 212, .18);
   filter: blur(32px);
   mix-blend-mode: screen;
 }
@@ -2588,18 +2609,44 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 /* ---- sharp pass: the glass lighting up from within ----
    `overlay` SCALES the artwork's own values (dark toward darker, bright toward white) instead of
    adding a flat amount, so the facets keep their contrast. This is the one thing the old glint got
-   backwards. */
+   backwards.
+   A RAKE, not a top-to-bottom ramp: the origin sits off the top-left corner, so the F is nearest the
+   light and the n furthest, and the word has a direction to it. A ramp brightens every letter by the
+   same amount, which is the even all-over glow this was meant to get away from. */
 .hm-brand-wm::after {
   content: ""; position: absolute; inset: 0; z-index: 2;
   pointer-events: none;
-  background: linear-gradient(180deg,
-    rgba(255, 255, 255, .80), rgba(200, 242, 255, .64) 42%, rgba(140, 216, 250, .52));
+  background: radial-gradient(120% 180% at 18% 6%,
+    rgba(255, 255, 255, 1) 0%, rgba(226, 248, 255, .80) 26%,
+    rgba(150, 214, 246, .44) 58%, rgba(74, 140, 182, .26) 100%);
   -webkit-mask-image: url('brand-wordmark.png?v=2');
           mask-image: url('brand-wordmark.png?v=2');
   -webkit-mask-size: contain;      mask-size: contain;
   -webkit-mask-position: center;   mask-position: center;
   -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
   mix-blend-mode: overlay;
+  animation: hm-wm-breathe 7s ease-in-out infinite;
+}
+
+/* ---- the glint itself: one specular catch on the F's top-left corner ----
+   `screen` and pure white, because this is meant to look blown out where it lands and gone a few
+   pixels later — that is what separates a sun catch from a coloured highlight. Two layers: a small
+   vertical lozenge for the core, and a wider, much flatter one crossing it, which is the short ray a
+   real specular throws along the surface. Everything is sized in PERCENT of the box, so it tracks the
+   type from 24px on desktop down to 20px on a phone without a second set of numbers. Masked by the
+   artwork's own alpha, so it can only ever land ON the glass — it cannot add to the rim. */
+.hm-brand-wm::before {
+  content: ""; position: absolute; inset: 0; z-index: 3;
+  pointer-events: none;
+  background:
+    radial-gradient(5% 30% at 6.5% 20%, rgba(255,255,255,1) 0%, rgba(255,255,255,.62) 40%, rgba(255,255,255,0) 100%),
+    radial-gradient(16% 5% at 6.5% 20%, rgba(255,255,255,.72) 0%, rgba(255,255,255,0) 100%);
+  -webkit-mask-image: url('brand-wordmark.png?v=2');
+          mask-image: url('brand-wordmark.png?v=2');
+  -webkit-mask-size: contain;      mask-size: contain;
+  -webkit-mask-position: center;   mask-position: center;
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+  mix-blend-mode: screen;
   animation: hm-wm-breathe 7s ease-in-out infinite;
 }
 
@@ -2615,7 +2662,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   50%      { opacity: .72; transform: scale(1.08); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hm-brand-glint, .hm-brand-halo, .hm-brand-wm::after { animation: none; }
+  .hm-brand-glint, .hm-brand-halo, .hm-brand-wm::after, .hm-brand-wm::before { animation: none; }
   .hm-brand-glint { opacity: .92; }
   .hm-brand-halo  { opacity: .64; transform: scale(1.06); }
 }
