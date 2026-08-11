@@ -239,6 +239,11 @@ window.FM = window.FM || {};
     mirror: 'photo', pixelate: 'photo', chromaticaberration: 'photo', hextiles: 'photo', glass: 'photo',
     // These two throw ghosts/streaks OUTSIDE the layer, which only shows if there is an outside.
     rgbsplit: 'card', innerblur: 'card', motionblur: 'card',
+    // Squish needs something that can HANG OVER an edge. The distort default ('grid') is the
+    // full-frame lattice: it already touches all four walls with nothing past them, so the tile
+    // would show the effect doing precisely nothing. The 64px lattice has texture (so the interior
+    // compression reads) and room to be driven into a wall — see OVERRIDES.squish.
+    squish: 'gridcard',
   };
   function subjectFor(type, reg) {
     // appliesTo is a hard gate, not a preference: a text effect on an image layer renders nothing.
@@ -254,6 +259,13 @@ window.FM = window.FM || {};
     return function (layers, hero) { hero.effects[0].params[key] = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1.65, v: 1, e: 'linear' }] }; };
   }
   const OVERRIDES = {
+    // Squish only does anything when the layer is actually ON a wall, so the tile has to drive it
+    // into one. Sliding the 64px lattice from mid-tile into the right edge shows the whole story:
+    // untouched, then contact, then compressed. The keyframes also trip the animated auto-detect,
+    // so the tile loops the squash instead of freezing on one deformed frame.
+    squish: function (layers, hero) {
+      hero.transform.x = { kf: [{ t: 0, v: 46, e: 'linear' }, { t: 1.65, v: 92, e: 'linear' }] };
+    },
     // Footage blur reads motion INSIDE the clip and deliberately ignores the layer's own transform —
     // so keyframing the hero across the frame proves nothing. Put a Drift UNDERNEATH it in the stack
     // instead: drift moves the content within the plate, which is exactly what this blur smears.

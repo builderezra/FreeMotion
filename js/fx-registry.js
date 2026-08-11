@@ -99,6 +99,9 @@ window.FM = window.FM || {};
     compresscrunch: 'stylize', temporaldenoise: 'blur',
     // batch 38 (round 11 opens)
     lensdistort: 'distort', pixelsort: 'stylize', lumamatte: 'matte', compoundblur: 'blur', matchgrade: 'color',
+    // Squish — geometry, not grading: the frame edges deform the layer. (Deliberately NOT in ADJ_OK;
+    // an adjustment layer has no edges of its own to press against a wall.)
+    squish: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -136,7 +139,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap', 'chromakeypro', 'timewarp'];
+  FM.FX_FEATURED = ['squish', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap', 'chromakeypro'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],

@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Squish probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 10px 14px; white-space: pre-wrap; }
+  .bad { color: #ff7a85; }
+</style>
+</head>
+<body>
+<div id="out">running…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * SQUISH PROBE — the numeric claims, measured. No pictures: every line here is a number the
+ * effect either produces or does not. Read with --dump-dom.
+ *
+ *   ?do=noop     amount 0 / no wall in reach vs the effect ABSENT — byte diff, must be 0
+ *   ?do=edges    where the layer's edges come from: transform box vs alpha bbox
+ *   ?do=ps       plate scale 1 vs 0.5, with a LENGTH param (inset) live
+ *   ?do=stable   layer much larger than the frame; corners; NaN/blank guards
+ *   ?do=cost     ms/frame at 1080x1920, full and reduced preview scale
+ *   ?do=all      everything (default)
+ * ==========================================================================================*/
+(function () {
+  'use strict';
+  var Q = new URLSearchParams(location.search);
+  var MODE = Q.get('do') || 'all';
+  var L = [], FAIL = 0;
+  function say(s) { L.push(s); }
+  function head(s) { L.push(''); L.push('=== ' + s + ' ' + Array(Math.max(2, 78 - s.length)).join('=')); }
+  function check(ok, s) { if (!ok) FAIL++; L.push((ok ? '  PASS  ' : '  FAIL  ') + s); }
+
+  var PW = 480, PH = 480;
+  function scene(layers, w, h) {
+    var s = FM.newScene();
+    s.project = { name: 'squish', width: w || PW, height: h || PH, fps: 60, duration: 10, background: '' };
+    s.layers = layers;
+    return s;
+  }
+  function circle(size, x, y, extra) {
+    var l = FM.makeLayer('shape', { x: x, y: y, start: 0, duration: 10, shape: 'ellipse',
+      shapeW: size, shapeH: size, fill: '#2fd0b5' });
+    l.stroke = { enabled: true, width: Math.max(4, size * 0.075), color: '#ffd166' };
+    if (extra) Object.keys(extra).forEach(function (k) { l[k] = extra[k]; });
+    return l;
+  }
+  function rect(w, h, x, y, rot) {
+    var l = FM.makeLayer('shape', { x: x, y: y, start: 0, duration: 10, shape: 'rect',
+      shapeW: w, shapeH: h, fill: '#2fd0b5' });
+    if (rot) l.transform.rotation = rot;
+    return l;
+  }
+  function poly(size, x, y) {
+    var l = FM.makeLayer('shape', { x: x, y: y, start: 0, duration: 10, shape: 'polygon',
+      shapeW: size, shapeH: size, fill: '#2fd0b5' });
+    l.sides = 5;
+    return l;
+  }
+  function fx(params) {
+    var inst = FM.fxRegistry.makeInstance('squish');
+    Object.keys(params || {}).forEach(function (k) { inst.params[k] = params[k]; });
+    return inst;
+  }
+  var _c = document.createElement('canvas');
+  function render(sc, t, cw, ch) {
+    cw = cw || sc.project.width; ch = ch || sc.project.height;
+    if (_c.width !== cw || _c.height !== ch) { _c.width = cw; _c.height = ch; }
+    var g = _c.getContext('2d', { willReadFrequently: true });
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
+    FM.renderScene(g, sc, t || 0);
+    return g.getImageData(0, 0, cw, ch);
+  }
+  function bytes(im) { return im.data; }
+  function diff(a, b) {
+    var n = 0, d1 = a.data, d2 = b.data, i;
+    if (d1.length !== d2.length) return -1;
+    for (i = 0; i < d1.length; i++) if (d1[i] !== d2[i]) n++;
+    return n;
+  }
+  // Alpha bbox + centroid, reported in PROJECT px whatever the plate was.
+  function meas(im, projW) {
+    var w = im.width, h = im.height, d = im.data, S = w / projW;
+    var x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, n = 0, sx = 0, sy = 0, x, y, a, bad = 0;
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+      a = d[(y * w + x) * 4 + 3];
+      if (a <= 8) continue;
+      n++; sx += x; sy += y;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (!n) return { lit: 0, blank: true, s: 'BLANK' };
+    return { lit: n, blank: false, x0: x0 / S, x1: x1 / S, y0: y0 / S, y1: y1 / S,
+      w: (x1 - x0 + 1) / S, h: (y1 - y0 + 1) / S, cx: (sx / n) / S, cy: (sy / n) / S,
+      s: 'bbox ' + ((x1 - x0 + 1) / S).toFixed(1) + 'x' + ((y1 - y0 + 1) / S).toFixed(1)
+        + ' [' + (x0 / S).toFixed(1) + ',' + (y0 / S).toFixed(1) + '..' + (x1 / S).toFixed(1) + ',' + (y1 / S).toFixed(1) + ']'
+        + ' centroid ' + ((sx / n) / S).toFixed(2) + ',' + ((sy / n) / S).toFixed(2)
+        + ' lit ' + Math.round(n / (S * S)) };
+  }
+  // Lit pixels in one column. A layer CUT OFF by the frame leaves a long lit run in the last
+  // column; a layer squashed back inside leaves few or none. That is the difference between
+  // "clipped" and "squished" stated as a number rather than as an impression.
+  function colLit(im, x) {
+    var n = 0, y, d = im.data, w = im.width;
+    for (y = 0; y < im.height; y++) if (d[(y * w + x) * 4 + 3] > 8) n++;
+    return n;
+  }
+  function rowLit(im, y) {
+    var n = 0, x, d = im.data, w = im.width;
+    for (x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 8) n++;
+    return n;
+  }
+  // With / without the effect, same layer. `mk` builds a fresh layer each time (never share).
+  function pair(mk, params, t, cw, ch, w, h) {
+    var a = render(scene([mk()], w, h), t, cw, ch);
+    var A = new ImageData(new Uint8ClampedArray(a.data), a.width, a.height);
+    var lb = mk(); lb.effects = [fx(params)];
+    var B = render(scene([lb], w, h), t, cw, ch);
+    return { off: A, on: B };
+  }
+
+  /* ---------------------------------------------------------------------------------------- */
+  function doNoop() {
+    head('NO-OP  — the effect present but idle must be the effect ABSENT, byte for byte');
+    say('  A 300px circle, 50% past the RIGHT wall unless stated. "diff" = differing BYTES of');
+    say('  the whole 480x480 RGBA frame (921600 bytes). Anything but 0 is a bug.');
+    var cases = [
+      ['amount 0, hard against the wall (50% over)', function () { return circle(300, 480, 240); }, { amount: 0 }],
+      ['amount 0, in a corner (over right AND bottom)', function () { return circle(300, 480, 480); }, { amount: 0 }],
+      ['amount 0 as a KEYFRAME track', function () { return circle(300, 480, 240); }, { amount: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] } }],
+      ['amount 1, layer dead centre (no wall in reach)', function () { return circle(300, 240, 240); }, { amount: 1 }],
+      ['amount 1, 10px of clearance from the right wall', function () { return circle(300, 480 - 161.25 - 10, 240); }, { amount: 1 }],
+      ['amount 1, extremity exactly ON the wall (0 penetration)', function () { return circle(300, 480 - 161.5, 240); }, { amount: 1 }],
+      ['amount 1, walls=Floor only, layer over the RIGHT wall', function () { return circle(300, 480, 240); }, { amount: 1, walls: 3 }],
+      ['amount 1, inset -200 puts every wall outside the frame', function () { return circle(300, 480, 240); }, { amount: 1, inset: -200 }],
+      // The one that would hurt in a real project: a background filling the comp EXACTLY sits on
+      // all four walls with zero penetration, so it must come out untouched rather than pinched.
+      ['amount 1, a rect filling the comp exactly (edges ON all four walls)', function () { return rect(480, 480, 240, 240); }, { amount: 1 }],
+      ['amount 1, a rect 40px inside every wall', function () { return rect(400, 400, 240, 240); }, { amount: 1 }],
+    ];
+    cases.forEach(function (c) {
+      var r = pair(c[1], c[2]);
+      var n = diff(r.off, r.on);
+      check(n === 0, c[0] + '  →  diff ' + n + ' bytes');
+    });
+    // …and the same effect at full strength on the same subject must NOT be a no-op, or the
+    // "0 bytes" above would only prove the effect never runs.
+    var r = pair(function () { return circle(300, 480, 240); }, { amount: 1 });
+    var n = diff(r.off, r.on);
+    check(n > 100000, 'CONTROL: amount 1 hard against the wall DOES change the frame  →  diff ' + n + ' bytes');
+    say('  off ' + meas(r.off, PW).s);
+    say('  on  ' + meas(r.on, PW).s);
+    // continuity: 1px of penetration must be a ~1px effect, not a jump
+    [0, 1, 3, 10, 40, 150].forEach(function (over) {
+      var rr = pair(function () { return circle(300, 480 - 161.5 + over, 240); }, { amount: 1 });
+      var m0 = meas(rr.off, PW), m1 = meas(rr.on, PW);
+      say('  penetration ' + String(over).padStart(3) + 'px:  clipped w=' + m0.w.toFixed(1)
+        + '  squished w=' + m1.w.toFixed(1) + '  (Δleft ' + (m1.x0 - m0.x0).toFixed(1)
+        + ', Δheight ' + (m1.h - m0.h).toFixed(1) + ', diff ' + diff(rr.off, rr.on) + ' bytes)');
+    });
+  }
+
+  /* ---------------------------------------------------------------------------------------- */
+  function doEdges() {
+    head('WHERE THE EDGES COME FROM  — transform box vs alpha bounding box');
+    say('  Squish drives its physics off the EXACT ALPHA bounds of a padded plate. The alternative');
+    say('  was the layer transform (x/y + shapeW/shapeH + scale). These are the cases that separate');
+    say('  them. "transform box" is what FM.layerSize()+transform.x would have said.');
+    say('');
+
+    // --- 1. rotated square: the transform box is not axis aligned, so it is simply wrong ---
+    var S = 200, cx = 480 - S / 2;   // transform box right edge EXACTLY on the wall
+    var mk = function () { return rect(S, S, cx, 240, 45); };
+    var off = render(scene([mk()]));
+    var m0 = meas(off, PW);
+    var lb = mk(); lb.effects = [fx({ amount: 1, bulge: 0 })];
+    var m1 = meas(render(scene([lb])), PW);
+    var halfDiag = S * Math.SQRT2 / 2, AREA = S * S;
+    var lbB = mk(); lbB.effects = [fx({ amount: 1 })];
+    var onB = render(scene([lbB]));
+    var mB = meas(onB, PW);
+    say('  [1] ' + S + 'x' + S + ' square rotated 45°, transform box right edge exactly at x=480');
+    say('      transform box says   : right edge 480.0  → penetration 0px  → SQUISH WOULD DO NOTHING');
+    say('      alpha bbox says      : right edge ' + (cx + halfDiag).toFixed(1) + '  → penetration '
+      + (cx + halfDiag - 480).toFixed(1) + 'px (the rotated corner, which the box cannot see)');
+    say('      whole square is ' + AREA + ' px of ink; the frame cuts ' + (AREA - m0.lit) + ' of it away');
+    say('      clipped (no effect)  : ' + m0.s + '   lit in column 479: ' + colLit(off, 479));
+    say('      squished, bulge 0    : ' + m1.s);
+    say('      squished, bulge 70   : ' + mB.s + '   lit in column 479: ' + colLit(onB, 479));
+    check(colLit(onB, 479) < colLit(off, 479) * 0.35,
+      'the corner comes back INSIDE the frame: the flat cut in column 479 shrinks from '
+      + colLit(off, 479) + 'px to ' + colLit(onB, 479) + 'px');
+    // Bulge is defined as the FRACTION of area conservation, so this sweep is the definition
+    // being checked rather than a taste call: at 100% the ink should come back to ~AREA.
+    var inks = [0, 35, 70, 100, 150].map(function (b) {
+      var l = mk(); l.effects = [fx({ amount: 1, bulge: b })];
+      return b + '%→' + meas(render(scene([l])), PW).lit;
+    });
+    say('      ink vs bulge (whole = ' + AREA + '): ' + inks.join('  '));
+    var l100 = mk(); l100.effects = [fx({ amount: 1, bulge: 100 })];
+    var ink100 = meas(render(scene([l100])), PW).lit;
+    check(ink100 > AREA * 0.92 && ink100 < AREA * 1.08,
+      'at bulge 100% ink is conserved to within 8% of the whole square (' + ink100 + ' vs ' + AREA + ') — it squashes, it does not shrink');
+    check(Math.abs(m0.x1 - 479) < 2, 'without the effect that corner is clipped flat against x=479');
+    // The spread cap is a real, visible limit, not a hidden one: when the layer already nearly
+    // fills the frame along the wall there is nowhere for the stretch to go, so area conservation
+    // is impossible and the layer DOES get smaller. Stated here so it is not mistaken for a bug.
+    var big = [0, 70, 150].map(function (b) {
+      var l = rect(300, 300, 330, 240, 45); l.effects = [fx({ amount: 1, bulge: b })];
+      return b + '%→' + meas(render(scene([l])), PW).lit;
+    });
+    say('      the SAME test at 300px (424px tall in a 480 frame — no room to stretch):');
+    say('      ink vs bulge (whole = 90000): ' + big.join('  ') + '   ← the spread cap binds at 1.13x');
+
+    // --- 2. stroke: draws OUTSIDE the transform box ---
+    say('');
+    var sw = 300 * 0.075;   // 22.5px stroke, centred on the path → 11.25px outside the box
+    var cx2 = 480 - 150;    // transform box right edge on the wall again
+    var offB = render(scene([circle(300, cx2, 240)]));
+    var lb2 = circle(300, cx2, 240); lb2.effects = [fx({ amount: 1, bulge: 0 })];
+    var onB = render(scene([lb2]), 0);
+    var mb0 = meas(offB, PW), mb1 = meas(onB, PW);
+    say('  [2] 300px circle with a ' + sw + 'px stroke, transform box right edge at x=480');
+    say('      transform box says   : penetration 0px');
+    say('      alpha bbox says      : penetration ' + (sw / 2).toFixed(2) + 'px (the stroke hangs outside the box)');
+    say('      clipped              : ' + mb0.s);
+    say('      squished             : ' + mb1.s);
+    check(diff(offB, onB) > 0, 'the stroke overhang alone is enough to trigger a (small) squish');
+
+    // --- 3. pentagon: visual bounds INSIDE the transform box ---
+    say('');
+    var pcx = 480 - 150 + 6;   // transform box 12px past the wall; the pentagon itself is not
+    var offP = render(scene([poly(300, pcx, 240)]));
+    var lp = poly(300, pcx, 240); lp.effects = [fx({ amount: 1, bulge: 0 })];
+    var onP = render(scene([lp]), 0);
+    var mp0 = meas(offP, PW);
+    say('  [3] 300px pentagon, transform box right edge at x=' + (pcx + 150).toFixed(0) + ' (12px past the wall)');
+    say('      transform box says   : penetration 12px  → it would squish');
+    say('      alpha bbox says      : right edge ' + mp0.x1.toFixed(1) + '  → penetration ' + Math.max(0, mp0.x1 + 1 - 480).toFixed(1) + 'px');
+    say('      clipped              : ' + mp0.s);
+    check(diff(offP, onP) === 0, 'a shape whose PIXELS clear the wall is left alone, even though its BOX does not');
+
+    // --- 4. and the plate alpha bbox on its own (unpadded) cannot see past the wall at all ---
+    say('');
+    var over = [0.25, 0.5, 0.75];
+    say('  [4] why the plate must be PADDED: a project-sized plate is clipped at the wall, so its');
+    say('      alpha bbox pins to x=479 and cannot tell 1px of penetration from 225px.');
+    over.forEach(function (f) {
+      var x = 480 - 150 + f * 300;
+      var mm = meas(render(scene([circle(300, x, 240)])), PW);
+      say('      ' + (f * 100) + '% over: unpadded plate bbox right edge = ' + mm.x1.toFixed(1)
+        + '   true right edge = ' + (x + 161.25).toFixed(1));
+    });
+    var w25 = meas(render(scene([(function () { var l = circle(300, 480 - 150 + 0.25 * 300, 240); l.effects = [fx({ amount: 1 })]; return l; })()])), PW);
+    var w75 = meas(render(scene([(function () { var l = circle(300, 480 - 150 + 0.75 * 300, 240); l.effects = [fx({ amount: 1 })]; return l; })()])), PW);
+    say('      squished at 25% over: ' + w25.s);
+    say('      squished at 75% over: ' + w75.s);
+    check(w75.lit > 0 && w25.lit > 0 && Math.abs(w75.lit - w25.lit) / w25.lit < 0.35,
+      'the layer keeps roughly the same amount of ink at 25% and 75% over (it is compressed, not cropped)');
+
+    // --- 5. and transform.x is not even the layer's POSITION once anything parents it ---
+    say('');
+    var par = FM.makeLayer('null', { x: 240, y: 0, start: 0, duration: 10 });
+    par.id = '_sqParent';
+    function kid() { var c = circle(300, 240, 240); c.parent = '_sqParent'; return c; }
+    var offPar = render(scene([par, kid()]));
+    var lk = kid(); lk.effects = [fx({ amount: 1 })];
+    var onPar = render(scene([par, lk]));
+    var mo = meas(offPar, PW), mn = meas(onPar, PW);
+    say('  [5] a circle whose transform.x is 240 — dead centre — but PARENTED to a null at x=240,');
+    say('      so it actually sits at x=480, 50% past the right wall. x/y are LOCAL to the parent.');
+    say('      clipped  ' + mo.s);
+    say('      squished ' + mn.s);
+    check(diff(offPar, onPar) > 50000,
+      'the effect fires on the layer\'s REAL placement, not on transform.x (diff ' + diff(offPar, onPar) + ' bytes)');
+    check(mn.w > mo.w + 15, 'and it recovers content: width ' + mo.w.toFixed(0) + ' → ' + mn.w.toFixed(0));
+  }
+
+  /* ---------------------------------------------------------------------------------------- */
+  function doPs() {
+    head('PLATE SCALE  — every LENGTH must be multiplied by ps');
+    say('  Rendering into a canvas HALF the project size makes renderScene stamp __fmRS=0.5, exactly');
+    say('  as a reduced-quality preview does. Results are reported in PROJECT px, so the two rows');
+    say('  must agree. `inset` is the one param that arrives in project units, so it is the test.');
+    say('');
+    [[{ amount: 1 }, 'defaults (inset 0)'],
+     [{ amount: 1, inset: 40 }, 'inset 40px'],
+     [{ amount: 1, inset: 40, bulge: 0 }, 'inset 40px, bulge 0']].forEach(function (c) {
+      var mk = function () { var l = circle(300, 480, 240); l.effects = [fx(c[0])]; return l; };
+      var m1 = meas(render(scene([mk()]), 0, 480, 480), PW);
+      var mh = meas(render(scene([mk()]), 0, 240, 240), PW);
+      say('  ' + c[1]);
+      say('    ps=1.0  ' + m1.s);
+      say('    ps=0.5  ' + mh.s);
+      check(Math.abs(m1.w - mh.w) <= 4 && Math.abs(m1.h - mh.h) <= 4 && Math.abs(m1.x0 - mh.x0) <= 4,
+        c[1] + ': the two plate scales agree to within 4 project px');
+    });
+    say('');
+    say('  Discriminator: at ps=0.5 an UNSCALED inset of 40 would act as 40 PLATE px = 80 project px,');
+    say('  putting the right wall at x=400 instead of x=440.');
+    var mkI = function () { var l = circle(300, 480, 240); l.effects = [fx({ amount: 1, inset: 40, bulge: 0 })]; return l; };
+    var mh = meas(render(scene([mkI()]), 0, 240, 240), PW);
+    check(Math.abs(mh.x1 - 439) < 4, 'at ps=0.5 the wall is at 440 (measured right edge ' + mh.x1.toFixed(1) + '), not 400');
+  }
+
+  /* ---------------------------------------------------------------------------------------- */
+  function doStable() {
+    head('STABILITY  — corners, oversized layers, degenerate inputs');
+    // corner
+    var mk = function () { var l = circle(300, 480, 480); l.effects = [fx({ amount: 1 })]; return l; };
+    var mc0 = meas(render(scene([circle(300, 480, 480)])), PW);
+    var mc1 = meas(render(scene([mk()])), PW);
+    say('  CORNER (bottom-right, 50% over both walls)');
+    say('    clipped  ' + mc0.s);
+    say('    squished ' + mc1.s);
+    check(mc1.w > mc0.w + 10 && mc1.h > mc0.h + 10, 'both axes recover content — the two fields sum, no special case');
+    check(mc1.x1 <= 479.5 && mc1.y1 <= 479.5, 'nothing is pushed back out through either wall');
+
+    say('');
+    [[1.5, '1.5x the frame'], [3, '3x the frame'], [8, '8x the frame']].forEach(function (c) {
+      var S = Math.round(480 * c[0]);
+      var mkB = function () { var l = rect(S, S, 240, 240); l.effects = [fx({ amount: 1 })]; return l; };
+      var t0 = performance.now();
+      var im = render(scene([mkB()]));
+      var ms = performance.now() - t0;
+      var m = meas(im, PW);
+      var im2 = render(scene([mkB()]));
+      say('  OVERSIZED ' + c[1] + ' (' + S + 'x' + S + ' rect): ' + m.s + '   ' + ms.toFixed(1) + ' ms');
+      check(!m.blank && m.lit > 100000, c[1] + ': still renders (not blank, no NaN coords)');
+      check(diff(im, im2) === 0, c[1] + ': deterministic');
+    });
+
+    say('');
+    // pathological params
+    [[{ amount: 1.5, softness: 20, bulge: 150 }, 'extremes: amount 1.5, spread 20%, bulge 150%'],
+     [{ amount: 1, softness: 250, bulge: 0 }, 'spread 250%, bulge 0'],
+     [{ amount: 1, inset: 300 }, 'inset 300 (walls meet in the middle of a 480 frame)'],
+     [{ amount: 1, inset: -100 }, 'inset -100 (walls outside the frame)'],
+     [{ amount: 1, walls: 1 }, 'walls = Sides'],
+     [{ amount: 1, walls: 2 }, 'walls = Floor + ceiling'],
+     [{ amount: 1, walls: 3 }, 'walls = Floor']].forEach(function (c) {
+      var mkX = function () { var l = circle(300, 470, 470); l.effects = [fx(c[0])]; return l; };
+      var im = render(scene([mkX()]));
+      var m = meas(im, PW);
+      say('  ' + c[1]);
+      say('    ' + m.s);
+      check(!m.blank, c[1] + ': renders something');
+    });
+
+    say('');
+    // STACKING. Squish renders the layer into its own plate by re-entering drawLayer, so a second
+    // plate effect on the same layer re-enters this function. A shared scratch canvas would have the
+    // inner pass clear and rewrite the outer pass's source — the bug the depth-indexed pool exists
+    // to prevent. Two Squishes and Squish-over-a-warp both have to come out sane.
+    [[['squish', 'squish'], 'Squish + Squish'],
+     [['twirl', 'squish'], 'Twirl then Squish'],
+     [['squish', 'twirl'], 'Squish then Twirl'],
+     [['glow', 'squish'], 'Glow then Squish']].forEach(function (c) {
+      var mkS = function () {
+        var l = circle(300, 480, 240);
+        l.effects = c[0].map(function (ty) { return ty === 'squish' ? fx({ amount: 1 }) : FM.fxRegistry.makeInstance(ty); });
+        return l;
+      };
+      var im = render(scene([mkS()])), im2 = render(scene([mkS()]));
+      var m = meas(im, PW);
+      say('  ' + c[1] + ': ' + m.s);
+      check(!m.blank && diff(im, im2) === 0, c[1] + ': renders and is deterministic');
+    });
+
+    say('');
+    // zero-size / empty layer must not throw
+    try {
+      var e = FM.makeLayer('shape', { x: 480, y: 240, start: 0, duration: 10, shape: 'rect', shapeW: 0, shapeH: 0, fill: '#2fd0b5' });
+      e.effects = [fx({ amount: 1 })];
+      render(scene([e]));
+      check(true, 'a zero-size layer renders without throwing');
+    } catch (err) { check(false, 'a zero-size layer threw: ' + err.message); }
+  }
+
+  /* ---------------------------------------------------------------------------------------- */
+  function doCost() {
+    head('COST  — ms per frame');
+    function bench(w, h, cw, ch, params, label, mkL) {
+      var mk = mkL || function () { var l = circle(Math.round(h * 0.3), w, h / 2); l.effects = params ? [fx(params)] : []; return l; };
+      var sc = scene([mk()], w, h);
+      var i;
+      for (i = 0; i < 3; i++) render(sc, 0, cw, ch);       // warm
+      var N = 12, t0 = performance.now();
+      for (i = 0; i < N; i++) render(scene([mk()], w, h), 0, cw, ch);
+      var ms = (performance.now() - t0) / N;
+      say('  ' + label.padEnd(56) + ms.toFixed(2) + ' ms/frame');
+      return ms;
+    }
+    var base = bench(1080, 1920, 1080, 1920, null, '1080x1920, no effect, 50% over the wall');
+    var on = bench(1080, 1920, 1080, 1920, { amount: 1 }, '1080x1920, SQUISH, 50% over the wall');
+    var half = bench(1080, 1920, 540, 960, { amount: 1 }, '1080x1920 into a 540x960 preview (ps=0.5), SQUISH');
+    var idle = bench(1080, 1920, 1080, 1920, { amount: 1 }, '1080x1920, SQUISH present, layer mid-frame (idle)',
+      function () { var l = circle(576, 540, 960); l.effects = [fx({ amount: 1 })]; return l; });
+    var baseIdle = bench(1080, 1920, 1080, 1920, null, '1080x1920, no effect, layer mid-frame',
+      function () { return circle(576, 540, 960); });
+    say('');
+    say('  active overhead   : ' + (on - base).toFixed(2) + ' ms  (' + (on / base).toFixed(2) + 'x)');
+    say('  idle overhead     : ' + (idle - baseIdle).toFixed(2) + ' ms  (' + (idle / baseIdle).toFixed(2) + 'x) — the geometric early-out');
+    say('  reduced preview   : ' + half.toFixed(2) + ' ms  (' + (half / on).toFixed(2) + 'x of full)');
+    // Compare against an existing warp of the same family for scale.
+    var tw = bench(1080, 1920, 1080, 1920, null, '1080x1920, TWIRL (existing warp) for scale',
+      function () { var l = circle(576, 1080, 960); l.effects = [FM.fxRegistry.makeInstance('twirl')]; return l; });
+  }
+
+  /* ---------------------------------------------------------------------------------------- */
+  var out = document.getElementById('out');
+  try {
+    if (!FM || !FM.renderScene || !FM.fxRegistry) throw new Error('FM did not load');
+    if (!FM.fxRegistry.get('squish')) throw new Error('squish is NOT in the registry');
+    say('SQUISH PROBE  —  registry entry: ' + JSON.stringify(FM.fxRegistry.get('squish').category)
+      + '   params: ' + FM.fxRegistry.get('squish').params.map(function (p) { return p.key + '=' + p.default; }).join(' '));
+    if (MODE === 'all' || MODE === 'noop') doNoop();
+    if (MODE === 'all' || MODE === 'edges') doEdges();
+    if (MODE === 'all' || MODE === 'ps') doPs();
+    if (MODE === 'all' || MODE === 'stable') doStable();
+    if (MODE === 'all' || MODE === 'cost') doCost();
+    say('');
+    say(FAIL === 0 ? 'PROBE OK — 0 failures' : 'PROBE FAILED — ' + FAIL + ' failure(s)');
+    out.textContent = L.join('\n');
+    if (FAIL) out.className = 'bad';
+    document.body.setAttribute('data-ready', FAIL ? '0' : '1');
+    document.title = (FAIL ? 'FAIL ' + FAIL : 'OK') + ' — squish probe';
+  } catch (e) {
+    out.className = 'bad';
+    out.textContent = L.join('\n') + '\n\nERROR — ' + (e && e.stack || e);
+    document.body.setAttribute('data-ready', '0');
+    document.title = 'ERROR — squish probe';
+  }
+})();
+</script>
+</body>
+</html>

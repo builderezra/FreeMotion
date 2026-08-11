@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Squish thumb</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12px/1.5 ui-monospace,Menlo,monospace}
+#out{padding:10px 14px;white-space:pre-wrap}canvas{margin:8px;image-rendering:pixelated;width:192px;height:192px}
+.bad{color:#ff7a85}</style></head>
+<body>
+<div id="strip"></div>
+<div id="out">running…</div>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script src="../js/fx-thumbs.js"></script>
+<script>
+/* The Add-Effect browser tile for Squish. A new effect can be perfectly correct in the compositor
+ * and still ship a dead tile: the wrong SUBJECT (the distort default is a full-frame lattice with
+ * nothing hanging over an edge) makes the effect a visible no-op, and a static tile freezes on one
+ * deformed frame. This renders the strip fx-thumbs would actually cache and MEASURES it — the tile
+ * has to differ from the un-effected sample, and the frames have to differ from each other. */
+(function () {
+  'use strict';
+  var L = [], FAIL = 0;
+  function say(s) { L.push(s); }
+  function check(ok, s) { if (!ok) FAIL++; L.push((ok ? '  PASS  ' : '  FAIL  ') + s); }
+  var out = document.getElementById('out'), strip = document.getElementById('strip');
+  try {
+    var reg = FM.fxRegistry.get('squish');
+    say('registry: category=' + reg.category + '  label=' + reg.label);
+    say('featured position: ' + FM.FX_FEATURED.indexOf('squish') + ' of ' + FM.FX_FEATURED.length);
+    check(FM.FX_FEATURED[0] === 'squish', 'Squish leads FX_FEATURED (newest-first standing rule)');
+    check(reg.category === 'distort', 'category is distort');
+    check(!!reg.desc && reg.desc.length > 40, 'it has a real description: ' + JSON.stringify(reg.desc.slice(0, 60) + '…'));
+    var pk = reg.params.map(function (p) { return p.key + '(' + p.type + ')'; }).join(' ');
+    say('params: ' + pk);
+    check(reg.params.length === 5, 'five controls are exposed');
+
+    // The tile itself. mount() is rAF-queued (tiles stream in without janking the browser), so the
+    // canvas is still blank on the next line — wait for the ticker, then measure twice a beat apart:
+    // a Squish tile is only worth shipping if it has content AND if it MOVES (a frozen deformed
+    // frame reads as a broken picture rather than as a squash).
+    var host = document.createElement('canvas'); host.width = 96; host.height = 96;
+    strip.appendChild(host);
+    FM.fxThumbs.mount(host, 'squish');
+    var BG = [0x15, 0x1a, 0x24];
+    function content(cv) {
+      var d = cv.getContext('2d').getImageData(0, 0, 96, 96).data, n = 0, i;
+      for (i = 0; i < d.length; i += 4) {
+        if (Math.abs(d[i] - BG[0]) > 6 || Math.abs(d[i + 1] - BG[1]) > 6 || Math.abs(d[i + 2] - BG[2]) > 6) n++;
+      }
+      return n;
+    }
+    function snapBytes(cv) { return cv.getContext('2d').getImageData(0, 0, 96, 96).data.slice(); }
+    setTimeout(function () {
+      try {
+        var n1 = content(host), a = snapBytes(host);
+        setTimeout(function () {
+          var n2 = content(host), b = snapBytes(host), d = 0, i;
+          for (i = 0; i < a.length; i++) if (a[i] !== b[i]) d++;
+          say('tile content: ' + n1 + ' / 9216 px differ from the backdrop');
+          check(n1 > 1500, 'the Squish tile renders actual content (not the blank fallback)');
+          check(d > 500, 'the tile ANIMATES — ' + d + ' bytes change between beats (it loops the squash)');
+          say('second sample: ' + n2 + ' px');
+          out.textContent = L.join('\n') + '\n\n' + (FAIL ? 'FAILED ' + FAIL : 'THUMB OK — 0 failures');
+          if (FAIL) out.className = 'bad';
+          document.title = (FAIL ? 'FAIL' : 'OK') + ' — squish thumb';
+          document.body.setAttribute('data-ready', FAIL ? '0' : '1');
+        }, 700);
+      } catch (e2) { out.className = 'bad'; out.textContent = 'ERROR — ' + e2; document.title = 'ERROR'; }
+    }, 500);
+  } catch (e) {
+    out.className = 'bad';
+    out.textContent = L.join('\n') + '\n\nERROR — ' + (e && e.stack || e);
+    document.title = 'ERROR — squish thumb';
+    document.body.setAttribute('data-ready', '0');
+  }
+})();
+</script>
+</body>
+</html>

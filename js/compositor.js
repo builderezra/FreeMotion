@@ -722,6 +722,16 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Match', options: [[0, 'Colour + contrast'], [1, 'Colour only'], [2, 'Contrast only']], def: 0 },
     ] },
+    // Squish — the canvas edges become WALLS. A layer that would go off-frame is normally just
+    // clipped; here it stays whole and compresses against the edge, and spreads sideways as it does.
+    // Pair it with a Bounce ease on Position for an impact squash. See drawSquish.
+    { type: 'squish', label: 'Squish', desc: 'Turns the canvas edges into walls: instead of sliding off-frame and being cut off, the layer squashes against the edge and spreads sideways, then springs back. Put a Bounce ease on Position and you get the impact squash for free.', params: [
+      { key: 'amount', label: 'Squish', min: 0, max: 1.5, step: 0.02, def: 1 },
+      { key: 'softness', label: 'Spread', min: 20, max: 250, step: 5, def: 100, unit: '%' },
+      { key: 'bulge', label: 'Bulge', min: 0, max: 150, step: 5, def: 70, unit: '%' },
+      { key: 'walls', label: 'Walls', options: [[0, 'All'], [1, 'Sides'], [2, 'Floor + ceiling'], [3, 'Floor']], def: 0 },
+      { key: 'inset', label: 'Wall inset', min: -100, max: 300, step: 1, def: 0, unit: 'px' },
+    ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1443,7 +1453,7 @@ window.FM = window.FM || {};
     squeeze: 1, tiles: 1, motionflow: 1, particles: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
-    displacemap: 1, polardisplace: 1,
+    displacemap: 1, polardisplace: 1, squish: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
@@ -1464,6 +1474,9 @@ window.FM = window.FM || {};
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
+    // Squish: needs a source plate BIGGER than the frame (the off-canvas part is the part it has to
+    // bring back), so it cannot ride the project-sized WARP_FX plate — it has its own render path.
+    if (fx.type === 'squish') return drawSquish(ctx, layer, t, scene, fx);
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
@@ -2656,6 +2669,249 @@ window.FM = window.FM || {};
       ctx.drawImage(wB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(wB,0,0) at scale 1
       ctx.restore();
     } finally { _wpDepth--; }
+  }
+
+  /* ============================ SQUISH — the canvas edges are WALLS ============================
+   *
+   * WHAT IT IS. Slide a layer off the side of the frame and it is simply cut off. With Squish the
+   * frame edges push back: the layer stays whole and COMPRESSES against the edge, spreading along
+   * the wall as it does. Drop it onto the bottom edge with a Bounce ease on Position and the
+   * impact squash comes out of the geometry for free — automatic squash-and-stretch.
+   *
+   * THE MODEL — a pressure field, not a bounding box.
+   * Each live wall emits a repulsion field. Working in the INVERSE direction (dest -> source, which
+   * is what a resampler needs), the right wall's field is
+   *
+   *     srcX = x + pR * K(x),        K(x) = max(0, (x - (xR - Lx)) / Lx) ^ 2
+   *
+   * with pR = how far past the wall the layer reaches (its PENETRATION) and Lx = how deep into the
+   * frame the field is felt (its REACH). Read that as: the output pixel sitting ON the wall fetches
+   * from pR px OUTSIDE it, so the layer's outermost point lands exactly on the wall and everything
+   * between is packed in behind it. Two properties fall out of writing it inverse-first:
+   *   - it is UNCONDITIONALLY monotonic (dsrc/dx = 1 + 2*pR*K'/Lx > 0), so it can never fold;
+   *   - it is C1 at the field boundary (K and K' are both 0 there), so there is no seam where the
+   *     undisturbed part of the layer meets the compressed part.
+   * K'' rises toward the wall, so the material nearest the wall is the most compressed — which is
+   * what a soft body against a hard surface actually does.
+   *
+   * Four walls each contribute their own term and the terms are SUMMED, so a corner is not a
+   * special case: both fields fire and the layer compresses diagonally into it. Nothing is
+   * piecewise, nothing is clipped to a box, and a layer that touches no wall has every penetration
+   * at zero, so the whole field is identically zero.
+   *
+   * BULGE (the "stretch" half of squash-and-stretch). Compressing along the wall normal expands
+   * along the wall tangent, by the same kernel:  srcY = cy + (y - cy) / (1 + gR*K(x)).  Its gain is
+   * tied to the compression (g = bulge * pR / Lx) and then capped so the spread cannot push the
+   * layer out of the very frame it is being squashed into.
+   *
+   * WHY IT IS NOT A WARP_FX ENTRY. drawWarpEffect's plate is exactly project-sized, so the
+   * off-canvas half of the layer never exists in it. Squishing a half-clipped disc can only smear
+   * the visible half — the missing ring would never come back. This path renders the layer into a
+   * plate that covers the frame PLUS a margin (the same __fmOX/__fmOY origin trick Tiles uses), so
+   * the material the wall is supposed to be pushing back into shot is actually there to be read.
+   * The margin is INTEGER plate pixels, which keeps the padded plate's grid aligned with the
+   * frame's — an identity map then reads exactly the pixel a normal plate would have.
+   *
+   * WHERE THE EDGES COME FROM. The margin is sized geometrically (transform + layer size + scale,
+   * bounded by the half-diagonal so it holds under any rotation) because that only has to be an
+   * UPPER bound and costs no render. The edges that drive the physics are then the EXACT ALPHA
+   * bounds of that padded plate. That distinction matters: layerSize() returns the transform box,
+   * which is wrong for a rotated shape (its box is not axis-aligned), wrong for an ellipse (its
+   * visual bounds are inscribed in the box) and wrong for anything with a stroke, a glow or a
+   * shadow (which draw outside it). The alpha scan is right for all of them by construction.
+   *
+   * DETERMINISM: params, time and the measured bounds only — no randomness, so preview == export.
+   * PLATE SCALE: every length here is already in PLATE pixels (the bounds are measured on the
+   * plate), and `inset` — the one length that arrives in project units — is multiplied by ps.
+   * ========================================================================================== */
+  const _sqPool = [];
+  let _sqDepth = 0;
+  // Amount 0 (or no wall in reach) must be the effect NOT BEING THERE, byte for byte. An identity
+  // warp is not good enough: the plate round trip is lossy on antialiased alpha (getImageData is
+  // unpremultiplied 8-bit, the canvas is premultiplied 8-bit), so a zero-strength pass would still
+  // move a few thousand bytes. The only exact no-op is to not run the pass — re-enter the ordinary
+  // layer path with this instance removed, which is literally what "the effect is absent" means.
+  function drawSquishOff(ctx, layer, t, scene, fx) {
+    drawLayer(ctx, Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) }), t, scene);
+  }
+  function drawSquish(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const p = fx.params || {};
+    // Every param read falls back to the CATALOG default. FM.evalProp(undefined, t) returns 0, so a
+    // missing key (older project, imported/AI-authored node) would silently render Squish at
+    // strength 0 — the effect present in the stack and doing nothing. See the note at POSTFX.
+    let amt = p.amount == null ? 1 : FM.evalProp(p.amount, t);
+    if (!(amt > 0)) return drawSquishOff(ctx, layer, t, scene, fx);
+    if (amt > 2) amt = 2;
+    let soft = p.softness == null ? 100 : FM.evalProp(p.softness, t);
+    if (!(soft > 5)) soft = 5; else if (soft > 400) soft = 400;
+    let bulge = p.bulge == null ? 70 : FM.evalProp(p.bulge, t);
+    if (!(bulge > 0)) bulge = 0; else if (bulge > 300) bulge = 300;
+    const mode = p.walls == null ? 0 : (Math.round(FM.evalProp(p.walls, t)) | 0);
+    const liveX = (mode === 0 || mode === 1);            // left + right
+    const liveT = (mode === 0 || mode === 2);            // ceiling
+    const liveB = (mode === 0 || mode === 2 || mode === 3);
+    const insP = p.inset == null ? 0 : FM.evalProp(p.inset, t);   // project px; moves every wall inward
+
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+
+    // ---- where could this layer possibly be? -----------------------------------------------
+    // A CONSERVATIVE box in project space, used for two things: to skip the whole pass when no live
+    // wall is even reachable (the common case — layer mid-frame — then costs nothing beyond this),
+    // and to size the padded plate below. It only has to CONTAIN the layer; the edges that drive
+    // the physics come from the alpha scan.
+    // It reads the placement MATRIX rather than transform.x/y, and that is not a nicety: x/y are
+    // LOCAL to the parent, so a layer parented to a null that carries it into a wall has a
+    // transform.x still sitting mid-frame — the pass would be skipped and the layer would clip as
+    // though the effect were not there. layerCTM composes parenting, behaviours, wiggle, z and the
+    // camera, so the four projected corners are where the layer actually is.
+    const tr = layer.transform || {};
+    const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
+    const strokeW = (layer.stroke && layer.stroke.enabled) ? Math.abs(layer.stroke.width || 0) : 0;
+    let gx0, gy0, gx1, gy1;
+    const M = layerCTM(layer, t, scene);
+    if (M) {
+      const kx = anchorX(tr), ky = anchorY(tr), bwl = sz.w || 0, bhl = sz.h || 0;
+      gx0 = gy0 = Infinity; gx1 = gy1 = -Infinity;
+      for (let i = 0; i < 4; i++) {
+        const lx = ((i & 1) ? 1 - kx : -kx) * bwl, ly = ((i & 2) ? 1 - ky : -ky) * bhl;
+        const qx = M.a * lx + M.c * ly + M.e, qy = M.b * lx + M.d * ly + M.f;
+        if (qx < gx0) gx0 = qx; if (qx > gx1) gx1 = qx;
+        if (qy < gy0) gy0 = qy; if (qy > gy1) gy1 = qy;
+      }
+      // A stroke is centred on the path, so it draws OUTSIDE the box; +4 covers antialiasing.
+      const msc = Math.max(Math.hypot(M.a, M.b), Math.hypot(M.c, M.d)) || 1;
+      const slack = strokeW * msc * 0.75 + 4;
+      gx0 -= slack; gy0 -= slack; gx1 += slack; gy1 += slack;
+    } else {
+      // No getTransform (ancient engine): fall back to the anchor plus half the diagonal, which is
+      // the exact bound on reach under any rotation. Parenting is not resolved on this path.
+      const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
+      const reach = 0.5 * Math.hypot(sz.w || 0, sz.h || 0) * sc + strokeW * sc + 4;
+      const qx = FM.evalProp(tr.x, t) || 0, qy = FM.evalProp(tr.y, t) || 0;
+      gx0 = qx - reach; gx1 = qx + reach; gy0 = qy - reach; gy1 = qy + reach;
+    }
+    if (!(liveX && (gx1 > PW - insP || gx0 < insP)) && !(liveB && gy1 > PH - insP) && !(liveT && gy0 < insP)) {
+      return drawSquishOff(ctx, layer, t, scene, fx);
+    }
+
+    // ---- the padded source plate -----------------------------------------------------------
+    let mx = Math.max(0, -gx0, gx1 - PW), my = Math.max(0, -gy0, gy1 - PH);
+    mx = Math.min(mx, PW * 0.6); my = Math.min(my, PH * 0.6);   // cost ceiling: at most ~4.8x the comp's pixels
+    const mxp = Math.max(0, Math.ceil(mx * ps)), myp = Math.max(0, Math.ceil(my * ps));   // INTEGER plate px: keeps the padded grid aligned with the frame's
+    const EW = W + 2 * mxp, EH = H + 2 * myp;
+    // Depth-indexed pool, same reason as the warp pool: stacking two plate effects re-enters this
+    // function (the inner one renders inside the outer's drawLayer) and a shared singleton would
+    // have the inner pass clear and rewrite the outer pass's source.
+    const d = _sqDepth++;
+    try {
+      let slot = _sqPool[d];
+      if (!slot) slot = _sqPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), dx: null, ry: null, dy: null, rx: null };
+      const sA = slot.A, sB = slot.B;
+      if (sA.width !== EW || sA.height !== EH) { sA.width = EW; sA.height = EH; }
+      if (sB.width !== W || sB.height !== H) { sB.width = W; sB.height = H; }
+      sA.__fmRS = ps; sA.__fmOX = -mxp / ps; sA.__fmOY = -myp / ps;   // plate pixel (mxp,myp) IS project (0,0)
+      const actx = sA.getContext('2d', { willReadFrequently: true });
+      actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, EW, EH);
+      baseT(actx);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(actx, tmp, t, scene);
+      const src = actx.getImageData(0, 0, EW, EH).data;
+      const bb = alphaBBoxExact(src, EW, EH);
+      if (!bb) return;   // the layer drew nothing; so does this
+
+      // ---- the physics, all in PLATE pixels with the frame's origin at (0,0) ----------------
+      const bx0 = bb.x - mxp, bx1 = bb.x + bb.w - mxp;      // half-open [bx0, bx1)
+      const by0 = bb.y - myp, by1 = bb.y + bb.h - myp;
+      const bw = Math.max(1, bx1 - bx0), bh = Math.max(1, by1 - by0);
+      const bcx = (bx0 + bx1) / 2, bcy = (by0 + by1) / 2;   // the spread pivots on the layer, not the frame
+      // LENGTH -> plate px, or the walls would move with preview quality. Clamped per axis so the
+      // two opposing walls can meet but never cross: an inset of 300 on a 480 frame otherwise puts
+      // the left wall to the RIGHT of the right one and the field pushes outward from both.
+      const ins = insP * ps;
+      const insX = Math.min(ins, W / 2 - 1), insY = Math.min(ins, H / 2 - 1);
+      const xR = W - insX, xL = insX, yB = H - insY, yT = insY;
+      const pR = liveX ? Math.max(0, bx1 - xR) * amt : 0;
+      const pL = liveX ? Math.max(0, xL - bx0) * amt : 0;
+      const pB = liveB ? Math.max(0, by1 - yB) * amt : 0;
+      const pT = liveT ? Math.max(0, yT - by0) * amt : 0;
+      if (!(pR > 0 || pL > 0 || pB > 0 || pT > 0)) return drawSquishOff(ctx, layer, t, scene, fx);
+
+      // Reach: how far into the frame each wall is felt. Tied to the layer's own extent so a small
+      // ball flattens as a whole rather than growing a flat spot, floored against the penetration so
+      // the compression at the wall stays bounded (<= ~4.3x) however deep the layer has gone.
+      const Lcap = 8 * Math.max(W, H);
+      let Lx = Math.max(soft * 0.01 * bw, 2 * ps, 0.6 * Math.max(pR, pL)); if (Lx > Lcap) Lx = Lcap;
+      let Ly = Math.max(soft * 0.01 * bh, 2 * ps, 0.6 * Math.max(pB, pT)); if (Ly > Lcap) Ly = Lcap;
+
+      // Tangential spread — the "stretch" half of squash-and-stretch, and the reason the layer does
+      // not just get thinner. The gain is not a free number: the local compression along the wall
+      // normal is d(src)/d(dest) = 1 + 2*p*w/L, so its PEAK (at the wall, w=1) is 1 + 2p/L, and
+      // stretching by exactly that much conserves area there. Bulge is therefore the FRACTION of
+      // that conservation you want — 100% = incompressible, 0% = the layer simply gets thinner.
+      // Measured before this was tied to the compression: a 45°-rotated square driven 62px into the
+      // wall came back with 77,150 lit pixels against 86,406 clipped and 90,000 whole — the squash
+      // was quietly eating 14% of the layer, which reads as the thing shrinking, not squashing.
+      const bf = bulge * 0.01;
+      let gR = bf * 2 * (pR / Lx), gL = bf * 2 * (pL / Lx);     // side walls stretch along Y
+      let gB = bf * 2 * (pB / Ly), gT = bf * 2 * (pT / Ly);     // floor/ceiling stretch along X
+      const capX = Math.max(1, 2 * Math.max(1, Math.min(bcx - xL, xR - bcx)) / bw);
+      const capY = Math.max(1, 2 * Math.max(1, Math.min(bcy - yT, yB - bcy)) / bh);
+      const sgX = gB + gT, sgY = gR + gL;
+      if (sgX > 0 && 1 + sgX > capX) { const k = (capX - 1) / sgX; gB *= k; gT *= k; }
+      if (sgY > 0 && 1 + sgY > capY) { const k = (capY - 1) / sgY; gR *= k; gL *= k; }
+
+      // Each wall's field varies along ONE axis only, so the whole map collapses to two lookup
+      // tables + two multiplies per pixel. (dx/dy = the summed normal displacement; rx/ry = the
+      // reciprocal of the tangential stretch, so the inner loop has no divides.)
+      if (!slot.dx || slot.dx.length !== W) { slot.dx = new Float32Array(W); slot.ry = new Float32Array(W); }
+      if (!slot.dy || slot.dy.length !== H) { slot.dy = new Float32Array(H); slot.rx = new Float32Array(H); }
+      const dxA = slot.dx, ryA = slot.ry, dyA = slot.dy, rxA = slot.rx;
+      const aR = xR - Lx, aL = xL + Lx, aB = yB - Ly, aT = yT + Ly;   // where each field starts
+      for (let x = 0; x < W; x++) {
+        const cx0 = x + 0.5;
+        let kR = 0, kL = 0, w;
+        if (pR > 0) { w = (cx0 - aR) / Lx; if (w > 0) kR = w * w; }
+        if (pL > 0) { w = (aL - cx0) / Lx; if (w > 0) kL = w * w; }
+        dxA[x] = pR * kR - pL * kL;
+        ryA[x] = 1 / (1 + gR * kR + gL * kL);
+      }
+      for (let y = 0; y < H; y++) {
+        const cy0 = y + 0.5;
+        let kB = 0, kT = 0, w;
+        if (pB > 0) { w = (cy0 - aB) / Ly; if (w > 0) kB = w * w; }
+        if (pT > 0) { w = (aT - cy0) / Ly; if (w > 0) kT = w * w; }
+        dyA[y] = pB * kB - pT * kT;
+        rxA[y] = 1 / (1 + gB * kB + gT * kT);
+      }
+
+      const bctx = sB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+      const ELX = EW - 1, ELY = EH - 1;
+      for (let y = 0; y < H; y++) {
+        const ny = y + 0.5 + dyA[y], rX = rxA[y], di0 = y * W * 4;
+        for (let x = 0; x < W; x++) {
+          const nx = x + 0.5 + dxA[x];
+          let ix = (bcx + (nx - bcx) * rX + mxp) | 0;
+          let iy = (bcy + (ny - bcy) * ryA[x] + myp) | 0;
+          if (ix < 0) ix = 0; else if (ix > ELX) ix = ELX;
+          if (iy < 0) iy = 0; else if (iy > ELY) iy = ELY;
+          const di = di0 + x * 4, si = (iy * EW + ix) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      bctx.putImageData(outImg, 0, 0);
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(sB, 0, 0, PW, PH);
+      ctx.restore();
+    } finally { _sqDepth--; }
   }
 
   // ---- Displacement Map (batch 29): warp the layer by ANOTHER layer's pixels. Unlike WARP_FX (a pure
