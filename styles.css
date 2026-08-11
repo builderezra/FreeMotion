@@ -1886,7 +1886,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    (Ezra). 12/12 keeps the same overall height and puts them on the centre line. */
 .hm-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; }
 .hm-brand { flex: 1; min-width: 0; font-weight: 800; font-size: 19px; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* flex:1 eats the free space so the action buttons stay grouped on the right */
-.hm-more { width: 38px; height: 38px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 18px; cursor: pointer; }
+/* .hm-more removed in v5.24 — the home ⋯ menu's two entries moved into the settings cog. */
 /* magnifier beside Select/⋯ — opens the name+date search bar */
 .hm-search-btn { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin-right: 8px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer; }
 .hm-search-btn.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
@@ -2629,3 +2629,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   #home-screen.hm-intro::before, #home-screen.hm-intro::after,
   #home-screen.hm-intro .hm-in, #home-screen.hm-intro .hm-in-fab { animation: none; }
 }
+
+/* A settings row whose control performs an action rather than storing a preference (Import…, Show
+   shortcuts). Sized to match .set-select so the right-hand column of the panel stays on one line. */
+.set-action {
+  flex: 0 0 auto; padding: 8px 14px; border-radius: 9px; cursor: pointer;
+  background: var(--panel-3); border: 1px solid var(--line); color: var(--text);
+  font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
+}
+.set-action:hover { border-color: var(--accent); color: var(--text); }
+.set-action:active { transform: translateY(1px); }

@@ -120,6 +120,22 @@ window.FM = window.FM || {};
     return row;
   }
 
+  // A row whose control is a button that DOES something, rather than storing a preference. Added so
+  // the home screen's ⋯ menu could be emptied into here (Ezra: "Put the options that show up in the
+  // three dots that are in the home menu specifically inside the menus settings cog menu") — a
+  // two-item overflow menu next to a settings cog was two front doors to the same cupboard.
+  function actionRow(label, hint, btnLabel, fn) {
+    const row = el('div', 'set-row');
+    const txt = el('div', 'set-rowtext');
+    txt.appendChild(el('div', 'set-label', label));
+    if (hint) txt.appendChild(el('div', 'set-hint', hint));
+    const b = el('button', 'set-action', btnLabel);
+    b.type = 'button';
+    b.addEventListener('click', () => { FM.settings.close(); fn(); });
+    row.appendChild(txt); row.appendChild(b);
+    return row;
+  }
+
   function hintRow(text) {
     const row = el('div', 'set-row');
     row.appendChild(el('div', 'set-hint', text));
@@ -182,6 +198,15 @@ window.FM = window.FM || {};
         hintRow('Classic puts the editing panel down the right-hand side. Studio moves it next to the timeline and turns the top bar into a rail on the far left — so adding and editing is a short trip from the clips instead of a reach to the top corner, and the canvas gets the height the top bar was using. Drag the top edge of the bottom band to trade canvas height for editing room.'),
       ));
     }
+
+    // The old home ⋯ menu, rehomed. Both are app-level rather than project-level, so they belong
+    // with the rest of the app's settings and work the same from Home or from inside a project.
+    body.appendChild(group(
+      actionRow('Import a project file', 'Open a .fmotion.json backup as a project of its own.', 'Import…',
+        () => { if (FM.storage && FM.storage.importFile) FM.storage.importFile(() => { if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); }); }),
+      actionRow('Keyboard shortcuts', 'The full list, including the ones that have no button.', 'Show',
+        () => { if (FM.shortcuts) FM.shortcuts.toggle(); }),
+    ));
 
     const foot = el('div', 'set-foot');
     const ver = document.querySelector('.ver');

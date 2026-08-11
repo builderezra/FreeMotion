@@ -963,7 +963,7 @@ window.FM = window.FM || {};
       if (top && !document.getElementById('hm-select-btn')) {
         const sb = el('button', 'hm-select-btn', 'Select'); sb.id = 'hm-select-btn';
         sb.addEventListener('click', () => { if (selectMode) exitSelect(); else enterSelect(); });
-        top.insertBefore(sb, top.querySelector('.hm-more'));
+        top.appendChild(sb);   // the ⋯ used to anchor this; it is gone (v5.24), so these simply append
       }
       // settings cog — app-wide preferences (sorting, demo mode, defaults). Injected like the
       // Select button so the markup stays put; sits left of the ⋯ file menu.
@@ -972,22 +972,14 @@ window.FM = window.FM || {};
         cg.setAttribute('aria-label', 'Settings'); cg.title = 'Settings';
         cg.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';   // same mark as the editor's cog
         cg.addEventListener('click', () => { if (FM.settings) FM.settings.open(); });
-        top.insertBefore(cg, top.querySelector('.hm-more'));
+        top.appendChild(cg);   // cog is now the last control in the row
       }
       // re-sort / re-render when a setting that affects this screen changes
       if (FM.settings) FM.settings.onChange(() => { if (FM.home.isOpen()) render(); });
-      // top-right ⋯: file-level actions that used to live behind the editor's back arrow
-      root.querySelector('.hm-more').addEventListener('click', (ev) => {
-        const r = ev.currentTarget.getBoundingClientRect();
-        FM.contextMenu.show(Math.min(r.left, window.innerWidth - 220), r.bottom + 4, [
-          { label: 'Import project file…', action: () => { FM.storage.importFile(() => FM.home.close()); } },   // close on SUCCESS, not a blind 400ms timer (which dumped you into the editor even if you cancelled the picker)
-          // NO "Save frame (PNG)" here: on Home there is no open project and so no frame to save.
-          // It lives in the editor, where a frame actually exists.
-          // Opens ON TOP of the home screen — reading the shortcut list shouldn't drop you into a
-          // project you didn't ask to open (and, on a fresh install, shouldn't create one).
-          { label: 'Shortcuts', action: () => { FM.shortcuts.toggle(); } },
-        ]);
-      });
+      // The home ⋯ is GONE (v5.24). Its only two entries — Import project file and Shortcuts — moved
+      // into the settings cog beside it, which is where app-level actions already live. Ezra: "Put the
+      // options that show up in the three dots that are in the home menu specifically inside the menus
+      // settings cog menu." Two front doors to the same cupboard, and the ⋯ was the emptier one.
       // search: magnifier → name/date bar over the list
       const sBtn = document.getElementById('hm-search-btn'), sInp = document.getElementById('hm-search-input');
       if (sBtn && sInp) {
