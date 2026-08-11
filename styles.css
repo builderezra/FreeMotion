@@ -231,6 +231,23 @@ body {
 .mt-vbox-val { width: 100%; box-sizing: border-box; text-align: center; font-size: 18px; font-weight: 600; color: var(--accent); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; cursor: ew-resize; user-select: none; font-variant-numeric: tabular-nums; touch-action: none; }
 .mt-vbox-val.editing { outline: 2px solid var(--accent); outline-offset: -1px; cursor: text; color: #fff; }
 .mt-vbox-lab { font-size: 11px; color: #7d8ca5; }
+/* X / Y / Z as the move pad's mode switch (v5.43). The LABEL is the target, not the number — tapping
+   the number opens the type-in editor and that stays. Padded into a small pill so it is a real touch
+   target rather than three glyphs, and the active axis carries the accent so the pad below always has
+   something on screen saying what it is currently editing. */
+.mt-vbox-axis { cursor: pointer; border-radius: 6px; padding: 1px 7px; margin-top: 1px; transition: background .12s, color .12s; }
+.mt-vbox-axis:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.mt-vbox-axis.on { color: var(--accent); background: rgba(90, 199, 237, .14); font-weight: 700; }
+/* An axis the pad is NOT editing reads as a plain number. Without this all three stay accent-
+   coloured and the readouts contradict the chip that says which one is live. */
+.mt-vbox.mt-axis-off .mt-vbox-val { color: var(--text); }
+/* Z sub-mode: a vertical-only pad. The chevrons ARE the affordance — they say which way the gesture
+   runs, which a bare panel with a line of text does not. */
+.mt-zpad { flex-direction: column; gap: 10px; cursor: ns-resize; }
+.mt-zpad .mt-trackpad-hint { color: var(--accent); font-weight: 600; }
+.mt-zpad-arrow { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; opacity: .5; }
+.mt-zpad-arrow.up { border-bottom: 9px solid #7d8ca5; }
+.mt-zpad-arrow.down { border-top: 9px solid #7d8ca5; }
 .mt-link { width: 32px !important; height: 32px !important; align-self: center; margin-top: 4px; flex: none; }
 .mt-link.on { color: var(--accent); border-color: rgba(41,217,187,.5); }
 /* Edit Shape (media) = Size editor: the two AM top-right toggles + Width/Height boxes. */

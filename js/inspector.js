@@ -1672,6 +1672,21 @@ window.FM = window.FM || {};
     const box = el('div', 'mt-vbox');
     const val = el('div', 'mt-vbox-val');
     const lab = el('div', 'mt-vbox-lab', labelText);
+    // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43, AM): the label under the
+    // number is the target, NOT the number itself — tapping the number already opens the type-in
+    // editor, and taking that over would trade one thing for another.
+    if (opts.axis) {
+      lab.classList.add('mt-vbox-axis');
+      const axisOn = (FM._mtAxis || 'xy') === opts.axis;
+      box.classList.add(axisOn ? 'mt-axis-on' : 'mt-axis-off');   // the VALUE follows the axis too (AM)
+      if (axisOn) lab.classList.add('on');
+      lab.title = opts.axis === 'z' ? 'Edit Z (depth) on the pad' : 'Edit X and Y on the pad';
+      lab.addEventListener('click', e => {
+        e.stopPropagation();
+        FM._mtAxis = opts.axis;
+        FM.inspector.refresh();
+      });
+    }
     const fmtS = () => round(getVal(), dp).toFixed(dp) + (opts.unit || '');
     const refresh = () => { if (!val.isContentEditable) val.textContent = fmtS(); };
     refresh(); box.appendChild(val); box.appendChild(lab);
@@ -2019,10 +2034,44 @@ window.FM = window.FM || {};
     center.appendChild(values); center.appendChild(control);
 
     if (mode === 'move') {
-      const bx = mtVBox('X', () => mtEval(layer, 'x'), (v, typed) => mtSetXY(layer, 'x', v, typed), { dp: 1, scrub: 1, kfKey: 'x', layer: layer });
-      const by = mtVBox('Y', () => mtEval(layer, 'y'), (v, typed) => mtSetXY(layer, 'y', v, typed), { dp: 1, scrub: 1, kfKey: 'y', layer: layer });
-      const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2, kfKey: 'z', layer: layer });
+      const bx = mtVBox('X', () => mtEval(layer, 'x'), (v, typed) => mtSetXY(layer, 'x', v, typed), { dp: 1, scrub: 1, kfKey: 'x', layer: layer, axis: 'xy' });
+      const by = mtVBox('Y', () => mtEval(layer, 'y'), (v, typed) => mtSetXY(layer, 'y', v, typed), { dp: 1, scrub: 1, kfKey: 'y', layer: layer, axis: 'xy' });
+      const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2, kfKey: 'z', layer: layer, axis: 'z' });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
+
+      // ---- Z sub-mode (v5.43, AM): tap the Z label and the same pad becomes a depth slider ----
+      // Ezra: "you just tap on z and then it switches to this version." It is a sub-mode of the move
+      // pad rather than a fifth button on the mode rail, exactly as AM has it — Z is still position.
+      // VERTICAL only, and the sign is chosen so the pad drags the OBJECT and not the number: pushing
+      // your finger DOWN pushes the layer back into the scene (z grows = further away, which is the
+      // same direction the fog and focus maths already read it), so it shrinks under a camera; pulling
+      // UP brings it toward you and it grows. The chevrons say which axis the gesture runs on.
+      if ((FM._mtAxis || 'xy') === 'z') {
+        const zpad = el('div', 'mt-trackpad mt-zpad');
+        zpad.appendChild(el('i', 'mt-zpad-arrow up'));
+        const zhint = el('span', 'mt-trackpad-hint', 'Swipe here to adjust Z position');
+        zpad.appendChild(zhint);
+        zpad.appendChild(el('i', 'mt-zpad-arrow down'));
+        const zsens = ((FM.scene.project.width || 1080) / 640) * 2;   // depth ranges wider than x/y
+        let zd = null;
+        zpad.addEventListener('pointerdown', e => {
+          zd = { y: e.clientY, iz: mtEval(layer, 'z') };
+          try { zpad.setPointerCapture(e.pointerId); } catch (_) {}
+          e.preventDefault();
+        });
+        zpad.addEventListener('pointermove', e => {
+          if (!zd) return;
+          if (e.pointerType === 'mouse' && e.buttons === 0) { zd = null; commitH(); return; }
+          mtSet(layer, 'z', Math.round(zd.iz + (e.clientY - zd.y) * zsens));
+          refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
+        });
+        const zEnd = e => { if (!zd) return; zd = null; try { zpad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); };
+        zpad.addEventListener('pointerup', zEnd);
+        zpad.addEventListener('pointercancel', zEnd);
+        control.appendChild(zpad);
+        if (layer.type !== 'camera') control.appendChild(el('div', 'insp-hint', 'Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move with parallax.'));
+      } else {
+
       // 2D trackpad
       const pad = el('div', 'mt-trackpad');
       const padHint = el('span', 'mt-trackpad-hint', 'Swipe here to move layer · snaps to centre, edges & earlier keyframes');
@@ -2095,6 +2144,7 @@ window.FM = window.FM || {};
       // The parallax payoff is otherwise undiscoverable — Z, the Camera object and "pans give depth"
       // live in three unconnected places. One line here connects them at the moment Z is in hand.
       if (layer.type !== 'camera') control.appendChild(el('div', 'insp-hint', 'Z sets depth — add a Camera (Add → Object) and pan it, and layers at different Z move with parallax.'));
+      }
     } else if (mode === 'rotate') {
       const brot = mtVBox('Rotation', () => mtEval(layer, 'rotation'), v => mtSet(layer, 'rotation', v), { dp: 0, unit: '°', scrub: 0.5, kfKey: 'rotation', layer: layer });
       // Snap near-zero tilt to EXACT 0 — a scrubbed-back residual (±1e-6°) is invisible but flips the
@@ -3026,7 +3076,7 @@ window.FM = window.FM || {};
       root = document.getElementById('inspector');
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
-    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
+    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
     // The quick row's middle buttons depend on which SIDE of the clip the playhead is sitting on, and
     // the panel deliberately does NOT rebuild while you scrub (it would rebuild 60-120 times a second).
     // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on

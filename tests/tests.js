@@ -1928,6 +1928,70 @@
     }
   });
 
+  test('move & transform: tapping Z turns the pad into a depth slider', { item: 'mt-z-pad' }, function () {
+    // v5.43. Ezra, from an AM screenshot: "it's showing what the z position editing looks like and I
+    // would like you to add z position editing as well… you just tap on z and then it switches to
+    // this version." A sub-mode of the move pad, not a fifth button on the mode rail.
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const L = FM.makeLayer('shape', { shape: 'rect', name: 'z', x: 200, y: 200, shapeW: 80, shapeH: 80, fill: '#fff' });
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('transform');
+      FM._mtMode = 'move';
+      FM.inspector.refresh();
+
+      const chips = () => Array.prototype.slice.call(document.querySelectorAll('.mt-vbox-axis'));
+      const chip = name => chips().find(c => (c.textContent || '').trim() === name);
+      if (chips().length !== 3) throw new Error('expected X, Y and Z to be tappable axis chips, found ' + chips().length);
+      if (!chip('Z')) throw new Error('no Z chip: ' + chips().map(c => c.textContent).join(','));
+      if (!chip('X').classList.contains('on')) throw new Error('Move mode should start on the X/Y pad');
+      if (document.querySelector('.mt-zpad')) throw new Error('the Z pad is showing before Z was tapped');
+      if (!document.querySelector('.mt-trackpad')) throw new Error('no move pad at all');
+
+      // Tap Z.
+      chip('Z').click();
+      const zpad = document.querySelector('.mt-zpad');
+      if (!zpad) throw new Error('tapping Z did not switch the pad');
+      if (document.querySelectorAll('.mt-trackpad').length !== 1) throw new Error('the X/Y pad is still there alongside the Z pad');
+      if (!chip('Z').classList.contains('on')) throw new Error('the Z chip does not read as the active axis');
+      if (chip('X').classList.contains('on')) throw new Error('X still reads as active while the pad is editing Z');
+      const hint = zpad.querySelector('.mt-trackpad-hint');
+      if (!hint || !/Z position/i.test(hint.textContent)) throw new Error('the Z pad does not say what it does: "' + (hint && hint.textContent) + '"');
+      if (zpad.querySelectorAll('.mt-zpad-arrow').length !== 2) throw new Error('the Z pad has no up/down affordance');
+
+      // Drag it. DOWN pushes the layer away, so z grows — the pad drags the object, not the number.
+      const z0 = FM.evalProp(L.transform.z, FM.time) || 0;
+      const ev = (type, y, buttons) => zpad.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: 100, clientY: y, buttons: buttons == null ? 1 : buttons }));
+      ev('pointerdown', 100); ev('pointermove', 160); ev('pointerup', 160, 0);
+      const zDown = FM.evalProp(L.transform.z, FM.time) || 0;
+      if (!(zDown > z0)) throw new Error('swiping DOWN on the Z pad did not push the layer away (z ' + z0 + ' → ' + zDown + ')');
+      ev('pointerdown', 160); ev('pointermove', 60); ev('pointerup', 60, 0);
+      const zUp = FM.evalProp(L.transform.z, FM.time) || 0;
+      if (!(zUp < zDown)) throw new Error('swiping UP did not bring the layer back toward the camera (z ' + zDown + ' → ' + zUp + ')');
+
+      // …and back.
+      chip('X').click();
+      if (document.querySelector('.mt-zpad')) throw new Error('tapping X did not return the pad to X/Y');
+      if (!document.querySelector('.mt-trackpad')) throw new Error('the X/Y pad did not come back');
+
+      // Leaving Move & Transform must not strand the pad in Z mode. Switch BACK to Z first — checking
+      // this from the X/Y state would pass whether or not anything resets.
+      chip('Z').click();
+      if (!document.querySelector('.mt-zpad')) throw new Error('could not get back into Z mode to test the reset');
+      FM.inspector.openCategory('home');
+      FM.inspector.openCategory('transform');
+      FM._mtMode = 'move'; FM.inspector.refresh();
+      if (document.querySelector('.mt-zpad')) throw new Error('the pad is still in Z mode after leaving and re-entering Move & Transform');
+    } finally {
+      FM._mtAxis = 'xy';
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.inspector.openCategory('home');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
