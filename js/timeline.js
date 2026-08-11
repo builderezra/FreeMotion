@@ -1344,6 +1344,10 @@ window.FM = window.FM || {};
   FM.timeline = {
     // exposed so the suite can prove delete-parity with FM.animatedProps without faking a double-click
     deleteKeyframesAt: deleteKeyframesAt,
+    // Read-only view of the magnet. The ⋯ menu could not tick 'Snapping' because this was a
+    // module-local with no way out — so the one timeline toggle that DEFAULTS ON was also the one
+    // that never showed its state, and tapping it looked like it did nothing.
+    isSnapping: function () { return snapping; },
     init() {
       rulerEl = document.getElementById('tl-ruler');
       tracksEl = document.getElementById('tl-tracks');

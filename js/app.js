@@ -2339,8 +2339,11 @@ window.FM = window.FM || {};
         { sep: true },
         // Timeline controls that AM keeps off the play row — relocated here so they stay reachable.
         { label: (FM.loop ? '✓ ' : '') + 'Loop playback', action: () => clickHidden('btn-loop') },
-        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin', action: () => clickHidden('btn-onion') },
-        { label: 'Snapping (magnet)', action: () => clickHidden('btn-snap') },
+        // Both of these are toggles whose EFFECT is invisible until you go and try the thing they
+        // change, so the labels say what they do rather than just naming themselves (Ezra: "what does
+        // the snapping magnet and onion skin things in the three dot menu even do???").
+        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin — ghost the layer before/after now', action: () => clickHidden('btn-onion') },
+        { label: ((FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()) ? '✓ ' : '') + 'Snapping (magnet) — clips stick to edges', action: () => clickHidden('btn-snap') },
         { label: 'Split clip at playhead', action: () => clickHidden('btn-split') },
         { label: 'Trim project to last clip', action: () => clickHidden('btn-fit') },
         { label: 'Mark export start', action: markRegionIn },
