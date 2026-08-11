@@ -4,7 +4,7 @@ Read this first if the session starts with "keep going", "go", or a vague pick-u
 Top to bottom is the order Ezra asked for. **He numbers his requests and expects them done in that
 order; new asks go to the BOTTOM of the list.**
 
-State at handoff: **v5.61**, **65/65 regression tests green**.
+State at handoff: **v5.65**, **69/69 regression tests green**.
 
 ---
 
@@ -169,6 +169,49 @@ already ARE the canvas edges. The design risk: uniform compression reads as *the
 *squashed* — a real squish deforms locally near the contact and bulges perpendicular. Three models are
 being prototyped and judged on rendered contact sheets.
 
+### 49. DESTRUCTIVE: clicking a malformed preset wipes the layer's effect stack — *workflow in flight*
+js/inspector.js ~2887 assigns `layer.effects = fx.map(...)`; a row whose `.effects` is missing or empty
+still RENDERS (as "(0 effects)") and the click assigns an empty array. Live data loss. Two more silent
+paths in js/fx-presets.js: a failed save returns `false` with no toast and no throw (:74, :141), and a
+param over MAX_KF (240) makes the WHOLE preset get discarded without a word.
+
+### 50. PC: the Add panel doesn't fill its space, and still scrolls
+Dead band beneath the tiles AND clipped content at once — the tile container's height ignores the
+panel's. Tiles should scale with the panel. Beware the circular-height trap (asking children to fill a
+parent sized by its children collapses it) and the hiding trap.
+
+### 51. The Add section should reopen whatever was last open
+Remember the tab (and inner page). Recommend global + persisted, matching how the Studio toggle and
+export settings already persist.
+
+### 52. PC: the settings cog opens the wrong settings menu in a project — **blocks item 35**
+Item 35 moves Loop / Onion / Snapping INTO that cog, so this must be fixed first or they land in the
+wrong menu. Studio layout (v5.58) is the prime suspect.
+
+### 53. PC is missing Group and Mask
+Diff the FULL phone-vs-PC layer-action lists rather than patching the two he noticed. Mask is a
+hand-rendered pseudo-effect ("the same trick as" Motion Blur (Object)), so a surface built from the
+registry will not see it.
+
+### 54. Still have to open something before you can drag it — *workflow in flight*
+v5.52's rule is literally "an OPEN effect row can be dragged". Also covers the never-verified v5.56
+guard (TAP_MS is **700**, js/fx-browser.js:91 — not 400 as older notes said).
+
+### 55. Opening a project should slide: card exits left, editor enters from the right
+260-320ms, ease-OUT, overlapping not sequential, outgoing travels ~a third as far and dims. Respect
+prefers-reduced-motion. Transform/opacity only, and mind the v5.49 intro-animation collision.
+
+### 56. Car shape is stretched — *workflow in flight*
+Acceptance test is his: the wheels must be circles. Prime suspect is the DECLARED `aspect` in
+js/addmenu.js, not the traced geometry. Do not hand-edit the points. It stays on the BEFORE-PUBLISHING
+redraw list regardless.
+
+### 57. Timeline: a group's bar bleeds across the track-head column — *workflow in flight*
+IMG_2445. The head stacks correctly (sticky, z-index 6) so the row's own BACKGROUND is the likely
+culprit, not an escaped clip. Second fault in the same shot: a long name runs under the ≡ with no
+ellipsis. Third thing to check, not assume: a clip rendering in two shades either side of the playhead
+may be intentional.
+
 ### Older, still open
 - **Transform blur can't smear effect- or camera-driven motion.**
 - **Continue the EFFECTS-PLAN build rounds.**
@@ -226,3 +269,20 @@ converted into work rather than left as a question, since the v5.56 guard was ne
   `position:absolute` inside a `position:static` parent, so it centred on the **panel** — and on the
   **viewport** in Studio, painting the degrees over the canvas); Speed disabled on layers with no source;
   and tapping the X/Y/Z **number** now selects that axis.
+- **v5.62** The **Custom elements** button opened an invisible panel — #el-browser was missing from the
+  `#fx-browser` selector list, so it opened at a measured 0x247 with position:static. The geometry comes
+  from the ID; the `fxb-root` class it borrows has no rules anywhere.
+- **v5.63** PC export button: it was rendering the original inline SVG arrow AND the crystal artwork on
+  top of it, plus a mint ring — and theme-glass.css held its own copy of that ring, the **third** fix
+  that file has silently eaten. Also PC home tabs now span the project width (they were capped at 736px
+  against the list's 700px, and had no `flex` outside the phone media query).
+- **v5.64** The finished MP4 no longer lives on the JS heap. 20s export 358.6 MB -> 30.4 MB; 40s
+  717.0 MB -> 60.9 MB. At 1280x960/200s/70Mb/s the OLD code dies with `RangeError: Array buffer
+  allocation failed` after 197.5s delivering nothing; the new one writes a working 1.655 GB file at
+  +10.5 MB peak. **Cost: no fastStart, so the output is not progressive-play.**
+- **v5.65** Captions is real. The data and render existed; the EDITOR and TIMELINE did not, so typing set
+  a field nothing read (measured: canvas ink 10805 -> 10805 after typing). Now real cues, a Cue n/N
+  navigator, chips on the clip, burned into the export (verified by MP4 round-trip), plus
+  `FM.detectSpeech` — voice-activity detection laying cues where someone talks, decoded through the
+  low-rate path v5.59 added. Word-level transcription deliberately NOT built: large model download,
+  Ezra's call.
