@@ -417,6 +417,16 @@ window.FM = window.FM || {};
     { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }] },
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
+    // Squish — the canvas edges become walls the layer squashes against instead of being clipped by.
+    // Amount doubles as the master blend (0 = the effect is not there). Give is the non-linear part:
+    // how much of the compression concentrates at the contact rather than spreading over the shape.
+    { type: 'squish', label: 'Squish', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.01, def: 1 },
+      { key: 'bulge', label: 'Stretch', min: 0, max: 1, step: 0.01, def: 0.6 },
+      { key: 'give', label: 'Give', min: 0, max: 1, step: 0.01, def: 0.65 },
+      { key: 'inset', label: 'Wall inset', min: -200, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'walls', label: 'Walls', options: ['All', 'Floor', 'Sides', 'Floor + ceiling'], def: 0 },
+    ] },
     { type: 'tiles', label: 'Tiles', params: [
       // legacy = what an instance saved BEFORE this param existed still renders as, so the panel
       // highlights the button that is actually drawing rather than the new default.
@@ -1440,7 +1450,7 @@ window.FM = window.FM || {};
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
-    squeeze: 1, tiles: 1, motionflow: 1, particles: 1,
+    squeeze: 1, squish: 1, tiles: 1, motionflow: 1, particles: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
@@ -1461,6 +1471,9 @@ window.FM = window.FM || {};
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, p.level == null ? 0.5 : FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
+    // Squish measures the layer's real bounds off an OVERSIZED plate, so it cannot be a WARP_FX mapFn
+    // (those only ever see the comp-sized plate, with the overhang already clipped away).
+    if (fx.type === 'squish') return drawSquishEffect(ctx, layer, t, scene, fx);
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
@@ -2656,6 +2669,345 @@ window.FM = window.FM || {};
       ctx.drawImage(wB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(wB,0,0) at scale 1
       ctx.restore();
     } finally { _wpDepth--; }
+  }
+
+  /* ======================= SQUISH — the frame edges act as WALLS ==============================
+   * A layer that runs off the canvas is normally just CLIPPED. Squish instead treats the four frame
+   * edges as solid walls: the layer stays WHOLE and compresses against them. Put a Bounce ease on
+   * position and the impact squash comes for free — the deformation you would otherwise keyframe by
+   * hand, driven by the frame itself.
+   *
+   * MODEL — GLOBAL COMPRESSION TO FIT.
+   *   1. Measure the layer's TRUE bounds (see the plate note).
+   *   2. Per axis, map those bounds onto the largest interval that fits inside the walls. The two
+   *      endpoints do the work of an anchor, so there is no anchor special-case: overhang on ONE
+   *      wall leaves the far edge exactly where it was and walks the near edge back to the wall;
+   *      overhang on both fits between them; no overhang leaves the interval alone and the map is
+   *      the identity.
+   *   3. Volume: the axis that is NOT compressed stretches by (1/k)^Stretch about its centre,
+   *      capped so the stretch STOPS at a wall instead of pushing through it.
+   *   4. GIVE — the non-linear part, and the reason this is not just "the layer got smaller". A
+   *      uniform scale is a shrink. Real squash concentrates at the contact: the compression is
+   *      graded across the shape (barely any at the far edge, most at the wall) and the
+   *      perpendicular stretch is tapered the same way, so the contact end fans out while the far
+   *      end keeps its shape.
+   *
+   * WHY IT CANNOT RIDE drawWarpEffect. A warp plate is COMP-SIZED, so everything past the wall has
+   * already been thrown away before a mapFn could run — you cannot fit what you cannot measure.
+   * This renders the clean layer into a plate covering the comp PLUS a margin, with the same
+   * __fmOX/__fmOY origin machinery renderExpandedPlate and the motion-blur plate use. The margin is
+   * a WHOLE number of plate pixels, so the padded plate shares the comp plate's pixel grid and an
+   * identity map is a straight copy. The estimate is then CHECKED against the rendered alpha: if the
+   * layer reached the plate border the estimate was short (parenting, camera, stroke, shadow) and
+   * the plate is re-cut once, larger.
+   *
+   * WHY ALPHA BOUNDS AND NOT THE TRANSFORM BOX. transform.x/y + layerSize() describe the layer's
+   * UNROTATED box and know nothing about what the layer paints inside it. Rotate a 300×300 square
+   * 45° and it draws 442×442; a pentagon in the same box draws 300×286; a stroke adds its own half
+   * width on every side. Fitting the transform box would leave the real shape either poking through
+   * the wall or floating short of it — the one thing this effect must never do.
+   *
+   * EDGES GO TRANSPARENT, NOT CLAMPED. drawWarpEffect edge-replicates; here that would paint a
+   * smear of the last row along exactly the wall the effect exists to sell. Anything mapped outside
+   * the plate writes nothing.
+   *
+   * Amount 0 short-circuits to the plain draw, so it is byte-identical to the effect being absent.
+   * Every length is multiplied by ps. Deterministic — params, measured bounds and t, no randomness.
+   */
+  const _sqPool = [];
+  let _sqDepth = 0;
+
+  // One axis of the fit. b0/b1 = the layer's true bounds, lo/hi = the walls, loOn/hiOn = active.
+  // `dir` says WHICH end made contact (+1 high, -1 low, 0 both/neither) — the grading needs to know
+  // which end of the shape is being pressed.
+  function sqFit(b0, b1, lo, hi, loOn, hiOn) {
+    const hitLo = loOn && b0 < lo, hitHi = hiOn && b1 > hi;
+    let t0 = hitLo ? lo : b0, t1 = hitHi ? hi : b1;
+    if (t1 - t0 < 1) {                       // wholly past the wall — collapse to a sliver hugging it
+      let c = (t0 + t1) / 2;
+      if (loOn && c < lo) c = lo;
+      if (hiOn && c > hi) c = hi;
+      t0 = c - 0.5; t1 = c + 0.5;
+    }
+    const span = b1 - b0;
+    return { t0: t0, t1: t1, k: span > 1e-6 ? (t1 - t0) / span : 1,
+             dir: (hitHi && hitLo) ? 0 : (hitHi ? 1 : (hitLo ? -1 : 0)) };
+  }
+
+  // Grow an interval about its centre by f, but never through an active wall.
+  function sqExpand(f, t0, t1, lo, hi, loOn, hiOn) {
+    if (!(f > 1)) return { t0: t0, t1: t1 };
+    const c = (t0 + t1) / 2, h = (t1 - t0) / 2;
+    if (h <= 1e-6) return { t0: t0, t1: t1 };
+    let cap = f;
+    if (loOn) cap = Math.min(cap, (c - lo) / h);
+    if (hiOn) cap = Math.min(cap, (hi - c) / h);
+    if (!(cap > 1)) cap = 1;
+    return { t0: c - h * cap, t1: c + h * cap };
+  }
+  // How much further this interval could still grow before it touches a wall (>= 1).
+  function sqRoom(t0, t1, lo, hi, loOn, hiOn) {
+    const c = (t0 + t1) / 2, h = (t1 - t0) / 2;
+    if (h <= 1e-6) return 1;
+    let r = 1e9;
+    if (loOn) r = Math.min(r, (c - lo) / h);
+    if (hiOn) r = Math.min(r, (hi - c) / h);
+    return r < 1 ? 1 : r;
+  }
+
+  /* The graded compression profile for one axis. G maps the MATERIAL coordinate u (0..1 across the
+   * layer's own bounds) to the destination offset in units of the source span: G(0)=0, G(1)=k.
+   *   give 0  -> G(u) = k·u, plain affine — every part of the shape compresses equally (a shrink).
+   *   give 1  -> the far edge keeps almost its original scale (slope b -> min(1, 2k)) and the whole
+   *              deficit piles up at the contact edge (a squash).
+   * Quadratic on purpose: the resample needs the INVERSE, and a quadratic inverts in one square
+   * root. Monotone by construction — G'(1) = 2k − b, and b < 2k for every reachable b, so it can
+   * never fold over. Only compression (k<1) is graded; a stretched axis is handled by the taper. */
+  function sqProfile(k, give, dir) {
+    let b = k;
+    if (k < 1 && give > 0 && dir !== 0) b = k + give * 0.85 * (Math.min(1, 2 * k) - k);
+    return { a1: b, a2: k - b, k: k, dir: dir };
+  }
+  function sqInv0(pf, v) {
+    const a1 = pf.a1, a2 = pf.a2;
+    if (v < 0) return v / a1;                                   // linear C1 extension off the shape:
+    if (v > pf.k) return 1 + (v - pf.k) / (a1 + 2 * a2);        // keeps off-shape dest reading off-shape source
+    if (a2 > -1e-9) return v / a1;                              // ungraded: plain affine
+    const disc = a1 * a1 + 4 * a2 * v;
+    return (-a1 + Math.sqrt(disc > 0 ? disc : 0)) / (2 * a2);
+  }
+  function sqInv(pf, v) { return pf.dir < 0 ? 1 - sqInv0(pf, pf.k - v) : sqInv0(pf, v); }
+
+  /* Premultiplied bilinear. A 2× compression shows nearest-neighbour stepping on the very edge this
+   * effect exists to sell, and interpolating in premultiplied space stops transparent neighbours
+   * darkening the rim. Outside the plate is TRANSPARENT — never edge-replicate. */
+  function sqSample(src, EW, EH, u, v, o, di) {
+    const x0 = Math.floor(u), y0 = Math.floor(v), fu = u - x0, fv = v - y0;
+    let r = 0, g = 0, b = 0, a = 0;
+    for (let j = 0; j < 2; j++) {
+      const yy = y0 + j; if (yy < 0 || yy >= EH) continue;
+      const wy = j ? fv : 1 - fv; if (wy <= 0) continue;
+      for (let i = 0; i < 2; i++) {
+        const xx = x0 + i; if (xx < 0 || xx >= EW) continue;
+        const wx = i ? fu : 1 - fu; if (wx <= 0) continue;
+        const si = (yy * EW + xx) * 4, sa = src[si + 3];
+        if (!sa) continue;
+        const w = wx * wy, pm = w * sa / 255;
+        r += src[si] * pm; g += src[si + 1] * pm; b += src[si + 2] * pm; a += w * sa;
+      }
+    }
+    if (a <= 0) { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; return; }
+    const inv = 255 / a;
+    o[di] = r * inv; o[di + 1] = g * inv; o[di + 2] = b * inv; o[di + 3] = a;
+  }
+
+  function drawSquishEffect(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const p = fx.params || {};
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    // evalProp(undefined) is 0, NOT the catalogue default — every read falls back explicitly, or an
+    // older project / imported node renders at strength 0 (or wall inset 0) with no way to tell.
+    const amount = p.amount == null ? 1 : FM.evalProp(p.amount, t);
+    if (!(amount > 0)) { drawLayer(ctx, clean, t, scene); return; }   // NO-OP at 0 by taking the identical path
+    const bulge = Math.max(0, p.bulge == null ? 0.6 : FM.evalProp(p.bulge, t));
+    const give = Math.max(0, Math.min(1, p.give == null ? 0.65 : FM.evalProp(p.give, t)));
+    const insetP = p.inset == null ? 0 : FM.evalProp(p.inset, t);     // PROJECT px — scaled by ps below
+    const mode = p.walls == null ? 0 : (Math.round(FM.evalProp(p.walls, t)) | 0);
+    const onL = (mode === 0 || mode === 2), onR = onL;
+    const onT = (mode === 0 || mode === 3), onB = (mode === 0 || mode === 1 || mode === 3);
+    if (!onL && !onR && !onT && !onB) { drawLayer(ctx, clean, t, scene); return; }
+
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);    // 1 for export/1:1, smaller for a reduced preview
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const inset = insetP * ps;                                        // LENGTH -> plate px, or the walls move with preview quality
+
+    // Margin estimate. Half the diagonal is the exact bound on how far an unparented layer can reach
+    // from its anchor under any rotation; +24 covers a stroke / shadow. It is only an ESTIMATE — the
+    // border check below is what makes it safe.
+    const tr = layer.transform || {};
+    const sz = FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH };
+    const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
+    const reach = 0.5 * Math.hypot(sz.w || 0, sz.h || 0) * Math.max(sc, 0.01) + 24;
+    const lx = FM.evalProp(tr.x, t) || 0, ly = FM.evalProp(tr.y, t) || 0;
+    let mxP = Math.max(0, Math.max(reach - lx, lx + reach - PW));
+    let myP = Math.max(0, Math.max(reach - ly, ly + reach - PH));
+    if (insetP < 0) { mxP = Math.max(mxP, -insetP + 2); myP = Math.max(myP, -insetP + 2); }
+    // Wholly inside the frame with the walls on the frame or outside it: no wall can be touched.
+    if (mxP < 1 && myP < 1 && insetP <= 0) { drawLayer(ctx, clean, t, scene); return; }
+
+    let MXP = Math.max(2, Math.ceil(mxP * ps)), MYP = Math.max(2, Math.ceil(myP * ps));
+    const CAP = Math.ceil(Math.max(W, H));                            // cost ceiling on the plate
+    const d = _sqDepth++;
+    try {
+      if (!_sqPool[d]) _sqPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const sA = _sqPool[d].A, sB = _sqPool[d].B;
+      let EW = 0, EH = 0, src = null, bx0 = 0, bx1 = -1, by0 = 0, by1 = -1;
+      for (let pass = 0; pass < 2; pass++) {
+        if (MXP > CAP) MXP = CAP;
+        if (MYP > CAP) MYP = CAP;
+        EW = W + 2 * MXP; EH = H + 2 * MYP;
+        if (sA.width !== EW || sA.height !== EH) { sA.width = EW; sA.height = EH; }
+        sA.__fmRS = ps; sA.__fmOX = -MXP / ps; sA.__fmOY = -MYP / ps;  // plate px (MXP,MYP) IS project (0,0)
+        const actx = sA.getContext('2d', { willReadFrequently: true });
+        actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, EW, EH);
+        baseT(actx);
+        actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+        const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+        drawLayer(actx, tmp, t, scene);
+        src = actx.getImageData(0, 0, EW, EH).data;
+        // Row-wise scan, walking in from BOTH ends and stopping at the first lit pixel: the bounds
+        // are all this needs, and at 1080p a per-pixel min/max over the padded plate was costing
+        // more than the resample itself.
+        bx0 = EW; by0 = EH; bx1 = -1; by1 = -1;
+        for (let y = 0; y < EH; y++) {
+          const row = y * EW * 4 + 3;
+          let lo = -1;
+          for (let x = 0; x < EW; x++) { if (src[row + x * 4] > 2) { lo = x; break; } }
+          if (lo < 0) continue;
+          let hi = lo;
+          for (let x = EW - 1; x > lo; x--) { if (src[row + x * 4] > 2) { hi = x; break; } }
+          if (lo < bx0) bx0 = lo;
+          if (hi > bx1) bx1 = hi;
+          if (y < by0) by0 = y;
+          by1 = y;
+        }
+        if (bx1 < 0) break;                                           // layer painted nothing
+        const touched = (bx0 <= 0 || by0 <= 0 || bx1 >= EW - 1 || by1 >= EH - 1);
+        if (!touched || pass === 1 || (MXP >= CAP && MYP >= CAP)) break;
+        MXP = Math.min(CAP, MXP * 2 + 8); MYP = Math.min(CAP, MYP * 2 + 8);   // estimate was short — re-cut
+      }
+      if (bx1 < 0) return;
+
+      // Continuous bounds: pixel i spans [i, i+1).
+      let b0x = bx0, b1x = bx1 + 1, b0y = by0, b1y = by1 + 1;
+      if (FM.__sqUseTransformBox) {   // TEST HOOK ONLY — the cheaper "fit the layer box" variant, for comparison
+        b0x = MXP + (lx - sz.w / 2 * sc) * ps; b1x = MXP + (lx + sz.w / 2 * sc) * ps;
+        b0y = MYP + (ly - sz.h / 2 * sc) * ps; b1y = MYP + (ly + sz.h / 2 * sc) * ps;
+      }
+      const spanX = b1x - b0x, spanY = b1y - b0y;
+      // A layer that has left the FRAME entirely is simply not on screen, and must stay not on
+      // screen. Without this the sliver clamp in sqFit collapses it onto the nearest wall and a ball
+      // that flies out of shot leaves a 1px scrape behind it — measured: a 300px circle at x=760
+      // drew a 1x12 mark on the right edge where the plain layer drew nothing.
+      if (b1x <= MXP || b0x >= MXP + W || b1y <= MYP || b0y >= MYP + H) return;
+
+      // The walls, in PADDED-PLATE pixels.
+      const L = MXP + inset, R = MXP + W - inset, T = MYP + inset, B = MYP + H - inset;
+
+      const fitX = sqFit(b0x, b1x, L, R, onL, onR);
+      const fitY = sqFit(b0y, b1y, T, B, onT, onB);
+      let tx0 = fitX.t0, tx1 = fitX.t1, ty0 = fitY.t0, ty1 = fitY.t1;
+      // Volume: only an axis that is NOT itself compressed can afford to stretch. In a corner hit
+      // both are at the wall already and sqExpand's cap silently resolves to 1 — no special case.
+      if (bulge > 0) {
+        if (fitX.k >= 1 && fitY.k < 1) { const e = sqExpand(Math.pow(1 / fitY.k, bulge), tx0, tx1, L, R, onL, onR); tx0 = e.t0; tx1 = e.t1; }
+        if (fitY.k >= 1 && fitX.k < 1) { const e = sqExpand(Math.pow(1 / fitX.k, bulge), ty0, ty1, T, B, onT, onB); ty0 = e.t0; ty1 = e.t1; }
+      }
+      const kx = (tx1 - tx0) / spanX, ky = (ty1 - ty0) / spanY;
+      const cxB = (b0x + b1x) / 2, cxT = (tx0 + tx1) / 2;
+      const cyB = (b0y + b1y) / 2, cyT = (ty0 + ty1) / 2;
+
+      // PRIMARY = the compressed axis; it is mapped first because the SECONDARY axis reads its
+      // material coordinate to know how far along the squash each row/column sits.
+      const primX = kx < ky;
+      const dirP = primX ? fitX.dir : fitY.dir;
+      const kSec = primX ? ky : kx;
+      // Taper: the stretch fans toward the CONTACT end. Whatever room the mean stretch already spent
+      // is not available to the taper, so it is clipped to what is left rather than pushed through a wall.
+      let tw = 0;
+      if (give > 0 && kSec > 1 && dirP !== 0) {
+        const room = primX ? sqRoom(ty0, ty1, T, B, onT, onB) : sqRoom(tx0, tx1, L, R, onL, onR);
+        tw = Math.min(give * 0.9, 2 * (room - 1));
+        if (tw < 0) tw = 0;
+      }
+
+      const pfX = sqProfile(kx, give, fitX.dir), pfY = sqProfile(ky, give, fitY.dir);
+      // Precompute the primary axis once per destination index (its map depends on nothing else),
+      // and with it the secondary axis' per-index scale — the inner loop is then two multiplies.
+      const nP = primX ? W : H, nS = primX ? H : W;
+      const oP = primX ? MXP : MYP, oS = primX ? MYP : MXP;
+      const pf = primX ? pfX : pfY, t0P = primX ? tx0 : ty0, spP = primX ? spanX : spanY, b0P = primX ? b0x : b0y;
+      const primSrc = new Float64Array(nP), secA = new Float64Array(nP), secB = new Float64Array(nP);
+      const kS = kSec, cB = primX ? cyB : cxB, cT = primX ? cyT : cxT;
+      for (let i = 0; i < nP; i++) {
+        const cd = i + oP + 0.5;                                      // destination pixel centre, plate coords
+        const u = sqInv(pf, (cd - t0P) / spP);                        // material coordinate 0..1
+        primSrc[i] = cd + amount * ((b0P + u * spP) - cd) - 0.5;      // −0.5: bilinear wants centre-space
+        const S = kS * (1 + tw * dirP * (u - 0.5));                   // this row/column's cross scale
+        const invS = 1 / (Math.abs(S) < 1e-6 ? 1e-6 : S);
+        secA[i] = 1 + amount * (invS - 1);                            // secondary map is affine in the dest coord…
+        secB[i] = amount * (cB - cT * invS) - 0.5;                    // …so store it as A·cd + B
+      }
+      // When the secondary axis is ALSO compressed it gets its own graded profile and no taper —
+      // then it is a plain per-index map and the loop reads it straight out.
+      let secSrc = null;
+      if (kSec < 1) {
+        secSrc = new Float64Array(nS);
+        const pfS = primX ? pfY : pfX, t0S = primX ? ty0 : tx0, spS = primX ? spanY : spanX, b0S = primX ? b0y : b0x;
+        for (let j = 0; j < nS; j++) {
+          const cd = j + oS + 0.5;
+          const u = sqInv(pfS, (cd - t0S) / spS);
+          secSrc[j] = cd + amount * ((b0S + u * spS) - cd) - 0.5;
+        }
+      }
+
+      if (FM.__sqTrace) FM.__sqTrace.push({ MXP: MXP, MYP: MYP, EW: EW, EH: EH, b: [b0x, b1x, b0y, b1y], walls: [L, R, T, B], tx: [tx0, tx1], ty: [ty0, ty1], kx: kx, ky: ky, primX: primX, dirX: fitX.dir, dirY: fitY.dir, tw: tw, a1: pfX.a1, a2: pfX.a2 });
+      if (sB.width !== W || sB.height !== H) { sB.width = W; sB.height = H; }
+      const bctx = sB.getContext('2d');
+      const outImg = bctx.createImageData(W, H), o = outImg.data;   // zero-filled: anything not visited stays transparent
+      /* Only the destination pixels that can READ the layer are worth sampling. Both axis maps are
+       * monotone, so the in-range set is one contiguous run per axis — solve for it instead of
+       * testing 2 million pixels against a shape that covers a tenth of them. */
+      const loX = b0x - 1, hiX = b1x + 1, loY = b0y - 1, hiY = b1y + 1;
+      const loP = primX ? loX : loY, hiP = primX ? hiX : hiY;
+      let iP0 = -1, iP1 = -1;
+      for (let i = 0; i < nP; i++) { const v = primSrc[i]; if (v >= loP && v <= hiP) { if (iP0 < 0) iP0 = i; iP1 = i; } }
+      if (iP0 < 0) return;                                  // nothing on the primary axis reads the layer
+      const loSec = primX ? loY : loX, hiSec = primX ? hiY : hiX;
+      let jS0 = 0, jS1 = nS - 1;
+      if (secSrc) {                                          // per-index map: one contiguous run
+        jS0 = -1; jS1 = -1;
+        for (let j = 0; j < nS; j++) { const v = secSrc[j]; if (v >= loSec && v <= hiSec) { if (jS0 < 0) jS0 = j; jS1 = j; } }
+        if (jS0 < 0) return;
+      }
+      if (primX) {
+        for (let x = iP0; x <= iP1; x++) {
+          const sx = primSrc[x], A = secA[x], Bc = secB[x];
+          let y0 = jS0, y1 = jS1;
+          if (!secSrc) {                                     // sy = A·(y+MYP+0.5)+Bc, A>0 — invert for the run
+            y0 = Math.max(0, Math.ceil((loSec - Bc) / A - MYP - 0.5));
+            y1 = Math.min(H - 1, Math.floor((hiSec - Bc) / A - MYP - 0.5));
+          }
+          for (let y = y0; y <= y1; y++) {
+            const sy = secSrc ? secSrc[y] : (A * (y + MYP + 0.5) + Bc);
+            sqSample(src, EW, EH, sx, sy, o, (y * W + x) * 4);
+          }
+        }
+      } else {
+        for (let y = iP0; y <= iP1; y++) {
+          const sy = primSrc[y], A = secA[y], Bc = secB[y], rowBase = y * W * 4;
+          let x0 = jS0, x1 = jS1;
+          if (!secSrc) {
+            x0 = Math.max(0, Math.ceil((loSec - Bc) / A - MXP - 0.5));
+            x1 = Math.min(W - 1, Math.floor((hiSec - Bc) / A - MXP - 0.5));
+          }
+          for (let x = x0; x <= x1; x++) {
+            const sx = secSrc ? secSrc[x] : (A * (x + MXP + 0.5) + Bc);
+            sqSample(src, EW, EH, sx, sy, o, rowBase + x * 4);
+          }
+        }
+      }
+      bctx.putImageData(outImg, 0, 0);
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(sB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(sB,0,0) at scale 1
+      ctx.restore();
+    } finally { _sqDepth--; }
   }
 
   // ---- Displacement Map (batch 29): warp the layer by ANOTHER layer's pixels. Unlike WARP_FX (a pure

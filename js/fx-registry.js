@@ -68,7 +68,7 @@ window.FM = window.FM || {};
     // batch 23 (move / transform)
     wiggle: 'move', shake: 'move', swing: 'move', spin: 'move', pulse: 'move', drift: 'move', orbit: 'move',
     // batch 24
-    squeeze: 'distort', tiles: 'repeat',
+    squeeze: 'distort', squish: 'distort', tiles: 'repeat',
     motionflow: 'blur',   // content-aware motion blur (temporal)
     copybg: 'stylize',    // copy the backdrop below into this layer
     // batch 26 (AM parity fill-ins)
@@ -136,7 +136,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap', 'chromakeypro', 'timewarp'];
+  FM.FX_FEATURED = ['squish', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap', 'chromakeypro'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
@@ -281,6 +281,7 @@ window.FM = window.FM || {};
     hextiles: 'Rebuilds the picture out of flat hexagons.',
     innerpinch: 'Squeezes the middle of the frame while the edges stay pinned.',
     squeeze: 'Pinches the layer in at the waist, or bulges it out.',
+    squish: 'Turns the frame edges into walls: instead of being cut off, the layer squashes against them and stretches the other way. Add a Bounce ease to the position and the impact squash happens by itself.',
     tunnel: 'Pulls the frame into a receding tunnel around the centre.',
     stretchseg: 'Grabs one horizontal band and stretches it — the glitchy pulled-taffy smear.',
     tileshift: 'Chops the frame into tiles and slides alternate rows sideways.',

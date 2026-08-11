@@ -207,6 +207,10 @@ window.FM = window.FM || {};
     // Particles stream OUT of the emitter, so a small compact emitter reads; a full-frame one just
     // sprays from everywhere at once.
     particles: 'ball',
+    // Squish acts on the layer's edge AGAINST the frame edge, so the tile needs something with room
+    // to hang over one — the category default `grid` fills the tile and touches all four walls, so
+    // nothing would be sticking out to compress and the tile would show an untouched lattice.
+    squish: 'gridcard',
     liquidglass: 'card', mattefringe: 'card',
     // Matte Choker eats or grows the alpha. On a rectangle that is just a slightly different
     // rectangle; on letters you can watch the shape thicken, which is the whole point.
@@ -254,6 +258,12 @@ window.FM = window.FM || {};
     return function (layers, hero) { hero.effects[0].params[key] = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1.65, v: 1, e: 'linear' }] }; };
   }
   const OVERRIDES = {
+    // A still frame of Squish is just a deformed card — the effect IS the moment of contact. Drive
+    // the hero into the right wall so the tile animates from untouched to fully squashed (the two
+    // probe frames differ, so the browser promotes the tile to a 10-frame loop by itself).
+    squish: function (layers, hero) {
+      hero.transform.x = { kf: [{ t: 0, v: 46, e: 'linear' }, { t: 1.65, v: 92, e: 'linear' }] };
+    },
     // Footage blur reads motion INSIDE the clip and deliberately ignores the layer's own transform —
     // so keyframing the hero across the frame proves nothing. Put a Drift UNDERNEATH it in the stack
     // instead: drift moves the content within the plate, which is exactly what this blur smears.

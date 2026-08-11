@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>squish probe</title></head>
+<body><pre id="out">…</pre>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+(function(){
+  var Q = new URLSearchParams(location.search);
+  function num(k,d){ var v=parseFloat(Q.get(k)); return isFinite(v)?v:d; }
+  var PW=num('W',480), PH=num('H',480), D=num('size',300);
+  var X=num('x', PW-D/2+0.75*D), Y=num('y', PH/2), ROT=num('rot',0);
+  var SHAPE=Q.get('shape')||'circle';
+  var STROKE = Q.get('stroke')==='0' ? 0 : Math.max(4, D*0.075);
+  var P={}; try{ P=JSON.parse(Q.get('p')||'{}'); }catch(e){}
+  function mk(){
+    var l=FM.makeLayer('shape',{x:X,y:Y,start:0,duration:10,
+      shape: SHAPE==='rect'?'rect':(SHAPE==='poly'?'polygon':'ellipse'),
+      shapeW:D, shapeH:D, fill:'#2fd0b5'});
+    l.sides=5;
+    if (ROT) l.transform.rotation = ROT;
+    if (STROKE) l.stroke={enabled:true,width:STROKE,color:'#ffd166'};
+    return l;
+  }
+  function scene(l){ var s=FM.newScene(); s.project={name:'p',width:PW,height:PH,fps:60,duration:10,background:''}; s.layers=[l]; return s; }
+  var cv=document.createElement('canvas'); cv.width=PW; cv.height=PH;
+  var g=cv.getContext('2d');
+  function render(l){ g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,PW,PH); FM.renderScene(g, scene(l), 0); }
+  function bbox(){
+    var d=g.getImageData(0,0,PW,PH).data, x0=1e9,y0=1e9,x1=-1,y1=-1,n=0;
+    for(var y=0;y<PH;y++)for(var x=0;x<PW;x++){var a=d[(y*PW+x)*4+3]; if(a<=8)continue; n++;
+      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;}
+    return n? {x0:x0,y0:y0,x1:x1,y1:y1,w:x1-x0+1,h:y1-y0+1,lit:n} : null;
+  }
+  var lines=[];
+  // 1) untouched
+  var l0=mk(); render(l0); lines.push('no fx        ' + JSON.stringify(bbox()));
+  // 2) with squish, traced
+  FM.__sqTrace=[];
+  var l1=mk(); var inst=FM.fxRegistry.makeInstance('squish');
+  Object.keys(P).forEach(function(k){ inst.params[k]=P[k]; });
+  l1.effects=[inst];
+  render(l1);
+  lines.push('instance     ' + JSON.stringify(inst.params));
+  lines.push('squish       ' + JSON.stringify(bbox()));
+  lines.push('trace        ' + JSON.stringify(FM.__sqTrace));
+  document.getElementById('out').textContent = lines.join('\n');
+  document.body.setAttribute('data-ready','1');
+})();
+</script>
+</body></html>

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>squish verify</title></head>
+<body><pre id="out">…</pre>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* Numeric gates for the Squish prototype. Everything here is a MEASUREMENT — a byte diff or a
+   measured bounding box — never an assertion about what the code ought to do. */
+(function(){
+  var PW=480, PH=480, L=[];
+  function say(s){ L.push(s); }
+
+  function scene(layers){ var s=FM.newScene(); s.project={name:'p',width:PW,height:PH,fps:60,duration:10,background:''}; s.layers=layers; return s; }
+  function shape(opt){
+    var l=FM.makeLayer('shape',{x:opt.x, y:opt.y, start:0, duration:10,
+      shape: opt.shape||'ellipse', shapeW:opt.d, shapeH:opt.dh||opt.d, fill:'#2fd0b5'});
+    l.sides=5;
+    if (opt.rot) l.transform.rotation=opt.rot;
+    if (opt.stroke!==0) l.stroke={enabled:true,width:opt.stroke||Math.max(4,opt.d*0.075),color:'#ffd166'};
+    if (opt.fx) l.effects=[opt.fx];
+    return l;
+  }
+  function inst(p){ var i=FM.fxRegistry.makeInstance('squish'); Object.keys(p||{}).forEach(function(k){i.params[k]=p[k];}); return i; }
+  var cv=document.createElement('canvas');
+  function render(layer, w, h, t){
+    w=w||PW; h=h||PH;
+    if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
+    var g=cv.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,w,h);
+    FM.renderScene(g, scene([layer]), t||0);
+    return g.getImageData(0,0,w,h).data;
+  }
+  function bbox(d,w,h){
+    var x0=1e9,y0=1e9,x1=-1,y1=-1,n=0;
+    for(var y=0;y<h;y++)for(var x=0;x<w;x++){ if(d[(y*w+x)*4+3]<=8)continue; n++;
+      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+    return n?{x0:x0,y0:y0,x1:x1,y1:y1,w:x1-x0+1,h:y1-y0+1,lit:n}:null;
+  }
+  function diff(a,b){ var n=0,worst=0; for(var i=0;i<a.length;i++){ var dd=Math.abs(a[i]-b[i]); if(dd){n++; if(dd>worst)worst=dd;} } return {bytes:n,worst:worst}; }
+  function fmt(b){ return b? (b.w+'x'+b.h+' ['+b.x0+','+b.y0+'..'+b.x1+','+b.y1+'] lit '+b.lit) : 'EMPTY'; }
+
+  // ---- 1. NO-OP AT AMOUNT 0 -----------------------------------------------------------------
+  // The effect present at amount 0 vs the effect absent. Anything but 0 differing bytes is a bug.
+  var base = { d:300, x:PW-150+150, y:PH/2 };                 // 50% over the right wall
+  var A = render(shape({d:base.d,x:base.x,y:base.y}));
+  var B = render(shape({d:base.d,x:base.x,y:base.y,fx:inst({amount:0})}));
+  var d1 = diff(A,B);
+  say('1  NO-OP at amount 0        differing bytes = '+d1.bytes+'   '+(d1.bytes===0?'PASS (byte-identical to the effect being absent)':'FAIL'));
+  // and a stack sanity check: amount 0 must also not disturb a SECOND effect on the layer
+  var l2a = shape({d:base.d,x:base.x,y:base.y}); l2a.effects=[FM.fxRegistry.makeInstance('blur')];
+  var l2b = shape({d:base.d,x:base.x,y:base.y}); l2b.effects=[inst({amount:0}), FM.fxRegistry.makeInstance('blur')];
+  var d1b = diff(render(l2a), render(l2b));
+  say('1b zero-strength in a stack differing bytes = '+d1b.bytes+'   '+(d1b.bytes===0?'PASS':'FAIL'));
+
+  // ---- 2. IDENTITY MAP ----------------------------------------------------------------------
+  // Walls pushed outside the layer (inset -200) with the layer still overhanging the frame, so the
+  // whole resample runs with k=1. Measures what the plate round trip alone costs.
+  var C = render(shape({d:base.d,x:base.x,y:base.y,fx:inst({inset:-200})}));
+  var d2 = diff(A,C);
+  say('2  identity map (inset-200) differing bytes = '+d2.bytes+' of '+A.length+'  worst channel delta = '+d2.worst);
+  say('   bbox no-fx '+fmt(bbox(A,PW,PH))+'   identity '+fmt(bbox(C,PW,PH)));
+  // where do those bytes live? A difference under a transparent pixel is invisible; one on a solid
+  // pixel is not. Split them so the number means something.
+  (function(){
+    var vis=0, visWorst=0, hid=0, aW=0;
+    for(var i=0;i<A.length;i+=4){
+      var op=Math.max(A[i+3],C[i+3]);
+      var dm=Math.max(Math.abs(A[i]-C[i]),Math.abs(A[i+1]-C[i+1]),Math.abs(A[i+2]-C[i+2]));
+      var da=Math.abs(A[i+3]-C[i+3]); if(da>aW)aW=da;
+      if(!dm && !da) continue;
+      if(op<=8){ hid++; } else { vis++; if(dm>visWorst)visWorst=dm; }
+    }
+    say('   pixels differing: '+vis+' with visible alpha (worst RGB delta '+visWorst+'), '+hid+' under alpha<=8;  worst alpha delta '+aW);
+  })();
+
+  // ---- 3. WHICH BOUNDS? alpha vs the transform box ------------------------------------------
+  // For each subject: the layer's TRANSFORM box, the bounds it actually DRAWS, and where the drawn
+  // right edge ends up after Squish. The transform box is what a cheaper implementation would fit.
+  say('');
+  say('3  EDGE DETECTION — transform box vs drawn pixels (all 300x300 layers 50% over the RIGHT wall)');
+  say('   subject            transform box x     drawn x        after squish   drawn edge lands');
+  [
+    { n:'circle+stroke',  o:{d:300,x:480,y:240} },
+    { n:'circle no strk', o:{d:300,x:480,y:240,stroke:0} },
+    { n:'square rot 45',  o:{d:300,x:480,y:240,shape:'rect',rot:45} },
+    { n:'pentagon',       o:{d:300,x:480,y:240,shape:'polygon'} },
+    { n:'pentagon rot 30',o:{d:300,x:480,y:240,shape:'polygon',rot:30} },
+  ].forEach(function(c){
+    var sz = FM.layerSize(shape(c.o));
+    var tb0 = c.o.x - sz.w/2, tb1 = c.o.x + sz.w/2;                 // the transform box, unrotated
+    var raw = bbox(render(shape(c.o)), PW, PH);                     // NB: clipped by the frame at 479
+    // measure the TRUE drawn extent by rendering into a wider project
+    PW = 960; var rawWide = bbox(render(shape(c.o)), 960, 480); PW = 480;
+    var dA = render(shape(Object.assign({}, c.o, {fx:inst({})})));
+    var out = bbox(dA, PW, PH);
+    // The counterfactual: the SAME effect fitting the layer's TRANSFORM box instead of its pixels.
+    // It cannot be measured by widening the project (that moves the wall), so measure the tell of a
+    // shape that is still being cut by the frame: a long solid run in the last column. A shape that
+    // truly lands ON the wall is TANGENT to it and lights only a few pixels there.
+    FM.__sqUseTransformBox = 1;
+    var dB = render(shape(Object.assign({}, c.o, {fx:inst({})})));
+    FM.__sqUseTransformBox = 0;
+    function lastCol(d){ var n=0; for(var y=0;y<PH;y++) if(d[(y*PW+479)*4+3]>8) n++; return n; }
+    var pad = function(s,n){ s=String(s); while(s.length<n) s+=' '; return s; };
+    say('   ' + pad(c.n,18) + pad(tb0.toFixed(0)+'..'+tb1.toFixed(0),20)
+        + pad(rawWide.x0+'..'+rawWide.x1,15) + pad(out.x0+'..'+out.x1,15)
+        + pad('alpha ' + lastCol(dA) + 'px', 16) + 'box ' + lastCol(dB) + 'px');
+  });
+  say('   (last two columns: pixels lit in the FRAME\'S LAST COLUMN. Tangent to the wall = a few;');
+  say('    a big number means the shape is still being cut off by the frame — the effect failed.)');
+  say('   for scale: the same shapes with NO effect light '
+      + [{d:300,x:480,y:240},{d:300,x:480,y:240,stroke:0},{d:300,x:480,y:240,shape:'rect',rot:45}]
+        .map(function(o){ var d=render(shape(o)); var n=0; for(var y=0;y<PH;y++) if(d[(y*PW+479)*4+3]>8) n++; return n; }).join('/') + 'px');
+
+  // ---- 4. GIVE: does the non-linear grading change the shape, or just the numbers? -----------
+  // Same fit either way (same bbox), so the difference is entirely in HOW the interior deforms.
+  say('');
+  say('4  GIVE (non-linear compression) — 300px circle 40% over the BOTTOM wall');
+  [0, 0.35, 0.65, 1].forEach(function(gv){
+    var d = render(shape({d:300,x:240,y:PH-150+120,fx:inst({give:gv})}));
+    var b = bbox(d,PW,PH);
+    // widest row, and where it sits: a uniform scale keeps the widest row at the shape's own middle;
+    // grading pushes the fat part toward the contact.
+    var best=0, bestY=0;
+    for(var y=b.y0;y<=b.y1;y++){ var lo=-1,hi=-1;
+      for(var x=0;x<PW;x++){ if(d[(y*PW+x)*4+3]>8){ if(lo<0)lo=x; hi=x; } }
+      if(hi-lo+1>best){best=hi-lo+1;bestY=y;} }
+    say('   give '+gv+'  bbox '+b.w+'x'+b.h+'  widest row '+best+'px at y='+bestY
+        +'  ('+((bestY-b.y0)/(b.h-1)*100).toFixed(0)+'% down the shape)');
+  });
+
+  // ---- 4b. EDGE CASES ------------------------------------------------------------------------
+  say('');
+  say('4b EDGE CASES');
+  [
+    { n:'corner: both walls (R+B), 300px circle 50% over each', o:{d:300,x:480,y:480} },
+    { n:'rotated square 45, corner',                            o:{d:300,x:480,y:480,shape:'rect',rot:45} },
+    { n:'layer BIGGER than the frame (600px, centred)',         o:{d:600,x:240,y:240} },
+    { n:'exactly the frame (480px, centred)',                   o:{d:480,x:240,y:240,stroke:0,shape:'rect'} },
+    { n:'wholly off-frame (300px circle at x=760)',             o:{d:300,x:760,y:240} },
+  ].forEach(function(c){
+    // bbox+area cannot tell a clipped quarter-disc from a whole small disc (they have the SAME area
+    // and the same box). The tell is the wall itself: a clipped shape lights a long run in the
+    // frame's last row/column; one that merely touches the wall lights a handful.
+    function edges(d){ var r=0,c2=0,y,x;
+      for(x=0;x<PW;x++) if(d[((PH-1)*PW+x)*4+3]>8) r++;
+      for(y=0;y<PH;y++) if(d[(y*PW+PW-1)*4+3]>8) c2++;
+      return r+'/'+c2; }
+    var dn = render(shape(c.o)), dy = render(shape(Object.assign({},c.o,{fx:inst({})})));
+    var no = bbox(dn, PW, PH), on = bbox(dy, PW, PH);
+    say('   ' + c.n
+      + '\n      no fx  ' + fmt(no) + '   px on last row/col ' + edges(dn)
+      + '\n      squish ' + fmt(on) + '   px on last row/col ' + edges(dy));
+  });
+
+  // ---- 5. DETERMINISM ------------------------------------------------------------------------
+  var r1 = render(shape({d:300,x:480,y:240,fx:inst({})}));
+  var r1c = new Uint8ClampedArray(r1);
+  var r2 = render(shape({d:300,x:480,y:240,fx:inst({})}));
+  say('');
+  say('5  determinism (same frame twice)  differing bytes = '+diff(r1c,r2).bytes);
+
+  // ---- 6. PLATE SCALE ------------------------------------------------------------------------
+  // ps=1 vs ps=0.5. Every length must be multiplied by ps or the walls / the inset move.
+  say('');
+  say('6  PLATE SCALE — bbox reported in PROJECT px, the two rows must match');
+  [{i:0,n:'inset 0'},{i:60,n:'inset 60'},{i:-60,n:'inset -60'}].forEach(function(c){
+    var full = bbox(render(shape({d:300,x:480,y:240,fx:inst({inset:c.i})}), 480,480), 480,480);
+    var half = bbox(render(shape({d:300,x:480,y:240,fx:inst({inset:c.i})}), 240,240), 240,240);
+    var hp = {w:half.w*2, h:half.h*2, x0:half.x0*2, x1:half.x1*2+1, y0:half.y0*2, y1:half.y1*2+1};
+    say('   '+c.n+'  ps=1  '+full.w+'x'+full.h+' ['+full.x0+'..'+full.x1+']'
+        +'   ps=0.5 '+hp.w+'x'+hp.h+' ['+hp.x0+'..'+hp.x1+']'
+        +'   Δw='+Math.abs(full.w-hp.w)+' Δh='+Math.abs(full.h-hp.h));
+  });
+
+  // ---- 7. COST -------------------------------------------------------------------------------
+  say('');
+  say('7  COST — ms per frame, median of 9, one 300px layer 50% over the wall');
+  [[480,480,'480x480'],[1920,1080,'1920x1080 (1:1)'],[960,540,'1920x1080 at ps=0.5']].forEach(function(c){
+    var w=c[0],h=c[1];
+    var pw=PW, ph=PH;
+    PW = (c[2].indexOf('ps=0.5')>=0)?1920:w; PH=(c[2].indexOf('ps=0.5')>=0)?1080:h;
+    var lay = function(){ return shape({d:Math.round(PH*0.28), x:PW, y:PH/2, fx:inst({})}); };
+    var lay0 = function(){ return shape({d:Math.round(PH*0.28), x:PW, y:PH/2}); };
+    var ts=[], t0s=[];
+    for(var k=0;k<9;k++){ var a=performance.now(); render(lay(), w, h); ts.push(performance.now()-a);
+                          var b2=performance.now(); render(lay0(), w, h); t0s.push(performance.now()-b2); }
+    ts.sort(function(a,b){return a-b;}); t0s.sort(function(a,b){return a-b;});
+    say('   '+c[2]+'   squish '+ts[4].toFixed(1)+' ms   plain layer '+t0s[4].toFixed(1)+' ms   (+'+(ts[4]-t0s[4]).toFixed(1)+' ms)');
+    PW=pw; PH=ph;
+  });
+
+  document.getElementById('out').textContent = L.join('\n');
+  document.body.setAttribute('data-ready','1');
+})();
+</script>
+</body></html>
