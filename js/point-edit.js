@@ -12,6 +12,7 @@ window.FM = window.FM || {};
   let active = null;        // { layerId, embedded }
   let overlay = null, bar = null, raf = 0;
   let drag = null;          // { si, pi } current dragged point
+  let snapU = null, snapV = null;   // local-space lines the dragged point is currently locked to
   let sel = null;           // { si, pi } selected point (green, drives the panel)
   let lastTap = { t: 0, si: -1, pi: -1 };
   const cbs = [];           // change listeners (panel refresh)
@@ -109,6 +110,20 @@ window.FM = window.FM || {};
         g.strokeStyle = 'rgba(41,217,187,.9)'; g.lineWidth = 1.25;
       });
     });
+    // Snap guides. Drawn THROUGH the same local→canvas map as the points, so on a rotated or skewed
+    // layer the line lies along the shape's own axis rather than uselessly down the screen. Extended
+    // past the shape's box so it reads as a rule and not as another edge of the outline.
+    if (snapU != null || snapV != null) {
+      g.save();
+      g.setLineDash([5, 4]);
+      g.strokeStyle = 'rgba(255, 205, 84, .95)';
+      g.lineWidth = 1.2;
+      const rule = (a, b) => { const A = map(a), B = map(b); g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(B[0], B[1]); g.stroke(); };
+      if (snapU != null) rule([snapU, -0.25], [snapU, 1.25]);
+      if (snapV != null) rule([-0.25, snapV], [1.25, snapV]);
+      g.restore();
+      g.strokeStyle = 'rgba(41,217,187,.9)'; g.lineWidth = 1.25;
+    }
     // tangent HANDLES for the selected SMOOTH point — drag either end to shape the curve (AM)
     if (sel) {
       const ss = subs[sel.si], sp = ss && ss[sel.pi];
@@ -231,6 +246,25 @@ window.FM = window.FM || {};
     draw();
     overlay.setPointerCapture && overlay.setPointerCapture(e.pointerId);
   }
+  // ---- snapping a dragged point to the OTHER points (v5.44) --------------------------------------
+  // Ezra: "the shape editor point editor thing doesn't have grid snapping to the other points."
+  // Snapped in the shape's OWN local units, not on screen: aligning two points should mean they share
+  // an edge of the shape's geometry, and that has to keep meaning the same thing when the layer is
+  // rotated or skewed. The guide is then drawn back through toCanvas, so on a rotated layer it comes
+  // out slanted with the shape — which is exactly where the alignment actually is.
+  const SNAP_PX = 7;                      // stickiness, in CSS px, converted per-axis below
+  function otherPoints(l, si, pi) {
+    const out = [];
+    subsOf(l).forEach((pts, i) => pts.forEach((p, j) => { if (i !== si || j !== pi) out.push(p); }));
+    return out;
+  }
+  // NOT `nearest` — this file already has a nearest(e) that hit-tests the pointer against the points,
+  // and a second function declaration of that name in the same scope silently replaces it.
+  function nearestVal(v, vals, thr) {
+    let best = null, bd = thr;
+    for (let i = 0; i < vals.length; i++) { const d = Math.abs(v - vals[i]); if (d < bd) { bd = d; best = vals[i]; } }
+    return best;
+  }
   function onMove(e) {
     if (!drag) return;
     const l = layer(); if (!l) return;
@@ -245,9 +279,34 @@ window.FM = window.FM || {};
       p[2] = 1; p[3] = hx; p[4] = hy; p.length = 5;
       FM.requestRender(); notify('move'); return;
     }
-    p[0] = loc.u; p[1] = loc.v; FM.requestRender(); notify('move');
+    // One local unit spans the whole shape, so the threshold is different on each axis and has to be
+    // divided back through the layer's own size and scale — a flat number in local units would be
+    // hair-fine on a big shape and magnetic on a small one.
+    const m = xform(l), k = dispScale() || 1;
+    const thrU = SNAP_PX / k / Math.max(1e-6, Math.abs(m.w * m.sx));
+    const thrV = SNAP_PX / k / Math.max(1e-6, Math.abs(m.h * m.sy));
+    const others = otherPoints(l, drag.si, drag.pi);
+    const su = nearestVal(loc.u, others.map(q => q[0]), thrU);
+    const sv = nearestVal(loc.v, others.map(q => q[1]), thrV);
+    if ((su != null || sv != null) && (su !== snapU || sv !== snapV) && navigator.vibrate) {
+      try { navigator.vibrate(6); } catch (_) {}    // a tick when it CATCHES, not every frame it holds
+    }
+    snapU = su; snapV = sv;
+    p[0] = su == null ? loc.u : su;
+    p[1] = sv == null ? loc.v : sv;
+    drag.moved = true;
+    FM.requestRender(); notify('move'); draw();
   }
-  function onUp() { if (drag) { drag = null; if (FM.history) FM.history.commit(); notify('sel'); } }
+  function onUp() {
+    if (!drag) return;
+    // A drag CLEARS the double-tap latch. Without this, dragging a point and then grabbing it again
+    // within 350ms counts as a double tap and deletes it — two ordinary adjustments in a row, and the
+    // point is gone. A double tap should mean two taps, not two drags.
+    if (drag.moved) lastTap = { t: 0, si: -1, pi: -1 };
+    drag = null; snapU = snapV = null; draw();
+    if (FM.history) FM.history.commit();
+    notify('sel');
+  }
 
   FM.pointEdit = {
     isActive() { return !!active; },
@@ -303,7 +362,7 @@ window.FM = window.FM || {};
       wrap.appendChild(overlay);
       if (!active.embedded) {
         bar = document.createElement('div'); bar.id = 'pe-bar';
-        bar.innerHTML = '<span>Edit points — drag to move · tap a ring to add · double-tap to delete</span>';
+        bar.innerHTML = '<span>Edit points — drag to move (snaps to the other points) · tap a ring to add · double-tap to delete</span>';
         const done = document.createElement('button'); done.className = 'btn btn-accent'; done.textContent = 'Done';
         done.addEventListener('click', () => FM.pointEdit.stop());
         bar.appendChild(done);

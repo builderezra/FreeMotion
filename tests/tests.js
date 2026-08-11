@@ -1992,6 +1992,67 @@
     }
   });
 
+  test('edit points: a dragged point snaps to the other points', { item: 'point-snap' }, function () {
+    // v5.44. Ezra: "the shape editor point editor thing doesn't have grid snapping to the other
+    // points." Snapped in the shape's OWN local units, so lining two points up means they share an
+    // edge of the geometry — and keeps meaning that when the layer is rotated.
+    if (!FM.pointEdit || !FM.pointEdit.start) throw new Error('FM.pointEdit missing');
+    const scene = FM.scene, sel0 = scene.selectedId, wasActive = FM.pointEdit.isActive();
+    let added = null;
+    try {
+      added = FM.makeLayer('shape', { shape: 'rect', x: (scene.project.width / 2) | 0, y: (scene.project.height / 2) | 0, shapeW: 600, shapeH: 600, fill: '#ffd24a' });
+      scene.layers.unshift(added);
+      FM.selectLayer(added.id);
+      FM.pointEdit.start(added.id);
+      const pts = added.subs ? added.subs[0] : added.points;
+      if (!pts || pts.length < 4) throw new Error('the rect did not convert to an editable path (' + (pts && pts.length) + ' points)');
+
+      const ov = document.getElementById('pe-overlay');
+      const cv = document.getElementById('preview');
+      if (!ov || !cv) throw new Error('no point-edit overlay / preview');
+      const r = cv.getBoundingClientRect();
+      if (!(r.width > 0)) throw new Error('the preview has no size to aim at');
+      // local (u,v) → client px. Anchor is centred and the layer is unrotated, so this is the plain
+      // inverse of toCanvas; anything cleverer would just be re-implementing the module under test.
+      const client = (u, v) => ({
+        x: r.left + ((added.transform.x + (u - 0.5) * added.shapeW) / scene.project.width) * r.width,
+        y: r.top + ((added.transform.y + (v - 0.5) * added.shapeH) / scene.project.height) * r.height,
+      });
+      const send = (type, c, buttons) => ov.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse',
+        clientX: c.x, clientY: c.y, buttons: buttons == null ? 1 : buttons }));
+
+      // Grab point 0 and drop it a hair off point 1's u — close enough to catch, far enough that an
+      // un-snapped drag would land somewhere else.
+      const p0 = pts[0].slice(), p1 = pts[1];
+      const nudge = 0.004;   // ~2.4px on a 600px shape: inside the 7px catch, outside float noise
+      send('pointerdown', client(p0[0], p0[1]));
+      send('pointermove', client(p1[0] + nudge, p0[1] + 0.25));
+      const caughtU = pts[0][0];
+      send('pointerup', client(p1[0] + nudge, p0[1] + 0.25), 0);
+      if (Math.abs(caughtU - p1[0]) > 1e-6) {
+        throw new Error('the dragged point landed at u=' + caughtU.toFixed(4) + ' instead of snapping to the neighbouring point at u=' + p1[0].toFixed(4));
+      }
+
+      // …and it must NOT snap when it is nowhere near. Otherwise the check above would pass on a
+      // control that snapped everything to everything.
+      const far = 0.5 * (p1[0] + p0[0]) + 0.31;
+      send('pointerdown', client(pts[0][0], pts[0][1]));
+      send('pointermove', client(far, 0.5));
+      const freeU = pts[0][0];
+      send('pointerup', client(far, 0.5), 0);
+      const others = pts.slice(1).map(q => q[0]);
+      if (others.some(u => Math.abs(u - freeU) < 1e-6)) {
+        throw new Error('a point dragged far from anything still snapped to u=' + freeU.toFixed(4) + ' — the threshold is not being applied');
+      }
+    } finally {
+      if (FM.pointEdit.isActive() && !wasActive) FM.pointEdit.stop();
+      if (added) { const i = scene.layers.indexOf(added); if (i >= 0) scene.layers.splice(i, 1); }
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -148,6 +148,27 @@ var RECIPES = {
     }
     await sleep(300);
   },
+  // A point mid-drag, held on a snap, so the capture shows the guide. No pointerup — releasing would
+  // clear it, and a still of the finished drag proves nothing about the indicator.
+  async 'point-snap'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.scene.layers.length = 0;
+    const L = FM.makeLayer('shape', { shape: 'rect', name: 'Box', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, shapeW: 620, shapeH: 620, fill: '#ffd24a' });
+    FM.scene.layers.push(L); FM.refreshAll(); await sleep(300);
+    FM.selectLayer(L.id); FM.pointEdit.start(L.id); await sleep(500);
+    const pts = L.subs ? L.subs[0] : L.points;
+    const ov = d.getElementById('pe-overlay'), cv = d.getElementById('preview');
+    const r = cv.getBoundingClientRect();
+    const client = (u, v) => ({
+      x: r.left + ((L.transform.x + (u - 0.5) * L.shapeW) / FM.scene.project.width) * r.width,
+      y: r.top + ((L.transform.y + (v - 0.5) * L.shapeH) / FM.scene.project.height) * r.height });
+    const W = f.contentWindow;
+    const send = (type, c) => ov.dispatchEvent(new W.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: c.x, clientY: c.y, buttons: 1 }));
+    const p0 = pts[0].slice(), p1 = pts[1];
+    send('pointerdown', client(p0[0], p0[1]));
+    send('pointermove', client(p1[0] + 0.004, 0.42));
+    await sleep(500);
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 
