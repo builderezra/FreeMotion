@@ -1387,14 +1387,40 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .kf-dot.ease-back { background: var(--kf); }       /* overshoot / anticipate */
 .kf-dot.ease-custom { background: #b18cff; }       /* hand-shaped bezier */
 .kf-dot.ease-hold { background: #7d8ca5; transform: translateX(-5.5px) rotate(0deg); border-radius: 1px; }  /* stepped / hold — flat square */
-.kf-dot:hover { background: #d7fff5 !important; }
+.kf-dot.kf-live:hover { background: #d7fff5 !important; }
 /* Armed and live. Needs !important to beat the hover rule above, and must NOT touch `transform` —
    .ease-hold re-shapes the diamond into a square, and overriding transform here would spin it
    back into a diamond mid-drag. */
 /* A keyframe belonging to a property you are NOT currently editing: still visible so you can see the
    shape of the animation, but inert so you can't grab it by mistake. */
-.kf-dot.kf-dim { opacity: .3; pointer-events: none; }
-.kf-dot.kf-dim::after { pointer-events: none; }
+/* IDLE (v5.42) — a keyframe whose property editor is not open. An OUTLINE, not a faded solid: it has
+   to read clearly as "here is a keyframe" while reading equally clearly as "not this one". The old
+   .3 opacity did the second job and not the first. Fully inert, including its touch pad, so it
+   cannot be hovered, dragged or long-pressed. `background: none` beats the per-easing background
+   rules above by order, and the border keeps the easing colour so the shape of the animation is
+   still legible at a glance. */
+.kf-dot.kf-idle {
+  background: none;
+  border: 1.5px solid currentColor;
+  opacity: .78;
+  pointer-events: none;
+  cursor: default;
+}
+.kf-dot.kf-idle::after { pointer-events: none; }
+.kf-dot.kf-idle.ease-linear { color: #ffffff; }
+.kf-dot.kf-idle.ease-smooth { color: var(--accent); }
+.kf-dot.kf-idle.ease-back   { color: var(--kf); }
+.kf-dot.kf-idle.ease-custom { color: #b18cff; }
+.kf-dot.kf-idle.ease-hold   { color: #7d8ca5; }
+/* LIVE + under the playhead — the one you are actually about to affect. Grown and ringed rather
+   than recoloured, so it still says which easing it is. */
+.kf-dot.kf-here {
+  width: 15px; height: 15px;
+  transform: translateX(-7.5px) rotate(45deg);
+  box-shadow: 0 0 0 1.5px #fff, 0 0 6px 1px rgba(0,0,0,.5);
+  z-index: 7;
+}
+.kf-dot.kf-here.ease-hold { transform: translateX(-7.5px) rotate(0deg); }
 .kf-dot.kf-dragging { background: #ff9d3d !important; border-color: #ff9d3d !important;
   box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 0 10px rgba(255,157,61,.8) !important; z-index: 6; }
 

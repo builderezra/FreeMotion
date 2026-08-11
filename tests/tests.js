@@ -1869,6 +1869,65 @@
     }
   });
 
+  test('keyframes: inert outlines until you open the editor that owns them', { item: 'kf-idle-live' }, function () {
+    // v5.42, from Ezra's Alight Motion screenshots. Tapping a layer shows every keyframe but arms
+    // none of them — "they're clearly showing you where they are but you can't move them yet or hover
+    // over them or anything at all". Opening a property's editor arms just that property's keyframes;
+    // the rest stay outlines. Selecting a clip used to arm every diamond on the layer.
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const L = FM.makeLayer('shape', { shape: 'rect', name: 'kf', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff' });
+    try {
+      // Two DIFFERENT properties animated, so "only the open editor's keyframes" is actually testable.
+      L.transform.x = { kf: [{ t: 0, v: 100 }, { t: 1, v: 300 }] };
+      L.transform.opacity = { kf: [{ t: 0, v: 1 }, { t: 2, v: 0 }] };
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+
+      const dots = () => Array.prototype.slice.call(document.querySelectorAll('#tl-tracks .kf-dot'));
+      const cls = c => dots().filter(d => d.classList.contains(c));
+
+      // 1) Nothing focused — the state right after tapping the layer.
+      FM.inspector.openCategory('home');
+      FM.timeline.rebuild();
+      const all = dots();
+      if (all.length < 4) throw new Error('expected 4 keyframe diamonds, found ' + all.length + ' — this test would be checking nothing');
+      if (cls('kf-live').length) throw new Error(cls('kf-live').length + ' keyframes are live with no property editor open — selecting a clip should arm none of them');
+      if (cls('kf-idle').length !== all.length) throw new Error('only ' + cls('kf-idle').length + ' of ' + all.length + ' keyframes are outlines');
+      const idleStyle = getComputedStyle(all[0]);
+      if (idleStyle.pointerEvents !== 'none') throw new Error('an idle keyframe still takes pointer events (' + idleStyle.pointerEvents + ') — it can be grabbed when it should be inert');
+      if (idleStyle.backgroundImage === 'none' && idleStyle.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+        throw new Error('an idle keyframe is still a filled diamond (' + idleStyle.backgroundColor + ') rather than an outline');
+      }
+      if (parseFloat(idleStyle.borderTopWidth) < 1) throw new Error('an idle keyframe has no outline to read (border ' + idleStyle.borderTopWidth + ')');
+
+      // 2) Move & Transform, Move mode — x is armed, opacity is not.
+      FM.inspector.openCategory('transform');
+      FM._mtMode = 'move';
+      FM.timeline.rebuild();
+      const live = cls('kf-live'), idle = cls('kf-idle');
+      if (live.length !== 2) throw new Error('expected the 2 position keyframes to be live in Move mode, got ' + live.length);
+      if (idle.length !== 2) throw new Error('expected the 2 opacity keyframes to stay outlines, got ' + idle.length);
+      if (getComputedStyle(live[0]).pointerEvents === 'none') throw new Error('a live keyframe is not interactive — you could not drag the very thing you opened the editor for');
+
+      // 3) The live keyframe under the playhead lights up.
+      FM.time = 0;
+      FM.timeline.updatePlayhead();
+      const here = dots().filter(d => d.classList.contains('kf-here'));
+      if (!here.length) throw new Error('no live keyframe lit at the playhead (t=0, where a position keyframe sits)');
+      if (here.some(d => d.classList.contains('kf-idle'))) throw new Error('an idle keyframe lit up at the playhead — only the armed ones should');
+      FM.time = 1.5;
+      FM.timeline.updatePlayhead();
+      if (dots().filter(d => d.classList.contains('kf-here')).length) throw new Error('a keyframe is still lit with the playhead nowhere near one');
+    } finally {
+      FM.time = t0;
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.inspector.openCategory('home');
+      FM.timeline.rebuild();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

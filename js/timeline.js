@@ -1094,18 +1094,23 @@ window.FM = window.FM || {};
       // property that had a keyframe at 1.2s shared a single diamond, and dragging it retimed all of
       // them at once. Now each animated property owns its own, so a slider's keyframes are its own.
       //
-      // The ones belonging to whatever you are editing right now are full opacity and draggable;
-      // every other keyframe on the layer still shows, dimmed and inert, so you can see the shape of
-      // the animation without grabbing the wrong thing. Nothing focused (the home panel) → they are
-      // all live, which is the old behaviour.
+      // TWO STATES, and the default is the quiet one (v5.42). Ezra, with AM screenshots: on first
+      // tapping a layer "they're clearly showing you where they are but you can't move them yet or
+      // hover over them or anything at all"; then, once he opens a specific property's editor, that
+      // property's keyframes "become clear and highlighted when you go over them, whilst the others
+      // stay as outlines."
+      // So a keyframe is LIVE — solid, draggable, and lit when the playhead reaches it — only while
+      // the editor that owns it is open. Everything else is a hollow outline and completely inert.
+      // This inverts what nothing-focused used to mean: it made every keyframe on the layer live and
+      // draggable, so simply selecting a clip armed a dozen diamonds you had no reason to touch.
       const focus = FM.kfFocusProps ? FM.kfFocusProps(layer) : null;
-      const inFocus = (prop) => !focus || focus.indexOf(prop) >= 0;
+      const inFocus = (prop) => !!focus && focus.indexOf(prop) >= 0;
       const entries = [];
       FM.animatedProps(layer).forEach(prop => {
         const live = inFocus(prop);
         prop.kf.forEach(kf => entries.push({ prop: prop, kf: kf, t: Math.round(kf.t * 1000) / 1000, live: live }));
       });
-      // dimmed first so the live ones paint over them where they share a time
+      // outlines first so the live ones paint over them where they share a time
       entries.sort((a, b) => (a.live === b.live) ? 0 : (a.live ? 1 : -1));
       entries.forEach(entry => {
         const tt = entry.t;
@@ -1117,9 +1122,14 @@ window.FM = window.FM || {};
           : dotEase === 'linear' ? 'ease-linear'
             : (dotEase === 'overshoot' || dotEase === 'anticipate') ? 'ease-back'
               : dotEase === 'custom' ? 'ease-custom' : 'ease-smooth';
-        dot.className = 'kf-dot ' + easeClass + (entry.live ? '' : ' kf-dim');
+        dot.className = 'kf-dot ' + easeClass + (entry.live ? ' kf-live' : ' kf-idle');
         dot.style.left = (PAD + tt * pps) + 'px';
-        dot.title = 'Drag to retime · double-click to delete';
+        dot.dataset.t = tt;   // updatePlayhead reads this to light the one under the playhead
+        // An inert diamond must not advertise a gesture it will refuse. It keeps its title as a
+        // sign-post to the thing that WOULD make it draggable.
+        dot.title = entry.live
+          ? 'Drag to retime · double-click to delete'
+          : 'Open this property\u2019s editor to move this keyframe';
         dot.addEventListener('pointerdown', (e) => {
           e.stopPropagation(); e.preventDefault();
           if (e.pointerType === 'mouse' && e.button !== 0) return;   // right-click is the MENU, never a drag
@@ -1841,6 +1851,12 @@ window.FM = window.FM || {};
       }
       const t = FM.time;
       const sL = timelineEl ? timelineEl.scrollLeft : 0;
+      // Light the live keyframe the playhead is sitting on. Half a frame of tolerance, because a
+      // keyframe's time and FM.time are both floats and an exact compare would flicker.
+      const kfTol = 0.5 / Math.max(1, (FM.scene.project && FM.scene.project.fps) || 30);
+      tracksEl.querySelectorAll('.kf-dot.kf-live').forEach(d => {
+        d.classList.toggle('kf-here', Math.abs(parseFloat(d.dataset.t) - t) <= kfTol);
+      });
       tracksEl.querySelectorAll('.clip').forEach(clipEl => {
         const l = FM.layerById(FM.scene, clipEl.dataset.id);
         clipEl.classList.toggle('under-playhead', !!l && t >= l.start && t < l.start + l.duration);

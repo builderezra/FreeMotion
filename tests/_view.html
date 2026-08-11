@@ -117,6 +117,23 @@ var RECIPES = {
     const popName = q.get('pop');
     if (popName) { const b = d.querySelector('.te-' + popName); if (!b) throw new Error('no .te-' + popName + ' button'); b.click(); await sleep(500); }
   },
+  // Keyframes in both states. ?cat=home leaves nothing focused (every diamond an inert outline);
+  // ?cat=transform opens Move & Transform so the position keys arm and the opacity keys do not.
+  async 'keyframes'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.scene.layers.length = 0;
+    const L = FM.makeLayer('shape', { shape: 'star', name: 'Star', x: FM.scene.project.width * 0.3, y: FM.scene.project.height * 0.5, shapeW: 300, shapeH: 300, fill: '#7a5cff' });
+    L.transform.x = { kf: [{ t: 0, v: 300, e: 'smooth' }, { t: 1.6, v: 800, e: 'smooth' }, { t: 3.2, v: 300, e: 'linear' }] };
+    L.transform.opacity = { kf: [{ t: 0.6, v: 1, e: 'hold' }, { t: 2.4, v: 0.2, e: 'hold' }] };
+    FM.scene.layers.push(L);
+    FM.refreshAll(); await sleep(300);
+    FM.selectLayer(L.id); await sleep(300);
+    FM.inspector.openCategory(q.get('cat') || 'home');
+    if ((q.get('cat') || '') === 'transform') FM._mtMode = 'move';
+    FM.timeline.rebuild();
+    FM.time = 0; FM.timeline.updatePlayhead();
+    await sleep(500);
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 
