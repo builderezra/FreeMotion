@@ -1012,7 +1012,15 @@ window.FM = window.FM || {};
     banner: [1.6, 0.7], cloud: [1.4, 0.95], boat: [1.1, 1.1],
     // these six come from traced references, so their aspect IS the reference's aspect
     check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
-    envelope: [1.33, 0.75], key: [0.7, 1.44], car: [1.76, 0.57],
+    envelope: [1.33, 0.75], key: [0.7, 1.44],
+    // CAR IS NOT ONE OF THEM ANY MORE — it must stay SQUARE. The v5.33 redraw stopped being a trace:
+    // it is a landmark polyline carrying its OWN proportion inside the unit box (ink measures
+    // 0.9576 x 0.5200 of it, i.e. 1.841:1) and it draws both tyres as true circles there. The box only
+    // SCALES that drawing, so anything but 1:1 turns every wheel into an ellipse by exactly the box
+    // ratio. The stale 1.76 x 0.57 left from the v3.96 trace is 3.093:1, which stretched the car to
+    // 5.695:1 of ink and the wheels to 3.1:1 — Ezra: "really wide and streched out".
+    // To draw a BIGGER car, scale both numbers together (e.g. [1.4, 1.4]); never one of them.
+    car: [1, 1],
     // added shapes
     // A squircle is an app-icon shape — it's only itself when it's square. (Was 1.35:1, which made
     // the "Apple corners" pair at the top of the Shape tab spawn as a squashed rounded rectangle.)

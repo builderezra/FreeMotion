@@ -837,6 +837,13 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .preset-chip.builtin { border-color: rgba(106,160,255,.38); background: rgba(106,160,255,.1); }
 .preset-name { padding: 3px 7px; background: none; border: none; color: var(--ink, #cfd6e4); cursor: pointer; font-size: 11px; }
 .preset-name:hover { color: #fff; background: rgba(255,255,255,.06); }
+/* A preset row this build can't apply (no usable effects). It stays on screen — hiding it would hide
+   the × that removes it — but it must never LOOK like a live look you can tap. Tapping it explains
+   itself in a toast instead of wiping the layer's effect stack. */
+.preset-chip.broken { border-color: rgba(255,170,60,.42); background: rgba(255,170,60,.09); }
+.preset-chip.broken .preset-name { color: #9aa3b4; cursor: help; }
+.preset-chip.broken .preset-name:hover { color: #cfd6e4; background: rgba(255,170,60,.1); }
+.preset-warn { padding: 0 5px 0 0; color: #ffaa3c; font-size: 11px; line-height: 1; cursor: help; }
 .preset-del { padding: 3px 6px; background: none; border: none; color: #8893a6; cursor: pointer; font-size: 12px; line-height: 1; }
 .preset-del:hover { color: #ff6b6b; }
 .preset-empty { color: #6b7588; font-size: 11px; font-style: italic; }

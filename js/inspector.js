@@ -626,8 +626,13 @@ window.FM = window.FM || {};
       { label: 'Save as preset…', action: () => {
         const name = prompt('Preset name:', (reg ? reg.label : fx.type) + ' preset'); if (!name || !name.trim()) return;
         const p = FM.effectPresets && FM.effectPresets.capture(fx, name.trim());
-        if (p && FM.effectPresets.save(p)) { if (FM.toast) FM.toast('Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400); }
-        else if (FM.toast) FM.toast('Couldn’t save this effect as a preset', 1600);
+        // save() now reports its OWN failure (and any keyframe trim) on screen, so this only speaks
+        // for the capture step and only when save() stayed quiet — otherwise a bare "Saved"/"Couldn't
+        // save" would paint straight over the message that says what actually happened.
+        if (!p) { if (FM.toast) FM.toast('Couldn’t save “' + (reg ? reg.label : fx.type) + '” as a preset — it has no settings to store', 2600); return; }
+        if (!FM.effectPresets.save(p)) return;
+        const note = FM.effectPresets.lastNote ? FM.effectPresets.lastNote() : '';
+        if (!note && FM.toast) FM.toast('Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400);
       } },
       { sep: true },
       { label: 'Delete', danger: true, action: () => { layer.effects.splice(idx, 1); afterFx(); } },
@@ -2968,14 +2973,45 @@ window.FM = window.FM || {};
       svL.addEventListener('click', () => FM.savePresetPrompt && FM.savePresetPrompt(layer));
       pwrap.appendChild(svL);
       pwrap.appendChild(el('div', 'preset-sec', 'Effect looks'));
+      // A row is only APPLICABLE if it carries at least one effect this build can actually build.
+      // 'fm.fxpresets' is written by more than one code path and nothing validates another's shape,
+      // so rows turn up with .effects missing, empty, a string, or full of types the registry no
+      // longer has. Those used to render as "(0 effects)" and, when tapped, ran
+      // `layer.effects = [].map(…)` — silently deleting every effect on the selected layer with no
+      // confirmation and nothing but an unprompted Ctrl+Z between the user and the loss.
+      // Now an unusable row is inert and says why. (Queue #37 replaces both preset systems with one
+      // namespace + migration, which retires this class of bug; this is the stop-the-bleeding fix.)
+      const usableFx = p => (Array.isArray(p.effects) ? p.effects : [])
+        .filter(e => e && typeof e === 'object' && typeof e.type === 'string' && FM.fxRegistry.get(e.type));
       FM.fxPresets.list().forEach(p => {
-        const fx = Array.isArray(p.effects) ? p.effects : [];
-        const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : ''));
+        const raw = Array.isArray(p.effects) ? p.effects : [];
+        const fx = usableFx(p);
+        const skipped = raw.length - fx.length;
+        const chip = el('div', 'preset-chip' + (p.builtin ? ' builtin' : '') + (fx.length ? '' : ' broken'));
         const nm = el('button', 'preset-name', p.name);
-        nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') + ')';
-        // A preset is a saved LOOK → REPLACE the stack (not append), so re-tapping never stacks duplicates.
-        nm.addEventListener('click', () => { layer.effects = fx.map(e => JSON.parse(JSON.stringify(e))); FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Applied “' + p.name + '”'); });
+        if (!fx.length) {
+          // NOT hidden: a broken row you cannot see is a row you cannot delete. It stays visible,
+          // keeps its ×, and explains itself in a toast — a title tooltip alone is invisible on a phone.
+          const why = raw.length
+            ? ('its ' + raw.length + ' effect' + (raw.length === 1 ? ' is' : 's are') + ' not in this build')
+            : 'it was saved empty, or in a format this panel doesn’t read';
+          nm.title = '“' + p.name + '” can’t be applied — ' + why + '. Applying it would wipe this layer’s effects, so it does nothing. Remove it with ×.';
+          nm.addEventListener('click', () => { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — ' + why + '. Your effect stack is untouched.', 3600); });
+        } else {
+          nm.title = (p.builtin ? 'Built-in — apply “' : 'Apply “') + p.name + '” (' + fx.length + ' effect' + (fx.length === 1 ? '' : 's') +
+            (skipped ? ', ' + skipped + ' skipped — not in this build' : '') + ')';
+          // A preset is a saved LOOK → REPLACE the stack (not append), so re-tapping never stacks duplicates.
+          nm.addEventListener('click', () => {
+            const use = usableFx(p);   // re-read at click time: never assign an empty/unusable stack
+            if (!use.length) { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — your effect stack is untouched.', 3600); return; }
+            layer.effects = use.map(e => JSON.parse(JSON.stringify(e)));
+            FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit();
+            if (FM.toast) FM.toast('Applied “' + p.name + '”' + (skipped ? ' (' + skipped + ' effect' + (skipped === 1 ? '' : 's') + ' skipped — not in this build)' : ''));
+          });
+        }
         chip.appendChild(nm);
+        // The ⚠ sits OUTSIDE the name button so the button's text stays exactly the preset's name.
+        if (!fx.length) { const w = el('span', 'preset-warn', '⚠'); w.title = nm.title; chip.appendChild(w); }
         if (!p.builtin) { const del = el('button', 'preset-del', '×'); del.title = 'Delete this preset'; del.addEventListener('click', () => { FM.fxPresets.remove(p.name); FM.inspector.refresh(); }); chip.appendChild(del); }
         pwrap.appendChild(chip);
       });

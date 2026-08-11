@@ -3003,6 +3003,72 @@
   });
 
 
+  test('shapes: an added Car renders with ROUND wheels', { item: 'car-aspect' }, function () {
+    // v5.65: SHAPE_ASPECT.car still carried [1.76, 0.57] from the v3.96 image trace, but the v5.33
+    // redraw carries its own proportion inside the unit box (ink 0.9576 x 0.5200 of it) and draws
+    // both tyres as true circles there. The box only scales that drawing, so a non-square box turned
+    // every wheel into an ellipse by exactly the box ratio - 3.09:1, "really wide and streched out".
+    // Measured in PIXELS, not read off the declaration: the two tyres are separate ink blobs from the
+    // body (the arch cavity is open at the bottom), so each wheel's bbox comes off the rendered image.
+    var savedScene = FM.scene, commit = FM.history.commit, autosave = FM.storage.autosave,
+        save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    var L;
+    try {
+      FM.scene = { project: { width: 1080, height: 1080, fps: 30, duration: 5, background: '#000000' }, layers: [], selectedId: null, selectedIds: [] };
+      FM.addShapeLayer('car', { name: 'Car' });
+      L = FM.scene.layers[0];
+    } finally {
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+    if (!L || L.shape !== 'car') throw new Error('FM.addShapeLayer("car") did not add a car layer');
+    // Same box ratio, rendered big enough that the 0.023-normalized tyre/arch gap survives even when
+    // the aspect is wrong (so a failure reports the ellipse, not "could not find the wheels").
+    var k = 600 / Math.max(L.shapeW, L.shapeH), S = 680;
+    // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
+    // and the car renders half off the canvas (which is how this test first failed, on a good fix)
+    var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
+      transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }),
+      shapeW: Math.round(L.shapeW * k), shapeH: Math.round(L.shapeH * k) });
+    var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+    var d = x.getImageData(0, 0, S, S).data, n = S * S, mask = new Uint8Array(n), i;
+    for (i = 0; i < n; i++) mask[i] = d[i * 4] > 127 ? 1 : 0;
+    var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), blobs = [];
+    for (var p = 0; p < n; p++) {
+      if (!mask[p] || lab[p] >= 0) continue;
+      var id = blobs.length, sp = 0, cnt = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      st[sp++] = p; lab[p] = id;
+      while (sp > 0) {
+        var q = st[--sp], qx = q % S, qy = (q / S) | 0;
+        cnt++;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        if (qx > 0     && mask[q - 1] && lab[q - 1] < 0) { lab[q - 1] = id; st[sp++] = q - 1; }
+        if (qx < S - 1 && mask[q + 1] && lab[q + 1] < 0) { lab[q + 1] = id; st[sp++] = q + 1; }
+        if (qy > 0     && mask[q - S] && lab[q - S] < 0) { lab[q - S] = id; st[sp++] = q - S; }
+        if (qy < S - 1 && mask[q + S] && lab[q + S] < 0) { lab[q + S] = id; st[sp++] = q + S; }
+      }
+      if (cnt > 40) blobs.push({ n: cnt, x0: x0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+    }
+    if (!blobs.length) throw new Error('the car rendered nothing at ' + cl.shapeW + 'x' + cl.shapeH);
+    // never measure a clipped picture: any ink on the border means part of the car is off-canvas
+    for (i = 0; i < S; i++) {
+      if (mask[i] || mask[(S - 1) * S + i] || mask[i * S] || mask[i * S + S - 1])
+        throw new Error('the car render touches the canvas edge - it is clipped, refusing to measure it');
+    }
+    if (blobs.length !== 3) throw new Error('expected 3 ink blobs (body + 2 tyres), got ' + blobs.length +
+      ' at box ' + cl.shapeW + 'x' + cl.shapeH + ' - the wheels cannot be isolated, which itself means the car is distorted');
+    blobs.sort(function (a, b) { return b.n - a.n; });
+    blobs.slice(1).sort(function (a, b) { return a.x0 - b.x0; }).forEach(function (wl, j) {
+      if (Math.abs(wl.w - wl.h) > 1)
+        throw new Error((j ? 'front' : 'rear') + ' wheel is ' + wl.w + 'x' + wl.h + 'px (' + (wl.w / wl.h).toFixed(2) +
+          ':1), not a circle - SHAPE_ASPECT.car must stay square, but a Car spawned at ' + L.shapeW + 'x' + L.shapeH);
+    });
+  });
+
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

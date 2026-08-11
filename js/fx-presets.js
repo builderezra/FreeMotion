@@ -46,8 +46,20 @@ window.FM = window.FM || {};
 
   // ---- validation (custom presets come back from localStorage — never trust the shape) ----
   const EASE_OK = { linear: 1, easeIn: 1, easeOut: 1, easeInOut: 1 };
+  // Two bits of state the validator leaves behind for whoever asked it to validate. Reads (readCustom)
+  // ignore them; the user-facing entry points (save/capture) drain them and speak up, so a rejection
+  // or a trim is never silent. They are read IMMEDIATELY after the sanePreset() call that set them —
+  // any later readCustom() would overwrite them.
+  let _clamped = 0;   // over-long keyframe lists trimmed by the last sanePreset()
+  let _why = '';      // why the last sanePreset() returned null
+  let _note = '';     // what save() last put on screen (so callers don't toast over it)
+  let _trimmedId = ''; // id of the preset capture() trimmed, for the save() that follows
   function saneKf(raw) {
-    if (!Array.isArray(raw) || !raw.length || raw.length > MAX_KF) return null;
+    if (!Array.isArray(raw) || !raw.length) return null;
+    // Over-long lists used to return null, which DROPPED the param, which could make sanePreset
+    // return null — binning the entire preset over one greedy parameter, without a word. Keep the
+    // first MAX_KF instead: a trimmed animation is recoverable, a discarded preset is not.
+    if (raw.length > MAX_KF) { raw = raw.slice(0, MAX_KF); _clamped++; }
     const out = [];
     for (let i = 0; i < raw.length; i++) {
       const k = raw[i];
@@ -62,13 +74,15 @@ window.FM = window.FM || {};
     return out;
   }
   function sanePreset(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    const reg = FM.fxRegistry && FM.fxRegistry.get(String(raw.fx || '')); if (!reg) return null;
+    _why = '';
+    if (!raw || typeof raw !== 'object') { _why = 'it isn’t a preset'; return null; }
+    const reg = FM.fxRegistry && FM.fxRegistry.get(String(raw.fx || ''));
+    if (!reg) { _why = raw.fx ? ('this build has no “' + String(raw.fx).slice(0, 40) + '” effect') : 'it names no effect (an effect-stack preset can’t be saved here)'; return null; }
     const kinds = {};   // real storage key -> param type ('layer' excluded: source ids don't travel)
     reg.params.forEach(p => { if (p.type !== 'layer') kinds[p.key] = p.type; });
     const params = {};
     const rp = raw.params;
-    if (!rp || typeof rp !== 'object') return null;
+    if (!rp || typeof rp !== 'object') { _why = 'it carries no parameters'; return null; }
     for (const key of Object.keys(kinds)) {
       if (!Object.prototype.hasOwnProperty.call(rp, key)) continue;   // own-props ONLY (no proto walk)
       const v = rp[key];
@@ -76,7 +90,7 @@ window.FM = window.FM || {};
       else if (typeof v === 'string' && v.length <= 32) params[key] = v;
       else if (v && typeof v === 'object' && Array.isArray(v.kf)) { const kf = saneKf(v.kf); if (kf) params[key] = { kf: kf }; }
     }
-    if (!Object.keys(params).length) return null;
+    if (!Object.keys(params).length) { _why = 'none of its values are settings ' + reg.label + ' has'; return null; }
     return {
       id: String(raw.id || '').slice(0, 40) || ('u' + Math.random().toString(36).slice(2, 9)),
       fx: reg.type,
@@ -93,9 +107,12 @@ window.FM = window.FM || {};
       return Array.isArray(a) ? a.map(sanePreset).filter(Boolean) : [];
     } catch (e) { return []; }
   }
+  // Returns whether the write actually landed. It used to swallow the failure and return undefined,
+  // so save() reported success after a quota error and the caller's "Saved" toast painted straight
+  // over the "Storage full" one.
   function writeCustom(arr) {
-    try { localStorage.setItem(KEY, JSON.stringify(arr)); }
-    catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); }
+    try { localStorage.setItem(KEY, JSON.stringify(arr)); return true; }
+    catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved', 3200); return false; }
   }
 
   FM.effectPresets = {
@@ -131,21 +148,41 @@ window.FM = window.FM || {};
         const c = params[key];
         if (c && typeof c === 'object' && Array.isArray(c.kf)) c.kf.forEach(k => { k.t = r4(Math.max(0, (k.t || 0) - minT)); });
       });
-      return sanePreset({
+      _clamped = 0;
+      const out = sanePreset({
         id: 'u' + Math.random().toString(36).slice(2, 9),
         fx: fx.type, name: name, desc: 'Your preset',
         dur: r4(Math.max(0, maxT - minT)),
         params: params,
       });
+      // A trim that happened HERE is invisible to save() — by then the keyframes are already gone.
+      // Hand it over by id (each capture mints a fresh one) so the save that follows can say so, and
+      // an unrelated save can never inherit the message.
+      _trimmedId = (_clamped && out) ? out.id : '';
+      return out;
     },
 
+    /* Returns true only if the preset is now on disk. A false NEVER passes silently any more: the
+       reason is on screen before this returns, because a boolean nobody reads is not error handling. */
     save: function (preset) {
-      const p = sanePreset(preset); if (!p) return false;
+      _clamped = 0; _note = '';
+      const p = sanePreset(preset);
+      const why = _why;   // read now — readCustom() below re-runs the validator
+      const clamped = _clamped || (p && _trimmedId === p.id);
+      _trimmedId = '';
+      if (!p) { if (FM.toast) FM.toast('Couldn’t save that preset — ' + (why || 'it didn’t validate'), 3600); return false; }
       const arr = readCustom().filter(x => x.id !== p.id).slice(0, MAX_PRESETS - 1);
       arr.unshift(p);
-      writeCustom(arr);
+      if (!writeCustom(arr)) return false;   // writeCustom has already said why
+      if (clamped) {
+        _note = 'Saved “' + p.name + '” — one parameter had over ' + MAX_KF + ' keyframes, so only the first ' + MAX_KF + ' were kept';
+        if (FM.toast) FM.toast(_note, 4000);
+      }
       return true;
     },
+    /* What save() already put on screen, '' if nothing — so a caller's own "Saved" toast doesn't
+       paint over the more specific message this one just showed. */
+    lastNote: function () { return _note; },
     remove: function (id) { writeCustom(readCustom().filter(p => p.id !== id)); },
 
     /* Preset → ONE normal effect instance. Starts from registry defaults (forward-compat: params the
