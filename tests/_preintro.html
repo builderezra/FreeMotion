@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>preintro timeline</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+#out{padding:8px;white-space:pre}
+iframe{position:fixed;left:-9999px;top:0;width:900px;height:760px;border:0}</style>
+</head>
+<body>
+<pre id="out">sampling…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. "Is the home screen stuck invisible?" is a question about TIME, and a single assertion
+   at one arbitrary moment cannot tell a stuck screen from a screen that simply has not finished its
+   entrance yet. This samples the actual state every 100ms from boot so the two can be told apart. */
+var f = document.getElementById('f'), out = document.getElementById('out'), rows = [];
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow, t0 = Date.now();
+  var iv = setInterval(function () {
+    var hs = d.getElementById('home-screen'), sp = d.getElementById('splash');
+    rows.push([
+      String(Date.now() - t0).padStart(5) + 'ms',
+      'home=' + (hs ? (hs.className || '—') : 'missing'),
+      'splash=' + (sp ? (sp.className || '(visible)') : 'missing'),
+      'up=' + (w.FM && w.FM.home && w.FM.home._splashIsUp ? w.FM.home._splashIsUp() : '?')
+    ].join('  '));
+    out.textContent = rows.join('\n');
+    if (Date.now() - t0 > 9000) { clearInterval(iv); out.textContent = rows.join('\n') + '\nDONE'; }
+  }, 100);
+});
+</script>
+</body>
+</html>

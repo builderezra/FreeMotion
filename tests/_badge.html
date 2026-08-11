@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OPEN badge</title>
+<link rel="stylesheet" href="../styles.css?v=277">
+<style>
+  /* Dev-only. The badge only appears on the CURRENTLY OPEN project's card, which is awkward to stage
+     in the real home screen just to look at 33x22 pixels. This puts the shipped .hm-open-badge — its
+     real size, its real filter chain — over the range of thumbnails it has to survive, because the
+     bug being fixed was entirely about what shows THROUGH the letters. */
+  html, body { margin: 0; background: #0b0e14; font: 11px ui-monospace, monospace; color: #7b8798; }
+  #row { display: flex; }
+  .cell { width: 116px; }
+  .thumb { position: relative; height: 76px; }
+  .cap { padding: 4px 6px; }
+  .t1 { background: #fff; }
+  .t2 { background: repeating-linear-gradient(0deg, #f7e6c4 0 2px, #e9cda0 2px 4px); }
+  .t3 { background: repeating-linear-gradient(58deg, #78bed2 0 7px, #468cae 7px 14px); }
+  .t4 { background: #12161c; }
+  .t5 { background: linear-gradient(120deg, #fff 0 50%, #0a0d12 50% 100%); }
+</style>
+</head>
+<body>
+<div id="row"></div>
+<script>
+var BACKS = [['t1', 'white'], ['t2', 'pale photo'], ['t3', 'busy midtone'], ['t4', 'dark'], ['t5', 'split']];
+document.getElementById('row').innerHTML = BACKS.map(function (b) {
+  return '<div class="cell"><div class="thumb ' + b[0] + '"><span class="hm-open-badge">OPEN</span></div>' +
+         '<div class="cap">' + b[1] + '</div></div>';
+}).join('');
+</script>
+</body>
+</html>

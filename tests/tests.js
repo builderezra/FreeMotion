@@ -991,7 +991,7 @@
     if (o.effects[0].params.source) throw new Error('a source pointing outside the pack survived as ' + o.effects[0].params.source);
   });
 
-  test('the home screen is never left invisible waiting for a splash that will not dismiss', { item: 'preintro-stuck' }, function () {
+  test('the home screen is never left invisible waiting for a splash that will not dismiss', { item: 'preintro-stuck' }, async function () {
     // v5.16, and a live report: "when i exit a project nothing loads, i can still press on the screen
     // and load projects but they just arent visibly there… it happens if i refresh while in a
     // project." The splash plays once per SESSION, so on a refresh the boot script returns early and
@@ -1003,7 +1003,24 @@
     // for the first time on the way OUT of the project, long after the splash slot has passed.
     const root = document.getElementById('home-screen');
     if (!root) throw new Error('#home-screen missing');
-    if (root.classList.contains('hm-preintro')) throw new Error('#home-screen is stuck in .hm-preintro right now — its content is invisible');
+    // "Is it stuck?" is a question about TIME. A single snapshot cannot tell a stuck home screen from
+    // one that is legitimately mid-entrance, and on a cold session the splash genuinely holds
+    // .hm-preintro for ~2.4s — which made this read red on every fresh load and green only when the
+    // splash had already played. The invariant that actually encodes the bug is narrower: preintro
+    // may only be up WHILE a splash is up. Sample it instead of guessing a sleep.
+    // The handover is not instantaneous: the splash stops counting as "up" the moment it begins
+    // dissolving, and preintro swaps to intro on the next frame. So orphaned-ness is only a fault
+    // once it PERSISTS — 0.8s here against the 6s of blank screen that was reported.
+    let orphaned = 0;
+    for (let i = 0; i < 90; i++) {
+      if (!root.classList.contains('hm-preintro')) break;
+      orphaned = (FM.home._splashIsUp && FM.home._splashIsUp()) ? 0 : orphaned + 1;
+      if (orphaned > 8) {
+        throw new Error('#home-screen has sat in .hm-preintro for ' + (orphaned * 100) + 'ms with no splash up — its content is invisible and nothing is left to reveal it');
+      }
+      if (i === 89) throw new Error('#home-screen was still in .hm-preintro after 9s — the splash never dismissed');
+      await new Promise(r => setTimeout(r, 100));
+    }
 
     // The rule itself must still bite when it is legitimately applied, or this test proves nothing.
     root.classList.add('hm-preintro');
@@ -1554,6 +1571,66 @@
     if (withCam > plain + 1) {
       throw new Error('on a 2x zoomed preview a hard edge is ' + withCam + 'px of ramp with a camera against ' + plain + 'px without — the camera plate is being upscaled instead of rendered at the preview\u2019s resolution');
     }
+  });
+
+  test('home: the OPEN badge says OPEN over any thumbnail', { item: 'open-badge-ink' }, async function () {
+    // The badge art was keyed out of a black backdrop, which knocked the letters out along with the
+    // background — so the word was a hole wearing whatever project thumbnail sat behind it, and it
+    // vanished on a busy one. Guard the ASSET, not the CSS: a re-export with the same mistake is
+    // exactly how this comes back. Interior transparency is found by flooding inward from the border,
+    // so the pill's own soft outer edge is not mistaken for a hole.
+    var url = new URL('../open-badge.png', document.baseURI).href;
+    var img = await new Promise(function (res, rej) {
+      var i = new Image();
+      i.onload = function () { res(i); };
+      i.onerror = function () { rej(new Error('open-badge.png did not load from ' + url)); };
+      i.src = url + '?t=' + Math.random();
+    });
+    var W = img.naturalWidth, H = img.naturalHeight;
+    if (!W || !H) throw new Error('open-badge.png decoded to 0x0');
+    var c = offscreen(W, H), cx = c.getContext('2d');
+    cx.drawImage(img, 0, 0);
+    var a = cx.getImageData(0, 0, W, H).data;
+    var alpha = function (x, y) { return a[(y * W + x) * 4 + 3]; };
+
+    var outside = new Uint8Array(W * H), q = [];
+    var push = function (x, y) {
+      var i = y * W + x;
+      if (!outside[i] && alpha(x, y) < 250) { outside[i] = 1; q.push(i); }
+    };
+    for (var x = 0; x < W; x++) { push(x, 0); push(x, H - 1); }
+    for (var y = 0; y < H; y++) { push(0, y); push(W - 1, y); }
+    for (var h = 0; h < q.length; h++) {
+      var i = q[h], qx = i % W, qy = (i / W) | 0;
+      if (qx > 0) push(qx - 1, qy);
+      if (qx < W - 1) push(qx + 1, qy);
+      if (qy > 0) push(qx, qy - 1);
+      if (qy < H - 1) push(qx, qy + 1);
+    }
+    var holes = 0;
+    for (var j = 0; j < W * H; j++) if (!outside[j] && a[j * 4 + 3] < 250) holes++;
+    if (holes) {
+      throw new Error(holes + ' of ' + (W * H) + ' pixels inside the OPEN badge are see-through — the ' +
+        'lettering is a cut-out again, so the word takes the colour of the thumbnail behind it');
+    }
+
+    // …and the letters must still be legible against the glass they sit on, not merely opaque.
+    var lum = function (o) {
+      var f = function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(a[o]) + 0.7152 * f(a[o + 1]) + 0.0722 * f(a[o + 2]);
+    };
+    var dark = [], light = [];
+    for (var yy = (H * 0.28) | 0; yy < (H * 0.58) | 0; yy++) {
+      for (var xx = (W * 0.16) | 0; xx < (W * 0.84) | 0; xx++) {
+        var o = (yy * W + xx) * 4;
+        if (a[o + 3] < 250) continue;
+        (lum(o) < 0.06 ? dark : light).push(lum(o));
+      }
+    }
+    if (dark.length < 200) throw new Error('found only ' + dark.length + ' ink pixels in the badge’s text band — the lettering is missing or no longer dark');
+    var med = light.sort(function (p, r) { return p - r; })[(light.length / 2) | 0];
+    var ratio = (med + 0.05) / (0.05);
+    if (ratio < 4.5) throw new Error('ink against the median glass around it is only ' + ratio.toFixed(2) + ':1 — under the 4.5:1 readable floor');
   });
 
   async function run() {

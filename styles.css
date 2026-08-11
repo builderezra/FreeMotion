@@ -1979,16 +1979,20 @@ body.hm-selecting .hm-card { touch-action: none; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .hm-thumb-empty { font-size: 26px; opacity: .25; }
 .hm-dur { position: absolute; bottom: 5px; left: 5px; font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 2px 6px; }
-/* OPEN badge (v4.90) — Ezra's glass pill render. Same construction as the + FAB: the word is cut in
-   the same black as the backdrop, so one luminance key punched out the background AND the letters,
-   and the project thumbnail shows through them. The text stays in the DOM for screen readers and is
-   hidden with a 0 font-size rather than display:none, so the badge keeps its accessible name.
-   Sized off the artwork's own 1.495 aspect so the pill can't stretch. */
+/* OPEN badge (v4.90) — Ezra's glass pill render. It was built like the + FAB: one luminance key
+   punched the black backdrop out of the artwork, which took the letters with it, so the word was a
+   hole and wore whatever project thumbnail sat behind it. On a busy or pale thumbnail it stopped
+   reading as a word at all, so as of v5.37 the letters are inked near-black IN THE ASSET — the pill
+   is now opaque through the word and says the same thing over any picture. The text stays in the DOM
+   for screen readers and is hidden with a 0 font-size rather than display:none, so the badge keeps
+   its accessible name. Sized off the artwork's own 1.495 aspect so the pill can't stretch. */
 .hm-open-badge {
   position: absolute; top: 5px; left: 5px;
   width: 33px; height: 22px; padding: 0; border-radius: 0;
-  font-size: 0; color: transparent; background: url('open-badge.png?v=1') center / contain no-repeat;
-  /* the edge light lands on the pill's outline AND inside the cut letters — at badge scale (v4.92) */
+  font-size: 0; color: transparent; background: url('open-badge.png?v=2') center / contain no-repeat;
+  /* Edge light at badge scale (v4.92). drop-shadow follows alpha, so before the letters were inked
+     this had to stay sub-pixel or it bloomed into the counters of the O and P. Now the only alpha
+     edge left is the pill outline and the sparkle, which is all this should ever have rimmed. */
   filter: var(--glass-edge-sm) drop-shadow(0 1px 3px rgba(0,0,0,.55));
 }
 .hm-body { flex: 1; min-width: 0; }
