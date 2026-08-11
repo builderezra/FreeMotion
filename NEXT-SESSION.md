@@ -120,13 +120,20 @@ compositor 1314, 1369, 1412, 6113, 6317; fx-browser.js 176-183; inspector `motio
 for other hand-rendered pseudo-effects — fx-browser calls this "the same trick as **Mask**".
 
 ### 32. AM's "Other" effects
-Present: `channelremap` (ONE; AM has HSV **and** RGB), `copybg`. **Absent: Fill Behind, Magnify
-Background, Echo Keyframes, Time Quantization.**
-- **Magnify Background** was built and **reverted** — stripe counts identical at zoom 1, 2 and 4. Two
-  hypotheses ruled out: it *does* reach `drawCopyBg` (`_bgSnap` exists at 320×240), and `makeInstance`
-  *does* get the default (`paramsOf()` normalises `def:`). **Next: instrument the actual `_z` and
-  transform** — the plate carries `__fmRS/__fmOX/__fmOY`, so scaling about raw `M.e/M.f` may be the
-  wrong origin.
+Present: `channelremap` (ONE; AM has HSV **and** RGB), `copybg`, `magnifybg`. **Absent: Fill Behind,
+Echo Keyframes, Time Quantization.**
+- **Magnify Background — SHIPPED 2026-08-12.** The reverted first attempt was wired as a **post-effect**:
+  a type in `POSTFX` routes `drawLayer` into `applyPostFx`, which had no kernel for it, so the layer drew
+  **zero pixels** and the identical stripe counts at zoom 1/2/4 were the bare backdrop. (The old "next
+  step" — suspecting the `__fmRS/__fmOX/__fmOY` origin — was a dead end: `M.e/M.f` is the right origin,
+  because `getTransform()` has already folded both in.) It now ships as a **Copy Background sibling**:
+  `FM.hasCopyBg` + `BG_SNAP_FX` accept it, `magnifyPlate`/`copyBgZoom` do the work in `drawCopyBg`, and
+  it is **never** in POSTFX. `tests/tests.js` holds the tripwire. Two open questions are **Ezra's call**:
+  - at zoom < 1 the source rect runs off the snapshot. It is currently **clamped** (the edge pixel is
+    repeated), because the copy composites with `source-in` and a transparent margin is a hole punched
+    through the layer. **Clamp, or allow minifying with transparent margins?**
+  - AM's magnifier has an **offset / centre control**; this one magnifies about the layer's own anchor
+    only. Worth adding, or is anchor-only enough?
 - **Fill Behind** — deliberately not built: pixel-effect plates are **project-sized**, so a naive fill
   paints the whole frame. **Ask Ezra what it should do** rather than guessing from one thumbnail.
 

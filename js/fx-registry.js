@@ -71,6 +71,7 @@ window.FM = window.FM || {};
     squeeze: 'distort', tiles: 'repeat',
     motionflow: 'blur',   // content-aware motion blur (temporal)
     copybg: 'stylize',    // copy the backdrop below into this layer
+    magnifybg: 'stylize', // …and the same copy through a lens
     // batch 26 (AM parity fill-ins)
     softglow: 'color', replacecolor: 'color', spotcolor: 'color', fourcolor: 'color', spectralmap: 'color',
     radialshadow: 'color', voronoi: 'proc', tunnel: 'distort',
@@ -136,7 +137,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap', 'chromakeypro', 'timewarp'];
+  FM.FX_FEATURED = ['magnifybg', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap', 'chromakeypro'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
@@ -248,6 +249,7 @@ window.FM = window.FM || {};
     nightvision: 'Green phosphor, grain and a soft vignette.',
     sketch: 'Redraws the image as pencil lines.',
     copybg: 'Copies the layers underneath into this one, so it can be distorted or masked as a unit.',
+    magnifybg: 'Copy Background through a lens: the layer fills with the scene below it, blown up around its own centre.',
 
     // ---- the rest, written 2026-08-08. Every line says what the effect DOES, in the words someone
     // would use before they knew its name. Where two effects are easy to confuse, the line says what

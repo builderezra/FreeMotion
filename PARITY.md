@@ -42,7 +42,7 @@ should check `git log -S'<the thing>'` before recording anything as a regression
 
 Legend: ✅ done · 🟡 partial · ❌ missing · ❔ unknown
 
-_Across 342 audited features: 208 ✅ · 52 🟡 · 81 ❌ · 1 ❔_ (was 90 ✅ · 62 🟡 · 189 ❌ before the 2026-07-10 re-audit; v2.86 shipped 13 more)
+_Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅ · 62 🟡 · 189 ❌ before the 2026-07-10 re-audit; v2.86 shipped 13 more)
 
 ## Timeline & playback (tracks, scrub, split, ripple/trim, speed & time-remap, markers, loop region, preview rate)
 
@@ -177,7 +177,7 @@ _Across 342 audited features: 208 ✅ · 52 🟡 · 81 ❌ · 1 ❔_ (was 90 ✅
 | Omino Diffusion+ | ❌ missing | nice | Confirmed absent. |
 | Copy Background | ✅ done | common | Re-audited 2026-07-10: shipped v2.55. `copybg` effect def + `drawCopyBg` + `FM.hasCopyBg`; featured in the fx browser. |
 | Fill Behind | ❌ missing | common | Confirmed absent. |
-| Magnify Background | ❌ missing | nice | Confirmed absent. |
+| Magnify Background | ✅ done | nice | Shipped 2026-08-12: `magnifybg` — a Copy Background SIBLING (`FM.hasCopyBg` / `BG_SNAP_FX`, never POSTFX), `magnifyPlate` + `copyBgZoom` in compositor.js. One Zoom param (0.1–8×, def 2), magnifies about the layer's own anchor, edge-clamped. Zoom 1 renders byte-identical to plain Copy Background. Costs ~2.2× Copy Background per layer. **Not** AM-complete: no offset/centre control. |
 | Echo Keyframes (motion trails) | 🟡 partial | nice | Re-audited 2026-07-10: `motionflow`'s Echo style gives long-exposure echo trails; not discrete time-offset keyframe echoes. |
 | Time Quantization | ❌ missing | nice | Confirmed absent. |
 | Particle Emitter | ❌ missing | common | Confirmed: no particle layer type in scene.js, none in FM.EFFECTS. |

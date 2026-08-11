@@ -3549,6 +3549,119 @@
     if (bad.length) throw new Error('tiles indistinguishable from their subject: ' + bad.join('; '));
   });
 
+  /* ---------------- Magnify Background (queue 32) ------------------------------------------
+   * Copy Background with a lens: the layer fills with the scene BELOW it, scaled about the layer's
+   * own anchor. It shipped once as a POST-EFFECT and was reverted for "doing nothing" — the stripe
+   * counts came out identical at zoom 1, 2 and 4. The cause was the wiring, not the maths: listing
+   * a type in POSTFX makes drawLayer take the `if (pp.length) { applyPostFx(…); return; }` branch,
+   * and applyPostFx has no PIXEL_FX / WARP_FX / CANVAS_FX kernel for it, so it falls through every
+   * `if` and returns undefined. The layer then draws ZERO pixels and what those measurements were
+   * counting was the bare backdrop through a layer that had vanished.
+   * So the load-bearing assertion here is not "the stripes are wider" — it is "the layer drew at
+   * all".
+   * WHAT THIS ACTUALLY GUARDS, mutation by mutation (measured 2026-08-12, not assumed):
+   *   • `magnifybg: 1` added to POSTFX            → RED, `the lens drew nothing` (assertion 1).
+   *   • POSTFX *and* a WARP_FX kernel for it      → RED, but via assertion 2: the layer now draws
+   *     SOMETHING, just not the copy, so zoom 1 stops matching plain Copy Background (39360 bytes).
+   *   • a WARP_FX kernel ALONE, no POSTFX entry   → still GREEN, and correctly so. WARP_FX is read
+   *     from exactly one place, the `if (WARP_FX[fx.type]) return drawWarpEffect(…)` line inside
+   *     applyPostFx, and drawLayer only reaches applyPostFx through the `layer.effects.filter(e =>
+   *     POSTFX[e.type] …)` gate. An entry there with no POSTFX entry never executes and changes no
+   *     pixel, so there is nothing for a rendering test to see.
+   * POSTFX is therefore the single gate, and it is the one this test covers. Don't rewrite this to
+   * promise WARP_FX coverage the pixels cannot deliver. */
+  var MBG = { W: 320, H: 240, LENS: 160, ROW: 60, MID: 120 };   // ROW is inside the lens, above the square
+  function mbgLayers(fx, zoom, square) {
+    var out = [];
+    if (fx) {
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'lens', x: 160, y: 120, shapeW: MBG.LENS, shapeH: MBG.LENS, fill: '#00ff00' });
+      var e = FM.fxRegistry.makeInstance(fx);
+      if (!e) throw new Error('no registry entry for ' + fx);
+      if (zoom != null && 'zoom' in e.params) e.params.zoom = zoom;
+      L.effects = [e];
+      out.push(L);
+    }
+    if (square) out.push(FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 40, shapeH: 40, fill: '#ff0000' }));
+    for (var x = 8; x < MBG.W; x += 16) out.push(FM.makeLayer('shape', { shape: 'rect', x: x, y: 120, shapeW: 8, shapeH: MBG.H, fill: '#ffffff' }));
+    return out;
+  }
+  function mbgPix(layers) {
+    var c = offscreen(MBG.W, MBG.H);
+    FM.renderScene(c.getContext('2d', { willReadFrequently: true }), scene(layers), 0);
+    return c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, MBG.W, MBG.H);
+  }
+  // widths of the runs of `pred` pixels along row y, keeping only those inside the lens
+  function mbgRuns(im, y, pred) {
+    var d = im.data, w = im.width, r = [], s = -1, lo = (MBG.W - MBG.LENS) / 2, hi = lo + MBG.LENS;
+    for (var x = 0; x <= w; x++) {
+      var i = (y * w + x) * 4;
+      var on = x < w && pred(d[i], d[i + 1], d[i + 2], d[i + 3]);
+      if (on && s < 0) s = x; else if (!on && s >= 0) { r.push([s, x - s]); s = -1; }
+    }
+    return r.filter(function (v) { return v[0] > lo && v[0] + v[1] < hi; });
+  }
+  var mbgWhite = function (r, g, b, a) { return a > 200 && r > 200 && g > 200 && b > 200; };
+  var mbgRed = function (r, g, b, a) { return a > 200 && r > 150 && g < 110 && b < 110; };
+
+  test('effects: Magnify Background really magnifies, and Copy Background is untouched', { item: 'magnify-bg' }, function () {
+    if (!FM.fxRegistry.get('magnifybg')) throw new Error('magnifybg is not in the effect registry');
+    var noLens = mbgPix(mbgLayers(null, null, true));
+    var cbg = mbgPix(mbgLayers('copybg', null, true));
+    var z1 = mbgPix(mbgLayers('magnifybg', 1, true));
+    var z2 = mbgPix(mbgLayers('magnifybg', 2, true));
+    var z4 = mbgPix(mbgLayers('magnifybg', 4, false));
+
+    // 1. THE TRIPWIRE. A layer routed through the post-effect path with no kernel draws nothing at
+    // all, and the frame is then pixel-for-pixel the backdrop with no layer in it.
+    var diff = 0;
+    for (var i = 0; i < z2.data.length; i++) if (z2.data[i] !== noLens.data[i]) diff++;
+    if (diff === 0) throw new Error('the lens drew nothing: a Magnify Background layer at zoom 2 left the frame byte-identical to the same scene with the layer deleted — either magnifybg has been listed in POSTFX, which routes it into applyPostFx, which has no kernel for it and so draws zero pixels, or the zoom never reached the plate');
+
+    // 2. zoom 1 IS Copy Background, byte for byte — the identity path must not be touched.
+    var d1 = 0;
+    for (var j = 0; j < z1.data.length; j++) if (z1.data[j] !== cbg.data[j]) d1++;
+    if (d1 !== 0) throw new Error('Magnify Background at zoom 1 differs from plain Copy Background in ' + d1 + ' bytes — the identity blit is no longer identical');
+
+    // 3. the picture inside the lens scales with zoom: 8px bars → 16 at 2x, 32 at 4x (measured 14
+    // and 30 at a >200 threshold, the rest of each edge being the bilinear ramp).
+    function bars(im) { return mbgRuns(im, MBG.ROW, mbgWhite).map(function (v) { return v[1]; }); }
+    var b1 = bars(z1), b2 = bars(z2), b4 = bars(z4);
+    if (!b1.length || b1.some(function (w) { return w < 7 || w > 9; })) throw new Error('at zoom 1 the backdrop bars should still be 8px, measured [' + b1 + ']');
+    if (!b2.length || b2.some(function (w) { return w < 13 || w > 17; })) throw new Error('at zoom 2 the 8px bars should be ~16px, measured [' + b2 + ']');
+    if (!b4.length || b4.some(function (w) { return w < 28 || w > 34; })) throw new Error('at zoom 4 the 8px bars should be ~32px, measured [' + b4 + ']');
+
+    // 4. …and it scales about the LAYER'S OWN ANCHOR, not the canvas origin: the 40px square sits on
+    // the anchor, so it must grow in place rather than slide out of the lens.
+    function sq(im) { var r = mbgRuns(im, MBG.MID, mbgRed); return r.length === 1 ? r[0] : null; }
+    var s1 = sq(z1), s2 = sq(z2);
+    if (!s1 || Math.abs(s1[1] - 40) > 2) throw new Error('at zoom 1 the 40px square measured ' + (s1 ? s1[1] : 'nothing'));
+    if (!s2 || Math.abs(s2[1] - 80) > 3) throw new Error('at zoom 2 the 40px square should be 80px wide, measured ' + (s2 ? s2[1] : 'nothing') + ' — check the magnification origin');
+    if (s2 && Math.abs((s2[0] + s2[1] / 2) - 160) > 2) throw new Error('the magnified square is centred at ' + (s2[0] + s2[1] / 2) + ', not on the layer anchor at 160 — it is being scaled about the wrong point');
+  });
+
+  test('effects: Magnify Background below 1x fills its edges instead of punching a hole', { item: 'magnify-bg' }, function () {
+    // The copy is composited with `source-in`, so anywhere the scaled backdrop does not reach is a
+    // HOLE straight through the layer. A magenta ring around a blue field tells the two apart: the
+    // clamp repeats the snapshot's EDGE pixel (magenta), a hole shows the backdrop itself (blue).
+    var layers = [null, null];
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'lens', x: 160, y: 120, shapeW: MBG.W, shapeH: MBG.H, fill: '#00ff00' });
+    var e = FM.fxRegistry.makeInstance('magnifybg');
+    if (!e) throw new Error('no registry entry for magnifybg');
+    e.params.zoom = 0.5; L.effects = [e];
+    layers = [L,
+      FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 40, shapeH: 40, fill: '#ff0000' }),
+      FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: MBG.W - 12, shapeH: MBG.H - 12, fill: '#0000ff' }),
+      FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: MBG.W, shapeH: MBG.H, fill: '#ff00ff' })];
+    var im = mbgPix(layers);
+    var at = function (x, y) { var i = (y * im.width + x) * 4; return [im.data[i], im.data[i + 1], im.data[i + 2], im.data[i + 3]]; };
+    // every one of these is in a margin the half-size copy cannot reach, and over the BLUE field
+    [[40, 30], [280, 30], [40, 210], [280, 210], [40, 120], [160, 20]].forEach(function (p) {
+      var c = at(p[0], p[1]);
+      if (c[3] < 250) throw new Error('at ' + p + ' the layer is transparent (alpha ' + c[3] + ') — the shrunken copy left a hole');
+      if (!(c[0] > 200 && c[1] < 80 && c[2] > 200)) throw new Error('at ' + p + ' the margin is rgb(' + c.slice(0, 3) + ') — expected the clamped magenta edge, blue means the backdrop is showing through a hole');
+    });
+  });
+
   /* ---------------- safe-area insets under viewport-fit=cover (queue 46) ----------------
    * v5.49 added viewport-fit=cover, so every position:fixed overlay now starts at the PHYSICAL top
    * of the screen and has to pay for the status bar itself. #topbar-m, .hm-top, .set-head and .te-bar

@@ -376,7 +376,7 @@ window.FM = window.FM || {};
     // fills with whatever is underneath, so the backdrop has to be the interesting half.
     // Light Wrap reads the layers UNDERNEATH, so like Copy Background its tile needs a plain shape
     // over something worth wrapping.
-    copybg: 'backdrop', lightwrap: 'backdrop',
+    copybg: 'backdrop', lightwrap: 'backdrop', magnifybg: 'backdrop',
     // Whole-frame framing: these draw ON the comp edge, so the subject must reach it.
     letterbox: 'full', border: 'full', vignette: 'full', tiltshift: 'full',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
@@ -411,6 +411,8 @@ window.FM = window.FM || {};
   function kf01(key) {
     return function (layers, hero) { hero.effects[0].params[key] = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1.65, v: 1, e: 'linear' }] }; };
   }
+  // Tilt the hero — see the Copy Background note below for why the backdrop effects need it.
+  function tilted16(layers, hero) { hero.transform = Object.assign({}, hero.transform, { rotation: 16 }); }
   const OVERRIDES = {
     // Footage blur reads motion INSIDE the clip and deliberately ignores the layer's own transform —
     // so keyframing the hero across the frame proves nothing. Put a Drift UNDERNEATH it in the stack
@@ -449,9 +451,9 @@ window.FM = window.FM || {};
     // that backdrop is invisible — the tile just looks like the untouched picture. Rotating the
     // layer rotates the copy with it, which is what makes "this shape now holds what's behind it"
     // readable in one frame.
-    copybg: function (layers, hero) {
-      hero.transform = Object.assign({}, hero.transform, { rotation: 16 });
-    },
+    // Magnify Background gets the same treatment for the same reason (its window has to read as a
+    // window), and the tilt also separates the blown-up copy from the picture around it.
+    copybg: tilted16, magnifybg: tilted16,
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
     counter: kf01('progress'), textprogress: kf01('progress'),
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect

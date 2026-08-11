@@ -516,6 +516,20 @@ window.FM = window.FM || {};
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
     // full-screen shape + Copy Background = an adjustment/colour-grade layer you can mask & animate.
     { type: 'copybg', label: 'Copy Background', params: [] },
+    // ---- Magnify Background: Copy Background with a lens. Same plate, same footprint, but the
+    // copied backdrop is scaled about this layer's own anchor before it is clipped — so a shape
+    // over the scene becomes a magnifying glass you can mask, animate and grade.
+    // It is a COPY-BACKGROUND SIBLING, not a post-effect: it must never be listed in POSTFX.
+    // Registering it there routes drawLayer into applyPostFx, which has no kernel for it, falls
+    // through every branch and returns undefined — the layer then draws ZERO pixels and the bare
+    // backdrop shows through. That is exactly how the first attempt at this effect shipped "doing
+    // nothing" and had to be reverted; tests/tests.js asserts the absence.
+    // (A WARP_FX / PIXEL_FX / CANVAS_FX kernel with no POSTFX entry is merely dead code, not a bug:
+    // those tables are only read from inside applyPostFx, which POSTFX alone gates. POSTFX is the
+    // one list to keep it out of.)
+    { type: 'magnifybg', label: 'Magnify Background', params: [
+      { key: 'zoom', label: 'Zoom', min: 0.1, max: 8, step: 0.1, def: 2, unit: '×' },   // U+00D7, matching Glitch's "RGB tear" — the catalog's only other multiplier
+    ] },
     // ---- batch 30: Particles — deterministic generative emitter (Procedural) ----
     { type: 'particles', label: 'Particles', params: [
       { key: 'rate', label: 'Rate', min: 1, max: 200, step: 1, def: 40, unit: '/s' },
@@ -5332,13 +5346,16 @@ window.FM = window.FM || {};
     const sc = Math.max(b.w / img.width, b.h / img.height);
     return panLimit(b.w, b.h, img.width * sc, img.height * sc);
   };
-  // Copy Background: does this layer copy the backdrop below it?
-  FM.hasCopyBg = function (layer) { return !!(layer.effects && layer.effects.some(function (e) { return e.type === 'copybg' && e.enabled !== false; })); };
+  // Copy Background: does this layer copy the backdrop below it? Magnify Background is the same
+  // draw — one plate, footprint-clipped backdrop — with a scale applied to the copy, so it routes
+  // through the SAME branch rather than through the post-effect pipeline (see the catalog note).
+  const COPYBG_FX = { copybg: 1, magnifybg: 1 };
+  FM.hasCopyBg = function (layer) { return !!(layer.effects && layer.effects.some(function (e) { return COPYBG_FX[e.type] && e.enabled !== false; })); };
   /* Which effects need a snapshot of everything drawn BELOW this layer. Copy Background was the only
    * one; Light Wrap needs the same picture for the opposite reason — it does not replace the layer
    * with the backdrop, it bleeds the backdrop's light around the layer's own edge. The capture is
    * gated because it is a full-frame blit per layer per frame, so only layers that ask for it pay. */
-  const BG_SNAP_FX = { copybg: 1, lightwrap: 1 };
+  const BG_SNAP_FX = { copybg: 1, lightwrap: 1, magnifybg: 1 };
   FM.needsBgSnap = function (layer) {
     return !!(layer.effects && layer.effects.some(function (e) { return BG_SNAP_FX[e.type] && e.enabled !== false; }));
   };
@@ -6197,6 +6214,41 @@ window.FM = window.FM || {};
   // The layer's own effects (set on ctx before this runs) then grade/blur that copy = a maskable,
   // shaped adjustment layer over the whole scene.
   let _cbA = null;
+  /* Magnify Background's lens plate: `snap` scaled by z about (px,py) on the SAME pixel grid, with
+   * the border pixel repeated across anything the scaled copy does not reach. The clamp is not
+   * cosmetic — the caller composites this with `source-in`, so a transparent margin is a HOLE
+   * punched through the layer, and a zoom below 1 (or an anchor outside the frame) produces one. */
+  let _cbZ = null;
+  function magnifyPlate(snap, cw, ch, z, px, py) {
+    if (!_cbZ) _cbZ = document.createElement('canvas');
+    if (_cbZ.width !== cw || _cbZ.height !== ch) { _cbZ.width = cw; _cbZ.height = ch; }
+    const g = _cbZ.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+    const sw = snap.width || cw, sh = snap.height || ch;
+    // scale about (px,py):  x' = z*x + px*(1-z)
+    const L = px * (1 - z), T = py * (1 - z), dw = cw * z, dh = ch * z, R = L + dw, B = T + dh;
+    try {
+      g.drawImage(snap, L, T, dw, dh);
+      if (L > 0) g.drawImage(snap, 0, 0, 1, sh, 0, T, L, dh);                             // left edge
+      if (R < cw) g.drawImage(snap, sw - 1, 0, 1, sh, R, T, cw - R, dh);                  // right edge
+      if (T > 0) g.drawImage(snap, 0, 0, sw, 1, L, 0, dw, T);                             // top edge
+      if (B < ch) g.drawImage(snap, 0, sh - 1, sw, 1, L, B, dw, ch - B);                  // bottom edge
+      if (L > 0 && T > 0) g.drawImage(snap, 0, 0, 1, 1, 0, 0, L, T);                      // corners
+      if (R < cw && T > 0) g.drawImage(snap, sw - 1, 0, 1, 1, R, 0, cw - R, T);
+      if (L > 0 && B < ch) g.drawImage(snap, 0, sh - 1, 1, 1, 0, B, L, ch - B);
+      if (R < cw && B < ch) g.drawImage(snap, sw - 1, sh - 1, 1, 1, R, B, cw - R, ch - B);
+    } catch (e) {}
+    return _cbZ;
+  }
+  // How much this layer magnifies the copied backdrop. 1 = plain Copy Background.
+  function copyBgZoom(layer, t) {
+    const mg = layer.effects && layer.effects.find(function (e) { return e.type === 'magnifybg' && e.enabled !== false; });
+    if (!mg) return 1;
+    const zp = (mg.params || {}).zoom;
+    const z = zp == null ? 2 : FM.evalProp(zp, t);   // catalog default, for an instance saved without the key
+    return z > 0.01 ? z : 0.01;                      // a zero/negative scale collapses the plate to nothing
+  }
   function drawCopyBg(ctx, layer, t, scene) {
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height, tr = layer.transform;
@@ -6236,7 +6288,26 @@ window.FM = window.FM || {};
     }
     a.setTransform(1, 0, 0, 1, 0, 0);   // _bgSnap already IS this pixel grid — copy it 1:1, no remap
     a.globalCompositeOperation = 'source-in';   // keep the backdrop ONLY inside the footprint
-    try { a.drawImage(layer._bgSnap, 0, 0); } catch (e) {}
+    // Magnify Background scales that copy about the layer's OWN anchor, which in screen space is
+    // exactly M.e/M.f: getTransform() has already folded in baseT's render scale (__fmRS) and
+    // viewport crop (__fmOX/__fmOY), so no further correction belongs here.
+    /* What keeps plain Copy Background byte-identical is copyBgZoom's `if (!mg) return 1` — a layer
+     * with no enabled magnifybg reports exactly 1, so nothing about its copy changes. It is NOT the
+     * `z !== 1` guard below: deleting that guard and sending every copybg layer through
+     * magnifyPlate was measured to leave the rendered frame byte-for-byte identical anyway, because
+     * _bgSnap is captured at the target's own size (`const _tw = target.canvas.width` in the
+     * renderScene layer loop, so sw===cw and sh===ch), so at z === 1
+     * the plate is one unscaled 1:1 drawImage and all eight edge/corner blits are skipped by their
+     * own L>0 / R<cw / T>0 / B<ch guards.
+     * The guard stays because it is a real FAST PATH, not because it is load-bearing for the pixels:
+     * measured at the phone preview backing store (810x1440, __fmRS 0.75, software raster) it saves
+     * ~2.0 ms/frame on one Copy Background layer (3.34 vs 5.30) and ~7.2 ms/frame on eight (28.2 vs
+     * 35.4) — a whole canvas allocate + clear + full-frame blit per copybg layer per frame.
+     * The `&& M` half is correctness, not speed: with no transform there is no anchor to scale
+     * about, so fall back to the unscaled copy rather than guess an origin. */
+    const z = copyBgZoom(layer, t);
+    const snap = (z !== 1 && M) ? magnifyPlate(layer._bgSnap, cw, ch, z, M.e, M.f) : layer._bgSnap;
+    try { a.drawImage(snap, 0, 0); } catch (e) {}
     a.globalCompositeOperation = 'source-over';
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);   // plate and target share the grid; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)
     try { ctx.drawImage(_cbA, 0, 0); } catch (e) {}
