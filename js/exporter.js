@@ -24,8 +24,10 @@ window.FM = window.FM || {};
   //     it → share() rejects with NotAllowedError, so we quietly download instead
   // AbortError is the one case we do NOT fall back on: the user saw the sheet and dismissed it, so
   // silently downloading anyway would be the opposite of what they asked for.
-  async function deliver(buffer, name) {
-    const blob = new Blob([buffer], { type: 'video/mp4' });
+  // Takes the finished file as a BLOB (see createMp4Sink). It used to take the muxer's ArrayBuffer and
+  // do `new Blob([buffer])` here, which meant that at the moment of delivery the whole movie existed
+  // TWICE — once on the JS heap, once in blob storage. A blob in, a blob out: no copy. (#47)
+  async function deliver(blob, name) {
     let file = null;
     try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -35,6 +37,90 @@ window.FM = window.FM || {};
     download(blob, name);
     return 'downloaded';
   }
+
+  /* ---- streaming MP4 sink: keep the finished file OFF the JS heap ---------------------------- (#47)
+   *
+   * The muxer used to write into an ArrayBufferTarget with fastStart:'in-memory', which by definition
+   * holds the ENTIRE movie in one JS ArrayBuffer so the moov atom can be placed at the front. At the
+   * exporter's own bitrate (min(80 Mb/s, W*H*fps*0.12)) a 1080p30 export costs ~0.9 MB per second of
+   * footage, so 20 min = ~1.07 GB and 60 min = ~3.2 GB against a mobile tab ceiling of roughly 1-2 GB.
+   *
+   * With fastStart:false the moov goes at the END, so the writes become essentially sequential and we
+   * can hand them off as they are produced. This sink is what mp4-muxer's StreamTarget calls:
+   *
+   *   onData(data, position)  — position is NOT decoration. The muxer says out loud that ignoring it
+   *                             breaks the output, and it really does patch earlier bytes: at finalize
+   *                             it rewrites the mdat box header at the front of the file once the
+   *                             payload length is known, long after those bytes were streamed out.
+   *
+   * So writes are kept WITH their offsets. The common case (an append at the current end) goes into a
+   * small RAM buffer that is folded into a Blob every few MB — Blob storage is disk-backed, so the
+   * finished file lives on disk, not on the heap, and peak JS memory is bounded by FOLD_BYTES rather
+   * than by the length of the export. Anything that lands before the end is recorded as a patch in
+   * ARRIVAL order and spliced in at finish() with Blob.slice(), which is a cheap view, not a copy.
+   * Later writes win, so a byte written twice ends up with the value written last.
+   *
+   * COST: no fastStart means the file is not "progressive" — a player must read the tail before it can
+   * start. For a file you download and open locally that is a non-issue; for one streamed from a URL it
+   * would mean no play-while-loading.
+   */
+  const FOLD_BYTES = 4 << 20;   // heap held between folds; 4 MB is far below any chunk the muxer emits
+
+  function createMp4Sink(type, foldBytes) {
+    const FOLD = foldBytes || FOLD_BYTES;
+    const parts = [];          // Blobs already folded off the heap, in file order
+    let pending = [];          // Uint8Arrays not yet folded — this is the only heap-resident part
+    let pendingBytes = 0;
+    let length = 0;            // length of the contiguous region we have written so far
+    const patches = [];        // { pos, data } in ARRIVAL order — a later write must overwrite an earlier one
+    let peakPending = 0, patchesSeen = 0;   // patchesSeen survives finish(); patches[] does not
+
+    function fold() {
+      if (!pending.length) return;
+      parts.push(new Blob(pending));   // copies into blob storage; the Uint8Arrays are then garbage
+      pending = []; pendingBytes = 0;
+    }
+    function append(u8) {
+      if (!u8.byteLength) return;
+      pending.push(u8); pendingBytes += u8.byteLength; length += u8.byteLength;
+      if (pendingBytes > peakPending) peakPending = pendingBytes;
+      if (pendingBytes >= FOLD) fold();
+    }
+
+    return {
+      // Bound to `this`-free so it can be handed straight to StreamTarget. Declared with two named
+      // params because StreamTarget rejects an onData of arity < 2 (its way of catching code that
+      // silently drops `position`).
+      onData(data, position) {
+        const u8 = data.slice();   // own our copy: the muxer reuses its scratch buffers
+        if (position === length) { append(u8); return; }                       // the overwhelmingly common case
+        if (position > length) { append(new Uint8Array(position - length)); append(u8); return; }  // hole → zero-fill so offsets stay true
+        const end = position + u8.byteLength;
+        if (end <= length) { patches.push({ pos: position, data: u8 }); patchesSeen++; return; }   // wholly behind the end (the mdat header patch)
+        // straddles the end: patch the part that overlaps, append the part that extends
+        patches.push({ pos: position, data: u8.subarray(0, length - position) }); patchesSeen++;
+        append(u8.subarray(length - position));
+      },
+      finish() {
+        fold();
+        let blob = new Blob(parts, { type: type });
+        parts.length = 0;
+        for (const p of patches) {
+          const end = p.pos + p.data.byteLength;
+          blob = new Blob([blob.slice(0, p.pos), p.data, blob.slice(Math.min(end, blob.size))], { type: type });
+        }
+        patches.length = 0;
+        return blob;
+      },
+      get length() { return length; },
+      get patchCount() { return patchesSeen; },     // NOT patches.length — finish() empties that, which
+                                                    // would make any "it took the patch path" assertion
+                                                    // read 0 and pass for the wrong reason
+      get peakHeapBytes() { return peakPending; },
+    };
+  }
+  // exposed for tests/_mp4sink.html, which checks the assembly against a dense reference buffer
+  FM._createMp4Sink = createMp4Sink;
 
   function seekVideo(m, time) {
     return new Promise(res => {
@@ -344,11 +430,15 @@ window.FM = window.FM || {};
         if (!audioOK) { console.warn('AAC audio encoding unavailable — exporting video only'); mix = null; }
       }
 
+      // Stream the file out to disk-backed blob storage instead of holding it whole on the JS heap.
+      // fastStart:false is what makes that possible — see createMp4Sink for the mechanism and the
+      // one cost (the output is no longer progressive-play). (#47)
+      const sink = createMp4Sink('video/mp4');
       const muxer = new Mp4Muxer.Muxer({
-        target: new Mp4Muxer.ArrayBufferTarget(),
+        target: new Mp4Muxer.StreamTarget({ onData: sink.onData }),
         video: { codec: 'avc', width: outW, height: outH },
         audio: mix ? { codec: 'aac', numberOfChannels: mix.channels, sampleRate: mix.sampleRate } : undefined,
-        fastStart: 'in-memory',
+        fastStart: false,
       });
 
       const codec = await pickVideoCodec(outW, outH, fps, bitrate);
@@ -376,7 +466,7 @@ window.FM = window.FM || {};
       encoder.close();
       if (mix) { try { await encodeAudio(muxer, mix); } catch (e) { console.warn('audio encode failed', e); } }
       muxer.finalize();
-      await deliver(muxer.target.buffer, (opts.name || 'freemotion-export') + '.mp4');
+      await deliver(sink.finish(), (opts.name || 'freemotion-export') + '.mp4');
       } finally {
         // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
