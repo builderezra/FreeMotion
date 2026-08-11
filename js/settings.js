@@ -84,7 +84,10 @@ window.FM = window.FM || {};
   }
   function group(...kids) { const g = el('div', 'set-group'); kids.forEach(k => k && g.appendChild(k)); return g; }
 
-  function toggleRow(label, hint, key) {
+  // A switch whose state is READ back from wherever it really lives, and whose press is handed to
+  // whoever really owns it. A stored preference is just the case where both are this module (see
+  // toggleRow); the project toggles below own theirs in app.js and timeline.js, and are never copied.
+  function switchRow(label, hint, get, toggle) {
     const row = el('div', 'set-row');
     const txt = el('div', 'set-rowtext');
     txt.appendChild(el('div', 'set-label', label));
@@ -92,13 +95,17 @@ window.FM = window.FM || {};
     const sw = el('button', 'set-switch');
     sw.type = 'button';
     sw.setAttribute('role', 'switch');
-    const sync = () => { sw.classList.toggle('on', !!state[key]); sw.setAttribute('aria-checked', state[key] ? 'true' : 'false'); };
+    const sync = () => { const on = !!get(); sw.classList.toggle('on', on); sw.setAttribute('aria-checked', on ? 'true' : 'false'); };
     sw.setAttribute('aria-label', label);
     sw.appendChild(el('span', 'set-knob'));
-    sw.addEventListener('click', () => { state[key] = !state[key]; sync(); save(); apply(); });
+    sw.addEventListener('click', () => { toggle(); sync(); });
     sync();
     row.appendChild(txt); row.appendChild(sw);
     return row;
+  }
+
+  function toggleRow(label, hint, key) {
+    return switchRow(label, hint, () => state[key], () => { state[key] = !state[key]; save(); apply(); });
   }
 
   function segmentRow(label, key, options) {
@@ -172,6 +179,32 @@ window.FM = window.FM || {};
     head.appendChild(close);
 
     const body = el('div', 'set-body');
+
+    // ---- THIS PROJECT (queue 52 + 35) --------------------------------------------------------
+    // Ezra: "PC: the settings cog opens the wrong settings menu in a project." It did: inside a
+    // project the cog opened this panel with only APP-wide, home-screen preferences in it —
+    // appearance, project sorting, import a file — and nothing whatsoever about the project you were
+    // looking at, while the project's own settings sat behind the ⋯ button 40px to its left.
+    // So the cog leads with the project when there IS one. Loop / Onion skin / Snapping move in with
+    // it (queue 35: they are settings, not actions) and leave the PC ⋯ menu — the same relocation the
+    // home screen's ⋯ menu already made into this panel. Each one is read and written through the
+    // control that owns it, never copied: a second copy of "is snapping on" is how the ⋯ menu used to
+    // show the wrong tick.
+    const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (inProject) {
+      const press = (id) => { const b = document.getElementById(id); if (b) b.click(); };
+      body.appendChild(group(
+        actionRow('Canvas', 'Size, aspect, frame rate and background — this project only.', 'Open…',
+          () => press('btn-canvas')),
+        switchRow('Loop playback', 'Playback restarts from the beginning instead of stopping at the end.',
+          () => FM.loop, () => press('btn-loop')),
+        switchRow('Onion skin', 'Ghosts the selected layer where it was just before and just after now (past cyan, future red) — for lining up an animation.',
+          () => FM.onionSkin, () => press('btn-onion')),
+        switchRow('Snapping (magnet)', 'Clips and keyframes stick to the playhead and to each other’s edges while you drag them.',
+          () => FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping(), () => press('btn-snap')),
+      ));
+    }
+
     body.appendChild(group(
       segmentRow('Appearance', 'theme', [{ label: 'Liquid', value: 'glass' }, { label: 'Classic', value: 'classic' }]),
       segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }]),

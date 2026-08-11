@@ -446,11 +446,31 @@ window.FM = window.FM || {};
   // couldn't get rid of the group options and I couldn't do anything" (Ezra). The timeline set both
   // classes by hand in two more places for the same reason. One function, called from every path that
   // can change the selection, and it recounts rather than trusting whoever called it.
+  // v5.71: this also owns `m-editing`, and with it the WHOLE phone top bar. It used to own two of the
+  // three classes while mobile.js owned the third from its own count, and the state nobody covered was
+  // ONE layer selected in select mode — the first frame of every long-press (timeline.js
+  // beginPaintSelect). Measured at 380x780 driving the real gesture: that frame kept the PROJECT header
+  // (name · ⋯ · cog · Export at 334..372), and the very next frame — second row painted in, finger
+  // still down — swapped it for the multi header and put the DELETE bin on 330..372, i.e. over 100% of
+  // the pixels Export had held one frame earlier. Muscle-memory Export became Delete mid-gesture.
+  // So: three states, decided here, from the live selection, and NOTHING else writes these classes or
+  // a display style on those buttons — the stylesheet reads the classes and does the rest.
+  //   (none)      nothing selected            → project header
+  //   m-editing   exactly 1, not selecting    → clip header
+  //   sel-mode    long-press select mode, OR any 2+ selection (shift-click, Select All) → selection header
   FM.syncSelectionChrome = function () {
-    const multi = FM.selectionIds ? FM.selectionIds().length : 0;
-    if (multi === 0 && FM.selectMode) FM.selectMode = false;   // select-mode ends when the selection empties
-    document.body.classList.toggle('sel-multi', multi >= 2);
-    document.body.classList.toggle('sel-mode', !!FM.selectMode);
+    const n = FM.selectionIds ? FM.selectionIds().length : 0;
+    if (n === 0 && FM.selectMode) FM.selectMode = false;   // select-mode ends when the selection empties
+    const selOwns = !!FM.selectMode || n >= 2;             // the SELECTION owns the bar, not the project
+    // m-editing is phone-only: it drives --head-w and the docked sheet, and the rules that read it are
+    // all inside (max-width: 700px). Off at desktop width, which is what mobile.js's resize did by hand.
+    const phone = !window.matchMedia || window.matchMedia('(max-width: 700px)').matches;
+    document.body.classList.toggle('sel-multi', n >= 2);
+    document.body.classList.toggle('sel-mode', selOwns);
+    document.body.classList.toggle('m-editing', phone && n === 1 && !selOwns);
+    // JS supplies the NUMBER; the stylesheet decides whether the label is on screen.
+    const cnt = document.getElementById('m-selcount');
+    if (cnt) cnt.textContent = n + (n === 1 ? ' layer selected' : ' layers selected');
   };
 
   // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there, AM-style) and
@@ -2348,12 +2368,16 @@ window.FM = window.FM || {};
         // entries to find a real home. Ezra is emptying this menu one item at a time.
         { sep: true },
         // Timeline controls that AM keeps off the play row — relocated here so they stay reachable.
-        { label: (FM.loop ? '✓ ' : '') + 'Loop playback', action: () => clickHidden('btn-loop') },
+        // queue 35: on PC these three are SETTINGS and now live in the settings cog (js/settings.js),
+        // so `desktopHide` drops them from this menu — one door, not two. The phone keeps them: its
+        // cog is Canvas settings (AM), and FM.settings is only reachable from the home screen there,
+        // so ⋯ is the only door a phone has. Same items, one surface each.
+        { label: (FM.loop ? '✓ ' : '') + 'Loop playback', desktopHide: true, action: () => clickHidden('btn-loop') },
         // Both of these are toggles whose EFFECT is invisible until you go and try the thing they
         // change, so the labels say what they do rather than just naming themselves (Ezra: "what does
         // the snapping magnet and onion skin things in the three dot menu even do???").
-        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin — ghost the layer before/after now', action: () => clickHidden('btn-onion') },
-        { label: ((FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()) ? '✓ ' : '') + 'Snapping (magnet) — clips stick to edges', action: () => clickHidden('btn-snap') },
+        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin — ghost the layer before/after now', desktopHide: true, action: () => clickHidden('btn-onion') },
+        { label: ((FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()) ? '✓ ' : '') + 'Snapping (magnet) — clips stick to edges', desktopHide: true, action: () => clickHidden('btn-snap') },
         { label: 'Split clip at playhead', action: () => clickHidden('btn-split') },
         { label: 'Trim project to last clip', action: () => clickHidden('btn-fit') },
         { label: 'Mark export start', action: markRegionIn },
@@ -2386,7 +2410,9 @@ window.FM = window.FM || {};
         if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 4, items);
         return;
       }
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, FM.projectMoreItems());
+      // desktopHide = "this lives in the settings cog on PC" (queue 35). The phone's own ⋯ filters
+      // mobileHide instead, so each platform's menu shows exactly what that platform can't reach elsewhere.
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, FM.projectMoreItems().filter(it => !it.desktopHide));
     });
     const prateEl = document.getElementById('preview-rate');
     if (prateEl) prateEl.addEventListener('change', () => FM.setPreviewRate(parseFloat(prateEl.value) || 1));

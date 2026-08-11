@@ -1906,14 +1906,36 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   body.m-editing #inspector { padding-top: 12px; }
 
   /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
-  #clip-name-m, #m-dup, #m-del, #m-group, #m-more { display: none; }
+  #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-more { display: none; }
   body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more { display: none; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
   body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
-  /* multi-select (long-press a layer's header): Group + bin appear beside the export slot */
-  body.sel-multi #m-group, body.sel-multi #m-del { display: flex; }
-  body.sel-multi #m-dup, body.sel-multi #m-more { display: none; }   /* the ⋯ clip menu is single-clip only */
-  body.sel-multi #m-settings, body.sel-multi #m-proj-more { display: none; }
+
+  /* ---------- the SELECTION owns the bar (long-press select mode, or any 2+ selection) ----------
+     The bin used to appear BESIDE the export slot, and because the project's own controls dropped out
+     at the same moment, Export slid left and the bin landed exactly where it had been. Measured at
+     380x780 by driving the real long-press (pointerdown, hold past 380ms, paint the next row, up):
+     Export 334..372 in one frame, DELETE 330..372 in the next, with the finger still down. A thumb
+     going where Export has always been hits the bin. So:
+       · every project control leaves (name, ⋯, cog, version AND Export) — a hidden button cannot move,
+         and the pixels Export owned become dead space, not a destructive button;
+       · the selection's controls are anchored to the LEFT with `order`, in the room the project name
+         gives up. Nothing they cover was ever a button;
+       · Group only WORKS at 2+ (FM.groupSelection needs two members), so at 1 its slot is reserved with
+         visibility, not display — the bin is in the same place from the first frame of the gesture to
+         the last, however many rows you paint.
+     One source of truth: these are body classes, set only by app.js syncSelectionChrome. No JS writes
+     display on these buttons. */
+  body.sel-mode #proj-name-m, body.sel-mode #clip-name-m, body.sel-mode #ver-m,
+  body.sel-mode #m-proj-more, body.sel-mode #m-settings, body.sel-mode #m-export,
+  body.sel-mode #m-dup, body.sel-mode #m-more { display: none; }
+  body.sel-mode #m-selcount { display: block; }
+  body.sel-mode #m-group, body.sel-mode #m-del { display: flex; }
+  body.sel-mode #m-group { visibility: hidden; }    /* slot held open at 1 selected… */
+  body.sel-multi #m-group { visibility: visible; }  /* …and filled at 2+, without moving the bin */
+  body.sel-mode #m-back  { order: -3; }
+  body.sel-mode #m-group { order: -2; }
+  body.sel-mode #m-del   { order: -1; }
   #m-del:active .m-ico { color: #ff6b6b; }
 }
 
@@ -2101,6 +2123,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     font-size: 16px; font-weight: 600; padding: 7px 6px; border-radius: 8px; text-overflow: ellipsis; text-align: left;
   }
   .m-projname:focus { outline: none; background: var(--bg); border-color: var(--accent); }
+  /* "3 layers selected" — the bar's title while a selection owns it. pointer-events:none because it
+     spans the slots the cog and Export just vacated: a tap there must do NOTHING, not something else. */
+  .m-selcount {
+    flex: 1; min-width: 0; padding: 0 8px; color: var(--text-dim);
+    font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none;
+  }
   /* Export is Ezra's own glass render now (v5.57) — the same object language as the + FAB and the
      OPEN badge, so the app's one primary action looks like it belongs to this app rather than being a
      mint rectangle borrowed from AM. Keyed off its black backdrop by flooding inward from the border,

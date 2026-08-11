@@ -38,11 +38,12 @@ window.FM = window.FM || {};
     // m-editing is the focused single-clip timeline layout (it drives --head-w), so it must stay OFF
     // for a multi-select even though the sheet is open — the multi bar is where Group / trim-all /
     // align live, and gating the sheet on m-editing hid all of them behind an empty panel.
+    // It is NOT decided here any more (v5.71). This counted the selection itself, which made two
+    // owners of one class and left "1 selected in select mode" between them; app.js's
+    // syncSelectionChrome derives all three top-bar classes from the live selection in one place. This
+    // wrapper survives only for ORDER — it has to run before origRefresh's rebuild, which reads --head-w.
     function syncEditingClass() {
-      if (!isPhone()) return;
-      var ids = (FM.selectionIds ? FM.selectionIds() : []) || [];
-      var multi = ids.length > 1 || !!FM.selectMode;
-      document.body.classList.toggle('m-editing', !!(FM.scene && FM.scene.selectedId) && !multi);
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
     }
     function syncSheet() {
       if (!isPhone()) return;
@@ -132,10 +133,11 @@ window.FM = window.FM || {};
     // reachable; deselecting drops it. Wrap, don't edit, the core fn. The class has to be set BEFORE
     // the rebuild inside orig() — it drives --head-w (overview eye-only vs edit pill), which the
     // rebuild reads to keep clip-x / playhead in sync; syncSheet then settles everything after.
+    // orig() IS FM.selectLayer, which sets the id and then calls syncSelectionChrome before its own
+    // rebuilds — so the class lands early enough without a second copy of the rule out here (v5.71).
     if (typeof FM.selectLayer === 'function') {
       var orig = FM.selectLayer;
       FM.selectLayer = function (id) {
-        if (isPhone()) document.body.classList.toggle('m-editing', !!id);
         var r = orig.apply(this, arguments);
         if (isPhone() && id) requestAnimationFrame(dockSheet);   // dock once the sheet's height has settled
         return r;
@@ -242,6 +244,9 @@ window.FM = window.FM || {};
 
     var mBack = document.getElementById('m-back');
     if (mBack) mBack.addEventListener('click', function () {
+      // The bar belongs to the selection → back LEAVES the selection, it does not leave the project.
+      // Without this the arrow beside a live multi-selection went to the home screen (v5.71).
+      if (isPhone() && document.body.classList.contains('sel-mode')) { FM.selectLayer(null); return; }
       if (isPhone() && document.body.classList.contains('m-editing')) { FM.selectLayer(null); return; }   // AM: back = deselect the clip
       if (FM.groupContext && FM.exitGroup) { FM.exitGroup(); return; }   // back out of the Edit Group timeline first
       // AM: back from the editor = the home screen (project browser). The old file menu's actions

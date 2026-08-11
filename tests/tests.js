@@ -3471,6 +3471,146 @@
   });
 
 
+  /* v5.71 — queue 52 + 35. The cog inside a project used to open the HOME screen's preferences and
+     nothing else; the project's own settings lived behind the ⋯ button beside it. Measured before the
+     fix at 1440x900, in both layouts: the panel's rows were Appearance / Project sorting / Demo mode /
+     Show touches / Show system fonts / Default layer duration / Playback quality / Layout / Import a
+     project file / Keyboard shortcuts — not one of them about the open project. */
+  test('settings cog: in a project the panel leads with the project, and its switches drive the real controls', { item: 'queue-52' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const before = { loop: !!FM.loop, onion: !!FM.onionSkin, snap: !!(FM.timeline.isSnapping && FM.timeline.isSnapping()) };
+    try {
+      FM.settings.open();
+      await sleep(0);
+      const rows = [].slice.call(document.querySelectorAll('.set-panel .set-row'));
+      const labels = rows.map(r => (r.querySelector('.set-label') || {}).textContent).filter(Boolean);
+      const lead = ['Canvas', 'Loop playback', 'Onion skin', 'Snapping (magnet)'];
+      if (labels.slice(0, 4).join('|') !== lead.join('|')) {
+        throw new Error('the cog opens a panel that leads with [' + labels.slice(0, 4).join(', ') +
+          '] — inside a project it must lead with the project: ' + lead.join(', '));
+      }
+      // Each switch must READ its owner and WRITE through it — not carry a second copy of the state.
+      const cases = [
+        ['Loop playback', () => !!FM.loop],
+        ['Onion skin', () => !!FM.onionSkin],
+        ['Snapping (magnet)', () => !!(FM.timeline.isSnapping && FM.timeline.isSnapping())],
+      ];
+      for (const [label, get] of cases) {
+        const row = rows.find(r => (r.querySelector('.set-label') || {}).textContent === label);
+        const sw = row && row.querySelector('.set-switch');
+        if (!sw) throw new Error('no switch for "' + label + '" in the cog');
+        if (sw.classList.contains('on') !== get()) throw new Error('"' + label + '" shows ' + sw.classList.contains('on') + ' while the app says ' + get() + ' — the panel is holding its own copy of the state');
+        const was = get();
+        sw.click(); await sleep(0);
+        if (get() === was) throw new Error('pressing "' + label + '" in the cog changed nothing — the row is not wired to the control that owns it');
+        if (sw.classList.contains('on') !== get()) throw new Error('"' + label + '" did not read back after its own press');
+        sw.click(); await sleep(0);
+        if (get() !== was) throw new Error('"' + label + '" would not go back to ' + was);
+      }
+      // …and they are gone from the PC ⋯ menu, which is the other half of "relocate" (queue 35).
+      const items = FM.projectMoreItems();
+      const pc = items.filter(it => !it.desktopHide).map(it => it.label || '');
+      const phone = items.filter(it => !it.mobileHide).map(it => it.label || '');
+      ['Loop playback', 'Onion skin', 'Snapping'].forEach(name => {
+        if (pc.some(l => l.indexOf(name) >= 0)) throw new Error('the PC ⋯ menu still offers "' + name + '" — it lives in the cog now, and two doors to one cupboard is what queue 35 is removing');
+        if (!phone.some(l => l.indexOf(name) >= 0)) throw new Error('the phone ⋯ menu lost "' + name + '" — the phone cog is Canvas settings and FM.settings is home-only there, so ⋯ is its only door');
+      });
+    } finally {
+      if (FM.settings.isOpen()) FM.settings.close();
+      if (!!FM.loop !== before.loop) { const b = document.getElementById('btn-loop'); if (b) b.click(); }
+      if (!!FM.onionSkin !== before.onion) { const b = document.getElementById('btn-onion'); if (b) b.click(); }
+      if (!!(FM.timeline.isSnapping && FM.timeline.isSnapping()) !== before.snap) { const b = document.getElementById('btn-snap'); if (b) b.click(); }
+    }
+  });
+
+  /* v5.71 — the phone top bar, at phone width, with the classes set by the REAL owner.
+     The geometry that matters is proved by tests/_q52_phone_header.py, which drives the actual
+     long-press top-level over CDP (an iframe cannot give you the gesture). This is the cheap guard
+     that runs on every change: the same four states, the same stylesheet, the same measurements.
+     Against the unfixed build it fails three ways — "1 selected in select mode" kept the project
+     header, Export moved 334→242 when the multi header arrived, and the bin landed on 330..372,
+     i.e. over the pixels Export had held. */
+  test('phone top bar: a destructive control never shares the bar with the project’s own, and Export never moves', { item: 'queue-52' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test needs to own its viewport width and has no frameElement');
+    const savedScene = FM.scene, hadW = frame.style.width, hadH = frame.style.height;
+    const box = id => {
+      const e = document.getElementById(id);
+      if (!e) return null;
+      const r = e.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0) || getComputedStyle(e).visibility === 'hidden') return null;
+      return { l: Math.round(r.left), r: Math.round(r.right) };
+    };
+    const PROJECT = ['proj-name-m', 'm-settings', 'm-proj-more', 'm-export'];
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { shape: 'rect', name: 'One', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#f00' }),
+        FM.makeLayer('shape', { shape: 'rect', name: 'Two', x: 80, y: 80, shapeW: 40, shapeH: 40, fill: '#0f0' }),
+      ]);
+      frame.style.width = '380px'; frame.style.height = '780px';
+      await sleep(60);
+      if (!matchMedia('(max-width: 700px)').matches) throw new Error('the frame did not become a phone (innerWidth ' + innerWidth + ')');
+      const ids = FM.scene.layers.map(l => l.id);
+      const states = {};
+      const capture = name => {
+        const o = { cls: document.body.className };
+        ['m-back', 'proj-name-m', 'm-selcount', 'm-settings', 'm-proj-more', 'm-export', 'm-group', 'm-del'].forEach(k => { o[k] = box(k); });
+        states[name] = o;
+      };
+      FM.selectLayer(null); capture('project');
+      FM.selectLayer(ids[0]); capture('editing');
+      // exactly what timeline.js beginPaintSelect leaves behind on the first frame of a long-press
+      FM.scene.selectedId = ids[0]; FM.scene.selectedIds = [ids[0]]; FM.selectMode = true;
+      FM.syncSelectionChrome(); capture('select1');
+      FM.scene.selectedIds = ids.slice(); FM.syncSelectionChrome(); capture('select2');
+
+      const seen = JSON.stringify(states, null, 0);
+      // 1. one layer selected in select mode is a STATE, not a gap between two
+      if (states.select1['m-export'] || states.select1['proj-name-m']) {
+        throw new Error('one layer selected in select mode still shows the project header — the first frame of every long-press belongs to no state: ' + seen);
+      }
+      // 2. a destructive control is never up alongside the project's own controls
+      ['select1', 'select2', 'project', 'editing'].forEach(k => {
+        if (!states[k]['m-del']) return;
+        const up = PROJECT.filter(p => states[k][p]);
+        if (up.length) throw new Error('state "' + k + '" has the delete bin up while the project header still shows ' + up.join(', '));
+      });
+      // 3. Export and back are learned by position: one slot each, across every state
+      ['m-export', 'm-back'].forEach(id => {
+        const slots = {};
+        Object.keys(states).forEach(k => { const b = states[k][id]; if (b) slots[b.l + '..' + b.r] = 1; });
+        const list = Object.keys(slots);
+        if (list.length > 1) throw new Error(id + ' sits in ' + list.length + ' different places depending on the selection (' + list.join(', ') + ') — a button learned by position must not move');
+      });
+      // 4. the bin never lands on the pixels Export or the cog were occupying
+      const exp = states.project['m-export'], cog = states.project['m-settings'];
+      ['select1', 'select2'].forEach(k => {
+        const d = states[k]['m-del'];
+        if (!d) throw new Error('state "' + k + '" offers no way to delete the selection');
+        [['Export', exp], ['the settings cog', cog]].forEach(([what, b]) => {
+          if (b && Math.min(d.r, b.r) > Math.max(d.l, b.l)) {
+            throw new Error('in "' + k + '" the delete bin (' + d.l + '..' + d.r + ') covers where ' + what +
+              ' was (' + b.l + '..' + b.r + ') — a thumb going where it has always gone hits delete');
+          }
+        });
+      });
+      // 5. the bin holds ONE slot for the whole of select mode, however many rows get painted in
+      const d1 = states.select1['m-del'], d2 = states.select2['m-del'];
+      if (d1.l !== d2.l) throw new Error('the bin moved from ' + d1.l + ' to ' + d2.l + ' when a second layer joined the selection — mid-gesture, with the finger still down');
+    } finally {
+      frame.style.width = hadW; frame.style.height = hadH;
+      FM.selectMode = false;
+      FM.scene = savedScene;
+      try { FM.syncSelectionChrome(); } catch (e) {}
+      await sleep(60);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -14,7 +14,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=304">
+<link rel="stylesheet" href="styles.css?v=305">
 <link rel="stylesheet" href="theme-glass.css?v=17">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -119,7 +119,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.71</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.72</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -157,6 +157,10 @@
       <button id="m-back" class="m-tbtn" aria-label="Projects / file"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
       <input id="proj-name-m" class="m-projname" type="text" value="Untitled" spellcheck="false" aria-label="Project name">
       <input id="clip-name-m" class="m-projname m-clipname" type="text" spellcheck="false" aria-label="Layer name">
+      <!-- Select mode's own title. It fills the space the project name gives up, which is what lets
+           the Group/delete buttons sit on the LEFT — they can never take the Export slot. Inert
+           (pointer-events:none): it covers the pixels Export used to hold. -->
+      <span id="m-selcount" class="m-selcount" aria-live="polite"></span>
       <span id="ver-m" class="m-ver" title="Build version"></span>
       <button id="m-proj-more" class="m-tbtn" aria-label="More — save frame, snapping, onion skin, export marks, project"><svg viewBox="0 0 24 24" class="m-ico" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
       <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -552,7 +556,7 @@
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/settings.js?v=7"></script>
+  <script src="js/settings.js?v=8"></script>
   <script src="js/scene.js?v=90"></script>
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=1"></script>
@@ -598,10 +602,10 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=47"></script>
-  <script src="js/app.js?v=211"></script>
+  <script src="js/app.js?v=212"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=4"></script>
-  <script src="js/mobile.js?v=27"></script>
+  <script src="js/mobile.js?v=28"></script>
   <script src="js/ai-manifest.js?v=5"></script>
   <script src="js/ai-ops.js?v=8"></script>
   <script src="js/ai-key.js?v=1"></script>
