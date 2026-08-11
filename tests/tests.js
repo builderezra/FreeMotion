@@ -2408,6 +2408,43 @@
     if (shaky[0][2] === 1 || shaky[shaky.length - 1][2] === 1) throw new Error('the end points should stay hard so the stroke starts and stops crisply');
   });
 
+  test('rotate: the degree readout sits dead centre in the dial, at every value', { item: 'dial-read-centre' }, function () {
+    // THE bug: .mt-dial-read was a child of .mt-dial, which is position:static, so `inset:0` resolved
+    // against #inspector-panel — the number centred on the PANEL and floated ~35px above the ring.
+    // Measured, not read: the ring's rect vs the readout's, at four widths of string.
+    if (!FM.inspector || !FM.inspector.openCategory) throw new Error('FM.inspector missing');
+    var scene = FM.scene, hadSel = scene.selectedId, hadMode = FM._mtMode, added = null;
+    try {
+      added = FM.makeLayer('shape', { shape: 'rect', x: (scene.project.width / 2) | 0, y: (scene.project.height / 2) | 0, shapeW: 120, shapeH: 120, fill: '#5ac7ed' });
+      scene.layers.unshift(added);
+      FM.selectLayer(added.id);
+      FM._mtMode = 'rotate';
+      FM.inspector.openCategory('transform');
+      var ring = document.querySelector('.mt-dial-ring');
+      if (!ring) throw new Error('no .mt-dial-ring — the rotate dial did not build');
+      if (!(ring.getBoundingClientRect().width > 0)) throw new Error('the dial has no laid-out size to measure');
+      [0, 90, -45, 180].forEach(function (deg) {
+        added.transform.rotation = deg;
+        FM._mtMode = 'rotate';
+        FM.inspector.refresh();
+        var rg = document.querySelector('.mt-dial-ring'), rd = document.querySelector('.mt-dial-read');
+        if (!rd) throw new Error('no .mt-dial-read at ' + deg + '°');
+        var a = rg.getBoundingClientRect(), b = rd.getBoundingClientRect();
+        var dx = (b.left + b.width / 2) - (a.left + a.width / 2);
+        var dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+        if (Math.abs(dx) > 1.5 || Math.abs(dy) > 1.5) throw new Error('"' + rd.textContent + '" is off the dial centre by ' + dx.toFixed(1) + ',' + dy.toFixed(1) + 'px (ring centre ' + (a.left + a.width / 2).toFixed(1) + ',' + (a.top + a.height / 2).toFixed(1) + ' vs readout ' + (b.left + b.width / 2).toFixed(1) + ',' + (b.top + b.height / 2).toFixed(1) + ')');
+        // …and it must hug the string, not span the panel — a full-bleed box can be "centred" by luck.
+        if (b.width > a.width) throw new Error('the readout box is ' + b.width.toFixed(0) + 'px wide against a ' + a.width.toFixed(0) + 'px ring — it is centring on something bigger than the dial');
+      });
+    } finally {
+      if (added) { var i = scene.layers.indexOf(added); if (i >= 0) scene.layers.splice(i, 1); }
+      FM._mtMode = hadMode;
+      FM.selectLayer(hadSel || null);
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+      if (FM.requestRender) FM.requestRender();
+    }
+  });
+
   // Registered LAST on purpose. The preintro-stuck test above races a wall clock — index.html's boot
   // script removes #splash ~5.3s after load — so every test that runs BEFORE it eats into that margin.
   // Adding this one further up turned that test red (measured: 63/64 with it mid-file, 64/64 here).

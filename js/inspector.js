@@ -2199,7 +2199,10 @@ window.FM = window.FM || {};
       const bty = mtVBox('Y tilt', () => mtEval(layer, 'rotationY'), v => mtSet(layer, 'rotationY', snap0(v)), { dp: 0, unit: '°', scrub: 0.5, min: -180, max: 180, kfKey: 'rotationY', layer: layer });
       refreshables.push(brot, btx, bty); values.append(brot, btx, bty);
       const dial = el('div', 'mt-dial'); const ring = el('div', 'mt-dial-ring'); const knob = el('div', 'mt-dial-knob'); const read = el('div', 'mt-dial-read');
-      ring.appendChild(knob); dial.appendChild(ring); dial.appendChild(read);
+      // The readout goes INSIDE the ring, not beside it: as a child of the unpositioned .mt-dial it
+      // was absolutely positioned against the whole inspector panel, so it centred on the PANEL and
+      // landed ~35px above the ring's centre.
+      ring.appendChild(knob); ring.appendChild(read); dial.appendChild(ring);
       const place = () => { const deg = mtEval(layer, 'rotation'); const rad = deg * Math.PI / 180; knob.style.left = (50 + Math.cos(rad) * 50) + '%'; knob.style.top = (50 + Math.sin(rad) * 50) + '%'; read.textContent = Math.round(deg) + '°'; };
       place(); syncFns.push(place);
       const ang = e => { const r = ring.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };

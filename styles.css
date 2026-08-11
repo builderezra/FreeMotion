@@ -369,7 +369,9 @@ body {
 .mt-dial { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 124px; }
 .mt-dial-ring { position: relative; width: 140px; height: 140px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); touch-action: none; cursor: pointer; }
 .mt-dial-knob { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #fff; transform: translate(-50%,-50%); box-shadow: 0 1px 4px rgba(0,0,0,.55); }
-.mt-dial-read { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: var(--accent); pointer-events: none; }
+/* Centred on the RING (it is a child of it), by transform — the string grows and shrinks as digits
+   and the minus sign come and go, so any fixed offset would drift off centre with the value. */
+.mt-dial-read { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); white-space: nowrap; font-size: 22px; font-weight: 600; color: var(--accent); pointer-events: none; }
 /* horizontal tick scrubber */
 /* The ruling SCROLLS under the fixed centre line as you drag (JS sets background-position-x), so the
    control visibly moves instead of only changing the number above it. repeat-x means it never runs out. */
