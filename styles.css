@@ -2577,6 +2577,28 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 
   /* the inspector now borders the timeline on its right, and both sit under the stage */
   body.layout-studio #inspector-panel { border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
+  /* The Add menu is what overflows Studio's band, NOT the category grid (v5.58, from the layout
+     sweep). Measured at 1440x900: the band is 269px of client height against 328px of content, and
+     the tallest child is the wrapper holding .addmenu--panel at 277px — which is why adding columns
+     to .cat-grid, the sweep's suggested fix, moved the number not at all.
+     v5.46 gave the phone SHEET's body a stated height and left the PANEL variant to grow with its
+     content. That is right everywhere the panel lives in a tall side column, and wrong here: Studio
+     is the one layout that puts it in a short wide band. So cap it here only, and let it scroll —
+     the same trick, and for the same reason: a number breaks the circular height dependency. */
+  /* Studio's band is WIDE (405px) and SHORT (269px), which is the opposite of the classic side
+     column the 2-row tab grid was built for in v5.48 — and that grid is most of the overflow:
+     measured, the panel is 277px of which the BODY is only 133px, so the tabs and title are the
+     bulk. Five tabs share one row here, which fits comfortably at this width and gives ~50px back. */
+  body.layout-studio .addmenu--panel .addmenu-tabs { display: flex; }
+  body.layout-studio .addmenu--panel .addmenu-tab { flex: 1 1 0; min-width: 0; }
+  /* …and a STATED height on the body, not a percentage. A percentage max-height resolves against a
+     parent that has no definite height of its own, so it silently does nothing — the same circular
+     dependency that defeated three attempts at the phone sheet before v5.46 used a number. */
+  body.layout-studio .addmenu--panel .addmenu-body {
+    max-height: 128px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
   body.layout-studio #timeline-panel  { border-top: 1px solid var(--line); }
   /* the drag handle should grab the whole band, not just the timeline half — the band now starts at
      the window edge, so reach back across the inspector AND the rail's column */

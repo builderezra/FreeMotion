@@ -224,6 +224,11 @@ var RECIPES = {
     FM.selectLayer(L.id); await sleep(300);
     FM.inspector.openCategory('effects'); await sleep(600);
   },
+  async 'studio-add'(W2, d, FM) {
+    await openEditor(d, FM);
+    d.body.classList.add('layout-studio');
+    FM.selectLayer(null); await sleep(800);
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 
