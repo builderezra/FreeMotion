@@ -43,6 +43,14 @@
   --glass-edge-sm:
     drop-shadow(0 0 0.5px rgba(226, 247, 255, .9))
     drop-shadow(0 0 1.6px rgba(150, 225, 255, .45));
+  /* Export (v5.58). Same construction, ~40% of the alpha — because this artwork gets its light ON
+     the glass now (see the "Export shine" block by #btn-export) and a rim as hot as --glass-edge-sm
+     competed with it, the way the wordmark's outline competed with its letterforms in v5.37. The radii are
+     also the tightest of the three: the upload arrow is a CUT-OUT, and drop-shadow can't tell the
+     edge of a hole from an outer edge, so anything wider bleeds into the arrow and flattens it. */
+  --export-edge:
+    drop-shadow(0 0 0.5px rgba(226, 247, 255, .40))
+    drop-shadow(0 0 1.3px rgba(150, 225, 255, .20));
 }
 
 * { box-sizing: border-box; }
@@ -147,13 +155,68 @@ body {
   background: rgba(41, 217, 187, .10);
   border: 1px solid rgba(92, 224, 200, .42);
   color: var(--am-green);
+  /* the shine layer below is absolutely placed over the ::before icon, and `isolate` keeps its
+     blending inside this button instead of reaching the toolbar painted behind it */
+  position: relative;
+  isolation: isolate;
 }
 #btn-export:hover { background: rgba(41, 217, 187, .17); border-color: var(--am-green); filter: none; }
 #btn-export::before {
   content: ""; flex: 0 0 auto; width: 24px; height: 24px;
   background: url('export-btn.png?v=1') center / contain no-repeat;
-  filter: var(--glass-edge-sm);
+  filter: var(--export-edge);
 }
+
+/* ---------- Export shine (v5.58) ----------
+ * Ezra: "make the export button actually have some shine to it and make it look better."
+ *
+ * The v5.57 button was the bare render plus a rim, and at 24-38px the facets average out to a pale
+ * blob — there is nothing in it for the eye to catch on. The fix is the one the wordmark learned in
+ * v5.38: put the light ON the glass, not AROUND it. So the rim comes down to --export-edge (~40% of
+ * the alpha it had) and the light it loses is put back as two things inside the silhouette:
+ *   · a RAKE — a radial originating off the top-left CORNER, so the crystal brightens toward one
+ *     light source and falls away to the bottom-right. An even ramp just raises every facet by the
+ *     same amount, which is the flat blob again with more exposure.
+ *   · ONE specular CATCH, a point at 17.5% / 15% — which is where the render already has its
+ *     brightest facet (measured on the artwork: 0.79 there against ~0.70 around it), so the
+ *     highlight has something to justify it. A glint smeared across the crystal blows it out; a sun
+ *     catch has to be a POINT.
+ *
+ * Two constraints decide the mechanics:
+ *   · The upload arrow is a HOLE in the alpha, not a dark shape. Every layer here is therefore
+ *     MASKED by the artwork's own alpha, so the light physically cannot land in the arrow — which
+ *     is what stops the shine from doing to this button what the ambient bloom did to the OPEN
+ *     badge. The catch's ray also runs out at 33.5% of the box; the arrow starts at 40%.
+ *   · `overlay`, not `screen`. Overlay SCALES what is already there — dark facets stay dark, and
+ *     the pure-white catch resolves to pure white only where it lands on a bright facet. Screen
+ *     adds a flat amount everywhere and would wash the faceting back out.
+ * Percentages, not pixels, so one rule serves 24px (desktop), 30px (Studio rail) and 38px (phone).
+ * The y figures are box-relative: the artwork is 972x910, so `contain` in a square box leaves it
+ * spanning 3.2%-96.8% vertically — the facet at 12.5% of the ARTWORK is 15% of the box. */
+#btn-export::after,
+.m-export::after {
+  content: ""; position: absolute; pointer-events: none;
+  background:
+    /* the catch: a tight core, plus the short flat ray a real specular throws along the surface */
+    radial-gradient(8% 10% at 17.5% 15%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, .55) 42%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(16% 3.5% at 17.5% 15%, rgba(255, 255, 255, .48) 0%, rgba(255, 255, 255, 0) 100%),
+    /* the rake: origin off the top-left corner, ending below neutral so the far side falls away.
+       Nothing in here is pure white — under `overlay` a white source clamps to 1.0 over anything
+       brighter than mid grey, which turns a rake into a blown-out quadrant. Measured: the first cut
+       of this gradient took the crystal's >=0.80 share from 1.6% to 12.8% and read as an exposure
+       lift, not as a light source. Only the CATCH above is allowed to be white. */
+    radial-gradient(128% 128% at 6% -6%,
+      rgba(236, 250, 255, .40) 0%, rgba(206, 236, 252, .30) 30%,
+      rgba(120, 168, 200, .26) 62%, rgba(30, 62, 90, .34) 100%);
+  -webkit-mask-image: url('export-btn.png?v=1');
+          mask-image: url('export-btn.png?v=1');
+  -webkit-mask-size: contain;      mask-size: contain;
+  -webkit-mask-position: center;   mask-position: center;
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+  mix-blend-mode: overlay;
+}
+/* Desktop pins the shine to the ::before icon's box: 13px padding + 1px border in from the left. */
+#btn-export::after { left: 14px; top: 50%; width: 24px; height: 24px; transform: translateY(-50%); }
 
 /* ---------- main (stage wrapper) ----------
    Holds only #stage now — the inspector moved out to #app so the grid can place it either right of the
@@ -1922,10 +1985,16 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     width: 38px; height: 38px; border: 0; padding: 0; border-radius: 0; cursor: pointer;
     background: url('export-btn.png?v=1') center / contain no-repeat;
     -webkit-tap-highlight-color: transparent;
-    filter: var(--glass-edge-sm) drop-shadow(0 1px 3px rgba(0,0,0,.5));
+    /* v5.58: the rim is --export-edge now and the ambient drop comes in from 3px to 2px, because the
+       shine lives inside the silhouette (see the ::after block up by #btn-export) and a hot rim over
+       the top of it is the outline-instead-of-object mistake again. The dark bloom is what separates
+       the crystal from the bar, so it stays — just tight enough not to fog the arrow cut-out. */
+    filter: var(--export-edge) drop-shadow(0 1px 2px rgba(0,0,0,.55));
+    position: relative; isolation: isolate;
   }
   .m-export .m-ico { display: none; }
-  .m-export:active { transform: translateY(1px); filter: var(--glass-edge-sm) brightness(1.08); }
+  .m-export::after { inset: 0; }
+  .m-export:active { transform: translateY(1px); filter: var(--export-edge) brightness(1.08); }
 
   /* The + FAB (add) — bottom-right, above the timeline.
      v4.92a: this is Ezra's faceted glass CROSS render, and it lives here only — "make that the button
@@ -2567,6 +2636,8 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      button. Ezra: "on PC at the moment, the export button isn't centered. It looks really bad." */
   body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; justify-content: center; }
   body.layout-studio #btn-export::before { width: 30px; height: 30px; }
+  /* the icon is centred here rather than pinned to a padding edge, so the shine has to follow it */
+  body.layout-studio #btn-export::after { left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
 
   /* The project name has nowhere to live in a 60px rail, so it floats over the stage's top-left —
      same input, same handlers, just repositioned. */

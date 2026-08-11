@@ -1415,19 +1415,29 @@ window.FM = window.FM || {};
       // Real video keeps Edit Shape (the AM Size editor) and parks Speed/Volume in the quick row.
       return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
     }
-    // shape / text / image get Speed + Volume cards too (AM parity). Speed re-times the clip like it
-    // does for video; Volume shows but is DISABLED when the layer has no audio (categoryGrid greys it).
+    // shape / text / image keep the Speed + Volume cards for AM parity, but BOTH show DISABLED here
+    // (categoryGrid greys them): Volume because there's no audio, Speed because there's no source
+    // clock to re-time — see layerHasSource.
     if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup' && c.key !== 'audiofx');
     return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && c.key !== 'audiofx');
   }
   function layerHasAudio(layer) { return !!layer && layer.type === 'video'; }   // only the video/audio path carries sound — shapes/text/images/groups don't
+  // Speed re-times a layer's SOURCE clock and nothing else: layer.speed feeds FM.layerSourceAdvance →
+  // FM.layerLocalTime, and every consumer of that (playback seek, export seek, frame cache, audio
+  // resample) is gated on layer.type === 'video'. So it moves video frames and audio samples, and
+  // nothing else — a shape/text layer's own keyframes are read at absolute project time, so a speed
+  // ramp on one changes literally nothing on screen. IMAGES count as "no source" too: a still has no
+  // timeline of its own (the compositor draws m.el with no time argument), so 4× an image is still
+  // the same single frame. Rather than leave a control that silently does nothing, the card is shown
+  // but disabled — same treatment Volume already gets on a layer with no audio.
+  function layerHasSource(layer) { return !!layer && layer.type === 'video'; }   // 'video' covers audio-only clips (mp3/wav ride the same path)
 
   // Is `v` a category this layer can actually show? Guards against unreachable views — e.g. the timeline
   // dbl-click calling openCategory('element') on a VIDEO (which rendered a stale duplicate Volume slider
   // that DESTROYED keyframed volume), or a persisted 'volume'/'speed' view after a media replace.
   function viewAllowed(layer, v) {
     if (!layer || v === 'home') return true;
-    if (v === 'speed') return ['video', 'shape', 'text', 'image'].indexOf(layer.type) >= 0;
+    if (v === 'speed') return layerHasSource(layer);   // speed only re-times a source clock — see layerHasSource
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
     if (v === 'cameraopts') return layer.type === 'camera';   // the lens belongs to the camera and nothing else
@@ -1451,11 +1461,13 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       const volDisabled = cat.key === 'volume' && !layerHasAudio(layer);   // Volume card shows on shapes/text but can't do anything with no audio
-      if (volDisabled) card.classList.add('cat-card-disabled');
+      const spdDisabled = cat.key === 'speed' && !layerHasSource(layer);   // same for Speed: nothing to re-time without video/audio frames
+      if (volDisabled || spdDisabled) card.classList.add('cat-card-disabled');
       // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') + '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (volDisabled) { if (FM.toast) FM.toast('This layer has no audio', 1200); return; }   // pressing Volume on a no-audio layer does nothing (Ezra)
+        if (spdDisabled) { if (FM.toast) FM.toast('Speed only re-times video or audio — this layer has neither', 1800); return; }   // it used to open a panel whose slider changed nothing on screen
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
         // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard
         // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
@@ -2778,8 +2790,9 @@ window.FM = window.FM || {};
       if (spAnim) spCenter.appendChild(el('div', 'insp-hint', 'Speed is keyframed (ramp): the clip length stays fixed while playback speeds up and slows down along the curve — use the curve button to shape the easing.'));
       spRow.appendChild(spCenter);
       body.appendChild(spRow);
-      // Frame blend + Reverse are about VIDEO frames/audio — a shape/text/image has neither, so its
-      // speed panel is just the Speed % (which re-times the clip). Video keeps both toggles.
+      // Frame blend + Reverse are about VIDEO frames/audio. Since viewAllowed now gates the whole
+      // panel to layers with a source (layerHasSource), this is video/audio only anyway — the guard
+      // stays as the belt-and-braces it always was.
       if (layer.type === 'video') {
         if (layer.frameBlend == null) layer.frameBlend = false;
         body.appendChild(checkRow('Smooth slow-motion (frame blend)', layer.frameBlend, async v => {

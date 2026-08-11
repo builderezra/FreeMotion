@@ -2408,6 +2408,55 @@
     if (shaky[0][2] === 1 || shaky[shaky.length - 1][2] === 1) throw new Error('the end points should stay hard so the stroke starts and stops crisply');
   });
 
+  // Registered LAST on purpose. The preintro-stuck test above races a wall clock — index.html's boot
+  // script removes #splash ~5.3s after load — so every test that runs BEFORE it eats into that margin.
+  // Adding this one further up turned that test red (measured: 63/64 with it mid-file, 64/64 here).
+  test('Speed is disabled on layers with no source to re-time', { item: 'speed-dead-control' }, function () {
+    // Queue 38. layer.speed only retimes the SOURCE clock (FM.layerSourceAdvance -> FM.layerLocalTime),
+    // and every consumer of that is gated on layer.type === 'video'. A shape/text layer's own keyframes
+    // are read at absolute project time, so a speed ramp on one changed nothing on screen — measured:
+    // transform.x 0->400 sat at x=100 at t=1 with speed 1 AND with a 0.25x->4x ramp. Images are stills
+    // (the compositor draws m.el with no time argument), so they have nothing to retime either. The
+    // card now greys out like Volume already does, instead of opening a panel whose slider is inert.
+    var savedScene = FM.scene;
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      var shape = FM.makeLayer('shape', { shape: 'rect', name: 'S', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#f00' });
+      var text = FM.makeLayer('text', { name: 'T', text: 'hi', x: 60, y: 60 });
+      var image = FM.makeLayer('image', { name: 'I', x: 60, y: 60 });
+      var video = FM.makeLayer('video', { name: 'V', x: 60, y: 60 });
+      FM.scene.layers.push(shape, text, image, video);
+      FM.media.set(video.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 480, duration: 10 });   // a real picture, so it isn't read as an audio-only clip
+      var insp = document.getElementById('inspector');
+      var speedCard = function () {
+        return [].find.call(insp.querySelectorAll('.cat-card'), function (c) {
+          var l = c.querySelector('.cat-label'); return l && l.textContent === 'Speed';
+        });
+      };
+      [shape, text, image].forEach(function (L) {
+        FM.selectLayer(L.id);
+        var card = speedCard();
+        if (!card) throw new Error(L.type + ': the Speed card vanished — it should still be shown, just disabled (AM parity)');
+        if (!card.classList.contains('cat-card-disabled')) throw new Error(L.type + ': Speed card class="' + card.className + '" — expected cat-card-disabled, the panel does nothing on this layer');
+        card.click();
+        if (insp.querySelector('.spd-panel')) throw new Error(L.type + ': clicking the disabled Speed card still opened the Speed panel');
+        FM.inspector.openCategory('speed');
+        if (insp.querySelector('.spd-panel')) throw new Error(L.type + ': openCategory("speed") opened the panel — the timeline dbl-click / number-key route is still unguarded');
+      });
+      // …and it must stay fully live where it does work: video parks Speed in the quick-action row.
+      FM.selectLayer(video.id);
+      var qb = [].find.call(insp.querySelectorAll('.qr-btn'), function (b) { return /^Speed/.test(b.title || ''); });
+      if (!qb) throw new Error('video: no Speed button in the quick-action row');
+      if (qb.disabled || qb.classList.contains('disabled')) throw new Error('video: the Speed button is disabled — speed genuinely retimes video/audio');
+      qb.click();
+      if (!insp.querySelector('.spd-panel')) throw new Error('video: the Speed panel did not open');
+    } finally {
+      FM.media.remove(video && video.id);
+      FM.scene = savedScene;
+      FM.selectLayer(FM.scene.selectedId || null);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
