@@ -1245,9 +1245,13 @@
       const A = FM.makeLayer('shape', { shape: 'rect', name: 'AAA', x: 80, y: 80, shapeW: 40, shapeH: 40, fill: '#f00', start: 1, duration: 4 });
       const B = FM.makeLayer('shape', { shape: 'rect', name: 'BBB', x: 80, y: 80, shapeW: 40, shapeH: 40, fill: '#0f0', start: 1, duration: 4 });
       FM.scene.layers.push(A, B);
-      FM.selectLayer(A.id);   // A is selected; B is not, and B is the one we grab
+      // NOTHING selected. That is the real phone scenario for this ask — and it has to be, because
+      // with a layer selected the phone timeline SOLOS that layer's row, so an unselected clip has no
+      // row to grab at all. (The first version of this test selected A first and passed only at
+      // desktop width, where every row renders.)
+      FM.selectLayer(null);
       const clip = [].find.call(document.querySelectorAll('.clip'), c => c.textContent.trim().indexOf('BBB') === 0);
-      if (!clip) throw new Error('no timeline clip rendered for the unselected layer');
+      if (!clip) throw new Error('no timeline clip rendered with nothing selected');
       const r = clip.getBoundingClientRect();
       if (!r.width) throw new Error('the clip has no width to aim at');
       const x = r.left + r.width / 2, y = r.top + r.height / 2;
@@ -1264,8 +1268,9 @@
       if (Math.abs(B.start - before) > 0.02) throw new Error('a quick drag moved the clip from ' + before + ' to ' + B.start + ' — that gesture is a scrub, not a grab');
 
       // 2. A HOLD on that same still-unselected clip grabs it, moves it, and selects it.
-      FM.selectLayer(A.id);
+      FM.selectLayer(null);
       const clip2 = [].find.call(document.querySelectorAll('.clip'), c => c.textContent.trim().indexOf('BBB') === 0);
+      if (!clip2) throw new Error('the clip vanished before the hold');
       const r2 = clip2.getBoundingClientRect(), x2 = r2.left + r2.width / 2, y2 = r2.top + r2.height / 2;
       clip2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 8, pointerType: 'touch', isPrimary: true, clientX: x2, clientY: y2, button: 0, buttons: 1 }));
       await nap(620);   // 350ms arm + the 150ms settle check, with headroom
@@ -1275,7 +1280,7 @@
       await nap(150);
       if (!(B.start > before + 0.1)) throw new Error('holding an unselected clip did not move it (start still ' + B.start + ') — this is the whole ask');
       if (FM.scene.selectedId !== B.id) throw new Error('the grabbed clip was not selected, so you cannot see what you are dragging');
-      if (Math.abs(A.start - 1) > 0.02) throw new Error('the previously-selected clip moved too (' + A.start + ')');
+      if (Math.abs(A.start - 1) > 0.02) throw new Error('the other clip moved too (' + A.start + ')');
     } finally {
       FM.scene = savedScene; FM.time = savedTime;
       FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
@@ -1332,6 +1337,41 @@
       if (FM.setIsolate) FM.setIsolate(0);
       FM.scene = savedScene;
       FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
+  test('the view rail can be scrolled to its last control, and nothing is squashed', { item: 'view-rail' }, function () {
+    // v5.29. Ezra, of the phone: "the view row is kinda ruined, needs to not be crammed in and be
+    // slide-able up and down." The rail is pinned to the CANVAS's height and has carried a lot more
+    // since v5.03 — fit, grid, layers, camera, canvas zoom, rate, loop, three export marks, timeline
+    // zoom. Measured at 380x820 it was 316px tall holding 566px of controls, so 252px of them were
+    // simply unreachable; his screenshot has mark-out sliced in half by the canvas edge.
+    // Both halves are asserted: it must SCROLL, and the buttons must keep their full touch target
+    // (shrinking them to fit would be the "crammed" he was complaining about).
+    const bar = document.getElementById('view-bar');
+    if (!bar) throw new Error('#view-bar missing');
+    const wasHidden = bar.classList.contains('hidden');
+    if (wasHidden) bar.classList.remove('hidden');
+    const wasScroll = bar.scrollTop;
+    try {
+      const cs = getComputedStyle(bar);
+      if (cs.overflowY !== 'auto' && cs.overflowY !== 'scroll') {
+        throw new Error('the rail does not scroll (overflow-y: ' + cs.overflowY + ') — anything past the canvas edge is unreachable');
+      }
+      const btns = [].slice.call(bar.querySelectorAll('.vb-btn'));
+      if (!btns.length) throw new Error('no .vb-btn in the rail to measure');
+      const squashed = btns.filter(b => b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().height < 34);
+      if (squashed.length) throw new Error(squashed.length + ' rail buttons were squashed below 34px — the flex container is shrinking them instead of scrolling');
+      // If it overflows at this size, prove the far end can actually be reached.
+      if (bar.scrollHeight - bar.clientHeight > 4) {
+        const last = bar.lastElementChild;
+        bar.scrollTop = bar.scrollHeight;
+        const lr = last.getBoundingClientRect(), br = bar.getBoundingClientRect();
+        if (lr.bottom > br.bottom + 2) throw new Error('scrolling to the end still does not bring the last control into view');
+      }
+    } finally {
+      bar.scrollTop = wasScroll;
+      if (wasHidden) bar.classList.add('hidden');
     }
   });
 

@@ -354,7 +354,26 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;
   background: rgba(18,24,36,.9); border: 1px solid var(--line); border-radius: 13px;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  /* SCROLLS (v5.29). Ezra, of the phone: "the view row is kinda ruined, needs to not be crammed in
+     and be slide-able up and down." The rail is pinned top-to-bottom of the CANVAS, and since v5.03
+     it carries a lot more than it used to — fit, grid, layers, camera, canvas zoom, playback rate,
+     loop, the three export marks, timeline zoom. On a phone that is taller than the canvas, so the
+     last controls were simply unreachable: his screenshot has the mark-out button sliced in half by
+     the canvas edge and everything below it gone.
+     Scrolling is the right answer rather than shrinking the buttons — "not crammed in" was the other
+     half of what he asked for, so the controls keep their 38px touch targets and you slide to them.
+     overscroll-behavior: contain stops a flick that reaches the end of the rail from turning into a
+     page scroll or a scrub on the timeline underneath. The scrollbar is hidden because a 46px rail
+     with a visible bar in it is exactly the crammed look being fixed. */
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
+#view-bar::-webkit-scrollbar { display: none; }
+/* The groups inside must not be squashed by the flex container when the content overflows — without
+   this the browser shrinks them to fit and you get the crammed look back instead of a scroll. */
+#view-bar > * { flex: 0 0 auto; }
 #view-bar.hidden { display: none; }
 .vb-btn {
   width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
