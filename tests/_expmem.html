@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>export memory probe</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+pre{padding:8px;white-space:pre-wrap}iframe{position:fixed;left:-9999px;top:0;border:0}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. Queue item 47 says to measure before building, so this measures.
+ *
+ * js/exporter.js builds the mp4 with `target: new Mp4Muxer.ArrayBufferTarget()` and
+ * `fastStart: 'in-memory'`. That second option REQUIRES the whole file in memory so the moov atom can
+ * be written at the front. So the peak JS-heap cost of an export is at least the size of the finished
+ * file — which is set by bitrate x duration, and the bitrate is chosen by the exporter itself as
+ *   Math.min(80e6, outW * outH * fps * 0.12)
+ * This runs REAL short exports, confirms output size tracks that formula, and extrapolates to the
+ * lengths Ezra actually edits. */
+var f = document.getElementById('f'), o = document.getElementById('o');
+f.style.width = '900px'; f.style.height = '700px';
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function mb(n){ return (n/1048576).toFixed(1) + ' MB'; }
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async () => {
+    for (var i = 0; i < 250 && !(w.FM && w.FM.scene && w.FM.exporter); i++) await sleep(60);
+    var FM = w.FM, log = [];
+    if (typeof w.VideoEncoder === 'undefined') { o.textContent = 'no WebCodecs in this browser — cannot measure'; return; }
+
+    var card = d.querySelector('.hm-card'); if (card) { card.click(); await sleep(1500); }
+    var P = FM.scene.project;
+    // A moving shape, so the encoder has real inter-frame work rather than a static frame it can
+    // compress to almost nothing — a still would flatter the numbers badly.
+    var L = FM.makeLayer('shape', { name: 'mover', shape: 'circle', x: P.width * 0.2, y: P.height / 2 });
+    L.transform.x = { kf: [{ t: 0, v: P.width * 0.15, e: 'linear' }, { t: 6, v: P.width * 0.85, e: 'linear' }] };
+    FM.scene.layers.length = 0; FM.scene.layers.push(L);
+    P.duration = 6; FM.refreshAll(); await sleep(300);
+
+    // Intercept delivery so nothing tries to download inside a headless iframe.
+    var caught = null;
+    var realCreate = w.URL.createObjectURL;
+    w.URL.createObjectURL = function (b) { caught = b; try { return realCreate.call(w.URL, b); } catch (e) { return 'blob:stub'; } };
+
+    log.push('REAL EXPORTS (the shipped path: ArrayBufferTarget + fastStart:"in-memory")');
+    log.push('');
+    log.push('seconds  out WxH      fps  bitrate     bytes out    bytes/sec   heap peak   wall');
+    var samples = [];
+    for (var _i = 0, secs = [1, 3, 6]; _i < secs.length; _i++) {
+      var S = secs[_i];
+      var scale = 0.5;                                  // keep the probe quick; the formula is linear in pixels
+      var outW = Math.max(2, Math.round(P.width * scale / 2) * 2), outH = Math.max(2, Math.round(P.height * scale / 2) * 2);
+      var fps = P.fps || 30, br = Math.min(80e6, Math.round(outW * outH * fps * 0.12));
+      var h0 = w.performance.memory ? w.performance.memory.usedJSHeapSize : 0, hPeak = h0;
+      var t0 = w.performance.now();
+      var poll = w.setInterval(function () {
+        if (w.performance.memory) hPeak = Math.max(hPeak, w.performance.memory.usedJSHeapSize);
+      }, 40);
+      caught = null;
+      try {
+        await FM.exporter.run({ scale: scale, fps: fps, from: 0, to: S, name: 'probe' });
+      } catch (e) {
+        w.clearInterval(poll);
+        log.push(String(S).padEnd(9) + 'EXPORT FAILED: ' + (e && e.message ? e.message : e));
+        continue;
+      }
+      w.clearInterval(poll);
+      var wall = w.performance.now() - t0;
+      var bytes = caught ? caught.size : 0;
+      samples.push({ S: S, bytes: bytes, br: br });
+      log.push(String(S).padEnd(9) + (outW + 'x' + outH).padEnd(13) + String(fps).padEnd(5) +
+               ((br / 1e6).toFixed(2) + ' Mb/s').padEnd(12) + mb(bytes).padEnd(13) +
+               mb(bytes / S).padEnd(12) + mb(hPeak - h0).padEnd(12) + (wall / 1000).toFixed(1) + 's');
+      await sleep(400);
+    }
+    w.URL.createObjectURL = realCreate;
+
+    if (samples.length >= 2) {
+      // Bytes per second of footage, measured — the thing that decides whether a long export fits.
+      var a = samples[0], b = samples[samples.length - 1];
+      var perSec = (b.bytes - a.bytes) / (b.S - a.S);
+      log.push('');
+      log.push('MEASURED growth: ' + mb(perSec) + ' per second of footage at ' + (a.br / 1e6).toFixed(2) + ' Mb/s.');
+      log.push('The exporter picks bitrate = min(80 Mb/s, W x H x fps x 0.12), so a FULL-RES 1080p30');
+      log.push('project asks for ' + ((1920 * 1080 * 30 * 0.12) / 1e6).toFixed(2) + ' Mb/s = ' + mb(1920 * 1080 * 30 * 0.12 / 8) + ' per second.');
+      log.push('');
+      log.push('At that rate, the finished file — which fastStart:"in-memory" forces to be held whole');
+      log.push('in ONE ArrayBuffer before it is delivered — comes to:');
+      [1, 5, 10, 20, 60].forEach(function (m) {
+        log.push('  ' + String(m + ' min').padEnd(9) + mb(1920 * 1080 * 30 * 0.12 / 8 * 60 * m));
+      });
+      log.push('');
+      log.push('A mobile tab dies somewhere around 1-2 GB, and this is on top of the frame buffers,');
+      log.push('the decoded audio and the scene itself.');
+    }
+    o.textContent = log.join('\n');
+  })();
+});
+</script>
+</body>
+</html>
