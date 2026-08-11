@@ -1027,7 +1027,7 @@ window.FM = window.FM || {};
           };
           armHold();
         }
-        innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
+        try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
         if (FM.playing) FM.pause();
         return;
       }
@@ -1043,7 +1043,7 @@ window.FM = window.FM || {};
       }
       if (layer.locked) return;   // locked: selectable, never movable in time
       clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
-      innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
+      try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
       if (FM.playing) FM.pause();
     });
     clip.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
@@ -1320,7 +1320,7 @@ window.FM = window.FM || {};
   function beginScrub(e) {
     stopMomentum();                                     // a fresh grab kills any in-flight glide
     dragging = true;
-    innerEl.setPointerCapture && innerEl.setPointerCapture(e.pointerId);
+    try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
     if (FM.playing) FM.pause();
   }
 

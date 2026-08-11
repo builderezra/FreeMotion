@@ -1013,6 +1013,10 @@ window.FM = window.FM || {};
   // ===== Alight Motion property-category model =====
   let view = 'home';
   let lastLayerId = null;
+  // Which side of the Effects card is showing: the visual stack or the audio one (queue 45). It is a
+  // TAB, not a view — the browser, the panel and the per-parameter easing sub-view all read it, and a
+  // separate 'audiofx' view would have had to be kept in sync with all three.
+  let fxTab = 'visual';
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
@@ -1020,9 +1024,10 @@ window.FM = window.FM || {};
     { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
-    { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },          // video only
-    { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },   // video only
-    { key: 'audiofx', label: 'Audio Effects', icon: 'M2 12h3l2.5-7 3 18 3-13 2.5 9 2-7h4' },   // video only
+    { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },
+    { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },
+    // No 'audiofx' card (queue 45). Audio effects are a SIDE of the Effects card now — the panel and
+    // the Add Effect browser each carry a Visual/Audio toggle — so there is one door to every effect.
     { key: 'element', label: 'Element Properties', icon: 'M4 9h7v7H4zM15 6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M16 14l4 6h-8z' },
     { key: 'editgroup', label: 'Edit Group', icon: 'M4 4h7v7H4zM13 13h7v7h-7zM13 7.5h3.5a1 1 0 0 1 1 1V12M11 16.5H7.5a1 1 0 0 1-1-1V12' },   // group only — opens the group's own timeline
     { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
@@ -1237,11 +1242,13 @@ window.FM = window.FM || {};
     }
     const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    const goCat = k => { view = k; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); };
     // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
     // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
-    const isVideo = layer.type === 'video';
-    if (isVideo) row.appendChild(qbtn('Speed — slow-mo / reverse', 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5', {}, () => goCat('speed')));
+    // …except Speed and Volume are CARDS now, on every layer kind (queue 45). Ezra, with two
+    // screenshots: "some layers look like the first image with the button option layout and some look
+    // like the second image. I want them both to look like the second image." A video was the odd one
+    // out — it hid the two controls a shape showed as cards 5 and 6, in an icon strip a shape didn't
+    // have. So the strip is now the same three buttons everywhere: trim-in · split · trim-out.
     // THE MIDDLE THREE SWAP WITH THE PLAYHEAD (Alight Motion). Parked outside the clip, trim-start,
     // split and trim-end are three buttons that can't do anything — so out there they become the two
     // that can: slide the clip to the playhead, or stretch its near edge out to meet it. The icons
@@ -1287,8 +1294,6 @@ window.FM = window.FM || {};
         layer.duration = nd; after();
       }));
     }
-    // The Audio button opens the full Volume panel (which has its own mute) — no standalone mute button.
-    if (isVideo) row.appendChild(qbtn('Audio — volume & fades', 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7', {}, () => goCat('volume')));
     return row;
   }
 
@@ -1411,26 +1416,24 @@ window.FM = window.FM || {};
     if (layer.type === 'group') return CATEGORIES.filter(c => ['color', 'border', 'blend', 'transform', 'editgroup', 'presets', 'effects'].indexOf(c.key) >= 0);
     // Nulls/adjustments never rasterize their own pixels — a fill or border card would be a dead end.
     if (layer.type === 'null' || layer.type === 'adjustment') return CATEGORIES.filter(c => ['blend', 'transform', 'presets', 'effects'].indexOf(c.key) >= 0);   // adjustment reaches masks (= a LOCAL grade) inside its Effects card
-    // Video: Speed + Audio live in the quick-action row (not as grid cards), and there's no catch-all
-    // Element card. Everything else hides Speed/Volume entirely (no audio/retiming).
+    // Video: the SAME nine cards a shape gets (queue 45). Speed and Volume used to be hidden here and
+    // parked in the icon strip instead, which is the entire difference Ezra photographed between the
+    // two layouts. There's still no catch-all Element card — media's element card IS Edit Shape.
     if (layer.type === 'video') {
       const audioOnly = isAudioOnly(layer);
-      // A SONG gets its own three cards. Every visual category is a dead end on a 0×0 layer — there
-      // is nothing to colour, size, move, blend or run an effect over (Ezra: "get rid of the effects
-      // menu for audios because none of the effects will do anything"), and Presets is visual too
-      // (layer styles and effect looks). What's left is what a song actually has: Speed, Volume and
-      // Audio Effects — one clean row of three. Speed and Volume are normally kept OUT of the grid
-      // because video parks them in the quick-action row, but on audio they're the whole point, and
-      // three cards beat one card floating on its own. They stay in the quick row as well.
-      if (audioOnly) return CATEGORIES.filter(c => ['speed', 'volume', 'audiofx'].indexOf(c.key) >= 0);
-      // Real video keeps Edit Shape (the AM Size editor) and parks Speed/Volume in the quick row.
-      return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
+      // A SONG keeps its short list. Every visual category is a dead end on a 0×0 layer — there is
+      // nothing to colour, size, move or blend (Ezra: "get rid of the effects menu for audios because
+      // none of the effects will do anything"), and Presets is visual too (layer styles and effect
+      // looks). Effects IS on the list now, because the audio stack lives behind it since queue 45 —
+      // it opens straight onto the audio side, with the visual side greyed (see fxTabFor).
+      if (audioOnly) return CATEGORIES.filter(c => ['speed', 'volume', 'effects'].indexOf(c.key) >= 0);
+      return CATEGORIES.filter(c => c.key !== 'editgroup');
     }
-    // shape / text / image keep the Speed + Volume cards for AM parity, but BOTH show DISABLED here
-    // (categoryGrid greys them): Volume because there's no audio, Speed because there's no source
-    // clock to re-time — see layerHasSource.
-    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup' && c.key !== 'audiofx');
-    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup' && c.key !== 'audiofx');
+    // shape / text / image show the same grid, with Speed and Volume DISABLED (categoryGrid greys
+    // them): Volume because there's no audio, Speed because there's no source clock to re-time —
+    // see layerHasSource.
+    if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup');
+    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
   }
   function layerHasAudio(layer) { return !!layer && layer.type === 'video'; }   // only the video/audio path carries sound — shapes/text/images/groups don't
   // Speed re-times a layer's SOURCE clock and nothing else: layer.speed feeds FM.layerSourceAdvance →
@@ -1443,6 +1446,62 @@ window.FM = window.FM || {};
   // but disabled — same treatment Volume already gets on a layer with no audio.
   function layerHasSource(layer) { return !!layer && layer.type === 'video'; }   // 'video' covers audio-only clips (mp3/wav ride the same path)
 
+  /* ---- Visual / Audio switch (queue 45) --------------------------------------------------------
+   * Ezra: "move the audio effects to the effects menu but put a toggle at the top that switches from
+   * showing you either the normal effects or audio ones, you can just grey it out and make it not
+   * selectable if a layer has no audio."
+   * ONE builder, three homes: the Effects panel here, and the two full-screen browsers (fx-browser.js
+   * and audio-fx-browser.js call FM.fxModeToggle). Three hand-rolled copies would have drifted.
+   *
+   * "Has audio" is a DECODED TRACK, never the word "video" — silent screen recordings are ordinary.
+   * FM.hasAudioTrack answers true/false/null and null means "not probed yet", which reads as YES:
+   * greying out a side that would have worked is worse than one that turns out empty, and the caller
+   * kicks FM.probeAudioTrack to settle it. The greyed side stays VISIBLE and dim and says why when
+   * tapped — the same language as the disabled Volume card, which is the pattern everywhere. */
+  function audioSideOk(layer) {
+    const known = FM.hasAudioTrack ? FM.hasAudioTrack(layer) : (!!layer && layer.type === 'video');
+    return known !== false;
+  }
+  function visualSideOk(layer) { return !isAudioOnly(layer); }   // a song is 0×0: no picture to put an effect on
+  // Settle an unknown audio answer without blocking the UI. Only a NO changes anything on screen (the
+  // optimistic render already assumed yes), so only a no re-renders — which also means no refresh loop.
+  function probeAudioSide(layer, onNo) {
+    if (!layer || !FM.probeAudioTrack) return;
+    if (!FM.hasAudioTrack || FM.hasAudioTrack(layer) !== null) return;
+    const id = layer.id;
+    FM.probeAudioTrack(layer).then(v => { if (v === false) onNo(id); });
+  }
+  function fxModeToggle(layer, current, onPick) {
+    const wrap = el('div', 'fxmode');
+    const okAudio = audioSideOk(layer), okVisual = visualSideOk(layer);
+    [['visual', 'Effects', okVisual], ['audio', 'Audio', okAudio]].forEach(([key, label, ok]) => {
+      const b = el('button', 'fxmode-btn' + (current === key ? ' on' : '') + (ok ? '' : ' off'), label);
+      b.title = ok ? (key === 'audio' ? 'Audio effects for this clip’s sound' : 'Effects for the picture')
+        : (key === 'audio' ? 'This layer has no audio' : 'This is an audio clip — it has no picture');
+      b.addEventListener('click', () => {
+        if (!ok) {
+          if (FM.toast) FM.toast(key === 'audio'
+            ? (layer && layer.type === 'video' ? 'This clip has no audio track — there’s nothing for an audio effect to work on' : 'This layer has no audio')
+            : 'This is an audio clip — there’s no picture for a visual effect to change', 1800);
+          return;
+        }
+        if (key !== current) onPick(key);
+      });
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+  // The browsers live in their own files; they build the identical control from this.
+  FM.fxModeToggle = fxModeToggle;
+  FM.fxAudioSideOk = audioSideOk;
+  FM.fxProbeAudioSide = probeAudioSide;
+  // Which stack the Effects card is actually showing. A song is pinned to audio (nothing visual can
+  // apply); a layer with no audio can only ever be on the visual side, whatever the tab last was.
+  function fxTabFor(layer) {
+    if (isAudioOnly(layer)) return 'audio';
+    return (fxTab === 'audio' && audioSideOk(layer)) ? 'audio' : 'visual';
+  }
+
   // Is `v` a category this layer can actually show? Guards against unreachable views — e.g. the timeline
   // dbl-click calling openCategory('element') on a VIDEO (which rendered a stale duplicate Volume slider
   // that DESTROYED keyframed volume), or a persisted 'volume'/'speed' view after a media replace.
@@ -1450,11 +1509,13 @@ window.FM = window.FM || {};
     if (!layer || v === 'home') return true;
     if (v === 'speed') return layerHasSource(layer);   // speed only re-times a source clock — see layerHasSource
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
-    if (v === 'audiofx') return layer.type === 'video';   // ditto — only the video path carries sound
     if (v === 'cameraopts') return layer.type === 'camera';   // the lens belongs to the camera and nothing else
+    // Effects is the ONE view a song may still open, because since queue 45 the audio stack lives
+    // behind it (fxTabFor pins a song to the audio side). It has to return before the gate below.
+    if (v === 'effects') return true;
     // Past this point every view is a VISUAL one, and a song has no card for any of them — so nothing
     // may route into one either. A view persisted from the previously selected layer, or a timeline
-    // double-click, would otherwise open a panel with no picture behind it. (Speed, Volume and Audio
+    // double-click, would otherwise open a panel with no picture behind it. (Speed, Volume and
     // Effects have already returned above; those are the three a song does keep.)
     if (isAudioOnly(layer)) return false;
     if (v === 'element') return ['camera', 'group', 'null', 'adjustment'].indexOf(layer.type) < 0;   // shape/text/image/video
@@ -1483,6 +1544,7 @@ window.FM = window.FM || {};
         // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard
         // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
         if (cat.key === 'element' && layer.type === 'text' && FM.textEdit) { FM.textEdit.start(layer.id); return; }
+        if (cat.key === 'effects') fxTab = 'visual';   // the card always means the visual stack; the toggle inside is how you reach the audio one
         view = cat.key; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
       });
       (i < 3 ? top : bot).appendChild(card);
@@ -3020,20 +3082,29 @@ window.FM = window.FM || {};
       pwrap.appendChild(sv);
       body.appendChild(pwrap);
     } else if (key === 'effects') {
-      // Motion Blur (Object) sits with the effects because that is where people look for it, and
-      // because it reads as one: added from the browser, removed with an ×.
-      const mbb = motionBlurBlock(layer); if (mbb) body.appendChild(mbb);
-      const s = effectsSection(layer);
-      const h4 = s.querySelector('h4'); if (h4) h4.remove();
-      body.appendChild(s);
-      // Masks live here, under the effect stack (Ezra: masks belong in Effects, not their own card) —
-      // but ONLY once the layer has one. An empty "Masks" heading whose entire content was a sentence
-      // pointing you back at the + Add Effect button directly above it was clutter explaining itself.
-      if (maskableLayer(layer) && layer.masks && layer.masks.length) body.appendChild(masksBlock(layer));
-    } else if (key === 'audiofx') {
-      const s = audioFxSection(layer);
-      const h4 = s.querySelector('h4'); if (h4) h4.remove();
-      body.appendChild(s);
+      // Two stacks, one card (queue 45): the toggle picks which one the panel is editing, and matches
+      // the one at the top of the Add Effect browser. It leads the panel so the answer to "where did
+      // Audio Effects go" is the first thing on screen.
+      const tab = fxTabFor(layer);
+      body.appendChild(fxModeToggle(layer, tab, k => { fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));
+      // An unknown audio answer rendered as available; settle it and demote the toggle if it's a no.
+      probeAudioSide(layer, id => { const cur = FM.selectedLayer(FM.scene); if (cur && cur.id === id && view === 'effects') FM.inspector.refresh(); });
+      if (tab === 'audio') {
+        const s = audioFxSection(layer);
+        const h4 = s.querySelector('h4'); if (h4) h4.remove();
+        body.appendChild(s);
+      } else {
+        // Motion Blur (Object) sits with the effects because that is where people look for it, and
+        // because it reads as one: added from the browser, removed with an ×.
+        const mbb = motionBlurBlock(layer); if (mbb) body.appendChild(mbb);
+        const s = effectsSection(layer);
+        const h4 = s.querySelector('h4'); if (h4) h4.remove();
+        body.appendChild(s);
+        // Masks live here, under the effect stack (Ezra: masks belong in Effects, not their own card) —
+        // but ONLY once the layer has one. An empty "Masks" heading whose entire content was a sentence
+        // pointing you back at the + Add Effect button directly above it was clutter explaining itself.
+        if (maskableLayer(layer) && layer.masks && layer.masks.length) body.appendChild(masksBlock(layer));
+      }
     } else if (key === 'color') {
       // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
       // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
@@ -3337,7 +3408,10 @@ window.FM = window.FM || {};
     // Opening a panel starts with NOTHING selected, so it behaves exactly as it did before row
     // selection existed: the whole panel's keyframes are live until you tap a name to narrow it.
     // (Auto-selecting the first row would silently freeze the others the moment a panel opened.)
-    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
+    // 'audiofx' is no longer a view of its own (queue 45) — it is the Effects card's audio TAB. The
+    // key is still accepted because it is what the Volume panel's "Audio effects…" button and the
+    // audio browser ask for, and because a project/session could have persisted it.
+    openCategory(key) { if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
     // The quick row's middle buttons depend on which SIDE of the clip the playhead is sitting on, and
     // the panel deliberately does NOT rebuild while you scrub (it would rebuild 60-120 times a second).
     // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on
@@ -3352,6 +3426,7 @@ window.FM = window.FM || {};
       const layer = FM.selectedLayer(FM.scene); if (!layer) return false;
       const cat = catsFor(layer)[i - 1]; if (!cat) return false;
       if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return true; }
+      if (cat.key === 'effects') fxTab = 'visual';
       view = cat.key; kfNavSync(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       return true;
     },
@@ -3412,7 +3487,7 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; fxTab = 'visual'; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // Every numbered category is a SINGLE-layer editor — it builds from the primary layer and writes
       // to it alone. Left open while a second clip is selected it silently edits one of them, so
@@ -3474,20 +3549,22 @@ window.FM = window.FM || {};
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditorFor(layer, () => layer.speed, ['speed'], 'speed'));
         root.appendChild(bodyEl);
-      } else if (view === 'effects' && FM._fxEasing && FM.buildEasingEditorFor && (layer.effects || [])[FM._fxEasing.fxIdx]) {
-        // Per-parameter easing for ANY effect — inline sub-view of the Effects panel.
-        const info = FM._fxEasing, fx = layer.effects[info.fxIdx];
-        const back = el('button', 'cat-back', '‹  Effects');
+      } else if (view === 'effects' && fxTabFor(layer) === 'audio' && FM._fxEasing && FM.buildEasingEditorFor && (layer.audioFx || [])[FM._fxEasing.fxIdx]) {
+        // Per-parameter easing for an audio effect — inline sub-view of the Effects panel's AUDIO tab.
+        // FM._fxEasing is shared with the visual stack: the two sides are mutually exclusive, so the
+        // tab is what decides which stack the index refers to. This must be tested BEFORE the visual
+        // branch, or an audio index would be read against layer.effects.
+        const info = FM._fxEasing, fx = layer.audioFx[info.fxIdx];
+        const back = el('button', 'cat-back', '‹  Audio Effects');
         back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditorFor(layer, k => fx.params[k], [info.key], info.label || info.key));
         root.appendChild(bodyEl);
-      } else if (view === 'audiofx' && FM._fxEasing && FM.buildEasingEditorFor && (layer.audioFx || [])[FM._fxEasing.fxIdx]) {
-        // Per-parameter easing for an audio effect — inline sub-view of the Audio Effects panel.
-        // FM._fxEasing is shared with the visual stack: the two views are mutually exclusive.
-        const info = FM._fxEasing, fx = layer.audioFx[info.fxIdx];
-        const back = el('button', 'cat-back', '‹  Audio Effects');
+      } else if (view === 'effects' && FM._fxEasing && FM.buildEasingEditorFor && (layer.effects || [])[FM._fxEasing.fxIdx]) {
+        // Per-parameter easing for ANY effect — inline sub-view of the Effects panel.
+        const info = FM._fxEasing, fx = layer.effects[info.fxIdx];
+        const back = el('button', 'cat-back', '‹  Effects');
         back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');

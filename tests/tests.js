@@ -2480,12 +2480,18 @@
         FM.inspector.openCategory('speed');
         if (insp.querySelector('.spd-panel')) throw new Error(L.type + ': openCategory("speed") opened the panel — the timeline dbl-click / number-key route is still unguarded');
       });
-      // …and it must stay fully live where it does work: video parks Speed in the quick-action row.
+      // …and it must stay fully live where it does work. Video used to park Speed in the quick-action
+      // icon strip; since queue 45 it is card 5 there too, exactly as it already was on a shape —
+      // which is the point: one layout, and the only difference between layer kinds is which cards
+      // are greyed. (The rest of this test is unchanged: the greying rule is what it guards.)
       FM.selectLayer(video.id);
-      var qb = [].find.call(insp.querySelectorAll('.qr-btn'), function (b) { return /^Speed/.test(b.title || ''); });
-      if (!qb) throw new Error('video: no Speed button in the quick-action row');
-      if (qb.disabled || qb.classList.contains('disabled')) throw new Error('video: the Speed button is disabled — speed genuinely retimes video/audio');
-      qb.click();
+      var vCard = speedCard();
+      if (!vCard) throw new Error('video: no Speed card in the grid');
+      if (vCard.classList.contains('cat-card-disabled')) throw new Error('video: the Speed card is greyed — speed genuinely retimes video/audio');
+      if ([].some.call(insp.querySelectorAll('.qr-btn'), function (b) { return /^Speed/.test(b.title || ''); })) {
+        throw new Error('video: Speed is STILL in the quick-action icon strip as well as on a card — it has one home');
+      }
+      vCard.click();
       if (!insp.querySelector('.spd-panel')) throw new Error('video: the Speed panel did not open');
     } finally {
       FM.media.remove(video && video.id);
@@ -3066,6 +3072,260 @@
         throw new Error((j ? 'front' : 'rear') + ' wheel is ' + wl.w + 'x' + wl.h + 'px (' + (wl.w / wl.h).toFixed(2) +
           ':1), not a circle - SHAPE_ASPECT.car must stay square, but a Car spawned at ' + L.shapeW + 'x' + L.shapeH);
     });
+  });
+
+  /* ---- queue 45 (v5.70) — one options layout for every layer ------------------------------------
+     Ezra, with two screenshots: "some layers look like the first image with the button option layout
+     and some look like the second image. I want them both to look like the second image, just move
+     the audio effects to the effects menu but put a toggle at the top that switches from showing you
+     either the normal effects or audio ones, you can just grey it out and make it not selectable if
+     a layer has no audio."
+     A VIDEO parked Speed and Volume in the icon strip and carried an Audio Effects card; a SHAPE had
+     them as cards 5 and 6 (Volume greyed) and no audio card at all. The shape is the target. ---- */
+
+  // A shared fixture: one video layer (with a media record) and one shape, both in the live scene.
+  // The playhead is parked INSIDE both clips: outside one, the icon strip's middle three deliberately
+  // become the two nudge buttons, and this is a test about the strip's contents.
+  function q45Fixture() {
+    const vid = FM.makeLayer('video', { name: 'q45 clip', duration: 5 });
+    const shp = FM.makeLayer('shape', { shape: 'rect', name: 'q45 box', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#3a7bd5' });
+    FM.scene.layers.push(vid, shp);
+    FM.media.set(vid.id, { kind: 'video', width: 640, height: 360, duration: 5 });
+    FM.time = 2;
+    return { vid: vid, shp: shp };
+  }
+  function q45Cards() {
+    return Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-card')).map(function (c) {
+      const lb = c.querySelector('.cat-label'), nm = c.querySelector('.cat-num');
+      return { label: lb ? lb.textContent : '(no label)', num: nm ? nm.textContent : '', off: c.classList.contains('cat-card-disabled'), el: c };
+    });
+  }
+  function q45Restore(saved) {
+    FM.scene.layers.length = 0;
+    saved.layers.forEach(function (l) { FM.scene.layers.push(l); });
+    saved.media.forEach(function (id) { FM.media.remove(id); });
+    FM.time = saved.time;
+    FM.selectLayer(saved.sel);
+    FM.inspector.openCategory('home');
+  }
+  // A real, decodable WAV as a File — the only honest way to test "this layer HAS an audio track".
+  function q45WavFile() {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const ctx = new OAC(1, 4410, 44100);
+    const buf = ctx.createBuffer(1, 4410, 44100);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < 4410; i++) d[i] = Math.sin(i / 8) * 0.4;
+    if (ctx.close) { try { ctx.close(); } catch (e) {} }
+    return new File([FM.audioBufferToWav(buf)], 'q45-tone.wav', { type: 'audio/wav' });
+  }
+  // …and a file with nothing decodable in it: a silent screen recording, as far as the probe can tell.
+  function q45SilentFile() {
+    return new File([new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 1, 2, 3, 4, 5, 6, 7, 8])], 'q45-silent.mp4', { type: 'video/mp4' });
+  }
+
+  test('layer options: Speed and Volume are CARDS on a video too — the icon strip is just trim/split/trim', { item: 'q45-one-layout' }, function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
+    try {
+      const f = q45Fixture(); saved.media.push(f.vid.id);
+
+      FM.selectLayer(f.vid.id); FM.inspector.openCategory('home');
+      const vCards = q45Cards();
+      const vLabels = vCards.map(function (c) { return c.label; });
+      FM.selectLayer(f.shp.id); FM.inspector.openCategory('home');
+      const sCards = q45Cards();
+      const sLabels = sCards.map(function (c) { return c.label; });
+
+      // The whole ask in one line: the two layer kinds offer the SAME cards in the same order.
+      if (vLabels.join(' | ') !== sLabels.join(' | ')) {
+        throw new Error('video and shape still show different option cards:\n  video: ' + vLabels.join(' | ') + '\n  shape: ' + sLabels.join(' | '));
+      }
+      const want = ['Color & Fill', 'Border & Shadow', 'Blending & Opacity', 'Move & Transform', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
+      if (vLabels.join(' | ') !== want.join(' | ')) {
+        throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
+      }
+      if (vLabels.indexOf('Audio Effects') >= 0) throw new Error('the Audio Effects card is still in the grid — it moved into the Add Effect browser');
+      // Numbered 1..9, and the disabled ones keep their number (visible, dim — never hidden).
+      vCards.forEach(function (c, i) { if (c.num !== String(i + 1)) throw new Error('card ' + (i + 1) + ' (' + c.label + ') is badged “' + c.num + '”'); });
+
+      // The disabled treatment is the v5.61 one: present, dim, and it says why when tapped.
+      const sVol = sCards[5], sSpd = sCards[4], vVol = vCards[5], vSpd = vCards[4];
+      if (!sVol.off) throw new Error('the Volume card on a shape is not greyed (.cat-card-disabled) — a shape has no audio');
+      if (!sSpd.off) throw new Error('the Speed card on a shape is not greyed — a shape has no source clock to re-time');
+      if (vVol.off) throw new Error('the Volume card is greyed on a VIDEO, which does have audio');
+      if (vSpd.off) throw new Error('the Speed card is greyed on a VIDEO, which does have frames to re-time');
+      if (Number(getComputedStyle(sVol.el).opacity) > 0.7) throw new Error('.cat-card-disabled no longer dims its card (opacity ' + getComputedStyle(sVol.el).opacity + ') — this check would prove nothing');
+      // …and it is still a live button, so the explanation can be shown.
+      if (sVol.el.disabled) throw new Error('the greyed Volume card is a disabled <button> — it can never toast the reason');
+
+      // The icon strip: three buttons, the same three a shape gets. Speed and Volume have left it.
+      FM.selectLayer(f.vid.id); FM.inspector.openCategory('home');
+      const vBtns = Array.prototype.slice.call(document.querySelectorAll('#inspector .quick-row .qr-btn'));
+      const vTitles = vBtns.map(function (b) { return b.title; });
+      if (vBtns.length !== 3) throw new Error('the video icon strip has ' + vBtns.length + ' buttons, expected 3 (trim-in / split / trim-out): ' + vTitles.join(' · '));
+      if (vTitles.some(function (t) { return /^Speed/.test(t) || /^Audio/.test(t); })) {
+        throw new Error('Speed and/or Audio are still in the icon strip: ' + vTitles.join(' · '));
+      }
+      FM.selectLayer(f.shp.id); FM.inspector.openCategory('home');
+      const sTitles = Array.prototype.slice.call(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(function (b) { return b.title; });
+      if (vTitles.join(' · ') !== sTitles.join(' · ')) {
+        throw new Error('the icon strips still differ:\n  video: ' + vTitles.join(' · ') + '\n  shape: ' + sTitles.join(' · '));
+      }
+    } finally { q45Restore(saved); }
+  });
+
+  test('audio detection: “has audio” is a decoded track, not the word “video”', { item: 'q45-has-audio' }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
+    try {
+      if (!FM.hasAudioTrack || !FM.probeAudioTrack) throw new Error('FM.hasAudioTrack / FM.probeAudioTrack are missing — nothing can tell a silent screen recording from a clip with sound');
+      const f = q45Fixture(); saved.media.push(f.vid.id);
+
+      // A shape can never have sound: answered synchronously, no decode, no media record needed.
+      if (FM.hasAudioTrack(f.shp) !== false) throw new Error('a shape layer does not report “no audio”: ' + FM.hasAudioTrack(f.shp));
+      if (await FM.probeAudioTrack(f.shp) !== false) throw new Error('probing a shape did not resolve false');
+
+      // A silent screen recording — a real video layer whose file has no decodable audio track.
+      const silent = FM.makeLayer('video', { name: 'q45 silent' });
+      FM.scene.layers.push(silent); saved.media.push(silent.id);
+      FM.media.set(silent.id, { kind: 'video', width: 640, height: 360, duration: 5, file: q45SilentFile() });
+      if (await FM.probeAudioTrack(silent) !== false) throw new Error('a video whose file has NO decodable audio still reports as having sound — “is a video” is not “has audio”');
+      if (FM.hasAudioTrack(silent) !== false) throw new Error('the probe result was not cached back onto the media record');
+
+      // …and one that really does carry sound.
+      const loud = FM.makeLayer('video', { name: 'q45 loud' });
+      FM.scene.layers.push(loud); saved.media.push(loud.id);
+      FM.media.set(loud.id, { kind: 'video', width: 640, height: 360, duration: 5, file: q45WavFile() });
+      if (await FM.probeAudioTrack(loud) !== true) throw new Error('a clip with a real decodable audio track reports as silent');
+
+      // Cheap: the probe must not park full-rate PCM on the media record (v5.59's whole point).
+      const rec = FM.media.get(loud.id);
+      if (rec.audioBuffer && rec.audioBuffer.sampleRate > 16000) throw new Error('the probe cached a ' + rec.audioBuffer.sampleRate + 'Hz buffer on the media record — it must decode cheap and throw the PCM away');
+    } finally { q45Restore(saved); }
+  });
+
+  test('Add Effect browser: a Visual/Audio toggle above Featured switches the whole browser', { item: 'q45-fx-toggle' }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
+    try {
+      const f = q45Fixture(); saved.media.push(f.vid.id);
+      const loud = FM.makeLayer('video', { name: 'q45 loud2' });
+      FM.scene.layers.push(loud); saved.media.push(loud.id);
+      FM.media.set(loud.id, { kind: 'video', width: 640, height: 360, duration: 5, file: q45WavFile() });
+      await FM.probeAudioTrack(loud);          // pre-warm so the toggle renders its final state at once
+      await FM.probeAudioTrack(f.shp);
+
+      const scroll = document.querySelector('#fx-browser .fxb-scroll');
+      const mode = function () { return scroll.querySelector('.fxmode'); };
+      const btn = function (name) {
+        return Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === name; });
+      };
+
+      // --- a layer with NO audio: the toggle is there, the audio half is greyed and inert ---
+      FM.selectLayer(f.shp.id);
+      FM.fxBrowser.open(f.shp);
+      if (!mode()) throw new Error('no .fxmode toggle in the Add Effect browser');
+      if (scroll.firstElementChild !== mode()) throw new Error('the toggle is not the first thing in the browser — it has to sit ABOVE Featured');
+      const feat = scroll.querySelector('.fxb-sec-title');
+      if (!feat || !(mode().compareDocumentPosition(feat) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('“' + (feat && feat.textContent) + '” is not below the toggle');
+      if (!btn('Audio') || !btn('Effects')) throw new Error('the toggle does not offer both sides: ' + Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).map(function (b) { return b.textContent; }).join('/'));
+      if (!btn('Effects').classList.contains('on')) throw new Error('the visual side is not the selected one on a layer with no audio');
+      // A control you cannot press is not a control: BOTH halves have to be a real thumb target and
+      // sit fully inside the browser's own box — greyed or not, the dim one still has to be tappable
+      // to say why it is dim.
+      const box = scroll.getBoundingClientRect();
+      Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).forEach(function (b) {
+        const r = b.getBoundingClientRect();
+        if (r.height < 36) throw new Error('the “' + b.textContent + '” half of the toggle is ' + Math.round(r.height) + 'px tall — under the 36px thumb minimum');
+        if (r.width < 60) throw new Error('the “' + b.textContent + '” half of the toggle is only ' + Math.round(r.width) + 'px wide');
+        if (r.left < box.left - 1 || r.right > box.right + 1 || r.top < box.top - 1) {
+          throw new Error('the “' + b.textContent + '” half spills outside the browser panel (' + Math.round(r.left) + '–' + Math.round(r.right) + ' vs ' + Math.round(box.left) + '–' + Math.round(box.right) + ')');
+        }
+      });
+      if (!btn('Audio').classList.contains('off')) throw new Error('the Audio side is not greyed on a layer with no audio');
+      if (Number(getComputedStyle(btn('Audio')).opacity) > 0.7) throw new Error('.fxmode-btn.off does not dim (opacity ' + getComputedStyle(btn('Audio')).opacity + ') — this check would prove nothing');
+      btn('Audio').click();
+      if (!document.getElementById('afx-browser').classList.contains('hidden')) throw new Error('the greyed Audio side still switched the browser — it must not be selectable');
+      if (document.getElementById('fx-browser').classList.contains('hidden')) throw new Error('tapping the greyed Audio side closed the browser');
+      FM.fxBrowser.close();
+
+      // --- a layer WITH audio: the toggle swaps the whole browser, categories included ---
+      FM.selectLayer(loud.id);
+      FM.fxBrowser.open(loud);
+      const visualCats = Array.prototype.slice.call(scroll.querySelectorAll('.fxb-banner-label')).map(function (n) { return n.textContent; });
+      if (!visualCats.length) throw new Error('the visual browser rendered no category banners');
+      if (btn('Audio').classList.contains('off')) throw new Error('the Audio side is greyed on a clip that HAS a decodable audio track');
+      btn('Audio').click();
+      if (!document.getElementById('fx-browser').classList.contains('hidden')) throw new Error('switching to Audio left the visual browser up');
+      const aScroll = document.querySelector('#afx-browser .fxb-scroll');
+      if (document.getElementById('afx-browser').classList.contains('hidden')) throw new Error('switching to Audio did not open the audio browser');
+      const aMode = aScroll.querySelector('.fxmode');
+      if (!aMode || aScroll.firstElementChild !== aMode) throw new Error('the audio side has no toggle at the top — there would be no way back');
+      const aAudioBtn = Array.prototype.slice.call(aScroll.querySelectorAll('.fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === 'Audio'; });
+      if (!aAudioBtn || !aAudioBtn.classList.contains('on')) throw new Error('the audio browser does not show Audio as the selected side');
+      const audioCats = Array.prototype.slice.call(aScroll.querySelectorAll('.fxb-banner-label')).map(function (n) { return n.textContent; });
+      const wantCats = FM.audioFxRegistry.categories().map(function (c) { return c.label; });
+      if (audioCats.join(',') !== wantCats.join(',')) throw new Error('the CATEGORIES did not switch with the toggle: ' + audioCats.join(',') + ' vs ' + wantCats.join(','));
+      // …and back again.
+      const aVisBtn = Array.prototype.slice.call(aScroll.querySelectorAll('.fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === 'Effects'; });
+      aVisBtn.click();
+      if (!document.getElementById('afx-browser').classList.contains('hidden') || document.getElementById('fx-browser').classList.contains('hidden')) throw new Error('the toggle is one-way — Effects did not bring the visual browser back');
+    } finally {
+      if (FM.fxBrowser) FM.fxBrowser.close();
+      if (FM.audioFxBrowser) FM.audioFxBrowser.close();
+      q45Restore(saved);
+    }
+  });
+
+  test('Effects panel: the same Visual/Audio toggle, so an added audio effect still has an editor', { item: 'q45-fx-toggle' }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
+    try {
+      const f = q45Fixture(); saved.media.push(f.vid.id);
+      const loud = FM.makeLayer('video', { name: 'q45 loud3' });
+      FM.scene.layers.push(loud); saved.media.push(loud.id);
+      FM.media.set(loud.id, { kind: 'video', width: 640, height: 360, duration: 5, file: q45WavFile() });
+      await FM.probeAudioTrack(loud); await FM.probeAudioTrack(f.shp);
+
+      const panelBtn = function (name) {
+        return Array.prototype.slice.call(document.querySelectorAll('#inspector .fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === name; });
+      };
+      FM.selectLayer(loud.id); FM.inspector.openCategory('effects');
+      if (!document.querySelector('#inspector .fxmode')) throw new Error('the Effects panel has no Visual/Audio toggle — an added audio effect would have no editor to live in');
+      if (!panelBtn('Effects').classList.contains('on')) throw new Error('the Effects panel does not open on the visual stack');
+      const addLabel = function () {
+        const b = document.querySelector('#inspector .fx-add-btn');
+        return b ? (b.textContent || '').trim() : '(no add button)';
+      };
+      if (addLabel() !== '+ Add Effect') throw new Error('the visual side does not offer “+ Add Effect”, it offers “' + addLabel() + '”');
+      panelBtn('Audio').click();
+      if (addLabel() !== '+ Add Audio Effect') throw new Error('switching the panel to Audio did not show the audio stack — its add button reads “' + addLabel() + '”');
+      if (!panelBtn('Audio').classList.contains('on')) throw new Error('the Audio side did not latch on');
+      // Same geometry rule as the browser's copy: a real thumb target, inside the panel it lives in.
+      const pBox = document.getElementById('inspector').getBoundingClientRect();
+      Array.prototype.slice.call(document.querySelectorAll('#inspector .fxmode-btn')).forEach(function (b) {
+        const r = b.getBoundingClientRect();
+        if (r.height < 36) throw new Error('the panel toggle’s “' + b.textContent + '” half is ' + Math.round(r.height) + 'px tall — under the 36px thumb minimum');
+        if (r.left < pBox.left - 1 || r.right > pBox.right + 1) throw new Error('the panel toggle’s “' + b.textContent + '” half spills outside the inspector');
+      });
+
+      // A layer with no audio: the panel keeps the toggle, greyed, and stays on the visual stack.
+      FM.selectLayer(f.shp.id); FM.inspector.openCategory('effects');
+      if (!panelBtn('Audio')) throw new Error('the Effects panel drops the toggle on a layer with no audio — it should be visible and dim');
+      if (!panelBtn('Audio').classList.contains('off')) throw new Error('the Audio side is selectable on a layer with no audio');
+      panelBtn('Audio').click();
+      if (addLabel() !== '+ Add Effect') throw new Error('the greyed Audio side still switched the panel');
+
+      // A SONG (mp3/wav rides the video path with a 0×0 picture) is the mirror image: pinned to the
+      // audio side, with the VISUAL half as the greyed one. Its Audio Effects card is gone like every
+      // other layer's, so Effects has to be the way in or the audio stack is unreachable on a song.
+      const song = FM.makeLayer('video', { name: 'q45 song' });
+      FM.scene.layers.push(song); saved.media.push(song.id);
+      FM.media.set(song.id, { kind: 'video', width: 0, height: 0, duration: 30, file: q45WavFile() });
+      await FM.probeAudioTrack(song);
+      FM.selectLayer(song.id); FM.inspector.openCategory('home');
+      const songCards = q45Cards().map(function (c) { return c.label; });
+      if (songCards.join(' | ') !== 'Speed | Volume | Effects') throw new Error('a song’s cards are “' + songCards.join(' | ') + '” — expected Speed | Volume | Effects');
+      FM.inspector.openCategory('effects');
+      if (addLabel() !== '+ Add Audio Effect') throw new Error('a song’s Effects card did not open on the audio side — its add button reads “' + addLabel() + '”');
+      if (!panelBtn('Effects').classList.contains('off')) throw new Error('the visual side is selectable on a song — a 0×0 layer has no picture for an effect to change');
+    } finally { q45Restore(saved); }
   });
 
 

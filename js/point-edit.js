@@ -207,7 +207,7 @@ window.FM = window.FM || {};
     if (hnd) {
       e.preventDefault(); e.stopPropagation();
       drag = { si: sel.si, pi: sel.pi, handle: hnd };
-      overlay.setPointerCapture && overlay.setPointerCapture(e.pointerId);
+      try { overlay.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
       return;
     }
     const hit = nearest(e);
@@ -244,7 +244,7 @@ window.FM = window.FM || {};
       notify('sel');
     }
     draw();
-    overlay.setPointerCapture && overlay.setPointerCapture(e.pointerId);
+    try { overlay.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
   }
   // ---- snapping a dragged point to the OTHER points (v5.44) --------------------------------------
   // Ezra: "the shape editor point editor thing doesn't have grid snapping to the other points."

@@ -87,7 +87,17 @@ window.FM = window.FM || {};
     // This tap IS the user gesture that unlocks the AudioContext — it has to resume inside the click's
     // call stack, so nothing may await before it.
     if (FM.audioFxLive && FM.audioFxLive.resume) FM.audioFxLive.resume();
-    if (FM.inspector) FM.inspector.refresh();
+    // Land ON the new effect's controls — the Effects card's AUDIO side (queue 45). A plain refresh()
+    // used to be enough because you could only get here from the Audio Effects card; you can now
+    // arrive from the visual browser's toggle, where a refresh would drop you on the category grid.
+    if (FM.inspector) {
+      if (FM.inspector.openCategory) FM.inspector.openCategory('audiofx');
+      else FM.inspector.refresh();
+      requestAnimationFrame(() => {
+        const open = document.querySelector('.fx-row.fx-open');
+        if (open && open.scrollIntoView) open.scrollIntoView({ block: 'nearest' });
+      });
+    }
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();
     if (FM.toast) FM.toast('Added ' + FM.audioFxRegistry.get(id).label, 1100);
@@ -222,9 +232,22 @@ window.FM = window.FM || {};
     return grid;
   }
 
+  // The other half of the queue-45 switch — same control, same position, pointing back at the visual
+  // browser. Its own side is greyed on a SONG's browser only in the sense that Effects (visual) is:
+  // a 0×0 layer has no picture, so FM.fxModeToggle greys the visual half and this stays put.
+  function modeToggle() {
+    if (!FM.fxModeToggle || !_layer) return null;
+    return FM.fxModeToggle(_layer, 'audio', () => {
+      const layer = _layer;
+      FM.audioFxBrowser.close();
+      if (FM.fxBrowser) FM.fxBrowser.open(layer);
+    });
+  }
+
   let _featRow = null, _catDepth = 0;
   function rebuild() {
     scrollEl.innerHTML = '';
+    const tg = modeToggle(); if (tg) scrollEl.appendChild(tg);   // above everything, search results included
     const q = (searchInput.value || '').trim();
     if (q) { scrollEl.appendChild(buildSearchResults(q)); stopAuto(); return; }
     const feat = buildFeatured();
@@ -279,7 +302,9 @@ window.FM = window.FM || {};
       if (!root) return;
       _layer = layer || (FM.scene && FM.layerById(FM.scene, FM.scene.selectedId));
       if (!_layer) { if (FM.toast) FM.toast('Select a clip first', 1400); return; }
-      if (_layer.type !== 'video') { if (FM.toast) FM.toast('Audio effects only work on a clip with sound', 2000); return; }
+      // "Has sound" is a decoded track now, not the layer type (queue 45) — a silent screen recording
+      // is a video with nothing to process. Unknown (not probed yet) still opens: see FM.hasAudioTrack.
+      if (FM.fxAudioSideOk ? !FM.fxAudioSideOk(_layer) : _layer.type !== 'video') { if (FM.toast) FM.toast('Audio effects only work on a clip with sound', 2000); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
       root.classList.remove('hidden');
       rebuild();

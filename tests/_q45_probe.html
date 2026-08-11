@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>q45 — focused probe</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 16px; }
+  .row { padding: 6px 10px; border-radius: 6px; margin: 4px 0; }
+  .ok { background: #11251a; } .fail { background: #2a1416; }
+  .tag { font-weight: 700; }
+  .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+</style>
+</head>
+<body>
+  <h3>queue 45 — the four new tests + the speed-card one, nothing else</h3>
+  <div id="out">running…</div>
+  <iframe id="app" src="../index.html"></iframe>
+  <script>
+    // Same trick as run.html, but it runs ONLY the tests this change touches, so a mutation check is
+    // a ten-second loop instead of a ninety-second one. run.html stays the source of truth.
+    var ITEMS = ['q45-one-layout', 'q45-has-audio', 'q45-fx-toggle', 'speed-dead-control'];
+    var frame = document.getElementById('app');
+    frame.addEventListener('load', function () {
+      var w = frame.contentWindow;
+      fetch('tests.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(async function (src) {
+        var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
+        if (!w.FMTests) throw new Error('FMTests did not load');
+        var picked = w.FMTests.tests.filter(function (t) { return ITEMS.indexOf(t.item) >= 0; });
+        var out = [];
+        for (var i = 0; i < picked.length; i++) {
+          var t = picked[i], ok = true, err = '';
+          try { var r2 = t.fn(); if (r2 && r2.then) await r2; }
+          catch (e) { ok = false; err = String((e && e.message) || e); }
+          out.push({ name: t.name, ok: ok, err: err });
+        }
+        document.getElementById('out').innerHTML =
+          '<div style="margin:8px 0;font-weight:700">' + out.filter(function (r) { return r.ok; }).length + '/' + out.length + ' green</div>' +
+          out.map(function (r) {
+            return '<div class="row ' + (r.ok ? 'ok' : 'fail') + '"><span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span> ' +
+              r.name + (r.err ? '<br><span style="color:#c98">— ' + r.err + '</span>' : '') + '</div>';
+          }).join('');
+        window.__q45 = out;
+      }).catch(function (e) {
+        document.getElementById('out').textContent = 'Error: ' + (e && e.message || e);
+        window.__q45 = [{ name: 'harness', ok: false, err: String(e && e.message || e) }];
+      });
+    });
+  </script>
+</body>
+</html>

@@ -109,6 +109,52 @@ window.FM = window.FM || {};
   const WAVE_MAX_BYTES = 300 * 1024 * 1024;
   const WAVE_RATE = 8000;   // 600 peaks are drawn from this — 8kHz is ample, and 6x smaller than 48k
 
+  /* ---- "Does this layer actually carry SOUND?" -------------------------------------------------
+   * NOT "is it a video". Silent screen recordings are ordinary, and the audio half of the effect
+   * browser greys itself on this answer — keying that off the layer TYPE would offer reverb on a clip
+   * with nothing to reverberate. The truth is in the file: a decodable audio track, or none.
+   *
+   * Three answers, because sometimes the honest one is "not yet":
+   *   hasAudioTrack(layer)  → true | false | null   synchronous, FREE. It only reads what is already
+   *     known: a cached probe result, the full-fidelity buffer the exporter/reverse path decodes, or
+   *     the timeline's waveform peaks (which can only exist if a track decoded). null = unknown.
+   *   probeAudioTrack(layer) → Promise<true|false|null>   resolves the unknown by decoding at 8 kHz
+   *     and keeping ONLY the yes/no. A probe must never pay for full-rate PCM (see decodeAudio's
+   *     memory note: an hour of 48k stereo is 1.3 GB), and must never park it on the record either.
+   *
+   * Callers treat null as "assume yes": greying out a control that would have worked is worse than
+   * offering one that turns out to do nothing, and the probe demotes it a moment later either way. */
+  const PROBE_RATE = 8000;
+  FM.hasAudioTrack = function (layer) {
+    if (!layer || layer.type !== 'video') return false;   // only the video/audio path carries sound (mp3/wav ride it)
+    const rec = store[layer.id];
+    if (!rec) return null;
+    if (typeof rec.hasAudioTrack === 'boolean') return rec.hasAudioTrack;
+    if (rec.audioBuffer) return true;
+    if (rec.audioBuffer === null) return false;                            // a full decode already came back empty
+    if (Array.isArray(rec.waveform) && rec.waveform.length) return true;   // peaks exist ⇒ a track decoded
+    return null;
+  };
+  FM.probeAudioTrack = async function (layer) {
+    const known = FM.hasAudioTrack(layer);
+    const rec = layer ? store[layer.id] : null;
+    if (known !== null) {
+      if (rec && typeof rec.hasAudioTrack !== 'boolean') rec.hasAudioTrack = known;
+      return known;
+    }
+    if (!rec || !rec.file) return null;                                    // nothing to look at — stays unknown
+    if (rec.file.size > WAVE_MAX_BYTES) return null;                       // same tab-safety ceiling as the waveform
+    if (rec._audioProbe) return rec._audioProbe;                           // one decode per record, however many callers ask
+    rec._audioProbe = (async () => {
+      const ab = await FM.decodeAudio(rec.file, { rate: PROBE_RATE });
+      // Deliberately NOT cached as rec.audioBuffer: that slot means full-fidelity PCM to the exporter
+      // and the audio-reactive tools, and an 8 kHz stand-in would silently degrade both.
+      rec.hasAudioTrack = !!(ab && ab.length && ab.numberOfChannels);
+      return rec.hasAudioTrack;
+    })();
+    return rec._audioProbe;
+  };
+
   /* Compute (and cache on the media rec) a peak array for drawing the clip waveform. */
   FM.getWaveform = async function (rec) {
     if (rec.waveform) return rec.waveform;

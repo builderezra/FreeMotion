@@ -467,9 +467,28 @@ window.FM = window.FM || {};
     return grid;
   }
 
+  /* The Visual/Audio switch that leads the browser (queue 45). Ezra: "put a toggle at the top that
+   * switches from showing you either the normal effects or audio ones." The two browsers are separate
+   * full-screen overlays with identical chrome, so switching = close this one, open the other at the
+   * same scroll position of the page (the top). Built by FM.fxModeToggle so the greying rule — and
+   * what it says when you tap it — is written once, in inspector.js, for all three places it appears. */
+  function modeToggle() {
+    if (!FM.fxModeToggle || !_layer) return null;
+    const tg = FM.fxModeToggle(_layer, 'visual', () => {
+      const layer = _layer;
+      FM.fxBrowser.close();
+      if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer);
+    });
+    // The audio answer may not be known yet (it means decoding the file). The toggle rendered
+    // optimistically; if the probe comes back "no track", re-render so the side greys out.
+    if (FM.fxProbeAudioSide) FM.fxProbeAudioSide(_layer, id => { if (_layer && _layer.id === id && root && !root.classList.contains('hidden')) rebuild(); });
+    return tg;
+  }
+
   let _featRow = null, _catDepth = 0;
   function rebuild() {
     scrollEl.innerHTML = '';
+    const tg = modeToggle(); if (tg) scrollEl.appendChild(tg);   // above everything, search results included
     const q = (searchInput.value || '').trim();
     if (q) { scrollEl.appendChild(buildSearchResults(q)); stopAuto(); return; }
     const feat = buildFeatured();
