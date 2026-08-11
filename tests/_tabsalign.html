@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>home tab alignment</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+pre{padding:8px;white-space:pre-wrap}iframe{position:fixed;left:-9999px;top:0;border:0}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. Ezra: "make the boxes on pc for templates projects etc squircle rectangles instead and make
+   sure they span the width that the projects do, so it doesnt look small."
+   The tab row was capped at 736px while the card list is capped at 700, AND .hm-tab had no flex outside
+   the phone media query, so four tabs shrink-wrapped their text into a short huddle. This measures the
+   two rows against each other — the only thing that decides whether they line up. */
+var q = new URLSearchParams(location.search);
+var W = +(q.get('w') || 1280), H = +(q.get('h') || 800);
+var f = document.getElementById('f'), o = document.getElementById('o');
+f.style.width = W + 'px'; f.style.height = H + 'px';
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async () => {
+    for (var i = 0; i < 250 && !(w.FM && w.FM.scene); i++) await sleep(60);
+    await sleep(1600);   // let the home intro settle; measuring mid-animation measures the animation
+    var log = [], fails = 0;
+    function ok(c, m) { log.push((c ? 'PASS  ' : 'FAIL  ') + m); if (!c) fails++; }
+
+    var tabs = d.querySelectorAll('.hm-tab'), grid = d.querySelector('.hm-grid');
+    if (!tabs.length || !grid) { o.textContent = 'tabs=' + tabs.length + ' grid=' + !!grid + ' — nothing to measure'; return; }
+    var first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
+    var g = grid.getBoundingClientRect();
+    var R = n => Math.round(n);
+
+    log.push('viewport      ' + W + 'x' + H);
+    log.push('tab row       ' + R(first.left) + ' … ' + R(last.right) + '   (' + R(last.right - first.left) + 'px)');
+    log.push('project list  ' + R(g.left) + ' … ' + R(g.right) + '   (' + R(g.width) + 'px)');
+    log.push('tab widths    ' + [].map.call(tabs, t => R(t.getBoundingClientRect().width)).join(', '));
+    log.push('radius        ' + w.getComputedStyle(tabs[0]).borderRadius);
+    log.push('');
+
+    ok(Math.abs(first.left - g.left) <= 1, 'the row starts where the projects start (off by ' + R(first.left - g.left) + 'px)');
+    ok(Math.abs(last.right - g.right) <= 1, 'the row ends where the projects end (off by ' + R(last.right - g.right) + 'px)');
+    // "so it doesnt look small" — the tabs must actually fill the row, not huddle inside it.
+    var widths = [].map.call(tabs, t => t.getBoundingClientRect().width);
+    var spread = Math.max.apply(null, widths) - Math.min.apply(null, widths);
+    ok(spread <= 1, 'all four tabs are the same width, so they divide the row evenly (spread ' + spread.toFixed(1) + 'px)');
+    // Squircle rectangle, not a pill: a pill's radius is half its height or more.
+    var rad = parseFloat(w.getComputedStyle(tabs[0]).borderRadius) || 0;
+    ok(rad > 6 && rad < first.height / 2, 'corners are a rounded rectangle, not a pill (radius ' + rad + 'px on a ' + R(first.height) + 'px box)');
+
+    log.push('');
+    log.push(fails ? ('RESULT ' + fails + ' FAILED') : 'RESULT all passed');
+    o.textContent = log.join('\n');
+  })();
+});
+</script>
+</body>
+</html>

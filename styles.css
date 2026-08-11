@@ -2201,8 +2201,20 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    Phone is untouched: 736 is wider than the screen, so the max-width never binds. width:100% is
    load-bearing — the row is a flex ITEM, so without it it shrink-wraps to its pills and margin:auto
    centres that shrunken row rather than aligning its left edge with the column. */
-.hm-tabs { display: flex; gap: 10px; padding: 10px 18px 12px; width: 100%; max-width: 736px; margin: 0 auto; }
-.hm-tab { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13.5px; font-weight: 700; padding: 9px 18px; cursor: pointer; border-radius: 999px; }
+/* v5.63. Ezra: "make the boxes on pc for templates projects etc squircle rectangles instead and make
+   sure they span the width that the projects do, so it doesnt look small."
+   Two things were wrong on PC. The row was capped at 736px while the card list is capped at 700, so
+   they were never going to line up; and .hm-tab had no `flex` outside the phone media query, so the
+   four tabs shrink-wrapped their own text into a short left-aligned huddle inside that row. Both
+   widths now come from ONE variable so they cannot drift apart again, and the tabs stretch to fill it.
+   Corners match .hm-card's 16px rather than a 999px pill, so the tab row and the cards below it read
+   as the same family of object. */
+:root { --hm-col: 700px; }
+.hm-tabs { display: flex; gap: 10px; padding: 10px 18px 12px; width: 100%;
+  /* +36 so the CONTENT box is exactly --hm-col: the 18px side padding lives inside max-width,
+     so without this the row ends up 36px narrower than the cards and reads as inset. */
+  max-width: calc(var(--hm-col) + 36px); margin: 0 auto; }
+.hm-tab { flex: 1 1 0; min-width: 0; text-align: center; background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13.5px; font-weight: 700; padding: 11px 14px; cursor: pointer; border-radius: 16px; }
 /* With a FOURTH tab (Tutorials, v5.50) the four fixed-width pills no longer fit a 380px phone — the
    last one was clipped mid-word at the screen edge. On the phone they share the row instead, the same
    way the add sheet's tabs do, so the row is exactly full at any width and nothing is cut off. The
@@ -2215,7 +2227,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .hm-tab.active { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 .hm-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 110px; }
 /* AM-style project LIST rows: thumb left, name + meta stacked, actions right */
-.hm-grid { display: flex; flex-direction: column; gap: 10px; max-width: 700px; margin: 0 auto; }
+.hm-grid { display: flex; flex-direction: column; gap: 10px; max-width: var(--hm-col); margin: 0 auto; }   /* same variable as .hm-tabs — the two must line up */
 .hm-card { position: relative; display: flex; align-items: center; gap: 13px; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px; cursor: pointer; color: var(--text); }
 .hm-card:active { background: var(--panel-3); }
 /* While selecting, a drag across cards PAINTS a selection, so the card must not hand the gesture to
