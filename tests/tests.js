@@ -1454,6 +1454,38 @@
     }
   });
 
+  test('camera focus blur is symmetric about the focus plane', { item: 'cam-focus' }, function () {
+    // v5.34, from the camera audit. The blur radius was divided by the layer's perspective scale.
+    // That looks like pre-compensating for the scale applied afterwards, but ctx.filter is applied in
+    // DEVICE space and is not touched by the transform — the same fact that makes plateScale
+    // necessary — so it simply made the blur depend on depth a SECOND time, on top of camDefocus
+    // which already measures distance from the focus plane. Anything behind the plane was smeared
+    // away; anything in front of it barely blurred. Measured near 29px vs far 64px for layers the
+    // same distance either side; now 58 vs 59.
+    const W = 400, H = 260;
+    function ramp(z) {
+      const c = offscreen(W, H);
+      c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const cam = FM.makeLayer('camera', { name: 'C', x: W / 2, y: H / 2, start: 0, duration: 5 });
+      cam.focus = { enabled: true, distance: 0, dof: 40, blur: 1 };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'R', x: W / 2, y: H / 2, shapeW: 100, shapeH: 80, fill: '#ffffff' });
+      L.transform.z = z;
+      FM.renderScene(c.getContext('2d'), { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: [L, cam], selectedId: null, selectedIds: [] }, 0);
+      const d = c.getContext('2d').getImageData(0, 0, W, H).data;
+      const y = H >> 1, at = x => d[(y * W + x) * 4];
+      let x = W >> 1;
+      while (x < W - 1 && at(x) > 230) x++;
+      const start = x;
+      while (x < W - 1 && at(x) > 25) x++;
+      return x - start;
+    }
+    if (ramp(0) > 3) throw new Error('a layer ON the focus plane is blurred (' + ramp(0) + 'px of ramp) — it should be sharp');
+    const near = ramp(-260), far = ramp(260);
+    if (near < 8 || far < 8) throw new Error('focus blur is not engaging at all (near ' + near + ', far ' + far + ') — check the focus field names, since a focus object missing its fields silently means no blur');
+    const ratio = Math.max(near, far) / Math.max(1, Math.min(near, far));
+    if (ratio > 1.5) throw new Error('layers the same distance either side of the focus plane blur by ' + near + 'px and ' + far + 'px (ratio ' + ratio.toFixed(2) + ') — the blur is depth-dependent twice over');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

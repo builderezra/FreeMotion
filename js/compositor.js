@@ -6337,10 +6337,14 @@ window.FM = window.FM || {};
     // blur less the further away it got, which is backwards. Hence the divide by the effective scale.
     const _dfc = camDefocus(layer, t);
     if (_dfc > 0) {
-      const zz = layer.transform.z != null ? FM.evalProp(layer.transform.z, t) : 0;
-      const F = (_camLens && _camLens.F) || Math.max(1, ((scene && scene.project && scene.project.height) || 1080) * 2);
-      const ps = zz ? F / Math.max(F * 0.05, F + zz) : 1;
-      const px = (_dfc * _camLens.focus.s * 22) / Math.max(0.05, ps);
+      // NO division by the layer's perspective scale. ctx.filter is applied in DEVICE space and is
+      // NOT touched by the current transform — the same fact that makes plateScale necessary — so
+      // dividing by ps did not "pre-compensate for the scale that follows", it simply made the blur
+      // depend on depth a second time, on top of camDefocus which already measures distance from the
+      // focus plane. Measured: the same defocus came out 1.2px on a near layer and 13.4px on a far
+      // one, so anything behind the focus plane was erased into a smear while anything in front of it
+      // was never really blurred at all.
+      const px = _dfc * _camLens.focus.s * 22;
       const pxs = px * plateScale(ctx);   // device-space like every other filter length — see effectFilter
       if (pxs > 0.3) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + pxs.toFixed(2) + 'px)';
     }
