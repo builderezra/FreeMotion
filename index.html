@@ -8,7 +8,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=271">
+<link rel="stylesheet" href="styles.css?v=273">
 <link rel="stylesheet" href="theme-glass.css?v=14">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -113,7 +113,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.25</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.26</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -193,10 +193,15 @@
             <button id="vb-faster" class="vb-z" title="Faster playback" aria-label="Faster playback">+</button>
           </div>
           <button id="vb-loop" class="vb-btn" title="Loop playback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
-          <button id="vb-markin" class="vb-btn" title="Mark export start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4h6M7 20h6M17 4v16"/></svg></button>
-          <button id="vb-markout" class="vb-btn" title="Mark export end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4v16M17 4h-6M17 20h-6M7 4v16"/></svg></button>
-          <button id="vb-markclear" class="vb-btn" title="Clear export marks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
-          <!-- Arrows, per Ezra, and HOLDING one runs to the end of the range instead of stepping. -->
+          <!-- The three export-mark buttons share a backing so they read as ONE control rather than
+               three unrelated icons in a column. Ezra: "add a dark layer behind these three buttons to
+               signify theyre grouped." -->
+          <div id="vb-marks">
+            <button id="vb-markin" class="vb-btn" title="Mark export start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4h6M7 20h6M17 4v16"/></svg></button>
+            <button id="vb-markout" class="vb-btn" title="Mark export end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4v16M17 4h-6M17 20h-6M7 4v16"/></svg></button>
+            <button id="vb-markclear" class="vb-btn" title="Clear export marks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+          </div>
+<!-- Arrows, per Ezra, and HOLDING one runs to the end of the range instead of stepping. -->
           <div id="vb-tlzoom">
             <button id="vb-tlin" class="vb-z" title="Zoom timeline in · hold for maximum" aria-label="Zoom timeline in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
             <button id="vb-tlout" class="vb-z" title="Zoom timeline out · hold for minimum" aria-label="Zoom timeline out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>

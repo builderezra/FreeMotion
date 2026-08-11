@@ -955,6 +955,17 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 #vb-rate, #vb-tlzoom { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #vb-ratelabel { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-dim); min-width: 30px; text-align: center; }
 .vb-btn.on { color: var(--accent); background: var(--accent-soft); }
+/* The export-mark trio sits on its own darker backing so the three read as one control instead of
+   three loose icons in a column. Ezra: "add a dark layer behind these three buttons to signify theyre
+   grouped." Deliberately DARKER than the bar rather than lighter — every other lit surface here means
+   "armed" (.vb-btn.on, the accent-soft wash), so a lighter panel would have said the marks were set
+   when they were not. Inset instead of raised, for the same reason. */
+#vb-marks {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 3px 2px; border-radius: 10px;
+  background: rgba(0, 0, 0, .42);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
 /* dim, not disabled: at the end of the zoom range or with no marks set, the button still responds —
    it just has nothing left to do, and a truly disabled control gives no feedback when you press it */
 .vb-btn.dim, .vb-z.dim { opacity: .38; }
