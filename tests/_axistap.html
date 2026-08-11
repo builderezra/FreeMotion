@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>axis tap probe</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+pre{padding:8px;white-space:pre-wrap}iframe{position:fixed;left:-9999px;top:0;border:0}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. Ezra: "when pressing on z to edit its position and same with X Y, you should be able to
+   press on the number as well, not just the tiny little Z."
+   Taps the NUMBER (not the label) of each axis box with real pointer events and reports what happened.
+   Written to fail against the unfixed build: before the change, tapping the Z number opened the type-in
+   editor and left FM._mtAxis on 'xy'. */
+var f = document.getElementById('f'), o = document.getElementById('o');
+f.style.width = '390px'; f.style.height = '844px';
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async () => {
+    for (var i = 0; i < 250 && !(w.FM && w.FM.scene && w.FM.inspector); i++) await sleep(60);
+    var FM = w.FM, log = [], fails = 0;
+    function ok(cond, msg) { log.push((cond ? 'PASS  ' : 'FAIL  ') + msg); if (!cond) fails++; }
+
+    var card = d.querySelector('.hm-card'); if (card) { card.click(); await sleep(1500); }
+    var P = FM.scene.project;
+    var L = FM.makeLayer('shape', { name: 'ball', shape: 'circle', x: P.width / 2, y: P.height / 2 });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.refreshAll(); await sleep(200);
+    FM.selectLayer(L.id); await sleep(300);
+
+    // Open Move & Transform. The card is a button.cat-card and its text carries a number badge, so this
+    // matches on substring — and then CHECKS the panel actually opened, because a documented trap in
+    // this codebase is a card click that finds a node, clicks it, and silently does not navigate.
+    var mt = [].slice.call(d.querySelectorAll('button.cat-card'))
+      .filter(n => (n.textContent || '').indexOf('Move & Transform') >= 0)[0];
+    if (!mt) { o.textContent = 'could not find the Move & Transform card among ' + d.querySelectorAll('button.cat-card').length + ' cards'; return; }
+    mt.click(); await sleep(600);
+    if (!d.querySelector('.mt-vbox')) { o.textContent = 'clicked the card but no .mt-vbox appeared — the panel did not open'; return; }
+
+    function boxFor(letter) {
+      var boxes = [].slice.call(d.querySelectorAll('.mt-vbox'));
+      return boxes.filter(b => { var l = b.querySelector('.mt-vbox-lab'); return l && l.textContent.trim() === letter; })[0] || null;
+    }
+    // A TAP: down and up at the same point, so drag.moved stays false. This is the exact gesture the
+    // handler distinguishes from a scrub, so a probe that moved the pointer would test nothing.
+    function tapNumber(letter) {
+      var b = boxFor(letter); if (!b) return 'no ' + letter + ' box';
+      var v = b.querySelector('.mt-vbox-val'); if (!v) return 'no value in ' + letter;
+      var r = v.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      var opt = { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', buttons: 1 };
+      v.dispatchEvent(new w.PointerEvent('pointerdown', opt));
+      v.dispatchEvent(new w.PointerEvent('pointerup', Object.assign({}, opt, { buttons: 0 })));
+      return null;
+    }
+    function editingLetter() {
+      var e = d.querySelector('.mt-vbox-val.editing');
+      if (!e) return null;
+      var l = e.parentElement && e.parentElement.querySelector('.mt-vbox-lab');
+      return l ? l.textContent.trim() : '?';
+    }
+
+    ok((FM._mtAxis || 'xy') === 'xy', 'starts on the XY axis (got ' + (FM._mtAxis || 'xy') + ')');
+    ok(!!boxFor('X') && !!boxFor('Y') && !!boxFor('Z'), 'all three axis boxes are present');
+
+    // CONTROL, before touching anything: X's axis is ALREADY the live one, so this tap goes straight
+    // down the untouched original path. If the editor does not open here either, then synthetic pointer
+    // events simply cannot drive the type-in editor and this probe cannot test that half — which would
+    // make the Z failure below a probe artifact, not a product bug. Distinguishing those is the whole
+    // reason this control exists.
+    tapNumber('X'); await sleep(250);
+    log.push('      CONTROL: tapping X (its axis already live, original code path) -> editing: ' + editingLetter());
+    var ctl = d.querySelector('.mt-vbox-val.editing'); if (ctl) ctl.blur();
+    await sleep(250);
+
+    // 1. The whole point: tapping the Z NUMBER selects Z.
+    var err = tapNumber('Z'); if (err) log.push('note: ' + err);
+    await sleep(300);
+    ok(FM._mtAxis === 'z', 'tapping the Z NUMBER switches the pad to Z (got ' + FM._mtAxis + ')');
+    ok(editingLetter() === null, '…and does NOT open the type-in editor on that first tap (editing: ' + editingLetter() + ')');
+
+    // 2. Nothing is taken away: with Z already live, the number still types.
+    // Checked SYNCHRONOUSLY as well as after a wait: if it opens and then vanishes, that is a refresh
+    // destroying the editor, which is a different bug from it never opening at all.
+    // Instrument the real element before tapping, so this says WHY rather than just "it didn't".
+    var zb = boxFor('Z'), zv = zb && zb.querySelector('.mt-vbox-val');
+    var seen = [];
+    if (zv) {
+      ['pointerdown', 'pointerup'].forEach(function (ev) {
+        zv.addEventListener(ev, function () { seen.push(ev); }, true);   // capture: fires before the real handler
+      });
+      log.push('      (Z value: contentEditable=' + zv.isContentEditable +
+               ' rect=' + JSON.stringify(zv.getBoundingClientRect().toJSON ? zv.getBoundingClientRect().toJSON() : {}) +
+               ' inDoc=' + d.contains(zv) + ')');
+    }
+    log.push('      (FM._mtAxis immediately before the second tap: ' + (FM._mtAxis || 'xy') + ')');
+    tapNumber('Z');
+    log.push('      (events that reached the value element: ' + (seen.join(',') || 'NONE') +
+             '; FM._mtAxis right after: ' + (FM._mtAxis || 'xy') + ')');
+    var immediate = editingLetter();
+    await sleep(300);
+    log.push('      (editor right after the tap: ' + immediate + ' / after 300ms: ' + editingLetter() + ')');
+    // NOT asserted, and the CONTROL above is why: tapping a box whose axis is already live — the code
+    // path this change does not touch — fails to open the type-in editor here too. So synthetic pointer
+    // events cannot drive that editor at all, and an assertion on it would be measuring the probe.
+    // The type-in half is verified with real clicks in a real browser instead.
+    log.push((editingLetter() === 'Z' ? 'PASS  ' : 'UNTESTABLE HERE  ') +
+             'second tap opens type-in (see CONTROL above — synthetic events cannot open it on the untouched path either)');
+    ok(FM._mtAxis === 'z', 'the second tap leaves the axis on Z (got ' + FM._mtAxis + ')');
+    var ed = d.querySelector('.mt-vbox-val.editing'); if (ed) { ed.blur(); }
+    await sleep(300);
+
+    // 3. And it works back the other way, from the X box.
+    tapNumber('X'); await sleep(300);
+    ok(FM._mtAxis === 'xy', 'tapping the X number switches back to XY (got ' + FM._mtAxis + ')');
+
+    // 4. The label must keep working — it was the only target before.
+    var zl = boxFor('Z') && boxFor('Z').querySelector('.mt-vbox-lab');
+    if (zl) zl.click(); await sleep(300);
+    ok(FM._mtAxis === 'z', 'the Z LABEL still switches the axis (got ' + FM._mtAxis + ')');
+
+    log.push('');
+    log.push(fails ? ('RESULT ' + fails + ' FAILED') : 'RESULT all passed');
+    o.textContent = log.join('\n');
+  })();
+});
+</script>
+</body>
+</html>

@@ -1752,7 +1752,22 @@ window.FM = window.FM || {};
       if (drag.moved && dx) applyDx(dx);
     });
     // A TAP (never moved) opens the type-in editor and must not glide — cancel the momentum first.
-    val.addEventListener('pointerup', e => { if (!drag) return; const moved = drag.moved; drag = null; try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (!moved) { glide.cancelDrag(); startEdit(); } });
+    // EXCEPT on a box whose axis is not the live one. Ezra: "when pressing on z to edit its position and
+    // same with X Y, you should be able to press on the number as well, not just the tiny little Z."
+    // The original note here argued the number could not be the switch because tapping it already opens
+    // the type-in editor — but that is only a conflict if both must happen on the same tap. Selecting
+    // first and editing second resolves it and takes nothing away: the whole box is now the switch
+    // instead of a 12px label, and typing into a box you were not already editing costs one extra tap.
+    // Scrubbing by dragging the number is untouched either way.
+    val.addEventListener('pointerup', e => {
+      if (!drag) return;
+      const moved = drag.moved; drag = null;
+      try { val.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (moved) return;
+      glide.cancelDrag();
+      if (opts.axis && (FM._mtAxis || 'xy') !== opts.axis) { FM._mtAxis = opts.axis; FM.inspector.refresh(); return; }
+      startEdit();
+    });
     val.addEventListener('pointercancel', e => { if (!drag) return; const moved = drag.moved; drag = null; glide.cancelDrag(); try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
