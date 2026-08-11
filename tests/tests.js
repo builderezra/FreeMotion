@@ -1375,6 +1375,40 @@
     }
   });
 
+  test('an effect sized in pixels covers the same fraction of frame at any preview scale', { item: 'plate-scale' }, function () {
+    // v5.31, and the head of BUG-HUNT.md's largest block. The preview canvas is rendered at
+    // P.width * s for the adaptive playback tier (down to 0.28), and an effect whose parameter is a
+    // LENGTH must multiply by that scale or it draws the same number of PLATE pixels — which is a
+    // much bigger thing in project terms. drawPixelEffect has always passed the scale as a 6th
+    // argument with a comment saying exactly this; only 4 of 67 effects were taking it.
+    // Measured the way the hunt measured it: the fraction of the frame the effect changes should not
+    // depend on the render scale. Stroke was 3.9% at 1:1 and 15% at 0.36 — a 154% error, which is
+    // baked into what you see while playing but not into the export.
+    const P = { width: 240, height: 180, fps: 30, duration: 5, background: null };
+    function frac(type, rs) {
+      const mk = fx => {
+        const c = offscreen(Math.round(P.width * rs), Math.round(P.height * rs));
+        c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 120, shapeH: 80, fill: '#c8c8c8' });
+        L.effects = fx;
+        FM.renderScene(c.getContext('2d'), { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0);
+        return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      };
+      const a = mk([]), b = mk([{ type: type, enabled: true, params: {} }]);
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]) > 12) n++;
+      }
+      return n / (a.length / 4);
+    }
+    const full = frac('stroke', 1), low = frac('stroke', 0.36);
+    if (full < 0.01) throw new Error('the stroke effect changed almost nothing at 1:1 (' + (full * 100).toFixed(1) + '%) — the probe scene is wrong, not the app');
+    const ratio = low / full;
+    // Exact invariance is not reachable: a 4px outline on a 0.36 plate rounds to 1px, and integer
+    // dilation cannot do better. 2.0 catches the real bug (3.89 before the fix) with room for that.
+    if (ratio > 2.0) throw new Error('stroke covers ' + ratio.toFixed(2) + 'x as much of the frame at a 0.36 preview scale as at 1:1 — its width is being applied in plate pixels, so the preview disagrees with the export');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
