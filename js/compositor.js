@@ -7020,8 +7020,19 @@ window.FM = window.FM || {};
     const cam = scene.layers.find(l => l.type === 'camera' && l.visible !== false && FM.isLayerVisibleAt(l, t));
     let target = ctx;
     if (cam) {
+      /* The camera's plate lives on the TARGET's pixel grid, not the project's — the same rule
+         drawManualBlendLayer, the Copy Background snapshot and (since v5.10) adjustment layers all
+         follow. Allocated at exactly P.width x P.height and never stamped, it meant plateScale() read
+         an undefined __fmRS on it and returned 1, so INSIDE a camera scene the adaptive playback
+         quality tier did nothing at all — every effect length behaved as though the preview were 1:1
+         — and a zoomed preview could never supersample, so the canvas went soft the moment you zoomed
+         in and stopped matching the export. Capped at 2x because beyond that a supersampled plate on
+         a 1080x1920 project costs tens of megapixels for detail nobody can see. */
+      const _camRs = Math.max(0.1, Math.min(2, ctx.canvas.__fmRS || 1));
+      const _cw = Math.max(1, Math.round(P.width * _camRs)), _ch = Math.max(1, Math.round(P.height * _camRs));
       if (!_camCv) _camCv = document.createElement('canvas');
-      if (_camCv.width !== P.width || _camCv.height !== P.height) { _camCv.width = P.width; _camCv.height = P.height; }   // cleared below
+      if (_camCv.width !== _cw || _camCv.height !== _ch) { _camCv.width = _cw; _camCv.height = _ch; }   // cleared below
+      _camCv.__fmRS = _camRs; _camCv.__fmOX = 0; _camCv.__fmOY = 0;
       target = _camCv.getContext('2d');
       // Stash the camera's evaluated pan (== what the composite below subtracts) + z-dolly, so the layer
       // loop's applyLayerTransform can add per-depth parallax. Cleared right after the loop so a drawLayer
@@ -7142,7 +7153,9 @@ window.FM = window.FM || {};
       ctx.clearRect(0, 0, P.width, P.height);
       if (P.background) { ctx.fillStyle = P.background; ctx.fillRect(0, 0, P.width, P.height); }
       ctx.translate(cx, cy); ctx.scale(zoom, zoom); ctx.rotate(rot); ctx.translate(-camX, -camY);
-      ctx.drawImage(_camCv, 0, 0);   // camX,camY (scene point) lands at screen centre, scaled by zoom
+      // The plate is in its own device pixels now, so it is blitted back at PROJECT size — the
+      // surrounding baseT + camera transform then map that to the screen exactly as before.
+      ctx.drawImage(_camCv, 0, 0, P.width, P.height);   // camX,camY (scene point) lands at screen centre, scaled by zoom
       ctx.restore();
     }
   };

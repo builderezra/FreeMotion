@@ -1525,6 +1525,37 @@
     }
   });
 
+  test('a camera scene is rendered on the preview\u2019s own pixel grid', { item: 'cam-plate' }, function () {
+    // v5.36, from the camera audit and the same class as the adjustment-layer plate fixed in v5.10.
+    // The camera composites through an offscreen plate that was allocated at exactly P.width x
+    // P.height and never stamped with __fmRS/__fmOX/__fmOY. Two consequences: plateScale() read an
+    // undefined scale on it and returned 1, so inside a camera scene the adaptive playback quality
+    // tier did nothing whatsoever; and a zoomed preview could not supersample, so the plate had to be
+    // UPSCALED to the canvas and everything went soft. Measured at a 2x zoomed preview: a hard edge
+    // came out as a 2px ramp with a camera against 0px without. This asserts the camera path matches
+    // the no-camera path, which is the property that was broken.
+    const W = 320, H = 240, rs = 2;
+    function edgeRamp(withCam) {
+      const c = offscreen(Math.round(W * rs), Math.round(H * rs));
+      c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'R', x: W / 2, y: H / 2, shapeW: 120, shapeH: 90, fill: '#ffffff' });
+      const ls = [L];
+      if (withCam) ls.push(FM.makeLayer('camera', { name: 'C', x: W / 2, y: H / 2, start: 0, duration: 5 }));
+      FM.renderScene(c.getContext('2d'), { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: ls, selectedId: null, selectedIds: [] }, 0);
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      const y = c.height >> 1, at = x => d[(y * c.width + x) * 4];
+      let x = c.width >> 1;
+      while (x < c.width - 1 && at(x) > 240) x++;
+      const s0 = x;
+      while (x < c.width - 1 && at(x) > 15) x++;
+      return x - s0;
+    }
+    const plain = edgeRamp(false), withCam = edgeRamp(true);
+    if (withCam > plain + 1) {
+      throw new Error('on a 2x zoomed preview a hard edge is ' + withCam + 'px of ramp with a camera against ' + plain + 'px without — the camera plate is being upscaled instead of rendered at the preview\u2019s resolution');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
