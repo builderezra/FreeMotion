@@ -2053,6 +2053,54 @@
     }
   });
 
+  test('text: the wrap handles sit beside the text, never on it', { item: 'wrap-handle-clearance' }, function () {
+    // v5.45. Ezra: "Edit text menu is broken." Nothing was thrown and every control worked — what was
+    // broken was the PICTURE. The v5.40 wrap handles were a fixed 26px tall sitting ON the border, so
+    // on a one-line caption they were taller than the box and clamped over the first and last glyph,
+    // and their 14px touch pads then swallowed taps meant for the letters. They were also drawn
+    // inside the focused text editor, on top of the very text being typed.
+    const box = document.getElementById('select-box');
+    if (!box) throw new Error('#select-box missing');
+    const h = box.querySelector('.sb-w');
+    if (!h) throw new Error('no west wrap handle');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const hadEditing = document.body.classList.contains('text-editing');
+    try {
+      const L = FM.makeLayer('text', { name: 'clr', text: 'Hi', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, fontSize: 60 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.refreshAll();
+      if (FM.canvasEdit) FM.canvasEdit.update();
+      document.body.classList.remove('text-editing');
+
+      const br = box.getBoundingClientRect(), hr = h.getBoundingClientRect();
+      if (!(br.width > 0 && hr.width > 0)) throw new Error('nothing to measure (box ' + Math.round(br.width) + ', handle ' + Math.round(hr.width) + ')');
+      // BESIDE, with real clearance — not merely "does not overlap". Ending exactly on the border still
+      // puts the bar over the first glyph's edge and its touch pad well across it, which is the state
+      // that looked broken; a few px of gap is what makes it read as a handle on the border.
+      const CLEAR = 3;
+      if (hr.right > br.left - CLEAR) {
+        throw new Error('the west wrap handle ends ' + Math.round(br.left - hr.right) + 'px from the text box (want ' + CLEAR + 'px clear) — it sits on the glyphs instead of beside them');
+      }
+      // …and never taller than the thing it is a handle for.
+      if (hr.height > br.height + 0.5) {
+        throw new Error('the wrap handle is ' + Math.round(hr.height) + 'px tall on a ' + Math.round(br.height) + 'px box — it reads as a clamp, not a handle');
+      }
+
+      // Inside the focused text editor they have no job and must be gone.
+      document.body.classList.add('text-editing');
+      if (getComputedStyle(h).display !== 'none') {
+        throw new Error('the wrap handles still draw inside the text editor, on top of the text being typed');
+      }
+    } finally {
+      document.body.classList.toggle('text-editing', hadEditing);
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

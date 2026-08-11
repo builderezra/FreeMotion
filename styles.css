@@ -353,10 +353,21 @@ body {
    do a different job: the corners scale the layer, these two move the column the text wraps in. Their
    ::before (inherited from .sb-handle) already gives them a 14px touch pad, so a 4px-wide bar is still
    a fingertip target. Hidden by default; canvas-edit adds .sb-has-wrap for a text layer. */
-.sb-wrap { display: none; width: 4px; height: 26px; border-radius: 3px; top: 50%; margin-top: -13px; cursor: ew-resize; }
+.sb-wrap {
+  display: none; width: 3px; border-radius: 2px; cursor: ew-resize;
+  /* Proportional to the box, not a fixed 26px. A fixed bar was TALLER than the box on a one-line
+     caption, so it read as a clamp bolted onto the text rather than a handle on its border. */
+  top: 22%; height: 56%; min-height: 10px; max-height: 30px;
+}
 #select-box.sb-has-wrap .sb-wrap { display: block; }
-.sb-w { left: -3px; }
-.sb-e { right: -3px; }
+/* OUTSIDE the border, not on it. Sitting on the border put them over the first and last glyph, which
+   is what made a selected text layer look mangled — and their 14px touch pads then swallowed taps
+   meant for the letters underneath. */
+.sb-w { left: -8px; }
+.sb-e { right: -8px; }
+/* …and they have no job at all inside the focused text editor, where they were being drawn on top of
+   the very text being typed. */
+body.text-editing .sb-wrap { display: none !important; }
 .sb-rot { left: 50%; top: -28px; margin-left: -5px; width: 10px; height: 10px; border-radius: 50%; cursor: grab; }
 .sb-rot::after {
   content: ""; position: absolute; left: 50%; top: 9px;

@@ -169,6 +169,20 @@ var RECIPES = {
     send('pointermove', client(p1[0] + 0.004, 0.42));
     await sleep(500);
   },
+  // The Edit Text route the USER takes: select a text layer, open the element category. ?pop= opens
+  // one of the toolbar popovers on top.
+  async 'edit-text'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.scene.layers.length = 0;
+    const L = FM.makeLayer('text', { name: 'Title', text: 'Hello there', x: FM.scene.project.width / 2, y: FM.scene.project.height * 0.42, fontSize: 96 });
+    FM.scene.layers.push(L); FM.refreshAll(); await sleep(300);
+    FM.selectLayer(L.id); await sleep(400);
+    if (q.get('grid') === '1') { if (FM.mobile && FM.mobile.open) FM.mobile.open(); await sleep(600); return; }
+    FM.inspector.openCategory('element'); await sleep(800);
+    const pop = q.get('pop');
+    if (pop) { const b = d.querySelector('.te-' + pop); if (!b) throw new Error('no .te-' + pop); b.click(); await sleep(600); }
+    await sleep(300);
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 
