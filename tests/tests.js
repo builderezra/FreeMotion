@@ -1416,6 +1416,44 @@
     });
   });
 
+  test('the car shape is car-shaped: level wheels, open holes, nothing below the ground line', { item: 'car-shape' }, function () {
+    // v5.33. Rejected twice by eye, so this pins the properties that were actually wrong rather than
+    // the look. The old shape had rings printed on a blobby body with the floor line running straight
+    // through them, tyres below the floor, and an ink box that was literally square (57x58) — which is
+    // why all three judges called it a bubble-van blob.
+    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
+    if (!car || car.length < 5) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
+    const bbox = sub => sub.reduce((a, p) => ({
+      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]),
+      y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
+    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
+      let s = 0;
+      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
+      return s / 2;
+    };
+    const body = bbox(car[0]);
+    if ((body.x1 - body.x0) < (body.y1 - body.y0) * 1.4) {
+      throw new Error('the car is ' + (body.x1 - body.x0).toFixed(2) + ' wide by ' + (body.y1 - body.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
+    }
+    // Holes must wind against the body, or nonzero fill paints them solid.
+    const bodyWind = Math.sign(area(car[0]));
+    const holes = car.slice(1).filter(sub => Math.sign(area(sub)) !== bodyWind);
+    if (holes.length < 3) throw new Error('only ' + holes.length + ' sub-paths wind against the body — the windows/hubs would fill in solid');
+    // The two tyres: same size, same centre line.
+    const rings = car.slice(1).map(bbox).filter(b => (b.x1 - b.x0) > 0.12 && Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.02);
+    if (rings.length < 2) throw new Error('could not find two round wheels in the shape');
+    const [w1, w2] = rings.slice(0, 2);
+    const cy1 = (w1.y0 + w1.y1) / 2, cy2 = (w2.y0 + w2.y1) / 2;
+    if (Math.abs(cy1 - cy2) > 0.005) throw new Error('the wheels are not level (centres at y ' + cy1.toFixed(3) + ' and ' + cy2.toFixed(3) + ')');
+    if (Math.abs((w1.x1 - w1.x0) - (w2.x1 - w2.x0)) > 0.01) throw new Error('the two wheels are different sizes');
+    // Tyres sit IN arches: they reach below the body's underside, and stay inside its width.
+    if (!(Math.max(w1.y1, w2.y1) > body.y1)) throw new Error('the tyres do not reach below the body — they are discs laid on a slab, not wheels in arches');
+    if (Math.min(w1.x0, w2.x0) < body.x0 - 0.001 || Math.max(w1.x1, w2.x1) > body.x1 + 0.001) {
+      throw new Error('a wheel pokes outside the body outline');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
