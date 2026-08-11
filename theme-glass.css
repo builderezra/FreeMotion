@@ -310,6 +310,11 @@ html[data-theme="glass"] .set-switch.on { border-color: transparent; }
 html[data-theme="glass"] input:focus,
 html[data-theme="glass"] select:focus,
 html[data-theme="glass"] .hm-search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(90, 199, 237, .16); }
+/* …but NOT on the bare input inside that pill. It has no border and no radius of its own, so the
+   generic rule above drew a square-cornered 3px rectangle inscribed in the 12px-rounded pill — two
+   hard vertical bars running its full interior height. The wrap's own :focus-within halo, on the same
+   line, is the halo that was actually wanted. */
+html[data-theme="glass"] #hm-search-input:focus { box-shadow: none; }
 
 /* The shortcuts card's sticky Close footer needs an opaque surface of its own — the card itself is
    translucent, so an inherited background would let the scrolling list read through it. */

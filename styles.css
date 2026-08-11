@@ -486,6 +486,7 @@ body.text-editing .sb-wrap { display: none !important; }
    assigns (.cat-span2/3, .cat-mspan2/3, .cat-card-fx) set grid-column, which is inert here, so they
    go quiet on their own with no change to inspector.js. */
 .cat-grid { --cat-cols: 2; --cat-gap: 9px; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--cat-gap); }
+
 .cat-card { flex: 0 0 calc((100% - (var(--cat-cols) - 1) * var(--cat-gap)) / var(--cat-cols)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 17px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; transition: background .12s, border-color .12s, transform .04s; }
 .cat-card { position: relative; }
 .cat-num { position: absolute; top: 5px; left: 7px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-faint); font-variant-numeric: tabular-nums; opacity: .8; }
@@ -629,6 +630,14 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
    loose rather than deliberate, and could be nudged sideways. flex:1 with min-width:0 makes them
    divide whatever width there is, so the row is always exactly full and never scrolls. */
 .addmenu--sheet .addmenu-tab { flex: 1 1 0; min-width: 0; }
+/* The DESKTOP panel has the same disease with less room to cure it: five 66px tabs plus gaps is 358px
+   inside a 288px panel, so Template rendered at 292..358 — entirely past the edge, with the row's
+   scrollbar hidden and no fade or chevron to say a fifth tab existed. A mouse-only user had no route
+   to Templates at all (the '5' shortcut still worked, which is why nobody noticed). Dividing the row
+   five ways here would leave ~52px per tab and truncate "Elements", so the panel WRAPS to a grid
+   instead: every label readable, nothing to scroll, and it reads as deliberate. */
+.addmenu--panel .addmenu-tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
+.addmenu--panel .addmenu-tab { flex: none; min-width: 0; }
 .addmenu--sheet .addmenu-lbl { max-width: 100%; }
 .addmenu-tab:hover, .addmenu-card:hover { background: var(--panel-3); color: var(--text); border-color: var(--accent); }
 .addmenu-tab:active, .addmenu-card:active { transform: translateY(1px); }
@@ -2060,7 +2069,15 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .hm-search-hint { max-width: 700px; margin: 0 auto; font-size: 11.5px; color: var(--text-dim); padding: 6px 4px 0; line-height: 1.4; }   /* --text-dim, not --text-faint: at 11px the faint tone is ~3:1 and this line is the ONLY place the date syntax is taught */
 .hm-search-hint.hidden { display: none; }
 /* AM-style pill tabs */
-.hm-tabs { display: flex; gap: 10px; padding: 10px 18px 12px; }
+/* The tab row belongs to the SAME column as everything under it (v5.48, from the layout sweep). It
+   was a full-bleed flex row, so on a 1440 desktop the first pill sat at x=18 while the search field,
+   its hint and every project card started at 370 — a 352px offset, three rows sharing an edge and one
+   stranded out in the left gutter. 736 = .hm-grid's 700 plus this row's own 18px of side padding, so
+   with the global border-box the first pill lands exactly on the card edge at every width above it.
+   Phone is untouched: 736 is wider than the screen, so the max-width never binds. width:100% is
+   load-bearing — the row is a flex ITEM, so without it it shrink-wraps to its pills and margin:auto
+   centres that shrunken row rather than aligning its left edge with the column. */
+.hm-tabs { display: flex; gap: 10px; padding: 10px 18px 12px; width: 100%; max-width: 736px; margin: 0 auto; }
 .hm-tab { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font-size: 13.5px; font-weight: 700; padding: 9px 18px; cursor: pointer; border-radius: 999px; }
 .hm-tab.active { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 .hm-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 110px; }
@@ -2085,7 +2102,7 @@ body.hm-selecting .hm-card { touch-action: none; }
 .hm-open-badge {
   position: absolute; top: 5px; left: 5px;
   width: 33px; height: 22px; padding: 0; border-radius: 0;
-  font-size: 0; color: transparent; background: url('open-badge.png?v=2') center / contain no-repeat;
+  font-size: 0; color: transparent; background: url('open-badge.png?v=3') center / contain no-repeat;
   /* Edge light at badge scale (v4.92). drop-shadow follows alpha, so before the letters were inked
      this had to stay sub-pixel or it bloomed into the counters of the O and P. Now the only alpha
      edge left is the pill outline and the sparkle, which is all this should ever have rimmed. */
