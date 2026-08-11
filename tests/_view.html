@@ -48,6 +48,12 @@ var RECIPES = {
     await openEditor(d, FM); FM.selectLayer(null); await sleep(400);
     const fab = d.getElementById('add-fab'); if (!fab) throw new Error('no #add-fab at this width');
     fab.click(); await sleep(700);
+    const t = q.get('tab');
+    if (t) {
+      const b = d.querySelector('#add-sheet .addmenu-tab[data-key="' + t + '"]');
+      if (!b) throw new Error('no tab ' + t);
+      b.click(); await sleep(500);
+    }
   },
   async 'add-menu-shapes'(W2, d, FM) {
     await openEditor(d, FM); FM.selectLayer(null); await sleep(500);

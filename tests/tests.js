@@ -2101,6 +2101,76 @@
     }
   });
 
+  test('add menu: the tab row fills, and every tab is the same height', { item: 'add-tabs-even' }, function () {
+    // v5.46. Ezra: "I want the top row of all the addable stuff to take up the whole row neatly, also
+    // I want every tab in the add section on mobile to be the same height, currently some are lower
+    // than others and it makes going between them all feel jumpy and shit." Measured before the fix:
+    // the row overflowed by 4px (5 fixed 66px tabs + gaps = 358 in a 354px row) and the sheet ran
+    // 209px on Media/Audio/Template against 356px on Shape — 147px of movement per tab change.
+    //
+    // The phone sheet only exists below the mobile breakpoint, and this suite runs wide, so the real
+    // class structure is built at a fixed width and measured. That is still the shipped CSS doing the
+    // layout — only the viewport is staged.
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:354px;';
+    const mk = (cls, html) => { const n = document.createElement('div'); n.className = cls; if (html) n.innerHTML = html; return n; };
+    const build = cardCount => {
+      const root = mk('addmenu addmenu--sheet');
+      const main = mk('addmenu-main');
+      const tabs = mk('addmenu-tabs');
+      ['Elements', 'Shape', 'Media', 'Audio', 'Template'].forEach(l => {
+        const b = document.createElement('button');
+        b.className = 'addmenu-tab';
+        b.innerHTML = '<span class="addmenu-ic"></span><span class="addmenu-lbl">' + l + '</span>';
+        tabs.appendChild(b);
+      });
+      const body = mk('addmenu-body');
+      const grid = mk('addmenu-grid');
+      for (let i = 0; i < cardCount; i++) grid.appendChild(mk('addmenu-card', '<span class="addmenu-ic"></span><span class="addmenu-lbl">x</span>'));
+      body.appendChild(grid);
+      main.appendChild(tabs); main.appendChild(body);
+      root.appendChild(main);
+      return { root, tabs, body };
+    };
+    try {
+      document.body.appendChild(host);
+      // One card (the Audio tab's shape) against twenty (the Shape catalogue's shape).
+      const thin = build(1), fat = build(20);
+      host.appendChild(thin.root); host.appendChild(fat.root);
+
+      const rowW = thin.tabs.getBoundingClientRect().width;
+      const tabEls = Array.prototype.slice.call(thin.tabs.querySelectorAll('.addmenu-tab'));
+      if (tabEls.length !== 5) throw new Error('expected 5 tabs, built ' + tabEls.length);
+      if (thin.tabs.scrollWidth > Math.round(rowW) + 1) {
+        throw new Error('the tab row overflows: ' + thin.tabs.scrollWidth + 'px of tabs in a ' + Math.round(rowW) + 'px row — it scrolls instead of sitting flush');
+      }
+      const sum = tabEls.reduce((a, t) => a + t.getBoundingClientRect().width, 0);
+      const gaps = parseFloat(getComputedStyle(thin.tabs).columnGap || 0) * (tabEls.length - 1);
+      if (Math.abs((sum + gaps) - rowW) > 2) {
+        throw new Error('the tabs fill ' + Math.round(sum + gaps) + ' of ' + Math.round(rowW) + 'px — the row is not neatly full');
+      }
+      // …and they are equal to each other, not merely adding up.
+      const widths = tabEls.map(t => t.getBoundingClientRect().width);
+      if (Math.max.apply(null, widths) - Math.min.apply(null, widths) > 1.5) {
+        throw new Error('the tabs are uneven: ' + widths.map(Math.round).join(', '));
+      }
+
+      const hThin = thin.body.getBoundingClientRect().height;
+      const hFat = fat.body.getBoundingClientRect().height;
+      if (!(hThin > 20)) throw new Error('the sheet body collapsed to ' + Math.round(hThin) + 'px — this is the failure mode of the three earlier attempts');
+      if (Math.abs(hThin - hFat) > 1) {
+        throw new Error('a 1-card tab is ' + Math.round(hThin) + 'px and a 20-card tab is ' + Math.round(hFat) + 'px — the sheet still jumps by ' + Math.round(Math.abs(hThin - hFat)) + 'px between tabs');
+      }
+      // The tall one must SCROLL rather than grow, or "equal height" would just be clipping content.
+      if (fat.body.scrollHeight <= hFat + 1) throw new Error('the 20-card tab did not overflow at all — the test is not exercising the scrolling case');
+      if (!/auto|scroll/.test(getComputedStyle(fat.body).overflowY)) {
+        throw new Error('the sheet body does not scroll (overflow-y: ' + getComputedStyle(fat.body).overflowY + ') — content past the fold would be unreachable');
+      }
+    } finally {
+      if (host.parentElement) host.parentElement.removeChild(host);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

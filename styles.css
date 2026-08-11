@@ -609,6 +609,12 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   transition: background .12s, border-color .12s, color .12s, transform .04s;
 }
 .addmenu-tab { flex: 0 0 auto; min-width: 66px; }
+/* On the phone sheet the tabs SHARE the row instead of being fixed at 66px each. Five of them plus
+   gaps came to 358px in a 354px row, so the row overflowed by 4px and never sat flush — it read as
+   loose rather than deliberate, and could be nudged sideways. flex:1 with min-width:0 makes them
+   divide whatever width there is, so the row is always exactly full and never scrolls. */
+.addmenu--sheet .addmenu-tab { flex: 1 1 0; min-width: 0; }
+.addmenu--sheet .addmenu-lbl { max-width: 100%; }
 .addmenu-tab:hover, .addmenu-card:hover { background: var(--panel-3); color: var(--text); border-color: var(--accent); }
 .addmenu-tab:active, .addmenu-card:active { transform: translateY(1px); }
 .addmenu-tab.active { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
@@ -1991,13 +1997,26 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .fxb-catview-top, .fxb-catview-scroll { width: min(680px, 94vw); }
   .fxb-catview-scroll { background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 18px; flex: 1; }
 }
-/* Add-menu: the shape catalog is tall now — let the sheet body scroll instead of growing */
-.addmenu--sheet .addmenu-body { overflow: hidden; }
+/* Add-menu on the phone sheet (v5.46). Ezra: "I want every tab in the add section on mobile to be
+   the same height, currently some are lower than others and it makes going between them all feel
+   jumpy and shit." Measured before touching it: the sheet ran 209px on Media/Audio/Template and
+   356px on Shape — 147px of the whole sheet jumping under your thumb every time you changed tab.
+   The cause is that nothing ever STATED a height, so the sheet was content-sized and every tab got
+   its own. The fix is a stated height here and scrolling inside it.
+   Deliberately NOT "make the inner content fill its parent" — that is what I tried three times
+   earlier and it collapsed the panel every time, because asking children to fill a parent that is
+   itself sized by its children is circular. A number breaks the circle. */
+.addmenu--sheet .addmenu-body {
+  height: clamp(170px, 32vh, 260px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 /* …EXCEPT the Elements tab, which is a searchable list rather than a sideways pager: your own
    elements are an open-ended pile, and a page you have to know to swipe to is the same as not
    having them. This one scrolls. */
 .addmenu-body--list { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.addmenu--sheet .addmenu-body--list { overflow: hidden; }
+.addmenu--sheet .addmenu-body--list { overflow-y: auto; }   /* same stated height as above; only the axis differs */
 .addmenu-search { width: 100%; box-sizing: border-box; flex: 0 0 auto; padding: 9px 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm, 8px); color: var(--text); font-size: 13px; }
 .addmenu-search:focus { outline: none; border-color: var(--accent); }
 .addmenu-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
