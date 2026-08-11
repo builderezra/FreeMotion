@@ -135,6 +135,25 @@ body {
   box-shadow: 0 2px 10px rgba(24, 184, 156, .35);
 }
 .btn-accent:hover { filter: brightness(1.08); background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
+/* Desktop Export keeps its WORD — the label earns its place on a pointer device where there is room,
+   and an unlabelled square would be a downgrade — but the flat stroked arrow is replaced by the glass
+   render, so the same object reads across phone and desktop. */
+#btn-export .ico { display: none; }
+#btn-export {
+  /* A DARK body, not the mint fill it had. The artwork is a pale faceted crystal; on mint it turned
+     into a muddy smudge that read as a sticker stuck on a button — the "simply plastered on" look
+     Ezra asked me to avoid. On a dark tinted body it reads as the object it is, and the word keeps
+     the button unambiguous on a pointer device. */
+  background: rgba(41, 217, 187, .10);
+  border: 1px solid rgba(92, 224, 200, .42);
+  color: var(--am-green);
+}
+#btn-export:hover { background: rgba(41, 217, 187, .17); border-color: var(--am-green); filter: none; }
+#btn-export::before {
+  content: ""; flex: 0 0 auto; width: 24px; height: 24px;
+  background: url('export-btn.png?v=1') center / contain no-repeat;
+  filter: var(--glass-edge-sm);
+}
 
 /* ---------- main (stage wrapper) ----------
    Holds only #stage now — the inspector moved out to #app so the grid can place it either right of the
@@ -1891,13 +1910,22 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     font-size: 16px; font-weight: 600; padding: 7px 6px; border-radius: 8px; text-overflow: ellipsis; text-align: left;
   }
   .m-projname:focus { outline: none; background: var(--bg); border-color: var(--accent); }
+  /* Export is Ezra's own glass render now (v5.57) — the same object language as the + FAB and the
+     OPEN badge, so the app's one primary action looks like it belongs to this app rather than being a
+     mint rectangle borrowed from AM. Keyed off its black backdrop by flooding inward from the border,
+     which is what preserves the DARK arrow: a luminance key would have taken the arrow out with the
+     background (the mistake the OPEN badge taught). The button is now the artwork, so its own icon and
+     fill go — square, because the artwork is a squircle and letterboxing it inside a 42x36 rectangle
+     is exactly the "plastered on" look he asked me to avoid. */
   .m-export {
-    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-    width: 42px; height: 36px; border: 0; border-radius: 9px; cursor: pointer;
-    background: var(--am-green); color: #04210f; -webkit-tap-highlight-color: transparent;
+    flex: 0 0 auto; display: block;
+    width: 38px; height: 38px; border: 0; padding: 0; border-radius: 0; cursor: pointer;
+    background: url('export-btn.png?v=1') center / contain no-repeat;
+    -webkit-tap-highlight-color: transparent;
+    filter: var(--glass-edge-sm) drop-shadow(0 1px 3px rgba(0,0,0,.5));
   }
-  .m-export .m-ico { width: 20px; height: 20px; }
-  .m-export:active { filter: brightness(.92); }
+  .m-export .m-ico { display: none; }
+  .m-export:active { transform: translateY(1px); filter: var(--glass-edge-sm) brightness(1.08); }
 
   /* The + FAB (add) — bottom-right, above the timeline.
      v4.92a: this is Ezra's faceted glass CROSS render, and it lives here only — "make that the button
@@ -2538,6 +2566,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      icon centre x=16 inside a button whose centre is x=29.5, so it sat 13.5px off inside its own
      button. Ezra: "on PC at the moment, the export button isn't centered. It looks really bad." */
   body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; justify-content: center; }
+  body.layout-studio #btn-export::before { width: 30px; height: 30px; }
 
   /* The project name has nowhere to live in a 60px rail, so it floats over the stage's top-left —
      same input, same handlers, just repositioned. */

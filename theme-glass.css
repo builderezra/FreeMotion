@@ -291,11 +291,15 @@ html[data-theme="glass"] .set-switch.on {
   color: #05141b;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 3px 12px rgba(90, 199, 237, .26);
 }
-html[data-theme="glass"] .m-export,
+/* Export is Ezra's glass render now (v5.57), not a mint pill — this rule used to paint over it, and
+   it loads after styles.css so it won. Only the DESKTOP pill keeps a tinted body, and even that is a
+   dark one so the artwork inside it can be seen. */
+html[data-theme="glass"] .m-export { background: url('export-btn.png?v=1') center / contain no-repeat; box-shadow: none; }
 html[data-theme="glass"] #btn-export {
-  background: linear-gradient(180deg, #8ff0e0, var(--am-green));
-  color: #032a24;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 3px 12px rgba(92, 224, 200, .24);
+  background: rgba(41, 217, 187, .10);
+  border: 1px solid rgba(92, 224, 200, .45);
+  color: var(--am-green);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 3px 12px rgba(92, 224, 200, .16);
 }
 
 /* Thumbnails and media get a hairline rim so they sit IN the glass rather than on it. */
