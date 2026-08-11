@@ -1230,6 +1230,58 @@
     }
   });
 
+  test('a phone hold moves an UNSELECTED clip, a quick drag still does not', { item: 'hold-drag' }, async function () {
+    // v5.23. Ezra: "On mobile you can only drag clips on the timeline if you have them selected, you
+    // should be able to drag clips by holding down on them without selecting." The hold-to-move path
+    // was gated on `FM.scene.selectedId === layer.id`, which made moving a clip a two-gesture job.
+    // The gate is gone, but the thing it was incidentally protecting must still hold: a finger that
+    // is still TRAVELLING is a scrub, not a grab, so a quick drag must not drag the clip with it.
+    const savedScene = FM.scene, savedTime = FM.time;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 10, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const A = FM.makeLayer('shape', { shape: 'rect', name: 'AAA', x: 80, y: 80, shapeW: 40, shapeH: 40, fill: '#f00', start: 1, duration: 4 });
+      const B = FM.makeLayer('shape', { shape: 'rect', name: 'BBB', x: 80, y: 80, shapeW: 40, shapeH: 40, fill: '#0f0', start: 1, duration: 4 });
+      FM.scene.layers.push(A, B);
+      FM.selectLayer(A.id);   // A is selected; B is not, and B is the one we grab
+      const clip = [].find.call(document.querySelectorAll('.clip'), c => c.textContent.trim().indexOf('BBB') === 0);
+      if (!clip) throw new Error('no timeline clip rendered for the unselected layer');
+      const r = clip.getBoundingClientRect();
+      if (!r.width) throw new Error('the clip has no width to aim at');
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const down = px => clip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: px, clientY: y, button: 0, buttons: 1 }));
+      const move = px => document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: px, clientY: y, buttons: 1 }));
+      const up = px => document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: px, clientY: y }));
+
+      const nap = ms => new Promise(res => setTimeout(res, ms));
+
+      // 1. A quick drag, no settle, must leave the clip where it is — that gesture is a scrub.
+      const before = B.start;
+      down(x); for (let k = 1; k <= 8; k++) move(x + 120 * k / 8); up(x + 120);
+      await nap(120);
+      if (Math.abs(B.start - before) > 0.02) throw new Error('a quick drag moved the clip from ' + before + ' to ' + B.start + ' — that gesture is a scrub, not a grab');
+
+      // 2. A HOLD on that same still-unselected clip grabs it, moves it, and selects it.
+      FM.selectLayer(A.id);
+      const clip2 = [].find.call(document.querySelectorAll('.clip'), c => c.textContent.trim().indexOf('BBB') === 0);
+      const r2 = clip2.getBoundingClientRect(), x2 = r2.left + r2.width / 2, y2 = r2.top + r2.height / 2;
+      clip2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 8, pointerType: 'touch', isPrimary: true, clientX: x2, clientY: y2, button: 0, buttons: 1 }));
+      await nap(620);   // 350ms arm + the 150ms settle check, with headroom
+      for (let k = 1; k <= 6; k++) document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 8, pointerType: 'touch', isPrimary: true, clientX: x2 + 120 * k / 6, clientY: y2, buttons: 1 }));
+      await nap(60);
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, pointerType: 'touch', isPrimary: true, clientX: x2 + 120, clientY: y2 }));
+      await nap(150);
+      if (!(B.start > before + 0.1)) throw new Error('holding an unselected clip did not move it (start still ' + B.start + ') — this is the whole ask');
+      if (FM.scene.selectedId !== B.id) throw new Error('the grabbed clip was not selected, so you cannot see what you are dragging');
+      if (Math.abs(A.start - 1) > 0.02) throw new Error('the previously-selected clip moved too (' + A.start + ')');
+    } finally {
+      FM.scene = savedScene; FM.time = savedTime;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

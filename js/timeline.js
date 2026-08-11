@@ -986,8 +986,12 @@ window.FM = window.FM || {};
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
         clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now() };
-        if (FM.scene.selectedId === layer.id && !layer.locked) {
-          // Press-and-HOLD (finger settled) on a selected clip grabs it to move in time. But a finger
+        // ANY unlocked clip, selected or not. Ezra: "On mobile you can only drag clips on the timeline
+        // if you have them selected, you should be able to drag clips by holding down on them without
+        // selecting." Requiring a prior selection made moving a clip a two-gesture job — tap it, wait
+        // for the sheet, then press-hold — when the hold alone is unambiguous.
+        if (!layer.locked) {
+          // Press-and-HOLD (finger settled) on a clip grabs it to move in time. But a finger
           // that is still travelling is a SCRUB, not a hold — a slow "drag the line over the clips to
           // find a spot" gesture emits continuous pointermoves and may cover <8px in the first 350ms.
           // So only convert to a clip move once the finger has gone still for ~150ms; otherwise leave
@@ -1000,6 +1004,12 @@ window.FM = window.FM || {};
               if (performance.now() - clipTap.lastMoveAt > 150) {
                 // carry the whole multi-selection, exactly like the desktop mouse path — a touch
                 // hold-move on one selected clip must not silently break the others' relative sync
+                // Grabbing a clip that was NOT selected selects it first, so what you are dragging is
+                // visibly the thing you grabbed. Safe to rebuild here: the pointer capture lives on
+                // innerEl, which survives a rebuild, not on the clip element which does not.
+                if (FM.scene.selectedId !== layer.id && !(FM.selectionIds && FM.selectionIds().indexOf(layer.id) >= 0)) {
+                  FM.selectLayer(layer.id);
+                }
                 let group = [];
                 const selIds = FM.selectionIds ? FM.selectionIds() : [];
                 if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
