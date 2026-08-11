@@ -459,6 +459,7 @@ window.FM = window.FM || {};
    * against the list actually on screen — otherwise "Delete 3" on the Templates tab would have gone
    * looking for three template ids in the PROJECT store. */
   function selKind() {
+    if (tab === 'tutorials') return null;   // nothing selectable on the placeholder tab
     if (tab === 'templates') return { noun: 'template', store: FM.templates, canDuplicate: false };
     if (tab === 'elements') return { noun: 'element', store: FM.elements, canDuplicate: false };
     return { noun: 'project', store: FM.projects, canDuplicate: true };
@@ -707,7 +708,9 @@ window.FM = window.FM || {};
     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = ''; }
     // the + means something different on each tab — say which, so it isn't a mystery button
     const newBtn = document.getElementById('hm-new');
-    if (newBtn) newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project');
+    // Nothing to create on the Tutorials tab, so the + hides rather than making a project from a
+    // screen that has no projects on it.
+    if (newBtn) { newBtn.style.display = (tab === 'tutorials') ? 'none' : ''; newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project'); }
     if (tab === 'projects') {
       // Order follows Settings → Project sorting: most recently EDITED first (so the project you
       // just worked on is the front card), or plain A–Z by name.
@@ -742,6 +745,11 @@ window.FM = window.FM || {};
       }
       list.forEach(p => { shownIds.push(p.id); grid.appendChild(projectCard(p)); });
       pruneSelection();
+    } else if (tab === 'tutorials') {
+      // Nothing here yet ON PURPOSE — the tab is a placeholder Ezra asked for so the lessons have
+      // somewhere to land later. The copy says "coming", not "none found", because an empty state that
+      // reads like a failure is worse than no tab at all.
+      grid.appendChild(emptyState('▷', 'Tutorials are coming', 'Short walkthroughs of the editor will live here.'));
     } else if (tab === 'templates') {
       let list = FM.templates.list();
       if (query && list.length) {

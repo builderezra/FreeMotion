@@ -14,7 +14,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=289">
+<link rel="stylesheet" href="styles.css?v=290">
 <link rel="stylesheet" href="theme-glass.css?v=15">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -119,7 +119,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.49</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.50</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -347,6 +347,10 @@
       <button class="hm-tab active" data-tab="projects">Projects</button>
       <button class="hm-tab" data-tab="templates">Templates</button>
       <button class="hm-tab" data-tab="elements">Elements</button>
+      <!-- Tutorials is deliberately EMPTY for now (v5.50). Ezra: "don't make any tutorials yet, but
+           add a tab alongside elements projects etc that says tutorials, we will later make tutorials
+           and put them in there." The tab and its empty state exist so the content can drop in. -->
+      <button class="hm-tab" data-tab="tutorials">Tutorials</button>
     </div>
     <div class="hm-scroll"><div class="hm-grid"></div></div>
     <!-- Geometry, not a font glyph. A text "+" sits wherever the device's resolved font puts its ink
@@ -583,7 +587,7 @@
   <script src="js/history.js?v=25"></script>
   <script src="js/storage.js?v=88"></script>
   <script src="js/medialib.js?v=3"></script>
-  <script src="js/home.js?v=110"></script>
+  <script src="js/home.js?v=111"></script>
   <script src="js/graph-editor.js?v=13"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

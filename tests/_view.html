@@ -36,6 +36,7 @@ var RECIPES = {
   async home(W2) {},
   async 'home-templates'(W2, d) { d.querySelector('.hm-tab[data-tab="templates"]').click(); await sleep(400); },
   async 'home-elements'(W2, d) { d.querySelector('.hm-tab[data-tab="elements"]').click(); await sleep(400); },
+  async 'home-tutorials'(W2, d) { d.querySelector('.hm-tab[data-tab="tutorials"]').click(); await sleep(400); },
   async 'home-search'(W2, d) { d.getElementById('hm-search-btn').click(); await sleep(400); },
   async editor(W2, d, FM) { await openEditor(d, FM); },
   async 'editor-selected'(W2, d, FM) {
