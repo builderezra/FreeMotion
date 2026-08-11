@@ -247,7 +247,7 @@ window.FM = window.FM || {};
     const sel = FM.selectedLayer(FM.scene);
     if (sel && sel.type === 'camera') {   // camera selected → dragging anywhere pans the view (grab-the-scene)
       e.preventDefault();
-      drag = { mode: 'campan', pointerId: e.pointerId, layer: sel, startP: p, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
+      drag = { mode: 'campan', pointerId: e.pointerId, layer: sel, startP: p, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, rot: (FM.evalProp(sel.transform.rotation, FM.time) || 0) * Math.PI / 180, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
       return;
     }
     if (sel) {
@@ -391,8 +391,20 @@ window.FM = window.FM || {};
       drag.moved = true;
     }
     if (drag.mode === 'campan') {   // pan the camera so the grabbed scene point follows the cursor
-      const nx = drag.startX - (p.x - drag.startP.x) / drag.zoom;
-      const ny = drag.startY - (p.y - drag.startP.y) / drag.zoom;
+      // UN-ROTATE the finger delta, not just un-zoom it. The composite applies ctx.rotate(rot) to the
+      // whole scene, so a screen-space drag has to come back through the camera's inverse rotation
+      // before it can be written as camera x/y. Without it the scene moved off by exactly the camera
+      // angle: measured with a 281px rightward drag, rot=0 gave (+281, 0) correctly, rot=45 gave
+      // (+198, +198), rot=90 sent the scene straight DOWN, and rot=180 sent it BACKWARDS. The
+      // parented-layer branch a few lines below already does this correctly; the camera never did.
+      let fx = (p.x - drag.startP.x) / drag.zoom, fy = (p.y - drag.startP.y) / drag.zoom;
+      if (drag.rot) {
+        const c = Math.cos(-drag.rot), si = Math.sin(-drag.rot);
+        const rx = fx * c - fy * si, ry = fx * si + fy * c;
+        fx = rx; fy = ry;
+      }
+      const nx = drag.startX - fx;
+      const ny = drag.startY - fy;
       FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
       FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
       FM.requestRender(); update(); return;

@@ -1189,6 +1189,47 @@
     }
   });
 
+  test('dragging a rotated camera still moves the scene the way you drag', { item: 'cam-pan-rot' }, function () {
+    // v5.22, from the camera audit. The campan drag divided the finger delta by zoom but never
+    // un-rotated it, while the composite applies ctx.rotate(rot) to the whole scene. So the scene
+    // came out off by exactly the camera angle: a 281px rightward drag gave (+281,0) at rot=0,
+    // (+198,+198) at 45, straight DOWN at 90 and BACKWARDS at 180.
+    // Asserted through the composite's own relation rather than by eye: screen displacement of a
+    // scene point is R(rot) applied to -Δcamera, and that must come out as the drag, every time.
+    const pv = document.getElementById('preview');
+    if (!pv) throw new Error('#preview missing');
+    const r = pv.getBoundingClientRect();
+    if (!r.width) throw new Error('#preview has no size to aim at');
+    const savedScene = FM.scene;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    try {
+      [0, 45, 90, 180].forEach(deg => {
+        FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+        const cam = FM.makeLayer('camera', { name: 'C', x: 160, y: 120, start: 0, duration: 5 });
+        FM.setTransform(cam, 'rotation', deg, 0);
+        FM.scene.layers.push(cam);
+        FM.selectLayer(cam.id);
+        const x0 = FM.evalProp(cam.transform.x, 0), y0 = FM.evalProp(cam.transform.y, 0);
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const ev = (t, x, y) => pv.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+        ev('pointerdown', cx, cy);
+        for (let k = 1; k <= 6; k++) ev('pointermove', cx + 100 * k / 6, cy);
+        ev('pointerup', cx + 100, cy);
+        const dcx = FM.evalProp(cam.transform.x, 0) - x0, dcy = FM.evalProp(cam.transform.y, 0) - y0;
+        // screen delta = R(rot) · (−Δcam)
+        const rad = deg * Math.PI / 180, c = Math.cos(rad), s = Math.sin(rad);
+        const sx = (-dcx) * c - (-dcy) * s, sy = (-dcx) * s + (-dcy) * c;
+        if (Math.abs(sy) > Math.abs(sx) * 0.15) throw new Error('at ' + deg + '° a rightward drag moved the scene (' + Math.round(sx) + ',' + Math.round(sy) + ') — it should be almost purely horizontal');
+        if (!(sx > 0)) throw new Error('at ' + deg + '° a rightward drag moved the scene LEFT (' + Math.round(sx) + ')');
+      });
+    } finally {
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
