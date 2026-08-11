@@ -1486,6 +1486,45 @@
     if (ratio > 1.5) throw new Error('layers the same distance either side of the focus plane blur by ' + near + 'px and ' + far + 'px (ratio ' + ratio.toFixed(2) + ') — the blur is depth-dependent twice over');
   });
 
+  test('a camera does not stop blends and adjustments seeing the background', { item: 'cam-bg' }, function () {
+    // v5.35, two HIGH findings from the camera audit with one cause. The project background is
+    // painted on the real canvas rather than into the camera's plate, deliberately, so it stays put
+    // when the camera pans — Ezra: "the background is usually one solid colour so would you even
+    // notice the panning? Keep the background unaffected." But painting it ONLY there left the plate
+    // transparent where the background should be, so a blend mode had nothing to blend against and an
+    // adjustment layer had nothing to grade: both silently stopped working the moment a camera existed.
+    // It is now also laid into the plate, INVERSE-MAPPED through the camera transform, so the
+    // composite puts it exactly over the frame and it still does not move. All three properties are
+    // asserted, because fixing either one alone is easy and wrong.
+    const W = 300, H = 220, BG = '#3060c0';
+    function px(layers, camX) {
+      const c = offscreen(W, H);
+      c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const ls = layers.slice();
+      if (camX != null) ls.push(FM.makeLayer('camera', { name: 'C', x: camX, y: H / 2, start: 0, duration: 5 }));
+      FM.renderScene(c.getContext('2d'), { project: { width: W, height: H, fps: 30, duration: 5, background: BG }, layers: ls, selectedId: null, selectedIds: [] }, 0);
+      const d = c.getContext('2d').getImageData(0, 0, W, H).data;
+      const rd = (x, y) => { const i = (y * W + x) * 4; return d[i] + ',' + d[i + 1] + ',' + d[i + 2]; };
+      return { corner: rd(20, 20), far: rd(W - 20, H - 20), centre: rd(W >> 1, H >> 1) };
+    }
+    // 1. the background must not move with the camera
+    const rest = px([], W / 2), panned = px([], W / 2 + 70);
+    if (rest.corner !== panned.corner || rest.far !== panned.far) {
+      throw new Error('the background moved when the camera panned (' + rest.corner + ' → ' + panned.corner + ') — it is meant to stay fixed');
+    }
+    // 2. a blend mode must composite against it, exactly as it does with no camera
+    const mkBlend = () => { const b = FM.makeLayer('shape', { shape: 'rect', name: 'B', x: W / 2, y: H / 2, shapeW: 120, shapeH: 90, fill: '#ffffff' }); b.blendMode = 'difference'; return b; };
+    const noCam = px([mkBlend()], null).centre, withCam = px([mkBlend()], W / 2).centre;
+    if (noCam === '255,255,255') throw new Error('the blend did not apply even without a camera — the probe is wrong, not the app');
+    if (withCam !== noCam) throw new Error('a difference blend renders ' + withCam + ' with a camera and ' + noCam + ' without — the camera plate has no background to blend against');
+    // 3. an adjustment layer must grade it
+    const adj = FM.makeLayer('adjustment', { name: 'grade' });
+    adj.effects = [{ type: 'invert', enabled: true, params: { amount: 1 } }];
+    if (px([adj], W / 2).corner === rest.corner) {
+      throw new Error('an adjustment layer left the background untouched with a camera present — it cannot see it');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

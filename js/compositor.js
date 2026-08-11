@@ -6826,6 +6826,28 @@ window.FM = window.FM || {};
   // control reads on a camera you have never touched — it is a long lens, which is exactly why Z
   // parallax has always been subtle. Opening it up shortens f, and every depth effect (layer scale
   // with z, camera parallax, focus falloff) strengthens together, because they all divide by f.
+  /* The screen rectangle, pushed BACK through the camera's transform into plate coordinates. The
+     composite does translate(cx,cy) · scale(zoom) · rotate(rot) · translate(-camX,-camY), so a plate
+     point p lands at C + zoom·R·(p − cam); inverting that gives p = cam + Rᵀ·((screen − C)/zoom).
+     Used to lay the project background into the camera's plate so it still reads as fixed. */
+  function cameraFrameQuad(cam, t, P) {
+    if (!cam || !cam.transform) return null;
+    const bv = FM.behaviorValue, tr = cam.transform;
+    const zoom = Math.max(1e-3, (bv ? bv(cam, 'scale', FM.evalProp(tr.scale, t) || 1, t) : (FM.evalProp(tr.scale, t) || 1)));
+    const camX = bv ? bv(cam, 'x', FM.evalProp(tr.x, t), t) : FM.evalProp(tr.x, t);
+    const camY = bv ? bv(cam, 'y', FM.evalProp(tr.y, t), t) : FM.evalProp(tr.y, t);
+    const rot = ((bv ? bv(cam, 'rotation', FM.evalProp(tr.rotation, t) || 0, t) : (FM.evalProp(tr.rotation, t) || 0))) * Math.PI / 180;
+    if (!isFinite(zoom) || !isFinite(camX) || !isFinite(camY) || !isFinite(rot)) return null;
+    const cx = P.width / 2, cy = P.height / 2;
+    const c = Math.cos(-rot), si = Math.sin(-rot);
+    // A generous margin, so a rotated frame's corners are still covered after the inverse rotation.
+    const m = Math.max(P.width, P.height);
+    return [[-m, -m], [P.width + m, -m], [P.width + m, P.height + m], [-m, P.height + m]].map(q => {
+      const dx = (q[0] - cx) / zoom, dy = (q[1] - cy) / zoom;
+      return [camX + (dx * c - dy * si), camY + (dx * si + dy * c)];
+    });
+  }
+
   FM.cameraLens = function (cam, t, P) {
     if (!cam) return null;
     const H = Math.max(1, (P && P.height) || 1080);
@@ -7031,9 +7053,34 @@ window.FM = window.FM || {};
     target.save();
     baseT(target);
     target.clearRect(0, 0, P.width, P.height);
-    if (!cam && P.background) {   // with a camera, the bg is painted on the real canvas so it stays fixed
+    if (!cam && P.background) {   // no camera: the plate IS the frame, so a plain fill is the background
       target.fillStyle = P.background;
       target.fillRect(0, 0, P.width, P.height);
+    } else if (cam && P.background) {
+      /* WITH a camera the background must stay FIXED on screen — Ezra: "the background is usually one
+         solid colour so would you even notice the panning? Keep the background unaffected." It is
+         painted on the real canvas below for exactly that reason. But painting it ONLY there meant
+         nothing inside the camera's plate could see it: a blend mode had nothing to blend against and
+         an adjustment layer had nothing to grade, so both silently stopped working the moment a camera
+         existed — two separate HIGH findings from the camera audit, one cause.
+         So it goes into the plate as well, INVERSE-MAPPED: the quad filled here is the screen
+         rectangle pushed back through the camera's transform, so once the composite applies that
+         transform the fill lands exactly over the frame and does not move when the camera pans. Same
+         colour as the real-canvas fill underneath it, so there is nothing to see — the whole point is
+         what the layers above it can now blend and grade against. */
+      const _bc = cameraFrameQuad(cam, t, P);
+      if (_bc) {
+        target.save();
+        target.setTransform(1, 0, 0, 1, 0, 0);
+        baseT(target);
+        target.fillStyle = P.background;
+        target.beginPath();
+        target.moveTo(_bc[0][0], _bc[0][1]);
+        for (let qi = 1; qi < _bc.length; qi++) target.lineTo(_bc[qi][0], _bc[qi][1]);
+        target.closePath();
+        target.fill();
+        target.restore();
+      }
     }
     // GROUP units (masking / effects / opacity / blend): members composite as ONE flattened unit,
     // drawn at the z-slot of the group's bottom-most member so stacking stays correct.
