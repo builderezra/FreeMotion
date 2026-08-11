@@ -181,6 +181,34 @@ window.FM = window.FM || {};
     remove(name) { this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
   };
 
+  // Copy/paste for ONE effect (v5.39, Ezra: "in the three dots for each effect, add options to copy
+  // effect and paste effect"). Kept in localStorage rather than a variable, because the point of
+  // copying an effect is usually to put it on a layer in a DIFFERENT project — a page-lifetime
+  // clipboard would be empty exactly when you got there.
+  //
+  // Copies carry the live params, which means they carry keyframes: an animated parameter IS a
+  // channel object sitting in fx.params[key], so the deep clone takes the animation with it. That is
+  // the same reason Duplicate clones instead of building a fresh default instance.
+  FM.fxClipboard = {
+    _key: 'fm.fxclip',
+    copy(fx) {
+      // jsonReplacer drops the runtime '_' props — without it the clipboard carries _expanded, and a
+      // pasted effect arrives with its editor already open, shoving the stack around.
+      try { localStorage.setItem(this._key, JSON.stringify(fx, FM.jsonReplacer)); return true; }
+      catch (e) { return false; }
+    },
+    read() {
+      try {
+        const fx = JSON.parse(localStorage.getItem(this._key) || 'null');
+        // A type that no longer exists (older build, renamed effect) would paste a row that renders
+        // nothing and cannot be edited — treat it as an empty clipboard.
+        if (!fx || !fx.type || !FM.fxRegistry.get(fx.type)) return null;
+        return fx;
+      } catch (e) { return null; }
+    },
+    label() { const fx = this.read(); if (!fx) return null; const reg = FM.fxRegistry.get(fx.type); return (reg && reg.label) || fx.type; }
+  };
+
   // The mutation trio every effect change must run (canvas + timeline keyframes + undo).
   function afterFx() { FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); }
 
@@ -557,10 +585,31 @@ window.FM = window.FM || {};
     if (!FM.contextMenu) return;
     const r = btn.getBoundingClientRect();
     const reg = FM.fxRegistry.get(fx.type);
-    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, [
+    const clipLabel = FM.fxClipboard.label();
+    const items = [
       { label: 'Reset', action: () => { const inst = FM.fxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterFx(); } } },
       // Duplicate must carry the CURRENT settings + keyframes (a fresh default instance isn't a duplicate)
       { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); layer.effects.splice(idx + 1, 0, copy); afterFx(); } },
+      { label: 'Copy effect', action: () => {
+        const ok = FM.fxClipboard.copy(fx);
+        if (FM.toast) FM.toast(ok ? 'Copied ' + ((reg && reg.label) || fx.type) : 'Couldn’t copy this effect', 1600);
+      } },
+    ];
+    // Naming what is on the clipboard matters more here than in most menus: an effect stack is a list
+    // of near-identical rows, and a bare "Paste effect" gives you no way to tell what you are about to
+    // land on it. Absent entirely when there is nothing to paste, rather than present and dead.
+    if (clipLabel) {
+      items.push({ label: 'Paste ' + clipLabel, action: () => {
+        const fxIn = FM.fxClipboard.read();
+        if (!fxIn) { if (FM.toast) FM.toast('Nothing to paste', 1400); return; }
+        delete fxIn._expanded;
+        if (!Array.isArray(layer.effects)) layer.effects = [];
+        layer.effects.splice(idx + 1, 0, fxIn);   // below the effect you opened the menu on
+        afterFx();
+        if (FM.toast) FM.toast('Pasted ' + clipLabel, 1400);
+      } });
+    }
+    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, items.concat([
       { label: 'Save as preset…', action: () => {
         const name = prompt('Preset name:', (reg ? reg.label : fx.type) + ' preset'); if (!name || !name.trim()) return;
         const p = FM.effectPresets && FM.effectPresets.capture(fx, name.trim());
@@ -569,7 +618,7 @@ window.FM = window.FM || {};
       } },
       { sep: true },
       { label: 'Delete', danger: true, action: () => { layer.effects.splice(idx, 1); afterFx(); } },
-    ]);
+    ]));
   }
 
   // Gestures on an effect row: SWIPE LEFT to delete, PRESS-HOLD then drag up/down to reorder.

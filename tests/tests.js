@@ -1633,6 +1633,95 @@
     if (ratio < 4.5) throw new Error('ink against the median glass around it is only ' + ratio.toFixed(2) + ':1 — under the 4.5:1 readable floor');
   });
 
+  test('effects: an effect can be copied off one layer and pasted onto another', { item: 'fx-copy-paste' }, function () {
+    // v5.39. Ezra: "in the three dots for each effect, add options to copy effect and paste effect."
+    // Driven through the REAL ⋯ menu rather than by calling the clipboard directly, because the whole
+    // feature is two menu entries — a clipboard that works behind a menu that never offers it is the
+    // failure worth catching.
+    if (!FM.fxClipboard) throw new Error('FM.fxClipboard is missing');
+    const menuLabels = () => Array.prototype.slice.call(document.querySelectorAll('#ctx-menu .ctx-item'))
+      .map(n => (n.textContent || '').trim());
+    const openMore = () => {
+      // The effect list lives behind the inspector's Effects CATEGORY — a plain refresh() leaves the
+      // panel on its category grid and renders no .fx-row at all.
+      FM.inspector.openCategory('effects');
+      const btn = document.querySelector('.fx-row.fx-open .fx-head .fx-icon-btn[title="More"]');
+      if (!btn) throw new Error('no ⋯ button on the open effect row');
+      btn.click();
+      return menuLabels();
+    };
+
+    const saved = localStorage.getItem('fm.fxclip');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      localStorage.removeItem('fm.fxclip');
+
+      const src = FM.makeLayer('shape', { shape: 'rect', name: 'src', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#ff0000' });
+      const dst = FM.makeLayer('shape', { shape: 'rect', name: 'dst', x: 200, y: 100, shapeW: 80, shapeH: 80, fill: '#00ff00' });
+      const fx = FM.fxRegistry.makeInstance('blur');
+      if (!fx) throw new Error('no blur effect in the registry to test with');
+      // A non-default value AND an animated one: a copy that silently drops keyframes would still pass
+      // if the only thing checked were a scalar.
+      const pk = Object.keys(fx.params)[0];
+      if (pk == null) throw new Error('the blur effect has no params to carry');
+      fx.params[pk] = 7.5;
+      fx._expanded = true;
+      src.effects = [fx];
+      dst.effects = [];
+      FM.scene.layers.push(src, dst);
+
+      FM.selectLayer(src.id);
+      let labels = openMore();
+      if (!labels.some(l => /^Copy effect$/.test(l))) throw new Error('the ⋯ menu has no "Copy effect": ' + JSON.stringify(labels));
+      if (labels.some(l => /^Paste /.test(l))) throw new Error('a "Paste" entry is offered with an empty clipboard: ' + JSON.stringify(labels));
+
+      if (!FM.fxClipboard.copy(fx)) throw new Error('FM.fxClipboard.copy returned false');
+      if (FM.fxClipboard.label() !== (FM.fxRegistry.get('blur') || {}).label) {
+        throw new Error('the clipboard does not name the copied effect: ' + FM.fxClipboard.label());
+      }
+
+      // The destination has no effects, so it has no row to open a ⋯ on — check the entry on the
+      // SOURCE's stack, where there is one, and apply the paste to the destination by hand below.
+      FM.selectLayer(src.id);
+      labels = openMore();
+      const paste = labels.find(l => /^Paste /.test(l));
+      if (!paste) throw new Error('no "Paste" entry after copying: ' + JSON.stringify(labels));
+      if (!/Paste .+/.test(paste)) throw new Error('the paste entry does not name the effect: ' + paste);
+
+      // Apply it the way the menu does, onto the OTHER layer.
+      const got = FM.fxClipboard.read();
+      if (!got) throw new Error('clipboard read back null straight after a successful copy');
+      if (got.params[pk] !== 7.5) throw new Error('the copy lost its edited parameter: ' + got.params[pk]);
+      if ('_expanded' in got) throw new Error('the copy carried the runtime _expanded flag, so a paste arrives with its editor already open');
+      dst.effects.push(got);
+      if (dst.effects.length !== 1 || dst.effects[0].type !== 'blur') throw new Error('paste did not land on the destination layer');
+
+      // …and again with that parameter ANIMATED. A keyframed param is not a number, it is a channel
+      // object living in the same slot, so a clipboard that flattened values would still have passed
+      // everything above while quietly turning every animation into a still.
+      fx.params[pk] = { kf: [{ t: 0, v: 3 }, { t: 1, v: 9 }] };
+      if (!FM.isAnimated(fx.params[pk])) throw new Error('the probe channel is not what FM calls animated — this check would prove nothing');
+      if (!FM.fxClipboard.copy(fx)) throw new Error('copying an animated effect returned false');
+      const anim = FM.fxClipboard.read();
+      if (!anim || !FM.isAnimated(anim.params[pk])) throw new Error('the copy lost its keyframes — an animated effect pastes back as a static one');
+      if (anim.params[pk].kf.length !== 2 || anim.params[pk].kf[1].v !== 9) {
+        throw new Error('the pasted channel does not match what was copied: ' + JSON.stringify(anim.params[pk]));
+      }
+
+      // A type this build no longer knows must read as an empty clipboard, not paste a dead row.
+      localStorage.setItem('fm.fxclip', JSON.stringify({ type: 'no-such-effect-xyz', params: {} }));
+      if (FM.fxClipboard.read()) throw new Error('an unknown effect type on the clipboard still reads as pasteable');
+      if (FM.fxClipboard.label()) throw new Error('an unknown effect type still produces a menu label');
+    } finally {
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      if (saved == null) localStorage.removeItem('fm.fxclip'); else localStorage.setItem('fm.fxclip', saved);
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.inspector.refresh();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
