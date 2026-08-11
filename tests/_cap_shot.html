@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Captions phone screenshot</title></head>
+<body style="margin:0;background:#000">
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0;display:block"></iframe>
+<script>
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.scene && w.FM.captions) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+var MODE = new URLSearchParams(location.search).get('m') || 'timeline';
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow;
+  waitFM(w).then(async function (FM) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await sleep(400);
+    FM.scene.layers.length = 0;
+    FM.scene.project.width = 1080; FM.scene.project.height = 1920; FM.scene.project.duration = 8;
+    FM.addCaptionLayer();
+    var lay = FM.scene.layers[0];
+    lay.captions = [
+      { start: 0, end: 1.4, text: 'This is the first caption' },
+      { start: 1.6, end: 3.2, text: 'and a second one here' },
+      { start: 4.0, end: 6.0, text: '' },
+    ];
+    lay.fontSize = 90;
+    FM.selectLayer(lay.id);
+    FM.scrubTime(0.6);
+    FM.timeline.rebuild();
+    if (FM.inspector) FM.inspector.refresh();
+    await sleep(500);
+    if (MODE === 'sheet') {
+      FM.textEdit.start(lay.id);
+      await sleep(250);
+      var b = w.document.querySelector('.te-extras'); if (b) b.click();
+      await sleep(400);
+    }
+    document.title = 'READY';
+  }).catch(function (e) { document.title = 'ERR ' + e.message; });
+});
+</script>
+</body>
+</html>

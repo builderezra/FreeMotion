@@ -2624,11 +2624,19 @@ window.FM = window.FM || {};
         // Commit + close the focused text editor first, so the caption captures what's actually typed
         // and the editor's textarea can't write the old text back over the now-empty layer.text.
         if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.layerId() === layer.id) FM.textEdit.stop();
-        layer.captions = [{ start: 0, end: 2, text: layer.text || 'Caption' }]; layer.text = '';
+        if (FM.captions) FM.captions.makeTrack(layer);
+        else { layer.captions = [{ start: 0, end: 2, text: layer.text || 'Caption' }]; layer.text = ''; }
         FM.requestRender(); commitH();
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
         if (FM.inspector) FM.inspector.refresh();
       });
       body.appendChild(capBtn);
+      // Speech detection is the reason to make a caption track at all, so it is reachable from the
+      // empty state too — FM.captions.detect() converts the layer and fills the grid in one press
+      // (carrying whatever text was already on the layer onto the first cue).
+      if (FM.captionsEditor && FM.captionsEditor.detectRow) {
+        body.appendChild(FM.captionsEditor.detectRow(layer, () => { if (FM.inspector) FM.inspector.refresh(); }));
+      }
     }
   }
   FM._textExtras = buildTextExtras;

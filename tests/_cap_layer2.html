@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Captions Layer 2 — detect speech end to end</title></head>
+<body>
+<pre id="out">running…</pre>
+<iframe id="app" src="../index.html" style="position:fixed;left:-10000px;top:0;width:1200px;height:800px;border:0"></iframe>
+<script>
+var L = [], FAIL = 0;
+function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function post() { try { fetch('/_result/layer2', { method: 'POST', body: L.join('\n') }).catch(function () {}); } catch (e) {} }
+function ok(c, name, d) { if (c) say('PASS  ' + name + (d ? '   [' + d + ']' : '')); else { FAIL++; say('FAIL  ' + name + '   ' + (d || '')); } }
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.renderScene && w.FM.scene && w.FM.captions) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* A REAL .wav file (16-bit PCM, 16 kHz) so the whole path runs: File -> FM.decodeAudio at 8 kHz
+ * (resampling from 16k) -> FM.detectSpeech -> cue times mapped through the clip's trim and speed. */
+function makeWav(rate, dur, bursts) {
+  var r = rng(4242), n = Math.round(rate * dur), f = new Float32Array(n);
+  for (var i = 0; i < n; i++) f[i] = (r() * 2 - 1) * 0.0008;
+  bursts.forEach(function (b, bi) {
+    var s = Math.round(b[0] * rate), e = Math.round(b[1] * rate), lp = 0, atk = Math.round(0.03 * rate);
+    for (var i = s; i < e; i++) {
+      var tt = (i - s) / rate;
+      var am = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * 4.3 * tt + bi), 2);
+      var env = Math.min(1, (i - s) / atk) * Math.min(1, (e - i) / atk);
+      var a = 0.55 + 0.4 * Math.sin(2 * Math.PI * 2.1 * tt + bi * 0.7);
+      var white = r() * 2 - 1; lp = lp + (1 - a) * (white - lp);
+      f[i] += (a > 0.75 ? white : lp * 2.2) * am * env * 0.28;
+    }
+  });
+  var buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  function str(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (var i = 0; i < n; i++) { var x = Math.max(-1, Math.min(1, f[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7FFF, true); }
+  return buf;
+}
+
+var TRUTH = [[0.90, 2.20], [3.60, 4.40], [6.10, 8.90]];
+var SRC_DUR = 11;
+
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow;
+  waitFM(w).then(async function (FM) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await sleep(200);
+    ok(typeof FM.detectSpeech === 'function', 'FM.detectSpeech is loaded in the app');
+
+    var wav = makeWav(16000, SRC_DUR, TRUTH);
+    var file = new w.File([wav], 'speech.wav', { type: 'audio/wav' });
+    say('wav: ' + (wav.byteLength / 1024).toFixed(0) + ' KB, 16 kHz mono, ' + SRC_DUR + 's');
+
+    async function run(label, srcOver, capOver, expect) {
+      FM.scene.layers.length = 0;
+      FM.scene.project.duration = 20;
+      // NOTE: FM.makeLayer only reads a whitelist of props (name/start/duration/x/y/…). trimStart,
+      // speed and an EMPTY text are not in it — 'text' even falls back to the placeholder 'Text' —
+      // so they have to be assigned after construction or the harness silently tests the wrong clip.
+      var src = FM.makeLayer('video', { name: 'Voice', start: srcOver.start || 0, duration: SRC_DUR });
+      src.trimStart = srcOver.trimStart || 0;
+      src.speed = srcOver.speed || 1;
+      FM.media.set(src.id, { kind: 'video', file: file, duration: SRC_DUR, width: 0, height: 0, el: null });
+      var cap = FM.makeLayer('text', { name: 'Captions', start: capOver.start || 0, duration: 20 });
+      cap.text = '';
+      cap.captions = [];
+      FM.scene.layers.push(src, cap);
+      var prog = [];
+      var t0 = performance.now();
+      var r = await FM.captions.detect(cap, src, function (p) { prog.push(p); });
+      var ms = performance.now() - t0;
+      say('\n--- ' + label + ' ---');
+      say('stats: ' + JSON.stringify(r.stats));
+      say('cues: ' + cap.captions.map(function (c) { return c.start.toFixed(2) + '-' + c.end.toFixed(2); }).join(', ') + '   (' + ms.toFixed(0) + ' ms)');
+      ok(r.count === TRUTH.length, label + ': one cue per burst', 'got ' + r.count + ' of ' + TRUTH.length);
+      ok(prog.length > 0, label + ': progress was reported', prog.length + ' callbacks');
+      var worst = 0, rows = [];
+      TRUTH.forEach(function (b, i) {
+        var e = expect(b), c = cap.captions[i];
+        if (!c) { rows.push('  burst ' + i + ' MISSING'); worst = 999; return; }
+        var ds = (c.start - e[0]) * 1000, de = (c.end - e[1]) * 1000;
+        worst = Math.max(worst, Math.abs(ds), Math.abs(de));
+        rows.push('  expected ' + e[0].toFixed(2) + '–' + e[1].toFixed(2) + '  got ' + c.start.toFixed(3) + '–' + c.end.toFixed(3) + '   Δ ' + ds.toFixed(0) + ' / ' + de.toFixed(0) + ' ms');
+      });
+      rows.forEach(say);
+      // 80 ms of that is the detector's deliberate onset/offset padding (opts.pad)
+      ok(worst < 190, label + ': every boundary within 190 ms of truth', 'worst ' + worst.toFixed(0) + ' ms');
+      ok(cap.captions.every(function (c) { return c.text === ''; }), label + ': cues are EMPTY, ready to type into');
+      return cap;
+    }
+
+    // A: plain clip at t=0
+    await run('A. clip at 0, no trim, 1x', {}, {}, function (b) { return [b[0], b[1]]; });
+
+    // B: clip moved to 3s, first 1s trimmed off, caption layer starting at 0.5s
+    await run('B. clip at 3s, 1s trimmed, caption layer starts 0.5s',
+      { start: 3, trimStart: 1 }, { start: 0.5 },
+      function (b) { return [3 + (b[0] - 1) - 0.5, 3 + (b[1] - 1) - 0.5]; });
+
+    // C: 2x speed — source seconds compress on the timeline
+    await run('C. 2x speed', { start: 1, speed: 2 }, {},
+      function (b) { return [1 + b[0] / 2, 1 + b[1] / 2]; });
+
+    // D: re-running keeps text the user already typed
+    say('\n--- D. re-detect keeps typed text ---');
+    var cap = FM.scene.layers[FM.scene.layers.length - 1];
+    var src = FM.scene.layers[FM.scene.layers.length - 2];
+    cap.captions[0].text = 'already typed this one';
+    cap.captions[1].text = 'and this one';
+    await FM.captions.detect(cap, src);
+    ok(cap.captions[0].text === 'already typed this one' && cap.captions[1].text === 'and this one',
+      're-detecting carries existing words onto the overlapping cues', JSON.stringify(cap.captions.map(function (c) { return c.text; })));
+
+    // E: the detected cues actually RENDER
+    say('\n--- E. detected cues render ---');
+    cap.captions[0].text = 'DETECTED';
+    var c1 = document.createElement('canvas'); c1.width = FM.scene.project.width; c1.height = FM.scene.project.height;
+    FM.renderScene(c1.getContext('2d'), FM.scene, cap.start + cap.captions[0].start + 0.1);
+    var d = c1.getContext('2d').getImageData(0, 0, c1.width, c1.height).data, lit = 0;
+    for (var i = 0; i < d.length; i += 4) if (d[i] > 40 || d[i + 1] > 40 || d[i + 2] > 40) lit++;
+    ok(lit > 100, 'a detected cue draws through the normal text path', 'bright px = ' + lit);
+
+    // F: the UI control exists and names a source
+    say('\n--- F. UI ---');
+    FM.selectLayer(cap.id);
+    if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('element');
+    await sleep(300);
+    var host = w.document.createElement('div');
+    FM._textExtras(cap, host, function () {});
+    var btn = host.querySelector('.cap-detect-btn');
+    ok(!!btn, 'the Detect speech button is built into the text options sheet');
+    ok(btn && !btn.disabled, 'and it is enabled when the project has an audio clip');
+    ok(FM.captions.audioSources().length === 1, 'audioSources() found the voice clip', String(FM.captions.audioSources().length));
+
+    // G: a clip with no speech produces nothing rather than junk
+    say('\n--- G. a clip of steady tone ---');
+    var toneRate = 16000, tn = toneRate * 6, tf = new ArrayBuffer(44 + tn * 2), tv = new DataView(tf);
+    (function () {
+      function str(o, s) { for (var i = 0; i < s.length; i++) tv.setUint8(o + i, s.charCodeAt(i)); }
+      str(0, 'RIFF'); tv.setUint32(4, 36 + tn * 2, true); str(8, 'WAVEfmt ');
+      tv.setUint32(16, 16, true); tv.setUint16(20, 1, true); tv.setUint16(22, 1, true);
+      tv.setUint32(24, toneRate, true); tv.setUint32(28, toneRate * 2, true); tv.setUint16(32, 2, true); tv.setUint16(34, 16, true);
+      str(36, 'data'); tv.setUint32(40, tn * 2, true);
+      for (var i = 0; i < tn; i++) tv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * 440 * i / toneRate) * 0.3 * 0x7FFF), true);
+    })();
+    var toneFile = new w.File([tf], 'tone.wav', { type: 'audio/wav' });
+    FM.scene.layers.length = 0;
+    var s2 = FM.makeLayer('video', { name: 'Tone', start: 0, duration: 6 });
+    FM.media.set(s2.id, { kind: 'video', file: toneFile, duration: 6, width: 0, height: 0, el: null });
+    var c2 = FM.makeLayer('text', { name: 'Captions', start: 0, duration: 6 }); c2.text = ''; c2.captions = [];
+    FM.scene.layers.push(s2, c2);
+    var rt = await FM.captions.detect(c2, s2);
+    ok(rt.count === 0, 'a steady 440 Hz tone yields no cues', 'count=' + rt.count + ' ' + JSON.stringify(rt.stats));
+
+    say('\n' + (FAIL ? FAIL + ' FAILURES' : 'ALL PASS') + '  (' + L.filter(function (x) { return /^PASS|^FAIL/.test(x); }).length + ' assertions)');
+    say('DONE'); post();
+  }).catch(function (e) { say('ERR ' + (e && e.stack || e)); say('DONE'); post(); });
+});
+</script>
+</body>
+</html>

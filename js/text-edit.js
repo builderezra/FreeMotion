@@ -9,11 +9,67 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  let active = null;                 // { layerId, prevText }
+  let active = null;                 // { layerId, prevText, cueIndex, createdCue }
   const MIN_PREVIEW = 120;           // px of canvas that must survive the keyboard lift
   let bar = null, dock = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
+  let cueNav = null;                 // the ‹ n/N › strip shown on a caption track
 
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
+
+  /* ---- caption tracks ------------------------------------------------------
+   * A caption track's visible string is the CUE at the playhead, not layer.text — so on one of those
+   * this editor binds to a cue. Without this, typing on a caption layer wrote to layer.text, which
+   * the compositor never reads once captions exist: the field worked, the picture never changed.
+   * (That is the whole "captions are fake" experience.) */
+  function isCapTrack(l) { return !!(FM.captions && FM.captions.isTrack(l)); }
+  function cueList(l) { return (l && Array.isArray(l.captions)) ? l.captions : []; }
+  function activeCue() {
+    if (!active || active.cueIndex == null) return null;
+    return cueList(layer())[active.cueIndex] || null;
+  }
+  /* Which cue should this session edit? The one live at the playhead; failing that a NEW one there,
+   * so typing always has somewhere visible to land. An auto-created cue that is still empty at Done
+   * is removed again, so opening the editor by accident leaves no litter. */
+  function bindCue(l) {
+    if (!isCapTrack(l)) return;
+    let i = FM.captions.indexAt(l, FM.time);
+    if (i < 0) {
+      i = FM.captions.addCue(l, Math.max(0, FM.captions.localTime(l, FM.time)));
+      active.createdCue = true;
+    }
+    active.cueIndex = i;
+  }
+  function gotoCue(i) {
+    const l = layer(); if (!l) return;
+    const cues = cueList(l);
+    if (!cues.length) return;
+    i = Math.max(0, Math.min(cues.length - 1, i));
+    // Leaving a cue we invented and never typed into: drop it rather than stranding a blank cue.
+    dropEmptyCreated();
+    const cues2 = cueList(l);
+    i = Math.max(0, Math.min(cues2.length - 1, i));
+    active.cueIndex = i;
+    const c = cues2[i];
+    if (FM.scrubTime) FM.scrubTime((l.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2));
+    if (input) { input.value = c.text || ''; try { input.focus(); input.select(); } catch (_) {} }
+    updateCueNav();
+    FM.requestRender();
+  }
+  function dropEmptyCreated() {
+    if (!active || !active.createdCue) return;
+    const l = layer(), c = activeCue();
+    if (l && c && !(c.text || '').trim()) {
+      const cues = cueList(l), k = cues.indexOf(c);
+      if (k >= 0) cues.splice(k, 1);
+    }
+    active.createdCue = false;
+  }
+  function updateCueNav() {
+    if (!cueNav) return;
+    const l = layer(), cues = cueList(l);
+    const lbl = cueNav.querySelector('.te-cue-lbl');
+    if (lbl) lbl.textContent = cues.length ? 'Cue ' + (active.cueIndex + 1) + ' / ' + cues.length : 'Cue —';
+  }
 
   // Built-in families (mirrors inspector.js FONTS); imported fonts come from FM.fonts.list().
   const FONTS = ['Inter, sans-serif', 'Helvetica, Arial, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Verdana, sans-serif', 'Trebuchet MS, sans-serif', 'Palatino, serif', 'Comic Sans MS, cursive'];
@@ -178,11 +234,22 @@ window.FM = window.FM || {};
   }
 
   // ---- lifecycle -----------------------------------------------------------
-  function onInput() { const l = layer(); if (l) { l.text = input.value; FM.requestRender(); } }
+  function onInput() {
+    const l = layer(); if (!l) return;
+    const c = activeCue();
+    if (c) c.text = input.value; else l.text = input.value;
+    FM.requestRender();
+  }
 
   function commit() {
     const l = layer();
-    if (l && input) l.text = input.value;
+    if (l && input) {
+      const c = activeCue();
+      if (c) c.text = input.value; else l.text = input.value;
+    }
+    dropEmptyCreated();
+    if (l && FM.captions && Array.isArray(l.captions)) FM.captions.normalize(l);
+    if (FM.timeline && FM.timeline.rebuild && l && Array.isArray(l.captions)) FM.timeline.rebuild();
     teardown();
     FM.requestRender();
     if (FM.inspector) FM.inspector.refresh();
@@ -204,7 +271,7 @@ window.FM = window.FM || {};
     closePop();
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
     if (dock && dock.parentElement) dock.parentElement.removeChild(dock); dock = null;
-    input = null;
+    input = null; cueNav = null;
     const stage = document.getElementById('stage'); if (stage) stage.style.paddingBottom = '';   // drop the keyboard-lift
     document.body.classList.remove('text-editing');
     window.removeEventListener('resize', onViewport);
@@ -226,7 +293,8 @@ window.FM = window.FM || {};
       if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       if (FM.selectLayer) FM.selectLayer(l.id);
-      active = { layerId: layerId, prevText: l.text };
+      active = { layerId: layerId, prevText: l.text, cueIndex: null, createdCue: false };
+      bindCue(l);   // caption track → this session edits a CUE, not layer.text
 
       // ---- top toolbar: Align · Font · Size · Colour · Done ----
       bar = elc('div', 'te-bar');
@@ -254,9 +322,34 @@ window.FM = window.FM || {};
 
       // ---- bottom dock: the text field ----
       dock = elc('div', 'te-dock');
+      // Caption track: a ‹ Cue n / N › strip above the field. Captioning is "type, next, type", and
+      // making the user close the editor and re-seek between every cue is what makes it a chore.
+      if (isCapTrack(l)) {
+        cueNav = elc('div', 'te-cue-nav');
+        const prev = elc('button', 'te-cue-btn', '‹'); prev.type = 'button'; prev.title = 'Previous cue';
+        const lbl = elc('span', 'te-cue-lbl', '');
+        const next = elc('button', 'te-cue-btn', '›'); next.type = 'button'; next.title = 'Next cue';
+        const addB = elc('button', 'te-cue-btn te-cue-add', '+'); addB.type = 'button'; addB.title = 'New cue after this one';
+        prev.addEventListener('click', () => gotoCue((active.cueIndex || 0) - 1));
+        next.addEventListener('click', () => gotoCue((active.cueIndex || 0) + 1));
+        addB.addEventListener('click', () => {
+          const ly = layer(), cur = activeCue(); if (!ly || !cur) return;
+          const at = Math.min(cur.end + 0.05, Math.max(0, (ly.duration || 0) - FM.captions.MIN_CUE));
+          const i = FM.captions.addCue(ly, at);
+          active.createdCue = false;   // deliberately created — keep it even if left blank
+          gotoCue(i);
+        });
+        cueNav.append(prev, lbl, next, addB);
+        // Guard the strip the same way the top bar is guarded, or tapping ‹ › dismisses the keyboard.
+        const keep = e => { if (e.target !== input) e.preventDefault(); };
+        cueNav.addEventListener('pointerdown', keep);
+        cueNav.addEventListener('mousedown', keep);
+        dock.appendChild(cueNav);
+      }
       input = document.createElement('textarea');
-      input.id = 'te-input'; input.rows = 2; input.value = l.text || ''; input.spellcheck = false;
-      input.setAttribute('placeholder', 'Type your text…');
+      const boundCue = activeCue();
+      input.id = 'te-input'; input.rows = 2; input.value = boundCue ? (boundCue.text || '') : (l.text || ''); input.spellcheck = false;
+      input.setAttribute('placeholder', boundCue ? 'Type this caption…' : 'Type your text…');
       dock.appendChild(input);
       document.body.appendChild(dock);
       input.addEventListener('input', onInput);
@@ -273,6 +366,7 @@ window.FM = window.FM || {};
       document.addEventListener('pointerdown', onDocDown, true);
 
       updateBarLabels();
+      updateCueNav();
       onViewport();
       input.focus();
       if (opts.selectAll) input.select();

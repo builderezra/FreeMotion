@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Captions — phone layout probe</title></head>
+<body style="margin:0;background:#111">
+<pre id="out" style="color:#ccc;font:12px monospace;position:fixed;right:0;top:0;width:520px;z-index:9;white-space:pre-wrap">running…</pre>
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+var L = []; function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function post() { try { fetch('/_result/mobile', { method: 'POST', body: L.join('\n') }).catch(function () {}); } catch (e) {} }
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.scene && w.FM.captions) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow;
+  waitFM(w).then(async function (FM) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await sleep(400);
+    FM.scene.layers.length = 0;
+    FM.scene.project.width = 1080; FM.scene.project.height = 1920; FM.scene.project.duration = 8;
+    FM.addCaptionLayer();
+    var lay = FM.scene.layers[0];
+    lay.captions = [
+      { start: 0, end: 1.4, text: 'This is the first caption' },
+      { start: 1.6, end: 3.2, text: 'and a second one here' },
+      { start: 4.0, end: 6.0, text: '' },
+    ];
+    FM.selectLayer(lay.id);
+    FM.timeline.rebuild();
+    if (FM.inspector) FM.inspector.refresh();
+    await sleep(400);
+
+    var doc = w.document;
+    function box(sel) { var e = doc.querySelector(sel); if (!e) return null; var r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), l: Math.round(r.left), r: Math.round(r.right) }; }
+    say('viewport: ' + w.innerWidth + 'x' + w.innerHeight);
+
+    // --- 1. timeline cue chips on a phone ---
+    var chips = doc.querySelectorAll('.cap-cue');
+    say('timeline cue chips: ' + chips.length);
+    var over = 0, tlRight = doc.getElementById('timeline').getBoundingClientRect().right;
+    chips.forEach(function (c) { var r = c.getBoundingClientRect(); if (r.height < 12) over++; });
+    say('chips with height < 12px (unhittable): ' + over);
+    say('chip heights: ' + Array.prototype.map.call(chips, function (c) { return Math.round(c.getBoundingClientRect().height); }).join(','));
+    say('grip widths: ' + Array.prototype.map.call(doc.querySelectorAll('.cap-cue-grip'), function (g) { return Math.round(g.getBoundingClientRect().width); }).slice(0, 4).join(','));
+
+    // --- 2. the captions panel inside the "Aa" sheet, at 380px ---
+    FM.textEdit.start(lay.id);
+    await sleep(200);
+    var extras = doc.querySelector('.te-extras');
+    if (extras) extras.click();
+    await sleep(300);
+    say('\nAa sheet open: ' + !!doc.querySelector('.te-pop-extras'));
+    say('cue nav strip: ' + JSON.stringify(box('.te-cue-nav')) + '  buttons: ' + Array.prototype.map.call(doc.querySelectorAll('.te-cue-btn'), function (b) { var r = b.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join(' '));
+    say('cue rows: ' + doc.querySelectorAll('.cap-row').length);
+    say('cue text button: ' + JSON.stringify(box('.cap-text')));
+    say('time fields: ' + JSON.stringify(box('.cap-time')));
+    say('detect button: ' + JSON.stringify(box('.cap-detect-btn')));
+    var popB = doc.querySelector('.te-pop-extras');
+    if (popB) {
+      var pr = popB.getBoundingClientRect();
+      say('Aa sheet box: ' + Math.round(pr.left) + '..' + Math.round(pr.right) + ' of ' + w.innerWidth + '  scrollW=' + popB.scrollWidth + ' clientW=' + popB.clientWidth);
+      say('sheet overflows horizontally: ' + (popB.scrollWidth > popB.clientWidth + 1));
+    }
+    // does anything stick out past the viewport?
+    var wide = [];
+    ['.cap-row', '.cap-text', '.cap-detect', '.cap-detect-btn', '.te-cue-nav', '.cap-time'].forEach(function (sel) {
+      doc.querySelectorAll(sel).forEach(function (e) { var r = e.getBoundingClientRect(); if (r.right > w.innerWidth + 1 || r.left < -1) wide.push(sel + ' ' + Math.round(r.left) + '..' + Math.round(r.right)); });
+    });
+    say('elements outside the 380px viewport: ' + (wide.length ? wide.join(' | ') : 'none'));
+    say('document scrollWidth=' + doc.documentElement.scrollWidth + ' (viewport ' + w.innerWidth + ')');
+    // tap targets
+    var small = [];
+    doc.querySelectorAll('.te-cue-btn, .cap-text, .cap-del, .cap-detect-btn').forEach(function (e) {
+      var r = e.getBoundingClientRect();
+      if (r.height > 0 && r.height < 30) small.push(e.className + ' h=' + Math.round(r.height));
+    });
+    say('controls under 30px tall: ' + (small.length ? small.join(', ') : 'none'));
+
+    say('\nDONE'); post();
+  }).catch(function (e) { say('ERR ' + (e && e.stack || e)); say('DONE'); post(); });
+});
+</script>
+</body>
+</html>

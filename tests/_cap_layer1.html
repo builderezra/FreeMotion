@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Captions Layer 1 — verification</title></head>
+<body>
+<pre id="out">running…</pre>
+<iframe id="app" src="../index.html" style="position:fixed;left:-10000px;top:0;width:1200px;height:800px;border:0"></iframe>
+<script>
+var L = [], FAIL = 0;
+function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function post() { try { fetch('/_result/layer1', { method: 'POST', body: L.join('\n') }).catch(function () {}); } catch (e) {} }
+function ok(cond, name, detail) { if (cond) say('PASS  ' + name + (detail ? '   [' + detail + ']' : '')); else { FAIL++; say('FAIL  ' + name + '   ' + (detail || '')); } }
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.renderScene && w.FM.scene && w.FM.timeline) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+function offscreen(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function inkOf(ctx, w, h) { var d = ctx.getImageData(0, 0, w, h).data, n = 0; for (var i = 0; i < d.length; i += 4) if (d[i] > 40 || d[i + 1] > 40 || d[i + 2] > 40) n++; return n; }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () {
+  var w = frame.contentWindow;
+  waitFM(w).then(async function (FM) {
+    var W = 320, H = 240;
+    function ink(t) { var c = offscreen(W, H); FM.renderScene(c.getContext('2d'), FM.scene, t); return inkOf(c.getContext('2d'), W, H); }
+    function pd(el, x, opts) { var e = new w.PointerEvent('pointerdown', Object.assign({ bubbles: true, cancelable: true, clientX: x, clientY: 10, pointerId: 1, pointerType: 'mouse', button: 0 }, opts || {})); el.dispatchEvent(e); }
+    function pm(x) { w.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: 10, pointerId: 1, pointerType: 'mouse' })); }
+    function pu(x) { w.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: 10, pointerId: 1, pointerType: 'mouse' })); }
+
+    // The app boots onto the Home screen, where #timeline is hidden and 0px wide. Every geometry
+    // assertion below (and the timeline's own fixed-centre scroll contract) needs the real editor.
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await sleep(200);
+    if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    say('editor open — #timeline clientWidth = ' + w.document.getElementById('timeline').clientWidth);
+
+    FM.scene.layers.length = 0;
+    FM.scene.project.width = W; FM.scene.project.height = H; FM.scene.project.duration = 6;
+    FM.addCaptionLayer();
+    var lay = FM.scene.layers[0];
+    say('cues: ' + JSON.stringify(lay.captions));
+
+    // ================= 1. the text editor edits the CUE, not the dead layer.text =================
+    say('\n--- 1. text editor binds to the cue at the playhead ---');
+    FM.scrubTime(0.5);
+    var ink0 = ink(0.5);
+    FM.textEdit.start(lay.id);
+    var ta = w.document.getElementById('te-input');
+    ok(!!ta, 'editor opened');
+    ok(ta.value === 'First caption', 'field is prefilled with the CUE text', 'got ' + JSON.stringify(ta.value));
+    ta.value = 'HELLO FROM THE EDITOR';
+    ta.dispatchEvent(new w.Event('input', { bubbles: true }));
+    var ink1 = ink(0.5);
+    ok(lay.captions[0].text === 'HELLO FROM THE EDITOR', 'typing writes the cue', JSON.stringify(lay.captions[0].text));
+    ok(lay.text === '', 'layer.text is left alone', JSON.stringify(lay.text));
+    ok(ink1 !== ink0, 'the PICTURE changed while typing', 'ink ' + ink0 + ' -> ' + ink1);
+    // cue nav
+    var nav = w.document.querySelector('.te-cue-nav');
+    ok(!!nav, 'cue nav strip present');
+    ok(/Cue 1 \/ 2/.test(nav.textContent), 'nav reads Cue 1 / 2', JSON.stringify(nav.textContent));
+    say('  diag: timeline clientWidth=' + w.document.getElementById('timeline').clientWidth + ' scrollLeft=' + w.document.getElementById('timeline').scrollLeft);
+    FM.scrubTime(1.0); say('  diag: scrubTime(1.0) -> FM.time=' + FM.time);
+    FM.scrubTime(0.5);
+    var nextBtn = Array.prototype.find.call(nav.querySelectorAll('.te-cue-btn'), function (b) { return b.title === 'Next cue'; });
+    ok(!!nextBtn, 'found the › button');
+    var origScrub = FM.scrubTime, trace = [];
+    FM.scrubTime = function (t, ns) { trace.push(t + ' <- ' + (new Error().stack || '').split('\n')[2].trim()); return origScrub.call(FM, t, ns); };
+    nextBtn.click();
+    await sleep(30);
+    FM.scrubTime = origScrub;
+    say('  diag: scrubTime calls during › : \n    ' + trace.join('\n    '));
+    ta = w.document.getElementById('te-input');
+    ok(ta.value === 'Second caption', '› moves to cue 2 and reloads the field', JSON.stringify(ta.value));
+    ok(FM.captions.indexAt(lay, FM.time) === 1, '› moved the playhead onto cue 2', 'time=' + FM.time.toFixed(2) + ' indexAt=' + FM.captions.indexAt(lay, FM.time));
+    var addBtn = Array.prototype.find.call(nav.querySelectorAll('.te-cue-btn'), function (b) { return b.title === 'New cue after this one'; });
+    var nBefore = lay.captions.length;
+    addBtn.click(); await sleep(20);
+    ok(lay.captions.length === nBefore + 1, '+ adds a cue after the current one', nBefore + ' -> ' + lay.captions.length);
+    var overlaps = function (list) { return list.some(function (a) { return list.some(function (b) { return a !== b && a.start < b.end - 1e-6 && b.start < a.end - 1e-6; }); }); };
+    ok(!overlaps(lay.captions), '+ never drops the new cue on top of an existing one', JSON.stringify(lay.captions));
+    // …and directly: asking for a cue at a time that lands INSIDE an existing one. Two overlapping
+    // cues resolve to the later start, so an empty new cue there would silently blank the old words.
+    var probe = { type: 'text', duration: 10, captions: [{ start: 1, end: 4, text: 'keep me' }] };
+    var pi = FM.captions.addCue(probe, 2.0);
+    ok(!overlaps(probe.captions), 'addCue() at a time inside an existing cue does not overlap it', JSON.stringify(probe.captions));
+    ok(probe.captions[pi].start >= 4 - 1e-6, 'it starts at the existing cue’s end instead', 'start=' + probe.captions[pi].start);
+    // put the track back to two cues for the rest of the run
+    lay.captions = lay.captions.filter(function (c) { return (c.text || '').trim(); });
+    FM.scrubTime(0.5);
+    FM.textEdit.stop();
+    ok(lay.captions[0].text === 'HELLO FROM THE EDITOR' && lay.captions[1].text === 'Second caption', 'both cues survive Done');
+
+    // ================= 2. opening in a GAP creates a cue; abandoning it leaves no litter ==========
+    say('\n--- 2. gap behaviour ---');
+    FM.scrubTime(5.5);   // past the last cue
+    var n0 = lay.captions.length;
+    FM.textEdit.start(lay.id);
+    ok(lay.captions.length === n0 + 1, 'a cue is created at the playhead so typing has somewhere to land', n0 + ' -> ' + lay.captions.length);
+    FM.textEdit.stop();
+    ok(lay.captions.length === n0, 'abandoning it without typing leaves NO empty cue', 'back to ' + lay.captions.length);
+    FM.scrubTime(5.5);
+    FM.textEdit.start(lay.id);
+    w.document.getElementById('te-input').value = 'THIRD';
+    w.document.getElementById('te-input').dispatchEvent(new w.Event('input', { bubbles: true }));
+    FM.textEdit.stop();
+    ok(lay.captions.length === n0 + 1, 'a cue that WAS typed into is kept', String(lay.captions.length));
+    ok(ink(5.5) > 0, 'the new cue renders at 5.5s', 'ink=' + ink(5.5));
+
+    // ================= 3. cues on the timeline =================
+    say('\n--- 3. timeline cues ---');
+    FM.selectLayer(lay.id);
+    FM.timeline.rebuild();
+    var tl = w.document.getElementById('tl-tracks');
+    var chips = tl.querySelectorAll('.cap-cue');
+    ok(chips.length === lay.captions.length, 'one chip per cue', chips.length + ' chips / ' + lay.captions.length + ' cues');
+    var clipEl = tl.querySelector('.clip[data-id="' + lay.id + '"]');
+    var pps = parseFloat(clipEl.style.width) / lay.duration;
+    var chip0 = chips[0];
+    // EVERY chip, not just the first — cue 0 starts at 0, so a "left is always 0" bug would hide there.
+    var posRows = [], posBad = 0, wBad = 0;
+    for (var k = 0; k < chips.length; k++) {
+      var cu = lay.captions[+chips[k].dataset.ci];
+      var eL = cu.start * pps, gL = parseFloat(chips[k].style.left);
+      var eW = (cu.end - cu.start) * pps, gW = parseFloat(chips[k].style.width);
+      if (Math.abs(eL - gL) > 1) posBad++;
+      if (Math.abs(eW - gW) > 1) wBad++;
+      posRows.push('cue ' + cu.start.toFixed(2) + '-' + cu.end.toFixed(2) + ' -> left ' + gL.toFixed(1) + '/' + eL.toFixed(1) + ' w ' + gW.toFixed(1) + '/' + eW.toFixed(1));
+    }
+    ok(posBad === 0, 'every chip sits at its cue.start', posRows.join(' | '));
+    ok(wBad === 0, 'every chip is its cue length wide', posRows.join(' | '));
+    ok(chip0.querySelector('.cap-cue-lbl').textContent === 'HELLO FROM THE EDITOR', 'chip shows the cue text');
+
+    // XSS: caption text must never be parsed as HTML anywhere it reaches the DOM
+    lay.captions[0].text = '<img src=x onerror="window.__CAPXSS=1">';
+    FM.timeline.rebuild();
+    if (FM.inspector) FM.inspector.refresh();
+    await sleep(60);
+    ok(!w.__CAPXSS, 'caption text is NOT parsed as HTML (timeline + inspector)');
+    ok(w.document.querySelectorAll('.cap-cue-lbl img').length === 0, 'no element was built from cue text');
+    lay.captions[0].text = 'HELLO FROM THE EDITOR';
+    FM.timeline.rebuild();
+
+    // ---- drag a cue to move it ----
+    say('\n--- 4. drag to move / trim ---');
+    chips = tl.querySelectorAll('.cap-cue');
+    var before = { s: lay.captions[0].start, e: lay.captions[0].end };
+    var r = chips[0].getBoundingClientRect();
+    pd(chips[0], r.left + r.width / 2);
+    pm(r.left + r.width / 2 + 60);
+    pu(r.left + r.width / 2 + 60);
+    await sleep(40);
+    var moved = FM.scene.layers[0].captions.slice().sort(function (a, b) { return a.start - b.start; });
+    var c0 = moved.find(function (c) { return c.text === 'HELLO FROM THE EDITOR'; });
+    var expDelta = 60 / pps;
+    ok(Math.abs((c0.start - before.s) - expDelta) < 0.05, 'dragging the chip moved the cue in time',
+      'expected +' + expDelta.toFixed(3) + 's, got +' + (c0.start - before.s).toFixed(3) + 's');
+    ok(Math.abs((c0.end - c0.start) - (before.e - before.s)) < 0.01, 'moving preserved the cue length');
+
+    // ---- trim the right edge ----
+    FM.timeline.rebuild();
+    chips = tl.querySelectorAll('.cap-cue');
+    var idx = -1; for (var i = 0; i < chips.length; i++) if (chips[i].querySelector('.cap-cue-lbl').textContent === 'HELLO FROM THE EDITOR') idx = i;
+    var chip = chips[idx];
+    var cue = FM.scene.layers[0].captions[+chip.dataset.ci];
+    var e0 = cue.end;
+    var rr = chip.querySelector('.cap-cue-grip.r').getBoundingClientRect();
+    pd(chip.querySelector('.cap-cue-grip.r'), rr.left + rr.width / 2);
+    pm(rr.left + rr.width / 2 - 40);
+    pu(rr.left + rr.width / 2 - 40);
+    await sleep(40);
+    var cue2 = FM.scene.layers[0].captions.find(function (c) { return c.text === 'HELLO FROM THE EDITOR'; });
+    ok(Math.abs((cue2.end - e0) + 40 / pps) < 0.05, 'right grip trimmed the cue end',
+      'expected ' + (-40 / pps).toFixed(3) + 's, got ' + (cue2.end - e0).toFixed(3) + 's');
+    ok(cue2.start === c0.start, 'trimming the end left the start alone');
+
+    // ---- undo ----
+    say('\n--- 5. undo ---');
+    FM.history.undo();
+    var afterUndo = FM.scene.layers[0].captions.find(function (c) { return c.text === 'HELLO FROM THE EDITOR'; });
+    ok(Math.abs(afterUndo.end - e0) < 1e-6, 'undo restored the trimmed end', 'end ' + afterUndo.end + ' (was ' + e0 + ')');
+    FM.history.redo();
+
+    // ---- save / reload ----
+    say('\n--- 6. save + reload ---');
+    var snapshot = JSON.stringify(FM.scene.layers[0].captions);
+    FM.storage.flushSync();
+    var f2 = document.createElement('iframe');
+    f2.style.cssText = 'position:fixed;left:-10000px;top:900px;width:900px;height:700px;border:0';
+    document.body.appendChild(f2);
+    await new Promise(function (res) { f2.addEventListener('load', res); f2.src = '../index.html?reload'; });
+    var FM2 = await waitFM(f2.contentWindow);
+    await sleep(800);
+    var l2 = FM2.scene.layers.filter(function (x) { return x.captions; })[0];
+    ok(!!l2 && JSON.stringify(l2.captions) === snapshot, 'cues survive save + reload byte-for-byte',
+      l2 ? JSON.stringify(l2.captions) : 'no caption layer');
+
+    // ================= 7. REAL EXPORT — do the captions burn in? =================
+    say('\n--- 7. real MP4 export, decoded back ---');
+    // Big white text on black at a known time, so a decoded frame either has bright pixels or does not.
+    FM.scene.layers.length = 0;
+    FM.scene.project.duration = 2;
+    FM.addCaptionLayer();
+    var el2 = FM.scene.layers[0];
+    el2.captions = [{ start: 0.0, end: 0.6, text: 'BURN IN' }];
+    el2.captionBg = false; el2.color = '#ffffff'; el2.fontSize = 80;
+    el2.x = W / 2; el2.y = H / 2;
+    FM.scene.project.background = '#000000';
+    say('preview ink @0.2 = ' + ink(0.2) + ' , @1.5 (no cue) = ' + ink(1.5));
+
+    var captured = null;
+    var origCOU = w.URL.createObjectURL;
+    w.URL.createObjectURL = function (b) { if (b instanceof w.Blob && b.size > 1000) captured = b; return origCOU.call(w.URL, b); };
+    var haveWC = (typeof w.VideoEncoder !== 'undefined' && typeof w.Mp4Muxer !== 'undefined');
+    say('WebCodecs+muxer available: ' + haveWC);
+    if (haveWC) {
+      try {
+        await FM.exporter.run({ scale: 1, fps: 10, from: 0, to: 1.0, name: 'captest' });
+      } catch (e) { say('  export threw: ' + (e && e.message || e)); }
+      w.URL.createObjectURL = origCOU;
+      ok(!!captured, 'export produced a file', captured ? (captured.size + ' bytes, ' + captured.type) : 'nothing captured');
+      if (captured) {
+        var vurl = origCOU.call(w.URL, captured);
+        var v = w.document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = vurl;
+        await new Promise(function (res) { var done = 0; var f = function () { if (!done++) res(); }; v.addEventListener('loadeddata', f); v.addEventListener('error', f); setTimeout(f, 5000); });
+        say('  decoded video: ' + v.videoWidth + 'x' + v.videoHeight + ' dur=' + v.duration);
+        async function frameInk(tt) {
+          await new Promise(function (res) { var f = function () { v.removeEventListener('seeked', f); res(); }; v.addEventListener('seeked', f); v.currentTime = tt; setTimeout(res, 3000); });
+          await sleep(60);
+          var c = offscreen(v.videoWidth || W, v.videoHeight || H);
+          var cx = c.getContext('2d'); cx.drawImage(v, 0, 0);
+          return inkOf(cx, c.width, c.height);
+        }
+        var inkIn = await frameInk(0.2);
+        var inkOut = await frameInk(0.85);
+        ok(inkIn > 200, 'the CUE is present in the DECODED EXPORTED VIDEO at 0.2s', 'bright px = ' + inkIn);
+        ok(inkOut < inkIn / 4, 'and absent at 0.85s where no cue is live', 'bright px = ' + inkOut);
+      }
+    } else {
+      say('SKIP  export round-trip — WebCodecs unavailable in this browser');
+    }
+
+    say('\n' + (FAIL ? FAIL + ' FAILURES' : 'ALL PASS') + '  (' + L.filter(function (x) { return /^PASS|^FAIL/.test(x); }).length + ' assertions)');
+    say('DONE');
+    post();
+  }).catch(function (e) { say('ERR ' + (e && e.stack || e)); say('DONE'); post(); });
+});
+</script>
+</body>
+</html>

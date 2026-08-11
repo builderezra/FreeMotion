@@ -2523,6 +2523,87 @@
     });
   });
 
+  /* ---- captions (v43): the feature Ezra called fake. Data + render existed; the EDITOR and the
+     timeline did not, so typing on a caption track changed nothing you could see. ---- */
+
+  test('captions: the text editor writes the CUE at the playhead, not the dead layer.text', { item: 'captions' }, function () {
+    var saved = FM.scene, savedT = FM.time;
+    try {
+      FM.scene = scene([]);
+      var L = FM.makeLayer('text', { name: 'Caps', x: 160, y: 120, fontSize: 40 });
+      L.text = ''; L.duration = 5;
+      L.captions = [{ start: 0, end: 2, text: 'one' }, { start: 2, end: 4, text: 'two' }];
+      FM.scene.layers.push(L);
+      FM.time = 0.5;
+      FM.textEdit.start(L.id);
+      var ta = document.getElementById('te-input');
+      if (!ta) throw new Error('the text editor did not open');
+      if (ta.value !== 'one') throw new Error('field showed "' + ta.value + '" — it must load the cue live at the playhead, not layer.text');
+      ta.value = 'ONE EDITED';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      if (L.captions[0].text !== 'ONE EDITED') throw new Error('typing did not reach the cue (cue is still "' + L.captions[0].text + '") — this is the "captions do nothing" bug');
+      if (L.text !== '') throw new Error('typing wrote layer.text ("' + L.text + '"), which a caption track never renders');
+      // and the render must follow
+      var c = offscreen(320, 240); FM.renderScene(c.getContext('2d'), FM.scene, 0.5);
+      var d = c.getContext('2d').getImageData(0, 0, 320, 240).data, lit = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] > 40) lit++;
+      if (lit < 50) throw new Error('the edited cue did not draw (bright px ' + lit + ')');
+      FM.textEdit.stop();
+    } finally { if (FM.textEdit.isActive()) FM.textEdit.stop(); FM.scene = saved; FM.time = savedT; }
+  });
+
+  test('captions: cue times are LAYER-LOCAL, so cues travel with the clip', { item: 'captions' }, function () {
+    var L = FM.makeLayer('text', { name: 'Caps', x: 160, y: 120, fontSize: 40 });
+    L.text = ''; L.start = 0; L.duration = 5;
+    L.captions = [{ start: 0.5, end: 1.5, text: 'X' }];
+    if (FM.activeCaption(L, 1.0) !== 'X') throw new Error('cue not live at t=1.0 with the clip at 0');
+    L.start = 3;   // move the clip 3s later
+    if (FM.activeCaption(L, 1.0) !== null) throw new Error('cue still live at t=1.0 after the clip moved — times are being read as absolute');
+    if (FM.activeCaption(L, 4.0) !== 'X') throw new Error('cue not live at t=4.0 after the clip moved to 3s');
+  });
+
+  test('captions: speech detection finds the bursts and ignores a steady tone', { item: 'captions-vad' }, async function () {
+    if (!FM.detectSpeech) throw new Error('FM.detectSpeech missing (js/captions-vad.js not loaded)');
+    var RATE = 8000, DUR = 8, n = RATE * DUR, d = new Float32Array(n);
+    // deterministic PRNG — a test that uses Math.random cannot be trusted when it goes red
+    var seed = 99, rnd = function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    for (var i = 0; i < n; i++) d[i] = (rnd() * 2 - 1) * 0.0008;                       // room tone
+    var bursts = [[1.0, 2.4], [4.0, 6.0]], lp = 0;
+    bursts.forEach(function (b, bi) {
+      var s = Math.round(b[0] * RATE), e = Math.round(b[1] * RATE), atk = Math.round(0.03 * RATE);
+      for (var i = s; i < e; i++) {
+        var tt = (i - s) / RATE;
+        var am = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * 4.3 * tt + bi), 2);
+        var env = Math.min(1, (i - s) / atk) * Math.min(1, (e - i) / atk);
+        var a = 0.55 + 0.4 * Math.sin(2 * Math.PI * 2.1 * tt + bi * 0.7);
+        var white = rnd() * 2 - 1; lp = lp + (1 - a) * (white - lp);
+        d[i] += (a > 0.75 ? white : lp * 2.2) * am * env * 0.28;
+      }
+    });
+    // A 220 ms pause INSIDE the second burst — a breath between words. Shorter than minGap (300 ms)
+    // so it must NOT split the cue in two, and longer than 2x the 80 ms onset padding, so a split
+    // could not be papered back over by the padding merge either.
+    for (var z = Math.round(4.8 * RATE); z < Math.round(5.02 * RATE); z++) d[z] = (rnd() * 2 - 1) * 0.0008;
+    var r = await FM.detectSpeech({ sampleRate: RATE, data: d });
+    if (r.segments.length !== 2) throw new Error('expected 2 speech segments, got ' + r.segments.length + ' — ' + JSON.stringify(r.segments) + ' (a 220ms pause inside a burst must not split it: minGap is 300ms)');
+    bursts.forEach(function (b, i) {
+      var g = r.segments[i];
+      if (Math.abs(g.start - b[0]) > 0.2 || Math.abs(g.end - b[1]) > 0.2)
+        throw new Error('segment ' + i + ' is ' + g.start.toFixed(2) + '-' + g.end.toFixed(2) + ', expected ~' + b[0] + '-' + b[1] + ' (200ms tolerance covers the deliberate 80ms pad)');
+    });
+    // THE SAME CLIP 34 dB QUIETER must still work: the gate adapts to each clip's own noise floor,
+    // so a whispered phone recording and a loud interview both caption. A fixed dB gate fails here.
+    var quiet = new Float32Array(n);
+    for (var q = 0; q < n; q++) quiet[q] = d[q] * 0.02;
+    var rq = await FM.detectSpeech({ sampleRate: RATE, data: quiet });
+    if (rq.segments.length !== 2) throw new Error('quiet copy of the same clip gave ' + rq.segments.length + ' segments, not 2 — the threshold is not adapting to the clip (enterDb=' + rq.stats.enterDb + ', loudDb=' + rq.stats.loudDb + ')');
+    // a steady tone is not speech, at any level — the gate is derived from the clip's own floor
+    var tone = new Float32Array(RATE * 6);
+    for (var j = 0; j < tone.length; j++) tone[j] = Math.sin(2 * Math.PI * 440 * j / RATE) * 0.3;
+    var rt = await FM.detectSpeech({ sampleRate: RATE, data: tone });
+    if (rt.segments.length) throw new Error('a steady 440 Hz tone was read as ' + rt.segments.length + ' speech segments');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -63,6 +63,7 @@ window.FM = window.FM || {};
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
   let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
+  let cueDrag = null;    // moving / trimming one CAPTION CUE inside its track's clip
   let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
@@ -76,7 +77,8 @@ window.FM = window.FM || {};
   // never followed, a half-trim, a mid-drag keyframe time) — that state would ride silently into the
   // next history.commit and autosave.
   function abortGestures() {
-    const had = clipMove || trimDrag || kfDrag || slipDrag;
+    const had = clipMove || trimDrag || kfDrag || slipDrag || cueDrag;
+    if (cueDrag) { cueDrag.cue.start = cueDrag.s0; cueDrag.cue.end = cueDrag.e0; cueDrag = null; }
     if (slipDrag) { slipDrag.layer.trimStart = slipDrag.trim0; endSlipGhost(slipDrag); slipDrag = null; }
     if (clipMove) {
       clipMove.layer.start = clipMove.origStart;
@@ -1086,6 +1088,49 @@ window.FM = window.FM || {};
         clip.appendChild(slip);
       }
     }
+    // CAPTION CUES on the bar. Cue times are LAYER-LOCAL, so they are positioned relative to the
+    // clip's own left edge and travel with it for free when the clip is moved or trimmed. Each chip
+    // can be dragged (move) or grabbed by an edge (trim) — the timing work of captioning done where
+    // you can see it against the waveform, instead of in a pair of number fields.
+    if (FM.captions && FM.captions.isTrack(layer) && !layer.locked) {
+      FM.captions.cues(layer).forEach((cue, ci) => {
+        const w = Math.max(4, (cue.end - cue.start) * pps);
+        const chip = document.createElement('div');
+        chip.className = 'cap-cue' + (FM.captions.indexAt(layer, FM.time) === ci ? ' live' : '');
+        chip.style.left = (cue.start * pps) + 'px';
+        chip.style.width = w + 'px';
+        chip.dataset.ci = ci;
+        // textContent, never innerHTML: cue text is user data and lands in the DOM here.
+        const lbl = document.createElement('span');
+        lbl.className = 'cap-cue-lbl';
+        lbl.textContent = (cue.text || '').trim() || '…';
+        chip.appendChild(lbl);
+        chip.title = (cue.text || '(empty cue)') + '  ' + cue.start.toFixed(2) + '–' + cue.end.toFixed(2) + 's\nDrag to move · edges to trim · double-click to type';
+        const startCue = (e, mode) => {
+          e.stopPropagation(); e.preventDefault();
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          if (pinch) return;
+          try { (mode === 'move' ? chip : e.currentTarget).setPointerCapture(e.pointerId); } catch (_) {}
+          cueDrag = { layer: layer, cue: cue, mode: mode, startX: e.clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
+          FM.selectLayer(layer.id);
+          if (FM.playing) FM.pause();
+        };
+        chip.addEventListener('pointerdown', (e) => startCue(e, 'move'));
+        chip.addEventListener('dblclick', (e) => {
+          e.stopPropagation(); e.preventDefault();
+          FM.selectLayer(layer.id);
+          if (FM.scrubTime) FM.scrubTime((layer.start || 0) + cue.start + Math.min(0.05, (cue.end - cue.start) / 2));
+          if (FM.textEdit) FM.textEdit.start(layer.id, { selectAll: true });
+        });
+        ['l', 'r'].forEach(side => {
+          const g = document.createElement('div');
+          g.className = 'cap-cue-grip ' + side;
+          g.addEventListener('pointerdown', (e) => startCue(e, side === 'l' ? 'trimL' : 'trimR'));
+          chip.appendChild(g);
+        });
+        clip.appendChild(chip);
+      });
+    }
     lane.appendChild(clip);
 
     // keyframe diamonds for the selected layer (absolute project time, lane-relative px)
@@ -1368,6 +1413,12 @@ window.FM = window.FM || {};
       // view back to the playhead — the "I'm 40s in, click a clip, get sent to the start" bug.
       if (timelineEl) timelineEl.addEventListener('scroll', () => {
         if (trimDrag || clipMove || kfDrag || scrub) return;            // those drive scroll/time themselves
+        // A HIDDEN timeline cannot have been scrolled by a hand. While the focused text editor is
+        // open, body.text-editing hides #timeline-panel, so every updatePlayhead write to scrollLeft
+        // is clamped to 0 by a 0-width box — and this handler read that clamp as "the user scrolled
+        // to the start" and dragged the playhead back to 0. Anything that seeks while the editor is
+        // open (walking captions cue by cue, for one) was silently undone a frame later.
+        if (!timelineEl.clientWidth) return;
         const sL = timelineEl.scrollLeft;
         if (Math.abs(sL - lastProgScroll) < 1) return;                  // our own playhead-driven write → ignore (no feedback loop)
         lastProgScroll = sL;
@@ -1502,6 +1553,37 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointermove', (e) => {
         if (pinch) return;   // a 2-finger pinch is in progress → ignore any in-flight 1-finger drag math
+        if (cueDrag) {
+          const pps = pxPerSec(), f = FM.scene.project.fps || 30;
+          let dt = Math.round(((e.clientX - cueDrag.startX) / pps) * f) / f;
+          if (!cueDrag.moved && Math.abs(e.clientX - cueDrag.startX) < 3) return;
+          cueDrag.moved = true;
+          const L = cueDrag.layer, cue = cueDrag.cue;
+          const MIN = (FM.captions && FM.captions.MIN_CUE) || 0.1;
+          const dur = L.duration > 0 ? L.duration : Infinity;
+          if (cueDrag.mode === 'move') {
+            const len = cueDrag.e0 - cueDrag.s0;
+            let s = cueDrag.s0 + dt;
+            s = Math.max(0, s);
+            if (isFinite(dur)) s = Math.min(s, Math.max(0, dur - len));
+            cue.start = s; cue.end = s + len;
+          } else if (cueDrag.mode === 'trimL') {
+            let s = Math.max(0, cueDrag.s0 + dt);
+            s = Math.min(s, cueDrag.e0 - MIN);
+            cue.start = s;
+          } else {
+            let en = cueDrag.e0 + dt;
+            if (isFinite(dur)) en = Math.min(en, dur);
+            en = Math.max(en, cueDrag.s0 + MIN);
+            cue.end = en;
+          }
+          if (cueDrag.chip) {
+            cueDrag.chip.style.left = (cue.start * pps) + 'px';
+            cueDrag.chip.style.width = Math.max(4, (cue.end - cue.start) * pps) + 'px';
+          }
+          FM.requestRender();
+          return;
+        }
         if (clipTap) {
           const dx = e.clientX - clipTap.startX, dy = e.clientY - clipTap.startY;
           const adx = Math.abs(dx), ady = Math.abs(dy);
@@ -1616,6 +1698,20 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointerup', (e) => {
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
+        if (cueDrag) {
+          const cd = cueDrag; cueDrag = null;
+          if (cd.moved) {
+            if (FM.captions) FM.captions.normalize(cd.layer);
+            FM.timeline.rebuild();
+            if (FM.inspector) FM.inspector.refresh();
+            if (FM.history) FM.history.commit();
+          } else {
+            // a plain tap on a cue puts the playhead on it (so you can see what you're about to edit)
+            if (FM.scrubTime) FM.scrubTime((cd.layer.start || 0) + cd.cue.start + Math.min(0.05, (cd.cue.end - cd.cue.start) / 2));
+          }
+          FM.requestRender();
+          return;
+        }
         if (dragging && scrub && !scrub.moved) {
           // A TAP on the timeline (ruler OR empty lane) NEVER seeks — only a horizontal DRAG scrubs.
           // Tapping off any clip just deselects (revealing the Add menu / dropping the phone sheet).
@@ -1864,6 +1960,12 @@ window.FM = window.FM || {};
       tracksEl.querySelectorAll('.clip').forEach(clipEl => {
         const l = FM.layerById(FM.scene, clipEl.dataset.id);
         clipEl.classList.toggle('under-playhead', !!l && t >= l.start && t < l.start + l.duration);
+        // Light the caption cue that is actually on screen right now — the same "which cue is
+        // showing" answer the compositor uses, so the bar never disagrees with the picture.
+        if (l && FM.captions && FM.captions.isTrack(l)) {
+          const liveI = FM.captions.indexAt(l, t);
+          clipEl.querySelectorAll('.cap-cue').forEach(ch => ch.classList.toggle('live', +ch.dataset.ci === liveI));
+        }
         // AM: keep the clip NAME pinned to the clip's VISIBLE left edge as the timeline scrolls, so the
         // name stays readable even when the clip's start has scrolled off-screen. Pure math (no reflow).
         const label = clipEl.querySelector('.clip-label');

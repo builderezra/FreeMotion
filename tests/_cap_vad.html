@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>VAD verification — synthesised audio</title></head>
+<body>
+<pre id="out">running…</pre>
+<script src="../js/captions-vad.js"></script>
+<script>
+var L = []; function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function post(name) { try { fetch('/_result/' + name, { method: 'POST', body: L.join('\n') }).catch(function () {}); } catch (e) {} }
+
+/* Deterministic PRNG — the whole point is that this test gives the same answer every run.
+ * mulberry32; no Math.random anywhere in the harness or the detector. */
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* Build a mono buffer at `rate` with speech-like bursts at TRUE times.
+ * A burst is broadband noise, amplitude-modulated at syllable rate (~4.3 Hz) and passed through a
+ * one-pole filter whose cutoff wobbles — so it has BOTH the energy modulation and the alternating
+ * voiced/unvoiced zero-crossing character real speech has. Between bursts: a quiet noise floor. */
+function makeClip(rate, dur, bursts, opt) {
+  opt = opt || {};
+  var gain = opt.gain == null ? 1 : opt.gain;
+  var floorAmp = opt.floorAmp == null ? 0.0008 : opt.floorAmp;   // ~ -62 dBFS room tone
+  var r = rng(opt.seed == null ? 12345 : opt.seed);
+  var n = Math.round(rate * dur), d = new Float32Array(n);
+  for (var i = 0; i < n; i++) d[i] = (r() * 2 - 1) * floorAmp;
+  bursts.forEach(function (b, bi) {
+    var s = Math.round(b[0] * rate), e = Math.round(b[1] * rate);
+    var lp = 0, atk = Math.round(0.030 * rate);
+    for (var i = s; i < e; i++) {
+      var tt = (i - s) / rate, len = (e - s) / rate;
+      // syllable-rate AM (never fully to zero, or the gap logic would split inside a word)
+      var am = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * 4.3 * tt + bi), 2);
+      // attack / release so onsets are not a click
+      var env = Math.min(1, (i - s) / atk) * Math.min(1, (e - i) / atk);
+      // wobbling one-pole: alternates bright (fricative-ish, high ZCR) and dark (voiced, low ZCR)
+      var a = 0.55 + 0.40 * Math.sin(2 * Math.PI * 2.1 * tt + bi * 0.7);
+      var white = r() * 2 - 1;
+      lp = lp + (1 - a) * (white - lp);
+      var v = (a > 0.75 ? white : lp * 2.2);
+      d[i] += v * am * env * 0.28 * gain;
+      if (len < 0) break;
+    }
+  });
+  return { sampleRate: rate, data: d };
+}
+function toneClip(rate, dur, hz, amp) {
+  var n = Math.round(rate * dur), d = new Float32Array(n);
+  for (var i = 0; i < n; i++) d[i] = Math.sin(2 * Math.PI * hz * i / rate) * (amp == null ? 0.3 : amp);
+  return { sampleRate: rate, data: d };
+}
+function silentClip(rate, dur) { return { sampleRate: rate, data: new Float32Array(Math.round(rate * dur)) }; }
+
+// Match detected segments to true bursts (nearest start) and report ms errors.
+function score(truth, got) {
+  var rows = [], maxErr = 0, matched = 0;
+  truth.forEach(function (b) {
+    var best = null, bd = 1e9;
+    got.forEach(function (g) { var d = Math.abs(g.start - b[0]); if (d < bd) { bd = d; best = g; } });
+    if (best && bd < 0.75) {
+      matched++;
+      var es = (best.start - b[0]) * 1000, ee = (best.end - b[1]) * 1000;
+      maxErr = Math.max(maxErr, Math.abs(es), Math.abs(ee));
+      rows.push('  true ' + b[0].toFixed(2) + '–' + b[1].toFixed(2) + '  got ' + best.start.toFixed(3) + '–' + best.end.toFixed(3) +
+        '   Δstart ' + (es >= 0 ? '+' : '') + es.toFixed(0) + ' ms   Δend ' + (ee >= 0 ? '+' : '') + ee.toFixed(0) + ' ms');
+    } else rows.push('  true ' + b[0].toFixed(2) + '–' + b[1].toFixed(2) + '   MISSED');
+  });
+  return { rows: rows, maxErr: maxErr, matched: matched };
+}
+
+var RATE = 8000;
+var TRUTH = [[0.80, 2.10], [3.40, 4.25], [6.00, 9.20], [10.50, 11.05]];
+
+(async function () {
+  try {
+    say('FM.detectSpeech: ' + typeof FM.detectSpeech);
+
+    // ---- 1. speech-like bursts, normal level ----
+    var clip = makeClip(RATE, 13, TRUTH);
+    var r1 = await FM.detectSpeech(clip);
+    say('\n=== 1. speech-like bursts @ full level ===');
+    say('stats: ' + JSON.stringify(r1.stats));
+    say('detected ' + r1.segments.length + ': ' + r1.segments.map(function (s) { return s.start.toFixed(2) + '-' + s.end.toFixed(2); }).join(', '));
+    var sc1 = score(TRUTH, r1.segments);
+    sc1.rows.forEach(say);
+    say('matched ' + sc1.matched + '/' + TRUTH.length + '   worst boundary error ' + sc1.maxErr.toFixed(0) + ' ms   extra segments ' + (r1.segments.length - sc1.matched));
+
+    // ---- 2. same clip 34 dB quieter (adaptive threshold must still work) ----
+    var quiet = makeClip(RATE, 13, TRUTH, { gain: 0.02, floorAmp: 0.000016 });
+    var r2 = await FM.detectSpeech(quiet);
+    var sc2 = score(TRUTH, r2.segments);
+    say('\n=== 2. same bursts at 2% amplitude (quiet recording) ===');
+    say('stats: ' + JSON.stringify(r2.stats));
+    say('detected ' + r2.segments.length + ': ' + r2.segments.map(function (s) { return s.start.toFixed(2) + '-' + s.end.toFixed(2); }).join(', '));
+    sc2.rows.forEach(say);
+    say('matched ' + sc2.matched + '/' + TRUTH.length + '   worst boundary error ' + sc2.maxErr.toFixed(0) + ' ms');
+
+    // ---- 3. must NOT fire ----
+    var rt = await FM.detectSpeech(toneClip(RATE, 10, 440, 0.3));
+    say('\n=== 3. steady 440 Hz tone, 10 s ===');
+    say('segments: ' + rt.segments.length + '  stats: ' + JSON.stringify(rt.stats));
+    var rs = await FM.detectSpeech(silentClip(RATE, 10));
+    say('=== 3b. digital silence, 10 s ===');
+    say('segments: ' + rs.segments.length + '  stats: ' + JSON.stringify(rs.stats));
+    var rn = await FM.detectSpeech(makeClip(RATE, 10, [], { floorAmp: 0.004 }));
+    say('=== 3c. steady room tone only (-48 dBFS noise, 10 s) ===');
+    say('segments: ' + rn.segments.length + '  stats: ' + JSON.stringify(rn.stats));
+
+    // ---- 3d. how much of the boundary error is the deliberate onset padding? ----
+    var rp = await FM.detectSpeech(makeClip(RATE, 13, TRUTH), { pad: 0 });
+    var scp = score(TRUTH, rp.segments);
+    say('\n=== 3d. same clip with pad:0 (raw detector accuracy) ===');
+    scp.rows.forEach(say);
+    say('worst RAW boundary error ' + scp.maxErr.toFixed(0) + ' ms  (the 80 ms pad is deliberate: speech onsets sit under the gate)');
+
+    // ---- 4. determinism ----
+    var again = await FM.detectSpeech(makeClip(RATE, 13, TRUTH));
+    say('\n=== 4. determinism ===');
+    say('identical to run 1: ' + (JSON.stringify(again.segments) === JSON.stringify(r1.segments)));
+
+    // ---- 5. long clip: does it block the main thread? ----
+    // A watchdog on a 10 ms interval measures the LONGEST gap the UI thread actually experienced —
+    // that is the number that decides whether the app freezes, not the total run time.
+    say('\n=== 5. 20-minute clip (8 kHz), main-thread blocking ===');
+    var longBursts = [];
+    for (var t = 1; t < 1195; t += 7) longBursts.push([t, t + 3.2]);
+    var big = makeClip(RATE, 1200, longBursts);
+    say('buffer: ' + big.data.length + ' samples = ' + (big.data.length * 4 / 1048576).toFixed(1) + ' MB Float32');
+    var last = performance.now(), worstGap = 0;
+    var wd = setInterval(function () { var now = performance.now(); worstGap = Math.max(worstGap, now - last); last = now; }, 10);
+    last = performance.now();
+    var t0 = performance.now();
+    var rl = await FM.detectSpeech(big);
+    var elapsed = performance.now() - t0;
+    await new Promise(function (r) { setTimeout(r, 60); });  // let the watchdog fire at least once after the run
+    clearInterval(wd);
+    say('detected ' + rl.segments.length + ' cues from ' + longBursts.length + ' bursts in ' + elapsed.toFixed(0) + ' ms');
+    say('longest UI-thread gap measured by watchdog: ' + worstGap.toFixed(1) + ' ms');
+    say('longest synchronous chunk reported by detector: ' + rl.stats.maxBlockMs + ' ms');
+
+    // ---- 6. blocking WITHOUT chunking, for comparison ----
+    var last2 = performance.now(), worst2 = 0;
+    var wd2 = setInterval(function () { var now = performance.now(); worst2 = Math.max(worst2, now - last2); last2 = now; }, 10);
+    last2 = performance.now();
+    var rl2 = await FM.detectSpeech(big, { chunkFrames: 1e9 });
+    // A promise resolution is a MICROTASK, and Chrome reschedules a setInterval it was suspended
+    // through rather than firing every missed tick — so clearing the watchdog straight after the
+    // await reports a fake 0 ms. Wait out a full watchdog period first.
+    await new Promise(function (r) { setTimeout(r, 60); });
+    clearInterval(wd2);
+    say('same clip with chunking disabled (chunkFrames=1e9): longest UI gap ' + worst2.toFixed(1) + ' ms, detector chunk ' + rl2.stats.maxBlockMs + ' ms');
+    say('same segments either way: ' + (JSON.stringify(rl2.segments) === JSON.stringify(rl.segments)));
+
+    say('\nDONE');
+    post('vad');
+  } catch (e) { say('ERR ' + (e && e.stack || e)); say('DONE'); post('vad'); }
+})();
+</script>
+</body>
+</html>

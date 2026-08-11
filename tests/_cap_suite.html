@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Suite runner (headless, posts its result)</title></head>
+<body>
+<pre id="out">running…</pre>
+<iframe id="app" src="../index.html" style="position:fixed;left:-10000px;top:0;width:900px;height:760px;border:0"></iframe>
+<script>
+/* Same job as run.html, but it POSTs the summary when it finishes instead of only painting it —
+   --dump-dom serialises at the load event and truncates anything that lands after. */
+var L = []; function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function post() { try { fetch('/_result/suite', { method: 'POST', body: L.join('\n') }).catch(function () {}); } catch (e) {} }
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow;
+  setTimeout(function () {
+    fetch('tests.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (src) {
+      var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
+      return w.FMTests.run();
+    }).then(function (res) {
+      say('Regression ' + res.regressionPass + '/' + res.regressionTotal + (res.regressionGreen ? ' GREEN' : ' RED'));
+      say('Pending ' + res.pendingPass + '/' + res.pendingTotal + ' built');
+      res.results.forEach(function (r) { if (!r.ok) say((r.pending ? 'pending ' : 'REGRESSION ') + 'FAIL: ' + r.name + ' — ' + r.error); });
+      say('DONE'); post();
+    }).catch(function (e) { say('ERR ' + (e && e.stack || e)); say('DONE'); post(); });
+  }, 1200);
+});
+</script>
+</body>
+</html>
