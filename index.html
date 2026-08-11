@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- viewport-fit=cover (v5.49). Without it iOS letterboxes a standalone web app BELOW the status
+     bar and fills that strip with the page background, which is the flat black band with a hard
+     seam across the top that Ezra photographed: "at the very top of the screen there's a cut off…
+     the design should just flow to the very top seamlessly." The rest of the app was already
+     written for cover mode — a dozen rules consume env(safe-area-inset-bottom) and two consume
+     the top one — so those insets were simply resolving to 0 and doing nothing. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>FreeMotion</title>
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=286">
+<link rel="stylesheet" href="styles.css?v=289">
 <link rel="stylesheet" href="theme-glass.css?v=15">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -113,7 +119,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.48</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.49</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing

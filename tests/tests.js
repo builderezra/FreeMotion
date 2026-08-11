@@ -2228,6 +2228,77 @@
     if (Math.abs(FM.evalProp(neu, 0) - 0) > 1e-9 || Math.abs(FM.evalProp(neu, 1) - 100) > 1e-9) throw new Error('a parameterised keyframe does not land on its own values');
   });
 
+  test('shell: the page reaches the screen edges, and nothing hides under the system UI', { item: 'safe-area-cover' }, function () {
+    // v5.49. Ezra: "at the very top of the screen there's a cut off, and I feel it looks very ugly,
+    // the design should just flow to the very top seamlessly." Cause: the viewport meta had no
+    // viewport-fit=cover, so iOS letterboxes a standalone web app BELOW the status bar and paints that
+    // strip with the page background — the flat black band with a hard seam. The rest of the app was
+    // already written for cover mode (a dozen rules consume the bottom inset), so those env() values
+    // were resolving to 0 and doing nothing.
+    //
+    // A real safe-area inset cannot be produced in a headless browser, so this asserts the two things
+    // that CAUSE the seam rather than the seam itself: cover mode is on, and every element pinned to
+    // an edge of the screen consumes the inset on that edge. Both are exactly what regressed.
+    const mv = document.querySelector('meta[name="viewport"]');
+    if (!mv) throw new Error('no viewport meta');
+    if (!/viewport-fit\s*=\s*cover/.test(mv.content)) {
+      throw new Error('the viewport meta has no viewport-fit=cover ("' + mv.content + '") — iOS will letterbox the app below the status bar and fill the strip with the page background');
+    }
+
+    // Walk the stylesheet for the rules that pin something to the top or bottom of the SCREEN, and
+    // insist each one pays the matching inset. Reading the CSS text, because these are declarations
+    // that resolve to 0 here — a computed-style check would pass no matter what.
+    const want = [
+      { sel: '.hm-top', edge: 'top' },          // home header — the wordmark would sit under the clock
+      { sel: '#topbar-m', edge: 'top' },        // editor top bar
+      { sel: '#add-fab', edge: 'bottom' },      // the + orb, over the home indicator
+      { sel: '#add-sheet', edge: 'bottom' },    // the add sheet's last row
+    ];
+    let css = '';
+    for (const sheet of document.styleSheets) {
+      let rules; try { rules = sheet.cssRules; } catch (e) { continue; }   // cross-origin sheets throw
+      if (!rules) continue;
+      const walk = rs => { for (const r of rs) { if (r.cssText) css += r.cssText + '\n'; if (r.cssRules) walk(r.cssRules); } };
+      walk(rules);
+    }
+    if (css.length < 5000) throw new Error('only ' + css.length + ' chars of CSS were readable — this test would pass without checking anything');
+    // Split into rule blocks rather than regexing across the whole sheet — a greedy prefix walks past
+    // closing braces and silently reads the WRONG block, which is how the first version of this
+    // reported #topbar-m as missing an inset it has had all along.
+    const blocks = css.split('}').map(b => { const i = b.lastIndexOf('{'); return i < 0 ? null : { sel: b.slice(0, i), body: b.slice(i + 1) }; }).filter(Boolean);
+    want.forEach(w => {
+      const hit = blocks.some(b => b.sel.indexOf(w.sel) >= 0 && b.body.indexOf('safe-area-inset-' + w.edge) >= 0);
+      if (!hit) throw new Error(w.sel + ' is pinned to the ' + w.edge + ' of the screen but never consumes env(safe-area-inset-' + w.edge + ') — under viewport-fit=cover its content sits under the system UI');
+    });
+  });
+
+  test('home: both backdrop layers actually drift', { item: 'backdrop-motion' }, function () {
+    // v5.49. Ezra: "the background design needs more animation, currently it's a bit stiff." It was
+    // stiff for two reasons and only one was speed: just ONE of the two gradient layers was animated
+    // at all, and the OTHER had its drift silently replaced — #home-screen.hm-intro::before is more
+    // specific than the plain ::before rule and listed only the bloom, and .hm-intro stays on the
+    // element, so that layer sat frozen on its first keyframe forever. Its ::after sibling chained
+    // both animations, which is why the bug was invisible.
+    const el = document.getElementById('home-screen');
+    if (!el) throw new Error('#home-screen missing');
+    const named = which => {
+      const a = getComputedStyle(el, which).animationName || '';
+      const d = (getComputedStyle(el, which).animationDuration || '').split(',').map(s => parseFloat(s));
+      return { names: a.split(',').map(s => s.trim()), secs: d };
+    };
+    ['::before', '::after'].forEach(w => {
+      const g = named(w);
+      const drift = g.names.findIndex(n => /drift/.test(n));
+      if (drift < 0) throw new Error('#home-screen' + w + ' has no drift animation (has: ' + g.names.join(', ') + ') — that layer is a still image');
+      const secs = g.secs[drift];
+      if (!(secs > 0 && secs <= 30)) throw new Error('#home-screen' + w + ' drifts over ' + secs + 's — too slow to read as movement');
+    });
+    // The two must not share a period, or they slide as one flat sheet instead of rearranging.
+    const a = named('::before'), b = named('::after');
+    const sa = a.secs[a.names.findIndex(n => /drift/.test(n))], sb = b.secs[b.names.findIndex(n => /drift/.test(n))];
+    if (Math.abs(sa - sb) < 1) throw new Error('both backdrop layers drift on the same ' + sa + 's period — they travel together and read as one sheet');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
