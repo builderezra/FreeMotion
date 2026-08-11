@@ -98,7 +98,13 @@ window.FM = window.FM || {};
         // imported keyframe easing of 'toString' resolved to Object.prototype.toString — truthy, called
         // unbound, returning a string, and the lerp below went NaN. Only audioFx keyframes are ease-
         // validated on import, so this site is the backstop for every other prop.
-        if (b.bez) f = bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);
+        // A parameterised ease (v5.47: the bounce/steps families, each with its own knobs) wins over
+        // everything below it. easeApply returns null for an absent or unknown `ez`, so a project
+        // saved before this existed — or a hostile import naming a preset this build has never heard
+        // of — falls straight through to the chain that has always been here.
+        const _ez = FM.easeApply ? FM.easeApply(b.ez, f) : null;
+        if (_ez != null) f = _ez;
+        else if (b.bez) f = bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);
         else if (hasOwn(EASES, b.e)) f = EASES[b.e](f);
         else if (hasOwn(FM.EASE_PRESETS, b.e)) { const z = FM.EASE_PRESETS[b.e]; f = bezierAt(z[0], z[1], z[2], z[3], f); }
         if (typeof a.v === 'string' || typeof b.v === 'string') return lerpHexKf(a.v, b.v, f);   // colour keyframes

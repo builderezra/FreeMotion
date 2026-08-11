@@ -307,6 +307,21 @@ body {
 .es-presets { display: flex; flex-direction: column; gap: 9px; }
 .es-preset { width: 46px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .es-preset.on { border-color: var(--accent); background: rgba(41,217,187,.14); box-shadow: inset 0 0 0 1px rgba(41,217,187,.5); }
+/* FAMILY rail (v5.47) — outboard of the presets, the way AM nests them: pick the KIND of graph on the
+   outside, then which of its presets on the inside. Wider than a preset button and labelled, because
+   this rail changes what the whole editor is, and three unlabelled squiggles would not say that.
+   The rails scroll on their own if a family ever outgrows the height available; the graph beside them
+   keeps its size either way. */
+.es-fams { display: flex; flex-direction: column; gap: 9px; }
+.es-fam {
+  width: 58px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel-2); display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; cursor: pointer; padding: 5px 2px; color: var(--text-dim);
+}
+.es-fam-lbl { font-size: 9.5px; line-height: 1; letter-spacing: .2px; }
+.es-fam.on { border-color: var(--accent); background: rgba(41,217,187,.18); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(41,217,187,.5); }
+.es-presets, .es-fams { max-height: 100%; overflow-y: auto; scrollbar-width: none; }
+.es-presets::-webkit-scrollbar, .es-fams::-webkit-scrollbar { display: none; }
 .es-carousel { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 2px 0; }
 .es-car-arrow { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 20px; line-height: 1; cursor: pointer; }
 .es-car-label { min-width: 150px; text-align: center; color: #b8c4d6; font-size: 14px; }

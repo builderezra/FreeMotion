@@ -29,22 +29,33 @@ window.FM = window.FM || {};
   // Non-bezier named eases (bounce/elastic) — drawn by sampling FM.EASES, not as a draggable bezier.
   const CURVE_EASES = ['bounce', 'elastic'];
   const PAD = 26;
-  let canvas = null, presetWrap = null, hint = null, loopBtn = null, carLabel = null;
+  let canvas = null, presetWrap = null, hint = null, loopBtn = null, carLabel = null, famWrap = null;
   let cur = { layer: null, mode: 'all', keys: [], kfs: [] };   // kfs = end-keyframes to edit together
   let dragHandle = null;
 
   function bezOf(kf) { if (kf.bez) return kf.bez.slice(); const p = FM.EASE_PRESETS[kf.e] || FM.EASE_PRESETS.easeInOut; return p.slice(); }
 
-  function grid(ctx, W, H) {
+  // lo/hi are the VALUE range the box maps to; they default to the plain 0..1 the bezier editor has
+  // always used, so every existing caller is unchanged.
+  function grid(ctx, W, H, lo, hi) {
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi - lo < 1e-6) { lo = 0; hi = 1; }
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0c1016'; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
-    const gx = x => PAD + x * (W - 2 * PAD), gy = y => (H - PAD) - y * (H - 2 * PAD);
+    const gx = x => PAD + x * (W - 2 * PAD);
+    const gy = y => (H - PAD) - ((y - lo) / (hi - lo)) * (H - 2 * PAD);
     for (let i = 0; i <= 4; i++) {
-      ctx.beginPath(); ctx.moveTo(gx(i / 4), gy(0)); ctx.lineTo(gx(i / 4), gy(1)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(gx(0), gy(i / 4)); ctx.lineTo(gx(1), gy(i / 4)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx(i / 4), gy(lo)); ctx.lineTo(gx(i / 4), gy(hi)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx(0), gy(lo + (hi - lo) * i / 4)); ctx.lineTo(gx(1), gy(lo + (hi - lo) * i / 4)); ctx.stroke();
     }
-    return { gx: gx, gy: gy };
+    // The keyframe band — where 0 and 1 actually are — stays marked even when the view is zoomed out
+    // to hold an overshoot, or there is no way to read how far past the ends the curve goes.
+    if (lo < -0.02 || hi > 1.02) {
+      ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,.18)';
+      [0, 1].forEach(v => { ctx.beginPath(); ctx.moveTo(gx(0), gy(v)); ctx.lineTo(gx(1), gy(v)); ctx.stroke(); });
+      ctx.restore();
+    }
+    return { gx: gx, gy: gy, lo: lo, hi: hi };
   }
   function drawBez(ctx, W, H, bez) {
     const g = grid(ctx, W, H), gx = g.gx, gy = g.gy;
@@ -73,6 +84,22 @@ window.FM = window.FM || {};
     ctx.stroke();
     ctx.fillStyle = '#29d9bb'; [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
   }
+  // Mini preview for a PARAMETERISED preset's button — the same fn the graph uses, at its defaults,
+  // so a preset's icon is always a true miniature of what picking it will give you.
+  function drawEzGlyph(cv, P) {
+    const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, pd = 4;
+    ctx.clearRect(0, 0, W, H);
+    const gx = x => pd + x * (W - 2 * pd), gy = y => (H - pd) - y * (H - 2 * pd);
+    ctx.strokeStyle = '#c2cee0'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const x = i / 48, y = Math.max(-0.25, Math.min(1.25, P.fn(x, P.defaults)));
+      const px = gx(x), py = gy(y);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
   // Mini preview for a preset glyph button.
   function drawGlyph(cv, key) {
     const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, p = 4;
@@ -100,6 +127,121 @@ window.FM = window.FM || {};
     return { keys: keys, kfs: kfs };
   }
 
+  /* ---- parameterised families (v5.47) --------------------------------------------------------
+   * A keyframe carrying `ez` belongs to the Bounce or Steps family; anything else is the Bezier
+   * family, which keeps its two draggable handles exactly as before. The editor knows nothing about
+   * any individual preset: it asks the preset where its points SIT and hands a drag straight back to
+   * it (see js/eases.js), so adding a preset never touches this file. */
+  let ezPts = [];        // control points in screen px, rebuilt every draw, used for hit-testing
+  let ezDrag = -1;       // index into ezPts while one is held
+
+  function curEz() { return cur.kfs.length ? cur.kfs[0].ez : null; }
+  function curFamKey() {
+    const z = curEz();
+    const F = z && FM.easeFamily ? FM.easeFamily(z.fam) : null;
+    return (F && !F.bez) ? z.fam : 'bezier';
+  }
+  function curPresetDef() { const z = curEz(); return z && FM.easePreset ? FM.easePreset(z.fam, z.preset) : null; }
+  function curParams() { const z = curEz(), P = curPresetDef(); return P ? Object.assign({}, P.defaults, z.p || {}) : null; }
+
+  function applyEzPreset(famKey, presetKey) {
+    const P = FM.easePreset(famKey, presetKey); if (!P) return;
+    cur.kfs.forEach(kf => {
+      kf.ez = { fam: famKey, preset: presetKey, p: Object.assign({}, P.defaults) };
+      delete kf.bez;
+      // Leave a plain named ease behind as well. A build that predates `ez` — or any reader that
+      // ignores it — then gets a sane curve instead of a linear one, rather than the project quietly
+      // losing its easing on a round trip.
+      kf.e = 'easeInOut';
+    });
+    FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
+  }
+  function applyFamily(famKey) {
+    const F = FM.easeFamily(famKey); if (!F) return;
+    if (F.bez) { cur.kfs.forEach(kf => { delete kf.ez; }); applyPreset('easeInOut'); return; }
+    applyEzPreset(famKey, F.presets[0].key);
+  }
+  function setEzParams(np) {
+    cur.kfs.forEach(kf => { if (kf.ez) kf.ez.p = Object.assign({}, np); });
+    FM.requestRender(); redraw();
+  }
+
+  // Draw a parameterised curve and its grab points. Rails and stalks are drawn first so the circles
+  // sit on top of them, and every point's position comes from the preset's own `at`, so what you see
+  // and what a drag reads can never disagree.
+  function drawEzCurve(ctx, W, H, P, prm) {
+    // AUTO-FIT the vertical range to the curve AND its handles. These families overshoot hard on
+    // purpose — a bounce at its defaults peaks near 1.9, elastic near 3.7 — so a graph pinned to 0..1
+    // draws a line that leaves the top of the box and takes its grab points with it, which is exactly
+    // what the first build of this did. The 0..1 band still gets its gridlines, so you can see how far
+    // past the keyframes the curve is actually going.
+    let lo = 0, hi = 1;
+    for (let i = 0; i <= 160; i++) { const y = P.fn(i / 160, prm); if (Number.isFinite(y)) { if (y < lo) lo = y; if (y > hi) hi = y; } }
+    (P.points || []).forEach(pt => { const a = pt.at(prm); if (Number.isFinite(a.y)) { if (a.y < lo) lo = a.y; if (a.y > hi) hi = a.y; } });
+    const pad = (hi - lo) * 0.08 || 0.08;
+    lo -= pad; hi += pad;
+    const g = grid(ctx, W, H, lo, hi), gx = g.gx, gy = g.gy;
+    ctx.strokeStyle = '#29d9bb'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
+    for (let i = 0; i <= 160; i++) {
+      const x = i / 160, y = P.fn(x, prm);
+      const px = gx(x), py = gy(y);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#29d9bb';
+    [[0, 0], [1, 1]].forEach(q => { ctx.beginPath(); ctx.arc(gx(q[0]), gy(q[1]), 4, 0, 7); ctx.fill(); });
+
+    ezPts = [];
+    (P.points || []).forEach((pt, i) => {
+      const at = pt.at(prm);
+      const px = gx(Math.max(0, Math.min(1, at.x))), py = gy(at.y);
+      ctx.save();
+      if (pt.rail) {
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,205,84,.55)'; ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        if (pt.rail === 'h') { ctx.moveTo(gx(0), py); ctx.lineTo(gx(1), py); }
+        else { ctx.moveTo(px, gy(0)); ctx.lineTo(px, gy(1.3)); }
+        ctx.stroke();
+      } else if (pt.stalk) {
+        // a short leader back to the curve, so a point floating off it still reads as attached
+        const onY = gy(P.fn(Math.max(0, Math.min(1, at.x)), prm));
+        ctx.strokeStyle = 'rgba(255,205,84,.75)'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, onY); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(px, py, 9, 0, 7);
+      ctx.fillStyle = (ezDrag === i) ? '#fff' : '#ffcd54';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(10,14,20,.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ezPts.push({ px: px, py: py });
+    });
+  }
+
+  // Fill the inner rail with the ACTIVE family's presets. Rebuilt rather than shown/hidden, because
+  // the two families hold different numbers of presets and a stale button would still be clickable.
+  let _railFam = null;
+  function buildPresetRail(famKey) {
+    if (!presetWrap || _railFam === famKey) return;
+    _railFam = famKey;
+    presetWrap.innerHTML = '';
+    const F = FM.easeFamily(famKey);
+    if (!F || F.bez) {
+      PRESETS.forEach(pr => {
+        const b = document.createElement('button'); b.className = 'es-preset'; b._key = pr.key; b.title = pr.label;
+        const cv = document.createElement('canvas'); cv.width = 30; cv.height = 22; b.appendChild(cv); drawGlyph(cv, pr.key);
+        b.addEventListener('click', () => applyPreset(pr.key));
+        presetWrap.appendChild(b);
+      });
+      return;
+    }
+    F.presets.forEach(P => {
+      const b = document.createElement('button'); b.className = 'es-preset'; b._key = P.key; b.title = P.label;
+      const cv = document.createElement('canvas'); cv.width = 30; cv.height = 22; b.appendChild(cv); drawEzGlyph(cv, P);
+      b.addEventListener('click', () => applyEzPreset(famKey, P.key));
+      presetWrap.appendChild(b);
+    });
+  }
+
   function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; }); FM.requestRender(); redraw(); }
   function applyPreset(key) {
     // Store only the named easing (delete any custom bez). evalProp + bezOf both resolve a named
@@ -115,13 +257,20 @@ window.FM = window.FM || {};
     if (!canvas) return;
     if (!cur.kfs.length) { hint.style.display = ''; canvas.style.display = 'none'; presetWrap.style.opacity = '.4'; if (carLabel) carLabel.textContent = '—'; return; }
     hint.style.display = 'none'; canvas.style.display = ''; presetWrap.style.opacity = '1';
-    if (curIsHold()) drawHold(canvas.getContext('2d'), canvas.width, canvas.height);
-    else if (curIsCurve()) drawEaseCurve(canvas.getContext('2d'), canvas.width, canvas.height, FM.EASES[cur.kfs[0].e]);
-    else drawBez(canvas.getContext('2d'), canvas.width, canvas.height, bezOf(cur.kfs[0]));
-    // active preset highlight
-    const activeKey = curIsHold() ? 'hold' : (cur.kfs[0].bez ? null : cur.kfs[0].e);
+    const Pdef = curPresetDef(), prm = curParams();
+    if (Pdef && prm) drawEzCurve(canvas.getContext('2d'), canvas.width, canvas.height, Pdef, prm);
+    else if (curIsHold()) { ezPts = []; drawHold(canvas.getContext('2d'), canvas.width, canvas.height); }
+    else if (curIsCurve()) { ezPts = []; drawEaseCurve(canvas.getContext('2d'), canvas.width, canvas.height, FM.EASES[cur.kfs[0].e]); }
+    else { ezPts = []; drawBez(canvas.getContext('2d'), canvas.width, canvas.height, bezOf(cur.kfs[0])); }
+
+    // the two rails: which FAMILY is on, and which of its presets
+    const famKey = curFamKey();
+    if (famWrap) [].forEach.call(famWrap.children, b => b.classList.toggle('on', b._key === famKey));
+    buildPresetRail(famKey);
+    const activeKey = Pdef ? Pdef.key : (curIsHold() ? 'hold' : (cur.kfs[0].bez ? null : cur.kfs[0].e));
     [].forEach.call(presetWrap.children, b => b.classList.toggle('on', b._key === activeKey));
-    if (carLabel) carLabel.textContent = curIsHold() ? 'Hold (step)' : (cur.kfs[0].bez ? 'Cubic Bezier Easing' : (PRESETS.find(p => p.key === cur.kfs[0].e) || {}).label || 'Cubic Bezier Easing');
+    if (carLabel) carLabel.textContent = Pdef ? Pdef.label
+      : (curIsHold() ? 'Hold (step)' : (cur.kfs[0].bez ? 'Cubic Bezier Easing' : (PRESETS.find(p => p.key === cur.kfs[0].e) || {}).label || 'Cubic Bezier Easing'));
     if (loopBtn) { const fp = cur.get && cur.keys.length ? cur.get(cur.keys[0]) : null; const lm = fp && fp.loopMode; loopBtn.classList.toggle('on', !!lm && lm !== 'none'); loopBtn.title = 'Loop: ' + (lm || 'none'); }
   }
 
@@ -130,9 +279,24 @@ window.FM = window.FM || {};
     const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
     return { x: Math.max(0, Math.min(1, (px - PAD) / (W - 2 * PAD))), y: Math.max(-0.4, Math.min(1.4, ((H - PAD) - py) / (H - 2 * PAD))) };   // clamp to the DRAWABLE band — a handle at y≈1.8 vanished off-canvas and became ungrabbable
   }
-  window.addEventListener('pointermove', e => { if (dragHandle === null || !cur.kfs.length || !canvas) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); bez[dragHandle * 2] = g.x; bez[dragHandle * 2 + 1] = g.y; applyBez(bez); });
-  window.addEventListener('pointerup', () => { if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); } });
-  window.addEventListener('pointercancel', () => { if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); } });   // an OS-cancelled touch must not leave the NEXT touch silently rewriting the curve
+  window.addEventListener('pointermove', e => {
+    if (ezDrag >= 0) {
+      const P = curPresetDef(), prm = curParams();
+      if (!P || !prm) { ezDrag = -1; return; }
+      const g = toGraph(e);
+      const np = P.points[ezDrag].drag(prm, g.x, g.y);
+      setEzParams(Object.assign({}, prm, np));
+      return;
+    }
+    if (dragHandle === null || !cur.kfs.length || !canvas) return;
+    const g = toGraph(e); const bez = bezOf(cur.kfs[0]); bez[dragHandle * 2] = g.x; bez[dragHandle * 2 + 1] = g.y; applyBez(bez);
+  });
+  function endDrag() {
+    if (ezDrag >= 0) { ezDrag = -1; redraw(); if (FM.history) FM.history.commit(); }
+    if (dragHandle !== null) { dragHandle = null; if (FM.history) FM.history.commit(); }
+  }
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);   // an OS-cancelled touch must not leave the NEXT touch silently rewriting the curve
 
   // Build the editor as an INLINE element (no full-screen overlay) so it sits in the same Move &
   // Transform bottom-sheet, exactly like Alight Motion. The inspector renders this as a sub-view and
@@ -144,23 +308,62 @@ window.FM = window.FM || {};
     const gwrap = document.createElement('div'); gwrap.className = 'es-graph';
     canvas = document.createElement('canvas'); canvas.className = 'es-canvas'; canvas.width = 320; canvas.height = 320;
     hint = document.createElement('div'); hint.className = 'es-hint'; hint.textContent = 'Animate this property (tap ◆), add a second keyframe, then shape its easing here.'; hint.style.display = 'none';
-    canvas.addEventListener('pointerdown', e => { if (!cur.kfs.length || curIsHold() || curIsCurve()) return; const g = toGraph(e); const bez = bezOf(cur.kfs[0]); dragHandle = Math.hypot(g.x - bez[0], g.y - bez[1]) <= Math.hypot(g.x - bez[2], g.y - bez[3]) ? 0 : 1; e.preventDefault(); });
+    canvas.addEventListener('pointerdown', e => {
+      if (!cur.kfs.length) return;
+      // A parameterised preset owns the canvas: grab the nearest of ITS points, within a real finger
+      // radius. Falling through to the bezier branch here would rewrite kf.bez on a bounce keyframe
+      // and silently drop it back to the Bezier family mid-drag.
+      if (curPresetDef()) {
+        if (!ezPts.length) return;
+        const r = canvas.getBoundingClientRect(), sx = canvas.width / r.width, sy = canvas.height / r.height;
+        const mx = (e.clientX - r.left) * sx, my = (e.clientY - r.top) * sy;
+        let best = -1, bd = 34 * Math.max(sx, sy);
+        ezPts.forEach((q, i) => { const d = Math.hypot(q.px - mx, q.py - my); if (d < bd) { bd = d; best = i; } });
+        if (best >= 0) { ezDrag = best; redraw(); e.preventDefault(); }
+        return;
+      }
+      if (curIsHold() || curIsCurve()) return;
+      const g = toGraph(e); const bez = bezOf(cur.kfs[0]);
+      dragHandle = Math.hypot(g.x - bez[0], g.y - bez[1]) <= Math.hypot(g.x - bez[2], g.y - bez[3]) ? 0 : 1;
+      e.preventDefault();
+    });
     gwrap.append(canvas, hint);
 
     presetWrap = document.createElement('div'); presetWrap.className = 'es-presets';
-    PRESETS.forEach(pr => {
-      const b = document.createElement('button'); b.className = 'es-preset'; b._key = pr.key; b.title = pr.label;
-      const cv = document.createElement('canvas'); cv.width = 30; cv.height = 22; b.appendChild(cv); drawGlyph(cv, pr.key);
-      b.addEventListener('click', () => applyPreset(pr.key));
-      presetWrap.appendChild(b);
+    // The FAMILY rail sits outboard of the presets, exactly as AM stacks them: pick the kind of graph
+    // on the outside, then which of its presets on the inside.
+    famWrap = document.createElement('div'); famWrap.className = 'es-fams';
+    (FM.EASE_FAMILIES || []).forEach(F => {
+      const b = document.createElement('button'); b.className = 'es-fam'; b._key = F.key; b.title = F.label;
+      const cv = document.createElement('canvas'); cv.width = 30; cv.height = 22; b.appendChild(cv);
+      if (F.bez) drawGlyph(cv, 'easeInOut'); else drawEzGlyph(cv, F.presets[0]);
+      b.appendChild(Object.assign(document.createElement('span'), { className: 'es-fam-lbl', textContent: F.label }));
+      b.addEventListener('click', () => { if (curFamKey() !== F.key) applyFamily(F.key); });
+      famWrap.appendChild(b);
     });
-    main.append(gwrap, presetWrap);
+    main.append(gwrap, presetWrap, famWrap);
 
     const car = document.createElement('div'); car.className = 'es-carousel';
     const cprev = document.createElement('button'); cprev.className = 'es-car-arrow'; cprev.innerHTML = '&#8249;';
     carLabel = document.createElement('div'); carLabel.className = 'es-car-label'; carLabel.textContent = 'Cubic Bezier Easing';
     const cnext = document.createElement('button'); cnext.className = 'es-car-arrow'; cnext.innerHTML = '&#8250;';
-    const step = d => { const order = PRESETS.map(p => p.key); const a = curIsHold() ? 'hold' : (cur.kfs.length && !cur.kfs[0].bez ? cur.kfs[0].e : 'easeInOut'); let i = order.indexOf(a); i = (i < 0 ? 0 : i + d + order.length) % order.length; applyPreset(order[i]); };
+    // The pager walks the CURRENT family's presets, not one flat list of everything — stepping from
+    // the last bezier preset straight into Bounce is what made the old carousel feel arbitrary.
+    const step = d => {
+      const famKey = curFamKey(), F = FM.easeFamily(famKey);
+      if (!F) return;
+      if (F.bez) {
+        const order = PRESETS.map(p => p.key);
+        const a = curIsHold() ? 'hold' : (cur.kfs.length && !cur.kfs[0].bez ? cur.kfs[0].e : 'easeInOut');
+        let i = order.indexOf(a); i = (i < 0 ? 0 : i + d + order.length) % order.length;
+        applyPreset(order[i]);
+        return;
+      }
+      const order = F.presets.map(p => p.key), z = curEz();
+      let i = order.indexOf(z && z.preset);
+      i = (i < 0 ? 0 : i + d + order.length) % order.length;
+      applyEzPreset(famKey, order[i]);
+    };
     cprev.addEventListener('click', () => step(-1)); cnext.addEventListener('click', () => step(1));
     car.append(cprev, carLabel, cnext);
 

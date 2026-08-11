@@ -189,6 +189,32 @@ var RECIPES = {
     if (pop) { const b = d.querySelector('.te-' + pop); if (!b) throw new Error('no .te-' + pop); b.click(); await sleep(600); }
     await sleep(300);
   },
+  // The easing graph editor. ?fam= picks a family, ?preset= one of its presets.
+  async 'easing'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.scene.layers.length = 0;
+    const L = FM.makeLayer('shape', { shape: 'star', name: 'Star', x: 300, y: 500, shapeW: 260, shapeH: 260, fill: '#7a5cff' });
+    L.transform.x = { kf: [{ t: 0, v: 200, e: 'easeInOut' }, { t: 2, v: 800, e: 'easeInOut' }] };
+    FM.scene.layers.push(L); FM.refreshAll(); await sleep(300);
+    FM.selectLayer(L.id); await sleep(300);
+    FM.time = 2; FM.timeline.updatePlayhead();
+    FM.inspector.openCategory('transform'); FM._mtMode = 'move'; FM.inspector.refresh(); await sleep(300);
+    const eb = d.querySelector('.mt-ease'); if (!eb) throw new Error('no easing button on the M&T rail');
+    eb.click(); await sleep(600);
+    const fam = q.get('fam');
+    if (fam) {
+      const b = Array.prototype.slice.call(d.querySelectorAll('.es-fam')).find(x => x._key === fam);
+      if (!b) throw new Error('no family ' + fam + ' (have ' + Array.prototype.map.call(d.querySelectorAll('.es-fam'), x => x._key).join(',') + ')');
+      b.click(); await sleep(500);
+    }
+    const pre = q.get('preset');
+    if (pre) {
+      const b = Array.prototype.slice.call(d.querySelectorAll('.es-preset')).find(x => x._key === pre);
+      if (!b) throw new Error('no preset ' + pre + ' (have ' + Array.prototype.map.call(d.querySelectorAll('.es-preset'), x => x._key).join(',') + ')');
+      b.click(); await sleep(500);
+    }
+    await sleep(300);
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 

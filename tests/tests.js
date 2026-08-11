@@ -2171,6 +2171,63 @@
     }
   });
 
+  test('easing: every parameterised preset lands exactly on its keyframes', { item: 'ease-families' }, function () {
+    // v5.47. The families Ezra asked for (bezier / bounce / steps, each with its own presets and its
+    // own grab points). The one invariant that matters more than any shape: an easing must return
+    // EXACTLY 0 at the start and EXACTLY 1 at the end, at every corner of its parameter range. Miss it
+    // and the layer jumps off its own keyframe — which is precisely what elastic did at high
+    // amplitude on the first pass (1.002 instead of 1), and what the period rescale could have
+    // reintroduced. Swept, not spot-checked.
+    if (!FM.EASE_FAMILIES || !FM.easeApply) throw new Error('the easing families never loaded');
+    const RANGES = { n: [1, 2, 8, 12], d: [0.15, 1.5, 3], a: [0, 0.05, 1, 2], p: [1, 3, 8], c: [1, 8], j: [2, 32], seed: [0, 99], w: [0, 1] };
+    let checked = 0;
+    FM.EASE_FAMILIES.forEach(F => {
+      if (F.bez) return;
+      F.presets.forEach(P => {
+        const keys = Object.keys(P.defaults);
+        let combos = [{}];
+        keys.forEach(k => {
+          const vals = RANGES[k] || [P.defaults[k]];
+          const next = [];
+          combos.forEach(c => vals.forEach(v => { const d = Object.assign({}, c); d[k] = v; next.push(d); }));
+          combos = next;
+        });
+        combos.forEach(c => {
+          const prm = Object.assign({}, P.defaults, c);
+          const y0 = P.fn(0, prm), y1 = P.fn(1, prm);
+          if (Math.abs(y0) > 1e-9) throw new Error(F.key + '/' + P.key + ' starts at ' + y0 + ' not 0 with ' + JSON.stringify(prm) + ' — the layer jumps at the first keyframe');
+          if (Math.abs(y1 - 1) > 1e-9) throw new Error(F.key + '/' + P.key + ' ends at ' + y1 + ' not 1 with ' + JSON.stringify(prm) + ' — the layer overshoots its last keyframe');
+          for (let s = 0; s <= 40; s++) { const y = P.fn(s / 40, prm); if (!Number.isFinite(y)) throw new Error(F.key + '/' + P.key + ' is ' + y + ' at t=' + (s / 40) + ' with ' + JSON.stringify(prm)); }
+          checked++;
+        });
+        // Every declared grab point must sit somewhere real, or the editor draws a handle at NaN.
+        (P.points || []).forEach(pt => {
+          const at = pt.at(P.defaults);
+          if (!at || !Number.isFinite(at.x) || !Number.isFinite(at.y)) throw new Error(F.key + '/' + P.key + ' point "' + pt.key + '" sits at ' + JSON.stringify(at));
+          const np = pt.drag(P.defaults, 0.5, 0.5);
+          if (!np || typeof np !== 'object') throw new Error(F.key + '/' + P.key + ' point "' + pt.key + '" returned ' + np + ' from a drag');
+          if (!Number.isFinite(P.fn(0.5, Object.assign({}, P.defaults, np)))) throw new Error(F.key + '/' + P.key + ' point "' + pt.key + '" dragged the curve to a non-finite value');
+        });
+      });
+    });
+    if (checked < 40) throw new Error('only ' + checked + ' parameter combinations swept — the sweep is not covering the ranges');
+
+    // Backwards compatibility, which is the other half of shipping a new keyframe field.
+    if (FM.easeApply(null, 0.5) !== null) throw new Error('an absent ez should resolve to null so evalProp falls through to the old chain');
+    if (FM.easeApply({ fam: 'nope', preset: 'nope' }, 0.5) !== null) throw new Error('an unknown family still resolves — an older project or a hostile import could produce a broken curve');
+    // …and a keyframe from before this existed must behave EXACTLY as it used to.
+    const oldStyle = { kf: [{ t: 0, v: 0 }, { t: 1, v: 100, e: 'bounce' }] };
+    const wantOld = 0 + (100 - 0) * FM.EASES.bounce(0.5);
+    if (Math.abs(FM.evalProp(oldStyle, 0.5) - wantOld) > 1e-9) throw new Error('a pre-existing e:"bounce" keyframe changed meaning: ' + FM.evalProp(oldStyle, 0.5) + ' vs ' + wantOld);
+
+    // …and a new one actually routes through the family maths, not the old chain.
+    const P0 = FM.easePreset('steps', 'steps');
+    const neu = { kf: [{ t: 0, v: 0 }, { t: 1, v: 100, e: 'easeInOut', ez: { fam: 'steps', preset: 'steps', p: { n: 4 } } }] };
+    const wantNew = 100 * P0.fn(0.5, { n: 4 });
+    if (Math.abs(FM.evalProp(neu, 0.5) - wantNew) > 1e-9) throw new Error('evalProp ignored ez: got ' + FM.evalProp(neu, 0.5) + ', the steps preset says ' + wantNew);
+    if (Math.abs(FM.evalProp(neu, 0) - 0) > 1e-9 || Math.abs(FM.evalProp(neu, 1) - 100) > 1e-9) throw new Error('a parameterised keyframe does not land on its own values');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
