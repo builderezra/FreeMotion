@@ -1375,38 +1375,45 @@
     }
   });
 
-  test('an effect sized in pixels covers the same fraction of frame at any preview scale', { item: 'plate-scale' }, function () {
-    // v5.31, and the head of BUG-HUNT.md's largest block. The preview canvas is rendered at
-    // P.width * s for the adaptive playback tier (down to 0.28), and an effect whose parameter is a
-    // LENGTH must multiply by that scale or it draws the same number of PLATE pixels — which is a
-    // much bigger thing in project terms. drawPixelEffect has always passed the scale as a 6th
-    // argument with a comment saying exactly this; only 4 of 67 effects were taking it.
-    // Measured the way the hunt measured it: the fraction of the frame the effect changes should not
-    // depend on the render scale. Stroke was 3.9% at 1:1 and 15% at 0.36 — a 154% error, which is
-    // baked into what you see while playing but not into the export.
+  test('effects sized in pixels cover the same fraction of frame at any preview scale', { item: 'plate-scale' }, function () {
+    // v5.32, and the head of BUG-HUNT.md's largest block. The preview canvas is rendered at
+    // P.width * s for the adaptive playback tier (down to 0.28), so an effect whose parameter is a
+    // LENGTH must multiply by that scale or it draws the same number of PLATE pixels — a much bigger
+    // thing in project terms, and one that never reaches the export. drawPixelEffect has always
+    // passed the scale as a 6th argument saying exactly this; only 4 of 67 effects were taking it.
+    //
+    // THE PROBE MATTERS AS MUCH AS THE ASSERTION. Measuring at DEFAULT parameters on a flat rectangle
+    // put mattefringe at 3.63 and hextiles at 8.45 — both pure noise, because each changed under 1%
+    // of the frame and the ratio was dominated by edge antialiasing. With a parameter that actually
+    // does something, on a shape with real detail, mattefringe measures 1.09 and always did.
+    // So: meaningful parameters, a star (concave, plenty of edge), and a coverage floor.
     const P = { width: 240, height: 180, fps: 30, duration: 5, background: null };
-    function frac(type, rs) {
+    function frac(type, params, rs) {
       const mk = fx => {
         const c = offscreen(Math.round(P.width * rs), Math.round(P.height * rs));
         c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
-        const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 120, shapeH: 80, fill: '#c8c8c8' });
+        const L = FM.makeLayer('shape', { shape: 'star', x: 120, y: 90, shapeW: 150, shapeH: 130, fill: '#c8c8c8' });
         L.effects = fx;
         FM.renderScene(c.getContext('2d'), { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0);
         return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
       };
-      const a = mk([]), b = mk([{ type: type, enabled: true, params: {} }]);
+      const a = mk([]), b = mk([{ type: type, enabled: true, params: params }]);
       let n = 0;
       for (let i = 0; i < a.length; i += 4) {
         if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]) > 12) n++;
       }
       return n / (a.length / 4);
     }
-    const full = frac('stroke', 1), low = frac('stroke', 0.36);
-    if (full < 0.01) throw new Error('the stroke effect changed almost nothing at 1:1 (' + (full * 100).toFixed(1) + '%) — the probe scene is wrong, not the app');
-    const ratio = low / full;
-    // Exact invariance is not reachable: a 4px outline on a 0.36 plate rounds to 1px, and integer
-    // dilation cannot do better. 2.0 catches the real bug (3.89 before the fix) with room for that.
-    if (ratio > 2.0) throw new Error('stroke covers ' + ratio.toFixed(2) + 'x as much of the frame at a 0.36 preview scale as at 1:1 — its width is being applied in plate pixels, so the preview disagrees with the export');
+    // Ratios BEFORE the scaling was threaded through: stroke 3.89, mosaic 2.02.
+    [['stroke', { width: 12 }], ['mosaic', { size: 40 }], ['mattefringe', { width: 12 }]].forEach(pair => {
+      const type = pair[0], params = pair[1];
+      const full = frac(type, params, 1);
+      if (full < 0.05) throw new Error(type + ' changed only ' + (full * 100).toFixed(1) + '% of the frame at 1:1 — the probe is too weak to measure anything, not the effect too good');
+      const ratio = frac(type, params, 0.36) / full;
+      // 1.6 catches the real bug (stroke was 3.89) while allowing the integer quantisation that is
+      // unavoidable when a 12px feature lands on a 0.36 plate.
+      if (ratio > 1.6) throw new Error(type + ' covers ' + ratio.toFixed(2) + 'x as much of the frame at a 0.36 preview scale as at 1:1 — its size is being applied in plate pixels, so the preview disagrees with the export');
+    });
   });
 
   async function run() {
