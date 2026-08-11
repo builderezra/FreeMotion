@@ -209,6 +209,15 @@ window.FM = window.FM || {};
     label() { const fx = this.read(); if (!fx) return null; const reg = FM.fxRegistry.get(fx.type); return (reg && reg.label) || fx.type; }
   };
 
+  /* A reorder that has JUST finished (v5.56). Ezra: "if I only have two effects and I try to drag the
+     top one down it just closes the menu." The per-row `_g.moved` flag was supposed to swallow the
+     click that follows a drag — but dropping calls afterFx(), which REBUILDS every row, so by the time
+     the click arrives its handler belongs to a brand new row whose flag is false. The accordion then
+     toggled and the editor you were dragging shut itself. A module-level timestamp survives the
+     rebuild; the flag never could. */
+  let _fxReorderAt = 0;
+  const _justReordered = () => (performance.now() - _fxReorderAt) < 400;
+
   // The mutation trio every effect change must run (canvas + timeline keyframes + undo).
   function afterFx() { FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); }
 
@@ -668,6 +677,7 @@ window.FM = window.FM || {};
       });
     }
     function endReorder() {
+      _fxReorderAt = performance.now();   // …so the click that follows this drop cannot toggle the accordion
       if (rows) rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; });
       row.classList.remove('fx-dragging'); row.style.transform = '';
       const list = listOf();
@@ -771,6 +781,7 @@ window.FM = window.FM || {};
     // ACCORDION (like Blending & Opacity): opening one effect closes every other, so exactly one
     // editor is ever open — no more scrolling past three expanded stacks to reach the fourth.
     const toggle = () => {
+      if (_justReordered()) return;                       // a drag just dropped here — not a tap
       if (row._g && row._g.moved) { row._g.moved = false; return; }
       (layer.effects || []).forEach(e => { if (e !== fx) e._expanded = false; });
       fx._expanded = !expanded;
@@ -926,6 +937,7 @@ window.FM = window.FM || {};
     const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
     const name = el('span', 'fx-name', reg.label);
     const toggle = () => {
+      if (_justReordered()) return;                       // a drag just dropped here — not a tap
       if (row._g && row._g.moved) { row._g.moved = false; return; }
       (layer.audioFx || []).forEach(e => { if (e !== fx) e._expanded = false; });   // accordion: exactly one editor open
       fx._expanded = !expanded;

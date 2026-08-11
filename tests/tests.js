@@ -2339,7 +2339,16 @@
       ev('pointermove', rl.top + rl.height / 2 + 6);
       await sleep(40);
       ev('pointerup', rl.top + rl.height / 2 + 6, 0);
+      // The browser fires a click after pointerup on the same element. THAT is what used to slam the
+      // accordion shut (Ezra: "if I only have two effects and I try to drag the top one down it just
+      // closes the menu") — dropping rebuilds every row, so the per-row "was dragged" flag the toggle
+      // checked belonged to a node that no longer existed.
+      head.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await sleep(80);
+      // NOTE: no assertion here about the editor staying open. A synthetic click dispatched on the
+      // pre-rebuild node still carries the old row's "was dragged" flag, so it can never reproduce the
+      // real browser's post-drop click — an assertion here passed with the fix REMOVED, which makes it
+      // worse than no assertion at all. See the v5.56 note in POLISH-LOG.
       const after = L.effects.map(e => e.type).join('>');
       if (after === before) throw new Error('dragging the open row to the end changed nothing (still ' + after + ')');
       if (L.effects[L.effects.length - 1].type !== 'blur') throw new Error('expected blur to land last, got ' + after);
