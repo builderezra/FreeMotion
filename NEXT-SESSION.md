@@ -4,7 +4,7 @@ Read this first if the session starts with "keep going", "go", or a vague pick-u
 Top to bottom is the order Ezra asked for. **He numbers his requests and expects them done in that
 order; new asks go to the BOTTOM of the list.**
 
-State at handoff: **v5.65**, **69/69 regression tests green**.
+State at handoff: **v5.72**, **83/83 regression tests green**, tree clean, 0 unpushed.
 
 ---
 
@@ -41,6 +41,64 @@ keeps working exactly as before.
 - Bump `index.html`'s version label + the `?v=` cache-busters, and add a POLISH-LOG.md entry per release.
 - **`git apply` is atomic** — one failing file rolls back the whole patch, even for files it just
   reported as applied cleanly.
+
+---
+
+## THREE DECISIONS WAITING ON EZRA — do not guess these
+
+1. **Squish (#48).** Four build rounds, EIGHT independent rejections, every one legitimate. The EFFECT is
+   good and has been for three rounds (bounce 162x162 -> 202x127 -> 261x85, continuity worst ratio 1.09,
+   off-canvas byte-identical at 126 positions). What keeps failing is a PERFORMANCE GATE that predicts
+   whether a layer is near a wall: every rejection since attempt 3 is the same shape — the gate's
+   prediction disagrees with what the layer actually PAINTS (shadow, then repeater/group proxy), and
+   where they disagree the effect switches on or off in one pixel of travel. A gate that must predict
+   what a layer paints will keep being wrong for the next painter; enumerating them is not convergent.
+   OPTIONS: (a) delete the gate, always compute the true alpha box — correct by construction, costs a
+   plate render per Squish layer per frame; (b) **RECOMMENDED** — a gate that cannot be wrong, e.g. run
+   whenever the transform box is within one frame-diagonal of a wall: cheap, needs no per-painter
+   knowledge, over-runs harmlessly; (c) ship with the dead band documented.
+   Diffs `squish-v3-full.diff` + `squish-v4-delta.diff` are round-trip verified — whichever he picks is
+   apply-and-adjust, not a rebuild.
+
+2. **Effect-browser reach (#46b).** The safe-area half shipped in v5.66. Where the close and search
+   buttons actually GO on a tall phone is a taste call: swipe-down-to-close, search to a bottom bar, or
+   both. Measure and present; do not choose.
+
+3. **Captions word transcription (#43 layer 3).** Cues, editing and speech DETECTION all shipped in
+   v5.65. Actual words need Whisper via transformers.js — fully offline, but a large one-time model
+   download and slow on a phone. Present the size and the device tradeoff; never switch it on by default.
+
+## TWO ITEMS BUILT, VERIFIED-EXCEPT-ONE-THING, NOT LANDED
+
+- **Add menu trio (#50 + #51 + #42)** — see task notes for the full numbers. The win is large and
+  independently reproduced (Studio 11 layout failures -> 0; 2560x1440 Shape 4 pages -> 1). Blocked on
+  two things: the page dots became 6x6px `<button>`s with a measured 2px hit reach (revert
+  `createElement('button')` to `'span'` — verifier-tested, 7 failures -> 0, layout still green), and an
+  undisclosed regression where 1024x640 classic went from a perfect single page to 2 pages of 6
+  (FIT_CFG.lbl.minW 56 / hMin 65 forbids HEAD's 5x45px grid). Fix both, then land.
+  NOTE: the diff carries a literal multiplication sign where the repo stores the HTML escape on the
+  perPage line — normalise that one character or `git apply` fails outright.
+- **Project-open slide (#55)** — rejected twice. First attempt re-laid-out the whole home screen at
+  DOUBLE WIDTH for the entire 280ms push on every phone; the second was rejected too and its reason has
+  not been read yet. Read the verifier's report before re-briefing.
+
+## HOUSE RULES EARNED TODAY
+
+- **A silent test runner is an ABORT, not slowness.** Twice today: a stray merge-conflict marker, and an
+  uncaught throw inside a test. Once it was 32 leftover headless Chrome processes starving the machine —
+  which survived a `git reset --hard` and looked exactly like a code regression. Check the process count
+  before blaming the diff.
+- **Verify with an instrument that can SEE the change you made.** The export button was verified with a
+  brightness number and still looked wrong; the add-menu "phone byte-identical" claim compared boxes
+  only and could not detect that spans had become buttons.
+- **A size assertion scoped to a selector list exempts everything not in it.** The easing editor shrank
+  the one control its own >=36px assertion did not name.
+- **When two modules each own part of a mode, the bug is in the state neither names** — that is how a
+  delete button landed on the Export pixels mid-gesture.
+- **Drive index.html TOP-LEVEL with device metrics, never in an iframe.** Two changes were rejected for
+  defects their authors' iframe harnesses structurally could not see.
+- There is a **live service worker on localhost:8777** that can serve stale JS. Unregister it before
+  trusting a browser measurement.
 
 ---
 
