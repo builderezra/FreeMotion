@@ -1282,6 +1282,59 @@
     }
   });
 
+  test('isolate cycles three ways and never touches the scene', { item: 'isolate' }, function () {
+    // v5.27. The ⧉ layers button used to toast "coming soon". Ezra: "if you have one clip selected,
+    // the first tap will make it so every other layer but this one is hidden, then another press
+    // makes it so all the other layers are there but this one goes on top of them all… and then
+    // pressing again sets it back… make sure you dont actually make it move on the timeline at all,
+    // this shouldnt change anything but just be its own little tool to help you visualise stuff."
+    // That last sentence is the important half and is what this test is really for: it is a VIEW
+    // state read by the compositor, so layer order, visibility, history and autosave must all be
+    // untouched no matter which mode is armed.
+    const savedScene = FM.scene;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    let commits = 0, saves = 0;
+    FM.history.commit = function () { commits++; }; FM.storage.autosave = function () { saves++; };
+    FM.storage.save = function () { saves++; }; FM.storage.markDirty = function () {};
+    try {
+      if (!FM.setIsolate) throw new Error('FM.setIsolate is missing — the layers button does nothing again');
+      const W = 200, H = 200;
+      FM.scene = { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: [], selectedId: null, selectedIds: [] };
+      // Front overlaps Back but also sticks out to the right, so the three modes are distinguishable:
+      // with both fully overlapping they render identically and the test would prove nothing.
+      const back = FM.makeLayer('shape', { shape: 'rect', name: 'Back', x: 80, y: 100, shapeW: 100, shapeH: 100, fill: '#0000ff' });
+      const front = FM.makeLayer('shape', { shape: 'rect', name: 'Front', x: 130, y: 100, shapeW: 100, shapeH: 100, fill: '#ff0000' });
+      FM.scene.layers.push(front, back);
+      const order0 = FM.scene.layers.map(l => l.name).join(',');
+      const vis0 = FM.scene.layers.map(l => l.visible !== false).join(',');
+      const at = (x, y) => {
+        const c = offscreen(W, H); FM.renderScene(c.getContext('2d'), FM.scene, 0);
+        const d = c.getContext('2d').getImageData(x, y, 1, 1).data;
+        return (d[0] > 140 && d[1] < 90) ? 'RED' : ((d[2] > 140 && d[0] < 90) ? 'BLUE' : 'bg');
+      };
+      FM.selectLayer(back.id);
+      if (at(100, 100) !== 'RED' || at(170, 100) !== 'RED') throw new Error('the control render is wrong before isolating');
+      FM.setIsolate(1);
+      if (at(100, 100) !== 'BLUE' || at(170, 100) !== 'bg') throw new Error('mode 1 should hide every other layer');
+      FM.setIsolate(2);
+      if (at(100, 100) !== 'BLUE') throw new Error('mode 2 should draw the chosen layer OVER the others');
+      if (at(170, 100) !== 'RED') throw new Error('mode 2 should still show the other layers');
+      FM.setIsolate(0);
+      if (at(100, 100) !== 'RED') throw new Error('turning isolate off did not restore the normal render');
+
+      FM.setIsolate(2);
+      if (FM.scene.layers.map(l => l.name).join(',') !== order0) throw new Error('isolate REORDERED the layers — it must only change the draw');
+      if (FM.scene.layers.map(l => l.visible !== false).join(',') !== vis0) throw new Error('isolate changed layer.visible — it must only change the draw');
+      if (commits || saves) throw new Error('isolate wrote history/autosave (' + commits + ' commits, ' + saves + ' saves) — it is a view tool, not an edit');
+      FM.selectLayer(front.id);
+      if (FM.isolate) throw new Error('isolate survived a selection change — you would be left wondering where the other layers went');
+    } finally {
+      if (FM.setIsolate) FM.setIsolate(0);
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

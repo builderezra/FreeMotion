@@ -7042,9 +7042,23 @@ window.FM = window.FM || {};
     // drawn at the z-slot of the group's bottom-most member so stacking stays correct.
     const memberToUnit = collectGroupUnits(scene, t);
     const soloActive = scene.layers.some(l => l.solo);   // if any layer is soloed, only draw soloed ones
+    /* ISOLATE — a VIEW-ONLY override driven by the ⧉ layers button. Ezra: "make sure you dont actually
+       make it move on the timeline at all, this shouldnt change anything but just be its own little
+       tool to help you visualise stuff." So it lives here, in the draw, and touches nothing in the
+       scene: no layer.visible, no reordering, no history, no autosave. Two modes:
+         1 — draw only this layer (everything else hidden)
+         2 — draw everything, but draw THIS one last so it sits on top
+       Mode 2 is skipped for a layer inside a group unit: those members composite as one flattened
+       unit at the group's z-slot, so lifting one member out of it would change what the group IS,
+       not just what order it draws in. */
+    const _iso = (FM.isolate && FM.isolate.id && FM.isolate.mode && scene.layers.some(l => l.id === FM.isolate.id)) ? FM.isolate : null;
+    const _isoTop = (_iso && _iso.mode === 2 && !(memberToUnit && memberToUnit[_iso.id]))
+      ? scene.layers.find(l => l.id === _iso.id) : null;
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;
+      if (_iso && _iso.mode === 1 && L.id !== _iso.id) continue;   // isolate: this layer alone
+      if (_isoTop && L.id === _isoTop.id) continue;                // …drawn after the loop instead
       if (L.type === 'camera') continue;   // the camera drives the composite; it is never rasterized
       const unit = memberToUnit && memberToUnit[L.id];
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
@@ -7060,6 +7074,12 @@ window.FM = window.FM || {};
         }
         drawLayer(target, L, t, scene);
       }
+    }
+    // Isolate mode 2: the chosen layer goes on last, so it reads above everything without its real
+    // position in FM.scene.layers changing by one index.
+    if (_isoTop && FM.isLayerVisibleAt(_isoTop, t)) {
+      if (_isoTop.type === 'adjustment') applyAdjustment(target, _isoTop, t, scene);
+      else drawLayer(target, _isoTop, t, scene);
     }
     target.restore();
     _camParallax = null;   // parallax is scoped to the layer loop above only

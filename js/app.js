@@ -1165,6 +1165,9 @@ window.FM = window.FM || {};
     // Selecting a DIFFERENT layer must close the crop tool — it has no rAF loop and never self-closes,
     // so it stayed bound to the old layer (composited uncropped) while the inspector showed the new one.
     if (FM.cropTool && FM.cropTool.isActive() && FM.cropTool.layerId && FM.cropTool.layerId() !== id) FM.cropTool.stop();
+    // Isolate is scoped to the layer it was armed on — selecting anything else drops it, so you can
+    // never be left looking at a filtered scene and wondering why the others vanished.
+    if (FM.isolate && FM.isolate.id !== id && FM.setIsolate) FM.setIsolate(0);
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
     FM.syncSelectionChrome();   // BEFORE the rebuilds — sel-mode/sel-multi change what they render
@@ -2460,7 +2463,35 @@ window.FM = window.FM || {};
     const vbGrid = document.getElementById('vb-grid');
     if (vbGrid) vbGrid.addEventListener('click', () => { FM.showGuides = !FM.showGuides; vbGrid.classList.toggle('on', FM.showGuides); render(); });
     const vbLayers = document.getElementById('vb-layers');
-    if (vbLayers) vbLayers.addEventListener('click', () => { if (FM.toast) FM.toast('Layers — coming soon', 1400); });   // function TBD (matches AM placement)
+    /* ISOLATE (v5.27). Ezra: "make the layers button work, the one that weve had for ages that does
+       nothing… if you have one clip selected, the first tap will make it so every other layer but
+       this one is hidden, then another press makes it so all the other layers are there but this one
+       goes on top of them all… and then pressing again sets it back to how it was. make sure you dont
+       actually make it move on the timeline at all, this shouldnt change anything but just be its own
+       little tool to help you visualise stuff."
+       So it is a VIEW state and nothing else: FM.isolate is read by the compositor's layer loop and
+       never written into the scene — no layer.visible, no reordering, no history entry, no autosave.
+       Close the project or pick a different clip and it is simply gone. */
+    FM.isolate = null;
+    FM.setIsolate = function (mode) {
+      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      if (!sel || !mode) { FM.isolate = null; }
+      else FM.isolate = { id: sel.id, mode: mode };
+      if (vbLayers) {
+        vbLayers.classList.toggle('on', !!FM.isolate);
+        vbLayers.title = !FM.isolate ? 'Isolate this layer'
+          : FM.isolate.mode === 1 ? 'Isolating — tap again to bring it to the front'
+          : 'On top — tap again to return to normal';
+      }
+      FM.requestRender();
+    };
+    if (vbLayers) vbLayers.addEventListener('click', () => {
+      const ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (ids.length !== 1) { if (FM.toast) FM.toast(ids.length ? 'Select a single clip to isolate it' : 'Select a clip first', 1600); return; }
+      const cur = (FM.isolate && FM.isolate.id === ids[0]) ? FM.isolate.mode : 0;
+      FM.setIsolate(cur === 0 ? 1 : cur === 1 ? 2 : 0);
+      if (FM.toast) FM.toast(cur === 0 ? 'Only this layer' : cur === 1 ? 'This layer on top' : 'Back to normal', 1200);
+    });
     const vbCam = document.getElementById('vb-camera');
     if (vbCam) vbCam.addEventListener('click', () => { if (FM.addCameraLayer) FM.addCameraLayer(); });
     /* ---- view bar, second group (v5.03) --------------------------------------------------------
