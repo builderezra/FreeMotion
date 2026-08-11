@@ -54,6 +54,36 @@ var RECIPES = {
   },
   async 'export-dialog'(W2, d, FM) { await openEditor(d, FM); FM.showExportDialog(); await sleep(500); },
   async settings(W2, d, FM) { await openEditor(d, FM); if (FM.settings && FM.settings.open) FM.settings.open(); await sleep(600); },
+  // Freehand: enter the tool and draw a real arc through the overlay, so the capture shows an actual
+  // stroke rather than an empty canvas in drawing mode.
+  async freehand(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.selectLayer(null); await sleep(300);
+    FM.startDraw('freehand'); await sleep(700);
+    const ov = d.getElementById('draw-overlay');
+    if (!ov) throw new Error('no #draw-overlay');
+    const r = ov.getBoundingClientRect();
+    if (!r.width) throw new Error('draw overlay is ' + Math.round(r.width) + 'x' + Math.round(r.height));
+    const W = f.contentWindow;
+    const ev = (type, x, y) => ov.dispatchEvent(new W.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const sx = Math.min(150, r.width * 0.32), sy = Math.min(120, r.height * 0.26);
+    ev('pointerdown', cx - sx, cy + sy);
+    // A HUMAN stroke, not a formula: sampled densely with hand tremor on top. A clean sine curve has
+    // nothing to smooth, so it cannot show whether smoothing works — the first version of this recipe
+    // drew one and the before/after images were identical.
+    let seed = 12345;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff - 0.5; };
+    for (let i = 1; i <= 120; i++) {
+      const t = i / 120;
+      const jx = rnd() * 5.5, jy = rnd() * 5.5;
+      ev('pointermove', cx - sx + 2 * sx * t + jx, cy + sy - Math.sin(t * Math.PI) * 2 * sy + jy);
+      await sleep(3);
+    }
+    ev('pointerup', cx + sx, cy + sy);
+    await sleep(800);
+  },
+  async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 
 async function openEditor(d, FM) {

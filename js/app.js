@@ -1041,7 +1041,11 @@ window.FM = window.FM || {};
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     projPts.forEach(p => { if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0]; if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1]; });
     const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
-    const pts = projPts.map(p => [(p[0] - minX) / w, (p[1] - minY) / h]);
+    // Keep the third element: [u,v,1] means "curve through this point" (see traceShapePath /
+    // buildSubPath). Dropping it here is what forced every freehand stroke to render as a hard
+    // polyline through its raw samples.
+    const pts = projPts.map(p => (p.length > 2 ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
+                                              : [(p[0] - minX) / w, (p[1] - minY) / h]));
     const P = FM.scene.project;
     const layer = FM.makeLayer('shape', {
       name: opt.name || 'Drawing', shape: 'path',

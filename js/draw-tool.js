@@ -159,10 +159,47 @@ window.FM = window.FM || {};
     if (FM.drawTool.points.length >= 2) finish(); else redraw();
   }
 
+  /* A freehand stroke was committed as its RAW samples, every one of them a hard corner, so the
+     result was a faceted polyline that read as a plotter line rather than a drawn one — Ezra, three
+     times: "Free hand draw is still buggy and looks like shit."
+     Two passes fix that. First simplify (Ramer-Douglas-Peucker): a stroke samples every 2.5 device
+     pixels, so a quick arc arrives as a few hundred points whose jitter IS the wobble you can see.
+     Then mark the survivors smooth — the path format already supports [u,v,1] for "curve through
+     this point", and nothing was ever setting it. The two ENDS stay hard so the stroke starts and
+     stops crisply instead of hooking. */
+  function rdp(pts, eps) {
+    if (pts.length < 3) return pts.slice();
+    var first = 0, last = pts.length - 1, keep = new Array(pts.length).fill(false);
+    keep[first] = keep[last] = true;
+    var stack = [[first, last]];
+    while (stack.length) {
+      var seg = stack.pop(), a = seg[0], b = seg[1];
+      var ax = pts[a][0], ay = pts[a][1], bx = pts[b][0], by = pts[b][1];
+      var dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+      var far = -1, fi = -1;
+      for (var i = a + 1; i < b; i++) {
+        // perpendicular distance to the chord (a degenerate chord falls back to plain distance)
+        var d = Math.abs((pts[i][0] - ax) * dy - (pts[i][1] - ay) * dx) / len;
+        if (d > far) { far = d; fi = i; }
+      }
+      if (far > eps && fi > 0) { keep[fi] = true; stack.push([a, fi], [fi, b]); }
+    }
+    return pts.filter(function (_, i) { return keep[i]; });
+  }
+  function smoothFreehand(src) {
+    // 2.2 project px, tuned by eye against a jittery stroke: 1.1 still left visible angular kinks,
+    // and much past 2.5 starts cutting the corners off deliberate shapes.
+    var pts = rdp(src, 2.2);
+    if (pts.length < 3) return pts;
+    return pts.map(function (p, i) {
+      return (i === 0 || i === pts.length - 1) ? [p[0], p[1]] : [p[0], p[1], 1];
+    });
+  }
+
   function finish() {
     var t = FM.drawTool;
     if (t.mode === 'freehand' && t.points.length >= 2) {
-      FM.addPathLayer(t.points, { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
+      FM.addPathLayer(smoothFreehand(t.points), { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
     } else if (t.mode === 'vector' && t.points.length >= 3) {
       FM.addPathLayer(t.points, { closed: true, name: 'Drawing', fill: t.color });
     } else if (t.mode === 'vector') {
