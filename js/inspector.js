@@ -633,7 +633,13 @@ window.FM = window.FM || {};
     row._g = { moved: false };
     const clearHold = () => { if (hold) { clearTimeout(hold); hold = null; } };
     function beginReorder() {
-      if (fx._expanded) return;                          // only collapsed rows reorder (uniform height) (#9)
+      // Expanded rows reorder TOO (v5.52). Ezra: "dragging and layering effects is broken." The guard
+      // that used to sit here refused to start a drag on an open row, which meant the effect you were
+      // LOOKING AT was the one you could not move — you tap an effect to see it (the accordion opens
+      // it and closes the rest), try to drag it, and nothing happens with no feedback at all. The
+      // stated reason was uniform height, but that stopped being true: the drop index comes from each
+      // sibling's MEASURED midpoint (see moveReorder), and slotH below already reads the dragged row's
+      // own measured height, so a tall row shifts its siblings by exactly its own size.
       const list = row.parentNode; if (!list) return;
       mode = 'reorder'; row._g.moved = true;
       rows = Array.prototype.slice.call(list.children);
@@ -773,7 +779,7 @@ window.FM = window.FM || {};
     // Tap ANYWHERE on the row header to open/close the editor — not just the ▸ arrow. The action
     // buttons (eye / ⋯ / delete) keep their own behaviour; the disc + name + empty space all toggle.
     head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
-    if (!expanded && (layer.effects || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder)
+    if ((layer.effects || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder) — on OPEN rows too, or the one you are editing looks unmovable
     head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
       const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';

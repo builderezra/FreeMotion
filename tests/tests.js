@@ -2299,6 +2299,58 @@
     if (Math.abs(sa - sb) < 1) throw new Error('both backdrop layers drift on the same ' + sa + 's period — they travel together and read as one sheet');
   });
 
+  test('effects: an OPEN effect row can still be dragged to reorder', { item: 'fx-reorder-open' }, async function () {
+    // v5.52. Ezra: "dragging and layering effects is broken." Reordering worked on a COLLAPSED row and
+    // silently did nothing on an open one — beginReorder bailed out on fx._expanded and the grip was
+    // not even drawn. Since the stack is an accordion (opening one closes the rest), the effect you
+    // had just tapped to look at was precisely the one you could not move, with no feedback.
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'ord', x: 200, y: 200, shapeW: 120, shapeH: 120, fill: '#f80' });
+      L.effects = [];
+      ['blur', 'vignette', 'glow'].forEach(t => { const fx = FM.fxRegistry.makeInstance(t); if (fx) { fx._expanded = false; L.effects.push(fx); } });
+      if (L.effects.length !== 3) throw new Error('needed 3 effects, built ' + L.effects.length);
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('effects');
+
+      let rows = Array.prototype.slice.call(document.querySelectorAll('.fx-row'));
+      if (rows.length !== 3) throw new Error('expected 3 effect rows, found ' + rows.length);
+      // Open the first one, the way tapping it does.
+      rows[0].querySelector('.fx-head').click();
+      await sleep(60);
+      rows = Array.prototype.slice.call(document.querySelectorAll('.fx-row'));
+      if (!rows[0].classList.contains('fx-open')) throw new Error('the first row did not open');
+      if (document.querySelectorAll('.fx-grip').length !== 3) {
+        throw new Error('only ' + document.querySelectorAll('.fx-grip').length + ' of 3 rows show a drag grip — an open row looks unmovable');
+      }
+
+      const head = rows[0].querySelector('.fx-head');
+      const r0 = rows[0].getBoundingClientRect(), rl = rows[rows.length - 1].getBoundingClientRect();
+      const ev = (type, y, buttons) => head.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse',
+        clientX: r0.left + r0.width * 0.4, clientY: y, buttons: buttons == null ? 1 : buttons }));
+      const before = L.effects.map(e => e.type).join('>');
+      ev('pointerdown', r0.top + 20);
+      await sleep(360);                                   // past the 280ms press-hold
+      if (!document.querySelector('.fx-dragging')) throw new Error('the press-hold never armed a drag on the open row');
+      ev('pointermove', r0.top + 40);
+      ev('pointermove', rl.top + rl.height / 2 + 6);
+      await sleep(40);
+      ev('pointerup', rl.top + rl.height / 2 + 6, 0);
+      await sleep(80);
+      const after = L.effects.map(e => e.type).join('>');
+      if (after === before) throw new Error('dragging the open row to the end changed nothing (still ' + after + ')');
+      if (L.effects[L.effects.length - 1].type !== 'blur') throw new Error('expected blur to land last, got ' + after);
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.inspector.openCategory('home');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
