@@ -332,6 +332,14 @@ body {
 .sb-ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .sb-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
 .sb-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+/* Wrap handles (v5.40) — text only, and shaped as BARS rather than the corner squares, because they
+   do a different job: the corners scale the layer, these two move the column the text wraps in. Their
+   ::before (inherited from .sb-handle) already gives them a 14px touch pad, so a 4px-wide bar is still
+   a fingertip target. Hidden by default; canvas-edit adds .sb-has-wrap for a text layer. */
+.sb-wrap { display: none; width: 4px; height: 26px; border-radius: 3px; top: 50%; margin-top: -13px; cursor: ew-resize; }
+#select-box.sb-has-wrap .sb-wrap { display: block; }
+.sb-w { left: -3px; }
+.sb-e { right: -3px; }
 .sb-rot { left: 50%; top: -28px; margin-left: -5px; width: 10px; height: 10px; border-radius: 50%; cursor: grab; }
 .sb-rot::after {
   content: ""; position: absolute; left: 50%; top: 9px;

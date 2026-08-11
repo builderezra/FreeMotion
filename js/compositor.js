@@ -6165,7 +6165,7 @@ window.FM = window.FM || {};
       a.textAlign = layer.align || 'center'; a.textBaseline = 'middle';
       a.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
       let textSrc = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
-      const lines = String(textSrc).split('\n'), lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
+      const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
       lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
     } else {
       // footprint = the VISIBLE frame (crop), not the full source — else Copy Background on a cropped
@@ -6373,7 +6373,9 @@ window.FM = window.FM || {};
       const _tEff = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
       textSrc = _tEff.text;
       if ('letterSpacing' in ctx) ctx.letterSpacing = _tEff.letterSpacing + 'px';
-      const lines = String(textSrc).split('\n');
+      // AFTER applyTextEffects: Count Up, Randomizer and friends change the string, so wrapping the
+      // pre-effect text would break the lines in the wrong places on every frame but the first.
+      const lines = FM.textLines(ctx, layer, textSrc);
       const lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15);
       const total = (lines.length - 1) * lh;
       // Caption background pill: readable semi-transparent box behind the text (CapCut/AM style).
@@ -7178,6 +7180,70 @@ window.FM = window.FM || {};
     return { x: x, y: y, w: w, h: h, full: (w >= mw - 0.5 && h >= mh - 0.5) };
   };
 
+  /* Lay a text layer's string out into lines (v5.40).
+   *
+   * Text used to have no wrapping at all: four separate places did String(text).split('\n'), so a
+   * long line just ran off the frame and the only way to break it was to type a newline. Ezra: "you
+   * should be able to drag the border of the text to decide when the text wraps and stops going on
+   * to the right." layer.wrapWidth is that border, in PROJECT px, and this is the one place that
+   * knows about it — the draw pass, the alpha/footprint pass and layerSize all come through here, so
+   * the picture and the selection box can never disagree about where the lines break.
+   *
+   * The ctx must already carry the layer's font AND letterSpacing, because measureText answers for
+   * both; passing a bare context silently wraps at the wrong place rather than failing.
+   *
+   * A word wider than the whole column is broken by character. That is not the typographically nice
+   * answer, but the alternative is one line quietly sticking out past the border the user just
+   * dragged, which is the exact thing being fixed.
+   */
+  FM.textLines = function (ctx, layer, textSrc) {
+    const src = String(textSrc == null ? '' : textSrc);
+    const paras = src.split('\n');
+    const ww = layer && Number(layer.wrapWidth);
+    if (!isFinite(ww) || ww <= 0) return paras;
+
+    // Re-wrapping every frame is wasted work — the inputs only change when someone edits the layer.
+    // The '_' prefix keeps this out of save/undo (see FM.jsonReplacer). TWO slots, not one: the draw
+    // pass and layerSize call in with different letter-spacing (the draw pass has been through
+    // applyTextEffects), so a single slot would miss on every call and cache nothing at all.
+    const key = src + ' ' + ww + ' ' + ctx.font + ' ' + (ctx.letterSpacing || '');
+    const cache = layer ? (layer._wrapCache || (layer._wrapCache = [])) : null;
+    if (cache) { for (let i = 0; i < cache.length; i++) if (cache[i].key === key) return cache[i].lines; }
+
+    const out = [];
+    const trim = s => s.replace(/\s+$/, '');
+    const fits = s => ctx.measureText(s).width <= ww;
+    // A run wider than the whole column: emit each full line it yields and hand back the remainder.
+    // This has to be reachable for a word that STARTS a line as well as one that lands mid-line —
+    // handling it only in the "does not fit after the current line" branch leaves a paragraph whose
+    // very first word is over-long running straight off the frame.
+    const chop = s => {
+      while (trim(s).length > 1 && !fits(trim(s))) {
+        const solid = trim(s);
+        let cut = 1;
+        while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
+        out.push(solid.slice(0, cut));
+        s = solid.slice(cut) + s.slice(solid.length);
+      }
+      return s;
+    };
+    paras.forEach(para => {
+      if (para === '') { out.push(''); return; }
+      // Keep the whitespace with the word it follows, so runs of spaces survive the round trip.
+      const words = para.match(/\S+\s*/g) || [para];
+      let line = '';
+      words.forEach(w => {
+        if (line === '') { line = chop(w); return; }
+        if (fits(trim(line + w))) { line += w; return; }
+        out.push(trim(line));
+        line = chop(w);
+      });
+      out.push(trim(line));
+    });
+    if (cache) { cache.unshift({ key: key, lines: out }); if (cache.length > 2) cache.length = 2; }
+    return out;
+  };
+
   FM.layerSize = function (layer) {
     // A cropped media layer's on-screen frame is the CROP size, so the selection box / hit-test / anchor
     // all wrap the visible crop, not the full source.
@@ -7192,8 +7258,13 @@ window.FM = window.FM || {};
       // layer.text alone gives a 10px box that the hit-test/selection/align all read wrong. Measure the
       // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)
       const strs = (layer.captions && layer.captions.length) ? layer.captions.map(cap => cap.text || '') : [layer.text || ''];
+      if ('letterSpacing' in c) c.letterSpacing = (layer.letterSpacing || 0) + 'px';   // measureText answers for it; wrapping must too
       let w = 10, maxLines = 1;
-      strs.forEach(s => { const lines = String(s).split('\n'); maxLines = Math.max(maxLines, lines.length); lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
+      strs.forEach(s => { const lines = FM.textLines(c, layer, s); maxLines = Math.max(maxLines, lines.length); lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
+      // With a wrap width set, the box IS the column the user dragged — not the widest line that
+      // happens to be in it. Otherwise the border would jump inwards the moment a long word left.
+      const ww = Number(layer.wrapWidth);
+      if (isFinite(ww) && ww > 0) w = ww;
       return { w: w, h: Math.max(10, maxLines * (layer.fontSize || 96) * (layer.lineHeight || 1.15)) };
     }
     if (layer.type === 'null') return { w: 100, h: 100 };

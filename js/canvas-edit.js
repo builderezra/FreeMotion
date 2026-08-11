@@ -312,7 +312,23 @@ window.FM = window.FM || {};
           cx = gb.x; cy = gb.y;   // finger distance/angle are measured from what the user SEES
         }
       }
-      if (role === 'scale') {
+      if (role === 'wrap') {
+        // Measured along the layer's OWN x axis, so the column still tracks the finger on a rotated
+        // layer. The distance is halved on the way in and doubled on the way out because the text is
+        // laid out about its centre — one side handle moves both borders, which is what keeps the
+        // column centred under the anchor instead of walking sideways as you drag.
+        const rad = (FM.evalProp(layer.transform.rotation, FM.time) || 0) * Math.PI / 180;
+        const sc0 = (FM.evalProp(layer.transform.scale, FM.time) || 1) *
+                    (layer.transform.scaleX != null ? FM.evalProp(layer.transform.scaleX, FM.time) : 1) || 1;
+        const cur = Number(layer.wrapWidth);
+        drag = {
+          mode: 'wrap', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, rad: rad, sc: sc0
+        };
+        // The handle already SITS on the border, so the column simply follows the finger — no offset
+        // to carry. With no wrap set yet the handle sits at the text's natural width, so the first
+        // drag starts from the border you can already see instead of jumping to some default.
+        void cur;
+      } else if (role === 'scale') {
         drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: FM.evalProp(layer.transform.scale, FM.time) || 0.0001, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
       } else {
         drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
@@ -432,6 +448,14 @@ window.FM = window.FM || {};
       // shiftTransform (not setTransform): a canvas drag moves the WHOLE animation, never adds a keyframe
       FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
       FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
+    } else if (drag.mode === 'wrap') {
+      // Project the finger onto the layer's own x axis, undo the layer's scale so the number stored is
+      // in the same project px the renderer measures in, and double it (the handle is one border of a
+      // centred column). Not a keyframable transform — wrapWidth is layout, so it is set directly and
+      // committed on pointer-up like any other one-shot edit.
+      const dx = p.x - drag.cx, dy = p.y - drag.cy;
+      const local = Math.abs(dx * Math.cos(drag.rad) + dy * Math.sin(drag.rad)) / (Math.abs(drag.sc) || 1);
+      L.wrapWidth = Math.max(20, Math.round(local * 2));
     } else if (drag.mode === 'scale') {
       const s = Math.max(0.02, Math.round(drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist) * 1000) / 1000);
       if (drag.pivot) {
@@ -574,6 +598,8 @@ window.FM = window.FM || {};
       if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
     }
     box.style.display = 'block';
+    // The wrap handles are text-only — on a shape or a video there is no column for them to set.
+    box.classList.toggle('sb-has-wrap', layer.type === 'text');
     box.style.width = bw + 'px';
     box.style.height = bh + 'px';
     // transform.x/y is the ANCHOR point; the compositor draws content at -w*anchorX / -h*anchorY from it
@@ -623,6 +649,28 @@ window.FM = window.FM || {};
         const h = document.createElement('div');
         h.className = 'sb-handle sb-' + pos;
         h.addEventListener('pointerdown', startHandle('scale'));
+        box.appendChild(h);
+      });
+      // TEXT ONLY: the two side handles set where the text wraps (v5.40). Ezra: "you should be able to
+      // drag the border of the text to decide when the text wraps and stops going on to the right."
+      // Deliberately NOT scale handles — the corners already scale, and a side handle that stretched
+      // the glyphs is the thing every editor gets shouted at for.
+      ['w', 'e'].forEach(pos => {
+        const h = document.createElement('div');
+        h.className = 'sb-handle sb-wrap sb-' + pos;
+        h.title = 'Drag to set where the text wraps — double-click to turn wrapping off';
+        h.addEventListener('pointerdown', startHandle('wrap'));
+        // A wrap you can only ever tighten is a trap: once you have dragged one and made a few more
+        // edits, undo is no longer a way back to "no wrapping at all".
+        h.addEventListener('dblclick', ev => {
+          ev.preventDefault(); ev.stopPropagation();
+          const L = FM.selectedLayer(FM.scene);
+          if (!L || L.type !== 'text' || L.locked) return;
+          L.wrapWidth = 0;
+          FM.requestRender();
+          if (FM.inspector) FM.inspector.refresh();
+          if (FM.history) FM.history.commit();
+        });
         box.appendChild(h);
       });
       const rotH = document.createElement('div');

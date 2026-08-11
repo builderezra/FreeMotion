@@ -1722,6 +1722,68 @@
     }
   });
 
+  test('text: a wrap width breaks the lines, and the picture obeys it', { item: 'text-wrap' }, function () {
+    // v5.40. Ezra: "you should be able to drag the border of the text to decide when the text wraps
+    // and stops going on to the right." Text had NO wrapping at all before this — four separate places
+    // did split('\n') and a long line simply ran off the frame.
+    if (!FM.textLines) throw new Error('FM.textLines is missing');
+    const LONG = 'the quick brown fox jumps over the lazy dog again and again';
+    const mk = ww => FM.makeLayer('text', { text: LONG, x: 160, y: 120, size: 24, fontSize: 24, wrapWidth: ww });
+
+    const c = offscreen(10, 10).getContext('2d');
+    c.font = '24px sans-serif';
+    const wide = FM.textLines(c, { wrapWidth: 0 }, LONG);
+    if (wide.length !== 1) throw new Error('with no wrap width the text should stay on one line, got ' + wide.length);
+
+    const WW = 140;
+    const lines = FM.textLines(c, { wrapWidth: WW }, LONG);
+    if (lines.length < 2) throw new Error('a ' + WW + 'px column did not break a ' + Math.round(c.measureText(LONG).width) + 'px line');
+    lines.forEach(l => {
+      if (c.measureText(l).width > WW + 0.5) throw new Error('a wrapped line is ' + Math.round(c.measureText(l).width) + 'px wide, past the ' + WW + 'px column: "' + l + '"');
+    });
+    if (lines.join(' ').replace(/\s+/g, ' ').trim() !== LONG) throw new Error('wrapping changed the words: "' + lines.join(' ') + '"');
+
+    // A single word wider than the whole column has to be broken, not left hanging out past the
+    // border the user just dragged — and it is the case the greedy loop gets wrong first, because the
+    // word starts its line and so never reaches the "does not fit after what is already here" branch.
+    const solo = FM.textLines(c, { wrapWidth: 60 }, 'Supercalifragilistic');
+    if (solo.length < 2) throw new Error('an over-long single word was not broken: ' + JSON.stringify(solo));
+    solo.forEach(l => { if (c.measureText(l).width > 60.5) throw new Error('a broken piece is still ' + Math.round(c.measureText(l).width) + 'px wide: "' + l + '"'); });
+
+    // …and the PICTURE has to obey it, not just the helper. Measure the drawn ink both ways.
+    const inkBox = layer => {
+      const cv = offscreen(320, 240), cx = cv.getContext('2d');
+      FM.renderScene(cx, scene([layer]), 0);
+      const d = cx.getImageData(0, 0, 320, 240).data;
+      let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+      for (let y = 0; y < 240; y++) for (let x = 0; x < 320; x++) {
+        const o = (y * 320 + x) * 4;
+        if (d[o] + d[o + 1] + d[o + 2] > 90) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      return x1 < 0 ? null : { w: x1 - x0 + 1, h: y1 - y0 + 1 };
+    };
+    const off = inkBox(mk(0)), on = inkBox(mk(WW));
+    if (!off || !on) throw new Error('the text did not render at all — this test would be measuring an empty canvas');
+    if (!(on.w < off.w - 10)) throw new Error('the drawn text is ' + on.w + 'px wide with a ' + WW + 'px wrap and ' + off.w + 'px without — the renderer is ignoring wrapWidth');
+    if (!(on.h > off.h + 4)) throw new Error('wrapping did not add any lines to the picture (h ' + off.h + ' → ' + on.h + ')');
+    if (on.w > WW + 4) throw new Error('the wrapped text still draws ' + on.w + 'px wide, past its ' + WW + 'px column');
+
+    // The selection box has to agree with the picture, or the handle you drag stops matching the border.
+    const sz = FM.layerSize(mk(WW));
+    if (Math.abs(sz.w - WW) > 0.5) throw new Error('layerSize reports ' + sz.w + ' for a ' + WW + 'px column — the box and the text would disagree');
+
+    // The handles themselves: text-only, and really in the DOM.
+    const sb = document.getElementById('select-box');
+    if (!sb) throw new Error('#select-box missing');
+    if (sb.querySelectorAll('.sb-wrap').length !== 2) throw new Error('expected two wrap handles, found ' + sb.querySelectorAll('.sb-wrap').length);
+    const probe = sb.querySelector('.sb-wrap');
+    sb.classList.remove('sb-has-wrap');
+    if (getComputedStyle(probe).display !== 'none') throw new Error('the wrap handles show on a non-text layer');
+    sb.classList.add('sb-has-wrap');
+    if (getComputedStyle(probe).display === 'none') throw new Error('the wrap handles stay hidden on a text layer');
+    sb.classList.remove('sb-has-wrap');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

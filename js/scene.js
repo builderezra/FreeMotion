@@ -391,6 +391,7 @@ window.FM = window.FM || {};
       base.italic = false;
       base.letterSpacing = 0;
       base.lineHeight = 1.15;
+      base.wrapWidth = props.wrapWidth || 0;   // 0 = no wrapping; set by dragging the side handles on the canvas (v5.40)
       base.stroke = { enabled: false, width: 6, color: '#000000' };
       base.textAnim = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
     }
