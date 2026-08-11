@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>text-edit grid probe</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+pre{padding:8px;white-space:pre-wrap}
+iframe{position:fixed;left:-9999px;top:0;border:0}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. Ezra's IMG_2432: entering the text editor on a phone leaves a huge black void under the
+   toolbar with the canvas crushed at the bottom.
+   The earlier keyboard probe ran at 1280x900 and saw nothing — the whole phone layout lives behind
+   `@media (max-width: 700px)`, so at desktop width the suspect rule never applied. This one runs at
+   phone width, and it does NOT fake a keyboard: if the fault is the grid, it is there the instant the
+   editor opens, before any keyboard exists. */
+var q = new URLSearchParams(location.search);
+var W = +(q.get('w') || 390), H = +(q.get('h') || 844);
+var f = document.getElementById('f'), o = document.getElementById('o');
+f.style.width = W + 'px'; f.style.height = H + 'px';
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async () => {
+    for (var i = 0; i < 250 && !(w.FM && w.FM.scene && w.FM.textEdit); i++) await sleep(60);
+    var FM = w.FM, log = [];
+    var card = d.querySelector('.hm-card'); if (card) { card.click(); await sleep(1500); }
+    var P = FM.scene.project;
+    var L = FM.makeLayer('text', { name: 'cap', text: 'Type here', x: P.width / 2, y: P.height * 0.4, fontSize: 90 });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.refreshAll(); await sleep(300);
+
+    function R(sel) {
+      var n = typeof sel === 'string' ? d.querySelector(sel) : sel;
+      if (!n) return null;
+      var cs = w.getComputedStyle(n);
+      if (cs.display === 'none') return { none: true };
+      var r = n.getBoundingClientRect();
+      return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+    }
+    function fmt(t) { return !t ? 'MISSING' : t.none ? 'display:none' : (t.x + ',' + t.y + ' ' + t.w + 'x' + t.h); }
+    function snap(tag) {
+      var app = d.getElementById('app');
+      log.push('--- ' + tag + ' ---');
+      log.push('  rows      ' + w.getComputedStyle(app).gridTemplateRows);
+      log.push('  #topbar-m ' + fmt(R('#topbar-m')));
+      log.push('  #main     ' + fmt(R('#main')));
+      log.push('  #stage    ' + fmt(R('#stage')));
+      log.push('  #preview  ' + fmt(R('#preview')));
+    }
+    snap('before (normal editing)');
+    var before = R('#preview');
+
+    FM.textEdit.start(L.id); await sleep(600);
+    snap('after textEdit.start');
+    var after = R('#preview');
+
+    // The two numbers that decide it. A canvas that keeps a sane share of the screen and does not
+    // slide to the bottom is a working editor; the fault looks like a tiny canvas parked low.
+    var frac = after && !after.none ? (after.h / H) : 0;
+    var topGap = after && !after.none ? after.y : 0;
+    log.push('');
+    log.push('preview height  ' + (before ? before.h : '?') + ' -> ' + (after ? after.h : '?') + '  (' + (frac * 100).toFixed(1) + '% of the ' + H + 'px screen)');
+    log.push('preview top     ' + (before ? before.y : '?') + ' -> ' + topGap + '  (void above the canvas)');
+    log.push('VERDICT ' + (frac > 0.25 && topGap < H * 0.4 ? 'OK' : 'BROKEN — canvas is tiny and/or shoved to the bottom'));
+
+    // Drawing mode carries the byte-identical rule one line below, so it should fail the same way.
+    FM.textEdit.commit ? FM.textEdit.commit() : 0;
+    d.body.classList.remove('text-editing');
+    d.body.classList.add('drawing'); await sleep(200);
+    snap('body.drawing (same rule, one line below)');
+
+    o.textContent = log.join('\n');
+  })();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>audio decode memory probe</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}pre{padding:8px;white-space:pre-wrap}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<script>
+/* Dev-only. Ezra: "I cannot add long videos on mobile, it won't work."
+ *
+ * FM.getWaveform -> FM.decodeAudio(file) does file.arrayBuffer() then decodeAudioData(buf.slice(0)),
+ * and timeline.js:974 calls getWaveform on rebuild — i.e. dropping a clip on the timeline decodes the
+ * WHOLE file. This measures what that actually costs, because "it's probably memory" is a guess until
+ * there is a number on it. A phone tab has roughly a 1-2GB ceiling before the browser kills it.
+ *
+ * Uses a synthetic WAV so the cost scales with DURATION only and nothing depends on a fixture file. */
+var o = document.getElementById('o'), log = [];
+function mb(n) { return (n / 1048576).toFixed(1) + ' MB'; }
+
+// Minimal 16-bit PCM WAV. Content is irrelevant to the memory cost; a quiet tone keeps it honest
+// (pure zeros could in principle be special-cased by a decoder).
+function makeWav(seconds, rate, chans) {
+  var frames = seconds * rate, dataBytes = frames * chans * 2, buf = new ArrayBuffer(44 + dataBytes), v = new DataView(buf);
+  function s(off, str) { for (var i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)); }
+  s(0, 'RIFF'); v.setUint32(4, 36 + dataBytes, true); s(8, 'WAVE'); s(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, chans, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * chans * 2, true);
+  v.setUint16(32, chans * 2, true); v.setUint16(34, 16, true); s(36, 'data'); v.setUint32(40, dataBytes, true);
+  // Build ONE second of samples and repeat it. Writing 57M samples one setInt16 at a time (with a
+  // Math.sin each) is what hung the first run of this probe — the audio API was never the problem.
+  var pcm = new Int16Array(buf, 44, frames * chans);
+  var period = rate * chans, one = new Int16Array(period);
+  for (var i = 0; i < rate; i++) {
+    var val = Math.round(Math.sin(i * 0.01) * 8000);
+    for (var c = 0; c < chans; c++) one[i * chans + c] = val;
+  }
+  for (var off = 0; off < pcm.length; off += period) pcm.set(one.subarray(0, Math.min(period, pcm.length - off)), off);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+// Byte-for-byte what js/media.js does today.
+async function decodeAsShipped(file) {
+  var ctx = null;
+  try {
+    var buf = await file.arrayBuffer();
+    var AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC();
+    return await ctx.decodeAudioData(buf.slice(0));
+  } finally { if (ctx) { try { ctx.close(); } catch (e) {} } }
+}
+
+// The shipped low-rate path, copied from js/media.js FM.decodeAudio so this file stands alone.
+window.FM_decodeLow = async function (file) {
+  var ctx = null;
+  try {
+    var buf = await file.arrayBuffer();
+    var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    ctx = new OAC(1, 8000, 8000);
+    return await ctx.decodeAudioData(buf);
+  } catch (e) { return null; }
+  finally { if (ctx && ctx.close) { try { ctx.close(); } catch (e2) {} } }
+};
+
+(async function () {
+  var rate = 48000, chans = 2;
+  log.push('A video\'s audio track, decoded the way FM.getWaveform decodes it today.');
+  log.push('(peak JS heap is Chrome-only and approximate; the PCM figure is exact arithmetic)');
+  log.push('');
+  log.push('duration   wav file     decoded PCM   heap delta   what the phone must hold at once');
+  for (var _i = 0, mins = [1, 5, 10]; _i < mins.length; _i++) {
+    var m = mins[_i], secs = m * 60;
+    var blob = makeWav(secs, rate, chans);
+    var f = new File([blob], m + 'min.wav', { type: 'audio/wav' });
+    if (window.gc) window.gc();
+    var h0 = performance.memory ? performance.memory.usedJSHeapSize : 0;
+    var ab = await decodeAsShipped(f);
+    var h1 = performance.memory ? performance.memory.usedJSHeapSize : 0;
+    var pcm = ab.length * ab.numberOfChannels * 4;              // Float32 per sample per channel
+    // arrayBuffer + its slice(0) copy are both live at the moment decodeAudioData runs, on top of the PCM.
+    var peak = f.size * 2 + pcm;
+    log.push(String(m + ' min').padEnd(11) + mb(f.size).padEnd(13) + mb(pcm).padEnd(14) +
+             mb(h1 - h0).padEnd(13) + mb(peak));
+    ab = null;
+  }
+  log.push('');
+  log.push('Scaling to real footage (PCM is fixed by DURATION, not by file size or resolution):');
+  [10, 20, 60].forEach(function (m) {
+    var pcm = m * 60 * rate * chans * 4;
+    log.push('  ' + String(m + ' min').padEnd(8) + 'decoded PCM ' + mb(pcm) + ', cached on the media rec for the session');
+  });
+
+  // The fix: decode into a low-rate OfflineAudioContext. decodeAudioData resamples to the CONTEXT's
+  // rate, so this should shrink the decoded buffer by 48000/8000. Measured, not assumed — if the
+  // browser ignored the context rate this table would match the one above and the fix would be a lie.
+  log.push('');
+  log.push('AFTER — decoded at 8 kHz for the waveform (js/media.js WAVE_RATE):');
+  log.push('duration   decoded PCM   channels   rate     vs before');
+  for (var _j = 0, ms2 = [1, 5, 10]; _j < ms2.length; _j++) {
+    var mm = ms2[_j];
+    var f2 = new File([makeWav(mm * 60, rate, chans)], mm + 'min.wav', { type: 'audio/wav' });
+    var ab2 = await window.FM_decodeLow(f2);
+    if (!ab2) { log.push(String(mm + ' min').padEnd(11) + 'DECODE FAILED'); continue; }
+    var pcm2 = ab2.length * ab2.numberOfChannels * 4, old = mm * 60 * rate * chans * 4;
+    log.push(String(mm + ' min').padEnd(11) + mb(pcm2).padEnd(14) + String(ab2.numberOfChannels).padEnd(11) +
+             String(ab2.sampleRate).padEnd(9) + (old / pcm2).toFixed(1) + 'x smaller');
+    ab2 = null;
+  }
+  o.textContent = log.join('\n');
+})();
+</script>
+</body>
+</html>

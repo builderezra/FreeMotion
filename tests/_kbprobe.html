@@ -43,7 +43,11 @@ f.addEventListener('load', function () {
     }
     snap('after start');
     var vv = w.visualViewport;
-    var fake = { height: w.innerHeight - 336, width: w.innerWidth, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1, addEventListener(){}, removeEventListener(){} };
+    // `ot` is the visual viewport's offsetTop. iOS sets this NON-ZERO when it scrolls the page to bring
+    // the focused field into view; the first version of this probe hardcoded 0, which is the one case
+    // where the maths below cannot go wrong. `kb` is the keyboard height.
+    var KB = +(q.get('kb') || 336), OT = +(q.get('ot') || 0);
+    var fake = { height: w.innerHeight - KB, width: w.innerWidth, offsetTop: OT, offsetLeft: 0, pageTop: OT, pageLeft: 0, scale: 1, addEventListener(){}, removeEventListener(){} };
     Object.defineProperty(w, 'visualViewport', { value: fake, configurable: true });
     w.dispatchEvent(new w.Event('resize'));
     snap('right after resize');

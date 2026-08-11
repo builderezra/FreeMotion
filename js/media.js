@@ -76,20 +76,38 @@ window.FM = window.FM || {};
   };
 
   /* Decode a file's audio track into an AudioBuffer (used by the exporter for
-   * mixing / reversing). Returns null if the file has no decodable audio. */
-  FM.decodeAudio = async function (file) {
+   * mixing / reversing). Returns null if the file has no decodable audio.
+   *
+   * `opts.rate` decodes into an OfflineAudioContext at that sample rate instead of at the device rate.
+   * decodeAudioData resamples to the CONTEXT's rate, and the decoded buffer — not the file — is what
+   * kills a phone: PCM costs rate x channels x 4 bytes per second, so its size is set by DURATION and
+   * is the same for a 4K master and a phone clip of the same length. Measured (tests/_audiomem.html):
+   *   10 min -> 219.7 MB      20 min -> 439.5 MB      60 min -> 1318.4 MB
+   * against a mobile tab ceiling of roughly 1-2 GB. Ask for a low rate unless you need real fidelity. */
+  FM.decodeAudio = async function (file, opts) {
+    opts = opts || {};
     let ctx = null;
     try {
       const buf = await file.arrayBuffer();
       const AC = window.AudioContext || window.webkitAudioContext;
-      ctx = new AC();
-      return await ctx.decodeAudioData(buf.slice(0));
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      ctx = (opts.rate && OAC) ? new OAC(1, Math.ceil(opts.rate), opts.rate) : new AC();
+      // No .slice() — that copy doubled the transient cost (the whole file a second time) to guard a
+      // buffer nothing reads afterwards. decodeAudioData may detach `buf`; that is fine, it is local.
+      return await ctx.decodeAudioData(buf);
     } catch (e) {
       return null;   // no decodable audio track (screen recordings etc.)
     } finally {
-      if (ctx) { try { ctx.close(); } catch (e2) {} }   // iOS caps live AudioContexts (~4) — a leak per silent video eventually kills ALL audio
+      // OfflineAudioContext has no close() on older Safari, hence the guard as well as the try.
+      if (ctx && ctx.close) { try { ctx.close(); } catch (e2) {} }   // iOS caps live AudioContexts (~4) — a leak per silent video eventually kills ALL audio
     }
   };
+
+  /* Above this, decoding the audio track to draw a waveform is not worth the risk of losing the tab:
+   * file.arrayBuffer() alone has to hold the whole file in RAM before decoding even starts. A clip with
+   * no waveform is a small cosmetic loss; a browser that kills the tab loses the project. */
+  const WAVE_MAX_BYTES = 300 * 1024 * 1024;
+  const WAVE_RATE = 8000;   // 600 peaks are drawn from this — 8kHz is ample, and 6x smaller than 48k
 
   /* Compute (and cache on the media rec) a peak array for drawing the clip waveform. */
   FM.getWaveform = async function (rec) {
@@ -97,8 +115,14 @@ window.FM = window.FM || {};
     if (rec._wfPending) return null;
     rec._wfPending = true;
     try {
-      if (rec.audioBuffer === undefined) rec.audioBuffer = await FM.decodeAudio(rec.file);
-      const ab = rec.audioBuffer;
+      if (rec.file && rec.file.size > WAVE_MAX_BYTES) { rec.waveform = []; rec._wfPending = false; return rec.waveform; }
+      // Deliberately NOT cached on rec.audioBuffer. That slot is full-fidelity PCM the exporter and the
+      // audio-reactive effects want, and parking a half-gigabyte of it there for the whole session — to
+      // draw 600 peaks, on import, for every clip — is what made long videos impossible to add on a
+      // phone. Those callers decode for themselves when the feature is actually used.
+      const ab = rec.audioBuffer !== undefined && rec.audioBuffer !== null
+        ? rec.audioBuffer
+        : await FM.decodeAudio(rec.file, { rate: WAVE_RATE });
       if (!ab) { rec.waveform = []; rec._wfPending = false; return rec.waveform; }
       const ch = ab.getChannelData(0);
       const N = 600, block = Math.floor(ch.length / N) || 1, stride = Math.max(1, Math.floor(block / 200));
