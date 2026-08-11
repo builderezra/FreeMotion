@@ -1784,6 +1784,91 @@
     sb.classList.remove('sb-has-wrap');
   });
 
+  test('text editor: the selection box follows the canvas when the keyboard opens', { item: 'text-edit-mobile' }, async function () {
+    // v5.41. Ezra: "when you're in the text edit screen on mobile and you are typing it is glitchy and
+    // doesn't let you edit the other options on screen… and also pushes the screen down." Opening the
+    // keyboard shrinks the visual viewport, and the editor answers by re-padding #stage — which
+    // resizes the canvas. Nothing told the selection box: a padding change fires no window resize, so
+    // the box stayed where the canvas USED to be, parked in a corner of the frame with the text
+    // somewhere else entirely.
+    if (!FM.textEdit) throw new Error('FM.textEdit is missing');
+    // setTimeout, not rAF: this suite runs inside an offscreen iframe, where rAF is throttled and a
+    // promise waiting on it never settles — which hangs the whole run rather than failing a test.
+    const frame = () => new Promise(r => setTimeout(r, 60));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const vv0 = window.visualViewport;
+    const cv = document.getElementById('preview');
+    const box = document.getElementById('select-box');
+    if (!cv || !box) throw new Error('need #preview and #select-box');
+
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'kbtest', text: 'Type here', x: P.width / 2, y: P.height * 0.4, fontSize: 90 });
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.textEdit.start(L.id);
+      await frame();
+
+      let geom = '';
+      const drift = () => {
+        const r = cv.getBoundingClientRect(), b = box.getBoundingClientRect();
+        const ex = r.left + (FM.evalProp(L.transform.x, FM.time) / P.width) * r.width;
+        const ey = r.top + (FM.evalProp(L.transform.y, FM.time) / P.height) * r.height;
+        geom = ' [canvas ' + [r.left, r.top, r.width, r.height].map(Math.round) +
+               ' | box ' + [b.left, b.top, b.width, b.height].map(Math.round) +
+               ' | disp ' + (box.style.display || 'auto') + ' | sel ' + (FM.scene.selectedId === L.id) +
+               ' | vp ' + (FM.viewport ? FM.viewport.scale + ',' + FM.viewport.x + ',' + FM.viewport.y : '?') + ']';
+        return Math.hypot((b.left + b.width / 2) - ex, (b.top + b.height / 2) - ey);
+      };
+      const before = drift();
+      if (before > 6) throw new Error('the box is already ' + Math.round(before) + 'px off the text before any keyboard — this test cannot tell the fix from the bug');
+
+      // Fake the keyboard: the visual viewport is what actually changes, and it is read-only, so the
+      // whole object is swapped for the duration.
+      const fake = { height: window.innerHeight - 336, width: window.innerWidth, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1, addEventListener() {}, removeEventListener() {} };
+      Object.defineProperty(window, 'visualViewport', { value: fake, configurable: true });
+      window.dispatchEvent(new Event('resize'));
+      await frame();
+
+      const stage = document.getElementById('stage');
+      const padB = parseFloat(getComputedStyle(stage).paddingBottom) || 0;
+      const dockH = document.querySelector('.te-dock') ? document.querySelector('.te-dock').getBoundingClientRect().height : 0;
+      // The lift should clear the keyboard AND the docked field — but never by more than that (a
+      // hardcoded guess used to overshoot), and never so far that the preview is squeezed out (the
+      // clamp, which is the only reason it may legitimately come up short on a short screen).
+      const stageH = stage.getBoundingClientRect().height;
+      const topPad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
+      const want = 336 + dockH + 12, room = Math.max(0, stageH - topPad - 120);
+      const expect = Math.min(want, room);
+      if (Math.abs(padB - expect) > 2) {
+        throw new Error('#stage is padded ' + Math.round(padB) + 'px; a 336px keyboard plus a ' + Math.round(dockH) +
+          'px dock wants ' + Math.round(want) + 'px and the stage has room for ' + Math.round(room) + 'px, so it should be ' + Math.round(expect));
+      }
+      // …and the lift must never eat the preview entirely. A picture partly behind the keyboard beats
+      // no picture at all, which is what a short screen used to get.
+      const cr = cv.getBoundingClientRect();
+      if (cr.width < 20 || cr.height < 20) throw new Error('the preview collapsed to ' + Math.round(cr.width) + 'x' + Math.round(cr.height) + ' when the keyboard opened');
+
+      const after = drift();
+      if (after > 6) throw new Error('after the keyboard opened the selection box sits ' + Math.round(after) + 'px away from the text it belongs to (was ' + Math.round(before) + 'px)' + geom);
+
+      // The toolbar must not steal focus: on iOS a tap that blurs the field closes the keyboard and
+      // re-flows the whole screen, which is what made the options unusable while typing.
+      const btn = document.querySelector('.te-bar .te-btn');
+      if (!btn) throw new Error('no toolbar button to test');
+      const ev = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true });
+      btn.dispatchEvent(ev);
+      if (!ev.defaultPrevented) throw new Error('a pointerdown on a toolbar button is not prevented — on iOS the field blurs and the keyboard closes on every tap');
+    } finally {
+      if (vv0) Object.defineProperty(window, 'visualViewport', { value: vv0, configurable: true });
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

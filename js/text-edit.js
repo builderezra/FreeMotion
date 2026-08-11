@@ -10,6 +10,7 @@ window.FM = window.FM || {};
   'use strict';
 
   let active = null;                 // { layerId, prevText }
+  const MIN_PREVIEW = 120;           // px of canvas that must survive the keyboard lift
   let bar = null, dock = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
 
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
@@ -55,6 +56,13 @@ window.FM = window.FM || {};
     closePop();
     pop = elc('div', 'te-pop te-pop-' + kind);
     build(pop);
+    // Same focus guard as the bar, but it must NOT cover the native controls: preventing pointerdown
+    // on a range input stops the thumb from dragging, and on a select stops the picker from opening.
+    pop.addEventListener('pointerdown', e => {
+      const t = e.target;
+      if (t && t.closest && t.closest('input, select, textarea')) return;
+      e.preventDefault();
+    });
     document.body.appendChild(pop);
     popKind = kind; popBtn = btn || null; popBuild = build;
     if (btn) btn.classList.add('on');
@@ -139,10 +147,34 @@ window.FM = window.FM || {};
     const gap = vv ? Math.max(0, (window.innerHeight - vv.height - vv.offsetTop)) : 0;
     if (bar) bar.style.top = (vv ? vv.offsetTop : 0) + 'px';
     if (dock) dock.style.bottom = gap + 'px';
+    // While editing, the whole layout is fixed-position and there is nothing to scroll to — but iOS
+    // scrolls the DOCUMENT anyway to bring the focused field into view, which is what "pushes the
+    // screen down" is. body{overflow:hidden} does not stop that on iOS; putting the scroll back does.
+    if (window.scrollY || window.scrollX) { try { window.scrollTo(0, 0); } catch (_) {} }
     // Lift the canvas above the keyboard + docked field so the text you're typing stays visible.
+    // MEASURE the dock instead of assuming its height — it grows with the safe-area inset and with
+    // the field's own line count, and a fixed guess either crops the canvas or leaves a dead band.
     const stage = document.getElementById('stage');
-    if (stage) stage.style.paddingBottom = (gap + 118) + 'px';
+    const dockH = dock ? Math.round(dock.getBoundingClientRect().height) : 0;
+    if (stage) {
+      // CLAMPED. On a tall phone the keyboard and the dock leave plenty of room, but on a short one
+      // (landscape, a small device, a split view) gap + dock can exceed the stage outright and the
+      // preview collapses to 0x0 — no picture at all while you type, which is worse than a preview
+      // partly hidden behind the keyboard. #stage is border-box, so its height does not move with the
+      // padding and this cannot feed back on itself.
+      const stageH = stage.getBoundingClientRect().height;
+      const topPad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
+      const room = Math.max(0, stageH - topPad - MIN_PREVIEW);
+      stage.style.paddingBottom = Math.min(gap + dockH + 12, room) + 'px';
+    }
     positionPop();
+    // The selection box is positioned from the canvas's live bounding rect, and nothing tells it the
+    // stage just changed shape — no window resize fires for a padding change. Without this the box
+    // stays where the canvas USED to be the moment the keyboard opens, which is most of what "glitchy"
+    // means here. Synchronous, not on the next frame: update() reads getBoundingClientRect(), which
+    // flushes the padding written a line ago, so it already measures the new layout — and a rAF here
+    // would silently never run wherever rAF is throttled.
+    if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
   }
 
   // ---- lifecycle -----------------------------------------------------------
@@ -211,8 +243,13 @@ window.FM = window.FM || {};
       sizeBtn.addEventListener('click', () => openPop('size', buildSizePop, sizeBtn));
       colorBtn.addEventListener('click', () => openPop('color', buildColorPop, colorBtn));
       extrasBtn.addEventListener('click', () => openPop('extras', buildExtrasPop, extrasBtn));
-      // guard mousedown so tapping a bar button doesn't blur/close the keyboard mid-edit
-      bar.addEventListener('mousedown', e => { if (e.target !== input) e.preventDefault(); });
+      // Guard so tapping a bar button doesn't blur the field and dismiss the keyboard mid-edit.
+      // POINTERDOWN as well as mousedown: on iOS the blur is already under way by the time a synthetic
+      // mousedown arrives, so guarding only that let every tap on Align / Font / Size / Colour close
+      // the keyboard and re-flow the screen — which is what made the toolbar feel unusable while typing.
+      const keepFocus = e => { if (e.target !== input) e.preventDefault(); };
+      bar.addEventListener('pointerdown', keepFocus);
+      bar.addEventListener('mousedown', keepFocus);
       doneBtn.addEventListener('click', commit);
 
       // ---- bottom dock: the text field ----

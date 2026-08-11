@@ -103,8 +103,37 @@ var RECIPES = {
     FM.selectLayer(t.id);
     await sleep(700);
   },
+  // The focused text editor, on a phone. `kb` fakes a software keyboard by shrinking the visual
+  // viewport, which is the only way to see the layout the bug is about — headless Chrome has no
+  // keyboard, so without this every capture shows the easy, keyboard-less case.
+  async 'text-edit'(W2, d, FM) {
+    await openEditor(d, FM);
+    FM.scene.layers.length = 0;
+    const t = FM.makeLayer('text', { name: 'Caption', text: 'Type here', x: FM.scene.project.width / 2, y: FM.scene.project.height * 0.4, fontSize: 90 });
+    FM.scene.layers.push(t); FM.refreshAll(); await sleep(300);
+    FM.textEdit.start(t.id); await sleep(500);
+    const kb = +(q.get('kb') || 0);
+    if (kb) { fakeKeyboard(f.contentWindow, kb); await sleep(400); }
+    const popName = q.get('pop');
+    if (popName) { const b = d.querySelector('.te-' + popName); if (!b) throw new Error('no .te-' + popName + ' button'); b.click(); await sleep(500); }
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
+
+// Shrink the iframe's visual viewport by `px` and fire the events a real keyboard fires. The
+// property is read-only, so the object is replaced wholesale on the iframe's window.
+function fakeKeyboard(W, px) {
+  const vv = W.visualViewport;
+  const fake = {
+    height: (vv ? vv.height : W.innerHeight) - px,
+    width: vv ? vv.width : W.innerWidth,
+    offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1,
+    addEventListener() {}, removeEventListener() {},
+  };
+  try { Object.defineProperty(W, 'visualViewport', { value: fake, configurable: true }); } catch (e) { return false; }
+  W.dispatchEvent(new W.Event('resize'));
+  return true;
+}
 
 async function openEditor(d, FM) {
   var card = d.querySelector('.hm-card');

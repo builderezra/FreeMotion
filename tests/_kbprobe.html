@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>keyboard probe</title>
+<style>html,body{margin:0;background:#0b0e14;color:#cfe;font:12px ui-monospace,monospace}
+pre{padding:8px;white-space:pre-wrap}
+iframe{position:fixed;left:-9999px;top:0;border:0}</style>
+</head>
+<body>
+<pre id="o">…</pre>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+/* Dev-only. Walks the text editor through a fake keyboard one step at a time and reports the
+   geometry after each, so "the box is in the wrong place" can be pinned to the step that moved it. */
+var q = new URLSearchParams(location.search);
+var W = +(q.get('w') || 1280), H = +(q.get('h') || 900);
+var f = document.getElementById('f'), o = document.getElementById('o');
+f.style.width = W + 'px'; f.style.height = H + 'px';
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+f.addEventListener('load', function () {
+  var d = f.contentDocument, w = f.contentWindow;
+  (async () => {
+    for (var i = 0; i < 200 && !(w.FM && w.FM.scene && w.FM.textEdit); i++) await sleep(60);
+    var FM = w.FM, log = [];
+    var card = d.querySelector('.hm-card'); if (card) { card.click(); await sleep(1400); }
+    var P = FM.scene.project;
+    var L = FM.makeLayer('text', { name: 'kb', text: 'Type here', x: P.width / 2, y: P.height * 0.4, fontSize: 90 });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.refreshAll(); await sleep(300);
+    FM.textEdit.start(L.id); await sleep(500);
+
+    var cv = d.getElementById('preview'), box = d.getElementById('select-box'), stage = d.getElementById('stage');
+    function snap(tag) {
+      var r = cv.getBoundingClientRect(), b = box.getBoundingClientRect();
+      var ex = r.left + (FM.evalProp(L.transform.x, FM.time) / P.width) * r.width;
+      var ey = r.top + (FM.evalProp(L.transform.y, FM.time) / P.height) * r.height;
+      var bx = b.left + b.width / 2, by = b.top + b.height / 2;
+      log.push(tag.padEnd(26) +
+        ' canvas=' + [r.left, r.top, r.width, r.height].map(Math.round).join(',') +
+        '  box=' + [b.left, b.top, b.width, b.height].map(Math.round).join(',') +
+        '  drift=' + Math.round(Math.hypot(bx - ex, by - ey)) +
+        '  padB=' + Math.round(parseFloat(getComputedStyle(stage).paddingBottom) || 0) +
+        '  vpScale=' + (FM.viewport ? FM.viewport.scale : '?') +
+        '  wrapTf=' + (d.getElementById('canvas-wrap').style.transform || '-'));
+    }
+    snap('after start');
+    var vv = w.visualViewport;
+    var fake = { height: w.innerHeight - 336, width: w.innerWidth, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1, addEventListener(){}, removeEventListener(){} };
+    Object.defineProperty(w, 'visualViewport', { value: fake, configurable: true });
+    w.dispatchEvent(new w.Event('resize'));
+    snap('right after resize');
+    await sleep(120); snap('120ms later');
+    FM.canvasEdit.update(); snap('explicit update()');
+    if (FM.viewport && FM.viewport.apply) { FM.viewport.apply(); FM.canvasEdit.update(); snap('viewport.apply()+update'); }
+    if (FM.fitCanvas) { FM.fitCanvas(); FM.canvasEdit.update(); snap('fitCanvas()+update'); }
+    o.textContent = log.join('\n');
+  })();
+});
+</script>
+</body>
+</html>
