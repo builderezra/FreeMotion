@@ -438,7 +438,10 @@ window.FM = window.FM || {};
       eb.addEventListener('click', () => { FM._fxEasing = { fxIdx: fxIdx, key: p.key, label: p.label }; FM.inspector.refresh(); });
       row.appendChild(eb);
     }
-    row.appendChild(el('span', 'fx-scrub-label', p.label));
+    // The NAME selects the row (AM): tap it and this parameter's keyframes become the live ones on
+    // the timeline. Only offered where it can mean something — kfScope covers the OPEN effect of the
+    // Effects panel, so audio-effect rows (which share this builder) render a plain label.
+    row.appendChild(paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key));
     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || '');
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
@@ -785,6 +788,7 @@ window.FM = window.FM || {};
       if (row._g && row._g.moved) { row._g.moved = false; return; }
       (layer.effects || []).forEach(e => { if (e !== fx) e._expanded = false; });
       fx._expanded = !expanded;
+      kfNavSync();   // a different effect's params are in play now — drop the old row, re-arm the timeline
       FM.inspector.refresh();
     };
     // Tap ANYWHERE on the row header to open/close the editor — not just the ▸ arrow. The action
@@ -1472,7 +1476,7 @@ window.FM = window.FM || {};
         // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard
         // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
         if (cat.key === 'element' && layer.type === 'text' && FM.textEdit) { FM.textEdit.start(layer.id); return; }
-        view = cat.key; FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
+        view = cat.key; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh();
       });
       (i < 3 ? top : bot).appendChild(card);
     });
@@ -1705,17 +1709,43 @@ window.FM = window.FM || {};
     // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43, AM): the label under the
     // number is the target, NOT the number itself — tapping the number already opens the type-in
     // editor, and taking that over would trade one thing for another.
+    //
+    // That same name is now also the ROW SELECTOR (AM): tapping it picks which property's keyframes
+    // you are editing. The two live on one tap because they never disagree — the pad axis and the
+    // selection are both "this is the channel I'm working on". Where a tap ALSO changes the axis it
+    // selects rather than toggles, because that tap is unambiguously "I want this one".
+    const selKey = (opts.kfKey && opts.layer) ? ('tf:' + opts.kfKey) : null;
+    const selectable = !!(selKey && kfInScope(opts.layer, selKey));
     if (opts.axis) {
       lab.classList.add('mt-vbox-axis');
       const axisOn = (FM._mtAxis || 'xy') === opts.axis;
       box.classList.add(axisOn ? 'mt-axis-on' : 'mt-axis-off');   // the VALUE follows the axis too (AM)
       if (axisOn) lab.classList.add('on');
+    }
+    if (selectable) {
+      const on = kfIsSel(opts.layer, selKey);
+      lab.classList.add('kf-selectable');
+      if (on) lab.classList.add('kf-sel');
+      lab.setAttribute('role', 'button');
+      lab.setAttribute('aria-pressed', String(on));
+      lab.tabIndex = 0;
+      lab.title = (on ? 'Editing ' + labelText + ' — tap to deselect' : 'Select ' + labelText)
+        + (opts.axis ? (opts.axis === 'z' ? ' (and edit Z on the pad)' : ' (and edit X/Y on the pad)') : '')
+        + ' — its keyframes become the ones you edit';
+    } else if (opts.axis) {
       lab.title = opts.axis === 'z' ? 'Edit Z (depth) on the pad' : 'Edit X and Y on the pad';
-      lab.addEventListener('click', e => {
+    }
+    if (opts.axis || selectable) {
+      const onName = e => {
         e.stopPropagation();
-        FM._mtAxis = opts.axis;
-        FM.inspector.refresh();
-      });
+        let axisChanged = false;
+        if (opts.axis && (FM._mtAxis || 'xy') !== opts.axis) { FM._mtAxis = opts.axis; axisChanged = true; }
+        if (selectable) kfSetSel(opts.layer, selKey, axisChanged ? 'on' : 'toggle');
+        else FM.inspector.refresh();
+      };
+      lab.addEventListener('click', onName);
+      // Space must not reach the window-level play/pause shortcut — see paramName.
+      if (selectable) lab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onName(e); } });
     }
     const fmtS = () => round(getVal(), dp).toFixed(dp) + (opts.unit || '');
     const refresh = () => { if (!val.isContentEditable) val.textContent = fmtS(); };
@@ -2325,6 +2355,7 @@ window.FM = window.FM || {};
       b.addEventListener('click', () => {
         // Press Move while already on Move → the anchor placer. Press it again → back to Move.
         FM._mtMode = (m === 'move' && (mode === 'move' || mode === 'anchor')) ? (mode === 'move' ? 'anchor' : 'move') : m;
+        kfNavSync();   // a new mode owns different channels — carrying a Move selection into Scale is meaningless
         FM.inspector.refresh();
       });
       right.appendChild(b);
@@ -3098,43 +3129,117 @@ window.FM = window.FM || {};
     }
   }
 
+  // ===== WHICH property am I editing? — panel scope + an optional tapped row ======================
+  //
+  // v5.42 made keyframe diamonds inert outlines unless their property's editor is open, so "focus"
+  // was implied by which PANEL you had open. Ezra (AM): "to tell what slider you have selected —
+  // hence forth what key frames ur gonna be editing, it shows by making the item ur changing have a
+  // different colour on the name of it, you can also tap on the name to select the row." In his
+  // screenshot the Offset effect's X was green and its Y was not, so the unit is ONE PROPERTY, not
+  // one control and not one row.
+  //
+  // ONE source of truth, deliberately: this is NOT a second focus system running beside the panel.
+  // The open panel defines the SCOPE — every property that panel owns — and a tapped name NARROWS
+  // that scope to a single member of it. A selection that is not in the current scope is stale by
+  // definition and is ignored (kfScopeHit returns nothing), so a tapped row and an open panel can
+  // never both claim the timeline with different answers. Nothing selected = the whole scope, which
+  // is exactly the v5.42 behaviour, so opening a panel changes nothing until you tap a name.
+  //
+  // Keys are strings, not object identities, because the inspector throws its DOM away on every
+  // refresh and effect params live on objects that get replaced by undo/redo and preset paste.
+  //   'tf:x'      a transform channel        'fx:distance'  a param of the OPEN effect
+  //   'volume' / 'speed'                     (the accordion guarantees exactly one open effect)
+  let kfSel = null;   // { layerId, key } — survives a refresh, not a layer change
+
+  // Every property the CURRENT panel owns, animated or not, in one place. kfFocusProps filters this
+  // down to the animated ones; the row builders ask it whether a name is worth making tappable.
+  function kfScope(layer) {
+    const out = [];
+    if (!layer) return out;
+    // An OPEN EFFECT editor wins: you are looking at that effect's controls, so those are its
+    // keyframes. Only while the EFFECTS panel is actually open — an effect left expanded from an
+    // earlier visit would otherwise keep stealing focus while you work in Move & Transform.
+    if (view === 'effects') {
+      const openFx = (layer.effects || []).find(e => e && e._expanded);
+      if (openFx && openFx.params) Object.keys(openFx.params).forEach(k => out.push({ key: 'fx:' + k, prop: openFx.params[k] }));
+      return out;
+    }
+    // Move & Transform: the channels the current mode owns (Move = x/y/z, Scale = scale/scaleX/scaleY…).
+    if (view === 'transform') {
+      const mode = ALL_MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
+      (MT_PROPS[mode] || []).forEach(k => out.push({ key: 'tf:' + k, prop: layer.transform[k] }));
+      return out;
+    }
+    if (view === 'blend') out.push({ key: 'tf:opacity', prop: layer.transform.opacity });
+    else if (view === 'volume') out.push({ key: 'volume', prop: layer.volume });
+    else if (view === 'speed') out.push({ key: 'speed', prop: layer.speed });
+    return out;   // home / anything else — nothing is in focus, so nothing is dimmed
+  }
+  function kfScopeHit(layer) {
+    if (!kfSel || !layer || kfSel.layerId !== layer.id) return null;
+    return kfScope(layer).filter(e => e.key === kfSel.key);   // [] when the selection went out of scope
+  }
+  function kfInScope(layer, key) { return kfScope(layer).some(e => e.key === key); }
+  function kfIsSel(layer, key) { return !!(kfSel && layer && kfSel.layerId === layer.id && kfSel.key === key && kfInScope(layer, key)); }
+  // mode 'on' forces selection (used when the tap also switched the pad's axis — that tap is clearly
+  // "I want this one", not "toggle me off"); anything else toggles.
+  function kfSetSel(layer, key, mode) {
+    if (!layer) return;
+    kfSel = (mode !== 'on' && kfIsSel(layer, key)) ? null : { layerId: layer.id, key: key };
+    if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // the diamonds follow immediately
+    FM.inspector.refresh();
+  }
+  function kfClearSel() { kfSel = null; }
+  // Navigating between panels/modes changes WHICH keyframes are armed, so the timeline has to be
+  // rebuilt — it reads kfFocusProps once, at build time. v5.42 wired that to editing actions but not
+  // to navigation, so opening Move & Transform from the category grid left every diamond an inert
+  // outline until some unrelated edit happened to rebuild the track. Measured, not assumed: the
+  // probe's E1 caught it (0 live diamonds after tapping the card, 4 expected).
+  function kfNavSync() { kfClearSel(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); }
+
+  // A parameter NAME that doubles as the row selector. Only rows whose property is actually in the
+  // current scope get the affordance — a name that cannot change the timeline must not look like it can.
+  function paramName(cls, text, layer, key) {
+    const n = el('span', cls, text);
+    if (!layer || !key || !kfInScope(layer, key)) return n;
+    const on = kfIsSel(layer, key);
+    n.classList.add('kf-selectable');
+    if (on) n.classList.add('kf-sel');
+    n.setAttribute('role', 'button');
+    n.setAttribute('aria-pressed', String(on));
+    n.tabIndex = 0;
+    n.title = on ? 'Editing ' + text + ' — tap to deselect (its keyframes are the live ones)'
+                 : 'Select ' + text + ' — its keyframes become the ones you edit';
+    n.addEventListener('click', e => { e.stopPropagation(); kfSetSel(layer, key, 'toggle'); });
+    // stopPropagation, not just preventDefault: the app's Space shortcut lives on WINDOW and does not
+    // count a role=button span as "in an editor", so a bare preventDefault would select the row AND
+    // start playback on the same key.
+    n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); kfSetSel(layer, key, 'toggle'); } });
+    return n;
+  }
+
   // WHICH keyframes are you actually working on right now? The timeline PULLS this at build time
   // (rather than the inspector pushing, which would need a rebuild every panel change and could loop).
   // Returns the prop objects — the same `{kf:[…]}` containers FM.animatedProps hands back, so the
-  // timeline matches them by identity — or null meaning "everything is in play".
+  // timeline matches them by identity — or null meaning "nothing is armed".
   //
   // Ezra: every slider should own its keyframes, the ones for what you're editing should be full
   // opacity and draggable, and the rest should still show at ~30% so you can see them without
   // grabbing them by accident.
   FM.kfFocusProps = function (layer) {
     if (!layer) return null;
-    // An OPEN EFFECT editor wins: you are looking at that effect's controls, so those are its
-    // keyframes. Includes every animated param of that one effect.
-    // Only while the EFFECTS panel is actually open. An effect left expanded from an earlier visit
-    // would otherwise keep stealing focus while you work in Move & Transform.
-    if (view === 'effects') {
-      const openFx = (layer.effects || []).find(e => e && e._expanded);
-      if (openFx && openFx.params) {
-        const out = [];
-        Object.keys(openFx.params).forEach(k => { if (FM.isAnimated(openFx.params[k])) out.push(openFx.params[k]); });
-        // An effect with NOTHING animated focuses nothing. Returning [] here matched no property and
-        // so dimmed and froze every keyframe on the layer the moment you added any effect — a fresh
-        // effect has no animated params, and v3.97 opens its editor automatically on add.
-        return out.length ? out : null;
-      }
-      return null;
-    }
-    // Move & Transform: the channels the current mode owns (Move = x/y/z, Scale = scale/scaleX/scaleY…).
-    if (view === 'transform') {
-      const mode = ALL_MT_MODES.indexOf(FM._mtMode) >= 0 ? FM._mtMode : 'move';
-      const out = [];
-      (MT_PROPS[mode] || []).forEach(k => { if (FM.isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
-      return out.length ? out : null;   // nothing animated in this mode → don't dim the whole layer
-    }
-    if (view === 'blend' && FM.isAnimated(layer.transform.opacity)) return [layer.transform.opacity];
-    if (view === 'volume' && FM.isAnimated(layer.volume)) return [layer.volume];
-    if (view === 'speed' && FM.isAnimated(layer.speed)) return [layer.speed];
-    return null;   // home / anything else — no single property is in focus, so nothing is dimmed
+    const scope = kfScope(layer);
+    if (!scope.length) return null;
+    const hit = kfScopeHit(layer);
+    const use = (hit && hit.length) ? hit : scope;
+    const out = use.map(e => e.prop).filter(p => FM.isAnimated(p));
+    // An explicit selection is honoured even when it yields nothing: tapping a name that has no
+    // keyframes yet means "these are the ones I'm about to make", and arming the rest would be a lie.
+    if (hit && hit.length) return out;
+    // A panel with NOTHING animated focuses nothing. Returning [] here matched no property and so
+    // dimmed and froze every keyframe on the layer the moment you added any effect — a fresh effect
+    // has no animated params, and v3.97 opens its editor automatically on add.
+    return out.length ? out : null;
   };
 
   FM.inspector = {
@@ -3142,7 +3247,10 @@ window.FM = window.FM || {};
       root = document.getElementById('inspector');
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
-    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
+    // Opening a panel starts with NOTHING selected, so it behaves exactly as it did before row
+    // selection existed: the whole panel's keyframes are live until you tap a name to narrow it.
+    // (Auto-selecting the first row would silently freeze the others the moment a panel opened.)
+    openCategory(key) { const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
     // The quick row's middle buttons depend on which SIDE of the clip the playhead is sitting on, and
     // the panel deliberately does NOT rebuild while you scrub (it would rebuild 60-120 times a second).
     // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on
@@ -3157,7 +3265,7 @@ window.FM = window.FM || {};
       const layer = FM.selectedLayer(FM.scene); if (!layer) return false;
       const cat = catsFor(layer)[i - 1]; if (!cat) return false;
       if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return true; }
-      view = cat.key; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
+      view = cat.key; kfNavSync(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       return true;
     },
     // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
@@ -3168,8 +3276,8 @@ window.FM = window.FM || {};
       if (FM._mtEasing || FM._volEasing || FM._spdEasing || FM._fxEasing || FM._cropEasing) {
         FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); return true;
       }
-      if (view !== 'home') { view = 'home'; this.refresh(); return true; }
-      FM.selectLayer(null); return true;   // at the grid → deselect (closes the editor)
+      if (view !== 'home') { view = 'home'; kfNavSync(); this.refresh(); return true; }
+      FM.selectLayer(null); kfClearSel(); return true;   // at the grid → deselect (closes the editor)
     },
     refresh() {
       // A selectedId that no longer resolves is the worst state this panel can be in: the app believes
@@ -3210,7 +3318,7 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // Every numbered category is a SINGLE-layer editor — it builds from the primary layer and writes
       // to it alone. Left open while a second clip is selected it silently edits one of them, so

@@ -71,8 +71,19 @@ window.FM = window.FM || {};
         var onGrab = grabEl && (e.target === grabEl || grabEl.contains(e.target));
         if (!onGrab && !atTop()) return;
         // controls that OWN vertical drags (Move trackpad, rotate dial, value scrubs, curve editors)
-        // must never be hijacked into a sheet-dismiss — that deselected the layer mid-gesture
-        if (!onGrab && e.target.closest && e.target.closest('.mt-trackpad, .mt-dial-ring, .mt-scrub, .mt-vbox-val, .fx-scrub, .es-canvas, .ge-canvas, .cw-canvas, input, textarea, select')) return;
+        // must never be hijacked into a sheet-dismiss — that deselected the layer mid-gesture.
+        //
+        // .fx-grip is the effect/audio-effect reorder handle, and it belongs on this list for exactly
+        // that reason: it carries touch-action:none, so unlike the rest of the row it keeps feeding
+        // pointermoves instead of turning into a sheet scroll — and this handler was claiming them.
+        // Ezra: "if I only have two effects and I try to drag the top one down it just closes the
+        // menu." Measured on a 390x844 phone with real touch events: the second move called
+        // panel.setPointerCapture(), which retargets every later move AND the pointerup at the panel,
+        // so the effect row never ran endReorder() (the drop was thrown away, the row left stuck
+        // mid-drag with .fx-dragging and a translateY still on it, and _fxReorderAt never stamped, so
+        // the v5.56 400ms tap-guard could not possibly help). Drag past a third of the sheet's height
+        // — which the top row must, to clear an open editor — and the drop deselected the layer.
+        if (!onGrab && e.target.closest && e.target.closest('.mt-trackpad, .mt-dial-ring, .mt-scrub, .mt-vbox-val, .fx-scrub, .fx-grip, .es-canvas, .ge-canvas, .cw-canvas, input, textarea, select')) return;
         active = true; claimed = false; pid = e.pointerId;
         startY = lastY = e.clientY; startX = e.clientX; lastT = e.timeStamp; vy = 0;
         h = panel.getBoundingClientRect().height || 1; panel._swiped = false;

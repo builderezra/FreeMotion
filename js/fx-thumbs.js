@@ -27,23 +27,24 @@ window.FM = window.FM || {};
 
   /* ---- SUBJECTS ------------------------------------------------------------------------------
    * A thumbnail is only worth showing if you can tell WHAT THE EFFECT DOES from the tile alone.
-   * One generic subject cannot do that for 177 effects: a flat teal ball has no tonal range (so
+   * One generic subject cannot do that for 193 effects: a flat teal ball has no tonal range (so
    * Brightness, Contrast and Saturation all render the identical ball), no straight lines (so every
    * warp is just a slightly different ball) and no texture (so the 3D solids are all one blob).
-   * So each effect names the subject that demonstrates IT — see SUBJECT_OF below.
    *
+   * So the subject is chosen per SECTION: every category of the Add-Effect browser gets ONE piece
+   * of art built to demonstrate that family, and a section reads as one worked example (see
+   * SECTION_ART). SUBJECT_OF then names every effect whose own behaviour disagrees with its section.
+   * Two FORMS of each section's art:
+   *   full:<cat>  the art filling the 96px frame — anything tonal, geometric or full-frame.
+   *   card:<cat>  the same art at 64px on the backdrop — content AND a hard rectangular edge, for
+   *               effects that act on the layer's BORDER (stroke, shadow, corners, repeat, 3D) or
+   *               that need somewhere outside the layer to throw glows, shadows and ghosts.
+   * Fixed subjects that no section default can replace:
    *   ball     flat teal ellipse + orange dot on the backdrop. Clean silhouette, no interior — right
    *            only when the effect is about the layer's ALPHA/outline or about MOVING a small object.
-   *   photo    a mini landscape filling the frame: full 0-255 luma (near-black ridge, near-white
-   *            horizon), wide hue (indigo→orange sky, crimson sail), a dead-straight horizon and a
-   *            circular sun. The general-purpose subject for anything tonal.
-   *   card     that same photo at 64px on the backdrop — content AND a hard rectangular edge, for
-   *            effects that act on the layer's border (stroke, shadow, corners, repeat, 3D).
-   *   grid     full-frame lattice: checker ground, straight rules, concentric rings, one bold
-   *            diagonal. Straight lines make any geometric deformation unmistakable.
-   *   gridcard the lattice at 64px on the backdrop — texture plus an edge.
    *   text     a text layer. Only the six effects that rewrite/space a string.
    *   keyshot  half chroma-green, half gradient, white circle across the seam. Keying only.
+   *   backdrop a plain shape over the landscape, for the two effects that read the layers BELOW.
    * -------------------------------------------------------------------------------------------- */
 
   // A mini landscape, drawn parametrically so it stays crisp at any tile size (u = size/96).
@@ -105,6 +106,156 @@ window.FM = window.FM || {};
     g.fillStyle = '#ffffff'; g.fillRect(8 * u, 8 * u, 11 * u, 11 * u);   // a landmark: which tile went where
   }
 
+  /* --- one piece of art per section ---------------------------------------------------------- */
+
+  // BLUR. A blur is only visible if there was detail to lose, and the landscape is all smooth
+  // gradients — Sharpen and Unsharp Mask measured 12% and 20% of pixels moved on it, i.e. nothing.
+  // A resolution star + a 1px comb are the two things that make "how much detail survived" legible.
+  function paintDetail(g, S) {
+    const u = S / 96;
+    g.fillStyle = '#0b101c'; g.fillRect(0, 0, S, S);
+    const cx = 42 * u, cy = 40 * u;
+    g.fillStyle = '#eef2fa';
+    for (let i = 0; i < 24; i += 2) {                       // 12 wedges converging to a point
+      g.beginPath(); g.moveTo(cx, cy);
+      g.arc(cx, cy, 40 * u, i * Math.PI / 12, (i + 1) * Math.PI / 12); g.closePath(); g.fill();
+    }
+    g.fillStyle = '#0b101c'; g.fillRect(0, 76 * u, S, S - 76 * u);
+    g.fillStyle = '#9fe8ff';                                // the highest frequency a 96px tile holds
+    for (let x = 0; x < 96; x += 2) g.fillRect(Math.round(x * u), 79 * u, Math.max(1, u), 10 * u);
+    // specular points: a lens blur turns these into aperture discs, the streak blurs into trails
+    [[80, 14, '#fff6d0'], [88, 30, '#ff5ea8'], [12, 88, '#8dff9f']].forEach(function (p) {
+      g.fillStyle = p[2]; g.beginPath(); g.arc(p[0] * u, p[1] * u, 2.6 * u, 0, Math.PI * 2); g.fill();
+    });
+    g.fillStyle = '#ff8b3d'; g.fillRect(68 * u, 60 * u, 24 * u, 12 * u);   // an edge for a smear to drag
+  }
+
+  // PROCEDURAL. Everything in this section PAINTS its own pattern over the layer, and a busy picture
+  // underneath fights it. A quiet plate with one ring and one block is enough to tell plate from
+  // pattern, and dark enough that clouds, rays, lightning and starfields read as added light.
+  function paintPlate(g, S) {
+    const u = S / 96;
+    // Quiet, but with the FULL luma range corner to corner: Posterize, Threshold, Dither and Noise
+    // all measure their strength against the range they are given, and a uniformly dark plate makes
+    // every one of them look like it did nothing.
+    const lg = g.createLinearGradient(0, 0, S, S);
+    lg.addColorStop(0, '#cfe0f2'); lg.addColorStop(0.4, '#2f6a86'); lg.addColorStop(1, '#04060b');
+    g.fillStyle = lg; g.fillRect(0, 0, S, S);
+    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = Math.max(1, 1.4 * u);
+    g.beginPath(); g.arc(44 * u, 46 * u, 26 * u, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#ffb347'; g.fillRect(10 * u, 10 * u, 12 * u, 12 * u);
+    g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(0, 68 * u, S, S - 68 * u);
+  }
+
+  // STYLIZE. A broadcast test card, because that is literally what these looks were built against:
+  // hard vertical edges and flat colour for glitch / VHS / CRT / scanlines to tear, and a smooth
+  // ramp plus a step wedge for dither, posterise and compression to band.
+  function paintBars(g, S) {
+    const u = S / 96;
+    const cols = ['#e6e9ef', '#e8d44d', '#3ec9d8', '#3fb75c', '#c94bb8', '#d94141', '#3a53c4'];
+    const w = S / cols.length;
+    cols.forEach(function (c, i) { g.fillStyle = c; g.fillRect(i * w, 0, w + 1, 56 * u); });
+    const r = g.createLinearGradient(0, 0, S, 0);
+    r.addColorStop(0, '#050505'); r.addColorStop(1, '#fbfbfb');
+    g.fillStyle = r; g.fillRect(0, 56 * u, S, 20 * u);
+    for (let i = 0; i < 8; i++) {
+      const v = Math.round(255 * i / 7);
+      g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.fillRect(i * S / 8, 76 * u, S / 8 + 1, 12 * u);
+    }
+    g.fillStyle = '#0a0a0a'; g.fillRect(0, 88 * u, S, S - 88 * u);
+    g.fillStyle = '#ff3d7f'; g.fillRect(6 * u, 90 * u, 26 * u, 4 * u);
+  }
+
+  // DRAWING & EDGE. One clean closed contour and one filled shape with a tonal interior: exactly
+  // what an edge pass traces, what a bevel/stroke rides, and what a halftone or hatch screen needs.
+  function paintEmblem(g, S) {
+    const u = S / 96;
+    const bgg = g.createLinearGradient(0, 0, 0, S);
+    bgg.addColorStop(0, '#121a2c'); bgg.addColorStop(1, '#080b12');
+    g.fillStyle = bgg; g.fillRect(0, 0, S, S);
+    g.strokeStyle = '#4ad7c4'; g.lineWidth = Math.max(1.5, 4 * u);
+    g.beginPath(); g.arc(46 * u, 44 * u, 32 * u, 0, Math.PI * 2); g.stroke();
+    const fill = g.createLinearGradient(0, 20 * u, 0, 70 * u);
+    fill.addColorStop(0, '#fff2d8'); fill.addColorStop(1, '#7d5fbe');
+    g.fillStyle = fill;
+    g.beginPath(); g.moveTo(34 * u, 24 * u); g.lineTo(70 * u, 45 * u); g.lineTo(34 * u, 66 * u); g.closePath(); g.fill();
+    g.fillStyle = '#ff8b3d'; g.fillRect(8 * u, 76 * u, 20 * u, 14 * u);
+    g.fillStyle = '#e6e9ef'; g.fillRect(68 * u, 78 * u, 20 * u, 5 * u);
+  }
+
+  // MOVE / TRANSFORM. An arrow on a disc: a rotated circle is the same circle, so Spin, Swing and
+  // Pulse can only be read off something that points somewhere and has a right way up.
+  function paintToken(g, S) {
+    const u = S / 96;
+    g.fillStyle = '#12203a'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#2fd0b5'; g.beginPath(); g.arc(48 * u, 48 * u, 44 * u, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#0b1220';
+    g.beginPath(); g.moveTo(48 * u, 12 * u); g.lineTo(74 * u, 62 * u); g.lineTo(48 * u, 50 * u); g.lineTo(22 * u, 62 * u); g.closePath(); g.fill();
+    g.fillStyle = '#ffb347'; g.fillRect(40 * u, 72 * u, 16 * u, 8 * u);
+  }
+
+  // REPEAT. The transform-demo "F": asymmetric in BOTH axes, so a copy that has been mirrored,
+  // flipped or turned is obvious the moment it lands beside the original.
+  function paintMotif(g, S) {
+    const u = S / 96;
+    g.fillStyle = '#101827'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#f2f5fb';
+    g.fillRect(28 * u, 14 * u, 12 * u, 68 * u);
+    g.fillRect(28 * u, 14 * u, 42 * u, 12 * u);
+    g.fillRect(28 * u, 42 * u, 30 * u, 11 * u);
+    g.fillStyle = '#ff3d7f'; g.fillRect(6 * u, 6 * u, 10 * u, 10 * u);
+    g.fillStyle = '#ffb347';
+    g.beginPath(); g.moveTo(S, S); g.lineTo(S - 22 * u, S); g.lineTo(S, S - 22 * u); g.closePath(); g.fill();
+  }
+
+  // MATTE / MASK / KEY. A clear foreground/background split — head and shoulders, bright, against a
+  // dark two-plane field — so a key, a wipe, a choke or a fill reads as "this came away from that".
+  function paintSplit(g, S) {
+    const u = S / 96;
+    const sky = g.createLinearGradient(0, 0, 0, S);
+    sky.addColorStop(0, '#1b2b4a'); sky.addColorStop(1, '#070a12');
+    g.fillStyle = sky; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#0e1522'; g.fillRect(0, 70 * u, S, S - 70 * u);
+    g.fillStyle = '#ff8f5c';
+    g.beginPath(); g.arc(40 * u, 32 * u, 15 * u, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(16 * u, 92 * u); g.quadraticCurveTo(40 * u, 42 * u, 64 * u, 92 * u); g.closePath(); g.fill();
+    g.fillStyle = '#ffe0c8'; g.beginPath(); g.arc(36 * u, 28 * u, 5 * u, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#3ec9d8'; g.fillRect(76 * u, 46 * u, 14 * u, 44 * u);
+  }
+
+  // OPACITY / VISIBILITY. FLAT and saturated on purpose: at 60% a photograph just looks like a
+  // slightly different photograph, but a flat block visibly lets the backdrop through.
+  function paintChip(g, S) {
+    const u = S / 96;
+    g.fillStyle = '#ff2e63'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#08d9d6'; g.beginPath(); g.arc(58 * u, 38 * u, 30 * u, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#f7f7f7'; g.fillRect(8 * u, 66 * u, 60 * u, 12 * u);
+    g.fillStyle = '#252a34'; g.fillRect(8 * u, 8 * u, 22 * u, 22 * u);
+  }
+
+  // 3D. A UV checker: flat it is a checker, wrapped on a solid its squares curve — the only thing
+  // that says "this is a form" rather than "this is a silhouette". The stripe and the corner block
+  // keep it asymmetric, so Flip Layer is a flip rather than the same texture again.
+  function paintFacet(g, S) {
+    const u = S / 96, n = 4, c = S / n;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      g.fillStyle = ((x + y) % 2) ? '#1d2a4d' : '#f0e6d2';
+      g.fillRect(x * c, y * c, c + 1, c + 1);
+    }
+    g.strokeStyle = '#ff3d7f'; g.lineWidth = Math.max(1.5, 3.5 * u);
+    g.beginPath(); g.moveTo(2 * u, 94 * u); g.lineTo(94 * u, 2 * u); g.stroke();
+    g.fillStyle = '#2fd0b5'; g.fillRect(4 * u, 4 * u, 18 * u, 18 * u);
+  }
+
+  // Category key -> the art its tiles are built from. Colour & Light keeps the landscape; every
+  // other section gets art built for what that family actually does.
+  const SECTION_ART = {
+    color: paintPhoto, other: paintPhoto, text: paintPhoto,
+    blur: paintDetail, distort: paintGrid, proc: paintPlate, stylize: paintBars,
+    drawing: paintEmblem, move: paintToken, repeat: paintMotif, matte: paintSplit,
+    opacity: paintChip, threed: paintFacet,
+  };
+
   // A neutral-grey displacement map with three soft blobs — mid-grey pushes nothing, the blobs push
   // in opposite directions, so Displacement Map has something to actually displace BY.
   function paintMap(g, S) {
@@ -161,21 +312,15 @@ window.FM = window.FM || {};
     l.id = id;
     return l;
   }
+  // Layer arrays are TOP-first (renderScene draws from the end of the array up), so bg goes last.
+  function bg() { return mkArt('_fxthumbBack', paintBackdrop, SIZE, 48, 48); }
   function ensureSamples() {
     if (samples) return;
-    // Layer arrays are TOP-first (renderScene draws from the end of the array up), so bg goes last.
-    const bg  = () => mkArt('_fxthumbBack', paintBackdrop, SIZE, 48, 48);
     const hero = mkShape({ shape: 'ellipse', shapeW: 46, shapeH: 46, fill: '#2fd0b5', x: 44, y: 44 });
     const dot  = mkShape({ shape: 'ellipse', shapeW: 12, shapeH: 12, fill: '#ffb86c', x: 74, y: 28 });          // makes warps/displacement legible
     const txt  = FM.makeLayer('text', { text: 'Abc', fontSize: 40, color: '#e8ecf4', x: 48, y: 48, start: 0, duration: 2 });
-    // CARD offset: 64px art centred at 46,44 leaves a 14-16px margin all round, so a stroke, a drop
-    // shadow or a 3D rotation still has somewhere to land inside the tile.
     samples = {
       ball:     { layers: [dot, hero, bg()], heroIdx: 1 },
-      photo:    { layers: [mkArt('_fxthumbPhoto', paintPhoto, SIZE, 48, 48), bg()], heroIdx: 0 },
-      card:     { layers: [mkArt('_fxthumbCard', paintPhoto, 64, 46, 44), bg()], heroIdx: 0 },
-      grid:     { layers: [mkArt('_fxthumbGrid', paintGrid, SIZE, 48, 48), bg()], heroIdx: 0 },
-      gridcard: { layers: [mkArt('_fxthumbGridC', paintGrid, 64, 46, 44), bg()], heroIdx: 0 },
       text:     { layers: [txt, bg()], heroIdx: 0 },
       keyshot:  { layers: [mkArt('_fxthumb', paintKeyshot, SIZE, 48, 48), bg()], heroIdx: 0 },
       // A plain shape over the landscape: for Copy Background, whose whole job is to pull the
@@ -183,18 +328,31 @@ window.FM = window.FM || {};
       backdrop: { layers: [mkShape({ shape: 'rect', shapeW: 54, shapeH: 54, fill: '#2fd0b5', x: 46, y: 44 }), mkArt('_fxthumbPhoto', paintPhoto, SIZE, 48, 48)], heroIdx: 0 },
     };
   }
+  // 'full:<cat>' / 'card:<cat>' built on first use and kept for the session (24 small canvases).
+  // CARD offset: 64px art centred at 46,44 leaves a 14-16px margin all round, so a stroke, a drop
+  // shadow or a 3D rotation still has somewhere to land inside the tile.
+  function sampleFor(key) {
+    if (samples[key]) return samples[key];
+    const cut = key.indexOf(':');
+    if (cut < 0) return samples.ball;
+    const form = key.slice(0, cut), cat = key.slice(cut + 1);
+    const art = SECTION_ART[cat] || paintPhoto;
+    const s = (form === 'card')
+      ? { layers: [mkArt('_fxthumbC_' + cat, art, 64, 46, 44), bg()], heroIdx: 0 }
+      : { layers: [mkArt('_fxthumbF_' + cat, art, SIZE, 48, 48), bg()], heroIdx: 0 };
+    samples[key] = s;
+    return s;
+  }
 
-  /* Which subject demonstrates each effect. A CATEGORY default gets most of them right — tonal
-   * families want the photo, geometric ones want the lattice — and SUBJECT_OF names every effect
-   * whose own behaviour disagrees with its category. Anything not listed falls to its category. */
+  /* Which FORM of its section's art demonstrates each effect. The section default gets most of them
+   * right, and SUBJECT_OF names every effect whose own behaviour disagrees with its section. */
   const SUBJECT_BY_CATEGORY = {
-    color: 'photo', blur: 'photo', proc: 'photo', stylize: 'photo', drawing: 'photo', other: 'photo',
+    color: 'full', blur: 'full', proc: 'full', stylize: 'full', drawing: 'full', other: 'full',
+    distort: 'full',
     // Fading needs something to fade AGAINST: on a full-frame subject a blink is just a blank tile.
     opacity: 'card',
-    distort: 'grid',
-    // Move and 3D both need an ASYMMETRIC subject with an edge: a round ball cannot show Spin,
-    // Swing or Pulse at all (a rotated circle is the same circle), and a 3D solid textured with a
-    // flat colour is a silhouette rather than a form.
+    // Move and 3D both need an ASYMMETRIC subject with an edge and room to travel, so both use the
+    // card: a full-frame subject that spins or drifts just swings its own edges through the tile.
     move: 'card', threed: 'card',
     repeat: 'card', matte: 'card', text: 'text',
   };
@@ -211,16 +369,16 @@ window.FM = window.FM || {};
     // Matte Choker eats or grows the alpha. On a rectangle that is just a slightly different
     // rectangle; on letters you can watch the shape thicken, which is the whole point.
     mattechoker: 'text',
-    // Remove Object needs something worth removing: a rectangle punched out of the landscape and
+    // Remove Object needs something worth removing: a rectangle punched out of the picture and
     // filled from its surroundings.
-    touchup: 'photo',
+    touchup: 'full',
     // Copy Background is the one effect whose subject must be BLANK: the point is that the layer
     // fills with whatever is underneath, so the backdrop has to be the interesting half.
     // Light Wrap reads the layers UNDERNEATH, so like Copy Background its tile needs a plain shape
     // over something worth wrapping.
     copybg: 'backdrop', lightwrap: 'backdrop',
     // Whole-frame framing: these draw ON the comp edge, so the subject must reach it.
-    letterbox: 'photo', border: 'photo', vignette: 'photo', tiltshift: 'photo',
+    letterbox: 'full', border: 'full', vignette: 'full', tiltshift: 'full',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
     halation: 'card',
     // Dispersion blows the layer AWAY, so it needs an edge to blow away from and space to go.
@@ -230,13 +388,10 @@ window.FM = window.FM || {};
     framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot', chromakeypro: 'keyshot',
-    lumamatte: 'photo', compoundblur: 'photo', matchgrade: 'photo',
+    lumamatte: 'full', compoundblur: 'full', matchgrade: 'full',
     // The scan bar has to have somewhere to sweep, and the frozen half only reads against a live
     // half — a full-frame subject with internal motion is the only thing that shows both.
-    timewarp: 'photo',
-    // Geometry that reads better on a real picture than on an abstract lattice: these re-tile or
-    // re-colour the content rather than bending it, so what matters is recognising the content.
-    mirror: 'photo', pixelate: 'photo', chromaticaberration: 'photo', hextiles: 'photo', glass: 'photo',
+    timewarp: 'full',
     // These two throw ghosts/streaks OUTSIDE the layer, which only shows if there is an outside.
     rgbsplit: 'card', innerblur: 'card', motionblur: 'card',
   };
@@ -244,7 +399,10 @@ window.FM = window.FM || {};
     // appliesTo is a hard gate, not a preference: a text effect on an image layer renders nothing.
     if (reg && reg.appliesTo === 'text') return 'text';
     if (reg && reg.appliesTo === 'media') return 'keyshot';
-    return SUBJECT_OF[type] || SUBJECT_BY_CATEGORY[(reg && reg.category) || ''] || 'photo';
+    const want = SUBJECT_OF[type] || SUBJECT_BY_CATEGORY[(reg && reg.category) || ''] || 'full';
+    // 'full'/'card' are FORMS — they resolve against the section the effect lives in.
+    if (want === 'full' || want === 'card') return want + ':' + ((reg && SECTION_ART[reg.category]) ? reg.category : 'color');
+    return want;
   }
 
   // Per-type sample/param overrides (extensible). Receives (layers, hero) of the fresh clone.
@@ -274,9 +432,12 @@ window.FM = window.FM || {};
     // Same reason: a frozen half of a STILL picture looks exactly like the live half, so all you
     // would see is a bar travelling. Put motion under it and the freeze becomes the point.
     // Temporal denoise only shows itself against MOTION — it is defined by what it leaves sharp.
+    // …and it is defined by what it does NOT change, so the tile also has to run it flat out.
     temporaldenoise: function (layers, hero) {
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 14; mv.params.speed = 1.2; hero.effects.unshift(mv); }
+      const p = hero.effects[hero.effects.length - 1].params;
+      p.strength = 1; p.threshold = 0.5; p.spatial = 6;
     },
     timewarp: function (layers, hero) {
       const mv = FM.fxRegistry.makeInstance('orbit');
@@ -305,7 +466,7 @@ window.FM = window.FM || {};
     shake: function (layers, hero) { hero.effects[0].params.amount = 13; },
     wiggle: function (layers, hero) { hero.effects[0].params.amount = 12; },
     mirrortile: function (layers, hero) { hero.effects[0].params.size = 26; },
-    rasterextrude: function (layers, hero) { hero.effects[0].params.depth = 15; },
+    rasterextrude: function (layers, hero) { const p = hero.effects[0].params; p.depth = 34; p.darken = 0.9; },
     particles: function (layers, hero) {
       const p = hero.effects[0].params;
       p.speed = 52; p.gravity = 60; p.sizeStart = 7; p.sizeEnd = 2; p.rate = 90; p.lifetime = 1.6;
@@ -323,7 +484,7 @@ window.FM = window.FM || {};
     fractalridges: function (l, h) { h.effects[0].params.scale = 20; },
     glass: function (l, h) { h.effects[0].params.amount = 4; },
     // A horizontal flip of a picture you have never seen is not a flip — it is just a picture.
-    // Vertical is the same effect and reads instantly, because the sky ends up underneath.
+    // Vertical is the same effect and reads instantly, because the diagonal changes hands.
     fliplayer: function (l, h) { h.effects[0].params.mode = 1; },
     glowscan: function (l, h) { h.effects[0].params.width = 26; },
     linstreaks: function (l, h) { h.effects[0].params.length = 16; },
@@ -334,7 +495,7 @@ window.FM = window.FM || {};
     tiles: function (l, h) { const p = h.effects[0].params; p.mode = 1; p.count = 3; p.gap = 4; },
     // Both of these work on the alpha edge, and their defaults are a 4px feather / a 6px bevel —
     // real values on a real comp, invisible on a 64px card. Show the shape of what they do.
-    smoothedges: function (l, h) { h.effects[0].params.radius = 12; },
+    smoothedges: function (l, h) { h.effects[0].params.radius = 20; },
     smoothbevel: function (l, h) { h.effects[0].params.depth = 17; h.effects[0].params.strength = 2; },
     // Both displacement effects fall back to self-displacing when no Map layer is chosen, which
     // reads as "smeared" rather than "displaced BY something". Give them a real map — mid-grey
@@ -369,14 +530,11 @@ window.FM = window.FM || {};
     solidmatte: function (layers, hero) { hero.effects[0].params.color = '#ff3d7f'; },
     // colorbalance's default warm push landed on the same pixels as temperature(+40). Cool it instead —
     // still representative (it's a per-channel balance) and the two thumbs stop being twins.
-    colorbalance: function (layers, hero) { hero.effects[0].params.red = -55; hero.effects[0].params.blue = 65; },
+    colorbalance: function (layers, hero) { const p = hero.effects[0].params; p.red = -100; p.green = 40; p.blue = 100; },
     // Same twins problem: Duotone (#241a52→#ff9e5e) and Gradient Map (#241a52→#ffb86c) run identical
     // luma-ramp maths from near-identical colours, so their tiles collide. Give the map a cold-to-warm
     // ramp of its own; Duotone keeps the defaults, since ITS name is the one about two colours.
     gradientmap: function (l, h) { h.effects[0].params.color = '#07263f'; h.effects[0].params.color2 = '#8df5a0'; },
-    // Vibrance protects already-saturated pixels, so at its default it moves the photo by ~6% — true
-    // to the effect and invisible in a tile. Run it at the top of its range instead.
-    vibrance: function (l, h) { h.effects[0].params.amount = 2; },
     // A -4px choke on a 64px rectangle is a 64px rectangle. Letters are the shape whose alpha you can
     // watch fatten, so the choke is shown spreading text rather than nudging an edge.
     mattechoker: function (l, h) { h.effects[0].params.choke = 7; },
@@ -384,12 +542,61 @@ window.FM = window.FM || {};
     // wide, and MM:SS:FF is eight glyphs at ~155px. Shorter tracking, shorter clock.
     textspacing: function (l, h) { h.effects[0].params.spacing = 9; },
     timecode: function (l, h) { h.effects[0].params.mode = 2; },
-    // Remove Object's default rectangle lands on empty sky, so nothing looks removed. Put it over
-    // the sun — the one thing in the picture you notice is missing.
+    // Remove Object's default rectangle lands on empty background, so nothing looks removed. Put it
+    // over the head of the matte section's figure — the one thing you notice is missing.
     touchup: function (l, h) {
       const p = h.effects[0].params;
-      p.x = 57; p.y = 15; p.w = 24; p.h = 25; p.feather = 5;
+      p.x = 26; p.y = 16; p.w = 30; p.h = 32; p.feather = 5;
     },
+
+    /* ---- DEMO STRENGTH (thumbnail only — the real defaults are untouched) --------------------
+     * 26 tiles measured as indistinguishable from their un-effected subject at 96px: either nothing
+     * moved anywhere (mean < 8/255 with no pixel past 100/255), or the whole frame shifted by so
+     * little that it read as the same picture (nothing past 35/255). Fixed here, along with four
+     * more that were only just above the line (brightness, crosshatch, stretchseg, starfield).
+     * Two causes, and both are about the tile rather than the effect:
+     *   • a PIXEL length set for a real comp — Soft Glow's 100px radius is wider than this whole
+     *     96px frame, so its bloom is spread too thin to see; same for Light Glow and Light Wrap.
+     *   • a THRESHOLD that a small dark tile never crosses — Halation waits for 0.68 luma, Luma Key
+     *     for 0.25, so on this subject they simply never fire.
+     * Everything here stays inside the control's own range and stays honest about what the effect
+     * does; it is the same picture the effect makes, taken far enough to see at 96 pixels. */
+    halation: function (l, h) { const p = h.effects[0].params; p.threshold = 0.1; p.spread = 20; p.amount = 2; p.tightness = 0; p.knee = 1; },
+    lightglow: function (l, h) { const p = h.effects[0].params; p.radius = 20; p.threshold = 18; p.amount = 1; },
+    softglow: function (l, h) { const p = h.effects[0].params; p.radius = 28; p.threshold = 12; p.amount = 1; },
+    bumpmap: function (l, h) { h.effects[0].params.amount = 3; },
+    levels: function (l, h) { const p = h.effects[0].params; p.inblack = 80; p.inwhite = 185; p.gamma = 1.7; },
+    hslbands: function (l, h) { const p = h.effects[0].params; p.sat = 100; p.lum = 34; p.range = 3; },
+    tealorange: function (l, h) { h.effects[0].params.amount = 1; },
+    crossprocess: function (l, h) { h.effects[0].params.amount = 1; },
+    faded: function (l, h) { h.effects[0].params.amount = 1; },
+    temperature: function (l, h) { h.effects[0].params.amount = 100; },
+    // The three Ezra named: at their defaults all three tiles were the same landscape again.
+    saturate: function (l, h) { h.effects[0].params.amount = 3; },
+    contrast: function (l, h) { h.effects[0].params.amount = 2.6; },
+    brightness: function (l, h) { h.effects[0].params.amount = 2.1; },
+    roughenedges: function (l, h) { const p = h.effects[0].params; p.amount = 20; p.scale = 7; },
+    // A 7px hatch pitch is 13 lines across the whole tile — tighten it so the screen reads as a
+    // screen, and stretch a band deep enough that Stretch Segment is a stretch and not a nudge.
+    crosshatch: function (l, h) { h.effects[0].params.spacing = 4; },
+    stretchseg: function (l, h) { const p = h.effects[0].params; p.amount = 0.95; p.height = 44; },
+    electricedges: function (l, h) { h.effects[0].params.amount = 1; },
+    lumakey: function (l, h) { h.effects[0].params.threshold = 0.58; },
+    // Reach/radius are comp-scale pixels: past ~45 on a 96px tile the wrap spreads so wide it fades
+    // out again (measured 11.22 mean at 44/34, 6.19 at 72/60), so this is the peak, not the maximum.
+    lightwrap: function (l, h) { const p = h.effects[0].params; p.intensity = 2; p.reach = 44; p.radius = 34; },
+    starfield: function (l, h) { h.effects[0].params.amount = 1; },
+    contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
+    filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
+    // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the
+    // default look) but pull it in close and hard so it reads as an offset edge.
+    dropshadow: function (l, h) { const p = h.effects[0].params; p.distance = 26; p.softness = 10; },
+    noise: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 2; p.color = 45; },
+    posterize: function (l, h) { h.effects[0].params.levels = 3; },
+    // Vibrance protects already-saturated pixels, so at its default it moved this photo by ~6%.
+    // Top of its range is all the headroom there is (Protect-highlights measured WORSE, 12.98 vs
+    // 14.36) — the tile is as strong as the control allows.
+    vibrance: function (l, h) { h.effects[0].params.amount = 2; },
   };
 
   // Fresh scene per type: shallow-clone the layer list (plain objects) and give the TARGET layer
@@ -398,7 +605,7 @@ window.FM = window.FM || {};
   // duration when a preset's keyframes run past the default 2s sample.
   function sceneFor(type, inst, span) {
     const reg = FM.fxRegistry.get(type);
-    const base = samples[subjectFor(type, reg)] || samples.ball;
+    const base = sampleFor(subjectFor(type, reg));
     const layers = base.layers.map(l => Object.assign({}, l));
     if (span && span > 2) layers.forEach(l => { l.duration = span + 0.5; });
     const target = layers[base.heroIdx];
@@ -545,6 +752,11 @@ window.FM = window.FM || {};
     mount: function (cv, type) { mountKey(cv, type, null); },
     /* Same contract for a PRESET's live preview (cache keyed by preset id). */
     mountPreset: function (cv, preset) { if (preset && preset.id) mountKey(cv, 'p:' + preset.id, preset); },
+    /* The exact scene a tile is rendered from — the subject, the effect instance and any demo-only
+     * parameter overrides. Exposed so the suite can MEASURE a tile (render it, render it again with
+     * the effect stripped out, diff) instead of taking "it looks right" on trust. Read-only: it
+     * hands back a fresh clone each call, so mutating it cannot affect a real thumbnail. */
+    previewScene: function (type) { ensureSamples(); return sceneFor(type); },
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
     stopAll: function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }

@@ -2604,6 +2604,405 @@
     if (rt.segments.length) throw new Error('a steady 440 Hz tone was read as ' + rt.segments.length + ' speech segments');
   });
 
+  test('effects (phone): dragging a row’s grip must not throw the inspector sheet away', { item: 'fx-drag-sheet-dismiss' }, async function () {
+    // Ezra: "if I only have two effects and I try to drag the top one down it just closes the menu."
+    //
+    // This is what actually happens, driven with REAL touch events against the live app on a 390x844
+    // phone (CDP, not synthetic): pointerdown lands on .fx-grip and starts a reorder — and it ALSO
+    // arms the bottom sheet's swipe-down-to-dismiss, because the sheet is scrolled to the top and the
+    // grip is not on its "controls that own vertical drags" exclusion list. On the second pointermove
+    // the sheet claims the gesture and calls panel.setPointerCapture(), which RETARGETS every
+    // remaining move and the pointerup at the panel. Measured targets: fx-grip → fx-head → panel,
+    // panel, panel … panel. The effect row never sees another event, so:
+    //   • endReorder() never runs → the drop is silently dropped (order unchanged), and the row is
+    //     left mid-drag: measured .fx-dragging still set, style.transform still translateY(8.6px);
+    //   • _fxReorderAt is therefore never stamped — the v5.56 400ms "a drag just dropped here" guard
+    //     is UNREACHABLE on this path, which is why it never fixed anything;
+    //   • past 33% of the sheet's height the drop deselects the layer outright (FM.selectLayer(null)),
+    //     and the whole panel goes away. That is the "it just closes the menu".
+    // Two effects is not strictly required (5 does it too) — with two, the only row to swap with sits
+    // 221px down past the open editor, which is double the sheet's dismiss threshold, so it fires
+    // every single time.
+    //
+    // Here in the suite the events are synthetic, so the capture theft cannot be reproduced (a made-up
+    // pointerId makes setPointerCapture throw). What DOES reproduce is the half that runs on
+    // window-level listeners: the sheet claiming the drag and dismissing. So that is what is asserted.
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const insp = document.getElementById('inspector-panel');
+    const realMM = window.matchMedia, top0 = insp.style.top, max0 = insp.style.maxHeight;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      // Be a phone without resizing the runner's frame: mobile.js asks matchMedia at EVENT time.
+      window.matchMedia = function (q) { return /max-width:\s*700px/.test(q) ? { matches: true, media: q } : realMM.call(window, q); };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'sheet', x: 160, y: 120, shapeW: 120, shapeH: 120, fill: '#4af' });
+      L.effects = [];
+      ['blur', 'glow'].forEach(t => { const fx = FM.fxRegistry.makeInstance(t); if (fx) L.effects.push(fx); });
+      if (L.effects.length !== 2) throw new Error('needed exactly 2 effects, built ' + L.effects.length);
+      L.effects[0]._expanded = true;                    // the TOP one is OPEN, exactly as reported
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('effects');
+      FM.inspector.refresh();                           // refresh is where mobile.js syncs the sheet
+      await sleep(60);
+      if (!insp.classList.contains('open')) throw new Error('the phone sheet never opened — there is nothing to dismiss, so this test would prove nothing');
+      insp.scrollTop = 0;                               // at the top is what ARMS swipe-to-dismiss
+      const rows = Array.prototype.slice.call(document.querySelectorAll('.fx-row'));
+      if (rows.length !== 2) throw new Error('expected 2 effect rows, found ' + rows.length);
+      const grip = rows[0].querySelector('.fx-grip');
+      if (!grip) throw new Error('the top row has no .fx-grip — nothing to drag by');
+      const h = insp.getBoundingClientRect().height, r = grip.getBoundingClientRect();
+      const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const dy = Math.max(h * 0.45, 130);               // past the sheet's 33%-of-height dismiss point
+      const ev = (type, y, buttons) => grip.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, pointerType: 'touch',
+        clientX: x, clientY: y, buttons: buttons == null ? 1 : buttons }));
+      ev('pointerdown', y0);
+      await sleep(40);
+      for (let i = 1; i <= 8; i++) { ev('pointermove', y0 + dy * i / 8); await sleep(16); }
+      ev('pointerup', y0 + dy, 0);
+      await sleep(80);
+      // Both of these were checked with the fix removed and both go red, one after the other.
+      // (There is deliberately NO assertion on insp.classList 'open': with a single clip selected the
+      // sheet is DOCKED — body.m-editing — and that branch of the dismiss deselects the layer instead
+      // of closing the panel, so an 'open' assertion could never fire here. Unfireable assertions are
+      // how the v5.56 guard came to be believed in the first place.)
+      if (FM.scene.selectedId !== L.id) throw new Error('dragging the effect grip DESELECTED the layer — the sheet ate the drag as a swipe-to-dismiss');
+      const left = document.querySelectorAll('.fx-row').length;
+      if (left !== 2) throw new Error('the effects list went from 2 rows to ' + left + ' — the menu closed itself mid-drag');
+    } finally {
+      window.matchMedia = realMM;
+      insp.style.transform = ''; insp.style.top = top0; insp.style.maxHeight = max0;
+      insp.classList.remove('open');
+      document.body.classList.remove('insp-open', 'm-editing');
+      const tgl = document.getElementById('insp-toggle'); if (tgl) tgl.classList.remove('on');
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.inspector.openCategory('home');
+    }
+  });
+
+  /* ---- Add-Effect thumbnails (queue item 30) ------------------------------------------------
+   * Both of these MEASURE the tile: build the exact scene fx-thumbs renders (FM.fxThumbs.
+   * previewScene), render it, render it again with the effect stripped out, and diff. Nothing here
+   * mounts a tile in the DOM — mount() is async and removing a mounted tile breaks every later
+   * mount, which has produced two confident wrong conclusions about this file already. */
+  // ONE surface for every tile render: the temporal effects (motion blur, denoise) hold per-plate
+  // state, and handing them a fresh canvas each frame resets it — which reads as "the effect does
+  // nothing" when in fact it never got a second frame to work from.
+  var thumbCv = null, thumbCtx = null;
+  function thumbPix(scene, t) {
+    if (!thumbCv) { thumbCv = offscreen(96, 96); thumbCtx = thumbCv.getContext('2d', { willReadFrequently: true }); }
+    thumbCtx.setTransform(1, 0, 0, 1, 0, 0);
+    thumbCtx.clearRect(0, 0, 96, 96);
+    FM.renderScene(thumbCtx, scene, t);
+    return thumbCtx.getImageData(0, 0, 96, 96).data;
+  }
+  // mean absolute RGB difference over the tile, and the largest single-pixel difference.
+  function thumbDiff(a, b) {
+    var sum = 0, n = 0, max = 0;
+    for (var i = 0; i < a.length; i += 4) {
+      var d = (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3;
+      var da = Math.abs(a[i + 3] - b[i + 3]);
+      if (da > d) d = da;
+      sum += d; n++; if (d > max) max = d;
+    }
+    return { mean: sum / n, max: max };
+  }
+  function thumbWithout(scene, type) {   // same scene, that one effect removed
+    return {
+      project: scene.project,
+      layers: scene.layers.map(function (l) {
+        var c = Object.assign({}, l);
+        if (c.effects) c.effects = c.effects.filter(function (e) { return e.type !== type; });
+        return c;
+      })
+    };
+  }
+
+  test('effects browser: each section demonstrates on its own subject', { item: 'fx-thumb-subjects' }, function () {
+    // One example subject per section, so a blur shows fine detail, a warp shows straight lines and
+    // a matte shows a foreground/background split. Before this, eleven sections shared one landscape.
+    var probe = { color: 'brightness', blur: 'blur', distort: 'wave', proc: 'clouds', stylize: 'scanlines',
+      drawing: 'edge', move: 'spin', repeat: 'gridrepeat', matte: 'wipe', opacity: 'blink', threed: 'cube3d' };
+    var seen = [];
+    Object.keys(probe).forEach(function (cat) {
+      var type = probe[cat];
+      if (!FM.fxRegistry.get(type)) throw new Error('probe effect missing from the registry: ' + type);
+      // the SUBJECT, i.e. the tile with its effect taken away — that is what must differ per section
+      var px = thumbPix(thumbWithout(FM.fxThumbs.previewScene(type), type), 0);
+      seen.forEach(function (s) {
+        var d = thumbDiff(px, s.px);
+        if (d.mean < 6) throw new Error('sections "' + cat + '" and "' + s.cat + '" draw the same subject (mean diff ' + d.mean.toFixed(2) + ')');
+      });
+      seen.push({ cat: cat, px: px });
+    });
+  });
+
+  test('effects browser: no thumbnail is a picture of the subject doing nothing', { item: 'fx-thumb-visible' }, function () {
+    // Every one of these measured as indistinguishable from its un-effected subject: either nothing
+    // moved (mean < 8/255) or nothing moved far (no pixel past 35/255). Usually a comp-scale pixel
+    // length or a threshold the tile never crosses — fixed with a demo-only parameter, never by
+    // touching the effect's real default. Floors are ~60% of measured, so a revert goes red.
+    var floors = {
+      halation: 8, lightglow: 8, softglow: 8, bumpmap: 30, levels: 20, hslbands: 25, faded: 22,
+      saturate: 20, contrast: 24, colorbalance: 35, temporaldenoise: 9, roughenedges: 8,
+      smoothedges: 9, stretchseg: 15, lumakey: 30, lightwrap: 8, rasterextrude: 8, filmgrain: 14,
+      noise: 24, posterize: 24, pixelsort: 11, unsharpmask: 9, tiltshift: 30, zoomstreaks: 8, sharpen: 9,
+    };
+    var bad = [];
+    Object.keys(floors).forEach(function (type) {
+      var scene = FM.fxThumbs.previewScene(type), off = thumbWithout(scene, type);
+      var ts = [0.2, 0.7, 1.2], on = [], no = [];            // temporal effects need more than one frame,
+      ts.forEach(function (t) { no.push(thumbPix(off, t)); });   // and they must be rendered in ascending t
+      thumbPix(scene, 0);                                    // warm-up, exactly as generate() does
+      ts.forEach(function (t) { on.push(thumbPix(scene, t)); });
+      var best = { mean: 0, max: 0 };
+      on.forEach(function (px, i) { var d = thumbDiff(px, no[i]); if (d.mean > best.mean) best = d; });
+      // mean: did enough of the tile change. max: did anything change FAR — a whole-frame grade can
+      // move every pixel by 13/255 and still read as the same picture, which is the original bug.
+      if (best.mean < floors[type] || best.max < 36) {
+        bad.push(type + ' mean ' + best.mean.toFixed(2) + '/' + floors[type] + ' max ' + best.max);
+      }
+    });
+    if (bad.length) throw new Error('tiles indistinguishable from their subject: ' + bad.join('; '));
+  });
+
+  /* ---------------- safe-area insets under viewport-fit=cover (queue 46) ----------------
+   * v5.49 added viewport-fit=cover, so every position:fixed overlay now starts at the PHYSICAL top
+   * of the screen and has to pay for the status bar itself. #topbar-m, .hm-top, .set-head and .te-bar
+   * all do; the Add-Effect browser's headers did not, and its ✕ / magnifier landed level with the
+   * clock and the battery — Ezra: "the buttons at the top of the effect menu are unreachable."
+   *
+   * Headless Chrome has NO safe area, so env(safe-area-inset-*) resolves to 0 and the bug is
+   * invisible to a plain measurement. These tests simulate one: they read the SPECIFIED value of the
+   * padding straight out of the CSSOM, swap env() for a var() the probe sets to a real iPhone inset,
+   * and measure a live clone. Delete the fix and the specified value falls back to the shorthand's
+   * 14px, the clone's button lands at y=14 inside a 62px inset, and these go red. */
+  var IPHONE_SAT = 62, IPHONE_SAB = 34;   // iPhone 16 Pro Max, 440x956pt (Dynamic Island / home indicator)
+
+  // The specified (not computed) value of one property on the first rule matching `sel`.
+  function specified(sel, prop) {
+    var sheets = document.styleSheets;
+    for (var i = 0; i < sheets.length; i++) {
+      var rules; try { rules = sheets[i].cssRules; } catch (e) { continue; }
+      if (!rules) continue;
+      for (var j = 0; j < rules.length; j++) {
+        var r = rules[j];
+        if (r.selectorText && r.selectorText.split(',').some(function (s) { return s.trim() === sel; })) {
+          var v = r.style.getPropertyValue(prop);
+          if (v) return v;
+        }
+      }
+    }
+    return '';
+  }
+  function withFakeInset(v) {
+    return String(v).replace(/env\(\s*safe-area-inset-(top|bottom|left|right)\s*(?:,[^()]*)?\)/g, 'var(--tsa-$1, 0px)');
+  }
+  // A 440px-wide off-screen box carrying an iPhone's insets as custom properties.
+  function insetSandbox() {
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:-10000px;top:0;width:440px;height:956px;' +
+      '--tsa-top:' + IPHONE_SAT + 'px;--tsa-bottom:' + IPHONE_SAB + 'px;--tsa-left:0px;--tsa-right:0px;';
+    document.body.appendChild(box);
+    return box;
+  }
+
+  test('safe area: the Add-Effect headers clear the status bar (viewport-fit=cover)', { item: 'safe-area-top' }, function () {
+    var box = insetSandbox();
+    try {
+      [['.fxb-top', '#fx-browser .fxb-top'], ['.fxb-catview-top', null]].forEach(function (pair) {
+        var sel = pair[0];
+        var pt = withFakeInset(specified(sel, 'padding-top'));
+        if (!pt) throw new Error(sel + ': no padding-top in the CSSOM at all');
+        // live clone of the real header if one exists, else the minimum markup the browser builds
+        function build() {
+          var src = pair[1] && document.querySelector(pair[1]);
+          if (src) return src.cloneNode(true);
+          var n = document.createElement('div'); n.className = 'fxb-catview-top';
+          var b = document.createElement('button'); b.className = 'fxb-back'; b.textContent = '‹ Back'; n.appendChild(b);
+          var t = document.createElement('div'); t.className = 'fxb-catview-title'; t.textContent = 'Blur'; n.appendChild(t);
+          return n;
+        }
+        // Two copies of the SAME header, differing only in the inset the padding resolves against.
+        // `notched` is the phone under test; `flat` is the control the fix must not have cost anything.
+        var notched = build(), flat = build();
+        notched.style.paddingTop = pt; notched.style.setProperty('--tsa-top', IPHONE_SAT + 'px');
+        flat.style.paddingTop = pt;    flat.style.setProperty('--tsa-top', '0px');
+        box.appendChild(notched); box.appendChild(flat);
+
+        var hb = notched.getBoundingClientRect(), top = box.getBoundingClientRect().top;
+        var on = [].slice.call(notched.querySelectorAll('button')).filter(function (b) { var r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+        var off = [].slice.call(flat.querySelectorAll('button'));
+        if (!on.length) throw new Error(sel + ': clone has no visible buttons to measure');
+        if (hb.height <= flat.getBoundingClientRect().height + 0.5) {
+          throw new Error(sel + ': the header did not grow at all under a ' + IPHONE_SAT +
+            'px inset (' + Math.round(hb.height) + 'px either way) — padding-top is "' + pt + '", which ignores the inset');
+        }
+        on.forEach(function (b, i) {
+          var r = b.getBoundingClientRect(), base = off[i].getBoundingClientRect();
+          var who = sel + ' "' + (b.className || b.textContent) + '"';
+          // 1. clear of the status bar…
+          if (r.top - top < IPHONE_SAT - 0.5) {
+            throw new Error(who + ' sits ' + Math.round(IPHONE_SAT - (r.top - top)) + 'px INSIDE a ' + IPHONE_SAT +
+              'px status-bar inset (y=' + Math.round(r.top - top) + ') — unreachable on a notched phone');
+          }
+          // 2. …and NOT by shrinking or clipping it. A "fits" test that hides what it measures is the
+          //    trap this suite fell into once before, so both are asserted alongside the fit itself.
+          if (r.bottom > hb.bottom + 0.5 || r.top < hb.top - 0.5) {
+            throw new Error(who + ' is not fully inside its header box (btn ' + Math.round(r.top) + '..' + Math.round(r.bottom) +
+              ' vs header ' + Math.round(hb.top) + '..' + Math.round(hb.bottom) + ')');
+          }
+          if (r.height < base.height - 0.5 || r.width < base.width - 0.5) {
+            throw new Error(who + ' shrank from ' + Math.round(base.width) + 'x' + Math.round(base.height) + ' to ' +
+              Math.round(r.width) + 'x' + Math.round(r.height) + ' under the inset — it must be paid for with padding, not by squashing the control');
+          }
+        });
+        // the two round chrome buttons Ezra could not reach must still be full-size targets
+        [].slice.call(notched.querySelectorAll('.fxb-close, .fxb-search-btn')).forEach(function (b) {
+          var r = b.getBoundingClientRect();
+          if (r.height < 36 || r.width < 36) throw new Error(sel + ' ' + b.className + ' is only ' + Math.round(r.width) + 'x' + Math.round(r.height) + 'px — below its 38px design size');
+        });
+      });
+    } finally { box.remove(); }
+  });
+
+  test('safe area: the audio-effect category bar clears the home indicator', { item: 'safe-area-bottom' }, function () {
+    // .afxb-catnav is the last child of a fixed inset:0 overlay, so its bottom edge IS the screen's.
+    var box = insetSandbox();
+    try {
+      var pb = withFakeInset(specified('.afxb-catnav', 'padding-bottom'));
+      if (!pb) throw new Error('.afxb-catnav: no padding-bottom in the CSSOM at all');
+      function bar(inset, bottom) {
+        var n = document.createElement('div'); n.className = 'fxb-catnav afxb-catnav';
+        ['‹ Dynamics', 'Space ›'].forEach(function (label) {
+          var b = document.createElement('button'); b.className = 'fxb-back afxb-catnav-btn'; b.textContent = label; n.appendChild(b);
+        });
+        n.style.paddingBottom = pb; n.style.setProperty('--tsa-bottom', inset + 'px');
+        n.style.position = 'absolute'; n.style.left = '0'; n.style.right = '0'; n.style.bottom = bottom + 'px';
+        box.appendChild(n); return n;
+      }
+      var notched = bar(IPHONE_SAB, 0), flat = bar(0, 400);   // `flat` = the same bar with no inset, parked clear
+      var bb = box.getBoundingClientRect(), nb = notched.getBoundingClientRect();
+      var safeBottom = bb.bottom - IPHONE_SAB;
+      if (nb.height <= flat.getBoundingClientRect().height + 0.5) {
+        throw new Error('.afxb-catnav did not grow at all under a ' + IPHONE_SAB + 'px inset (' +
+          Math.round(nb.height) + 'px either way) — padding-bottom is "' + pb + '", which ignores the inset');
+      }
+      var off = [].slice.call(flat.querySelectorAll('button'));
+      [].slice.call(notched.querySelectorAll('button')).forEach(function (b, i) {
+        var r = b.getBoundingClientRect(), base = off[i].getBoundingClientRect();
+        if (r.bottom > safeBottom + 0.5) {
+          throw new Error('.afxb-catnav "' + b.textContent + '" ends ' + Math.round(r.bottom - safeBottom) +
+            'px inside a ' + IPHONE_SAB + 'px home-indicator band');
+        }
+        if (r.bottom > nb.bottom + 0.5 || r.top < nb.top - 0.5) throw new Error('.afxb-catnav "' + b.textContent + '" is not fully inside the bar');
+        if (r.height < base.height - 0.5 || r.width < base.width - 0.5) {
+          throw new Error('.afxb-catnav "' + b.textContent + '" shrank from ' + Math.round(base.width) + 'x' + Math.round(base.height) +
+            ' to ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' under the inset');
+        }
+      });
+    } finally { box.remove(); }
+  });
+
+  test('parameter rows: tapping a name selects that one property’s keyframes', { item: 'param-row-select' }, function () {
+    // The explicit counterpart to v5.42. Ezra, from Alight Motion: "to tell what slider you
+    // have selected — hence forth what key frames ur gonna be editing, it shows by making the item ur
+    // changing have a different colour on the name of it, you can also tap on the name to select the
+    // row." Selection is per-PROPERTY (his screenshot has Offset's X green and its Y not), and it
+    // NARROWS the panel-implied focus rather than running beside it.
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'sel', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff' });
+    try {
+      // Distinct keyframe TIMES per property, so "which ones are live" is answerable, not just countable.
+      L.transform.x = { kf: [{ t: 0, v: 100 }, { t: 1, v: 300 }] };
+      L.transform.y = { kf: [{ t: 0, v: 100 }, { t: 2, v: 300 }] };
+      L.transform.scale = { kf: [{ t: 3, v: 1 }, { t: 4, v: 2 }] };   // a second MODE with keyframes, for the stale-selection check
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+
+      var insp = document.getElementById('inspector');
+      var dots = function () { return Array.prototype.slice.call(document.querySelectorAll('#tl-tracks .kf-dot')); };
+      var live = function () { return dots().filter(function (d) { return d.classList.contains('kf-live'); }); };
+      var times = function (ds) { return ds.map(function (d) { return d.dataset.t; }).sort().join(','); };
+      var name = function (sel, txt) {
+        return Array.prototype.slice.call(insp.querySelectorAll(sel)).filter(function (n) { return n.textContent.trim() === txt; })[0];
+      };
+
+      // --- Move & Transform ---------------------------------------------------------------------
+      FM.inspector.openCategory('transform'); FM._mtMode = 'move'; FM._mtAxis = 'xy';
+      FM.inspector.refresh(); FM.timeline.rebuild();
+      if (live().length !== 4) throw new Error('with nothing selected the whole panel should stay armed — ' + live().length + ' of 4 live');
+      if (insp.querySelector('.kf-sel')) throw new Error('a panel opened with a row already selected — opening must not silently freeze the other properties');
+      var X = name('.mt-vbox-lab', 'X');
+      if (!X) throw new Error('no X name element in Move & Transform');
+      if (!X.classList.contains('kf-selectable')) throw new Error('the X name is not offered as a row selector');
+      X.click();
+      X = name('.mt-vbox-lab', 'X');
+      var Y = name('.mt-vbox-lab', 'Y');
+      if (!X.classList.contains('kf-sel')) throw new Error('tapping the X name did not select it (classes: ' + X.className + ')');
+      if (Y.classList.contains('kf-sel')) throw new Error('Y got selected too — selection must be one property, not the row/control pair');
+      if (live().length !== 2) throw new Error('expected only X’s 2 keyframes live after selecting X, got ' + live().length);
+      if (times(live()) !== '0,1') throw new Error('the live keyframes are not X’s (want t=0,1; Y sits at 0,2) — got ' + times(live()));
+      // it has to LOOK selected, and be big enough to hit, and not spill out of its own box
+      var cs = getComputedStyle(X), cu = getComputedStyle(Y);
+      if (cs.color === cu.color) throw new Error('the selected name is the same colour as an unselected one (' + cs.color + ')');
+      if (cs.backgroundColor === cu.backgroundColor) throw new Error('the selected name has no pill behind it (' + cs.backgroundColor + ')');
+      var r = X.getBoundingClientRect(), box = X.closest('.mt-vbox').getBoundingClientRect();
+      if (r.height < 20) throw new Error('the tappable name is only ' + r.height.toFixed(1) + 'px tall');
+      if (r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5) {
+        throw new Error('the selected name spills outside its value box');
+      }
+      // ONE source of truth, the load-bearing half: the panel's SCOPE decides, and a selection that
+      // is no longer inside it is stale by definition. Switching mode here does NOT go through the
+      // mode rail (which clears), so only the scope check can save this — if a stale key were allowed
+      // to resolve, Scale's keyframes would be frozen by a row that belongs to Move.
+      FM._mtMode = 'scale'; FM.inspector.refresh(); FM.timeline.rebuild();
+      if (insp.querySelector('.kf-sel')) throw new Error('a Move selection is still painted as selected in Scale mode');
+      if (times(live()) !== '3,4') throw new Error('a stale Move selection is still deciding focus in Scale mode — live keyframes at ' + (times(live()) || 'none') + ', want Scale’s 3,4');
+      FM._mtMode = 'move'; FM.inspector.refresh(); FM.timeline.rebuild();
+      if (times(live()) !== '0,1') throw new Error('returning to Move did not restore the X row’s focus — got ' + times(live()));
+
+      name('.mt-vbox-lab', 'X').click();
+      if (live().length !== 4) throw new Error('tapping the selected name again should deselect it — ' + live().length + ' live, want 4');
+      if (insp.querySelector('.kf-sel')) throw new Error('a name is still marked selected after deselecting');
+
+      // --- Effect parameters --------------------------------------------------------------------
+      var fx = FM.fxRegistry.makeInstance('dropshadow');
+      fx.params.distance = { kf: [{ t: 0, v: 5 }, { t: 1, v: 40 }] };
+      fx.params.angle = { kf: [{ t: 0, v: 0 }, { t: 2, v: 300 }] };
+      fx._expanded = true;
+      L.effects = [fx];
+      FM.inspector.openCategory('effects'); FM.inspector.refresh(); FM.timeline.rebuild();
+      if (live().length !== 4) throw new Error('an open effect should arm all of its animated params — ' + live().length + ' of 4 live');
+      var dist = name('.fx-scrub-label', 'Distance');
+      if (!dist) throw new Error('no Distance name element in the effect editor');
+      dist.click();
+      dist = name('.fx-scrub-label', 'Distance');
+      if (!dist.classList.contains('kf-sel')) throw new Error('tapping the Distance name did not select it (classes: ' + dist.className + ')');
+      if (name('.fx-scrub-label', 'Angle').classList.contains('kf-sel')) throw new Error('Angle got selected as well');
+      if (live().length !== 2) throw new Error('expected only Distance’s 2 keyframes live, got ' + live().length);
+      if (times(live()) !== '0,1') throw new Error('the live keyframes are not Distance’s — got ' + times(live()));
+      var dr = dist.getBoundingClientRect(), row = dist.closest('.fx-scrub-row').getBoundingClientRect();
+      if (dr.height < 20) throw new Error('the tappable effect-param name is only ' + dr.height.toFixed(1) + 'px tall');
+      if (dr.top < row.top - 0.5 || dr.bottom > row.bottom + 0.5) throw new Error('the selected effect-param name spills outside its row');
+
+      // --- ONE source of truth: a selection can never outlive the panel that scoped it ------------
+      FM.inspector.openCategory('transform'); FM._mtMode = 'move'; FM.inspector.refresh(); FM.timeline.rebuild();
+      if (insp.querySelector('.kf-sel')) throw new Error('an effect-param selection is still showing in Move & Transform');
+      if (live().length !== 4) throw new Error('Move & Transform did not fall back to whole-panel focus — ' + live().length + ' live');
+    } finally {
+      FM.time = t0;
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+      FM.inspector.openCategory('home');
+      FM.timeline.rebuild();
+    }
+  });
+
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

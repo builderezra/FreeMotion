@@ -987,13 +987,22 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
  * this list rather than adding a fourth private copy of the same four properties. */
 #fx-browser, #el-browser { position: fixed; inset: 0; z-index: 160; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 #fx-browser.hidden, #el-browser.hidden { display: none; }
-.fxb-top { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line-soft); }
+/* v5.49 gave the page viewport-fit=cover, so a position:fixed overlay now starts at the PHYSICAL top
+   of the screen and every one of them has to pay for the status bar itself. This header did not, and
+   its two controls landed inside the inset — measured at 440x956 with a 62px inset: ✕ and the
+   magnifier both sat at y=14, i.e. 48px up inside the clock/battery row, level with them and
+   untappable. Same miss, same fix, same idiom as .hm-top and .set-head: max(base, inset) on the
+   padding edge that touches the screen, so nothing changes where the inset is 0 (PC, and any phone
+   without a notch). The shorthand stays for the other three edges; only the top is overridden. */
+.fxb-top { display: flex; align-items: center; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line-soft); }
 .fxb-close, .fxb-search-btn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; color: var(--text); cursor: pointer; font-size: 15px; flex: none; }
 .fxb-search-btn svg { width: 19px; height: 19px; }
 .fxb-title { flex: 1; text-align: center; font-weight: 700; font-size: 16px; }
 .fxb-search-input { margin: 10px 14px 0; padding: 11px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 14px; }
 .fxb-search-input.hidden { display: none; }
-.fxb-scroll { flex: 1; overflow-y: auto; padding: 14px; -webkit-overflow-scrolling: touch; }
+/* …and the same at the other end: this scroller's bottom edge IS the screen's bottom edge, so its
+   last row of tiles ended under the home indicator. Same idiom as .set-body / .hm-selbar. */
+.fxb-scroll { flex: 1; overflow-y: auto; padding: 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
 .fxb-section { margin-bottom: 22px; }
 .fxb-sec-title { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
 .fxb-featured { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
@@ -1044,10 +1053,12 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fxb-banner[data-cat="other"] { background: linear-gradient(120deg, rgba(170,180,200,.24), rgba(110,120,140,.16)); }
 .fxb-banner-count { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.7); }
 .fxb-catview { position: absolute; inset: 0; z-index: 5; background: var(--panel, #10141d); display: flex; flex-direction: column; }
-.fxb-catview-top { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line-soft); }
+/* The drilled-in category view is a SECOND full-cover header stacked over the first, with the same
+   status-bar problem and therefore the same fix — measured: ‹ Back sat at y=14 under a 62px inset. */
+.fxb-catview-top { display: flex; align-items: center; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line-soft); }
 .fxb-back { background: none; border: none; color: var(--accent); font-size: 15px; cursor: pointer; }
 .fxb-catview-title { font-weight: 700; font-size: 16px; }
-.fxb-catview-scroll { flex: 1; overflow-y: auto; padding: 14px; }
+.fxb-catview-scroll { flex: 1; overflow-y: auto; padding: 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
 .fxb-thumb { width: 100%; height: 62px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #3a7bd5, #00d2ff); }
 .fxb-thumb[data-cat="color"] { background: linear-gradient(135deg, #ff6a6a, #ffd24a); }
 .fxb-thumb[data-cat="blur"] { background: linear-gradient(135deg, #6a8dff, #b18cff); }
@@ -2511,7 +2522,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .afxb-banner[data-cat="space"] { background: linear-gradient(120deg, rgba(0,210,255,.3), rgba(41,217,187,.18)); }
 .afxb-banner[data-cat="dyn"] { background: linear-gradient(120deg, rgba(255,206,74,.3), rgba(255,132,66,.18)); }
 .afxb-banner[data-cat="char"] { background: linear-gradient(120deg, rgba(255,94,158,.3), rgba(196,113,255,.2)); }
-.afxb-catnav { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel-2, rgba(16,20,28,.96)); }
+/* The prev/next category bar is the LAST child of a fixed inset:0 overlay, so it is pinned to the
+   physical bottom of the screen. Measured at 440x956 with a 34px bottom inset: both buttons ended at
+   y=946, i.e. 24px inside the home-indicator band. Same idiom, bottom edge. */
+.afxb-catnav { display: flex; align-items: center; gap: 8px; padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel-2, rgba(16,20,28,.96)); }
 .afxb-catnav-btn { flex: 1; min-height: 40px; padding: 0 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .afxb-catnav-pos { color: var(--text-dim); font-size: 11px; flex: none; }
 @media (min-width: 701px) {
@@ -3107,3 +3121,37 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 }
 .set-action:hover { border-color: var(--accent); color: var(--text); }
 .set-action:active { transform: translateY(1px); }
+
+/* ===== Selected parameter row — the tapped-name half of the v5.42 focus rule ====================
+ * Ezra, from Alight Motion: "to tell what slider you have selected — hence forth what key frames ur
+ * gonna be editing, it shows by making the item ur changing have a different colour on the name of
+ * it, you can also tap on the name to select the row." AM draws the chosen parameter's NAME as a
+ * dark pill with green text; every other name stays the usual dim grey.
+ *
+ * This is the visible half of the focus rule v5.42 introduced: an unselected panel arms all of its
+ * keyframes, a selected name narrows that to one property (js/inspector.js — kfScope/kfFocusProps).
+ * The pill carries a 1px ring as well as a hue so the state survives a colour-blind reading and the
+ * glass theme's cooler palette.
+ *
+ * Placed at the end of the file on purpose: `.mt-vbox-axis.on` (the pad's active-axis tint) is also
+ * two classes, so only source order puts the selected pill on top of it. */
+.kf-selectable {
+  cursor: pointer; border-radius: 999px; padding: 5px 10px;
+  transition: background .12s, color .12s, box-shadow .12s;
+}
+.kf-selectable:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+.kf-selectable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mt-vbox-lab.kf-sel, .fx-scrub-label.kf-sel, .kf-selectable.kf-sel {
+  background: rgba(6, 22, 18, .92);
+  color: var(--am-green);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(92, 224, 200, .5);                                  /* fallback */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--am-green) 55%, transparent);
+}
+/* The pill has to HUG its name. `.fx-scrub-label` is flex:1 so the value box sits hard right, and a
+   pill painted across all of that reads as a second input field sitting next to the real one. Sizing
+   to content and pushing the slack into a right margin keeps the row's layout identical — measured
+   at 380px: the value box lands in the same place either way — while the pill stays name-shaped.
+   It applies selected or not, so selecting never shifts the row. min-width (72px, inherited) keeps a
+   short name like "Angle" a comfortable target rather than a nub. */
+.fx-scrub-row > .fx-scrub-label.kf-selectable { flex: 0 1 auto; margin-right: auto; align-self: center; }
