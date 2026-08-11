@@ -462,6 +462,43 @@ window.FM = window.FM || {};
     return false;
   };
 
+  // Break any CIRCULAR parent link in a layer list, in place. A build before v5.06 could autosave
+  // G.parent === G2 while G2.parent === G (see FM.groupSelection), and a document like that is not
+  // merely wrong, it is unopenable: the parent walks that carry a seen-guard bail out early, the one
+  // that did not recursed until the stack blew — inside FM.storage.load(), so the boot .then() never
+  // ran and the user lost the route back to Home and to every OTHER project with it.
+  //
+  // Deliberately MINIMAL: for each loop exactly one edge is dropped — the one that closes it — so the
+  // rest of the hierarchy survives and a healthy document comes out byte-for-byte identical (no field
+  // is written, not even parent: null on a layer that never had a parent). A dangling parent id is
+  // NOT a cycle and is left alone; the app already tolerates it. Returns the repaired layers' names
+  // so the caller can say what it did, or null when there was nothing to repair — so the clean case
+  // stays silent. Terminates without a hop cap: `seen` grows by one every iteration and is bounded by
+  // the layer count.
+  FM.repairParentCycles = function (layers) {
+    if (!Array.isArray(layers) || !layers.length) return null;
+    const byId = new Map();
+    layers.forEach(l => { if (l && l.id) byId.set(l.id, l); });
+    const fixed = [];
+    for (const l of layers) {
+      if (!l || !l.parent) continue;
+      const seen = new Set([l.id]);
+      let cur = l;
+      while (cur && cur.parent) {
+        const up = byId.get(cur.parent);
+        if (!up) break;                  // dangling parent id — not a cycle
+        if (seen.has(up.id)) {           // this edge closes the loop: drop THIS one, keep the chain
+          fixed.push(cur.name || cur.id);
+          cur.parent = null;
+          break;
+        }
+        seen.add(up.id);
+        cur = up;
+      }
+    }
+    return fixed.length ? fixed : null;
+  };
+
   /* Local source time for a layer at global project time t.
    * Returns null when the layer is not on-screen at t. Accounts for reverse + trim. */
   // Source-seconds advanced after `into` clip-seconds. Static speed = plain multiply (old path,

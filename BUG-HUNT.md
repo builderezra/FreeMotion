@@ -11,7 +11,10 @@ put to two independent skeptics — one on reachability, one on correctness. 171
 `unverified` means its skeptics were killed by a session limit — **not** that it was doubted. Of every
 skeptic verdict that returned, exactly one refuted its finding.
 
-Nothing here is fixed yet. Nothing in the source was changed by the hunt.
+Nothing in the source was changed BY the hunt — but a lot has been fixed SINCE. Entries struck through
+carry the version that fixed them. **Do not schedule work from this file without re-checking the code
+first:** three items picked off it in v5.74 turned out to be already fixed, and each time the REAL
+remaining bug was a different one nearby that the stale entry hid. Re-verify, then build.
 
 ## Came back clean
 
@@ -51,8 +54,37 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 
 ## High (25)
 
-### Filmstrip ImageBitmaps are never closed — FM.clearClipStrip has zero call sites, so every imported clip pins ~66MB (1080p) / ~265MB (4K) of native memory for the whole session
+### ~~Filmstrip ImageBitmaps are never closed — FM.clearClipStrip has zero call sites, so every imported clip pins ~66MB (1080p) / ~265MB (4K) of native memory for the whole session~~ — FIXED in v5.08, re-verified v5.74
 `js/app.js:1221`  · found by `leaks`
+
+> **FIXED — do not re-hunt this.** The diagnosis below was correct when written (v5.07) and was fixed
+> by commit 893366f "v5.08: release filmstrip bitmaps, and stop decoding them at source size". The
+> entry was never updated, so it still reads as live and costs every later agent a full re-hunt. The
+> line numbers below are pre-v5.08 and no longer resolve.
+>
+> Re-measured at v5.72 with an ImageBitmap accounting harness (wrap `createImageBitmap`, wrap
+> `ImageBitmap.prototype.close`, count bytes still un-closed), driving the real `index.html` in
+> headless Chrome at 390x844 DPR 3, importing 3 real 2048x2048 video clips and deleting all three:
+>
+> | | pre-fix (893366f^) | v5.72 |
+> |---|---|---|
+> | decoded strip frame size | 2048x2048 | 64x64 |
+> | per clip (8 frames) | 134,217,728 B (128 MB) | 131,072 B (128 KB) |
+> | pinned after deleting all 3 | 402,653,184 B (384 MB) | **0 B** |
+> | bitmaps closed / created | 0 / 24 | **24 / 24** |
+>
+> Filmstrip quality was checked too, since "smaller" must not silently mean "blurry": rendering the
+> same high-detail source through the real timeline with capped vs full-resolution bitmaps gives
+> mean abs difference 2.98/255, PSNR 28.1 dB, and the capped strip retains 97.9% of the full-res
+> strip's edge energy. Identical at DPR 2 and DPR 3, because the filmstrip canvas backing store is a
+> fixed 32px tall (`strip.height = 32`, js/timeline.js) and is never DPR-scaled — the canvas, not the
+> bitmap, is the resolution limit, so decoding above 64px buys nothing at any DPR.
+>
+> One path of the SAME bug class was still live at v5.72 and is now fixed separately: the
+> project-switch teardown in `FM.projects.open` (js/storage.js) dropped media records with
+> `FM.media.remove` while releasing **neither** cache. Measured on a real switch: 5 ImageBitmaps
+> created, 0 closed, 4 still reachable after six forced GCs. Now routed through
+> `FM.releaseProjectMedia`, which releases both before dropping the registry entry.
 
 - **What:** FM.buildClipStrip (js/frames.js:118-154) decodes 8 ImageBitmaps per video clip at FULL SOURCE RESOLUTION (`frames.push(await createImageBitmap(el))` — line 145, no resizeWidth/resizeHeight) and one full-resolution bitmap per image clip (line 133), caching them on the media record as `m.stripFrames`. It is called from js/timeline.js:919 for every video/image clip the timeline draws. The matching releaser `FM.clearClipStrip` exists at js/frames.js:156 but `grep -rn clearClipStrip` over the whole repo returns exactly one hit — its own definition. Nothing ever calls it. Every teardown path releases the neighbouring caches and skips this one: `FM.deleteLayer` (js/app.js:1221) and `FM.deleteSelected` (js/app.js:1196) call `FM.clearFrameCache(m)` but not `FM.clearClipStrip(m)`, and both deliberately KEEP the media record alive in the registry for undo (js/app.js:1223-1225), so the bitmaps stay reachable — not merely uncollected, but pinned by a live reference. `FM.replaceMediaWith` (js/app.js:1519) has the same omission. `m.stripFrames` is written exactly once per record and never reset, so nothing else can drop them either.
 - **Trigger:** Import a video clip (its filmstrip builds on the first timeline rebuild), then delete the clip. Repeat while editing — e.g. import 6 phone clips (1920x1080) and delete the 5 you don't want.
@@ -496,8 +528,25 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** The copy renders with every one of those effects dead — the layer that was cut out by a matte now covers the whole frame, the layer that was warped by a displacement map is flat. Nothing warns; the effect still shows in the inspector with an empty source picker, so the user has to re-pick the source layer on every affected effect (and may not notice until export). Duplicate is the normal way to make a variant of a project, so this loses work that was already saved correctly.
 - **Fix:** In reIdLayers, next to the behaviors remap, add the effect-source remap through the same null-prototype table: `out.forEach(l => (l.effects || []).forEach(fx => { if (fx && fx.params && fx.params.source) fx.params.source = map[fx.params.source] || ''; }));`. Mirror it in the copy/paste remap in js/app.js around line 1483, which follows the same batch-mate → clone / live-outside-layer → keep / dead-ref → clear rule for parent and behaviors.
 
-### Switching projects drops every media record without closing its frame-cache ImageBitmaps — up to 160MB of native memory orphaned per project switch on a phone
+### ~~Switching projects drops every media record without closing its frame-cache ImageBitmaps — up to 160MB of native memory orphaned per project switch on a phone~~ — FIXED v5.74
 `js/storage.js:711`  · found by `leaks`
+
+> **FIXED.** Reproduced first, on unfixed code, driving a real `FM.projects.create()` → `open()`
+> switch in headless Chrome at 390x844 DPR 3 with 3 image clips plus one frame cache: **5
+> ImageBitmaps created, 0 closed**, and **4 of 5 still reachable after six forced `gc()` calls** — so
+> this was retained, not merely awaiting collection. After the fix: **5 of 5 closed**.
+>
+> The teardown loop is now `FM.releaseProjectMedia` (js/storage.js), called from `projects.open`. It
+> releases both decoded caches *before* `FM.media.remove`, which is the only safe order — once the
+> registry entry is gone there is no reference left to release anything through. Split out of
+> `open()` and exported so it can be regression-tested without stubbing localStorage and
+> `FM.storage.load` in the live app page.
+>
+> **Still open, and NOT fixed by this change:** the loop walks `FM.scene.layers`, so media records
+> belonging to layers deleted earlier in the session are still never visited — the separate finding
+> below. Those records no longer hold either decoded cache (both are released at delete time), so
+> what they still orphan is the `<video>` element, the blob URL and any decoded `audioBuffer`, not
+> ImageBitmap surface.
 
 - **What:** `FM.projects.open()` tears down the outgoing project's media by calling `FM.dropAudioGraph(m)` then `FM.media.remove(l.id)`. `FM.media.remove` (js/media.js:15-19) only revokes the object URL and deletes the store entry — it does not touch `m.frameCache`. So the ImageBitmap array built by `FM.buildFrameCache` (js/frames.js:91-93) is dropped without any `.close()`. `FM.storage.load()` (js/storage.js:133) eagerly calls `FM.ensureReverseCache(l)` for every reversed or frame-blend-slow clip on load, so this cache is populated the moment such a project is opened. The correct pattern exists two files over: `FM.resetProject` (js/app.js:562-565) does `FM.clearFrameCache(m); dropAudioGraph(m); FM.media.remove(l.id);` in that order. `m.stripFrames` is not released here either (see the separate finding). Note that `FM.frameCacheLimits()` (js/app.js:1338-1347) sizes this cache at up to 160MB on mobile and larger on desktop, precisely because it is expected to be released promptly.
 - **Trigger:** Open a project containing a reversed clip (or a frame-blend slow-mo clip) from the Home screen, go back to Home, and open a different project. Repeat while browsing projects.

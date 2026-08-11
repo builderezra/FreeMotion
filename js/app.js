@@ -2276,6 +2276,25 @@ window.FM = window.FM || {};
       // sweep's keep-set reads the library, so seeding first is what stops it eating those blobs.
       if (FM.mediaLib) FM.mediaLib.backfill();
       if (FM.projects) FM.projects.pruneOrphans();   // boot sweep of orphaned media blobs
+    }).catch(err => {
+      // ONE unopenable document must never cost the user every OTHER project. FM.home.init() lives
+      // inside the .then() above, so anything load() throws used to skip it entirely: the editor sat
+      // over a document it could not draw, with no way back to the project browser — measured on both
+      // v5.05 and v5.72 with a parent-cycled project (home.open() ran but the screen never appeared,
+      // because init() had never built it). Whatever the cause, land on Home and say so.
+      try { console.error('FreeMotion: project load failed', err); } catch (e) {}
+      if (FM.home) { try { FM.home.init(); FM.home.open(); } catch (e) {} }
+      // …and only SAY they are back at their projects if they actually are. init()/open() can throw
+      // in their own right (a load that dies before FM.scene is usable takes home.init() with it),
+      // and a toast that claims the screen is there when it is not sends someone hunting for a way
+      // back that does not exist. Ask the DOM rather than trusting the two calls above.
+      if (FM.toast) setTimeout(() => {
+        const hs = document.getElementById('home-screen');
+        const up = !!hs && !hs.classList.contains('hidden') && getComputedStyle(hs).display !== 'none';
+        FM.toast(up ? 'That project could not be opened — you are back at your projects'
+                    : 'That project could not be opened. Reload the app to get back to your projects.', 6000);
+      }, 600);
+      if (FM.mediaLib) { try { FM.mediaLib.backfill(); } catch (e) {} }
     });
     // ‹ crumb pill exits the Edit Group view
     const gcBack = document.getElementById('group-crumb');
@@ -2833,6 +2852,50 @@ window.FM = window.FM || {};
     ['dragleave', 'drop'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === stage) stage.classList.remove('dragover'); }));
     stage.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files)); });
 
+    /* ---- "does a full-screen overlay own the screen?" -------------------------------------------
+     * Asked GEOMETRICALLY, never from a list of ids — the list is precisely what went stale. v5.07
+     * shipped this guard as `FM.home.isOpen() || FM.settings.isOpen() || querySelector('#fx-browser,
+     * #afx-browser, #export-dialog, #canvas-dialog')`. By v5.72 four more full-screen surfaces
+     * existed that nobody thought to add to it, and all four were measured letting bare-key editor
+     * shortcuts through to the project the user could not see:
+     *
+     *   #el-browser      Elements browser — shares its entire CSS rule with #fx-browser (styles.css)
+     *   #export-overlay  up for the WHOLE export, minutes at a time
+     *   .ps-overlay      Paste Style
+     *   #shortcuts-overlay   the keyboard-help sheet, of all things
+     *
+     * Measured on v5.72 at 1280x900: with each of those up, Backspace ran deleteSelected(), Space
+     * started playback, S split, M dropped a marker, [ set the loop-in — and the Backspace deletion
+     * was written through to localStorage['fm.proj.<id>'] (3 layers in, 2 layers out) because
+     * deleteSelected() commits and commit() autosaves. Permanent, silent, invisible.
+     *
+     * The rule now: hit-test the centre of the viewport and ask whether anything in that stack is
+     * position:fixed and as big as the screen. A new full-screen surface answers yes the day it is
+     * written — being full-screen IS the definition, so there is nothing to remember to add. A layer
+     * you can click THROUGH (pointer-events:none) is skipped by the hit test, which is correct: it
+     * is not owning anything.
+     *
+     * home/settings are kept as an explicit fast path because they are the two that actually lose
+     * work, and their own isOpen() is authoritative even mid-transition when geometry is still
+     * settling. They are API calls, not selectors: nothing here has to be kept in sync with the DOM.
+     * If you add a full-screen overlay, you do NOT need to touch this function. */
+    const OVERLAY_COVERS = 0.9;   // a bottom sheet / side panel is nowhere near this; every real overlay is inset:0
+    FM.overlayOwnsScreen = function () {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) return true;
+      if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) return true;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      if (!vw || !vh || !document.elementsFromPoint) return false;
+      const stack = document.elementsFromPoint(vw / 2, vh / 2) || [];
+      for (let i = 0; i < stack.length; i++) {
+        const el = stack[i];
+        if (el === document.body || el === document.documentElement) break;   // reached the page itself: nothing above it covered
+        if (getComputedStyle(el).position !== 'fixed') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width >= vw * OVERLAY_COVERS && r.height >= vh * OVERLAY_COVERS) return true;
+      }
+      return false;
+    };
+
     // keyboard
     let _nudged = false;
     window.addEventListener('keydown', e => {
@@ -2850,13 +2913,12 @@ window.FM = window.FM || {};
       // which commits, and commit() autosaves. The layer was gone next time they opened the project,
       // with no visible cause. Space was as bad in a quieter way: playback started behind an opaque
       // overlay, audio coming from nowhere. The overlay's own buttons are not INPUT/SELECT/TEXTAREA,
-      // so `inEdit` above never covered any of this.
+      // so `inEdit` above never covered any of this. See FM.overlayOwnsScreen above for why this is a
+      // geometry question and not a list of ids.
       // Escape is deliberately still allowed through: it is how several of these overlays close.
-      const overlayOwnsScreen =
-        (FM.home && FM.home.isOpen && FM.home.isOpen()) ||
-        (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) ||
-        !!document.querySelector('#fx-browser:not(.hidden), #afx-browser:not(.hidden), #export-dialog:not(.hidden), #canvas-dialog:not(.hidden)');
-      if (overlayOwnsScreen && e.code !== 'Escape') return;
+      // Both key and code are checked — a synthesised event may carry only one of them.
+      const isEscape = e.code === 'Escape' || e.key === 'Escape';
+      if (!isEscape && FM.overlayOwnsScreen()) return;
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();
@@ -3009,6 +3071,16 @@ window.FM = window.FM || {};
         }
         if (keepAtDown) return;                                                             // tapped a control / self-managing area
         if (moved) return;
+        // The SAME staleness the keyboard guard had, in a second listener. KEEP above is a list of
+        // selectors, and full-screen overlays have been added to it one at a time — #export-overlay,
+        // #export-dialog, #canvas-dialog, #shortcuts-overlay, #splash are all there, while
+        // #home-screen, #fx-browser, #afx-browser, #el-browser, .set-scrim and .ps-overlay never
+        // were. Measured on v5.72: a tap on the empty part of the home browser (or the Elements
+        // browser) ran FM.selectLayer(null) on the project underneath, so you came back to the editor
+        // with your selection gone and nothing to explain it. Asking the geometry instead covers
+        // every one of them, and every one added later: you cannot tap the editor's empty background
+        // while you cannot see the editor.
+        if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) return;
         if (!FM.scene || (!FM.scene.selectedId && !(FM.scene.selectedIds && FM.scene.selectedIds.length))) return;
         // Clicking anywhere off the inspector CLOSES it — deselect straight back to the Add menu so the
         // panel visibly clears (no matter how deep you were, e.g. the Effects sub-menu). Esc is the

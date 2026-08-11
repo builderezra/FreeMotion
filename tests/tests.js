@@ -14,6 +14,14 @@
 (function () {
   'use strict';
 
+  /* Captured the instant the suite is injected, because index.html's boot script REMOVES #splash
+   * about 5.3s after load. Any test that asks the live DOM for it is therefore racing a wall clock,
+   * and goes red as soon as the suite grows — which has now happened twice: once when a test was
+   * added mid-file, and again at v5.74 when seven arrived at once. The old workaround was to keep
+   * the racing test registered LAST, which is not a fix, it just moves the cliff to the next person
+   * who adds a test. Capture the node while it is certainly still there. */
+  const SPLASH_AT_LOAD = document.getElementById('splash');
+
   function scene(layers, over) {
     return Object.assign({
       project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' },
@@ -970,58 +978,412 @@
     }
   });
 
+  test('a saved parent cycle is repaired on the way in, not left to brick the project', { item: 'cycle-repair' }, async function () {
+    // The other half of the same CRITICAL finding. v5.06 stopped the app CREATING a cycle, but a
+    // document that ALREADY carried one — autosaved by any earlier build, or arriving in a shared
+    // .fmotion.json — was still unopenable. Measured in the running v5.72 app on a planted cycled
+    // project: RangeError out of collectGroupUnits (compositor.js:6987) from BOTH FM.refreshAll and
+    // FM.renderScene; the throw happened inside FM.storage.load()'s promise, so FM.home.init() never
+    // ran and Home never opened again — one bad document took every OTHER project down with it.
+    const savedScene = FM.scene;
+    const P = { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' };
+    function cycled() {
+      const A = FM.makeLayer('group', { name: 'Group A' });
+      const B = FM.makeLayer('group', { name: 'Group B' });
+      const r = FM.makeLayer('shape', { shape: 'rect', name: 'Rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#f00' });
+      A.parent = B.id; B.parent = A.id; r.parent = A.id;
+      // An effect is what makes groupNeedsUnit(A) true, and groupNeedsUnit is the gate on the walk
+      // that blows the stack — a plain transform-only group never enters it. Without this line the
+      // render assertion below passes on BROKEN code and proves nothing.
+      A.effects = [{ type: 'brightness', enabled: true, params: { amount: 1.2 } }];
+      return [A, B, r];
+    }
+    try {
+      // 1. A HEALTHY document comes out byte-for-byte identical, and silent.
+      const g = FM.makeLayer('group', { name: 'G' });
+      const kid = FM.makeLayer('shape', { shape: 'rect', name: 'Kid', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#0f0' });
+      const loose = FM.makeLayer('text', { name: 'Loose' });
+      const dangling = FM.makeLayer('null', { name: 'Dangling' });
+      kid.parent = g.id; dangling.parent = 'no_such_layer_id';
+      const healthy = [g, kid, loose, dangling];
+      const before = JSON.stringify(healthy);
+      const clean = FM.repairParentCycles(healthy);
+      if (clean !== null) throw new Error('a healthy project reported a repair: ' + JSON.stringify(clean));
+      if (JSON.stringify(healthy) !== before) throw new Error('the repair modified a healthy project');
+      if (dangling.parent !== 'no_such_layer_id') throw new Error('a dangling (non-cyclic) parent id was rewritten');
+
+      // 2. A cycle loses exactly ONE edge — the one that closes it. The rest of the tree survives.
+      const L = cycled();
+      const rootsBefore = L.filter(l => !l.parent).length;
+      const fixed = FM.repairParentCycles(L);
+      if (!fixed || fixed.length !== 1) throw new Error('expected exactly 1 repaired layer, got ' + JSON.stringify(fixed));
+      if (L.filter(l => !l.parent).length !== rootsBefore + 1) throw new Error('the repair dropped more than one parent link');
+      if (L[2].parent !== L[0].id) throw new Error('the repair moved a layer that was not part of the loop');
+      let hops = 0, cur = L[0];
+      while (cur && cur.parent && hops++ < 64) cur = L.find(x => x.id === cur.parent);
+      if (hops >= 64) throw new Error('the parent chain still does not terminate after the repair');
+
+      // 3. Self-parenting is a one-node cycle and goes the same way.
+      const solo = FM.makeLayer('null', { name: 'Solo' });
+      solo.parent = solo.id;
+      if (!FM.repairParentCycles([solo]) || solo.parent) throw new Error('a self-parented layer was not repaired');
+
+      // 4. THE RENDER GUARD, asserted on an UNREPAIRED scene: a cycle arriving from any future path
+      //    must degrade rather than blow the stack. This is the walk v5.06 missed.
+      const rawCv = offscreen(64, 48);
+      FM.renderScene(rawCv.getContext('2d'), scene(cycled(), { project: P }), 0);   // RangeError before the guard
+
+      // 5. The IMPORT path repairs too — a .fmotion.json is untrusted input, and reIdLayers remaps
+      //    both ends of the loop, so a cycle survives the re-id perfectly intact.
+      FM.scene = { project: Object.assign({}, P), layers: [], selectedId: null, selectedIds: [] };
+      await FM.storage.applyScene({ project: Object.assign({}, P), layers: cycled(), selectedId: null, selectedIds: [] });
+      const byId = {}; FM.scene.layers.forEach(l => { byId[l.id] = l; });
+      FM.scene.layers.forEach(l => {
+        let c = l, seen = {}, n = 0;
+        while (c && c.parent) {
+          if (seen[c.id]) throw new Error('applyScene let a parent cycle through');
+          seen[c.id] = 1; c = byId[c.parent];
+          if (++n > 256) throw new Error('applyScene left a runaway parent chain');
+        }
+      });
+
+      // 6. And load() must run it. load() reads the REAL current project out of localStorage, so it
+      //    cannot be executed from here without touching Ezra's own work — this asserts the wiring,
+      //    which is the part a future edit would actually break.
+      if (!/repairAndAnnounce|repairParentCycles/.test(String(FM.storage.load))) throw new Error('FM.storage.load no longer repairs parent cycles on the way in');
+    } finally {
+      FM.scene = savedScene;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+  /* ---- overlay key guard -----------------------------------------------------------------------
+   * Shared rig for the three tests below. Installs a throwaway 2-layer scene, stubs every path that
+   * could write to a REAL project (deleteSelected commits, and commit() autosaves), and hands back a
+   * key() that delivers a bare keydown with the target on <body> — exactly where focus sits after
+   * the browser back button, which is the gesture that loses work. */
+  // Every element that is, right now, position:fixed and the size of the viewport. The same question
+  // the guard asks, asked independently here so a test can never confirm the guard using the guard.
+  function coveringNow() {
+    const out = [];
+    const all = document.body.querySelectorAll('*');
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i], cs = getComputedStyle(el);
+      if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const r = el.getBoundingClientRect();
+      if (r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9) out.push(el);
+    }
+    return out;
+  }
+
+  function overlayKeyRig() {
+    const saved = {
+      scene: FM.scene,
+      commit: FM.history.commit, autosave: FM.storage.autosave,
+      save: FM.storage.save, dirty: FM.storage.markDirty,
+      homeIsOpen: FM.home.isOpen, settingsIsOpen: FM.settings && FM.settings.isOpen,
+    };
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    // The app boots INTO the home browser, so without this every leg below would be guarded by home
+    // and the test could never tell "guarded correctly" from "the key never arrived" — which is
+    // exactly how the first version of this test passed while asserting nothing. isOpen() is stubbed
+    // rather than really calling home.close(), and the element is hidden with a bare class toggle,
+    // because home.open()/close() rebuild the project list and can write a thumbnail — real side
+    // effects for a test to have. Anything else screen-sized (a leftover splash) goes too.
+    FM.home.isOpen = function () { return false; };
+    if (FM.settings) FM.settings.isOpen = function () { return false; };
+    const parked = coveringNow().filter(function (el) { return !el.classList.contains('hidden'); });
+    parked.forEach(function (el) { el.classList.add('hidden'); });
+    const KEYCHAR = { Space: ' ', KeyS: 's', KeyM: 'm', BracketLeft: '[', BracketRight: ']', Escape: 'Escape' };
+    return {
+      parked: parked,
+      reset: function (n) {
+        FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000', markers: [], loopIn: null, loopOut: null }, layers: [], selectedId: null, selectedIds: [] };
+        for (let i = 0; i < (n || 2); i++) {
+          FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'L' + i, x: 50 + i * 30, y: 50, shapeW: 40, shapeH: 40, fill: '#f00' }));
+        }
+        FM.time = 1;
+        FM.scene.selectedId = FM.scene.layers[0].id;
+        FM.scene.selectedIds = [FM.scene.layers[0].id];
+      },
+      key: function (code) {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', {
+          code: code, key: KEYCHAR[code] || code, bubbles: true, cancelable: true
+        }));
+      },
+      restore: function () {
+        if (FM.playing && FM.pause) FM.pause();
+        parked.forEach(function (el) { el.classList.remove('hidden'); });
+        FM.scene = saved.scene;
+        FM.history.commit = saved.commit; FM.storage.autosave = saved.autosave;
+        FM.storage.save = saved.save; FM.storage.markDirty = saved.dirty;
+        FM.home.isOpen = saved.homeIsOpen;
+        if (FM.settings && saved.settingsIsOpen) FM.settings.isOpen = saved.settingsIsOpen;
+      }
+    };
+  }
+
+  // Every bare-key editor shortcut that mutates the project. Each is measured under every overlay.
+  const OVERLAY_KEYS = [
+    { code: 'Backspace', check: () => 'layers=' + FM.scene.layers.length, want: 'layers=2' },
+    { code: 'Delete', check: () => 'layers=' + FM.scene.layers.length, want: 'layers=2' },
+    { code: 'Space', check: () => 'playing=' + !!FM.playing, want: 'playing=false' },
+    { code: 'KeyS', check: () => 'layers=' + FM.scene.layers.length, want: 'layers=2' },
+    { code: 'KeyM', check: () => 'markers=' + (FM.scene.project.markers || []).length, want: 'markers=0' },
+    { code: 'BracketLeft', check: () => 'loopIn=' + FM.scene.project.loopIn, want: 'loopIn=null' },
+  ];
+
   test('editor key shortcuts cannot reach the project under a full-screen overlay', { item: 'overlay-keys' }, function () {
     // v5.07. The global keydown handler only bailed out for modifier combos and for editable targets,
     // so with the home browser (or any dialog) covering the screen, the still-loaded project behind it
     // was fully reachable: Backspace — the habitual "go back" key, and exactly where focus sits after
     // the back button — ran deleteSelected(), which commits, and commit() autosaves. Silent data loss
-    // with no visible cause. #export-dialog stands in for the overlay family here because showing it
-    // is a pure class toggle with no side effects; the guard treats every one of them the same way.
-    const savedScene = FM.scene;
-    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
-    FM.history.commit = function () {}; FM.storage.autosave = function () {};
-    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
-    const dlg = document.getElementById('export-dialog');
-    const wasHidden = dlg ? dlg.classList.contains('hidden') : true;
-    // The app boots with the home browser up, so the home branch of the guard would swallow the
-    // control leg and the test could never tell "guarded correctly" from "the key never arrived".
-    // Reporting home's state is stubbed instead of really opening/closing it: home.open() rebuilds the
-    // list and can write a project thumbnail, which is a real side effect for a test to have.
-    const homeIsOpen = FM.home.isOpen;
-    const key = code => document.body.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: code === 'Space' ? ' ' : 'Backspace', bubbles: true, cancelable: true }));
+    // with no visible cause.
+    //
+    // v5.07 fixed it with a hardcoded list of overlay ids, and by v5.72 that list had gone stale in
+    // four places. Measured live at 1280x900 on v5.72, every one of these still let Backspace delete
+    // a layer, Space start playback, S split, M drop a marker and [ set the loop-in:
+    //   #el-browser · #export-overlay · .ps-overlay · #shortcuts-overlay
+    // The Backspace deletion was written through to localStorage['fm.proj.<id>'] — 3 layers in,
+    // 2 layers out, permanent. So this test now drives the REAL overlays, one key at a time.
+    const rig = overlayKeyRig();
+    // Pure DOM toggles only — nothing here opens a browser that would touch a real project.
+    const cases = [
+      { name: '#export-dialog', el: () => document.getElementById('export-dialog') },
+      { name: '#canvas-dialog', el: () => document.getElementById('canvas-dialog') },
+      { name: '#export-overlay (an export is running)', el: () => document.getElementById('export-overlay') },
+      { name: '#fx-browser', el: () => document.getElementById('fx-browser') },
+      { name: '#afx-browser', el: () => document.getElementById('afx-browser') },
+      { name: '#shortcuts-overlay', el: () => document.getElementById('shortcuts-overlay') },
+    ];
+    let exercised = 0;
     try {
-      if (!dlg) throw new Error('#export-dialog is missing — the overlay guard has nothing to key off');
-      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
-      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'One', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#f00' }));
-      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'Two', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0' }));
-      FM.scene.selectedId = FM.scene.layers[0].id;
-      FM.scene.selectedIds = [FM.scene.layers[0].id];
+      // CONTROL FIRST. If the key never arrives, every "guarded" leg below is asserting nothing —
+      // which is how this whole class of test quietly dies.
+      rig.reset(2);
+      rig.key('Backspace');
+      if (FM.scene.layers.length !== 1) {
+        throw new Error('control leg: Backspace did not delete with nothing up (layers=' + FM.scene.layers.length + ') — the key is not being delivered, so nothing below means anything');
+      }
 
-      // 1. The home / project browser — the route that actually loses work.
-      dlg.classList.add('hidden');
-      FM.home.isOpen = function () { return true; };
-      key('Backspace');
-      if (FM.scene.layers.length !== 2) throw new Error('Backspace deleted a layer with the home browser up');
+      cases.forEach(function (c) {
+        const el = c.el();
+        if (!el) return;                                   // surface not in this build
+        const wasHidden = el.classList.contains('hidden');
+        el.classList.remove('hidden');
+        try {
+          const r = el.getBoundingClientRect();
+          // Only assert against a surface that really is covering the screen right now. A skipped
+          // one is counted, not silently passed — see the floor check below.
+          if (!(r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9)) return;
+          exercised++;
+          OVERLAY_KEYS.forEach(function (k) {
+            rig.reset(2);
+            rig.key(k.code);
+            const got = k.check();
+            if (got !== k.want) {
+              throw new Error(k.code + ' reached the project under ' + c.name + ': ' + got + ' (expected ' + k.want + ')');
+            }
+            if (FM.playing && FM.pause) FM.pause();
+          });
+        } finally { el.classList.toggle('hidden', wasHidden); }
+      });
 
-      // 2. A dialog overlay, and Space as well as Backspace.
-      FM.home.isOpen = function () { return false; };
-      dlg.classList.remove('hidden');
-      key('Backspace');
-      if (FM.scene.layers.length !== 2) throw new Error('Backspace deleted a layer with a dialog up');
-      key('Space');
-      if (FM.playing) { FM.pause(); throw new Error('Space started playback with a dialog up'); }
+      if (exercised < 4) {
+        throw new Error('only ' + exercised + ' overlays were actually full-screen and testable — this test has stopped covering the family it is named for');
+      }
 
-      // 3. …and the guard must be scoped, not a blanket kill: with everything closed the key works.
-      dlg.classList.add('hidden');
-      FM.scene.selectedId = FM.scene.layers[0].id;
-      FM.scene.selectedIds = [FM.scene.layers[0].id];
-      key('Backspace');
-      if (FM.scene.layers.length !== 1) throw new Error('Backspace no longer deletes with nothing up (layers=' + FM.scene.layers.length + ') — the guard is too broad, or the test never delivered the key');
+      // Escape must STILL reach the app, and the shortcuts sheet is the honest way to prove it:
+      // js/shortcuts.js binds NO Escape handler of its own (only a ✕ and a backdrop tap), so the
+      // ONLY thing that closes it with the keyboard is the Escape branch of app.js's global handler
+      // — the branch sitting behind the very guard under test. It is also full-screen, so the guard
+      // is definitely firing while we press the key. Watching a spy listener instead would prove
+      // nothing: the guard returns early, it does not stopPropagation, so a spy sees every Escape
+      // whether the app acted on it or not. (That is what the first version of this did, and a
+      // mutation that swallowed Escape sailed straight through it.)
+      if (!FM.shortcuts) throw new Error('FM.shortcuts is missing — nothing left here proves Escape still reaches the app');
+      const wasShortcuts = FM.shortcuts.isOpen();
+      if (!wasShortcuts) FM.shortcuts.toggle();
+      try {
+        if (!FM.shortcuts.isOpen()) throw new Error('could not open the shortcuts sheet — the Escape leg would assert nothing');
+        if (!FM.overlayOwnsScreen()) throw new Error('the shortcuts sheet is not registering as full-screen, so this leg is not testing Escape under the guard at all');
+        rig.reset(2);
+        rig.key('Escape');
+        if (FM.shortcuts.isOpen()) throw new Error('Escape did not close the shortcuts sheet — the guard is swallowing Escape, and every overlay that relies on the app\'s Escape branch is now unclosable by keyboard');
+      } finally { if (wasShortcuts) { if (!FM.shortcuts.isOpen()) FM.shortcuts.toggle(); } else FM.shortcuts.hide(); }
+    } finally { rig.restore(); }
+  });
+
+  test('a full-screen overlay nobody listed anywhere is still guarded', { item: 'overlay-keys' }, function () {
+    // The anti-staleness test, and the reason the guard is geometry rather than a list of ids. This
+    // mints a surface whose id appears NOWHERE in the app — the next full-screen screen someone adds,
+    // before they have thought about the keyboard at all. A list-based guard cannot know about it and
+    // goes red here; a "is anything screen-sized covering the editor?" rule is right by construction.
+    //
+    // The second half is the counterweight: the rule must NOT be "any position:fixed element". The
+    // phone inspector is a fixed bottom sheet and the AI panel is a fixed side panel, and killing the
+    // keyboard whenever one of those is open would be its own bug.
+    const rig = overlayKeyRig();
+    const made = [];
+    function surface(css) {
+      const d = document.createElement('div');
+      d.id = 'fm-test-surface-' + made.length;
+      d.style.cssText = css + ';background:#101418';
+      document.body.appendChild(d);
+      made.push(d);
+      return d;
+    }
+    try {
+      if (typeof FM.overlayOwnsScreen !== 'function') throw new Error('FM.overlayOwnsScreen is missing — the guard is not asking a question anything can test');
+
+      // 1. nothing up → the guard is quiet and the key lands
+      if (FM.overlayOwnsScreen()) throw new Error('the guard reports an overlay with nothing open — every leg below would pass for the wrong reason');
+      rig.reset(2); rig.key('Backspace');
+      if (FM.scene.layers.length !== 1) throw new Error('control leg: Backspace did not delete with nothing up — the key is not being delivered');
+
+      // 2. a brand-new full-screen surface, named nowhere in the app
+      const novel = surface('position:fixed;inset:0;z-index:9000');
+      if (!FM.overlayOwnsScreen()) throw new Error('a new full-screen fixed overlay did not register as owning the screen — the guard only knows the surfaces that existed when it was written');
+      OVERLAY_KEYS.forEach(function (k) {
+        rig.reset(2); rig.key(k.code);
+        const got = k.check();
+        if (got !== k.want) throw new Error(k.code + ' reached the project under a brand-new full-screen overlay: ' + got + ' (expected ' + k.want + ')');
+        if (FM.playing && FM.pause) FM.pause();
+      });
+      novel.remove(); made.pop();
+
+      // 3. a fixed BOTTOM SHEET (the phone inspector's shape) must not kill the keyboard
+      surface('position:fixed;left:0;right:0;bottom:0;height:55%;z-index:9000');
+      if (FM.overlayOwnsScreen()) throw new Error('a fixed bottom sheet was treated as owning the whole screen — the guard is a blanket kill, not a screen-coverage test');
+      rig.reset(2); rig.key('Backspace');
+      if (FM.scene.layers.length !== 1) throw new Error('Backspace stopped working with only a bottom sheet up');
+
+      // 4. a fixed SIDE PANEL (the AI panel's shape) must not either
+      made.pop().remove();
+      surface('position:fixed;top:50px;right:0;bottom:0;width:376px;z-index:9000');
+      if (FM.overlayOwnsScreen()) throw new Error('a fixed side panel was treated as owning the whole screen');
+
+      // 5. a full-screen layer you can click THROUGH owns nothing — and must not deaden the keyboard
+      made.pop().remove();
+      surface('position:fixed;inset:0;pointer-events:none;z-index:9000');
+      if (FM.overlayOwnsScreen()) throw new Error('a pointer-events:none full-screen layer was treated as owning the screen — decorative layers would deaden every shortcut');
     } finally {
-      FM.home.isOpen = homeIsOpen;
-      if (dlg) dlg.classList.toggle('hidden', wasHidden);
-      FM.scene = savedScene;
-      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+      made.forEach(function (d) { d.remove(); });
+      rig.restore();
+    }
+  });
+
+  test('a tap on a full-screen overlay does not deselect the project behind it', { item: 'overlay-keys' }, function () {
+    // The same staleness, in a second listener. deselectOnEmptyTap treats a stationary tap that is
+    // not inside its KEEP list of selectors as "tapped the empty editor background" → selectLayer(null).
+    // Full-screen overlays have been added to KEEP one at a time (#export-overlay, #export-dialog,
+    // #canvas-dialog, #shortcuts-overlay, #splash) and six were never added at all. Measured on
+    // v5.72: a tap on the empty part of #home-screen or #el-browser cleared the selection in the
+    // project underneath — not data loss, but the same failure mode one listener over, and you came
+    // back to the editor with your work deselected and no cause you could see.
+    const rig = overlayKeyRig();
+    const made = [];
+    function tap(el) {
+      const r = el.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + 10);
+      ['pointerdown', 'pointerup'].forEach(function (t) {
+        el.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, button: 0, pointerType: 'touch' }));
+      });
+    }
+    try {
+      // control: a tap on genuinely empty editor background still deselects — otherwise the legs
+      // below prove nothing but "the tap never landed".
+      rig.reset(2);
+      const bg = document.createElement('div');
+      bg.style.cssText = 'position:absolute;left:0;top:0;width:40px;height:40px';
+      document.body.appendChild(bg); made.push(bg);
+      tap(bg);
+      if (FM.scene.selectedId) throw new Error('control leg: a tap on empty background did not deselect — the tap is not being delivered');
+
+      const ov = document.createElement('div');
+      ov.id = 'fm-test-tap-surface';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:#101418';
+      document.body.appendChild(ov); made.push(ov);
+      rig.reset(2);
+      const before = FM.scene.selectedId;
+      tap(ov);
+      if (!before) throw new Error('the rig did not leave a layer selected — nothing to lose');
+      if (FM.scene.selectedId !== before) throw new Error('a tap on a full-screen overlay deselected the layer in the project behind it');
+    } finally {
+      made.forEach(function (d) { d.remove(); });
+      rig.restore();
+    }
+  });
+
+  test('every full-screen rule in the stylesheet is covered by the overlay key guard', { item: 'overlay-keys' }, function () {
+    // Enumerated FROM styles.css at runtime, not from a list kept here — a list in the test goes
+    // stale exactly the way the list in the guard did. Any rule that sets position:fixed and applies
+    // right now is instantiated, measured, and (if it really covers the screen) asserted against the
+    // guard. Add `#whatever { position: fixed; inset: 0 }` to the stylesheet and this test starts
+    // covering it on its own.
+    const found = [], skipped = [];
+    function walk(rules) {
+      for (let i = 0; i < rules.length; i++) {
+        const r = rules[i];
+        if (r.media) { if (matchMedia(r.conditionText || r.media.mediaText).matches) walk(r.cssRules || []); continue; }
+        if (r.cssRules && !r.selectorText) { walk(r.cssRules); continue; }
+        if (!r.selectorText || !r.style) continue;
+        if (r.style.getPropertyValue('position') !== 'fixed') continue;
+        const inset = r.style.getPropertyValue('inset');
+        const spread = inset === '0' || inset === '0px' ||
+          (r.style.getPropertyValue('top') === '0' && r.style.getPropertyValue('bottom') === '0');
+        if (!spread) continue;
+        r.selectorText.split(',').forEach(function (s) {
+          s = s.trim();
+          if (/^[.#][A-Za-z0-9_-]+$/.test(s) && found.indexOf(s) < 0) found.push(s);
+        });
+      }
+    }
+    let sheets = 0;
+    for (let i = 0; i < document.styleSheets.length; i++) {
+      let rules = null;
+      try { rules = document.styleSheets[i].cssRules; } catch (e) { continue; }   // cross-origin
+      if (rules) { sheets++; walk(rules); }
+    }
+    if (!sheets) throw new Error('no stylesheet was readable — this test can only ever assert nothing');
+    if (found.length < 5) throw new Error('found only ' + found.length + ' full-screen fixed selectors in the stylesheet (' + found.join(' ') + ') — the scan has stopped working');
+
+    const rig = overlayKeyRig();
+    const temps = [];
+    let checked = 0;
+    const misses = [];
+    try {
+      // Non-vacuity: if the guard already says "covered" before a single surface is shown, every
+      // assertion below passes for free.
+      if (FM.overlayOwnsScreen()) throw new Error('the guard already reports an overlay before any surface was shown — every check below would pass for the wrong reason');
+      found.forEach(function (sel) {
+        let el = null, madeIt = false, wasHidden = false;
+        if (sel[0] === '#') {
+          el = document.getElementById(sel.slice(1));
+          if (el) { wasHidden = el.classList.contains('hidden'); el.classList.remove('hidden'); }
+        }
+        if (!el) {
+          el = document.createElement('div');
+          if (sel[0] === '#') el.id = sel.slice(1); else el.className = sel.slice(1);
+          document.body.appendChild(el); temps.push(el); madeIt = true;
+        }
+        try {
+          const r = el.getBoundingClientRect();
+          if (!(r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9)) { skipped.push(sel); return; }
+          checked++;
+          if (!FM.overlayOwnsScreen()) misses.push(sel);
+        } finally {
+          if (!madeIt) el.classList.toggle('hidden', wasHidden);
+        }
+      });
+      if (misses.length) {
+        throw new Error('these full-screen surfaces are NOT covered by the keyboard guard: ' + misses.join(', ') +
+          ' — editor shortcuts still reach the project behind them (Backspace deletes a layer and autosaves it)');
+      }
+      if (checked < 4) throw new Error('only ' + checked + ' of ' + found.length + ' full-screen selectors could be measured (skipped: ' + skipped.join(' ') + ') — the test is no longer covering the family');
+    } finally {
+      temps.forEach(function (t) { t.remove(); });
+      rig.restore();
     }
   });
 
@@ -1074,6 +1436,112 @@
       if (f.height > 96) throw new Error('strip frame decoded at ' + f.width + 'x' + f.height + ' — the filmstrip canvas is 32px tall, so this should be capped near 64');
       if (Math.abs((f.width / f.height) - (1920 / 1080)) > 0.05) throw new Error('strip frame aspect is wrong: ' + f.width + 'x' + f.height);
     } finally { FM.clearClipStrip(m); }
+  });
+
+  test('the VIDEO strip decode is capped too, not just the image one', { item: 'strip-release' }, async function () {
+    // The image branch (frames.js) and the video branch are two separate createImageBitmap calls and
+    // only the video one runs 8 times — it is the branch that cost ~66MB/clip at 1080p and ~265MB at
+    // 4K. The existing cap test only exercises the image branch (kind:'image'), so capping one and
+    // leaving the other uncapped would have gone green. Uses a real <video> so the seek/decode path
+    // is the production one; skips rather than lies if the element will not decode here.
+    const el = document.createElement('video');
+    // Relative to the APP page (tests.js runs in index.html's context at the repo root), not to tests/.
+    el.src = 'splash.mp4'; el.muted = true; el.playsInline = true; el.preload = 'auto';
+    const ready = await new Promise(function (res) {
+      const ok = function () { res(true); };
+      el.addEventListener('loadeddata', ok, { once: true });
+      el.addEventListener('error', function () { res(false); }, { once: true });
+      setTimeout(function () { res(el.readyState >= 2); }, 12000);
+    });
+    if (!ready || !el.videoWidth) throw new Error('splash.mp4 did not decode — this test cannot verify the video branch, so it must not report green');
+    const m = { kind: 'video', el: el, width: el.videoWidth, height: el.videoHeight, duration: el.duration };
+    await FM.buildClipStrip(m, 4);
+    try {
+      const fs = m.stripFrames || [];
+      if (!fs.length) throw new Error('the video branch produced no strip frames');
+      const tall = fs.filter(function (f) { return f.height > 96; });
+      if (tall.length) throw new Error(tall.length + ' of ' + fs.length + ' video strip frames decoded at ' + tall[0].width + 'x' + tall[0].height + ' — the filmstrip canvas is 32px tall, so this must be capped near 64');
+    } finally { FM.clearClipStrip(m); }
+  });
+
+  test('every media teardown path hands back BOTH decoded caches', { item: 'strip-release' }, function () {
+    // v5.08 added FM.clearClipStrip to the delete paths, but a release is easy to add on one path and
+    // forget on the next — which is exactly how this leak started (clearClipStrip shipped with ZERO
+    // call sites). Auditing at v5.72 found one path still missing BOTH releases: the project-switch
+    // teardown in FM.projects.open. Measured on a real switch before the fix: 5 ImageBitmaps created,
+    // 0 closed, 4 still reachable after six forced GCs.
+    //
+    // So assert the CONTRACT across every teardown at once instead of spot-checking one. Counted on
+    // real close() calls rather than by spying on FM.clearClipStrip: a path that hand-rolls its own
+    // release still passes, and a path that calls a helper which no longer releases still fails.
+    const savedScene = FM.scene, savedTime = FM.time;
+    const nameEl = document.getElementById('proj-name-m');
+    const savedName = nameEl ? nameEl.value : null;
+    const S = {
+      commit: FM.history.commit, hreset: FM.history.reset, autosave: FM.storage.autosave,
+      save: FM.storage.save, dirty: FM.storage.markDirty, rmMedia: FM.storage.removeMedia, toast: FM.toast,
+    };
+    const noop = function () {};
+    FM.history.commit = noop; FM.history.reset = noop; FM.storage.autosave = noop;
+    FM.storage.save = noop; FM.storage.markDirty = noop; FM.storage.removeMedia = noop; FM.toast = noop;
+
+    const made = [];
+    function setup() {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const L = FM.makeLayer('video', { name: 'clip', duration: 2 });
+      FM.scene.layers.push(L);
+      const n = { strip: 0, frame: 0 };
+      const rec = {
+        kind: 'video', width: 1920, height: 1080, duration: 4,
+        stripFrames: [0, 0, 0].map(function () { return { close: function () { n.strip++; } }; }),
+        frameCache: { fps: 30, frames: [0, 0].map(function () { return { close: function () { n.frame++; } }; }) },
+      };
+      FM.media.set(L.id, rec);
+      made.push(L.id);
+      return { id: L.id, rec: rec, n: n };
+    }
+
+    const paths = [
+      ['FM.deleteLayer', function (c) { FM.deleteLayer(c.id); }],
+      ['FM.deleteSelected', function (c) { FM.scene.selectedId = c.id; FM.scene.selectedIds = [c.id]; FM.deleteSelected(); }],
+      ['FM.replaceMediaWith', function (c) { FM.replaceMediaWith(c.id, { kind: 'image', el: document.createElement('canvas'), width: 8, height: 8, duration: 1 }); }],
+      ['FM.resetProject', function () { FM.resetProject(); }],
+      ['FM.releaseProjectMedia (the FM.projects.open switch teardown)', function () { FM.releaseProjectMedia(FM.scene.layers); }],
+    ];
+
+    try {
+      paths.forEach(function (p) {
+        const label = p[0], run = p[1];
+        const c = setup();
+        run(c);
+        if (c.n.strip !== 3) throw new Error(label + ' closed ' + c.n.strip + ' of 3 filmstrip bitmaps');
+        if (c.n.frame !== 2) throw new Error(label + ' closed ' + c.n.frame + ' of 2 frame-cache bitmaps');
+        // The delete paths deliberately KEEP the record for undo, so the sentinel they leave decides
+        // whether the restored clip can ever draw a filmstrip again: `undefined` means "never built,
+        // go build it", null means "built and came back empty, never retry" — a permanently blank bar.
+        if ('stripFrames' in c.rec) throw new Error(label + ' left stripFrames as ' + JSON.stringify(c.rec.stripFrames) + ' — must be undefined so the strip can rebuild');
+        if (c.rec.frameCache) throw new Error(label + ' left frameCache populated');
+      });
+    } finally {
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene = savedScene; FM.time = savedTime;
+      if (nameEl) nameEl.value = savedName;
+      FM.history.commit = S.commit; FM.history.reset = S.hreset; FM.storage.autosave = S.autosave;
+      FM.storage.save = S.save; FM.storage.markDirty = S.dirty; FM.storage.removeMedia = S.rmMedia; FM.toast = S.toast;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('the project switch still routes its media teardown through the shared releaser', { item: 'strip-release' }, function () {
+    // The test above proves FM.releaseProjectMedia releases both caches. This proves FM.projects.open
+    // still USES it — otherwise someone could inline the loop again, drop the two release calls, and
+    // the contract test above would stay green while the switch leaked exactly as it did before.
+    // Driving a real switch from the suite would mean stubbing localStorage and FM.storage.load in
+    // the live app page, and this app holds the only copy of the user's work.
+    if (typeof FM.releaseProjectMedia !== 'function') throw new Error('FM.releaseProjectMedia is missing');
+    const src = String(FM.projects.open);
+    if (!/releaseProjectMedia/.test(src)) throw new Error('FM.projects.open no longer calls FM.releaseProjectMedia — the outgoing project\'s filmstrip + frame-cache bitmaps are being orphaned on every switch');
+    if (/FM\.media\.remove/.test(src)) throw new Error('FM.projects.open drops media registry entries directly again — release must happen BEFORE the entry goes, and that ordering lives in FM.releaseProjectMedia');
   });
 
   test('undo invalidates a live audio-effect chain', { item: 'afx-undo' }, function () {
@@ -1332,9 +1800,14 @@
 
     // And the condition: a #splash that is present-but-hidden, or already dissolving, must NOT be
     // treated as "a splash is up". This is the exact state a refresh leaves behind.
-    const sp = document.getElementById('splash');
+    const sp = document.getElementById('splash') || SPLASH_AT_LOAD;
     if (!sp) throw new Error('#splash element is missing from index.html — armIntro keys off it');
     if (!FM.home._splashIsUp) throw new Error('FM.home._splashIsUp is not exposed — this test would only be checking its own copy of the condition');
+    // _splashIsUp() asks the live DOM, so if the boot script has already taken the node out, these
+    // three checks would all pass on nothing at all. Put it back for the duration — that keeps the
+    // assertions genuine no matter how long the suite has been running by the time we get here.
+    const wasDetached = !sp.isConnected;
+    if (wasDetached) document.body.appendChild(sp);
     const was = sp.className;
     try {
       sp.className = 'hidden';
@@ -1343,7 +1816,10 @@
       if (FM.home._splashIsUp()) throw new Error('a dissolving #splash still counts as "up" — its dismiss event has already fired, so nothing will ever clear .hm-preintro');
       sp.className = '';
       if (!FM.home._splashIsUp()) throw new Error('a visible #splash is no longer recognised — the entrance would play behind an opaque splash again');
-    } finally { sp.className = was; }
+    } finally {
+      sp.className = was;
+      if (wasDetached && sp.parentNode) sp.parentNode.removeChild(sp);   // leave the page exactly as found
+    }
   });
 
   test('a menu trigger toggles: tapping it again closes the menu', { item: 'menu-toggle' }, function () {

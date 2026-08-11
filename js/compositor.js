@@ -6983,7 +6983,15 @@ window.FM = window.FM || {};
     for (const g of scene.layers) {
       if (g.type !== 'group' || !g.visible || !groupNeedsUnit(g, t)) continue;
       const members = [];
+      const seen = new Set();
       (function walk(gid) {
+        // v5.06 gave FM.groupBounds and FM.groupDescendants this guard and missed THIS walk, which is
+        // the one that runs per unit-group PER FRAME. On a document that already carried a parent
+        // cycle it still recursed until the stack blew — measured on v5.72: renderScene AND refreshAll
+        // both died here (compositor.js:6987), load() threw inside its promise, and the project stayed
+        // exactly as unopenable as before the fix. A cycle must degrade, never take the app with it.
+        if (seen.has(gid)) return;
+        seen.add(gid);
         scene.layers.forEach(l => { if (l.parent === gid) { members.push(l); if (l.type === 'group') walk(l.id); } });
       })(g.id);
       const drawable = members.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'adjustment' && l.type !== 'null');

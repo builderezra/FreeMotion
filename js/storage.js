@@ -83,6 +83,35 @@ window.FM = window.FM || {};
   function idbDel(db, key) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
+  // Repair a circular parent link carried by an already-saved (or imported) document, and SAY SO.
+  // Silent repair would be worse than the bug: the user's group nesting genuinely changes, and a
+  // change to their work that nobody announces is indistinguishable from corruption. Returns nothing
+  // when the document was clean — a healthy project must not see a toast, or a write, at all.
+  function repairAndAnnounce(layers, whenLoading) {
+    const fixed = FM.repairParentCycles ? FM.repairParentCycles(layers) : null;
+    if (!fixed) return null;
+    // Short on purpose. #toast shrink-fits inside the 50vw its left:50% containing block leaves it, so
+    // at 380px it has ~190px to wrap into — a sentence long enough to explain itself in full becomes a
+    // six-line block nobody reads. The layer names and the reason go to the console for the long form.
+    const msg = fixed.length === 1
+      ? 'Repaired this project: “' + fixed[0] + '” was parented in a loop'
+      : 'Repaired this project: ' + fixed.length + ' layers were parented in a loop';
+    let done = false;
+    const go = () => { if (done) return; done = true; if (FM.toast) FM.toast(msg, 7000); };
+    // On a cold launch the splash covers the screen for ~3s and would eat the notice, so wait for the
+    // dismiss the home intro already waits for — same idiom, same 6s backstop for a splash torn down
+    // some other way. No splash (import, project switch, repeat load) → show it right away.
+    const sp = whenLoading ? document.getElementById('splash') : null;
+    if (sp && !sp.classList.contains('hidden') && !sp.classList.contains('splash-out')) {
+      document.addEventListener('fm:splash-dismiss', () => setTimeout(go, 600), { once: true });
+      setTimeout(go, 6000);
+    } else {
+      setTimeout(go, 400);
+    }
+    try { console.warn('FreeMotion: broke a circular parent link on ' + fixed.join(', ') + ' — this project could not have opened otherwise.'); } catch (e) {}
+    return fixed;
+  }
+
   FM.storage = {
     async save() {
       let sceneOk = false;
@@ -136,6 +165,12 @@ window.FM = window.FM || {};
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       FM.scene.project = scene.project;
       FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
+      // BEFORE anything walks the graph. A document saved by a pre-v5.06 build can carry a parent
+      // cycle; every parent walk below (refreshAll → the timeline, the layers panel, the compositor)
+      // then throws, and because that throw happens inside this promise the boot .then() never runs:
+      // no layers panel, no Home, and every other project unreachable behind it. Measured on v5.72
+      // before this line existed: RangeError out of collectGroupUnits, home never opened.
+      repairAndAnnounce(FM.scene.layers, true);
       FM.scene.selectedId = scene.selectedId;
       // Restore the full multi-selection (filtered to layers that still exist), not just one. (#20)
       const liveIds = new Set(FM.scene.layers.map(l => l.id));
@@ -491,6 +526,7 @@ window.FM = window.FM || {};
     const re = reIdLayers(obj.layers);
     FM.scene.project = obj.project;
     FM.scene.layers = re.layers;
+    repairAndAnnounce(FM.scene.layers, false);   // an imported .fmotion.json is untrusted input: a cycle in it is a hang, not a render
     FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
@@ -645,6 +681,36 @@ window.FM = window.FM || {};
   function putThumb(id, url) { _thumbCache.set(id, url); openDB().then(db => idbPut(db, 'thumb:' + id, url).then(() => db.close())).catch(() => {}); }
   function delThumb(db, id) { _thumbCache.delete(id); return idbDel(db, 'thumb:' + id); }
 
+  // Hand back everything the outgoing project's media holds, then drop the registry entries (the
+  // blobs stay in IDB — this is a switch, not a delete).
+  //
+  // The audio graph has to go with it: media.remove only revokes the object URL, so a rec carrying a
+  // live effect chain would leave its LFOs running on the shared AudioContext with no reference left
+  // to stop them.
+  //
+  // Order matters and the ONLY safe order is release-then-remove: FM.media.remove deletes the
+  // registry entry, so after it there is no reference left to release anything through. This loop
+  // used to call dropAudioGraph + media.remove and skip BOTH decoded caches. Measured on a real
+  // project switch (3 image clips + one frame cache): 5 ImageBitmaps created, 0 closed, and 4 of
+  // them still reachable after six forced GCs — retained, not merely awaiting collection. Both
+  // caches are ImageBitmaps, i.e. native memory that exerts no GC pressure, and frameCache alone is
+  // budgeted at up to 160MB on mobile (FM.frameCacheLimits) precisely because it is expected to be
+  // handed back promptly. FM.resetProject has always done it in this order; this path had drifted.
+  //
+  // Split out of projects.open() and exported so the teardown can be regression-tested directly.
+  // Driving a real switch from the suite would mean stubbing localStorage and FM.storage.load in
+  // the live app page, and this app holds the only copy of the user's work.
+  FM.releaseProjectMedia = function (layers) {
+    (layers || []).forEach(l => {
+      const m = FM.media.get(l.id);
+      if (!m) return;
+      if (FM.clearFrameCache) FM.clearFrameCache(m);
+      if (FM.clearClipStrip) FM.clearClipStrip(m);
+      if (FM.dropAudioGraph) FM.dropAudioGraph(m);
+      FM.media.remove(l.id);
+    });
+  };
+
   FM.projects = {
     list() { return readJSON(PROJ_INDEX, []); },
     // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
@@ -749,15 +815,7 @@ window.FM = window.FM || {};
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
       FM.storage.flushSync(); this.touchCurrent(true);
-      // drop the outgoing project's media from the in-memory registry (blobs stay in IDB). The audio
-      // graph must go with it: media.remove only revokes the URL, so a rec carrying a live effect chain
-      // would leave its LFOs running on the shared AudioContext with no reference left to stop them.
-      FM.scene.layers.forEach(l => {
-        const m = FM.media.get(l.id);
-        if (!m) return;
-        if (FM.dropAudioGraph) FM.dropAudioGraph(m);
-        FM.media.remove(l.id);
-      });
+      FM.releaseProjectMedia(FM.scene.layers);
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
       // Motion Blur (Footage) keeps a per-layer canvas of the previous frame. Those belong to the
       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
