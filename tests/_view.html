@@ -216,6 +216,14 @@ var RECIPES = {
     }
     await sleep(300);
   },
+  // Motion Blur (Object) — the bespoke block, so its controls can be looked at.
+  async 'motionblur'(W2, d, FM) {
+    await openEditor(d, FM);
+    const L = FM.scene.layers[0];
+    L.motionBlur = { enabled: true, shutter: 0.5, samples: 8 };
+    FM.selectLayer(L.id); await sleep(300);
+    FM.inspector.openCategory('effects'); await sleep(600);
+  },
   async 'freehand-drawn'(W2, d, FM) { await RECIPES.freehand(W2, d, FM); const done = d.querySelector('#draw-bar button'); if (done) done.click(); await sleep(900); },
 };
 

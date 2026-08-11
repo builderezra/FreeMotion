@@ -2677,11 +2677,20 @@ window.FM = window.FM || {};
     rm.addEventListener('click', () => { mb.enabled = false; FM.requestRender(); FM.inspector.refresh(); commitH(); });
     head.appendChild(rm);
     wrap.appendChild(head);
-    // Shutter is the fraction of a frame the "camera" is open: 0.5 is a real 180° shutter.
-    wrap.appendChild(rangeRow('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
-      v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); }, 0, 1, 0.05));
-    wrap.appendChild(rangeRow('Samples', () => Math.round(mb.samples || 8),
-      v => { mb.samples = Math.max(2, Math.min(24, Math.round(v))); FM.requestRender(); }, 2, 24, 1));
+    // The app's own value boxes, not bare <input type=range> (v5.54). Ezra: "some effects don't use
+    // the slider format that we should have, and also the sliders on those ones can be finicky, like
+    // this one." A 0..1 Shutter on a raw range input has almost no usable travel — a whole shutter
+    // angle lives in a couple of hundred pixels — where mtVBox gives the same drag-to-scrub-with-glide
+    // and tap-to-type as every other number in the app.
+    const mbVals = el('div', 'mt-values');
+    const bShut = mtVBox('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
+      v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); },
+      { dp: 2, scrub: 0.004, min: 0, max: 1 });
+    const bSamp = mtVBox('Samples', () => Math.round(mb.samples || 8),
+      v => { mb.samples = Math.max(2, Math.min(24, Math.round(v))); FM.requestRender(); },
+      { dp: 0, scrub: 0.08, min: 2, max: 24 });
+    mbVals.append(bShut, bSamp);
+    wrap.appendChild(mbVals);
     wrap.appendChild(el('div', 'insp-hint', 'Shutter is how long the shutter stays open — 0.5 is the 180° shutter film uses. Samples is how many slices are averaged: more is smoother and slower. A clip that is not moving costs nothing.'));
     return wrap;
   }
