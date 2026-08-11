@@ -51,7 +51,35 @@ window.FM = window.FM || {};
     });
   }
   function idbGet(db, key) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key); rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); } catch (e) { res(null); } }); }
-  function idbPut(db, key, val) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
+  // Resolves TRUE only if the write actually landed. This used to resolve the same way on success and
+  // on failure, and writeMedia returned a hardcoded true on top of it — so a video too big for the
+  // origin quota was rejected by the browser, reported as saved, and silently missing after a reload.
+  // On mobile, where the quota is far smaller and Safari rejects rather than prompting, that is most of
+  // what "I cannot add long videos, it won't work" looks like from the outside.
+  function idbPut(db, key, val) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => res(true); tx.onerror = () => { warnStore(tx.error); res(false); }; tx.onabort = () => { warnStore(tx.error); res(false); }; } catch (e) { warnStore(e); res(false); } }); }
+
+  // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
+  // localStorage warning earlier in the session cannot suppress this one.
+  let _storeWarned = false;
+  function warnStore(e) {
+    const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    if (_storeWarned || !FM.toast) return;
+    _storeWarned = true;
+    const mb = n => (n / 1048576).toFixed(0) + ' MB';
+    const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || ''), 6000);
+    if (quota && navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(q => say(q && q.quota ? ' Used ' + mb(q.usage || 0) + ' of ' + mb(q.quota) + '.' : '')).catch(() => say(''));
+    } else say('');
+  }
+
+  // Ask once for persistent storage. Without it the browser may evict this origin's media under
+  // pressure — i.e. projects can lose their clips with no user action at all. Cheap, and silent when
+  // it is refused or unsupported.
+  try {
+    if (navigator.storage && navigator.storage.persist && navigator.storage.persisted) {
+      navigator.storage.persisted().then(p => { if (!p) return navigator.storage.persist(); }).catch(() => {});
+    }
+  } catch (e) {}
   function idbDel(db, key) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
@@ -90,7 +118,9 @@ window.FM = window.FM || {};
     // Generic single-key access to the media store, for features that need to read or write a blob
     // outside the scene document (the Media library reads imported files and caches its thumbnails).
     async readMedia(key) { try { const db = await openDB(); const v = await idbGet(db, key); db.close(); return v; } catch (e) { return null; } },
-    async writeMedia(key, val) { try { const db = await openDB(); await idbPut(db, key, val); db.close(); return true; } catch (e) { return false; } },
+    // Reports what actually happened. It used to return a hardcoded true, so callers could not tell a
+    // stored clip from one the browser refused on quota.
+    async writeMedia(key, val) { try { const db = await openDB(); const ok = await idbPut(db, key, val); db.close(); return ok; } catch (e) { return false; } },
 
     // autosave is invoked ONLY by real-edit paths (history commit/undo/redo, template/element
     // inserts) — the single choke point that marks the project genuinely modified.
