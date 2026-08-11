@@ -277,6 +277,9 @@ f.addEventListener('load', function () {
     var r = RECIPES[DO];
     if (!r) return fail('unknown recipe: ' + DO);
     try { await r(W, d, w.FM); } catch (e) { return fail(DO + ' → ' + (e && e.message)); }
+    // &studio=1 puts ANY recipe into the Studio layout, so a panel can be looked at in the short
+    // bottom band as well as the tall side column — the two shapes it actually has to fit.
+    if (q.get('studio')) { d.body.classList.add('layout-studio'); await sleep(400); }
     await sleep(500);
   })();
 });

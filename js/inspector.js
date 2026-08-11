@@ -3391,6 +3391,12 @@ window.FM = window.FM || {};
       const navSig = (layer ? layer.id : '-') + '/' + view;
       const navChanged = navSig !== lastNavSig; lastNavSig = navSig;
       root.innerHTML = '';
+      // The easing editor is the one sub-view that has to FIT rather than scroll — its graph shrinks
+      // into whatever height is left (see #inspector-panel.insp-ease in styles.css). Cleared on every
+      // rebuild and re-applied at the bottom of this function from what actually got built, so no
+      // branch can leave the panel stuck as a flex column after you navigate away from it.
+      const panelEl = document.getElementById('inspector-panel');
+      if (panelEl) panelEl.classList.remove('insp-ease');
       if (navChanged && root.scrollTop) root.scrollTop = 0;
       if (!layer) {
         // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
@@ -3515,6 +3521,7 @@ window.FM = window.FM || {};
         buildCategory(view, layer, bodyEl);
         root.appendChild(bodyEl);
       }
+      if (panelEl && root.querySelector('.es-inline')) panelEl.classList.add('insp-ease');
     },
   };
 })(window.FM);

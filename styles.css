@@ -393,36 +393,69 @@ body {
 .mt-scrub-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--accent); transform: translateX(-50%); }
 .mt-scrub-ticks { display: none; }
 
-/* ===== Easing Curve editor — rendered INLINE inside the Move & Transform panel (AM-style), not a separate screen ===== */
-.es-inline { display: flex; flex-direction: column; gap: 8px; padding: 2px 0 6px; }
-.es-main { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
-.es-graph { position: relative; flex: 1; min-width: 0; max-width: 300px; display: flex; align-items: center; justify-content: center; }
+/* ===== Easing Curve editor — rendered INLINE inside the Move & Transform panel (AM-style), not a separate screen =====
+   LAYOUT (v5.70): the family and preset rails run HORIZONTALLY under the graph — they used to be
+   vertical columns beside it. Measured, on the unfixed build: the preset column was 351px tall inside
+   an inspector that is 290px on a 390x800 phone, so the panel overflowed by 224px and three presets
+   plus the Steps family button sat below the visible bottom of the sheet. Shrinking the buttons does
+   not fix that; it just moves which button is off screen, and because both rails had
+   `overflow-y:auto` with the scrollbar hidden, a clipped button stayed clickable and invisible while
+   `scrollHeight <= clientHeight` still read "fits".
+   A single row of N equal columns cannot fail that way — the buttons shrink in WIDTH, which nothing
+   depends on, and the graph takes whatever height is left, which is the thing that actually wanted
+   the room. No rail scrolls any more, in either axis. */
+.es-inline { display: flex; flex-direction: column; gap: 6px; padding: 0; min-height: 0; }
+.es-main { display: flex; align-items: stretch; justify-content: center; gap: 10px; min-height: 0; flex: 1 1 auto; }
+.es-graph { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .es-canvas { width: 100%; max-width: 280px; aspect-ratio: 1 / 1; border-radius: 12px; touch-action: none; }
 .es-hint { color: #7d8ca5; font-size: 13px; text-align: center; padding: 20px; line-height: 1.5; }
-.es-presets { display: flex; flex-direction: column; gap: 9px; }
-.es-preset { width: 46px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+/* Curve name + loop toggle, BESIDE the graph. As their own row under it they cost 37px of panel
+   height; at Studio 1280x720 (a 231px band) that was more than half of everything the graph had.
+   The graph is square, so every panel this app has is short of height and never short of width. */
+.es-side { flex: 0 0 84px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+/* One row, N equal columns. `grid-auto-flow: column` means the rail follows whatever the active
+   family holds — 6 bezier presets, 4 Bounce, 3 Steps — with no media query and no second code path. */
+.es-presets, .es-fams { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; flex: none; width: 100%; margin: 0 auto; }
+.es-presets { max-width: 340px; }
+.es-preset { width: auto; min-width: 0; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .es-preset.on { border-color: var(--accent); background: rgba(41,217,187,.14); box-shadow: inset 0 0 0 1px rgba(41,217,187,.5); }
-/* FAMILY rail (v5.47) — outboard of the presets, the way AM nests them: pick the KIND of graph on the
-   outside, then which of its presets on the inside. Wider than a preset button and labelled, because
-   this rail changes what the whole editor is, and three unlabelled squiggles would not say that.
-   The rails scroll on their own if a family ever outgrows the height available; the graph beside them
-   keeps its size either way. */
-.es-fams { display: flex; flex-direction: column; gap: 9px; }
+/* FAMILY rail (v5.47) — above the presets, the way AM nests them: pick the KIND of graph first, then
+   which of its presets. Labelled, because this rail changes what the whole editor is and three
+   unlabelled squiggles would not say that. */
+.es-fams { max-width: 300px; }
 .es-fam {
-  width: 58px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+  width: auto; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--panel-2); display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 2px; cursor: pointer; padding: 5px 2px; color: var(--text-dim);
+  justify-content: center; gap: 2px; cursor: pointer; padding: 3px 2px; color: var(--text-dim);
 }
 .es-fam-lbl { font-size: 9.5px; line-height: 1; letter-spacing: .2px; }
 .es-fam.on { border-color: var(--accent); background: rgba(41,217,187,.18); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(41,217,187,.5); }
-.es-presets, .es-fams { max-height: 100%; overflow-y: auto; scrollbar-width: none; }
-.es-presets::-webkit-scrollbar, .es-fams::-webkit-scrollbar { display: none; }
-.es-carousel { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 2px 0; }
-.es-car-arrow { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 20px; line-height: 1; cursor: pointer; }
-.es-car-label { min-width: 150px; text-align: center; color: #b8c4d6; font-size: 14px; }
-.es-foot { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 4px 0 0; }
-.es-loop { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 20px; line-height: 1; cursor: pointer; }
+.es-car-label { min-width: 0; width: 100%; text-align: center; color: #b8c4d6; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+/* 36px, not 34: it is a tap target. The rework that shrank it to 34 was caught by a verifier who
+   noticed the change's own >=36px assertion was scoped to .es-preset/.es-fam only — so the ONE
+   control it shrank was the one control the test did not watch. Mutation-proved: shrinking this
+   to 8x8 left the suite green. The assertion now covers it. */
+.es-loop { flex: none; width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; font-size: 17px; line-height: 1; cursor: pointer; padding: 0; }
 .es-loop.on { color: var(--accent); border-color: rgba(41,217,187,.5); background: rgba(41,217,187,.12); }
+
+/* While an easing editor is mounted the inspector becomes a height-constrained flex column, so the
+   GRAPH absorbs whatever height is left instead of the rails being pushed out of the panel. Without
+   this the panel content has no definite height to shrink against and `flex: 1` on .es-main does
+   nothing. Scoped to .insp-ease (set by the inspector when it mounts an .es-inline), so no other
+   category is touched. */
+#inspector-panel.insp-ease { display: flex; flex-direction: column; }
+#inspector-panel.insp-ease > #insp-grab, #inspector-panel.insp-ease > .panel-title { flex: none; }
+#inspector-panel.insp-ease > #inspector { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 10px; }
+#inspector-panel.insp-ease > #inspector > .cat-back { flex: none; padding-bottom: 5px; }
+#inspector-panel.insp-ease > #inspector > .cat-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* A canvas is a REPLACED element with an intrinsic 320x320 ratio, so width:auto + height:auto under
+   both max- constraints fits it into the box and stays square. Pinning height:100% instead would let
+   a narrow panel squash it into a rectangle, and the curve is read by its shape. */
+#inspector-panel.insp-ease .es-canvas { width: auto; height: auto; max-width: 100%; max-height: 100%; }
+/* No-keyframe state: the hint is the only thing in the graph box and it is taller than the box on a
+   short band. It scrolls inside the graph rather than pushing the rails out of the panel. */
+#inspector-panel.insp-ease .es-graph { overflow: auto; scrollbar-width: thin; }
+#inspector-panel.insp-ease .es-hint { padding: 6px 4px; font-size: 12px; line-height: 1.4; }
 
 /* ===== Volume panel (keyframeable audio level + easing) ===== */
 .vol-panel .mt-center { gap: 12px; }

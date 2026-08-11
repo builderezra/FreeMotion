@@ -3069,6 +3069,148 @@
   });
 
 
+  test('easing editor: the whole panel fits, and every rail button is really on screen', { item: 'ease-panel-fit' }, async function () {
+    // v5.70. The inline easing editor overflowed #inspector-panel at every size it ships at — measured
+    // 224px over on a 390x800 phone, 304px over in Studio at 1280x720, 49px over even at 1024x768.
+    // The preset rail was a vertical column 351px tall inside a panel that is 290px on a phone.
+    //
+    // BOTH halves are asserted here, and the second half is the whole point. "scrollHeight <=
+    // clientHeight" is satisfiable by HIDING a control: both rails used to be overflow-y:auto with
+    // scrollbar-width:none + ::-webkit-scrollbar{display:none}, so a button parked below the fold was
+    // invisible, still clickable, and still counted as "fits". Two earlier attempts at this shipped
+    // exactly that. So every preset and every family button must be measurably INSIDE its rail's
+    // visible box, inside the panel's visible box, and still 36px tall — and the graph they share the
+    // panel with must not have been squeezed to nothing to make room.
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) throw new Error('#inspector-panel missing');
+    const savedScene = FM.scene, commit = FM.history.commit, autosave = FM.storage.autosave,
+          save = FM.storage.save, dirty = FM.storage.markDirty;
+    const hadH = panel.style.height, hadMaxH = panel.style.maxHeight, hadMinH = panel.style.minHeight;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    try {
+      FM.scene = { project: { width: 1080, height: 1080, fps: 30, duration: 5, background: '#000000' }, layers: [], selectedId: null, selectedIds: [] };
+      const L = FM.makeLayer('shape', { shape: 'star', name: 'Star', x: 300, y: 500, shapeW: 260, shapeH: 260, fill: '#7a5cff' });
+      L.transform.x = { kf: [{ t: 0, v: 200, e: 'easeInOut' }, { t: 2, v: 800, e: 'easeInOut' }] };
+      FM.scene.layers.push(L);
+      FM.time = 2;
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('transform');
+      FM._mtMode = 'move'; FM.inspector.refresh();
+      const easeBtn = document.querySelector('.mt-ease');
+      if (!easeBtn) throw new Error('no easing button on the Move & Transform rail');
+      easeBtn.click();
+      await sleep(0);
+      if (!document.querySelector('.es-inline')) throw new Error('the easing editor never mounted');
+
+      // The visible box of an element: border box minus border, minus any scrollbar gutter.
+      const box = el => {
+        const r = el.getBoundingClientRect();
+        return { l: r.left + el.clientLeft, t: r.top + el.clientTop, r: r.left + el.clientLeft + el.clientWidth, b: r.top + el.clientTop + el.clientHeight };
+      };
+      const EPS = 0.5;
+      function assertFits(where) {
+        const pb = box(panel);
+        const over = panel.scrollHeight - panel.clientHeight;
+        if (over > 0) throw new Error(where + ': the inspector overflows by ' + over + 'px (' + panel.scrollHeight + ' of content in ' + panel.clientHeight + 'px) — the editor does not fit the panel');
+        // Guard against the cheapest way to pass this: an empty rail. Every family carries at least
+        // two presets, and the family rail is always the full three.
+        const nPre = document.querySelectorAll('.es-preset').length, nFam = document.querySelectorAll('.es-fam').length;
+        if (nPre < 2 || nFam !== 3) throw new Error(where + ': the rails hold ' + nPre + ' presets and ' + nFam + ' families — they did not build, so there is nothing to prove fits');
+        const btns = [].slice.call(document.querySelectorAll('.es-preset, .es-fam, .es-loop'));
+        btns.forEach(b => {
+          const rail = b.parentElement, rb = box(rail), r = b.getBoundingClientRect();
+          const key = (b._key || '?') + ' (' + b.className + ')';
+          if (r.height < 36 - EPS) throw new Error(where + ': ' + key + ' is only ' + r.height.toFixed(1) + 'px tall — squashed below a 36px touch target to make the panel fit');
+          if (r.bottom > rb.b + EPS || r.top < rb.t - EPS) throw new Error(where + ': ' + key + ' is outside its rail vertically (button ' + r.top.toFixed(1) + '–' + r.bottom.toFixed(1) + ' vs rail ' + rb.t.toFixed(1) + '–' + rb.b.toFixed(1) + ') — a rail that clips its own buttons is how "it fits" gets faked');
+          if (r.right > rb.r + EPS || r.left < rb.l - EPS) throw new Error(where + ': ' + key + ' is outside its rail horizontally (button ' + r.left.toFixed(1) + '–' + r.right.toFixed(1) + ' vs rail ' + rb.l.toFixed(1) + '–' + rb.r.toFixed(1) + ')');
+          if (r.bottom > pb.b + EPS || r.top < pb.t - EPS) throw new Error(where + ': ' + key + ' sits outside the visible panel (button ' + r.top.toFixed(1) + '–' + r.bottom.toFixed(1) + ' vs panel ' + pb.t.toFixed(1) + '–' + pb.b.toFixed(1) + ') — you would have to scroll to reach it');
+          if (!b.getClientRects().length) throw new Error(where + ': ' + key + ' has no box at all');
+        });
+        // …and the graph must still be a graph. Everything above is also satisfied by an editor whose
+        // curve has been shrunk to a dot, which is not a fix.
+        const cv = document.querySelector('.es-canvas');
+        if (!cv) throw new Error(where + ': no .es-canvas');
+        const cr = cv.getBoundingClientRect();
+        if (cr.height < 40) throw new Error(where + ': the curve graph collapsed to ' + cr.height.toFixed(1) + 'px — the rails were made to fit by taking everything from the graph');
+        if (Math.abs(cr.width - cr.height) > 1.5) throw new Error(where + ': the graph is ' + cr.width.toFixed(1) + 'x' + cr.height.toFixed(1) + ' — a squashed curve reads as the wrong easing');
+      }
+
+      // Pin the panel to the heights it actually gets on the devices this ships to: a docked phone
+      // sheet, the short Studio band at 720p, and the classic side column on a small laptop. Pinning
+      // is what makes those measurable from one harness window; the pin is verified, not assumed.
+      const HEIGHTS = [420, 348, 290, 257, 231, 217];
+      for (const h of HEIGHTS) {
+        panel.style.minHeight = panel.style.maxHeight = panel.style.height = h + 'px';
+        await sleep(0);
+        if (Math.abs(panel.clientHeight - h) > 3) throw new Error('could not pin the panel to ' + h + 'px (clientHeight ' + panel.clientHeight + ') — this sweep would be measuring nothing');
+        // every family, because each one fills the preset rail with a different number of buttons
+        const fams = [].slice.call(document.querySelectorAll('.es-fam'));
+        if (fams.length < 3) throw new Error('the family rail has ' + fams.length + ' buttons, expected 3');
+        assertFits(h + 'px / bezier');
+        for (let i = 0; i < fams.length; i++) {
+          const f = [].slice.call(document.querySelectorAll('.es-fam'))[i];
+          f.click();
+          await sleep(0);
+          assertFits(h + 'px / ' + f._key);
+        }
+        // back to bezier for the next height
+        const bez = [].slice.call(document.querySelectorAll('.es-fam')).filter(x => x._key === 'bezier')[0];
+        if (bez) { bez.click(); await sleep(0); }
+      }
+
+      // The rail may only offer curves a cubic bezier can BE — that is what made room. bounce and
+      // elastic are sampled functions and 'hold' is a step; they belong to the other two families.
+      const bezKeys = [].slice.call(document.querySelectorAll('.es-preset')).map(b => b._key);
+      const wantBez = ['linear', 'easeIn', 'easeOut', 'easeInOut', 'overshoot', 'anticipate'];
+      if (bezKeys.join(',') !== wantBez.join(',')) throw new Error('the bezier rail is [' + bezKeys.join(',') + '], expected [' + wantBez.join(',') + ']');
+      bezKeys.forEach(k => { if (!FM.EASE_PRESETS[k]) throw new Error('"' + k + '" is on the bezier rail but has no cubic bezier in FM.EASE_PRESETS — it cannot be drawn or dragged as one'); });
+      if (document.querySelectorAll('.es-car-arrow').length) throw new Error('the pager arrows are back — every preset of the active family is on screen, so they cost height for nothing');
+
+      // Hold has to stay reachable, and a keyframe that already says e:"hold" has to keep working.
+      const steps = [].slice.call(document.querySelectorAll('.es-fam')).filter(x => x._key === 'steps')[0];
+      if (!steps) throw new Error('no Steps family button');
+      steps.click(); await sleep(0);
+      const hold = [].slice.call(document.querySelectorAll('.es-preset')).filter(x => x._key === 'hold')[0];
+      if (!hold) throw new Error('Hold is not reachable from any rail — trimming the bezier rail dropped it instead of moving it');
+      hold.click(); await sleep(0);
+      if (L.transform.x.kf[1].e !== 'hold') throw new Error('picking Hold wrote e=' + L.transform.x.kf[1].e + ', not "hold" — older builds and evalProp both read that string');
+      if (L.transform.x.kf[1].ez) throw new Error('picking Hold left an ez behind, so the parameterised curve is still what evalProp uses');
+
+      const label = () => (document.querySelector('.es-car-label') || {}).textContent;
+      const litFam = () => [].slice.call(document.querySelectorAll('.es-fam.on')).map(x => x._key).join(',');
+      const LEGACY = { hold: 'Hold (step)', bounce: 'Bounce', elastic: 'Elastic' };
+      Object.keys(LEGACY).forEach(e => {
+        L.transform.x.kf[1].e = e;
+        delete L.transform.x.kf[1].bez; delete L.transform.x.kf[1].ez;
+        FM.refreshEasing();
+        if (label() !== LEGACY[e]) throw new Error('a keyframe carrying e:"' + e + '" reads as "' + label() + '" — an older project looks like it lost its easing');
+      });
+      L.transform.x.kf[1].e = 'hold'; FM.refreshEasing();
+      if (litFam() !== 'steps') throw new Error('e:"hold" lights the "' + litFam() + '" family — a step belongs to the Steps rail, and that is where Hold now lives');
+      if (![].slice.call(document.querySelectorAll('.es-preset')).some(b => b._key === 'hold' && b.classList.contains('on'))) {
+        throw new Error('e:"hold" does not light the Hold button on the rail it is supposed to live on');
+      }
+
+      // A REBUILD of the editor DOM must come back with a filled rail. buildPresetRail caches which
+      // family the rail was last filled for; that cache outlives the DOM, so any inspector.refresh()
+      // with the family unchanged — a keyframe toggle, the mobile sheet re-syncing — used to hand back
+      // a brand-new, permanently empty preset rail.
+      FM.inspector.refresh();
+      await sleep(0);
+      const afterRebuild = document.querySelectorAll('.es-preset').length;
+      if (afterRebuild < 2) throw new Error('rebuilding the panel left ' + afterRebuild + ' presets on the rail — the rail cache is keyed to a DOM node that no longer exists');
+    } finally {
+      panel.style.height = hadH; panel.style.maxHeight = hadMaxH; panel.style.minHeight = hadMinH;
+      FM.scene = savedScene;
+      FM._mtEasing = false;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+      try { FM.inspector.refresh(); } catch (e) {}
+    }
+  });
+
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

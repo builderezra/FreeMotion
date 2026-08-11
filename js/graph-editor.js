@@ -16,16 +16,23 @@ window.FM = window.FM || {};
     anchor: [],
     all: ['x', 'y', 'z', 'rotation', 'scale', 'scaleX', 'scaleY', 'skewX', 'skewY', 'opacity'],
   };
+  // The BEZIER rail carries only the curves a cubic bezier can actually BE — these are exactly the six
+  // in FM.EASE_PRESETS. bounce and elastic are sampled functions (they belong to the Bounce family)
+  // and 'hold' is a step, not a curve (it belongs to the Steps family), so listing them here made the
+  // rail eight tall for the sake of three entries that were lying about what they are.
   const PRESETS = [
     { key: 'linear', label: 'Linear' },
-    { key: 'easeOut', label: 'Ease Out' },
     { key: 'easeIn', label: 'Ease In' },
+    { key: 'easeOut', label: 'Ease Out' },
     { key: 'easeInOut', label: 'Ease In-Out' },
     { key: 'overshoot', label: 'Overshoot' },
-    { key: 'bounce', label: 'Bounce' },
-    { key: 'elastic', label: 'Elastic' },
-    { key: 'hold', label: 'Hold' },
+    { key: 'anticipate', label: 'Anticipate' },
   ];
+  // Named eases a keyframe can legitimately still carry that are NOT on the bezier rail: 'hold' is
+  // offered by the Steps rail, and bounce/elastic only arrive from an older project, an import, or
+  // FM.ai's ops layer. Every one of them must still READ correctly, or an old file looks like it lost
+  // its easing the moment you open the graph.
+  const LEGACY_LABELS = { hold: 'Hold (step)', bounce: 'Bounce', elastic: 'Elastic' };
   // Non-bezier named eases (bounce/elastic) — drawn by sampling FM.EASES, not as a draggable bezier.
   const CURVE_EASES = ['bounce', 'elastic'];
   const PAD = 26;
@@ -139,7 +146,11 @@ window.FM = window.FM || {};
   function curFamKey() {
     const z = curEz();
     const F = z && FM.easeFamily ? FM.easeFamily(z.fam) : null;
-    return (F && !F.bez) ? z.fam : 'bezier';
+    if (F && !F.bez) return z.fam;
+    // A plain kf.e === 'hold' is a STEP. It is not stored as `ez` (and must not be — every older
+    // project and evalProp already read the string), but the rail it belongs on is Steps, so that is
+    // the family the editor reports for it.
+    return curIsHold() ? 'steps' : 'bezier';
   }
   function curPresetDef() { const z = curEz(); return z && FM.easePreset ? FM.easePreset(z.fam, z.preset) : null; }
   function curParams() { const z = curEz(), P = curPresetDef(); return P ? Object.assign({}, P.defaults, z.p || {}) : null; }
@@ -240,6 +251,15 @@ window.FM = window.FM || {};
       b.addEventListener('click', () => applyEzPreset(famKey, P.key));
       presetWrap.appendChild(b);
     });
+    // HOLD lives at the end of the Steps rail. It is the one step this app had before the families
+    // existed, it is still written as the plain string kf.e = 'hold' that every older project uses,
+    // and it is the reason the Steps rail is where curFamKey() sends a held keyframe.
+    if (famKey === 'steps') {
+      const b = document.createElement('button'); b.className = 'es-preset'; b._key = 'hold'; b.title = LEGACY_LABELS.hold;
+      const cv = document.createElement('canvas'); cv.width = 30; cv.height = 22; b.appendChild(cv); drawGlyph(cv, 'hold');
+      b.addEventListener('click', () => applyPreset('hold'));
+      presetWrap.appendChild(b);
+    }
   }
 
   function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; }); FM.requestRender(); redraw(); }
@@ -247,7 +267,10 @@ window.FM = window.FM || {};
     // Store only the named easing (delete any custom bez). evalProp + bezOf both resolve a named
     // ease from kf.e, and every "is a preset active?" read site checks for the ABSENCE of kf.bez —
     // so writing bez here was what stopped presets highlighting and broke the label/carousel. (#4,#5)
-    cur.kfs.forEach(kf => { kf.e = key; delete kf.bez; });
+    // `ez` goes too: picking Hold off the Steps rail while a Steps preset is live has to actually
+    // land on Hold, and curPresetDef() reads `ez` first — leaving it behind meant the click drew
+    // the old parameterised curve back over the step.
+    cur.kfs.forEach(kf => { kf.e = key; delete kf.bez; delete kf.ez; });
     FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
   }
   function curIsHold() { return cur.kfs.length && cur.kfs[0].e === 'hold'; }
@@ -269,8 +292,12 @@ window.FM = window.FM || {};
     buildPresetRail(famKey);
     const activeKey = Pdef ? Pdef.key : (curIsHold() ? 'hold' : (cur.kfs[0].bez ? null : cur.kfs[0].e));
     [].forEach.call(presetWrap.children, b => b.classList.toggle('on', b._key === activeKey));
+    // LEGACY_LABELS before PRESETS: hold/bounce/elastic are no longer on the bezier rail, so without
+    // it a keyframe carrying one of those strings read "Cubic Bezier Easing" — a plain lie about a
+    // curve the editor was drawing correctly right beside the label.
     if (carLabel) carLabel.textContent = Pdef ? Pdef.label
-      : (curIsHold() ? 'Hold (step)' : (cur.kfs[0].bez ? 'Cubic Bezier Easing' : (PRESETS.find(p => p.key === cur.kfs[0].e) || {}).label || 'Cubic Bezier Easing'));
+      : (cur.kfs[0].bez ? 'Cubic Bezier Easing'
+        : (LEGACY_LABELS[cur.kfs[0].e] || (PRESETS.find(p => p.key === cur.kfs[0].e) || {}).label || 'Cubic Bezier Easing'));
     if (loopBtn) { const fp = cur.get && cur.keys.length ? cur.get(cur.keys[0]) : null; const lm = fp && fp.loopMode; loopBtn.classList.toggle('on', !!lm && lm !== 'none'); loopBtn.title = 'Loop: ' + (lm || 'none'); }
   }
 
@@ -330,8 +357,14 @@ window.FM = window.FM || {};
     gwrap.append(canvas, hint);
 
     presetWrap = document.createElement('div'); presetWrap.className = 'es-presets';
-    // The FAMILY rail sits outboard of the presets, exactly as AM stacks them: pick the kind of graph
-    // on the outside, then which of its presets on the inside.
+    // _railFam caches which family the rail was last FILLED for, so redraw() doesn't rebuild eight
+    // buttons on every pointermove. It has to be cleared here: this is a brand-new, empty presetWrap,
+    // and a stale cache made buildPresetRail return early and leave it that way. Measured — any
+    // inspector.refresh() with the family unchanged (a keyframe toggle, the mobile sheet re-syncing)
+    // came back with NO preset buttons at all.
+    _railFam = null;
+    // The FAMILY rail sits ABOVE the presets, the way AM nests them: pick the kind of graph first,
+    // then which of its presets.
     famWrap = document.createElement('div'); famWrap.className = 'es-fams';
     (FM.EASE_FAMILIES || []).forEach(F => {
       const b = document.createElement('button'); b.className = 'es-fam'; b._key = F.key; b.title = F.label;
@@ -341,33 +374,14 @@ window.FM = window.FM || {};
       b.addEventListener('click', () => { if (curFamKey() !== F.key) applyFamily(F.key); });
       famWrap.appendChild(b);
     });
-    main.append(gwrap, presetWrap, famWrap);
-
-    const car = document.createElement('div'); car.className = 'es-carousel';
-    const cprev = document.createElement('button'); cprev.className = 'es-car-arrow'; cprev.innerHTML = '&#8249;';
+    // The pager arrows are gone: every preset of the active family is on screen at once now, so a
+    // one-at-a-time stepper was a second, slower way to do what the rail already does.
+    // The name and the loop toggle sit BESIDE the graph, not in a row under it. Measured: as their own
+    // row they cost 37px of panel height, and at Studio 1280x720 — a 231px band — that was more than
+    // half of everything the graph had left (31px). Beside it they cost nothing: the graph is square,
+    // so on every panel this app has there is spare WIDTH next to it and never spare height.
+    const side = document.createElement('div'); side.className = 'es-side';
     carLabel = document.createElement('div'); carLabel.className = 'es-car-label'; carLabel.textContent = 'Cubic Bezier Easing';
-    const cnext = document.createElement('button'); cnext.className = 'es-car-arrow'; cnext.innerHTML = '&#8250;';
-    // The pager walks the CURRENT family's presets, not one flat list of everything — stepping from
-    // the last bezier preset straight into Bounce is what made the old carousel feel arbitrary.
-    const step = d => {
-      const famKey = curFamKey(), F = FM.easeFamily(famKey);
-      if (!F) return;
-      if (F.bez) {
-        const order = PRESETS.map(p => p.key);
-        const a = curIsHold() ? 'hold' : (cur.kfs.length && !cur.kfs[0].bez ? cur.kfs[0].e : 'easeInOut');
-        let i = order.indexOf(a); i = (i < 0 ? 0 : i + d + order.length) % order.length;
-        applyPreset(order[i]);
-        return;
-      }
-      const order = F.presets.map(p => p.key), z = curEz();
-      let i = order.indexOf(z && z.preset);
-      i = (i < 0 ? 0 : i + d + order.length) % order.length;
-      applyEzPreset(famKey, order[i]);
-    };
-    cprev.addEventListener('click', () => step(-1)); cnext.addEventListener('click', () => step(1));
-    car.append(cprev, carLabel, cnext);
-
-    const foot = document.createElement('div'); foot.className = 'es-foot';
     loopBtn = document.createElement('button'); loopBtn.className = 'es-loop'; loopBtn.innerHTML = '&#8635;'; loopBtn.title = 'Loop';
     loopBtn.addEventListener('click', () => {
       // Compute the next loop mode ONCE from the button's source-of-truth (keys[0], which redraw
@@ -379,9 +393,12 @@ window.FM = window.FM || {};
       cur.keys.forEach(k => { const p = cur.get(k); if (FM.isAnimated(p)) p.loopMode = next; });
       FM.requestRender(); redraw(); if (FM.history) FM.history.commit();
     });
-    foot.append(loopBtn);
-
-    wrap.append(main, car, foot);
+    side.append(carLabel, loopBtn);
+    main.append(gwrap, side);
+    // The two rails now sit UNDER the graph as single rows (see .es-fams/.es-presets in styles.css).
+    // Beside it they were a 351px-tall column in a panel that is 290px on a phone, which is why every
+    // attempt to shrink this editor by trimming buttons ended with one parked below the fold.
+    wrap.append(main, famWrap, presetWrap);
     return wrap;
   }
 
