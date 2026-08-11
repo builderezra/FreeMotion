@@ -2351,6 +2351,54 @@
     }
   });
 
+  test('freehand: hand tremor is smoothed out of a stroke', { item: 'freehand-smooth' }, function () {
+    // v5.53, and Ezra's FOURTH report on this: "free hand drawing is still fucked… make sure this
+    // gets solved and it works fine and looks good."
+    //
+    // The v5.19 attempt ran Ramer-Douglas-Peucker ALONE, which is the wrong tool used first. RDP is a
+    // simplifier: it keeps the points that deviate MOST from a chord and discards the ones lying close
+    // to it. Hand tremor IS the deviating points, so RDP preserved the wobble and threw away the
+    // smooth parts — which is why raising its epsilon never helped and only started clipping corners
+    // off deliberate shapes. Filtering first and simplifying second is the fix.
+    //
+    // "Shaky" is measured as TOTAL ABSOLUTE TURNING along the path. A smooth arc turns steadily and
+    // accumulates about pi; a tremulous line reverses direction constantly and racks up many times
+    // that. Measured against a clean version of the SAME arc, so the arc's own curvature cancels out.
+    if (!FM._smoothFreehand) throw new Error('FM._smoothFreehand is not exposed');
+    const arc = jitter => {
+      const out = []; let seed = 12345;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff - 0.5; };
+      for (let i = 0; i <= 120; i++) {
+        const t = i / 120;
+        out.push([-140 + 280 * t + rnd() * jitter, 120 - Math.sin(t * Math.PI) * 240 + rnd() * jitter]);
+      }
+      return out;
+    };
+    const turning = pts => {
+      let total = 0, prev = null;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        const h = Math.atan2(b[1] - a[1], b[0] - a[0]);
+        if (prev !== null) { let d = h - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; total += Math.abs(d); }
+        prev = h;
+      }
+      return total;
+    };
+    const clean = FM._smoothFreehand(arc(0));
+    const shaky = FM._smoothFreehand(arc(5.5));
+    if (clean.length < 3 || shaky.length < 3) throw new Error('the smoother returned ' + clean.length + '/' + shaky.length + ' points — nothing to measure');
+    const tc = turning(clean), ts = turning(shaky);
+    const excess = ts - tc;
+    // RDP alone measured ~65 rad of excess here. Anything in that neighbourhood is a visibly shaky line.
+    if (excess > 6) throw new Error('a stroke with hand tremor carries ' + excess.toFixed(1) + ' rad of turning beyond the same arc drawn cleanly (' + ts.toFixed(1) + ' vs ' + tc.toFixed(1) + ') — the wobble is still in the path');
+    // …and the smoothing must not have flattened the arc itself into a straight line.
+    if (tc < 1.5) throw new Error('a clean arc only turns ' + tc.toFixed(2) + ' rad after smoothing — the curve has been flattened away');
+    // Curve flags: the renderer only rounds a point marked [u,v,1]; without them this is a polyline.
+    const mid = shaky.slice(1, -1);
+    if (!mid.length || !mid.every(p => p[2] === 1)) throw new Error('interior points are not marked smooth, so the stroke renders as straight segments');
+    if (shaky[0][2] === 1 || shaky[shaky.length - 1][2] === 1) throw new Error('the end points should stay hard so the stroke starts and stops crisply');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

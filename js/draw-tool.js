@@ -153,10 +153,32 @@ window.FM = window.FM || {};
     if (Math.hypot((p[0] - last[0]) * s, (p[1] - last[1]) * s) < 2.5) return;   // min spacing
     pts.push(p); redraw();
   }
+  // Lifting the finger ends a STROKE, not the session. Ezra, four times: "free hand drawing is still
+  // fucked." This was the whole of it — onUp called finish(), and finish() calls stop(), which tears
+  // the drawing mode down: overlay hidden, bar hidden, stage shrunk back. So you got exactly ONE
+  // stroke per visit to the tool, and because committing a layer selects it, the phone then threw a
+  // full-screen inspector sheet over the canvas so you could not even see what you had drawn. Now a
+  // stroke is committed and the tool stays armed for the next one; Done is how you leave.
   function onUp(e) {
     if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand' || !drawing) return;
     drawing = false;
-    if (FM.drawTool.points.length >= 2) finish(); else redraw();
+    commitStroke();
+  }
+
+  // Commit the current freehand stroke as its own layer and clear the buffer, staying in draw mode.
+  function commitStroke() {
+    var t = FM.drawTool;
+    if (t.mode !== 'freehand' || t.points.length < 2) { redraw(); return false; }
+    var layer = FM.addPathLayer(smoothFreehand(t.points), { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
+    if (layer) strokes.push(layer.id);
+    t.points = [];
+    // Committing a layer SELECTS it, and on a phone a selection opens the inspector sheet over the
+    // whole screen — which is the thing that made this unusable. Stay deselected while drawing; the
+    // last stroke is selected on the way out (see finish()).
+    if (FM.selectLayer) FM.selectLayer(null);
+    if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
+    redraw(); updateBar();
+    return true;
   }
 
   /* A freehand stroke was committed as its RAW samples, every one of them a hard corner, so the
@@ -186,21 +208,61 @@ window.FM = window.FM || {};
     }
     return pts.filter(function (_, i) { return keep[i]; });
   }
+  /* A weighted moving average along the polyline. Endpoints are pinned so the stroke still starts and
+     stops exactly where the finger did. The 1-2-3-2-1 kernel is wide enough to swallow hand tremor
+     (a few px of high-frequency wobble) while barely touching the low-frequency shape underneath —
+     which is the whole distinction between "shaky" and "curved". */
+  function lowpass(pts, passes) {
+    var out = pts;
+    for (var n = 0; n < passes; n++) {
+      if (out.length < 5) return out;
+      var next = [out[0]];
+      for (var i = 1; i < out.length - 1; i++) {
+        var a = out[Math.max(0, i - 2)], b = out[i - 1], c = out[i],
+            e = out[i + 1], g = out[Math.min(out.length - 1, i + 2)];
+        next.push([(a[0] + 2 * b[0] + 3 * c[0] + 2 * e[0] + g[0]) / 9,
+                   (a[1] + 2 * b[1] + 3 * c[1] + 2 * e[1] + g[1]) / 9]);
+      }
+      next.push(out[out.length - 1]);
+      out = next;
+    }
+    return out;
+  }
+
+  /* Ezra, four times, on the LOOK: "free hand drawing… looks like shit."
+     The previous pass ran RDP alone, and that is the wrong tool used first. RDP is a SIMPLIFIER: it
+     keeps the points that deviate MOST from a chord and throws away the ones that lie close to it.
+     Hand tremor is precisely the deviating points — so RDP was preserving the wobble and discarding
+     the smooth parts, which is why raising its epsilon never helped and just started clipping the
+     corners off deliberate shapes.
+     Filter FIRST, then simplify. Two low-pass passes remove the tremor, RDP then reduces what is
+     left to a manageable number of anchors, and the survivors are marked [u,v,1] so the renderer
+     curves through them instead of joining them with straight segments. */
   function smoothFreehand(src) {
-    // 2.2 project px, tuned by eye against a jittery stroke: 1.1 still left visible angular kinks,
-    // and much past 2.5 starts cutting the corners off deliberate shapes.
-    var pts = rdp(src, 2.2);
+    var filtered = lowpass(src, 2);
+    var pts = rdp(filtered, 1.6);   // lower epsilon is safe now: there is no jitter left to preserve
     if (pts.length < 3) return pts;
     return pts.map(function (p, i) {
       return (i === 0 || i === pts.length - 1) ? [p[0], p[1]] : [p[0], p[1], 1];
     });
   }
 
+  var strokes = [];   // layer ids committed during THIS freehand session, for Undo and for the exit selection
+
+  // Exposed so the suite can measure the smoothing directly. Driving the whole tool just to check
+  // the shape of a curve makes the test about the UI instead of about the maths.
+  FM._smoothFreehand = function (pts) { return smoothFreehand(pts); };
+
   function finish() {
     var t = FM.drawTool;
-    if (t.mode === 'freehand' && t.points.length >= 2) {
-      FM.addPathLayer(smoothFreehand(t.points), { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
-    } else if (t.mode === 'vector' && t.points.length >= 3) {
+    if (t.mode === 'freehand') {
+      commitStroke();                                  // whatever is still under the finger
+      var last = strokes.length ? strokes[strokes.length - 1] : null;
+      stop();
+      if (last && FM.selectLayer) FM.selectLayer(last);   // hand back the drawing, selected
+      return;
+    }
+    if (t.mode === 'vector' && t.points.length >= 3) {
       FM.addPathLayer(t.points, { closed: true, name: 'Drawing', fill: t.color });
     } else if (t.mode === 'vector') {
       if (FM.toast) FM.toast('Tap at least 3 points, then Done');
@@ -210,6 +272,7 @@ window.FM = window.FM || {};
   }
 
   function stop() {
+    strokes = [];
     FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false;
     FM.drawTool.cursor = null; FM.drawTool.snapX = FM.drawTool.snapY = null;
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
@@ -223,14 +286,19 @@ window.FM = window.FM || {};
   function updateBar() {
     if (!bar) return;
     var vec = FM.drawTool.mode === 'vector';
-    ['.db-undo', '.db-done', '.db-pad', '.db-add'].forEach(function (sel) {
+    // Undo and Done belong to BOTH modes. Hiding them for freehand left that mode with no way out
+    // and no way back — the only exit was the pointerup that ended the whole session by accident.
+    ['.db-pad', '.db-add'].forEach(function (sel) {          // pad + add point are vector-only
       var elx = bar.querySelector(sel); if (elx) elx.style.display = vec ? '' : 'none';
+    });
+    ['.db-undo', '.db-done'].forEach(function (sel) {
+      var elx = bar.querySelector(sel); if (elx) elx.style.display = '';
     });
     bar.classList.toggle('db-vector', vec);
     var n = FM.drawTool.points.length;
     var hint = bar.querySelector('.db-hint');
     if (hint) hint.textContent = FM.drawTool.mode === 'freehand'
-      ? 'Draw on the canvas'
+      ? (strokes.length ? ('Draw again, or Done (' + strokes.length + ' stroke' + (strokes.length === 1 ? '' : 's') + ')') : 'Draw on the canvas — keep drawing, then Done')
       : (n < 3 ? 'Tap the canvas or use the pad, then + Add point (' + n + ')' : 'Done / Enter to finish, or land on the first point (' + n + ')');
   }
 
@@ -249,7 +317,22 @@ window.FM = window.FM || {};
     document.body.appendChild(bar);
     bar.querySelector('.db-color input').addEventListener('input', function (e) { FM.drawTool.color = e.target.value; redraw(); });
     bar.querySelector('.db-width input').addEventListener('input', function (e) { FM.drawTool.stroke = +e.target.value; redraw(); });
-    bar.querySelector('.db-undo').addEventListener('click', function () { FM.drawTool.points.pop(); redraw(); updateBar(); });
+    bar.querySelector('.db-undo').addEventListener('click', function () {
+      // In freehand the unit of work is a STROKE, so Undo takes the last one back rather than
+      // nibbling a single sample off a buffer the user cannot see.
+      if (FM.drawTool.mode === 'freehand') {
+        if (FM.drawTool.points.length) { FM.drawTool.points = []; }
+        else if (strokes.length) {
+          var id = strokes.pop();
+          var i = FM.scene.layers.findIndex(function (l) { return l.id === id; });
+          if (i >= 0) { FM.scene.layers.splice(i, 1); FM.refreshAll && FM.refreshAll(); if (FM.history) FM.history.commit(); }
+        }
+        if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
+        redraw(); updateBar(); FM.requestRender && FM.requestRender();
+        return;
+      }
+      FM.drawTool.points.pop(); redraw(); updateBar();
+    });
     bar.querySelector('.db-done').addEventListener('click', finish);
     bar.querySelector('.db-cancel').addEventListener('click', stop);
     bar.querySelector('.db-add').addEventListener('click', function () {
