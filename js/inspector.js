@@ -1152,7 +1152,7 @@ window.FM = window.FM || {};
     const row = el('div', 'quick-row');
     function qbtn(title, icon, opts, fn) {
       opts = opts || {};
-      const b = el('button', 'qr-btn' + (opts.on ? ' on' : '') + (opts.disabled ? ' disabled' : ''));
+      const b = el('button', 'qr-btn' + (opts.on ? ' on' : '') + (opts.disabled ? ' disabled' : '') + (opts.cls ? ' ' + opts.cls : ''));
       b.title = title; b.innerHTML = svgIcon(icon);
       if (opts.disabled) b.disabled = true; else b.addEventListener('click', fn);
       return b;
@@ -1193,7 +1193,7 @@ window.FM = window.FM || {};
       // trim START to playhead (drop everything before the playhead)
       // disabled state is evaluated at BUILD, but the panel doesn't rebuild on scrub — leave the
       // buttons live and guard inside each handler with the CURRENT playhead instead
-      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', {}, () => {
+      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => {
         const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
         layer.start = FM.time; layer.duration -= cut;
         // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
@@ -1202,9 +1202,9 @@ window.FM = window.FM || {};
         after();
       }));
       // split at playhead
-      row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', {}, () => { if (FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4) FM.splitLayer(layer.id); }));
+      row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { cls: 'qr-trim' }, () => { if (FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4) FM.splitLayer(layer.id); }));
       // trim END to playhead (drop everything after the playhead)
-      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', {}, () => {
+      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => {
         const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
         layer.duration = nd; after();
       }));

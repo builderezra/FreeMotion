@@ -8,7 +8,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=270">
+<link rel="stylesheet" href="styles.css?v=271">
 <link rel="stylesheet" href="theme-glass.css?v=14">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -113,7 +113,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.24</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.25</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -272,6 +272,19 @@
            them IS the playhead, and they only exist while a clip is selected and the playhead is off
            it — the same condition that made them appear in the inspector. timeline.js fills the
            icons and the titles, because which way the clip travels depends on which side you are on. -->
+      <!-- Trim / split, straddling the playhead. Complementary to #tl-nudge above: the nudge pair
+           appears when the playhead is OUTSIDE the clip (move it / stretch it to here), this appears
+           when the playhead is INSIDE it, which is the only time trimming or splitting means anything.
+           Ezra put both trims on the left of the line and the split on the right. -->
+      <div id="tl-trim" class="hidden">
+        <div class="tl-trim-side">
+          <button id="tl-trim-l" type="button"></button>
+          <button id="tl-trim-r" type="button"></button>
+        </div>
+        <div class="tl-trim-side">
+          <button id="tl-trim-s" type="button"></button>
+        </div>
+      </div>
       <div id="tl-nudge" class="hidden">
         <button id="tl-nudge-l" type="button"></button>
         <button id="tl-nudge-r" type="button"></button>
@@ -534,9 +547,9 @@
   <script src="js/fx-registry.js?v=62"></script>
   <script src="js/fx-presets.js?v=2"></script>
   <script src="js/fx-thumbs.js?v=14"></script>
-  <script src="js/timeline.js?v=114"></script>
+  <script src="js/timeline.js?v=115"></script>
   <script src="js/addmenu.js?v=23"></script>
-  <script src="js/inspector.js?v=203"></script>
+  <script src="js/inspector.js?v=204"></script>
   <script src="js/fx-browser.js?v=24"></script>
   <script src="js/elements-browser.js?v=1"></script>
   <script src="js/color-wheel.js?v=53"></script>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>shape render</title>
+<style>
+  html, body { margin: 0; background: #101318; }
+  #wrap { display: flex; flex-wrap: wrap; gap: 0; }
+  canvas { display: block; background: #101318; }
+  .lbl { position: fixed; left: 8px; bottom: 6px; color: #7b8798; font: 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<div id="wrap"></div>
+<div class="lbl" id="lbl"></div>
+<iframe id="f" src="../index.html" style="position:fixed;left:-9999px;top:0;width:900px;height:700px;border:0"></iframe>
+<script>
+/* Dev-only. Renders one of FM.SHAPE_POLYS at a large size on a flat background, so a shape can be
+   JUDGED as a picture instead of as a list of coordinates — which is how the car kept shipping wrong.
+     ?s=car            one shape, big
+     ?s=car,heart,star several, side by side
+     ?w=520&fill=%23e0483a&grid=1
+   grid=1 overlays a light rule at the quarter lines, which makes it obvious when something that
+   should be symmetric or level is not. */
+var q = new URLSearchParams(location.search);
+var names = (q.get('s') || 'car').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+var SZ = +(q.get('w') || 520);
+var FILL = q.get('fill') || '#e0483a';
+var GRID = q.get('grid') === '1';
+var f = document.getElementById('f');
+
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+f.addEventListener('load', function () {
+  var W = f.contentWindow;
+  (async function () {
+    for (var i = 0; i < 200 && !(W.FM && W.FM.SHAPE_POLYS && W.FM.makeLayer); i++) await sleep(60);
+    if (!W.FM || !W.FM.SHAPE_POLYS) { document.getElementById('lbl').textContent = 'FM never loaded'; return; }
+    var FM = W.FM;
+    // ?poly=A loads /tests/_car-A.js, which is expected to assign a replacement point list. This is
+    // how a candidate shape gets judged as a PICTURE without anyone editing compositor.js — several
+    // people can work on rival versions at once and none of them can break the app while trying.
+    var cand = q.get('poly');
+    if (cand) {
+      try {
+        var src = await (await fetch('/tests/_car-' + cand + '.js?t=' + Math.random())).text();
+        var fn = new W.Function('FM', src);
+        fn(FM);
+      } catch (e) { document.getElementById('lbl').textContent = 'candidate ' + cand + ' failed: ' + e.message; return; }
+    }
+    var missing = [];
+    names.forEach(function (nm) {
+      var cv = document.createElement('canvas');
+      cv.width = SZ; cv.height = SZ;
+      document.getElementById('wrap').appendChild(cv);
+      var ctx = cv.getContext('2d');
+      ctx.fillStyle = '#101318'; ctx.fillRect(0, 0, SZ, SZ);
+      if (!FM.SHAPE_POLYS[nm]) { missing.push(nm); return; }
+      // Render through the REAL compositor so what is judged is exactly what the app draws —
+      // winding, smooth flags, sub-paths and all.
+      var pad = SZ * 0.08, box = SZ - pad * 2;
+      var layer = FM.makeLayer('shape', { shape: nm, x: SZ / 2, y: SZ / 2, shapeW: box, shapeH: box, fill: FILL });
+      var scene = { project: { width: SZ, height: SZ, fps: 30, duration: 5, background: '#101318' }, layers: [layer], selectedId: null, selectedIds: [] };
+      FM.renderScene(ctx, scene, 0);
+      if (GRID) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1;
+        [0.25, 0.5, 0.75].forEach(function (t) {
+          ctx.beginPath(); ctx.moveTo(SZ * t, 0); ctx.lineTo(SZ * t, SZ); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, SZ * t); ctx.lineTo(SZ, SZ * t); ctx.stroke();
+        });
+        ctx.restore();
+      }
+    });
+    document.getElementById('lbl').textContent = names.join(' · ') + (missing.length ? '   MISSING: ' + missing.join(',') : '');
+  })();
+});
+</script>
+</body>
+</html>

@@ -1784,9 +1784,52 @@ window.FM = window.FM || {};
       L.setAttribute('aria-label', L.title); R.setAttribute('aria-label', R.title);
     },
 
+    // The trim/split trio. Mirrors syncNudge, and is its complement: this shows only while the
+    // playhead sits INSIDE the selected clip (side === 0), which is precisely when trimming or
+    // splitting there is meaningful — and precisely when the nudge pair is hidden, so exactly one of
+    // the two groups is ever on screen.
+    syncTrim() {
+      const box = document.getElementById('tl-trim');
+      if (!box) return;
+      const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      const inside = !!layer && FM.clipPlayheadSide && FM.clipPlayheadSide(layer) === 0;
+      box.classList.toggle('hidden', !inside);
+      if (!inside) return;
+      const L = document.getElementById('tl-trim-l'), R = document.getElementById('tl-trim-r'), S = document.getElementById('tl-trim-s');
+      if (!L || !R || !S || L.innerHTML) return;   // icons are static — build once, not every frame
+      const ico = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+      L.innerHTML = ico('M6 4v16M6 4h4M6 20h4M14 4v16');    // drop everything BEFORE the playhead
+      R.innerHTML = ico('M18 4v16M18 4h-4M18 20h-4M10 4v16'); // drop everything AFTER the playhead
+      S.innerHTML = ico('M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4'); // split at the playhead
+      L.title = 'Trim start to playhead (drop everything before it)';
+      R.title = 'Trim end to playhead (drop everything after it)';
+      S.title = 'Split at playhead';
+      [L, R, S].forEach(b => b.setAttribute('aria-label', b.title));
+      const after = () => { FM.refreshAll(); if (FM.history) FM.history.commit(); };
+      L.addEventListener('click', () => {
+        const l = FM.selectedLayer(FM.scene); if (!l) return;
+        const cut = FM.time - l.start; if (cut <= 0 || cut >= l.duration) return;
+        l.start = FM.time; l.duration -= cut;
+        // Same source-trim rule the inspector used: forward clips advance trimStart by the dropped
+        // wall-time × speed; a reversed clip anchors its trim to the source tail and keeps it.
+        if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+        after();
+      });
+      R.addEventListener('click', () => {
+        const l = FM.selectedLayer(FM.scene); if (!l) return;
+        const nd = FM.time - l.start; if (nd <= 0 || nd >= l.duration) return;
+        l.duration = nd; after();
+      });
+      S.addEventListener('click', () => {
+        const l = FM.selectedLayer(FM.scene); if (!l) return;
+        if (FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4) FM.splitLayer(l.id);
+      });
+    },
+
     updatePlayhead() {
       if (!tracksEl) return;
       FM.timeline.syncNudge();
+      FM.timeline.syncTrim();
       const pps = pxPerSec();
       // UNIVERSAL fixed-centre (phone + desktop): #tl-centerline is a CSS-pinned static line at 50vw
       // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits
