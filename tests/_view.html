@@ -43,6 +43,12 @@ var RECIPES = {
     FM.selectLayer(FM.scene.layers[0].id); await sleep(500);
   },
   async 'add-menu'(W2, d, FM) { await openEditor(d, FM); FM.selectLayer(null); await sleep(600); },
+  // Phone: the add SHEET (a different component from the desktop panel) — opened via the + FAB.
+  async 'add-sheet'(W2, d, FM) {
+    await openEditor(d, FM); FM.selectLayer(null); await sleep(400);
+    const fab = d.getElementById('add-fab'); if (!fab) throw new Error('no #add-fab at this width');
+    fab.click(); await sleep(700);
+  },
   async 'add-menu-shapes'(W2, d, FM) {
     await openEditor(d, FM); FM.selectLayer(null); await sleep(500);
     var t = d.querySelector('.addmenu-tab[data-key="shape"]'); if (t) t.click(); await sleep(400);

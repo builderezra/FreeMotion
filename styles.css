@@ -564,8 +564,7 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .addmenu-body { flex: 1 1 auto; }
 .addmenu-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .addmenu-side { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
-.addmenu-close { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); border-radius: var(--radius-sm); cursor: pointer; padding: 10px 6px; font-size: 13px; }
-.addmenu-close:hover { background: var(--panel-3); color: var(--text); }
+/* .addmenu-close removed in v5.28 — the phone sheet's ✕ is gone (four other ways to close it). */
 
 /* PC inspector column (narrow): stack — quick-add row on top, then tabs, then the chosen section. */
 .addmenu--panel { flex-direction: column; }
@@ -580,7 +579,8 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 /* Mobile bottom-sheet: AM layout — content on the left, quick-add rail on the right. */
 .addmenu-host { padding: 0 12px 6px; }
 .addmenu--sheet { padding-top: 2px; }
-.addmenu--sheet .addmenu-side { flex: 0 0 88px; }
+/* Was `flex: 0 0 88px` to hold the ✕. With the ✕ gone the rail is empty and :empty collapses it,
+   so the tile grid gets that quarter of a 375px screen back. */
 .addmenu--sheet .addmenu-grid { grid-template-columns: repeat(2, 1fr); }
 .cat-back:hover { color: var(--text); }
 .insp-sub-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); font-weight: 700; margin: 14px 0 8px; }

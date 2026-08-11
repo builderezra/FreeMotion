@@ -326,12 +326,13 @@ window.FM = window.FM || {};
        * because the phone sheet hangs its ✕ here; CSS collapses it when it holds nothing, so the panel
        * gets the whole row back instead of an empty strip. */
       var side = document.createElement('div'); side.className = 'addmenu-side';
-      if (variant === 'sheet' && opts.onClose) {
-        var x = document.createElement('button');
-        x.className = 'addmenu-close'; x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.textContent = '✕';
-        x.addEventListener('click', opts.onClose);
-        side.appendChild(x);
-      }
+      /* NO ✕ on the phone sheet (v5.28). Ezra: "get rid of that stupid X button that's there for some
+         reason and takes up heaps of needed space." It was costing the whole 88px rail on a 375px
+         screen — a quarter of the width — to duplicate something you can already do four other ways:
+         tap anywhere outside the sheet (app.js's tap handler, whose own comment says "so you never
+         have to find the ✕"), tap the + again (it toggles), tap the grab handle, or swipe the sheet
+         down. The rail is left in place but empty, and `.addmenu-side:empty { display: none }`
+         collapses it, so the tiles get that width back rather than sitting beside a blank strip. */
 
       root.appendChild(main); root.appendChild(side);
       container.appendChild(root);
