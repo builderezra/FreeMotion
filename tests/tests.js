@@ -2494,6 +2494,35 @@
     }
   });
 
+  test('every full-screen browser panel ID is in the styled selector list', { item: 'browser-root-geometry' }, function () {
+    // Ezra: "when I press the custom elements button literally nothing happens." #el-browser was
+    // missing from the `#fx-browser` selector list in styles.css, so it opened with display:block,
+    // visibility:visible, opacity:1 — and a measured rect of 0x247. position:static, no width, no
+    // z-index: present, working, and completely invisible.
+    //
+    // The geometry has always come from the ID. js/elements-browser.js gives its root the class
+    // `fxb-root` to borrow the effect browser's look, but that class has NO rules anywhere — which is
+    // exactly why this was so easy to miss by reading.
+    //
+    // Tested by inserting a bare probe element per ID rather than by opening the real panels: the
+    // effect browser refuses to open without a selected layer in this harness, so driving it would
+    // measure the harness. A probe measures the STYLESHEET, which is where the bug lived.
+    var ids = ['fx-browser', 'afx-browser', 'el-browser'];
+    ids.forEach(function (id) {
+      if (document.getElementById(id)) return;   // the real one is present; it is already covered
+      var probe = document.createElement('div');
+      probe.id = id;
+      document.body.appendChild(probe);
+      try {
+        var cs = getComputedStyle(probe);
+        if (cs.position !== 'fixed') throw new Error('#' + id + ' computes position:' + cs.position + ' — it is not in the browser-panel selector list, so it will lay out as an inline box behind the app');
+        if (cs.zIndex === 'auto' || +cs.zIndex < 100) throw new Error('#' + id + ' computes z-index:' + cs.zIndex + ' — it would render under the editor chrome');
+      } finally {
+        probe.remove();
+      }
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

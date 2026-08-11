@@ -967,8 +967,15 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fx-stack-tools .fx-act { margin: 0; }
 
 /* ===== Add-Effect browser (full-screen, AM) ===== */
-#fx-browser { position: fixed; inset: 0; z-index: 160; background: var(--panel, #10141d); display: flex; flex-direction: column; }
-#fx-browser.hidden { display: none; }
+/* Every full-screen browser panel, by ID. Ezra: "when I press the custom elements button literally
+ * nothing happens" — #el-browser was missing from this list, so it opened with display:block,
+ * visibility:visible, opacity:1 and a measured rect of 0x247: position:static, no width, no z-index.
+ * It was there and working the whole time, just laid out as an inline box behind everything.
+ * js/elements-browser.js gives its root the class `fxb-root` to borrow the effect browser's look, but
+ * that class has NO rules anywhere — the geometry has always come from the ID. Keep new browsers on
+ * this list rather than adding a fourth private copy of the same four properties. */
+#fx-browser, #el-browser { position: fixed; inset: 0; z-index: 160; background: var(--panel, #10141d); display: flex; flex-direction: column; }
+#fx-browser.hidden, #el-browser.hidden { display: none; }
 .fxb-top { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line-soft); }
 .fxb-close, .fxb-search-btn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; color: var(--text); cursor: pointer; font-size: 15px; flex: none; }
 .fxb-search-btn svg { width: 19px; height: 19px; }
@@ -2116,10 +2123,11 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 }
 /* PC: the browser is a centered modal over a dim scrim, not a full-bleed sheet */
 @media (min-width: 701px) {
-  #fx-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
-  #fx-browser .fxb-top, #fx-browser .fxb-search-input { width: min(680px, 94vw); }
-  #fx-browser .fxb-top { border-bottom: none; }
-  #fx-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
+  #fx-browser, #el-browser { background: rgba(6, 8, 12, .62); align-items: center; justify-content: flex-start; }
+  #fx-browser .fxb-top, #fx-browser .fxb-search-input,
+  #el-browser .fxb-top, #el-browser .fxb-search-input { width: min(680px, 94vw); }
+  #fx-browser .fxb-top, #el-browser .fxb-top { border-bottom: none; }
+  #fx-browser .fxb-scroll, #el-browser .fxb-scroll { width: min(680px, 94vw); background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.55); margin-bottom: 18px; }
   .fxb-catview { position: fixed; inset: 0; background: rgba(6, 8, 12, .72); align-items: center; }
   .fxb-catview-top, .fxb-catview-scroll { width: min(680px, 94vw); }
   .fxb-catview-scroll { background: var(--panel, #10141d); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 18px; flex: 1; }
