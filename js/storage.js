@@ -915,6 +915,9 @@ window.FM = window.FM || {};
       const re = reIdLayers(pack.layers);
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
       re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
+      // An element pack can carry a camera; inserting it twice (or into a scene that already has
+      // one) gave the project multiple cameras, and the composite silently uses the first it finds.
+      if (FM.scene.layers.some(l => l.type === 'camera')) re.layers = re.layers.filter(l => l.type !== 'camera');
       FM.scene.layers = re.layers.concat(FM.scene.layers);
       await hydratePack(re.layers, pack.media, re.map);
       if (FM.refreshAll) FM.refreshAll();

@@ -405,10 +405,20 @@ window.FM = window.FM || {};
     // SINGLE SOURCE OF TRUTH for project length: the timeline is only ever as long as its clips —
     // the furthest clip end, or exactly 0 when there are no clips. No minimum/floor, so a 1s clip
     // makes a 1s timeline and an empty project is a true 0s timeline.
+    // The CAMERA is not content — it is how the content is viewed — so it neither extends the
+    // timeline nor gets measured for it. Counting it did two bad things: a camera could hold the
+    // timeline open past the end of the real footage, and (much worse) its clip length was frozen at
+    // whatever the comp happened to be when it was created, so adding a longer clip afterwards grew
+    // the comp past the camera's end and the framing SNAPPED BACK mid-timeline with no warning —
+    // measured as an 80px jump on a 320px frame plus a 2x size change between two adjacent frames.
     let end = 0;
-    FM.scene.layers.forEach(l => { const e = (l.start || 0) + (l.duration || 0); if (e > end) end = e; });
+    FM.scene.layers.forEach(l => { if (l.type === 'camera') return; const e = (l.start || 0) + (l.duration || 0); if (e > end) end = e; });
     end = Math.max(0, Math.round(end * 1000) / 1000);
     if (FM.scene.project.duration !== end) FM.scene.project.duration = end;
+    // …and the camera SPANS whatever the comp turned out to be. Its clip length was frozen at
+    // creation time, so any clip added afterwards grew the comp past the camera's end and the
+    // framing snapped back to no-camera partway through.
+    FM.scene.layers.forEach(l => { if (l.type === 'camera' && (l.start || 0) === 0 && l.duration !== end) l.duration = end; });
     if (FM.time > end) FM.time = end;   // never leave the playhead past the (possibly shorter) end
     // Clamp/clear a now-stale loop region: a loopIn past the new end made the playback tick wrap to a
     // point beyond the timeline every frame → a frozen infinite-wrap loop (100% CPU, no progress).
@@ -1547,6 +1557,13 @@ window.FM = window.FM || {};
           FM.media.set(copy.id, nrec);
           if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
         }
+      }
+      // Single-camera invariant. FM.duplicateLayer enforces it; paste did not, so Cmd-C then Cmd-V
+      // on the camera made a SECOND one, and the composite takes the first it finds — the view was
+      // then driven by a camera that was not the one being edited.
+      if (copy.type === 'camera' && FM.scene.layers.some(l => l.type === 'camera')) {
+        if (FM.toast) FM.toast('Scene already has a camera');
+        continue;
       }
       FM.scene.layers.splice(insertAt++, 0, copy);
     }

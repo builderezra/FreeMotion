@@ -1157,6 +1157,38 @@
     if (!(dNear < dFar)) throw new Error('near did not move more than far (' + dNear.toFixed(1) + ' vs ' + dFar.toFixed(1) + ')');
   });
 
+  test('the camera spans the comp, and there is only ever one', { item: 'cam-lifecycle' }, function () {
+    // v5.21, from the camera audit. Two separate faults, both measured by driving the app.
+    // 1. The camera clip's length was frozen at creation (duration: P.duration at the time), while
+    //    autoFitDuration keeps growing the comp to the furthest clip. Add a longer clip afterwards
+    //    and the camera simply stops applying partway through: measured as an 80px jump on a 320px
+    //    frame plus a 2x size change between two adjacent frames, with no warning.
+    // 2. The single-camera invariant was enforced in duplicateLayer but nowhere else, so Cmd-C /
+    //    Cmd-V produced a second camera and the composite drives the view from whichever it finds
+    //    first — not necessarily the one being edited.
+    const savedScene = FM.scene;
+    const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    FM.history.commit = function () {}; FM.storage.autosave = function () {};
+    FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const cam = FM.makeLayer('camera', { name: 'Cam', x: 160, y: 120, start: 0, duration: 5 });
+      FM.scene.layers.push(cam);
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: 'Long', x: 160, y: 120, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 20 }));
+      FM.autoFitDuration();
+      if (Math.abs(FM.scene.project.duration - 20) > 0.01) throw new Error('the comp did not grow to the 20s clip (got ' + FM.scene.project.duration + ')');
+      if (Math.abs(cam.duration - 20) > 0.01) throw new Error('the camera still ends at ' + cam.duration + 's on a ' + FM.scene.project.duration + 's comp — the framing would snap back partway through');
+      // …and the camera must not be what holds the timeline open.
+      FM.scene.layers = FM.scene.layers.filter(l => l.type !== 'shape');
+      cam.duration = 30;
+      FM.autoFitDuration();
+      if (FM.scene.project.duration > 0.01) throw new Error('a lone camera held the timeline open at ' + FM.scene.project.duration + 's — it is not content');
+    } finally {
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
