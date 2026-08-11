@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>preset probe 3</title></head>
+<body>
+<pre id="out">booting…</pre>
+<iframe id="f" src="../index.html" style="width:380px;height:700px;border:0"></iframe>
+<script>
+var out = document.getElementById('out'); var L = [];
+function log(){ L.push(Array.prototype.slice.call(arguments).join(' ')); out.textContent = L.join('\n'); }
+function J(v){ try { return JSON.stringify(v); } catch(e){ return '<<'+e.message+'>>'; } }
+
+document.getElementById('f').addEventListener('load', function(){
+  var w = this.contentWindow, d = this.contentDocument, tries = 0;
+  (function wait(){
+    tries++;
+    if (!(w.FM && w.FM.scene && w.FM.fxRegistry && w.FM.effectPresets && w.FM.inspector && w.FM.home)) {
+      if (tries > 200) { log('TIMEOUT'); document.title='DONE'; return; }
+      return setTimeout(wait, 50);
+    }
+    setTimeout(function(){ run(w, d); }, 400);
+  })();
+});
+
+function run(w, d){
+  var FM = w.FM, LS = w.localStorage;
+  try {
+    ['fm.fx.userpresets','fm.fxpresets','fm.layerpresets'].forEach(function(k){ LS.removeItem(k); });
+    FM.home.close();
+    // layers are UNSHIFTED → the new layer is always index 0
+    function newShape(){ FM.addShapeLayer('rect'); return FM.scene.layers[0]; }
+
+    // ===== A. layerPresets target-type gating (shape look → text / video) =====
+    log('=== A. layerPresets.apply() type gating ===');
+    var src = newShape();
+    src.start = 0; src.duration = 5;
+    src.fill = '#ff0000'; src.fillOpacity = 0.5; src.stroke = {enabled:true,width:8,color:'#00ff00'};
+    src.cornerRadius = 24; src.blendMode = 'screen';
+    src.shadow = {enabled:true,blur:12,color:'#000'};
+    src.colorGrade = {exposure:0.3};
+    src.effects = [FM.fxRegistry.makeInstance('glow')];
+    src.transform.scale = { kf:[{t:0,v:1,e:'linear'},{t:1,v:2,e:'linear'}] };
+    FM.layerPresets.save('Shape look', src);
+    var stored = FM.layerPresets.list()[0];
+    log('stored payload keys: ' + Object.keys(stored.data).join(','));
+    log('stored transform keys: ' + Object.keys(stored.data.transform).join(','));
+    log('full stored row:'); log(J(stored));
+
+    FM.addTextLayer();
+    var txt = FM.scene.layers[0];
+    log('\ntext layer BEFORE: type=' + txt.type + ' fill=' + J(txt.fill) + ' cornerRadius=' + J(txt.cornerRadius) + ' stroke=' + J(txt.stroke) + ' blend=' + txt.blendMode + ' fillOpacity=' + J(txt.fillOpacity) + ' shadow=' + J(txt.shadow) + ' colorGrade=' + J(txt.colorGrade) + ' effects=' + txt.effects.length + ' scale=' + J(txt.transform.scale));
+    FM.layerPresets.apply('Shape look', txt);
+    log('text layer AFTER : fill=' + J(txt.fill) + ' cornerRadius=' + J(txt.cornerRadius) + ' stroke=' + J(txt.stroke) + ' blend=' + txt.blendMode + ' fillOpacity=' + J(txt.fillOpacity) + ' shadow=' + J(txt.shadow) + ' colorGrade=' + J(txt.colorGrade) + ' effects=' + txt.effects.length + ' scale=' + J(txt.transform.scale));
+
+    // an ADJUSTMENT layer (no pixels of its own) — what lands?
+    FM.addAdjustmentLayer();
+    var adj = FM.scene.layers[0];
+    var b = {fill:adj.fill, cr:adj.cornerRadius, st:adj.stroke, fx:adj.effects.length};
+    FM.layerPresets.apply('Shape look', adj);
+    log('\nadjustment layer: fill ' + J(b.fill) + '→' + J(adj.fill) + '  cornerRadius ' + J(b.cr) + '→' + J(adj.cornerRadius) + '  stroke ' + J(b.st) + '→' + J(adj.stroke) + '  effects ' + b.fx + '→' + adj.effects.length + '  (glow on an adjustment layer: supportsLayer=' + FM.fxRegistry.supportsLayer('glow', adj) + ')');
+
+    // ===== B. does apply() destroy existing transform animation? =====
+    log('\n=== B. transform overwrite ===');
+    var vic = newShape();
+    vic.start = 0; vic.duration = 5;
+    vic.transform.scale = { kf:[{t:0,v:5,e:'linear'},{t:2,v:9,e:'linear'}] };
+    vic.transform.x = { kf:[{t:0,v:100,e:'linear'},{t:2,v:800,e:'linear'}] };
+    log('victim BEFORE: scale=' + J(vic.transform.scale) + ' x=' + J(vic.transform.x));
+    FM.selectLayer(vic.id); FM.time = 0;
+    FM.layerPresets.apply('Shape look', vic);
+    log('victim AFTER : scale=' + J(vic.transform.scale) + ' x=' + J(vic.transform.x));
+    log('undo available? FM.history exists=' + !!FM.history);
+
+    // ===== C. effect params of type "layer" (source refs) =====
+    log('\n=== C. registry params of type "layer" ===');
+    var withLayerParam = [];
+    FM.fxRegistry.list ? FM.fxRegistry.list().forEach(function(r){ if ((r.params||[]).some(function(p){return p.type==='layer';})) withLayerParam.push(r.type); }) : log('(no fxRegistry.list)');
+    log('effects carrying a layer-ref param: ' + withLayerParam.length + ' → ' + withLayerParam.join(','));
+    if (withLayerParam.length) {
+      var lr = FM.fxRegistry.makeInstance(withLayerParam[0]);
+      lr.params.source = src.id;
+      log('instance with source set: ' + J(lr));
+      log('effectPresets.capture of it → ' + J(FM.effectPresets.capture(lr, 'srcprobe')));
+      log('fxPresets stack clone keeps source? → ' + J(JSON.parse(JSON.stringify([lr], FM.jsonReplacer))));
+    }
+
+    // ===== D. what else lives on a layer that a "preset" might want =====
+    log('\n=== D. full key list of a real layer ===');
+    log('shape layer keys: ' + Object.keys(src).join(','));
+    log('text layer keys : ' + Object.keys(txt).join(','));
+    log('transform keys  : ' + Object.keys(src.transform).join(','));
+
+    // ===== E. precise quota-failure behaviour =====
+    log('\n=== E. quota failure — does each writer tell you? ===');
+    ['fm.fx.userpresets','fm.fxpresets','fm.layerpresets'].forEach(function(k){ LS.removeItem(k); });
+    FM.fxPresets.save('keeper', [{type:'blur',enabled:true,params:{radius:3}}]);
+    FM.effectPresets.save({id:'keeper',fx:'blur',name:'keeper',params:{radius:3}});
+    FM.layerPresets.save('keeper', src);
+    var before = { fx: FM.fxPresets.saved().length, eff: FM.effectPresets.custom().length, lay: FM.layerPresets.list().length };
+    // fill to within a few hundred bytes of the wall
+    var q = 0;
+    function fill(size, tag){ var s = new Array(size+1).join('z'); var i=0; try { for (i=0;i<5000;i++) LS.setItem('__'+tag+i, s); } catch(e){} return i; }
+    fill(200*1024,'a'); fill(16*1024,'b'); fill(1024,'c'); fill(64,'d');
+    var probe = true; try { LS.setItem('__wall','0123456789'); LS.removeItem('__wall'); } catch(e){ probe = false; }
+    log('  storage is now full (a 10-char write ' + (probe ? 'STILL FITS — test invalid' : 'throws') + ')');
+    var toasts = []; var realToast = FM.toast; FM.toast = function(m){ toasts.push(m); };
+    var threw = '';
+    try { FM.fxPresets.save('after-full', [{type:'blur',enabled:true,params:{radius:1}}]); } catch(e){ threw = e.name; }
+    log('  fxPresets.save     → threw:' + (threw||'no') + '  toasts:' + J(toasts) + '  rows before=' + before.fx + ' after=' + FM.fxPresets.saved().length + '  (returns undefined either way)');
+    toasts.length = 0; threw = '';
+    var r2;
+    try { r2 = FM.effectPresets.save({id:'af',fx:'blur',name:'af',params:{radius:1}}); } catch(e){ threw = e.name; }
+    log('  effectPresets.save → threw:' + (threw||'no') + '  returned:' + J(r2) + '  toasts:' + J(toasts) + '  rows before=' + before.eff + ' after=' + FM.effectPresets.custom().length);
+    toasts.length = 0; threw = '';
+    try { FM.layerPresets.save('after-full', src); } catch(e){ threw = e.name; }
+    log('  layerPresets.save  → threw:' + (threw||'no') + '  toasts:' + J(toasts) + '  rows before=' + before.lay + ' after=' + FM.layerPresets.list().length);
+    FM.toast = realToast;
+    // clean up
+    for (var t2 of ['a','b','c','d']) for (var i2=0;i2<5000;i2++) LS.removeItem('__'+t2+i2);
+  } catch (e) { log('!! THREW: ' + e.message + '\n' + e.stack); }
+  document.title = 'DONE';
+}
+</script>
+</body>
+</html>

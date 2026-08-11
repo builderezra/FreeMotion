@@ -104,6 +104,37 @@ proportions that read well but not the exact contour. Everything else in the sha
 original geometry and is fine. The tracing pipeline itself is in the v3.96 commit message if it's
 useful again on assets we own.
 
+## 9. Launch readiness — not about identity, still a blocker
+
+Everything above is "don't look like theirs". This section is "don't lose the people who show up".
+
+### In-app onboarding: an interactive first-project walkthrough
+
+Ezra, from research into where Alight Motion falls short: *"In-app onboarding. An interactive first-
+project walkthrough. Their reviews are full of people who wanted to learn and gave up."*
+
+That is the strongest launch argument in this file, because it is a gap in the leader rather than a
+box to tick. A motion editor is dense by nature — layers, keyframes, easing, effect stacks, masks —
+and the people who churn are not the ones who disliked it, they are the ones who never got a first
+result. Someone who finishes one animation they are proud of in the first five minutes is a user.
+
+**What "done" looks like** — an *interactive* walkthrough, not a video and not a tour of tooltips:
+the user builds one real, small project by doing it, with the app leading. It should end with
+something they can actually export and show someone. Passive tours are the thing people skip.
+
+**Do not confuse this with the Tutorials tab.** The empty Tutorials tab shipped in v5.50 (Ezra:
+"don't make any tutorials yet, but add a tab") is a *library* for later reference material. Onboarding
+is the first-run experience and is a different job — though the walkthrough is a strong candidate for
+the first entry in that tab so it can be replayed.
+
+**Worth designing against the real complaints** rather than guessing: read the actual reviews for what
+specifically defeated people, and make the walkthrough teach those things. Keyframing is the usual
+answer in this category, but check rather than assume.
+
+**Sequencing note:** build this near the end. Onboarding teaches a specific UI, so every screen it
+walks through freezes that screen's design — doing it before the visual-identity work above means
+building it twice.
+
 ## Do this before
 
 - Any public link Ezra promotes, any store listing, any tutorial or demo video.

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>preset migration + ceiling probe</title></head>
+<body>
+<pre id="out">booting…</pre>
+<iframe id="f" src="../index.html" style="width:380px;height:700px;border:0"></iframe>
+<script>
+var out = document.getElementById('out'); var L = [];
+function log(){ L.push(Array.prototype.slice.call(arguments).join(' ')); out.textContent = L.join('\n'); }
+function J(v){ try { return JSON.stringify(v); } catch(e){ return '<<'+e.message+'>>'; } }
+function T(label, fn){ try { var r = fn(); log(label + ' → OK: ' + J(r)); } catch(e){ log(label + ' → THREW ' + e.name + ': ' + e.message); } }
+
+document.getElementById('f').addEventListener('load', function(){
+  var w = this.contentWindow, d = this.contentDocument, tries = 0;
+  (function wait(){
+    tries++;
+    if (!(w.FM && w.FM.scene && w.FM.fxRegistry && w.FM.effectPresets && w.FM.inspector && w.FM.home)) {
+      if (tries > 200) { log('TIMEOUT'); document.title='DONE'; return; }
+      return setTimeout(wait, 50);
+    }
+    setTimeout(function(){ run(w, d); }, 400);
+  })();
+});
+
+function run(w, d){
+  var FM = w.FM, LS = w.localStorage;
+  try {
+    ['fm.fx.userpresets','fm.fxpresets','fm.layerpresets'].forEach(function(k){ LS.removeItem(k); });
+    FM.home.close();
+
+    // ===== 1. CROSS-READ: give each store the OTHER shapes and see what happens =====
+    var effShape   = {id:'u1',fx:'shake',name:'Eff',desc:'d',dur:0.45,params:{amount:{kf:[{t:0,v:700,e:'easeOut'},{t:0.45,v:0,e:'linear'}]}}};
+    var stackShape = {name:'Stack',effects:[{type:'shake',enabled:true,params:{amount:{kf:[{t:8.2,v:700,e:'easeOut'}]}}},{type:'blur',enabled:true,params:{radius:6}}]};
+    var layerShape = {name:'LayerP',data:{effects:[{type:'blur',enabled:true,params:{radius:6}}],blendMode:'screen',transform:{rotation:{kf:[{t:0,v:0,e:'linear'}]},scale:1,opacity:1,xDelta:null,yDelta:null}}};
+
+    log('=== 1. CROSS-READ (no migration) ===');
+    LS.setItem('fm.fx.userpresets', JSON.stringify([stackShape, layerShape, effShape]));
+    var got = FM.effectPresets.custom();
+    log('effectPresets.custom() fed [stack, layerP, eff] → survivors=' + got.length + ' names=' + got.map(function(p){return p.name;}).join('|'));
+    log('  (silent? no throw, no toast — the two foreign rows just vanish)');
+
+    LS.setItem('fm.fxpresets', JSON.stringify([effShape, layerShape, stackShape]));
+    var lst = FM.fxPresets.list();
+    log('fxPresets.list() fed [eff, layerP, stack] → rows=' + lst.length);
+    lst.forEach(function(p){ log('   row name=' + p.name + '  effects=' + (Array.isArray(p.effects) ? p.effects.length : 'MISSING(renders as 0 effects)')); });
+
+    LS.setItem('fm.layerpresets', JSON.stringify([effShape, stackShape, layerShape]));
+    log('layerPresets.list() fed [eff, stack, layerP] → rows=' + FM.layerPresets.list().length + ' (no validation at all)');
+
+    // ===== 2. what APPLYING a foreign row does =====
+    log('\n=== 2. APPLYING a foreign row ===');
+    FM.addShapeLayer('rect');
+    var layer = FM.scene.layers[FM.scene.layers.length - 1];
+    FM.selectLayer(layer.id);
+    layer.start = 0; layer.duration = 5;
+    layer.effects = [FM.fxRegistry.makeInstance('glow')];
+    log('layer starts with effects: ' + J(layer.effects.map(function(e){return e.type;})));
+    // fxPresets card click handler, verbatim: layer.effects = fx.map(clone) where fx = p.effects||[]
+    var foreign = FM.fxPresets.list().find(function(p){ return p.name === 'Eff'; });
+    var fxArr = Array.isArray(foreign.effects) ? foreign.effects : [];
+    layer.effects = fxArr.map(function(e){ return JSON.parse(JSON.stringify(e)); });
+    log('after clicking the "Eff" chip in the Presets card → layer.effects = ' + J(layer.effects) + '  <-- STACK WIPED');
+
+    T('layerPresets.apply("Stack", layer)  [fxPresets row in the layerPresets store]', function(){ FM.layerPresets.apply('Stack', layer); return 'applied'; });
+    T('layerPresets.apply("Eff", layer)    [effectPresets row in the layerPresets store]', function(){ FM.layerPresets.apply('Eff', layer); return 'applied'; });
+
+    // ===== 3. TIME-BASE: does an effect-STACK preset survive being applied to a clip elsewhere? =====
+    log('\n=== 3. TIME BASE ===');
+    ['fm.fx.userpresets','fm.fxpresets','fm.layerpresets'].forEach(function(k){ LS.removeItem(k); });
+    FM.addShapeLayer('rect');
+    var src = FM.scene.layers[FM.scene.layers.length - 1];
+    src.start = 8; src.duration = 4;
+    var sh = FM.fxRegistry.makeInstance('shake');
+    sh.params.amount = { kf: [{t:8.2,v:700,e:'easeOut'},{t:8.65,v:0,e:'linear'}] };
+    src.effects = [sh];
+    FM.fxPresets.save('Slam stack', src.effects);
+    FM.layerPresets.save('Slam layer', src);
+    var eff = FM.effectPresets.capture(sh, 'Slam eff'); FM.effectPresets.save(eff);
+
+    FM.addShapeLayer('rect');
+    var dst = FM.scene.layers[FM.scene.layers.length - 1];
+    dst.start = 0; dst.duration = 4;
+    FM.selectLayer(dst.id); FM.time = 0.5;
+
+    var stackRow = FM.fxPresets.get('Slam stack');
+    dst.effects = stackRow.effects.map(function(e){ return JSON.parse(JSON.stringify(e)); });
+    log('fxPresets applied to clip at start=0 → kf times ' + J(dst.effects[0].params.amount.kf.map(function(k){return k.t;})) + '   clip spans 0..4  → OFF-CLIP');
+
+    dst.effects = [];
+    FM.layerPresets.apply('Slam layer', dst);
+    log('layerPresets applied to clip at start=0 → effect kf times ' + J(dst.effects[0].params.amount.kf.map(function(k){return k.t;})) + '   (transform kf ARE rebased, effects are NOT)');
+
+    var instAt = FM.effectPresets.makeInstance(FM.effectPresets.custom()[0], 0.5);
+    log('effectPresets.makeInstance(at playhead 0.5) → kf times ' + J(instAt.params.amount.kf.map(function(k){return k.t;})) + '   → LANDS ON THE PLAYHEAD');
+
+    // ===== 4. what layerPresets DROPS by target layer type =====
+    log('\n=== 4. layerPresets.apply target-type gating ===');
+    var shapeSrc = FM.scene.layers[FM.scene.layers.length - 1];
+    shapeSrc.fill = '#ff0000'; shapeSrc.stroke = {enabled:true,width:8,color:'#fff'}; shapeSrc.cornerRadius = 24; shapeSrc.blendMode = 'screen';
+    FM.layerPresets.save('Shape look', shapeSrc);
+    FM.addTextLayer();
+    var txt = FM.scene.layers[FM.scene.layers.length - 1];
+    FM.selectLayer(txt.id);
+    var beforeFill = txt.fill, beforeCR = txt.cornerRadius;
+    FM.layerPresets.apply('Shape look', txt);
+    log('shape look → TEXT layer: fill ' + J(beforeFill) + '→' + J(txt.fill) + '   cornerRadius ' + J(beforeCR) + '→' + J(txt.cornerRadius) + '   blendMode=' + txt.blendMode + '   stroke=' + J(txt.stroke));
+    log('saved layer-preset payload keys: ' + Object.keys(FM.layerPresets.list().find(function(p){return p.name==='Shape look';}).data).join(','));
+
+    // ===== 5. CEILINGS =====
+    log('\n=== 5. CEILINGS ===');
+    log('MAX_KF: a 241-kf param → ' + (FM.effectPresets.save({id:'kfx',fx:'shake',name:'kf',params:{amount:{kf:mkkf(241)}}}) ? 'SAVED' : 'REJECTED (whole preset)'));
+    log('       a 240-kf param → ' + (FM.effectPresets.save({id:'kfy',fx:'shake',name:'kf2',params:{amount:{kf:mkkf(240)}}}) ? 'SAVED' : 'REJECTED'));
+    function mkkf(n){ var a=[]; for(var i=0;i<n;i++) a.push({t:i*0.01,v:i,e:'linear'}); return a; }
+    // MAX_PRESETS
+    LS.setItem('fm.fx.userpresets','[]');
+    for (var i=0;i<130;i++) FM.effectPresets.save({id:'p'+i,fx:'blur',name:'P'+i,params:{radius:i}});
+    log('after 130 saves, effectPresets.custom().length = ' + FM.effectPresets.custom().length + '  (MAX_PRESETS)');
+    log('  bytes for those 120: ' + LS.getItem('fm.fx.userpresets').length);
+    log('  clamp checks: t>600 → ' + J(FM.effectPresets.save({id:'clamp',fx:'blur',name:'x',params:{radius:{kf:[{t:9999,v:1,e:'linear'}]}}}) && FM.effectPresets.custom()[0].params.radius.kf[0].t));
+    log('  dur clamp: ' + (function(){ FM.effectPresets.save({id:'dur',fx:'blur',name:'y',dur:999,params:{radius:3}}); return FM.effectPresets.custom()[0].dur; })());
+    log('  name clamp (60 chars in): ' + FM.effectPresets.custom.call && (function(){ FM.effectPresets.save({id:'nm',fx:'blur',name:new Array(61).join('x'),params:{radius:3}}); return FM.effectPresets.custom()[0].name.length; })());
+    log('fxPresets / layerPresets caps: none in code — verify by counting');
+    LS.setItem('fm.fxpresets','[]');
+    for (var j=0;j<300;j++) FM.fxPresets.save('S'+j, [{type:'blur',enabled:true,params:{radius:j}}]);
+    log('  fxPresets after 300 saves = ' + FM.fxPresets.saved().length + ' rows, ' + LS.getItem('fm.fxpresets').length + ' bytes');
+
+    // realistic single-row sizes
+    log('\n  one realistic row, bytes:');
+    log('   effectPreset (Beat Slam, shipped): ' + JSON.stringify(FM.EFFECT_PRESETS[0]).length);
+    log('   layerPreset  (Shape look):        ' + JSON.stringify(FM.layerPresets.list().find(function(p){return p.name==='Shape look';})).length);
+
+    // ===== 6. quota =====
+    log('\n=== 6. localStorage quota (this profile) ===');
+    var used = 0; for (var k2 in LS) { if (Object.prototype.hasOwnProperty.call(LS,k2)) used += k2.length + (LS.getItem(k2)||'').length; }
+    log('  currently used by all fm.* keys etc: ' + used + ' chars');
+    var chunk = new Array(64*1024+1).join('x'), n = 0;
+    try { for (n=0;n<400;n++) LS.setItem('__fill'+n, chunk); } catch(e){ log('  quota threw ' + e.name + ' after ' + n + ' × 64KB chunks ≈ ' + (n*64) + ' KB more'); }
+    for (var m=0;m<=n;m++) LS.removeItem('__fill'+m);
+    // silent-failure check: does each writer TELL you?
+    log('\n=== 7. quota failure behaviour ===');
+    var toasts = []; var realToast = FM.toast; FM.toast = function(m){ toasts.push(m); };
+    var chunk2 = new Array(200*1024+1).join('y'); var q=0;
+    try { for (q=0;q<200;q++) LS.setItem('__f2'+q, chunk2); } catch(e){}
+    toasts.length = 0;
+    try { FM.fxPresets.save('after-full', [{type:'blur',enabled:true,params:{radius:1}}]); } catch(e){ log('  fxPresets.save threw ' + e.name); }
+    log('  fxPresets.save when full → toasts: ' + J(toasts) + '  stored rows now: ' + FM.fxPresets.saved().length);
+    toasts.length = 0;
+    try { FM.effectPresets.save({id:'af',fx:'blur',name:'af',params:{radius:1}}); } catch(e){ log('  effectPresets.save threw ' + e.name); }
+    log('  effectPresets.save when full → toasts: ' + J(toasts));
+    toasts.length = 0;
+    try { FM.layerPresets.save('after-full', FM.scene.layers[0]); } catch(e){ log('  layerPresets.save threw ' + e.name); }
+    log('  layerPresets.save when full → toasts: ' + J(toasts));
+    FM.toast = realToast;
+    for (var z=0;z<=q;z++) LS.removeItem('__f2'+z);
+  } catch (e) {
+    log('!! THREW: ' + e.message + '\n' + e.stack);
+  }
+  document.title = 'DONE';
+}
+</script>
+</body>
+</html>

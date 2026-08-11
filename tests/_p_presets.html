@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>preset model probe</title></head>
+<body>
+<pre id="out">booting…</pre>
+<iframe id="f" src="../index.html" style="width:380px;height:700px;border:0"></iframe>
+<script>
+var out = document.getElementById('out');
+var L = [];
+function log(){ L.push(Array.prototype.slice.call(arguments).join(' ')); out.textContent = L.join('\n'); }
+function J(v){ try { return JSON.stringify(v); } catch(e){ return '<<unstringifiable: '+e.message+'>>'; } }
+
+document.getElementById('f').addEventListener('load', function(){
+  var w = this.contentWindow, d = this.contentDocument;
+  var tries = 0;
+  (function wait(){
+    tries++;
+    if (!(w.FM && w.FM.scene && w.FM.fxRegistry && w.FM.effectPresets && w.FM.inspector && w.FM.home)) {
+      if (tries > 200) { log('TIMEOUT waiting for FM'); return; }
+      return setTimeout(wait, 50);
+    }
+    setTimeout(function(){ run(w, d); }, 400);
+  })();
+});
+
+function run(w, d){
+  var FM = w.FM;
+  try {
+    // ---- clean slate for the three preset stores (fresh chrome profile, but be explicit)
+    ['fm.fx.userpresets','fm.fxpresets','fm.layerpresets'].forEach(function(k){ w.localStorage.removeItem(k); });
+
+    FM.home.close();
+    log('=== A. editor entered. scene layers:', FM.scene.layers.length);
+
+    // ---- build a layer with a keyframed effect at ABSOLUTE project times
+    FM.addShapeLayer('rect');
+    var layer = FM.scene.layers[FM.scene.layers.length - 1];
+    FM.selectLayer(layer.id);
+    layer.start = 2.0; layer.duration = 6.0;
+    log('layer type=' + layer.type + ' id=' + layer.id + ' start=' + layer.start);
+
+    // effect 1: shake, keyframed amount at t=8.2..8.65 (absolute)
+    var shake = FM.fxRegistry.makeInstance('shake');
+    shake.params.amount = { kf: [ {t:8.2, v:700, e:'easeOut'}, {t:8.65, v:0, e:'linear'} ] };
+    shake.params.speed = 16;
+    // effect 2: plain blur, static
+    var blur = FM.fxRegistry.makeInstance('blur');
+    layer.effects = [shake, blur];
+    log('fresh registry instance shape (blur):', J(blur));
+    log('fx-registry makeInstance keys:', Object.keys(blur).join(','));
+
+    // ---- 1. per-EFFECT preset (fx-presets.js) ----
+    var cap = FM.effectPresets.capture(shake, 'Probe Slam');
+    log('\n=== B. effectPresets.capture() returned:');
+    log(J(cap));
+    log('saved ok:', FM.effectPresets.save(cap));
+    log('localStorage[fm.fx.userpresets] RAW:');
+    log(w.localStorage.getItem('fm.fx.userpresets'));
+    var pools = FM.effectPresets.for('shake');
+    log('pools.for("shake") mine=' + pools.mine.length + ' shipped=' + pools.shipped.length);
+    var inst = FM.effectPresets.makeInstance(cap, 3.5);
+    log('makeInstance(cap, 3.5) →', J(inst));
+
+    // ---- 2. effect-STACK preset (FM.fxPresets) ----
+    FM.fxPresets.save('Probe Stack', layer.effects);
+    log('\n=== C. localStorage[fm.fxpresets] RAW:');
+    log(w.localStorage.getItem('fm.fxpresets'));
+    log('fxPresets.list() length=' + FM.fxPresets.list().length + ' builtins=' + FM.fxPresets.builtins.length);
+
+    // ---- 3. LAYER preset (FM.layerPresets) ----
+    // give the layer some transform animation first, at absolute times
+    layer.transform.x = { kf: [ {t:2.0, v:100, e:'linear'}, {t:5.0, v:600, e:'linear'} ] };
+    layer.transform.rotation = { kf: [ {t:2.0, v:0, e:'linear'}, {t:4.0, v:90, e:'linear'} ] };
+    layer.transform.opacity = { kf: [ {t:2.0, v:0, e:'linear'}, {t:2.5, v:1, e:'linear'} ] };
+    layer.blendMode = 'screen';
+    FM.layerPresets.save('Probe Layer', layer);
+    log('\n=== D. localStorage[fm.layerpresets] RAW:');
+    log(w.localStorage.getItem('fm.layerpresets'));
+    log('layerPresets.list() length=' + FM.layerPresets.list().length);
+
+    // ---- 4. what the Presets CARD renders ----
+    FM.inspector.openCategory('presets');
+    var root = d.getElementById('inspector');
+    log('\n=== E. Presets card rendered DOM:');
+    log(root ? root.innerHTML.replace(/></g,'>\n<') : '(no #inspector)');
+  } catch (e) {
+    log('!! THREW: ' + e.message + '\n' + e.stack);
+  }
+  document.title = 'DONE';
+}
+</script>
+</body>
+</html>
