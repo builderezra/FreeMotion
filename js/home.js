@@ -463,6 +463,24 @@ window.FM = window.FM || {};
     if (tab === 'elements') return { noun: 'element', store: FM.elements, canDuplicate: false };
     return { noun: 'project', store: FM.projects, canDuplicate: true };
   }
+  /* One empty state for all three tabs (v5.30). It used to be a single line of 13px italic
+     --text-faint pinned to the TOP of the tab body: measured at 380x820 that was a 26px paragraph
+     followed by 517px of dead background, and at 1440x900 a single 11px line above a 611px void —
+     99.1% of the body empty. It read as a broken page rather than an empty one, and it is the first
+     thing a new user sees on two of the three tabs.
+     A mark, a bold title and one short line, centred by the CSS below. The Elements copy was five
+     lines of explainer; centring five lines of small italic would not have helped, so it is trimmed
+     to the sentence that actually says what an element IS. */
+  function emptyState(mark, title, line) {
+    const box = el('div', 'hm-empty');
+    box.appendChild(el('div', 'hm-empty-mark', mark));
+    box.appendChild(el('div', 'hm-empty-title', title));
+    const p = document.createElement('p');
+    p.textContent = line;
+    box.appendChild(p);
+    return box;
+  }
+
   function renderSelBar() {
     let bar = document.getElementById('hm-selbar');
     if (!selectMode) { if (bar) bar.remove(); return; }
@@ -698,7 +716,7 @@ window.FM = window.FM || {};
         ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
         : (a, b) => (b.modified || 0) - (a.modified || 0));
       if (query) {
-        if (!list.length) { grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.')); renderSelBar(); return; }
+        if (!list.length) { grid.appendChild(emptyState('▶', 'No projects yet', 'Tap + to start one.')); renderSelBar(); return; }
         const range = parseDateQuery(query);
         const scored = list.map(p => { const r = scoreProject(p, query, range); return { p: p, score: r.score, exact: r.exact, why: r.why }; })
           .sort((a, b) => (b.score - a.score) || ((b.p.modified || 0) - (a.p.modified || 0)));
@@ -712,7 +730,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No projects yet — tap + to create one.'));
+      if (!list.length) grid.appendChild(emptyState('▶', 'No projects yet', 'Tap + to start one.'));
       // gentle housekeeping nudge on a big library (thumbs are out of the hot path now, so this is
       // informational — never a "you must delete to fix lag" like some other editors)
       const h = FM.projects.health && FM.projects.health();
@@ -736,7 +754,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No templates yet. Tap + to save a project as one, or use a project card’s ⋯ → “Save as template…”.'));
+      if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to save a project as one, or use a project’s ⋯ menu.'));
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
     } else {
       // ELEMENTS — same shape as the templates branch, including the forgiving name search.
@@ -750,7 +768,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(el('div', 'hm-empty', 'No elements yet. An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit. Tap + to save a whole project as one, or inside a project select the layers and use ⋯ → “Save selection as element…”.'));
+      if (!list.length) grid.appendChild(emptyState('◇', 'No elements yet', 'An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit.'));
       list.forEach(e => { shownIds.push(e.id); grid.appendChild(elementCard(e)); });
     }
     renderSelBar();
