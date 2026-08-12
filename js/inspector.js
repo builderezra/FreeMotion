@@ -798,8 +798,11 @@ window.FM = window.FM || {};
     const reg = FM.fxRegistry.get(fx.type) || { label: fx.type, params: [] };
     const expanded = !!fx._expanded, off = fx.enabled === false;
     const row = el('div', 'fx-row' + (off ? ' fx-off' : '') + (expanded ? ' fx-open' : ''));
+    fxTapHint();
     const head = el('div', 'fx-head');
-    const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
+    const disc = el('button', 'fx-disc'); disc.innerHTML = FX_CHEVRON;
+    disc.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    disc.title = expanded ? 'Close this effect' : 'Open this effect\u2019s controls';
     const name = el('span', 'fx-name', reg.label);
     // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it.
     // ACCORDION (like Blending & Opacity): opening one effect closes every other, so exactly one
@@ -971,8 +974,11 @@ window.FM = window.FM || {};
     const reg = FM.audioFxRegistry.get(fx.type) || { label: fx.type, params: [] };
     const expanded = !!fx._expanded, off = fx.enabled === false;
     const row = el('div', 'fx-row' + (off ? ' fx-off' : '') + (expanded ? ' fx-open' : ''));
+    fxTapHint();
     const head = el('div', 'fx-head');
-    const disc = el('button', 'fx-disc', expanded ? '▾' : '▸');
+    const disc = el('button', 'fx-disc'); disc.innerHTML = FX_CHEVRON;
+    disc.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    disc.title = expanded ? 'Close this effect' : 'Open this effect\u2019s controls';
     const name = el('span', 'fx-name', reg.label);
     const toggle = () => {
       if (_justReordered()) return;                       // a drag just dropped here — not a tap
@@ -1074,6 +1080,21 @@ window.FM = window.FM || {};
   }
 
   const FONTS = ['Inter, sans-serif', 'Helvetica, Arial, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Verdana, sans-serif', 'Trebuchet MS, sans-serif', 'Palatino, serif', 'Comic Sans MS, cursive'];
+
+  /* The open/close affordance on an effect row. It used to be an 11px '\u25b8' text triangle in a
+     20px box — Ezra: "the arrow to show an effect is open or closed is way too small, and it's kinda
+     hard to someone who doesn't know what to do to figure out that ur supposed to tap on the effect
+     to open and close." So: a real stroked chevron at a legible size that ROTATES between states
+     (motion reads as state far better than swapping one glyph for another), the head styled as
+     something you can press, and a one-time line of text for the person who has never seen it. */
+  const FX_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  function fxTapHint() {
+    try {
+      if (localStorage.getItem('fm.fx.tapHint')) return;
+      localStorage.setItem('fm.fx.tapHint', '1');
+    } catch (e) { return; }
+    if (FM.toast) FM.toast('Tap an effect to open its controls', 2600);
+  }
 
   function svgIcon(path) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>';

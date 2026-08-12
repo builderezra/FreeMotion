@@ -985,7 +985,23 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fx-row.fx-swipe-armed .fx-del-ico { transform: scale(1.3); }
 .fx-swipe-wrap { position: relative; z-index: 1; background: var(--panel-2); will-change: transform; }
 .fx-row.fx-off .fx-swipe-wrap { background: var(--panel-2); }
-.fx-disc { background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer; width: 20px; padding: 0; }
+/* The open/close chevron. Was an 11px text triangle in a 20px box, which is neither big enough to
+   see nor obviously a control. Now a stroked chevron in a 30px target that ROTATES 90deg when the
+   row opens — the movement is what makes the state legible, and it points DOWN into the controls it
+   just revealed. Full --text contrast, not --text-dim: this is the thing you are meant to notice. */
+.fx-disc {
+  background: none; border: none; color: var(--text); cursor: pointer;
+  width: 30px; height: 30px; margin-left: -4px; padding: 0; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .18s cubic-bezier(.3, .8, .3, 1), color .15s ease;
+}
+.fx-disc svg { width: 17px; height: 17px; display: block; }
+.fx-row.fx-open .fx-disc { transform: rotate(90deg); }
+/* …and the head has to LOOK pressable, because tapping it is the interaction. */
+.fx-head { cursor: pointer; border-radius: 8px; transition: background .14s ease; }
+.fx-head:hover { background: rgba(255, 255, 255, .05); }
+.fx-head:hover .fx-disc { color: var(--accent); }
+.fx-head:active { background: rgba(255, 255, 255, .09); }
 .fx-row .fx-name { font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; }
 .fx-spacer { flex: 1; }
 .fx-icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-dim); cursor: pointer; border-radius: 8px; font-size: 16px; padding: 0; flex: none; }
