@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tiles scratch-clobber probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — TILES SCRATCH-CLOBBER probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * BUG-HUNT, high: drawCanvasEffect uses the module singletons _cfA/_cfB rather than a depth-indexed
+ * pool. The comment at the call site argues that is safe because a nested canvas effect always
+ * finishes before _cfB is used — true for the plain drawLayer, but NOT for the `expand` callback.
+ * expand() runs renderExpandedPlate, whose own drawLayer re-enters drawCanvasEffect for the layer's
+ * OTHER canvas effect, and that nested call clears and rewrites both _cfA (the outer call's finished
+ * source plate) and _cfB (its already-cleared destination) while the outer tiles() still holds them.
+ *
+ * WHAT IT MEASURES, and why this rectangle
+ *   Drift moves the clip left by 200px/s, so at t=1 the layer is nowhere near where it started. The
+ *   probe counts fully-opaque pixels in the rectangle where the layer would sit if the Drift had
+ *   NOT been applied. Content there is proof of the clobber and nothing else: a correct render moved
+ *   that content away, so a copy of the clip that never saw the Drift can only have come from the
+ *   nested render overwriting the outer call's plate.
+ *
+ * THE CONTROL IS THE OTHER REPEAT MODE. "On screen" never calls expand(), so it walks the same code
+ * with the same two effects and cannot trip the bug. If both modes report the same number the probe
+ * is measuring something else — the drift, the tiling, the shape — and not the clobber.
+ * ============================================================================================ */
+(function () {
+  var W = 400, H = 400;
+  var RX0 = 361, RX1 = 399, RY0 = 181, RY1 = 219;      // where the layer sits with the Drift NOT applied
+
+  function fx(type, params) {
+    var e = FM.fxRegistry.makeInstance(type);
+    if (!e) throw new Error('no registry entry for ' + type);
+    Object.keys(params || {}).forEach(function (k) { e.params[k] = params[k]; });
+    return e;
+  }
+  function run(source, withDrift) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: 380, y: 200,
+                                    shapeW: 40, shapeH: 40, fill: '#ffffff' });
+    L.start = 0; L.duration = 5;
+    L.effects = (withDrift ? [fx('drift', { x: -200, y: 0 })] : [])
+      .concat([fx('tiles', { gap: 40, source: source })]);
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null },
+                        layers: [L] }, 1);
+    var d = g.getImageData(0, 0, W, H).data;
+    var solid = 0, total = 0, frame = 0;
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var a = d[(y * W + x) * 4 + 3];
+      if (a > 8) frame++;
+      if (x >= RX0 && x <= RX1 && y >= RY0 && y <= RY1) { total++; if (a === 255) solid++; }
+    }
+    return { solid: solid, total: total, frame: frame };
+  }
+
+  var lines = ['400x400 comp, 40x40 square at x=380, Drift -200px/s + Tiles(gap 40).',
+               'Counting FULLY OPAQUE px in ' + RX0 + '-' + RX1 + ' x ' + RY0 + '-' + RY1 +
+               ' — where the square would be with NO Drift.', ''];
+  lines.push('Tiles Repeat mode                    solid px   of      lit in frame   verdict');
+
+  var whole = run(1, true);           // 1 = Whole clip — the mode that calls expand()
+  var onscr = run(0, true);           // 0 = On screen  — never calls expand(): the control
+  lines.push('Whole clip (calls expand())'.padEnd(36) +
+    String(whole.solid).padStart(8) + '   ' + String(whole.total).padStart(4) + '   ' +
+    String(whole.frame).padStart(10) + '   ' +
+    (whole.solid >= whole.total ? 'CLOBBERED — a full un-drifted copy is stamped here'
+                                : (whole.solid > onscr.solid + 100 ? 'partly clobbered' : 'clean')));
+  lines.push('On screen (control, no expand())'.padEnd(36) +
+    String(onscr.solid).padStart(8) + '   ' + String(onscr.total).padStart(4) + '   ' +
+    String(onscr.frame).padStart(10) + '   ' + 'baseline');
+
+  /* Second control: the same scene with the Drift REMOVED. If Whole-clip-with-Drift matches this,
+     that is the clearest possible statement of the bug — the frame looks as though the Drift is not
+     there at all, because the plate that had it was overwritten by one that did not. */
+  var nodrift = run(1, false);
+  lines.push('Whole clip, Drift removed entirely'.padEnd(36) +
+    String(nodrift.solid).padStart(8) + '   ' + String(nodrift.total).padStart(4) + '   ' +
+    String(nodrift.frame).padStart(10) + '   ' + 'what "the Drift did nothing" looks like');
+
+  /* --- the OTHER half of this change: the clearRect guard that was removed ------------------
+     The pooled version deletes `if (ctx.canvas === _cfA) ctx.clearRect(...)`, whose job was to stop
+     a nested canvas effect ghosting the un-effected layer through (its destination WAS its own
+     freshly-rendered plate). Pooling should make that impossible rather than merely unnecessary, so
+     measure it rather than argue it: a square at the CENTRE, drifted away by 200px/s, with a second
+     canvas effect stacked on top. The square's starting footprint must be empty — anything there is
+     a copy of the layer that never saw the Drift, which is precisely what the guard used to wipe.
+     This row must read 0 on the pre-fix build too: it is a non-regression check, not a mutation. */
+  function ghost(extra) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: 200, y: 200, shapeW: 40, shapeH: 40, fill: '#ffffff' });
+    L.start = 0; L.duration = 5;
+    L.effects = [fx('drift', { x: -200, y: 0 })].concat(extra ? [fx(extra, {})] : []);
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: [L] }, 1);
+    var d = g.getImageData(0, 0, W, H).data, n = 0;
+    for (var y = 181; y <= 219; y++) for (var x = 181; x <= 219; x++) if (d[(y * W + x) * 4 + 3] > 8) n++;
+    return n;
+  }
+  lines.push('');
+  lines.push('ghost check — square at CENTRE drifted away; px left at its ORIGINAL footprint (want 0):');
+  ['', 'wiggle', 'spin', 'pulse'].forEach(function (e) {
+    var n = ghost(e);
+    lines.push(('  [drift' + (e ? ' + ' + e : '') + ']').padEnd(36) + String(n).padStart(8) +
+      (n === 0 ? '   clean' : '   GHOST — the un-effected layer is showing through'));
+  });
+
+  lines.push('');
+  if (whole.frame === 0 || onscr.frame === 0) {
+    lines.push('PROBE IS LYING — a mode rendered an empty frame; nothing above means anything.');
+  } else if (whole.solid > onscr.solid + 100) {
+    lines.push('TILES SCRATCH IS CLOBBERED — Whole clip has ' + (whole.solid - onscr.solid) +
+               ' more solid px than the control at the un-drifted position.');
+  } else {
+    lines.push('tiles scratch is clean — both repeat modes agree at the un-drifted position.');
+  }
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

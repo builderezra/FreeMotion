@@ -4459,7 +4459,23 @@ window.FM = window.FM || {};
     return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   }
   let _ccY = null, _ccB = null, _ccR = null;
-  let _cfA = null, _cfB = null, _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
+  /* DEPTH-POOLED, not singletons. drawCanvasEffect renders the clean layer into A, hands A to the
+   * effect fn to write into B, and blits B into ctx. The comment that used to sit at the B setup
+   * argued a nested canvas effect always finishes before B is used — true for the plain drawLayer,
+   * but NOT for the `expand` callback: expand() runs renderExpandedPlate, whose own drawLayer
+   * re-enters drawCanvasEffect for the layer's OTHER canvas effect, and that nested call cleared and
+   * rewrote both A and B while the outer tiles() was still holding them.
+   *
+   * Measured: 400x400 comp, 40x40 square at x=380, Drift -200px/s under Tiles(gap 40, Repeat =
+   * Whole clip). At t=1 the rectangle where the square sits with NO drift applied came back 1521 of
+   * 1521 px fully opaque — byte-identical to the same scene with the Drift effect DELETED, while the
+   * On-screen repeat mode (which never calls expand) read 897. An entire un-drifted copy of the clip
+   * was being stamped over the tiling, i.e. adding Tiles silently threw the other effect away. */
+  const _cfPool = [];
+  let _cfDepth = 0;
+  const _expPool = [];
+  let _expDepth = 0;
+  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -4528,7 +4544,6 @@ window.FM = window.FM || {};
    * reusing the very same __fmOX/__fmOY origin machinery the viewport crop uses (there it moves the
    * origin inward; here it moves outward). Returns the plate, the margin in project units, and the
    * scale — or null when the layer is already inside the frame and the normal plate will do. */
-  let _expC = null;
   function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH) {
     const tr = layer.transform || {};
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
@@ -4545,7 +4560,12 @@ window.FM = window.FM || {};
     if (mx < 2 && my < 2) return null;                          // nothing outside the frame — caller uses the normal plate
     mx = Math.min(mx, PW * 0.6); my = Math.min(my, PH * 0.6);   // cost ceiling: at most ~4.8x the comp's pixels
     const EW = Math.max(1, Math.round((PW + 2 * mx) * ps)), EH = Math.max(1, Math.round((PH + 2 * my) * ps));
-    if (!_expC) _expC = document.createElement('canvas');
+    /* Pooled by depth for the same reason A/B below are: the drawLayer at the end of this function
+     * re-enters drawCanvasEffect, which can call expand() again, and a second expanded plate would
+     * otherwise overwrite the one the outer tiles() is still holding a reference to. */
+    const _e = _expDepth;
+    if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
+    const _expC = _expPool[_e];
     if (_expC.width !== EW || _expC.height !== EH) { _expC.width = EW; _expC.height = EH; }
     _expC.__fmRS = ps; _expC.__fmOX = -mx; _expC.__fmOY = -my;   // plate pixel (0,0) IS project (-mx,-my)
     const ec = _expC.getContext('2d');
@@ -4553,7 +4573,8 @@ window.FM = window.FM || {};
     baseT(ec);
     ec.globalAlpha = 1; ec.globalCompositeOperation = 'source-over'; ec.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-    drawLayer(ec, tmp, t, scene);
+    _expDepth++;
+    try { drawLayer(ec, tmp, t, scene); } finally { _expDepth--; }
     return { cv: _expC, mx: mx, my: my, ps: ps };
   }
 
@@ -4563,8 +4584,10 @@ window.FM = window.FM || {};
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see plateScale — 1 for export/1:1, smaller for a reduced preview
     const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
-    if (!_cfA) _cfA = document.createElement('canvas');
-    if (!_cfB) _cfB = document.createElement('canvas');
+    const _d = _cfDepth++;
+    try {
+    if (!_cfPool[_d]) _cfPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    const _cfA = _cfPool[_d].A, _cfB = _cfPool[_d].B;
     // resize only on change — assigning .width even to the same value frees+reallocates the ~8MB
     // backing store, and this runs per canvas-effect per FRAME (wiggle/3D/tiles… = constant churn)
     if (_cfA.width !== W || _cfA.height !== H) { _cfA.width = W; _cfA.height = H; }
@@ -4599,9 +4622,8 @@ window.FM = window.FM || {};
       const _srcIdx = Array.isArray(_src) ? _src[0] : (_src == null ? 1 : _src);   // options land as an index, sometimes [idx,label]
       if (_srcIdx !== 0) bbox = { x: 0, y: 0, w: W, h: H };                        // 0 = "On screen", which SHOULD stay empty
     }
-    // set up B only AFTER the layer render — a nested canvas effect reuses these scratch canvases.
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
-    // frame — the exact churn line 1500's guard avoids for A); the clearRect does the reset either way.
+    // frame — the exact churn the guard above avoids for A); the clearRect does the reset either way.
     const bctx = _cfB.getContext('2d');
     if (_cfB.width !== W || _cfB.height !== H) { _cfB.width = W; _cfB.height = H; }
     baseT(bctx); bctx.clearRect(0, 0, W, H);
@@ -4614,14 +4636,17 @@ window.FM = window.FM || {};
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     baseT(ctx);
-    // Nested canvas fx (two+ stacked): dst IS our scratch A, still holding this call's clean-layer
-    // render — wipe it so only the effected result goes up, not a ghost of the plain layer under it.
-    if (ctx.canvas === _cfA) ctx.clearRect(0, 0, PW, PH);
+    /* The `if (ctx.canvas === _cfA) ctx.clearRect(...)` that used to sit here is gone, and is not
+     * merely unnecessary now but unreachable: it existed because a nested call shared the singleton,
+     * so its destination WAS its own freshly-rendered A and the plain layer ghosted through. With
+     * the pool, this call's A comes from its own depth slot and ctx belongs to a shallower one, so
+     * the two can never be the same canvas. */
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
     ctx.drawImage(_cfB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(_cfB,0,0) at scale 1
     ctx.restore();
+    } finally { _cfDepth--; }
   }
   // ---- 3D layer tilt (rotationX / rotationY) -------------------------------------------------------
   // Lean a FLAT layer in 3D. Render it to a clean project-res PLATE exactly as it would look flat (its

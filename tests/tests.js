@@ -5286,6 +5286,56 @@
     });
   });
 
+  test('effects: Tiles “Whole clip” does not throw away the other effect on the layer', { item: 'tiles-scratch' }, function () {
+    /* drawCanvasEffect renders the clean layer into scratch A, hands A to the effect fn to write
+     * into B, then blits B into ctx. Those were module singletons, defended by a comment arguing a
+     * nested canvas effect always finishes before B is used. True for the plain drawLayer — but not
+     * for the `expand` callback: Tiles' "Whole clip" repeat calls expand() to get the layer's
+     * content from OUTSIDE the frame, expand() runs renderExpandedPlate, and THAT does its own
+     * drawLayer, which re-enters drawCanvasEffect for the layer's other canvas effect and rewrites
+     * both A and B underneath the outer tiles() that is still holding them.
+     *
+     * The measurement is a position, which is what makes it unarguable. Drift moves the square left
+     * at 200px/s, so at t=1 a correct render has taken its content away from where it started. Any
+     * fully-opaque pixel left in the square's un-drifted footprint is a copy of the layer that never
+     * saw the Drift, and there is no legitimate route for one.
+     *
+     * TWO CONTROLS, because "some pixels in a rectangle" is a weak signal on its own and the tiling
+     * legitimately puts content everywhere: the "On screen" repeat mode walks the same code with the
+     * same two effects but never calls expand(), and the same scene with Drift DELETED shows what a
+     * thrown-away Drift looks like. Pre-fix the buggy mode read 1521/1521 — byte-identical to the
+     * Drift-deleted control, i.e. the Drift was gone completely — against 897 for On screen. */
+    function solidAtUndrifted(source, withDrift) {
+      var c = offscreen(400, 400);
+      var l = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: 380, y: 200, shapeW: 40, shapeH: 40, fill: '#ffffff' });
+      l.start = 0; l.duration = 5;
+      var fx = [];
+      if (withDrift) { var dr = FM.fxRegistry.makeInstance('drift'); dr.params.x = -200; dr.params.y = 0; fx.push(dr); }
+      var ti = FM.fxRegistry.makeInstance('tiles');
+      if (!ti) throw new Error('no registry entry for tiles');
+      ti.params.gap = 40; ti.params.source = source;
+      fx.push(ti);
+      l.effects = fx;
+      var sc = scene([l]);
+      sc.project = { width: 400, height: 400, fps: 30, duration: 5, background: null };
+      var g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, sc, 1);
+      var d = g.getImageData(0, 0, 400, 400).data, solid = 0, lit = 0;
+      for (var i = 0; i < 400 * 400; i++) {
+        var a = d[i * 4 + 3], x = i % 400, y = (i / 400) | 0;
+        if (a > 8) lit++;
+        if (a === 255 && x >= 361 && x <= 399 && y >= 181 && y <= 219) solid++;
+      }
+      return { solid: solid, lit: lit };
+    }
+    var whole = solidAtUndrifted(1, true);      // 1 = Whole clip: the mode that calls expand()
+    var onscr = solidAtUndrifted(0, true);      // 0 = On screen:  same effects, never calls expand()
+    var gone  = solidAtUndrifted(1, false);     // what a discarded Drift looks like
+    if (!whole.lit || !onscr.lit) throw new Error('a repeat mode rendered an empty frame (whole ' + whole.lit + ', on-screen ' + onscr.lit + ' lit px) — the comparison below would be meaningless');
+    if (gone.solid < 1400) throw new Error('the Drift-deleted control only filled ' + gone.solid + ' px of the un-drifted footprint — this test can no longer tell a discarded Drift apart from a working one');
+    if (whole.solid > onscr.solid + 100) throw new Error('Tiles “Whole clip” left ' + whole.solid + ' fully-opaque px where the square sits with NO Drift applied, against ' + onscr.solid + ' for “On screen” and ' + gone.solid + ' with the Drift deleted outright — the expanded-plate render is clobbering drawCanvasEffect’s scratch, so an un-drifted copy of the clip is stamped over the tiling. Depth-index the scratch (see _cfPool / _expPool)');
+  });
+
   test('effects: stacking two Mirrors does not resurrect what the first one removed', { item: 'mirror-stack' }, function () {
     /* drawMirror renders the clean layer into a scratch plate and then blits mirrored strips FROM
      * that plate INTO ctx. While the plate was a module singleton, stacking two Mirrors — Left→Right
