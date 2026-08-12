@@ -784,6 +784,17 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .addmenu-tab:active, .addmenu-card:active { transform: translateY(1px); }
 .addmenu-tab.active { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
 .addmenu-ic { display: flex; color: var(--accent); }
+/* v5.82. Ezra: "Add nice colouring to all of these buttons circled in red, make sure they all have
+   their own unique colour scheme, and the media one should have multiple colours, like yellow for the
+   sun green for the grass etc." The five top-row tabs were all one cyan, which is also the app accent
+   and every other icon in the sheet — five different destinations wearing the same coat. One hue each
+   now, chosen to stay legible on the dark glass and to be distinguishable from each OTHER at 22px
+   (violet / blue / multi / pink / orange are far apart in hue AND in the greyscale they collapse to).
+   Media is the exception and carries its colours in its own markup — see icoMulti in js/addmenu.js. */
+.addmenu-tab[data-key="object"]   .addmenu-ic { color: #A78BFA; }   /* Elements — violet */
+.addmenu-tab[data-key="shape"]    .addmenu-ic { color: #60A5FA; }   /* Shape — blue */
+.addmenu-tab[data-key="audio"]    .addmenu-ic { color: #F472B6; }   /* Audio — pink */
+.addmenu-tab[data-key="template"] .addmenu-ic { color: #FB923C; }   /* Template — orange */
 .addmenu-ic svg { width: 22px; height: 22px; }
 .add-emoji { font-size: 22px; line-height: 1; }
 .addmenu-lbl { font-size: 10.5px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
