@@ -118,12 +118,22 @@ window.FM = window.FM || {};
    * This is inferred from the render funnel rather than wired into each drag handler — there are
    * dozens of those across the timeline, canvas, trackpad and inspector, and one missed call site
    * would be an invisible hole. A burst of frames in one short window IS a drag, whatever caused it. */
-  const MOTION_FRAMES = 5, MOTION_WINDOW = 250, MOTION_IDLE = 200;
-  let _inMotion = false, _mFrames = 0, _mWinStart = 0, _mIdle = null;
+  /* CONSECUTIVE renders, each within MOTION_GAP of the last — deliberately NOT "N frames inside a
+   * fixed window". The old rule (5 frames in 250ms) was a RATE test in disguise: it required a frame
+   * gap under 62.5ms, which a heavy scene structurally cannot reach, so the window reset before the
+   * 5th frame every time. The quality relief was therefore available exactly when it was not needed
+   * and unavailable exactly when it was. Measured on a 4-layer/4-effect scene at 390x844 dpr3:
+   * scrub frame gap 108.3ms, _inMotion false for 100/100 frames, canvas stayed at 810x1440. With
+   * glow off the same gesture ran at 35.4ms, _inMotion was true 91% of the time and the canvas
+   * dropped a rung. MOTION_IDLE has to outlast ONE slow frame too — a 216ms frame was measured, and
+   * at 200ms the idle timer fired mid-drag and snapped back to full resolution. (#123) */
+  const MOTION_FRAMES = 3, MOTION_GAP = 500, MOTION_IDLE = 700;
+  let _inMotion = false, _mFrames = 0, _mLast = 0, _mIdle = null;
   function noteMotion(ms) {
     if (FM.playing) return;                       // playback has its own measurement below
     const now = performance.now();
-    if (now - _mWinStart > MOTION_WINDOW) { _mWinStart = now; _mFrames = 0; }
+    if (now - _mLast > MOTION_GAP) _mFrames = 0;
+    _mLast = now;
     _mFrames++;
     if (!_inMotion && _mFrames >= MOTION_FRAMES) { _inMotion = true; resizeCanvas(); }
     if (_inMotion) notePlaybackCost(ms);           // the same adaptive ladder, so a fast machine never drops at all
