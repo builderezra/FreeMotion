@@ -608,6 +608,16 @@ window.FM = window.FM || {};
         if (FM.toast) FM.toast(ok ? 'Copied ' + ((reg && reg.label) || fx.type) : 'Couldn’t copy this effect', 1600);
       } },
     ];
+    // Favourite from here too: you usually decide an effect is a keeper while you are USING it, not
+    // while browsing for it — and until now the ★ existed only in the browser. (#62)
+    if (FM.fxBrowser && FM.fxBrowser.toggleFav) {
+      const faved = FM.fxBrowser.isFav(fx.type);
+      const nm = (reg && reg.label) || fx.type;
+      items.push({ label: faved ? 'Remove from favourites' : 'Favourite', action: () => {
+        const on = FM.fxBrowser.toggleFav(fx.type);
+        if (FM.toast) FM.toast(on ? '★ ' + nm + ' added to favourites' : nm + ' removed from favourites', 1600);
+      } });
+    }
     // Naming what is on the clipboard matters more here than in most menus: an effect stack is a list
     // of near-identical rows, and a bare "Paste effect" gives you no way to tell what you are about to
     // land on it. Absent entirely when there is nothing to paste, rather than present and dead.
@@ -931,12 +941,25 @@ window.FM = window.FM || {};
   function audioFxMoreMenu(layer, fx, idx, btn) {
     if (!FM.contextMenu) return;
     const r = btn.getBoundingClientRect();
-    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, [
+    const areg = FM.audioFxRegistry.get(fx.type);
+    const items = [
       { label: 'Reset', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterAudioFx(); } } },
       { label: 'Duplicate', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { layer.audioFx.splice(idx + 1, 0, inst); afterAudioFx(); } } },
+    ];
+    // Same favourite affordance as the visual effects' ⋯ menu — audio effects live in their own
+    // browser with its own ★ and its own fav list, so this toggles that one. (#62)
+    if (FM.audioFxBrowser && FM.audioFxBrowser.toggleFav) {
+      const faved = FM.audioFxBrowser.isFav(fx.type);
+      const nm = (areg && areg.label) || fx.type;
+      items.push({ label: faved ? 'Remove from favourites' : 'Favourite', action: () => {
+        const on = FM.audioFxBrowser.toggleFav(fx.type);
+        if (FM.toast) FM.toast(on ? '★ ' + nm + ' added to favourites' : nm + ' removed from favourites', 1600);
+      } });
+    }
+    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, items.concat([
       { sep: true },
       { label: 'Delete', danger: true, action: () => { layer.audioFx.splice(idx, 1); afterAudioFx(); } },
-    ]);
+    ]));
   }
 
   function audioFxRow(layer, fx, idx) {

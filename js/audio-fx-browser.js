@@ -13,7 +13,21 @@ window.FM = window.FM || {};
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
   function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
-  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); }
+  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); return i < 0; }
+
+  // One star for every tile builder — the featured carousel had none, so the featured audio
+  // effects were unfavouritable for no reason the user could see. (#62)
+  function starFor(id, onStarChange) {
+    const star = el('span', 'fxb-star' + (isFav(id) ? ' on' : '')); star.textContent = '★';
+    star.title = 'Favourite';
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const on = toggleFav(id);
+      star.classList.toggle('on', on);
+      if (onStarChange) onStarChange();
+    });
+    return star;
+  }
 
   let root, scrollEl, searchInput, _layer, autoTimer = 0, autoPauseUntil = 0, _searchDebounce = 0;
 
@@ -105,8 +119,7 @@ window.FM = window.FM || {};
 
   function tile(reg, onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = reg.label;
-    const star = el('span', 'fxb-star' + (isFav(reg.type) ? ' on' : '')); star.textContent = '★';
-    star.addEventListener('click', (e) => { e.stopPropagation(); toggleFav(reg.type); star.classList.toggle('on'); if (onStarChange) onStarChange(); });
+    const star = starFor(reg.type, onStarChange);
     wrap.appendChild(thumb(reg));
     wrap.appendChild(el('span', 'fxb-tile-name', reg.label));
     wrap.appendChild(star);
@@ -123,6 +136,7 @@ window.FM = window.FM || {};
       const card = el('button', 'fxb-card'); card.title = reg.label;
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
+      card.appendChild(starFor(reg.type, rerenderPaged));   // the featured row had no ★ at all (#62)
       card.addEventListener('click', () => addEffect(reg.type));
       row.appendChild(card);
     });
@@ -285,6 +299,7 @@ window.FM = window.FM || {};
   }
 
   FM.audioFxBrowser = {
+    isFav: isFav, toggleFav: toggleFav,   // so an applied audio effect's ⋯ menu can favourite it too (#62)
     init: function () {
       root = document.getElementById('afx-browser'); if (!root) return;
       scrollEl = root.querySelector('.fxb-scroll');

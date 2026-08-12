@@ -8,11 +8,31 @@ window.FM = window.FM || {};
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
   const RECENTS_KEY = 'fm.fx.recents', FAV_KEY = 'fm.fx.fav', RECENTS_CAP = 8, PAGE_SIZE = 8;
-  function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(id => FM.fxRegistry.get(id)) : []; } catch (e) { return []; } }
+  // Two entries in this browser are NOT registry effects — Mask and Motion Blur (Object) are
+  // pseudo-tiles that drive layer state directly. They still look like effects and sit in the same
+  // grid, so they are favouritable like everything else; readList has to stop filtering them out.
+  // (Declared here, populated after the tile builders exist — see PSEUDO_TILES.) (#62)
+  const PSEUDO = { _mask: 'Mask', _objblur: 'Motion Blur (Object)' };
+  function knownId(id) { return !!(PSEUDO[id] || FM.fxRegistry.get(id)); }
+  function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(knownId) : []; } catch (e) { return []; } }
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
   function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
-  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); }
+  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); return i < 0; }
+
+  // One star, used by every tile builder. It used to be inlined in tile() only, which is exactly why
+  // the featured carousel, Mask and Motion Blur (Object) had no way to be favourited. (#62)
+  function starFor(id, onStarChange) {
+    const star = el('span', 'fxb-star' + (isFav(id) ? ' on' : '')); star.textContent = '★';
+    star.title = 'Favourite';
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();          // never let the star's tap also ADD the effect
+      const on = toggleFav(id);
+      star.classList.toggle('on', on);
+      if (onStarChange) onStarChange();
+    });
+    return star;
+  }
 
   let root, scrollEl, searchInput, _layer, autoTimer = 0, autoPauseUntil = 0, _searchDebounce = 0;
 
@@ -112,6 +132,7 @@ window.FM = window.FM || {};
     const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } };
     elm.addEventListener('pointerdown', (e) => {
       if (e.button && e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('.fxb-star')) return;   // holding the ★ must not also open the preset sheet (#62)
       x0 = e.clientX; y0 = e.clientY; elm._lpFired = false;
       clear();
       timer = setTimeout(() => {
@@ -150,7 +171,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
     if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
   }
-  function maskTile() {
+  function maskTile(onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = 'Mask — draw a shape that reveals part of this layer';
     const t = el('div', 'fxb-thumb'); t.dataset.cat = 'matte';
     const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 96; cv.height = 96;
@@ -164,6 +185,7 @@ window.FM = window.FM || {};
     t.appendChild(cv);
     wrap.appendChild(t);
     wrap.appendChild(el('span', 'fxb-tile-name', 'Mask'));
+    wrap.appendChild(starFor('_mask', onStarChange));
     wrap.addEventListener('click', addMaskFromBrowser);
     return wrap;
   }
@@ -188,7 +210,7 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Move & Transform'
                                    : 'Motion Blur (Object) on — smears this layer’s own movement', 2200);
   }
-  function objectBlurTile() {
+  function objectBlurTile(onStarChange) {
     const wrap = el('button', 'fxb-tile');
     wrap.title = 'Motion Blur (Object) — smears the layer’s OWN movement (position, scale, rotation)';
     const t = el('div', 'fxb-thumb'); t.dataset.cat = 'blur';
@@ -206,8 +228,18 @@ window.FM = window.FM || {};
     t.appendChild(cv);
     wrap.appendChild(t);
     wrap.appendChild(el('span', 'fxb-tile-name', 'Motion Blur (Object)'));
+    wrap.appendChild(starFor('_objblur', onStarChange));
     wrap.addEventListener('click', enableObjectBlur);
     return wrap;
+  }
+
+  // Build whatever tile an id names — a registry effect or one of the two pseudo-entries. This is what
+  // lets the Favourites page hold a favourited Mask / Motion Blur (Object) instead of dropping it. (#62)
+  const PSEUDO_TILES = { _mask: maskTile, _objblur: objectBlurTile };
+  function tileForId(id, onStarChange) {
+    if (PSEUDO_TILES[id]) return PSEUDO_TILES[id](onStarChange);
+    const reg = FM.fxRegistry.get(id);
+    return reg ? tile(reg, onStarChange) : null;
   }
 
   // navigator.clipboard needs a secure context — hidden-textarea copy covers plain file:// use.
@@ -321,11 +353,9 @@ window.FM = window.FM || {};
   // A tappable effect tile (thumb + name + ★ favourite toggle).
   function tile(reg, onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = reg.label;
-    const star = el('span', 'fxb-star' + (isFav(reg.id) ? ' on' : '')); star.textContent = '★';
-    star.addEventListener('click', (e) => { e.stopPropagation(); toggleFav(reg.id); star.classList.toggle('on'); if (onStarChange) onStarChange(); });
     wrap.appendChild(thumb(reg));
     wrap.appendChild(el('span', 'fxb-tile-name', reg.label));
-    wrap.appendChild(star);
+    wrap.appendChild(starFor(reg.id, onStarChange));
     wrap.addEventListener('click', guardedAdd(wrap, reg.id));
     attachLongPress(wrap, reg);   // hold (or right-click) → preset sheet
     return wrap;
@@ -340,6 +370,7 @@ window.FM = window.FM || {};
       const card = el('button', 'fxb-card'); card.title = reg.label;
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
+      card.appendChild(starFor(reg.id, rerenderPaged));   // the featured row had no ★ at all, so the newest effects — which lead FX_FEATURED — were exactly the ones you could not favourite (#62)
       card.addEventListener('click', guardedAdd(card, reg.id));
       attachLongPress(card, reg);
       row.appendChild(card);
@@ -354,8 +385,9 @@ window.FM = window.FM || {};
   function buildPaged(rerender) {
     const sec = el('div', 'fxb-section');
     sec.appendChild(el('div', 'fxb-sec-title', 'Recents & favourites'));
-    const recents = readList(RECENTS_KEY).map(id => FM.fxRegistry.get(id)).filter(Boolean);
-    const favs = readList(FAV_KEY).map(id => FM.fxRegistry.get(id)).filter(Boolean);
+    // Held as IDs, not registry entries, so a favourited pseudo-entry survives to the grid. (#62)
+    const recents = readList(RECENTS_KEY);
+    const favs = readList(FAV_KEY);
     // pages: [recents], then favourites chunked
     const pages = [];
     pages.push({ label: 'Recents', items: recents });
@@ -369,7 +401,7 @@ window.FM = window.FM || {};
         page.appendChild(el('div', 'fxb-empty', pg.label === 'Recents' ? 'No recent effects yet' : 'Tap ★ on any effect to favourite it'));
       } else {
         const grid = el('div', 'fxb-grid');
-        pg.items.forEach(reg => grid.appendChild(tile(reg, rerender)));
+        pg.items.forEach(id => { const t = tileForId(id, rerender); if (t) grid.appendChild(t); });
         page.appendChild(grid);
       }
       pager.appendChild(page);
@@ -527,6 +559,7 @@ window.FM = window.FM || {};
   }
 
   FM.fxBrowser = {
+    isFav: isFav, toggleFav: toggleFav,   // so an applied effect's ⋯ menu can favourite it too (#62)
     init: function () {
       root = document.getElementById('fx-browser'); if (!root) return;
       scrollEl = root.querySelector('.fxb-scroll');

@@ -1081,7 +1081,7 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fxb-sec-title { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
 .fxb-featured { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
 .fxb-featured::-webkit-scrollbar { display: none; }
-.fxb-card { flex: 0 0 150px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer; }
+.fxb-card { position: relative; flex: 0 0 150px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer; }   /* relative so the ★ pins to the CARD, not to the scroller (#62) */
 .fxb-card .fxb-thumb { height: 94px; border-radius: 0; }
 .fxb-card-name { padding: 9px 10px; font-size: 12.5px; font-weight: 600; color: var(--text); }
 .fxb-pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
