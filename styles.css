@@ -1,7 +1,13 @@
 :root {
   /* Palette matched to real Alight Motion screenshots (see reference/AM-LAYOUT.md): dark navy + teal accent */
   --bg: #0e1320;
-  --stage: #0a0e17;
+  /* v5.86. Ezra: "on the canvas, the background colour is a bit too close to black so you can't
+     really tell when the canvas ends and when the background begins, make it slightly brighter."
+     Measured at the canvas edge with a black project background: the stage read rgb(3,10,11) against
+     the canvas's rgb(0,0,0) — a mean difference of EIGHT out of 255, which is below what a phone
+     screen shows you in a lit room. Raised until the edge is legible without the surround competing
+     with the picture; the hue is unchanged, only the level. */
+  --stage: #131b26;
   --panel: #161c28;
   --panel-2: #1e2533;
   --panel-3: #283143;

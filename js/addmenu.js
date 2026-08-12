@@ -157,8 +157,14 @@ window.FM = window.FM || {};
       /* "with the shapes one, you can make the circle shape and the square two different colours."
          Blue square, teal circle — adjacent on the wheel so the pair still reads as one icon rather
          than two stickers, but far enough apart to be obviously two colours at 22px. */
-      '<rect x="4" y="4" width="9" height="9" rx="1.5" stroke="#60A5FA"/>'
-      + '<circle cx="16" cy="16" r="5" stroke="#2DD4BF"/>'), options: [
+      '<defs>'
+      + '<linearGradient id="fm-ic-sq" x1="4" y1="4" x2="13" y2="13" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#A5CDFF"/><stop offset="1" stop-color="#3B82F6"/></linearGradient>'
+      + '<linearGradient id="fm-ic-ci" x1="11" y1="11" x2="21" y2="21" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#7FF0DE"/><stop offset="1" stop-color="#12A594"/></linearGradient>'
+      + '</defs>'
+      + '<rect x="4" y="4" width="9" height="9" rx="1.5" stroke="url(#fm-ic-sq)"/>'
+      + '<circle cx="16" cy="16" r="5" stroke="url(#fm-ic-ci)"/>'), options: [
       // The pair Ezra asked for, first and side by side: the same square, sharp corners vs Apple's.
       // Both spawn a TRUE square (aspect forced 1:1) so the only difference you see is the corner.
       { label: 'Square', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'), add: shp('rect', { name: 'Square', aspect: [1, 1] }) },
@@ -201,14 +207,20 @@ window.FM = window.FM || {};
          · SOLID FILLS. At 22px an outline sun over an empty background reads as three unrelated marks;
            filled, it reads as a photo in one glance, which is the whole job of this icon. Compared
            against the outline version and a hills-only version at 3x before choosing. */
-      '<path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" fill="#2E6E9E" stroke="none"/>'
+      '<defs>'
+      + '<linearGradient id="fm-ic-sky" x1="12" y1="5" x2="12" y2="19" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#3E8CC4"/><stop offset="1" stop-color="#22557E"/></linearGradient>'
+      + '<linearGradient id="fm-ic-hill" x1="12" y1="14" x2="12" y2="19" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#7BEBA6"/><stop offset="1" stop-color="#2FB765"/></linearGradient>'
+      + '</defs>'
+      + '<path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" fill="url(#fm-ic-sky)" stroke="none"/>'
       + '<circle cx="8.4" cy="10.2" r="2.1" fill="#FBBF24" stroke="none"/>'
       + /* Peaks brought DOWN ~2px — Ezra: "the green goes up slightly to high". They were topping out at
          y=12.6 in a 5..19 frame, i.e. level with the sun, which made the hills fight the sky for the
          picture instead of sitting under it. Highest point is y=14.8 now, comfortably below the sun at
          10.2, and the silhouette is traced explicitly and closed through both bottom corner arcs so the
          ground still reaches the ground. */
-      '<path d="M3 17L3 18.6L8.6 14.8L12.4 17.2L15.4 15.6L21 18.6L21 17A2 2 0 0 1 19 19L5 19A2 2 0 0 1 3 17Z" fill="#4ADE80" stroke="none"/>'
+      '<path d="M3 17L3 18.6L8.6 14.8L12.4 17.2L15.4 15.6L21 18.6L21 17A2 2 0 0 1 19 19L5 19A2 2 0 0 1 3 17Z" fill="url(#fm-ic-hill)" stroke="none"/>'
       + '<path d="M3 17V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10" stroke="#7CC9EA"/>'
       + '<path d="M3 17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2" stroke="#4ADE80"/>'), options: function () {
       var base = [
@@ -243,8 +255,25 @@ window.FM = window.FM || {};
       /* "give the two lines in the middle different colours from the lines on the outside." The frame
          stays orange and the two dividers go amber — the lighter of the pair inside, so the icon reads
          frame-first and the layout it is describing sits within it. */
-      '<rect x="4" y="4" width="16" height="16" rx="2" stroke="#FB923C"/>'
-      + '<path d="M4 10h16M10 10v10" stroke="#FCD34D"/>'), options: function () {
+      /* Ezra: "make the lines in the middle complimentary colours but also very different from the
+         border colour, and also make the sideways line and the downwards line both unique colours, and
+         make sure the border lines go on top of the middle ones, not how it is currently."
+         So: the two dividers are SEPARATE paths with their own hues — cyan across, violet down. Both
+         sit opposite orange on the wheel, which is what makes them read as "not the border", and they
+         are a near-complementary pair to each other. ORDER IS THE FIX for the last part: SVG paints in
+         document order, so the dividers are declared FIRST and the frame LAST, and the frame's rounded
+         corners now cover the divider ends instead of the dividers crossing the frame. */
+      '<defs>'
+      + '<linearGradient id="fm-ic-tpH" x1="4" y1="10" x2="20" y2="10" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#7FE9F5"/><stop offset="1" stop-color="#0EA5C6"/></linearGradient>'
+      + '<linearGradient id="fm-ic-tpV" x1="10" y1="10" x2="10" y2="20" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#D8B4FE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>'
+      + '<linearGradient id="fm-ic-tpB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>'
+      + '</defs>'
+      + '<path d="M4 10h16" stroke="url(#fm-ic-tpH)"/>'
+      + '<path d="M10 10v10" stroke="url(#fm-ic-tpV)"/>'
+      + '<rect x="4" y="4" width="16" height="16" rx="2" stroke="url(#fm-ic-tpB)"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         return { label: t.name, icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie

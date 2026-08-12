@@ -23,7 +23,10 @@
 
 html[data-theme="glass"] {
   --bg: #060c0f;              /* the logo's own ground */
-  --stage: #04090c;
+  /* The glass theme is the SHIPPED DEFAULT, so this is the value Ezra actually sees — and at
+     rgb(4,9,12) it was even closer to black than the base theme. Same correction, same hue, kept a
+     touch deeper than the base so glass still reads as the darker of the two. */
+  --stage: #101823;
   --panel: #0a141a;
   --panel-2: #0f1e26;
   --panel-3: #172c36;
