@@ -294,7 +294,10 @@ html[data-theme="glass"] .set-switch.on {
 /* Export is Ezra's glass render now (v5.57), not a mint pill — this rule used to paint over it, and
    it loads after styles.css so it won. Only the DESKTOP pill keeps a tinted body, and even that is a
    dark one so the artwork inside it can be seen. */
-html[data-theme="glass"] .m-export { background: url('export-btn.png?v=1') center / contain no-repeat; box-shadow: none; }
+/* The glow lives here TOO, deliberately. This file loads after styles.css and its `box-shadow: none`
+   is what would silently delete the export glow — the same way it has eaten four earlier fixes. */
+html[data-theme="glass"] .m-export { background: url('export-btn.png?v=1') center / contain no-repeat;
+  border-radius: 30%; box-shadow: 0 0 7px rgba(140, 222, 255, .50), 0 0 15px rgba(96, 196, 246, .24); }
 /* v5.63. This file loads AFTER styles.css, so it held its own copy of the mint ring and kept
    repainting it after styles.css dropped it — the THIRD fix this file has silently eaten. Ezra saw
    the outline still there after it had been removed. Neutral now, matching styles.css, and the glass

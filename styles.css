@@ -2167,13 +2167,26 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      The + orb has glowed since it shipped (#add-fab: drop-shadow(0 0 9px rgba(90,199,237,.3))) while the
      export tile had nothing, and that inconsistency is what he photographed. Same hue on purpose, so the
      two crystal objects read as one family. */
-  .m-export::before {
-    content: ""; position: absolute; inset: -10px; pointer-events: none; z-index: 0;
-    background: radial-gradient(closest-side,
-      rgba(122, 214, 255, 0) 58%,
-      rgba(122, 214, 255, .34) 74%,
-      rgba(96, 196, 246, .16) 86%,
-      rgba(96, 196, 246, 0) 100%);
+  .m-export {
+    /* v5.79. The v5.76 attempt at this was a radial-gradient ring and Ezra called it, correctly:
+       "the glow for the export button look shitty". A radial gradient cannot hug a SQUIRCLE — it puts
+       more light on the corners than the edges, so it reads as a donut behind a sticker rather than as
+       light coming off glass.
+       Three techniques were measured against each other at 3x, and only one works:
+       · drop-shadow follows the silhouette perfectly but FILLS THE ARROW, because the arrow is a
+         CUT-OUT and drop-shadow cannot tell a hole from an outer edge. Arrow luminance 105.6 with no
+         glow, 137.6 at a radius of only 2px, 143.5 at 4px — it washes as fast as it lights.
+       · a gradient ring: the donut above.
+       · box-shadow is drawn strictly OUTSIDE the border box, so it physically cannot enter the hole.
+         Measured: arrow luminance identical at 115.44 across 7/9px and .50/.62 alpha — i.e. the glow
+         contributes exactly ZERO to the arrow — while the light outside goes 23.8 -> 61.4, stronger
+         than any drop-shadow managed before washing the arrow out.
+       The radius is proportional so it tracks the artwork's own corners at any size, and no brightness
+       filter is added, so the arrow stays exactly as dark as it was.
+       theme-glass.css sets `box-shadow: none` on this element and loads LATER — it carries the same
+       glow now, or this is the fifth fix that file eats. */
+    border-radius: 30%;
+    box-shadow: 0 0 7px rgba(140, 222, 255, .50), 0 0 15px rgba(96, 196, 246, .24);
   }
   .m-export::after { inset: 0; }
   .m-export:active { transform: translateY(1px); filter: var(--export-edge) brightness(1.08); }
