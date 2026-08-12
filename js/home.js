@@ -483,7 +483,8 @@ window.FM = window.FM || {};
   function projectCard(p, subOverride) {
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
-    const card = el('div', 'hm-card' + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
+    const isOpen = p.id === FM.projects.currentId();
+    const card = el('div', 'hm-card' + (isOpen ? ' hm-open' : '') + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
     card.setAttribute('role', 'button'); card.tabIndex = 0; card.dataset.pid = p.id;
     card.setAttribute('aria-label', (p.name || 'Untitled') + ' — open project');
     const th = el('div', 'hm-thumb');
@@ -491,7 +492,7 @@ window.FM = window.FM || {};
     const ph = el('span', 'hm-thumb-empty', '▶'); th.appendChild(ph);
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
     th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
-    if (p.id === FM.projects.currentId()) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
+    if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
     if (selectMode) th.appendChild(el('span', 'hm-check' + (selected.has(p.id) ? ' on' : ''), selected.has(p.id) ? '✓' : ''));
     const name = el('div', 'hm-name', p.name || 'Untitled');
     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
@@ -560,6 +561,18 @@ window.FM = window.FM || {};
     body.appendChild(name); body.appendChild(meta); body.appendChild(sub);
     card.appendChild(th); card.appendChild(body);
     if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
+    // The open project's travelling glint (Ezra: "make it so the project that's open, along the border
+    // of it has a moving glint that follows around it"). It is a light running around the card's EDGE,
+    // not a glow on the card, so it can be obvious without changing the contrast of anything you read.
+    // Added last so it paints over the thumb and the ⋯, and marked aria-hidden — the OPEN badge on the
+    // thumbnail is what carries this meaning for a screen reader; this is the same fact, in light.
+    // The <i> is the part that spins; .hm-glint masks it down to a 1.5px ring (see styles.css).
+    if (isOpen) {
+      const glint = el('span', 'hm-glint');
+      glint.setAttribute('aria-hidden', 'true');
+      glint.appendChild(document.createElement('i'));
+      card.appendChild(glint);
+    }
     card.addEventListener('click', () => {
       if (card._paintedAway) { card._paintedAway = false; cancelPress(card); return; }   // that "click" was the end of a drag-select
       if (selectMode) { cancelPress(card); toggleSel(p.id); } else openProject(p.id, false, card);

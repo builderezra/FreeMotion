@@ -14,7 +14,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=319">
+<link rel="stylesheet" href="styles.css?v=321">
 <link rel="stylesheet" href="theme-glass.css?v=21">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -119,7 +119,14 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.12</span></div>
+      <!-- Back to the project browser (v6.13). Ezra: "on the pc version make the top left arrow that
+           takes you back actually obviously be a back button." Until now the ONLY way home from a
+           desktop project was clicking the wordmark — and in the Studio rail that wordmark collapses to
+           a bare "▶", a right-pointing PLAY triangle, which is the exact opposite of what a back
+           control should look like. Same chevron as the phone's #m-back, so one mark means "back"
+           everywhere. Hidden on the phone, which has that button already. -->
+      <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span class="tb-back-txt">Projects</span></button>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.13</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -232,7 +239,13 @@
          stage in the classic layout, or DOWN beside the timeline in Studio. Same node either way — no
          second copy to keep in sync, and the phone sheet (position:fixed) is unaffected by where it sits. -->
     <aside id="inspector-panel" class="panel">
-      <div class="panel-title">Inspector</div>
+      <!-- The label is a SPAN now, not the div's own text: inspector.js swaps it between "Inspector" and
+           "Add", and it used to do that with title.textContent, which would wipe any sibling put in here.
+           The project name rides alongside it (v6.13, Ezra marked this strip on a Studio screenshot and
+           asked for the name to live there). It is a real editable field mirroring #proj-name — the same
+           pattern the phone bar's #proj-name-m already uses — because in the Studio layout the top bar is
+           a 60px rail and the original field has nowhere to be. -->
+      <div class="panel-title"><span class="panel-title-label">Inspector</span><input id="proj-name-s" class="proj-name-s" type="text" value="Untitled" title="Project name" aria-label="Project name" spellcheck="false"></div>
       <div id="inspector"><div class="empty">Select a layer to edit it.</div></div>
     </aside>
 
@@ -556,6 +569,13 @@
       </div>
       <div class="field"><span>Size</span><span id="cv-size" class="cv-size" role="status" aria-live="polite">1080 × 1920</span></div>
       <div class="dialog-actions">
+        <!-- The door to the APP's settings (v6.13). The cog now opens THIS dialog on desktop as well as
+             on the phone — before, the same gear icon meant "canvas" on a phone and "app preferences" on
+             a PC, which is what Ezra was reporting as the cog opening the wrong menu. One icon, one
+             destination, and the app-wide preferences keep a labelled way in from here (plus the home
+             screen's own cog). Left-aligned and plain, because it LEAVES this dialog — it is not a third
+             way to answer Cancel/Apply. -->
+        <button id="cv-appset" class="btn cv-appset">App settings…</button>
         <button id="cv-cancel" class="btn">Cancel</button>
         <button id="cv-go" class="btn btn-accent">Apply</button>
       </div>
@@ -563,7 +583,7 @@
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/settings.js?v=9"></script>
+  <script src="js/settings.js?v=10"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=91"></script>
   <script src="js/eases.js?v=3"></script>
@@ -577,7 +597,7 @@
   <script src="js/fx-thumbs.js?v=19"></script>
   <script src="js/timeline.js?v=124"></script>
   <script src="js/addmenu.js?v=32"></script>
-  <script src="js/inspector.js?v=223"></script>
+  <script src="js/inspector.js?v=224"></script>
   <script src="js/fx-browser.js?v=26"></script>
   <script src="js/elements-browser.js?v=1"></script>
   <script src="js/color-wheel.js?v=53"></script>
@@ -599,8 +619,8 @@
   <script src="js/audio-fx-browser.js?v=4"></script>
   <script src="js/history.js?v=25"></script>
   <script src="js/storage.js?v=92"></script>
-  <script src="js/medialib.js?v=3"></script>
-  <script src="js/home.js?v=114"></script>
+  <script src="js/medialib.js?v=4"></script>
+  <script src="js/home.js?v=115"></script>
   <script src="js/graph-editor.js?v=14"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -610,7 +630,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=47"></script>
-  <script src="js/app.js?v=223"></script>
+  <script src="js/app.js?v=224"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=4"></script>
   <script src="js/mobile.js?v=30"></script>

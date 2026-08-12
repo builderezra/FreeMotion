@@ -139,10 +139,33 @@ window.FM = window.FM || {};
       // the blob itself is left alone — pruneOrphans collects it if no project still uses it
     },
 
-    clear() {
-      readIndex().forEach(e => { if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(THUMB + e.mid); });
-      memThumb.clear();
-      writeIndex([]);
+    // How much history is remembered, split the way the Add menu splits it: songs are one tab, clips
+    // and photos are another. Settings labels its two Clear buttons from this, so you can see what a
+    // press is about to forget without opening the Add menu to count tiles.
+    counts() {
+      let audio = 0, visual = 0;
+      readIndex().forEach(e => { if (FM.mediaLib.isAudio(e)) audio++; else visual++; });
+      return { audio: audio, visual: visual, total: audio + visual };
+    },
+
+    // Forget imported files. `kind` is 'audio' | 'visual', or nothing for the lot. Returns how many
+    // entries went, so a caller can say so.
+    //
+    // What this does NOT do is delete your media. An entry is a POINTER at a blob some project's layer
+    // already owns (see the header) — dropping the pointer only takes away the one-tap shortcut. Any
+    // project using that file keeps it, because pruneOrphans keeps every key a project references;
+    // a blob no project references is collected on the next sweep, which is what you wanted anyway if
+    // you are clearing the history. Nothing here can reach into a project and empty a layer.
+    clear(kind) {
+      const list = readIndex();
+      const goes = e => !kind || (FM.mediaLib.isAudio(e) ? 'audio' : 'visual') === kind;
+      const gone = list.filter(goes);
+      gone.forEach(e => {
+        memThumb.delete(e.mid);
+        if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(THUMB + e.mid);
+      });
+      writeIndex(list.filter(e => !goes(e)));
+      return gone.length;
     },
 
     // One-time sweep so the library isn't empty on the day it ships: every media layer in every

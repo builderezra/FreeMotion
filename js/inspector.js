@@ -1054,7 +1054,7 @@ window.FM = window.FM || {};
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
-    { key: 'color', label: 'Color & Fill', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
+    { key: 'color', label: 'Colouring', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
     { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
@@ -1148,10 +1148,20 @@ window.FM = window.FM || {};
     '<path d="M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19" ' +
       'stroke="url(#fm-ci-fx)" stroke-width="2.1"/>';
 
-  /* COLOR & FILL — Ezra asked for this glyph to be CHANGED, not just tinted. It was a paint-blob
-   * outline; it is a filled droplet over a swatch bar now, which says "the colour AND the fill". */
+  /* COLOURING — Ezra asked for this glyph to be CHANGED, not just tinted. It was a paint-blob
+   * outline; it is a filled droplet over a swatch bar now, which says "the colour AND the fill".
+   *
+   * v6.13, the recolour: "the logo for colour and fill looks like a fire, just change the colour."
+   * It did, and the palette was the whole reason — pink at the tip running to orange and then YELLOW at
+   * the base is exactly how a flame is lit, and the droplet's pointed top sold the rest. Two things fix
+   * it. The ramp now runs violet → magenta → pink, so there is no yellow or orange anywhere in the
+   * glyph; and it runs COOL at the top to WARM at the base, which is the reverse of a flame (fire is
+   * hottest, so palest, at the bottom). Magenta was also the one hue no other category had claimed —
+   * Speed and Presets own the warms, Border, Transform, Volume and Shape own the cools, Effects owns
+   * the whole rainbow — so this reads as its own thing at 24px rather than as a near-miss of a
+   * neighbour. */
   const ICO_COLOR = lg('fm-ci-col', 6, 4, 19, 20, [
-      ['0', '#FF5FA2'], ['.5', '#FF9F45'], ['1', '#FFE066']]) +
+      ['0', '#9B5CFF'], ['.5', '#E255D8'], ['1', '#FF6FB5']]) +
     '<path d="M12 3.2c3.4 3.9 5.2 6.6 5.2 8.9a5.2 5.2 0 0 1-10.4 0c0-2.3 1.8-5 5.2-8.9z" fill="url(#fm-ci-col)"/>' +
     '<path d="M5 20.3h14" stroke="url(#fm-ci-col)" stroke-width="2.4"/>';
 
@@ -1294,7 +1304,7 @@ window.FM = window.FM || {};
 
   // ===== Paste Style (Alight Motion) — copy a layer, then apply chosen style aspects to another. =====
   const STYLE_CATS = [
-    { key: 'color',     label: 'Color & Fill',       icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
+    { key: 'color',     label: 'Colouring',       icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
     { key: 'border',    label: 'Border & Shadow',    icon: 'M4 4h12v12H4zM9 20h11V9' },
     { key: 'blend',     label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Move & Transform',   icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
@@ -3672,7 +3682,9 @@ window.FM = window.FM || {};
         }
       }
       const layer = FM.selectedLayer(FM.scene);
-      const title = document.querySelector('#inspector-panel .panel-title');
+      // The LABEL span, not the whole row — the row also holds the project-name field (v6.13), and
+      // writing textContent on the row would delete it on the next refresh.
+      const title = document.querySelector('#inspector-panel .panel-title-label');
       // A sub-view can be much taller than the grid, and the sheet keeps its scroll across a rebuild —
       // land back at the top whenever the LAYER or the VIEW changes, or you return to a short panel
       // already scrolled past its own content and it reads as empty. Same-view refreshes (a slider

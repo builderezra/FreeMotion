@@ -581,6 +581,12 @@ window.FM = window.FM || {};
     const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     const pn = document.getElementById('proj-name');
     if (pn && document.activeElement !== pn) { pn.value = sel ? (sel.name || '') : (FM.scene.project.name || 'Untitled'); pn.title = sel ? 'Layer name' : 'Project name'; }
+    // The panel-header copy (v6.13) is ALWAYS the project name. #proj-name above is dual-purpose — it
+    // renames the selected layer when there is one — and a second field that silently changed meaning
+    // depending on the selection would be a trap, especially where it sits: directly above a panel that
+    // is all about the selected layer.
+    const pns = document.getElementById('proj-name-s');
+    if (pns && document.activeElement !== pns) pns.value = FM.scene.project.name || 'Untitled';
     const delBtn = document.getElementById('btn-del-layer');
     if (delBtn) delBtn.style.display = sel ? '' : 'none';
     const parBtn = document.getElementById('btn-parent');
@@ -2538,6 +2544,15 @@ window.FM = window.FM || {};
     // desktop: clicking the brand goes Home (mobile uses the ‹ back arrow)
     const brandEl = document.querySelector('#topbar .brand');
     if (brandEl) brandEl.addEventListener('click', (e) => { if (e.target.classList.contains('ver')) return; if (FM.home) FM.home.open(); });
+    // The desktop back button (v6.13). Same ladder as the phone's #m-back, in the same order: a live
+    // selection and an open group are things you are INSIDE, and back should leave the innermost one
+    // first. Without this, pressing Back with a clip selected would jump you all the way out of the
+    // project — which is the bug v5.71 fixed on the phone, and this button would have re-introduced.
+    const backBtn = document.getElementById('btn-back');
+    if (backBtn) backBtn.addEventListener('click', () => {
+      if (FM.groupContext && FM.exitGroup) { FM.exitGroup(); return; }
+      if (FM.home) FM.home.open();
+    });
 
     // top bar
     const fileInput = document.getElementById('file-input');
@@ -2648,10 +2663,27 @@ window.FM = window.FM || {};
         { label: 'Reset project…', danger: true, action: () => { if (confirm('Reset the project? This clears all layers and cannot be undone.')) FM.resetProject(); } },
       ];
     };
+    // The desktop cog (v6.13). It used to open FM.settings — the APP preferences panel — while the
+    // phone's identical gear (#m-settings) opened Canvas settings. Ezra, twice: "settings cog on pc in
+    // projects STILL opens up wrong settings menu." It wasn't that the panel was empty of project rows
+    // (v5.x had already put Canvas / Loop / Onion / Snapping at the top of it); it was that the SAME
+    // icon in the SAME place meant two different things depending on which device he was holding.
+    // So the two agree now: inside a project, the cog is Canvas settings on every platform, and the
+    // app-wide preferences are one clearly-labelled button away inside it (#cv-appset above).
+    // On the HOME screen the cog is still FM.settings — there is no canvas there to configure.
     const setBtn = document.getElementById('btn-settings');
     if (setBtn) setBtn.addEventListener('click', () => {
+      const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
+      const cv = document.getElementById('btn-canvas');
+      if (inProject && cv) { cv.click(); return; }
       if (FM.settings && FM.settings.open) FM.settings.open();
       else if (FM.toast) FM.toast('Settings unavailable');
+    });
+    const appSetBtn = document.getElementById('cv-appset');
+    if (appSetBtn) appSetBtn.addEventListener('click', () => {
+      const dlg = document.getElementById('canvas-dialog');
+      if (dlg) dlg.classList.add('hidden');   // leave this dialog first, or the panel opens behind it
+      if (FM.settings && FM.settings.open) FM.settings.open();
     });
     // The PC top bar's ⋯ (#btn-more) used to live here, opening FM.projectMoreItems with nothing
     // selected and FM.layerMenuItems with a clip selected. Both halves were duplicates by the end:
@@ -2965,6 +2997,19 @@ window.FM = window.FM || {};
         else FM.scene.project.name = pn.value;
       });
       pn.addEventListener('change', () => { if (FM.history) FM.history.commit(); });
+    }
+    // …and its copy in the inspector/Add panel header (v6.13). Writes the PROJECT name only, and pushes
+    // the new value into the other two fields so all three never disagree.
+    const pns = document.getElementById('proj-name-s');
+    if (pns) {
+      pns.value = FM.scene.project.name || 'Untitled';
+      pns.addEventListener('input', () => {
+        FM.scene.project.name = pns.value;
+        const pnm = document.getElementById('proj-name-m');
+        if (pnm && document.activeElement !== pnm) pnm.value = pns.value;
+        if (pn && document.activeElement !== pn && !FM.selectedLayer(FM.scene)) pn.value = pns.value;
+      });
+      pns.addEventListener('change', () => { if (FM.history) FM.history.commit(); });
     }
     // Top-bar delete: removes the selected layer(s). Sits next to ⋯ / Export (the inspector's own
     // delete/duplicate/thumbnail header row was removed — those live on the timeline / top bar now).

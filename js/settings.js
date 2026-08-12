@@ -151,6 +151,41 @@ window.FM = window.FM || {};
     return row;
   }
 
+  // A row that FORGETS something, and stays put while it does. Deliberately not actionRow:
+  //   · actionRow shuts the panel before it runs, which is right for anything whose result is on the
+  //     screen behind (Trim, Save…, Reset). Here the result IS this row — the count in the hint is the
+  //     whole confirmation — so closing would hide the only feedback there is.
+  //   · clearing songs is usually followed by clearing clips. Re-opening Settings between the two
+  //     would be a silly thing to make someone do.
+  // Disabled at zero rather than hidden: a row that disappears once it is empty is a row you cannot
+  // find again to check, and "Songs — nothing remembered yet" is itself the answer to "is it clear?".
+  function clearRow(label, describe, count, doClear) {
+    const row = el('div', 'set-row');
+    const txt = el('div', 'set-rowtext');
+    txt.appendChild(el('div', 'set-label', label));
+    const hint = el('div', 'set-hint');
+    txt.appendChild(hint);
+    const b = el('button', 'set-action danger', 'Clear');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Clear ' + label.toLowerCase());
+    const sync = () => {
+      const n = count();
+      hint.textContent = describe(n);
+      b.disabled = !n;
+    };
+    b.addEventListener('click', () => {
+      const n = count();
+      // No FM.toast here on purpose: #toast sits at z-index 60 and .set-scrim at 220, so a toast
+      // raised from this panel would be painted behind it and never seen.
+      if (!n || !confirm(describe(n) + '\n\nForget them? Projects already using a file keep it — this only clears the list.')) return;
+      doClear();
+      sync();
+    });
+    sync();
+    row.appendChild(txt); row.appendChild(b);
+    return row;
+  }
+
   function selectRow(label, hint, key, values, fmt) {
     const row = el('div', 'set-row');
     const txt = el('div', 'set-rowtext');
@@ -235,6 +270,30 @@ window.FM = window.FM || {};
       toggleRow('Show system fonts', 'Off = the text font picker lists only fonts you imported.', 'systemFonts'),
       selectRow('Default layer duration', 'How long a new photo, text, shape or drawing lasts. Video clips always use their own length.', 'layerDuration', DURATIONS, v => (v < 1 ? v + 's' : v + 's')),
     ));
+
+    // ---- Import history (Ezra: "a setting that lets you clear the songs and media history that shows
+    // up after you import files") ---------------------------------------------------------------
+    // The Add menu remembers every file you have ever imported and shows it as a one-tap tile, because
+    // a browser cannot read your camera roll and the picker is the only way in (see medialib.js). That
+    // is the right default and it is also how a dozen throwaway test clips end up being the first thing
+    // on screen forever. Long-pressing a tile has always forgotten ONE; this is the bulk door.
+    // Songs and clips get their own button because they live in two different tabs and it is usually
+    // one of them you want gone. It sits directly under Demo mode, which hides these same tiles for a
+    // screen recording — same subject, one row apart, so whichever one you came looking for is here.
+    if (FM.mediaLib && FM.mediaLib.counts) {
+      const n = FM.mediaLib.counts();
+      body.appendChild(group(
+        clearRow('Songs',
+          c => c ? c + (c === 1 ? ' song' : ' songs') + ' remembered from past imports' : 'No songs remembered',
+          () => FM.mediaLib.counts().audio, () => FM.mediaLib.clear('audio')),
+        clearRow('Photos & videos',
+          c => c ? c + (c === 1 ? ' file' : ' files') + ' remembered from past imports' : 'No photos or videos remembered',
+          () => FM.mediaLib.counts().visual, () => FM.mediaLib.clear('visual')),
+        hintRow(n.total
+          ? 'These are the tiles in Add → Media and Add → Audio. Clearing forgets the shortcut only: a project already using a file keeps it, and the file is deleted from this device once no project needs it.'
+          : 'Files you import appear here as one-tap tiles in Add → Media and Add → Audio, so you never have to go back through the file picker for something you have already used.'),
+      ));
+    }
     body.appendChild(group(
       segmentRow('Playback quality', 'playbackQuality', [
         { label: 'Auto', value: 'auto' }, { label: 'Smooth', value: 'smooth' }, { label: 'Sharp', value: 'detail' },

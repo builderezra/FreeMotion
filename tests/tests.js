@@ -5082,7 +5082,9 @@
       if (vLabels.join(' | ') !== sLabels.join(' | ')) {
         throw new Error('video and shape still show different option cards:\n  video: ' + vLabels.join(' | ') + '\n  shape: ' + sLabels.join(' | '));
       }
-      const want = ['Color & Fill', 'Border & Shadow', 'Blending & Opacity', 'Move & Transform', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
+      // 'Colouring' since v6.13 — Ezra renamed it from 'Color & Fill' when the fire-looking icon was
+      // recoloured. The ORDER is what this test is about; the names are how it identifies the cards.
+      const want = ['Colouring', 'Border & Shadow', 'Blending & Opacity', 'Move & Transform', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
       if (vLabels.join(' | ') !== want.join(' | ')) {
         throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
       }
@@ -7729,6 +7731,58 @@
       if (!(after < before * 0.5)) throw new Error('the strip still has ' + (after / before).toFixed(2)
         + 'x its old ink after the peaks were flattened — a stale cached canvas is on screen');
     } finally { fx.restore(); }
+  });
+
+  /* Import history (v6.13). Both tests write a FAKE library into localStorage and put the real one
+   * back in a finally — the suite must never touch Ezra's own imports, and this is the one feature
+   * whose whole job is deleting that list. */
+  test('media history: clearing songs leaves the photos and videos alone', { item: 'media-history' }, function () {
+    var KEY = 'fm.medialib', saved = localStorage.getItem(KEY);
+    try {
+      localStorage.setItem(KEY, JSON.stringify([
+        { mid: 'ta1', key: 'k1', name: 'Song.mp3', kind: 'video', audio: true, w: 0, h: 0, dur: 90, added: 3 },
+        { mid: 'tv1', key: 'k2', name: 'Clip.mp4', kind: 'video', audio: false, w: 640, h: 480, dur: 4, added: 2 },
+        { mid: 'tp1', key: 'k3', name: 'Shot.jpg', kind: 'image', audio: false, w: 800, h: 600, dur: 0, added: 1 }
+      ]));
+      var before = FM.mediaLib.counts();
+      if (before.audio !== 1 || before.visual !== 2) throw new Error('counts() mis-read the library: ' + JSON.stringify(before));
+      var gone = FM.mediaLib.clear('audio');
+      var after = FM.mediaLib.counts();
+      if (gone !== 1) throw new Error('clear() reported ' + gone + ' forgotten, expected 1');
+      if (after.audio !== 0) throw new Error('the song survived a clear("audio")');
+      if (after.visual !== 2) throw new Error('clearing songs took ' + (2 - after.visual) + ' photo/video entries with it');
+    } finally { if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved); }
+  });
+
+  test('media history: the Settings row forgets the songs and keeps the panel open', { item: 'media-history' }, function () {
+    var KEY = 'fm.medialib', saved = localStorage.getItem(KEY);
+    var realConfirm = window.confirm, wasOpen = FM.settings.isOpen();
+    try {
+      localStorage.setItem(KEY, JSON.stringify([
+        { mid: 'ta1', key: 'k1', name: 'Song.mp3', kind: 'video', audio: true, w: 0, h: 0, dur: 90, added: 2 },
+        { mid: 'tv1', key: 'k2', name: 'Clip.mp4', kind: 'video', audio: false, w: 640, h: 480, dur: 4, added: 1 }
+      ]));
+      window.confirm = function () { return true; };
+      FM.settings.open();
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.set-panel .set-row'));
+      var row = rows.filter(function (r) { var l = r.querySelector('.set-label'); return l && l.textContent === 'Songs'; })[0];
+      if (!row) throw new Error('no Songs row in the settings panel');
+      var btn = row.querySelector('.set-action');
+      if (!btn) throw new Error('the Songs row has no Clear button');
+      if (btn.disabled) throw new Error('Clear was disabled with 1 song remembered');
+      btn.click();
+      var n = FM.mediaLib.counts();
+      if (n.audio !== 0) throw new Error('pressing Clear did not forget the song');
+      if (n.visual !== 1) throw new Error('pressing Clear on Songs also forgot the video');
+      if (!FM.settings.isOpen()) throw new Error('the panel closed — the updated count is the only feedback this press has');
+      if (!btn.disabled) throw new Error('Clear stayed live with nothing left to clear');
+      var hint = row.querySelector('.set-hint');
+      if (!hint || hint.textContent.indexOf('No songs') !== 0) throw new Error('the hint did not update: ' + (hint && hint.textContent));
+    } finally {
+      window.confirm = realConfirm;
+      if (!wasOpen) FM.settings.close();
+      if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved);
+    }
   });
 
   async function run() {
