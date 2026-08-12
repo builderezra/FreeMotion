@@ -4311,20 +4311,29 @@ window.FM = window.FM || {};
   }
 
   const WARP_FX = {
-    wave: function (x, y, W, H, cx, cy, maxR, p, t) {
-      const amp = FM.evalProp(p.amount, t) || 0;
+    /* `ps` (the 10th argument) converts PROJECT px into PLATE px. Every quantity below that the user
+     * dials in as pixels — amplitude, wavelength — must be multiplied by it, exactly as curl already
+     * does. Without it the wave was 1.4-3x stronger in a reduced preview than in the export: measured
+     * horizontal extent of a 200px square at render scale 1 / 0.5 / 0.28 was 259 / 270 / 293 px, so
+     * you dialled in a wave you liked while scrubbing, hit play, and it changed strength mid-playback
+     * — and the exported file matched neither. At ps === 1 every multiplication is a no-op, so
+     * exports and 1:1 previews stay byte-identical. (BUG-HUNT, high.) */
+    wave: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
+      const k = ps || 1;
+      const amp = (FM.evalProp(p.amount, t) || 0) * k;
       // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
       // ratio (46 = 38 * 1.2105…) so a single control moves both without changing the default look.
-      const wl = p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t));
-      const wl2 = wl === 38 ? 46 : wl * (46 / 38);
+      const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
+      const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
       const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
       const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
       return [x + amp * Math.sin(y / wl + ph), y + amp * cross * Math.sin(x / wl2 + ph)];
     },
-    ripple: function (x, y, W, H, cx, cy, maxR, p, t) {
+    ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
+      const k = ps || 1;   // amplitude and wavelength are absolute px — see the note on wave
       cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
-      const amp = FM.evalProp(p.amount, t) || 0, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) || 1e-6;
-      const wl = p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t));
+      const amp = (FM.evalProp(p.amount, t) || 0) * k, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) || 1e-6;
+      const wl = (p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
       const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
       const off = amp * Math.sin(r / wl - ph);   // minus: rising phase sends the rings OUTWARD
       return [x + (dx / r) * off, y + (dy / r) * off];
@@ -4364,11 +4373,14 @@ window.FM = window.FM || {};
     // a wall). Half the effect had no way to be reached.
     polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0); var plSx, plSy; if(plMode===1){ var plDx=x-cx, plDy=y-cy; var plA=Math.atan2(plDy,plDx); if(plA<0)plA+=Math.PI*2; plSx=(plA/(Math.PI*2))*W; plSy=(Math.sqrt(plDx*plDx+plDy*plDy)/maxR)*H; } else { var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; plSx=cx+Math.cos(plAng)*plRad; plSy=cy+Math.sin(plAng)*plRad; } return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
     bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1; var bdShift=bdAmt*cx*Math.sin((y/H)*Math.PI); return [x-bdShift,y]; },
-    glass: function(x,y,W,H,cx,cy,maxR,p,t){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
+    glass: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); gam*=(ps||1); /* px displacement — see the note on wave */ var ghh=(x*374761393 + y*668265263)|0; ghh=(ghh^(ghh>>13))*1274126177; ghh=ghh^(ghh>>16); var gdx=((ghh & 255)/255 - 0.5)*2*gam; var gdy=(((ghh>>8) & 255)/255 - 0.5)*2*gam; return [x+gdx, y+gdy]; },
     // ---- batch 9 (warp) ----
     curl: function(x,y,W,H,cx,cy,maxR,p,t,ps){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=Math.max(1,(p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)))*(ps||1)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
-    fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t){ var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; var fwNx=Math.sin(x/57+y/40)+Math.sin(x/29-y/53)*0.6+Math.sin(x/15+y/19)*0.35; var fwNy=Math.cos(x/47-y/61)+Math.sin(x/35+y/27)*0.6+Math.cos(x/13-y/21)*0.35; return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
+    fractalwarp: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var fwK=ps||1; var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; fwAmt*=fwK;
+      // The frequency DIVISORS are wavelengths in px too, so they scale with the plate as well —
+      // scaling only the amplitude would keep the displacement right and shrink the pattern.
+      var fwNx=Math.sin(x/(57*fwK)+y/(40*fwK))+Math.sin(x/(29*fwK)-y/(53*fwK))*0.6+Math.sin(x/(15*fwK)+y/(19*fwK))*0.35; var fwNy=Math.cos(x/(47*fwK)-y/(61*fwK))+Math.sin(x/(35*fwK)+y/(27*fwK))*0.6+Math.cos(x/(13*fwK)-y/(21*fwK))*0.35; return [x+fwNx*fwAmt*0.4, y+fwNy*fwAmt*0.4]; },
     // ---- batch 26: Tunnel — radial inversion about the centre (inside turns outside), blended by
     // amount. At 1 the frame reads as an infinite tube; small amounts give a wormhole pucker.
     tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y]; var tnDx=x-cx, tnDy=y-cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y]; var tnInv=(maxR*0.30)*(maxR*0.30)/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA; return [cx+tnDx/tnR*tnRR, cy+tnDy/tnR*tnRR]; },
@@ -4392,7 +4404,7 @@ window.FM = window.FM || {};
     stretchseg: function(x,y,W,H,cx,cy,maxR,p,t){ var ss_y=FM.evalProp(p.y,t); if(ss_y==null)ss_y=50; var ss_h=FM.evalProp(p.height,t); if(ss_h==null)ss_h=25; var ss_amt=FM.evalProp(p.amount,t); if(ss_amt==null)ss_amt=0.6; if(ss_amt<0)ss_amt=0; if(ss_amt>0.95)ss_amt=0.95; var ss_cy=H*ss_y/100, ss_half=H*ss_h/200; if(ss_half<1)return [x,y]; var ss_d=y-ss_cy; if(ss_d<-ss_half||ss_d>ss_half)return [x,y]; var ss_f=1-ss_amt; var ss_sy=ss_cy+ss_d*ss_f; return [x, ss_sy]; },
     // Tile Shift: chop into square tiles, offset alternate ROWS sideways (and alt columns down) by a
     // fraction of the tile — the classic sliced/glitch-tile displacement. Samples wrap via the source.
-    tileshift: function(x,y,W,H,cx,cy,maxR,p,t){ var ts_sz=FM.evalProp(p.size,t); if(ts_sz==null)ts_sz=120; if(ts_sz<8)ts_sz=8; var ts_off=FM.evalProp(p.amount,t); if(ts_off==null)ts_off=0.5; var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
+    tileshift: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var ts_sz=FM.evalProp(p.size,t); if(ts_sz==null)ts_sz=120; if(ts_sz<8)ts_sz=8; ts_sz=Math.max(2,ts_sz*(ps||1)); /* tile size is px; the offset is a FRACTION of it, so it rides along */ var ts_off=FM.evalProp(p.amount,t); if(ts_off==null)ts_off=0.5; var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
     // Tile Rotate: chop into tiles, spin each tile's CONTENT about its own centre by Angle (× a subtle
     // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
     tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },

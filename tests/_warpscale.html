@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Warp scale-stability probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — WARP SCALE-STABILITY probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * WHY THIS EXISTS
+ *   BUG-HUNT, high: "Warp effects displace by PLATE pixels, so wave/ripple/glass/tileshift/
+ *   fractalwarp are 1.4-3x stronger in the preview than in the export." The map functions took
+ *   nine arguments and the plate scale is the tenth, so every px-denominated control — amplitude,
+ *   wavelength, tile size — was read as REDUCED plate pixels. curl already took it, and is the
+ *   control here precisely because it was already right.
+ *
+ * WHAT IT MEASURES
+ *   The horizontal extent of a warped 200px square, expressed in PROJECT pixels, at three render
+ *   scales. A scale-correct effect gives the same number at all three; the bug shows up as spread.
+ *   Extent is measured in project units (plate px / rs) so the three are directly comparable —
+ *   comparing raw plate pixels would make every effect look "wrong" simply because the plate is
+ *   smaller, which is the trap this measurement exists to avoid.
+ * ============================================================================================ */
+(function () {
+  var W = 320, H = 240;
+  function shot(fx, rs) {
+    var c = document.createElement('canvas');
+    c.width = Math.round(W * rs); c.height = Math.round(H * rs);
+    c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: 160, y: 120, shapeW: 200, shapeH: 200, fill: '#ffffff' });
+    L.effects = fx ? [fx] : [];
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: [L] }, 0);
+    var d = g.getImageData(0, 0, c.width, c.height).data;
+    var minX = c.width, maxX = -1;
+    for (var y = 0; y < c.height; y++) for (var x = 0; x < c.width; x++) {
+      if (d[(y * c.width + x) * 4 + 3] > 8) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+    }
+    if (maxX < 0) return 0;
+    return (maxX - minX + 1) / rs;      // PROJECT px, so the three scales are comparable
+  }
+  var CASES = [
+    ['wave',        { type: 'wave', enabled: true, params: { amount: 30 } }],
+    ['ripple',      { type: 'ripple', enabled: true, params: { amount: 30 } }],
+    ['glass',       { type: 'glass', enabled: true, params: { amount: 30 } }],
+    ['tileshift',   { type: 'tileshift', enabled: true, params: { size: 120 } }],
+    ['fractalwarp', { type: 'fractalwarp', enabled: true, params: { amount: 50 } }],
+    ['curl (control — already took ps)', { type: 'curl', enabled: true, params: { amount: 30 } }],
+  ];
+  var SCALES = [1, 0.5, 0.28];
+  var lines = ['extent of a 200px square, in PROJECT px — a scale-correct effect is FLAT across the row', ''];
+  lines.push('effect                              rs=1.00   rs=0.50   rs=0.28    spread');
+  var worst = 0, worstName = '';
+  CASES.forEach(function (c) {
+    var vals = SCALES.map(function (rs) { return shot(c[1], rs); });
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    var spread = mn > 0 ? (mx / mn - 1) * 100 : 999;
+    if (spread > worst) { worst = spread; worstName = c[0]; }
+    lines.push(c[0].padEnd(34) + vals.map(function (v) { return String(Math.round(v)).padStart(8); }).join('  ')
+      + '   ' + spread.toFixed(1) + '%');
+  });
+  lines.push('');
+  lines.push('worst spread: ' + worst.toFixed(1) + '% (' + worstName + ')');
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

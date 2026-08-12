@@ -10437,6 +10437,67 @@
     });
   });
 
+  /* ---- warp effects must be the same STRENGTH at every preview scale ---------------------------
+   *
+   * BUG-HUNT, high: "Warp effects displace by PLATE pixels, so wave/ripple/glass/tileshift/
+   * fractalwarp are 1.4-3x stronger in the preview than in the export." drawWarpEffect passes the
+   * plate scale as the map function's 10th argument precisely so px-denominated controls can be
+   * converted; curl took it, and those five did not even declare it. So amplitude, wavelength and
+   * tile size were read as REDUCED plate pixels: you dialled in a wave you liked while scrubbing,
+   * hit play, the quality ladder dropped a tier and it changed strength mid-playback — and the
+   * exported file matched neither.
+   *
+   * Measured on the tree before the fix, spread across render scales 1 / 0.5 / 0.28:
+   *     ripple 233.8%   fractalwarp 60.2%   glass 23.6%   wave 5.7%   (curl, the control, 3.5%)
+   * and after: 0.9% / 1.8% / 3.0% / 3.8%, i.e. all of them down at the control's own floor, which
+   * is rasterisation noise at a 0.28 plate and not something any fix can remove.
+   *
+   * curl is in the sweep as a CONTROL, and that is what makes the threshold meaningful: it was
+   * already correct, so it measures how much spread is unavoidable. A test that just asserted
+   * "under 12%" with nothing to compare against would not survive someone tightening it. */
+  test('effects: warp strength does not change with the preview scale', { item: 'warp-plate-scale' }, function () {
+    var LBW = 320, LBH = 240;
+    var extent = function (fx, rs) {
+      var c = offscreen(Math.round(LBW * rs), Math.round(LBH * rs));
+      c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: 160, y: 120, shapeW: 200, shapeH: 200, fill: '#ffffff' });
+      L.effects = fx ? [fx] : [];
+      FM.renderScene(g, scene([L], { project: { width: LBW, height: LBH, fps: 30, duration: 5, background: null } }), 0);
+      var d = g.getImageData(0, 0, c.width, c.height).data;
+      var minX = c.width, maxX = -1;
+      for (var y = 0; y < c.height; y++) for (var x = 0; x < c.width; x++) {
+        if (d[(y * c.width + x) * 4 + 3] > 8) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+      }
+      return maxX < 0 ? 0 : (maxX - minX + 1) / rs;      // PROJECT px, so the scales are comparable
+    };
+    var CASES = [
+      ['Wave', { type: 'wave', enabled: true, params: { amount: 30 } }],
+      ['Circular Ripple', { type: 'ripple', enabled: true, params: { amount: 30 } }],
+      ['Frosted Glass', { type: 'glass', enabled: true, params: { amount: 30 } }],
+      ['Fractal Warp', { type: 'fractalwarp', enabled: true, params: { amount: 50 } }],
+      ['Curl', { type: 'curl', enabled: true, params: { amount: 30 } }],   // the control
+    ];
+    var spreadOf = function (fx) {
+      var v = [1, 0.5, 0.28].map(function (rs) { return extent(fx, rs); });
+      var mn = Math.min.apply(null, v), mx = Math.max.apply(null, v);
+      return { pct: mn > 0 ? (mx / mn - 1) * 100 : 999, vals: v };
+    };
+    var control = spreadOf(CASES[4][1]).pct;
+    // Generous headroom over the control: this guards the 20-230% class of failure, not a couple of
+    // pixels of rasterisation. Tightening it toward the control would make it flaky, not stricter.
+    var limit = Math.max(12, control * 3);
+    CASES.slice(0, 4).forEach(function (c) {
+      var r = spreadOf(c[1]);
+      if (r.pct > limit) {
+        throw new Error(c[0] + ' changes strength with the preview scale: extents ' +
+          r.vals.map(function (x) { return Math.round(x); }).join(' / ') + ' project px at scale 1 / 0.5 / 0.28 — ' +
+          r.pct.toFixed(1) + '% spread against a ' + control.toFixed(1) + '% control. It is reading its ' +
+          'pixel controls as PLATE pixels, so the preview and the export disagree.');
+      }
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
