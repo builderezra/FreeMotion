@@ -1096,6 +1096,122 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Tap an effect to open its controls', 2600);
   }
 
+  /* ---- Coloured category icons (#77) ----------------------------------------------------------
+   * Ezra: "it would be nice if you added colouring to all of these … gradients with bright nice
+   * colours." Same mechanism the add-menu tabs use (js/addmenu.js icoMulti): the wrapper carries NO
+   * blanket stroke="currentColor", because that would overwrite every per-path paint and flatten the
+   * gradients back to one colour. Gradient ids are namespaced fm-ci-* so they cannot collide with
+   * the add menu's fm-ic-* set — two <defs> with the same id in one document and the first one wins
+   * everywhere, which is a silent, confusing failure. */
+  function icoMulti(inner) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  }
+  function lg(id, x1, y1, x2, y2, stops) {
+    return '<defs><linearGradient id="' + id + '" x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
+      '" gradientUnits="userSpaceOnUse">' +
+      stops.map(function (st) { return '<stop offset="' + st[0] + '" stop-color="' + st[1] + '"/>'; }).join('') +
+      '</linearGradient></defs>';
+  }
+
+  /* SPEED — a real speedometer, which is what Ezra asked for by name: a dial ARC with tick marks, a
+   * needle, and a hub, not a generic gauge outline. The dial runs cool at the low end and RED at the
+   * top, the way a redline is printed on a real instrument, and the needle is swung up into that red
+   * so the icon reads as "fast" rather than as "a dial". Geometry is explicit: centre (12, 18.4),
+   * radius 8.4, ticks at 180/135/90/45/0 degrees drawn inward. */
+  const ICO_SPEED = lg('fm-ci-spd', 3.6, 18.4, 20.4, 8, [
+      ['0', '#5BE7B8'], ['.42', '#FFD166'], ['.74', '#FF7A45'], ['1', '#E01B2E']]) +
+    '<path d="M3.6 18.4a8.4 8.4 0 1 1 16.8 0" stroke="url(#fm-ci-spd)" stroke-width="2.2"/>' +
+    '<path d="M4.4 18.4h1.6M6.9 12.9l1.2 1.1M12 10.4v1.7M17.1 12.9l-1.2 1.1M19.6 18.4H18" ' +
+      'stroke="url(#fm-ci-spd)" stroke-width="1.5" opacity=".9"/>' +
+    '<path d="M12 18.4 16.5 14.2" stroke="#FF3B30" stroke-width="2.2"/>' +
+    '<circle cx="12" cy="18.4" r="1.7" fill="#E01B2E"/>';
+
+  /* BLENDING & OPACITY — Ezra: "make it look like one of the little circles was one colour and the
+   * other was another colour and where they meet is like them overlaying to a new colour." So the
+   * discs are FILLED and the right one is composited with `screen`: the overlap is a genuine third
+   * colour computed by the blend, not a third flat shape painted to look like one. isolation:isolate
+   * on the svg keeps that blend inside the icon instead of reaching the panel behind it. */
+  const ICO_BLEND =
+    '<circle cx="9.2" cy="12" r="5.6" fill="#3FA9FF" fill-opacity=".92"/>' +
+    '<circle cx="14.8" cy="12" r="5.6" fill="#FF4FA3" fill-opacity=".92" style="mix-blend-mode:screen"/>';
+
+  /* EFFECTS — Ezra: "a shared gradient over every little spike that makes a rainbow, don't just make
+   * each spike a new colour but it's like blends between them all." One gradient defined over the
+   * icon's whole box in userSpaceOnUse, referenced by EVERY spike — so a spike's colour comes from
+   * where it sits in the glyph, and the ramp runs continuously across all of them. Per-path
+   * gradients (the obvious wrong version) would restart the ramp inside each spike. */
+  const ICO_EFFECTS = lg('fm-ci-fx', 3, 21, 21, 3, [
+      ['0', '#FF4FA3'], ['.25', '#FF8A3D'], ['.5', '#FFE14D'], ['.75', '#49E39B'], ['1', '#4FC3FF']]) +
+    '<path d="M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19" ' +
+      'stroke="url(#fm-ci-fx)" stroke-width="2.1"/>';
+
+  /* COLOR & FILL — Ezra asked for this glyph to be CHANGED, not just tinted. It was a paint-blob
+   * outline; it is a filled droplet over a swatch bar now, which says "the colour AND the fill". */
+  const ICO_COLOR = lg('fm-ci-col', 6, 4, 19, 20, [
+      ['0', '#FF5FA2'], ['.5', '#FF9F45'], ['1', '#FFE066']]) +
+    '<path d="M12 3.2c3.4 3.9 5.2 6.6 5.2 8.9a5.2 5.2 0 0 1-10.4 0c0-2.3 1.8-5 5.2-8.9z" fill="url(#fm-ci-col)"/>' +
+    '<path d="M5 20.3h14" stroke="url(#fm-ci-col)" stroke-width="2.4"/>';
+
+  const ICO_BORDER = lg('fm-ci-bor', 4, 4, 20, 20, [
+      ['0', '#6FE3FF'], ['.55', '#4F9DFF'], ['1', '#7C6BFF']]) +
+    '<rect x="8.4" y="8.4" width="11.4" height="11.4" rx="2.4" fill="#0d1a24" fill-opacity=".55"/>' +
+    '<rect x="4.6" y="4.6" width="11.4" height="11.4" rx="2.4" stroke="url(#fm-ci-bor)" stroke-width="2"/>';
+
+  const ICO_TRANSFORM = lg('fm-ci-tr', 3, 21, 21, 3, [
+      ['0', '#3FE0C8'], ['.5', '#4FA8FF'], ['1', '#A96BFF']]) +
+    '<path d="M12 2.8v18.4M2.8 12h18.4M8.6 6.2 12 2.8l3.4 3.4M8.6 17.8 12 21.2l3.4-3.4' +
+      'M6.2 8.6 2.8 12l3.4 3.4M17.8 8.6 21.2 12l-3.4 3.4" stroke="url(#fm-ci-tr)" stroke-width="2"/>';
+
+  /* VOLUME — two states. Ezra: "make the volume icon change when there's no volume on a layer, like
+   * instead of the three lines just make it one horizontal line." So a silent layer gets a single
+   * flat stroke where the arcs were: a flat line IS the picture of no signal, and it reads at 22px
+   * where a small crossed-out speaker does not. */
+  const VOL_GRAD = lg('fm-ci-vol', 4, 18, 21, 6, [
+      ['0', '#49E39B'], ['.55', '#3FD8D8'], ['1', '#4FC3FF']]);
+  const VOL_BODY = '<path d="M11 5 6 9H3v6h3l5 4z" fill="url(#fm-ci-vol)"/>';
+  const ICO_VOLUME = VOL_GRAD + VOL_BODY +
+    '<path d="M14.6 9.4a3.6 3.6 0 0 1 0 5.2M17.2 6.8a7.2 7.2 0 0 1 0 10.4" stroke="url(#fm-ci-vol)" stroke-width="2"/>';
+  const ICO_VOLUME_OFF = VOL_GRAD + VOL_BODY +
+    '<path d="M14.4 12h6" stroke="#6f8592" stroke-width="2.1"/>';
+
+  /* ELEMENT — Edit Shape keeps a shape; Edit Points gets the same shape WITH its vertices shown,
+   * because the points are the thing that screen edits. elementLabel() already picks the wording off
+   * FM.isPointShape, so the icon switches on exactly the same condition and the two can never
+   * disagree. */
+  const EL_GRAD = lg('fm-ci-el', 4, 20, 20, 4, [
+      ['0', '#8CE86B'], ['.55', '#3FD8B0'], ['1', '#4FC3FF']]);
+  const ICO_SHAPE = EL_GRAD +
+    '<path d="M12 3.6 20.4 12 12 20.4 3.6 12z" stroke="url(#fm-ci-el)" stroke-width="2"/>';
+  const ICO_POINTS = EL_GRAD +
+    '<path d="M12 3.6 20.4 12 12 20.4 3.6 12z" stroke="url(#fm-ci-el)" stroke-width="1.7" opacity=".75"/>' +
+    '<rect x="10" y="1.6" width="4" height="4" rx="1" fill="url(#fm-ci-el)"/>' +
+    '<rect x="18.4" y="10" width="4" height="4" rx="1" fill="url(#fm-ci-el)"/>' +
+    '<rect x="10" y="18.4" width="4" height="4" rx="1" fill="url(#fm-ci-el)"/>' +
+    '<rect x="1.6" y="10" width="4" height="4" rx="1" fill="url(#fm-ci-el)"/>';
+
+  const ICO_PRESETS = lg('fm-ci-pre', 4, 20, 20, 4, [
+      ['0', '#FFB03A'], ['.55', '#FFD84D'], ['1', '#FFF0A6']]) +
+    '<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z" fill="url(#fm-ci-pre)"/>';
+
+  /* Which coloured glyph a category shows, given the layer it is describing. Returns raw inner SVG
+   * for icoMulti, or null to fall back to the old single-path currentColor icon. */
+  function catIco(key, layer) {
+    if (key === 'color') return ICO_COLOR;
+    if (key === 'border') return ICO_BORDER;
+    if (key === 'blend') return ICO_BLEND;
+    if (key === 'transform') return ICO_TRANSFORM;
+    if (key === 'speed') return ICO_SPEED;
+    if (key === 'presets') return ICO_PRESETS;
+    if (key === 'effects') return ICO_EFFECTS;
+    if (key === 'volume') {
+      const silent = !layer || layer.muted === true ||
+        (layer.volume != null && typeof layer.volume === 'number' && layer.volume <= 0);
+      return silent ? ICO_VOLUME_OFF : ICO_VOLUME;
+    }
+    if (key === 'element') return (layer && FM.isPointShape && FM.isPointShape(layer)) ? ICO_POINTS : ICO_SHAPE;
+    return null;
+  }
+
   function svgIcon(path) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>';
   }
@@ -1606,7 +1722,10 @@ window.FM = window.FM || {};
       const spdDisabled = cat.key === 'speed' && !layerHasSource(layer);   // same for Speed: nothing to re-time without video/audio frames
       if (volDisabled || spdDisabled) card.classList.add('cat-card-disabled');
       // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
-      card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') + '<span class="cat-ico">' + svgIcon(cat.icon) + '</span><span class="cat-label">' + label + '</span>';
+      const gico = catIco(cat.key, layer);
+      card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') +
+        '<span class="cat-ico">' + (gico ? icoMulti(gico) : svgIcon(cat.icon)) + '</span>' +
+        '<span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (volDisabled) { if (FM.toast) FM.toast('This layer has no audio', 1200); return; }   // pressing Volume on a no-audio layer does nothing (Ezra)
         if (spdDisabled) { if (FM.toast) FM.toast('Speed only re-times video or audio — this layer has neither', 1800); return; }   // it used to open a panel whose slider changed nothing on screen
