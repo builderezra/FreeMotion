@@ -54,7 +54,11 @@ Numbered with Ezra's own queue numbers where he gave them.
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio.
 - [ ] **58 — The red delete bar flashes during fast scroll** in the effects list.
-- [ ] **89 — Letterbox and Border Frame paint over the layers below them.** Same class of bug as Fill
+- [ ] **89 — Letterbox and Border Frame paint over the layers below them.** *Status:* the fix is
+      BUILT and measures well (layer-below survival 65.4% → 100%, zero pixels painted outside the
+      layer's box across 28 configs, 239/239 byte-identical) — but it was cut against v6.22 and two
+      verifiers refused it because it no longer APPLIES to today's code. Being forward-ported now.
+      Not landed until a plain `git apply --check` passes, which is the bar `--3way` can fake. Same class of bug as Fill
       Behind (fixed in v6.15). Both do `if (d[i+3] < 255) d[i+3] = 255`, manufacturing opaque coverage
       where the layer has none. Deliberately deferred: the one-line removal turns them into effects
       that do nothing on a non-fullscreen layer, which this codebase already had to revert once. The
