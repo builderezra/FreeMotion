@@ -176,9 +176,16 @@ window.FM = window.FM || {};
       { label: 'Line', icon: ico('<path d="M4 12h16"/>'), add: shp('line') },
       { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/><circle cx="12" cy="12" r="1.6"/>'), add: shp('polygon') },
     ].concat(LIB_SHAPES.map(function (s) { return { label: s[1], icon: icoPoly(s[0]), add: shp(s[0], { name: s[1] }) }; })) },
-    { key: 'media', label: 'Media', icon: icoMulti('<rect x="3" y="5" width="18" height="14" rx="2" stroke="#7CC9EA"/>'
+    { key: 'media', label: 'Media', icon: icoMulti(
+      /* The frame is drawn as three sides, NOT a rect, so its bottom edge can be its own colour —
+         Ezra: "with the colours on the media one, make the bottom line green". A rect gives you one
+         stroke for all four sides, so the ground line had to come out of it. It now runs green from
+         corner to corner and meets the hill, which is what makes it read as ground rather than as a
+         border that happens to be a different colour. */
+      '<path d="M5 19a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2" stroke="#7CC9EA"/>'
       + '<circle cx="8.4" cy="10.2" r="2" stroke="#FBBF24" fill="#FBBF24" fill-opacity=".30"/>'
-      + '<path d="M4 18l5-5 4 3 3-2 4 4" stroke="#4ADE80"/>'), options: function () {
+      + '<path d="M4 18l5-5 4 3 3-2 4 4" stroke="#4ADE80"/>'
+      + '<path d="M5 19h14" stroke="#4ADE80"/>'), options: function () {
       var base = [
         { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
         { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },

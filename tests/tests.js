@@ -843,6 +843,56 @@
     }
   });
 
+  test('the skip buttons only stop on keyframes you are actually editing', { item: 'skip-focus' }, function () {
+    /* Ezra: "make sure when you press the jump buttons, they don't jump to key frames that you aren't
+       currently editing." FM.timelineSnapPoints used to take EVERY animated property on the selected
+       clip, so a layer with a few animated params turned the skip buttons into a crawl through
+       diamonds the user had no reason to visit. It now filters through FM.kfFocusProps — the same
+       answer the timeline already uses to decide which diamonds are solid and draggable — so the
+       buttons stop exactly where the live diamonds are. */
+    const savedScene = FM.scene, savedT = FM.time, savedSel = FM.scene.selectedId;
+    const savedFocus = FM.kfFocusProps;
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'K', x: 100, y: 100, start: 0, duration: 6 });
+      // Two animated properties, at times that cannot collide with the clip edges or the project ends.
+      L.transform.x = { kf: [{ t: 1, v: 0 }, { t: 2, v: 50 }] };
+      L.transform.opacity = { kf: [{ t: 3, v: 1 }, { t: 4, v: 0 }] };
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 6, bg: '#000' },
+                   layers: [L], selectedId: L.id, selectedIds: [L.id] };
+      FM.time = 0.5;
+      const times = () => FM.timelineSnapPoints().filter(t => t > 0.5 && t < 5.5);
+
+      const props = FM.animatedProps(L);
+      if (props.length !== 2) throw new Error('expected 2 animated properties, got ' + props.length);
+      const xProp = props.find(p => p.kf.some(k => k.t === 1));
+      if (!xProp) throw new Error('could not identify the x property among the animated ones');
+
+      // NOTHING focused → no keyframe is a stop. A diamond you cannot grab is not a destination.
+      FM.kfFocusProps = () => null;
+      let got = times();
+      if (got.length) throw new Error('with nothing focused the skip buttons still stop on ' + JSON.stringify(got) + ' — those diamonds are inert in the timeline, so they must not be stops either');
+
+      // ONE property focused → only ITS keyframes are stops.
+      FM.kfFocusProps = () => [xProp];
+      got = times();
+      if (JSON.stringify(got) !== JSON.stringify([1, 2])) throw new Error('focusing one property should stop only on its keyframes (1, 2) — got ' + JSON.stringify(got));
+
+      // BOTH focused → all four.
+      FM.kfFocusProps = () => props;
+      got = times();
+      if (JSON.stringify(got) !== JSON.stringify([1, 2, 3, 4])) throw new Error('focusing both properties should stop on all four keyframes — got ' + JSON.stringify(got));
+
+      // Off the clip entirely → keyframes never join, focused or not (pre-existing rule, still true).
+      FM.time = 20;
+      FM.scene.project.duration = 30; L.start = 0; L.duration = 6;
+      if (FM.timelineSnapPoints().some(t => t === 1 || t === 2)) throw new Error('with the playhead off the clip its keyframes are still stops');
+    } finally {
+      FM.kfFocusProps = savedFocus;
+      FM.scene = savedScene; FM.time = savedT; FM.scene.selectedId = savedSel;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('add menu: the last TAB is remembered across a reload, the page inside it is not', { item: 'addmenu-memory' }, async function () {
     /* QUEUE 51. Ezra: "whatever i had open last in the add section should re open, like if i add a
      * shape then exit out of editing the shape it should still have the shape section open."

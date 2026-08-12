@@ -706,8 +706,23 @@ window.FM = window.FM || {};
     if (sel) {
       pts.push(Math.max(0, sel.start)); pts.push(Math.min(P.duration, sel.start + sel.duration));
       // Playhead ON the selected clip → its KEYFRAMES join the skip stops (off the clip they don't).
+      // …but only the ones you are ACTUALLY EDITING. Ezra: "make sure when you press the jump buttons,
+      // they don't jump to key frames that you aren't currently editing." This used to take every
+      // animated property on the layer, so a clip with position, scale, opacity and three effect
+      // params turned the skip buttons into a crawl through diamonds you had no reason to visit.
+      // FM.kfFocusProps is the same answer the TIMELINE already uses to decide which diamonds are
+      // solid and draggable versus hollow and inert (js/timeline.js) — reusing it means the buttons
+      // stop exactly where the live diamonds are, and a keyframe you cannot grab is never a stop.
+      // null means nothing is armed, and that deliberately contributes NO keyframes: the clip edges,
+      // benchmarks and project start/end still make the buttons useful with nothing focused.
       if (FM.time >= sel.start - 1e-6 && FM.time <= sel.start + sel.duration + 1e-6 && FM.animatedProps) {
-        FM.animatedProps(sel).forEach(pr => pr.kf.forEach(k => { if (k.t >= 0 && k.t <= P.duration) pts.push(k.t); }));
+        const focus = FM.kfFocusProps ? FM.kfFocusProps(sel) : null;
+        if (focus && focus.length) {
+          FM.animatedProps(sel).forEach(pr => {
+            if (focus.indexOf(pr) < 0) return;
+            pr.kf.forEach(k => { if (k.t >= 0 && k.t <= P.duration) pts.push(k.t); });
+          });
+        }
       }
     }
     return pts.sort((a, b) => a - b);
