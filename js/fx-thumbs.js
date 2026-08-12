@@ -14,6 +14,55 @@ window.FM = window.FM || {};
   const SIZE = 96, FRAMES = 10, TICK_MS = 90;   // 10 frames @ ~11fps ≈ 0.9s loop
   const PROJ = { width: SIZE, height: SIZE, fps: 30, duration: 2, background: '#151a24' };
 
+  /* ---- Ezra's photographs --------------------------------------------------------------------
+   * Fourteen of his own shots (fx-art/*.jpg, 320² each — tiles are 96 and cards 150, so 2x on both).
+   * A real photograph shows what an effect DOES in a way drawn art cannot: a grade needs a real
+   * tonal range, a blur needs real detail to destroy, a warp needs real straight lines to bend.
+   *
+   * The parametric art below is NOT removed and is not dead: it is what a tile paints until the JPEG
+   * has decoded, and what it keeps painting if the file never arrives (a PWA opened offline before
+   * fx-art/ was ever fetched). So the browser is never blank and never depends on an asset.
+   * -------------------------------------------------------------------------------------------- */
+  const PHOTOS = {};
+  function photo(key) {
+    let im = PHOTOS[key];
+    if (im) return im;
+    im = PHOTOS[key] = new Image();
+    im.decoding = 'async';
+    im.addEventListener('load', photosChanged);
+    im.src = 'fx-art/' + key + '.jpg?v=1';
+    return im;
+  }
+  function photoArt(key, fallback) {
+    return function (g, S) {
+      const im = photo(key);
+      if (im.complete && im.naturalWidth > 0) { g.drawImage(im, 0, 0, S, S); return; }
+      fallback(g, S);
+    };
+  }
+  // Every photo, requested the moment the browser opens. Without this a photo is only fetched when
+  // the first tile that needs it is built — which is always AFTER that tile has already painted its
+  // fallback, so every tile visibly flashed drawn art and then swapped. 243 KB for the set. (#66)
+  const ALL_PHOTOS = ['city', 'ramp', 'dusk', 'towers', 'dog', 'sunpath', 'bush', 'shore', 'bay',
+                      'run', 'clouds', 'figures', 'cat', 'pair'];
+  let preloaded = false;
+  function preloadArt() { if (preloaded) return; preloaded = true; ALL_PHOTOS.forEach(photo); }
+
+  // A decoded photo makes every tile that used it stale — the sample scene baked the fallback art
+  // into a canvas, and the frame cache baked that. Coalesced, because fourteen files land at once.
+  let photoSettle = 0;
+  function photosChanged() {
+    if (photoSettle) return;
+    photoSettle = setTimeout(function () {
+      photoSettle = 0;
+      const live = [].slice.call(document.querySelectorAll('canvas.fxb-thumb-cv')).filter(cv => cv._fxType && cv.isConnected);
+      FM.fxThumbs.stopAll();                                    // cancels the ticker, queue and rAF
+      if (samples) Object.keys(samples).forEach(k => { if (k.indexOf(':') >= 0) delete samples[k]; });
+      cache.clear();
+      live.forEach(cv => mountKey(cv, cv._fxType, null));
+    }, 80);
+  }
+
   // ---- render surface (one shared offscreen canvas) ----
   const work = document.createElement('canvas');
   work.width = SIZE; work.height = SIZE;
@@ -249,12 +298,49 @@ window.FM = window.FM || {};
 
   // Category key -> the art its tiles are built from. Colour & Light keeps the landscape; every
   // other section gets art built for what that family actually does.
+  /* Five sections now lead with a photograph, each chosen for what its family needs to show, with
+   * the drawn art kept behind it as the pre-decode fallback:
+   *   color   city   — a golden CBD sunset: crushed silhouettes, a blown sun, warm/cool separation
+   *   blur    dusk   — a dense dusk cityscape: high-frequency detail a blur can visibly destroy
+   *   distort towers — an aerial grid of hard straight lines, the only thing that reads as a warp
+   *   stylize dog    — a real subject, so posterise/halftone happen to something recognisable
+   *   other   ramp   — the cleanest colour ramp of the set
+   * The other eight sections keep their drawn art on purpose: opacity needs a FLAT block (a photo at
+   * 60% is just a slightly different photo), move/repeat/threed need a small asymmetric token with
+   * room to travel, matte needs a defined light/dark split, and proc/drawing get drawn ON. (#66) */
   const SECTION_ART = {
-    color: paintPhoto, other: paintPhoto, text: paintPhoto,
-    blur: paintDetail, distort: paintGrid, proc: paintPlate, stylize: paintBars,
+    color: photoArt('city', paintPhoto), other: photoArt('ramp', paintPhoto), text: paintPhoto,
+    blur: photoArt('dusk', paintDetail), distort: photoArt('towers', paintGrid), proc: paintPlate,
+    stylize: photoArt('dog', paintBars),
     drawing: paintEmblem, move: paintToken, repeat: paintMotif, matte: paintSplit,
     opacity: paintChip, threed: paintFacet,
   };
+
+  /* The remaining nine photographs, wired to the individual effects they demonstrate better than
+   * their section's default. Applied ON TOP of SUBJECT_OF so the FORM already reasoned out below is
+   * preserved — an effect that needs a card keeps its card, it just gets a photograph on it. (#66) */
+  const PHOTO_OF = {
+    sunpath: ['glow', 'softglow', 'darkglow', 'lightglow', 'edgeglow', 'lensflare', 'rays', 'lightleak', 'halation'],
+    bush:    ['filmgrain', 'noise', 'blocknoise'],
+    shore:   ['saturate', 'vibrance', 'hue', 'grayscale', 'duotone', 'gradientmap', 'tint'],
+    bay:     ['gradientoverlay', 'iridescence'],
+    run:     ['motionblur', 'motionflow'],
+    clouds:  ['vignette', 'lightning'],
+    figures: ['threshold', 'posterize'],
+    cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines'],
+    pair:    ['lumamatte', 'matchgrade', 'highlightsshadows'],
+  };
+  const PHOTO_SUBJECT = {};
+  Object.keys(PHOTO_OF).forEach(k => PHOTO_OF[k].forEach(t => { PHOTO_SUBJECT[t] = k; }));
+
+  /* Four effects act on PIXEL-LEVEL detail, and a photograph resampled down to a 96px tile has none
+   * left to act on — which is exactly why the drawn art carries 1px specks. This is not a guess:
+   * with a photo subject the suite's "no tile is indistinguishable from its subject" check failed
+   * for all of them (sharpen scored mean 7.80 against a threshold of 9, unsharpmask 5.42,
+   * temporaldenoise 8.41). They keep the drawn detail plate. (#66)
+   * Pixel Sort belongs with them but wants the BARS, not the detail plate — it sorts along runs of
+   * colour, and it scored 0.24 on the detail plate against 1.54 on a photo. */
+  const DETAIL_BOUND = ['sharpen', 'unsharpmask', 'temporaldenoise'];
 
   // A neutral-grey displacement map with three soft blobs — mid-grey pushes nothing, the blobs push
   // in opposite directions, so Displacement Map has something to actually displace BY.
@@ -326,6 +412,9 @@ window.FM = window.FM || {};
       // A plain shape over the landscape: for Copy Background, whose whole job is to pull the
       // layers UNDERNEATH into the layer, so the tile has to have something worth pulling in.
       backdrop: { layers: [mkShape({ shape: 'rect', shapeW: 54, shapeH: 54, fill: '#2fd0b5', x: 46, y: 44 }), mkArt('_fxthumbPhoto', paintPhoto, SIZE, 48, 48)], heroIdx: 0 },
+      // For DETAIL_BOUND — see above; a photo tile has no pixel-level detail left to sharpen.
+      detail:   { layers: [mkArt('_fxthumbDetail', paintDetail, SIZE, 48, 48), bg()], heroIdx: 0 },
+      bars:     { layers: [mkArt('_fxthumbBars', paintBars, SIZE, 48, 48), bg()], heroIdx: 0 },
     };
   }
   // 'full:<cat>' / 'card:<cat>' built on first use and kept for the session (24 small canvases).
@@ -336,6 +425,16 @@ window.FM = window.FM || {};
     const cut = key.indexOf(':');
     if (cut < 0) return samples.ball;
     const form = key.slice(0, cut), cat = key.slice(cut + 1);
+    // 'photo:<key>' / 'photocard:<key>' name one of Ezra's photographs directly rather than a
+    // section. Same two forms, same geometry — only the art differs. (#66)
+    if (form === 'photo' || form === 'photocard') {
+      const pa = photoArt(cat, paintPhoto);
+      const ps = (form === 'photocard')
+        ? { layers: [mkArt('_fxthumbPC_' + cat, pa, 64, 46, 44), bg()], heroIdx: 0 }
+        : { layers: [mkArt('_fxthumbPF_' + cat, pa, SIZE, 48, 48), bg()], heroIdx: 0 };
+      samples[key] = ps;
+      return ps;
+    }
     const art = SECTION_ART[cat] || paintPhoto;
     const s = (form === 'card')
       ? { layers: [mkArt('_fxthumbC_' + cat, art, 64, 46, 44), bg()], heroIdx: 0 }
@@ -400,11 +499,18 @@ window.FM = window.FM || {};
     // These two throw ghosts/streaks OUTSIDE the layer, which only shows if there is an outside.
     rgbsplit: 'card', innerblur: 'card', motionblur: 'card',
   };
+  DETAIL_BOUND.forEach(t => { SUBJECT_OF[t] = 'detail'; });
+  SUBJECT_OF.pixelsort = 'bars';   // the stylize section's own drawn art, kept now that the section leads with a photo
+
   function subjectFor(type, reg) {
     // appliesTo is a hard gate, not a preference: a text effect on an image layer renders nothing.
     if (reg && reg.appliesTo === 'text') return 'text';
     if (reg && reg.appliesTo === 'media') return 'keyshot';
     const want = SUBJECT_OF[type] || SUBJECT_BY_CATEGORY[(reg && reg.category) || ''] || 'full';
+    // A named photograph beats the section default for these — but only where the subject is a FORM.
+    // A fixed subject (keyshot, backdrop, text) was chosen because nothing else works at all. (#66)
+    const pk = PHOTO_SUBJECT[type];
+    if (pk && (want === 'full' || want === 'card')) return (want === 'card' ? 'photocard:' : 'photo:') + pk;
     // 'full'/'card' are FORMS — they resolve against the section the effect lives in.
     if (want === 'full' || want === 'card') return want + ':' + ((reg && SECTION_ART[reg.category]) ? reg.category : 'color');
     return want;
@@ -743,6 +849,7 @@ window.FM = window.FM || {};
       if (!warned._init) { warned._init = 1; console.warn('fx-thumbs: FM.renderScene/fxRegistry missing'); }
       return;
     }
+    preloadArt();          // kick every JPEG off on the first tile, not one at a time as tiles build
     ensureSamples();
     if (cv.width !== SIZE) cv.width = SIZE;
     if (cv.height !== SIZE) cv.height = SIZE;
@@ -766,7 +873,7 @@ window.FM = window.FM || {};
      * parameter overrides. Exposed so the suite can MEASURE a tile (render it, render it again with
      * the effect stripped out, diff) instead of taking "it looks right" on trust. Read-only: it
      * hands back a fresh clone each call, so mutating it cannot affect a real thumbnail. */
-    previewScene: function (type) { ensureSamples(); return sceneFor(type); },
+    previewScene: function (type) { preloadArt(); ensureSamples(); return sceneFor(type); },
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
     stopAll: function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
