@@ -50,7 +50,31 @@ window.FM = window.FM || {};
       w: l.shapeW || 400, h: l.shapeH || 300,
     };
   }
+  /* ONE SOURCE OF TRUTH FOR THE PLACEMENT MATRIX.
+   *
+   * Everything below re-derives the compositor's matrix by hand, and every time it has drifted from
+   * the real one it has been the same story: the overlay tracks the finger while the rendered point
+   * goes somewhere else, because toLocal is the exact inverse of the same wrong matrix. It was
+   * missing the flips (fixed in v6.53) and it is still missing the PARENT CHAIN — a parented point
+   * shape's markers sit at raw local coordinates, detached from where the layer is actually drawn.
+   *
+   * FM._layerCTM runs the compositor's own applyLayerTransform into a probe context and hands back
+   * the resulting matrix, so it carries the parent chain, the z-perspective and the flips by
+   * construction. Using it cannot drift, because it IS the thing we were trying to reproduce.
+   *
+   * The hand-derived path below stays as the fallback: _layerCTM returns null where getTransform is
+   * unavailable, and a browser that cannot report a CTM must still be able to edit points. */
+  function ctmOf(l) {
+    if (!FM._layerCTM) return null;
+    try { return FM._layerCTM(l, FM.time, FM.scene); } catch (e) { return null; }
+  }
   function toCanvas(l, u, v) {
+    const M = ctmOf(l);
+    if (M) {
+      const a0 = xform(l);                                   // anchor + size only; the matrix has the rest
+      const lx = (u - a0.ax) * a0.w, ly = (v - a0.ay) * a0.h;
+      return { x: M.a * lx + M.c * ly + M.e, y: M.b * lx + M.d * ly + M.f };
+    }
     const m = xform(l);
     let px = (u - m.ax) * m.w, py = (v - m.ay) * m.h;
     px *= m.fx; py *= m.fy;                              // flip is INNERMOST — before skew, as the compositor does it
@@ -60,6 +84,17 @@ window.FM = window.FM || {};
     return { x: m.x + qx * c - qy * s, y: m.y + qx * s + qy * c };
   }
   function toLocal(l, cx, cy) {
+    const M = ctmOf(l);
+    if (M) {
+      const a0 = xform(l);
+      const det = M.a * M.d - M.b * M.c;
+      if (Math.abs(det) > 1e-12) {                           // a degenerate matrix (scale 0) → fall through
+        const dx = cx - M.e, dy = cy - M.f;
+        const lx = ( M.d * dx - M.c * dy) / det;
+        const ly = (-M.b * dx + M.a * dy) / det;
+        return { u: lx / a0.w + a0.ax, v: ly / a0.h + a0.ay };
+      }
+    }
     const m = xform(l);
     const dx = cx - m.x, dy = cy - m.y;
     const c = Math.cos(-m.rot), s = Math.sin(-m.rot);

@@ -11084,6 +11084,55 @@
    * FM._layerCTM is the thing point-edit is supposed to agree with, so agreeing with it IS the
    * property. Round-tripping toCanvas → toLocal is checked too, because that inverse is what the drag
    * uses and it can be self-consistently wrong. */
+  /* The PARENT half of the same finding. point-edit re-derived the placement matrix by hand and read
+   * neither flipH/flipV (v6.53) nor layer.parent — so a parented point shape's overlay sat at the
+   * layer's RAW LOCAL coordinates, detached from where the compositor actually draws it. canvas-edit
+   * already solved this via parentXform; point-edit did not.
+   *
+   * Rather than hand-derive the parent chain too, toCanvas/toLocal now go through FM._layerCTM — the
+   * compositor's own matrix, taken by running its own applyLayerTransform. That cannot drift from the
+   * renderer, because it IS the renderer. This test states that as the contract: for any layer,
+   * parented or not, the overlay's mapping must equal the compositor's matrix. */
+  test('Edit Points: the overlay matches the compositor even when the layer is parented', { item: 'pointedit-parent' }, function () {
+    if (!FM.pointEdit || !FM.pointEdit._toCanvas) throw new Error('FM.pointEdit._toCanvas is not exposed');
+    if (!FM._layerCTM) throw new Error('FM._layerCTM is missing — point-edit has nothing authoritative to agree with');
+    var layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      FM.time = 0;
+      var P = FM.makeLayer('null', { name: 'rig', x: 250, y: 90 });
+      P.transform.rotation = 30; P.transform.scale = 1.4;
+      var C = FM.makeLayer('shape', { shape: 'rect', name: 'kid', x: 40, y: 20, shapeW: 100, shapeH: 80, fill: '#4af' });
+      C.parent = P.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(C, P);
+
+      var M = FM._layerCTM(C, 0, FM.scene);
+      if (!M) throw new Error('the compositor could not report a matrix — this environment cannot verify the contract');
+      var ax = 0.5, ay = 0.5, w = 100, h = 80;
+      [[0, 0], [1, 0], [0.25, 0.75], [1, 1]].forEach(function (uv) {
+        var lx = (uv[0] - ax) * w, ly = (uv[1] - ay) * h;
+        var want = { x: M.a * lx + M.c * ly + M.e, y: M.b * lx + M.d * ly + M.f };
+        var got = FM.pointEdit._toCanvas(C, uv[0], uv[1]);
+        if (Math.abs(got.x - want.x) > 0.01 || Math.abs(got.y - want.y) > 0.01) {
+          throw new Error('at u,v = ' + uv.join(',') + ' the overlay puts the point at ' +
+            got.x.toFixed(1) + ',' + got.y.toFixed(1) + ' but the compositor draws it at ' +
+            want.x.toFixed(1) + ',' + want.y.toFixed(1) + ' — the overlay ignores the parent chain, so ' +
+            'its markers sit detached from the shape and a drag moves the point somewhere else');
+        }
+      });
+      // …and the inverse the drag uses must still round-trip through a parented, rotated, scaled rig.
+      var c = FM.pointEdit._toCanvas(C, 0.3, 0.8);
+      var back = FM.pointEdit._toLocal(C, c.x, c.y);
+      if (Math.abs(back.u - 0.3) > 1e-6 || Math.abs(back.v - 0.8) > 1e-6) {
+        throw new Error('toCanvas → toLocal does not round-trip on a parented layer (' +
+          back.u.toFixed(4) + ', ' + back.v.toFixed(4) + ' from 0.3, 0.8)');
+      }
+    } finally {
+      FM.time = t0;
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
   test('Edit Points: the overlay honours flipH/flipV like the compositor does', { item: 'pointedit-flip' }, function () {
     if (!FM.pointEdit || !FM.pointEdit._toCanvas) throw new Error('FM.pointEdit._toCanvas is not exposed — cannot test the mapping the drag actually uses');
     var mk = function (flipH, flipV) {
