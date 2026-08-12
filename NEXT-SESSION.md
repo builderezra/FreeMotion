@@ -4,7 +4,24 @@ Read this first if the session starts with "keep going", "go", or a vague pick-u
 Top to bottom is the order Ezra asked for. **He numbers his requests and expects them done in that
 order; new asks go to the BOTTOM of the list.**
 
-State at handoff: **v5.73**, **87/87 regression tests green**, tree clean, 0 unpushed.
+State at handoff: **v6.54**, **228/228 regression tests green** at desktop AND 380px, tree clean,
+**39 commits unpushed** (Ezra pushes via GitHub Desktop — my credentials don't work).
+
+> **Overnight run, 12–13 Aug 2026 — v6.35 → v6.54, twenty releases.** Full detail is one line per
+> version in [POLISH-LOG.md](POLISH-LOG.md); the *what and whether* is in [REQUESTS.md](REQUESTS.md).
+> Everything below is still the live queue. Three things a fresh session should know before touching
+> anything:
+>
+> 1. **Every fix this run was mutation-checked** — break it again, watch the test go red, restore.
+>    That caught FOUR tests that could not reach the defect they were named after and would have
+>    shipped as green coverage. If you add a test here, mutate it before you trust it.
+> 2. **One fix was reverted rather than shipped** (the stage-resize hook, BUG-HUNT). It is right, but
+>    a ResizeObserver never fires in either available browser context, so it could not be
+>    demonstrated. BUG-HUNT.md records what was proven, what was not, and how to finish it in a real
+>    browser window.
+> 3. **The audio items are blocked on Ezra, not on work.** #72 needs his actual file — synthetic WAV
+>    is clean through every path measured. Three audio sliders could be made keyframable but need
+>    someone to LISTEN, which no harness here can do.
 
 ---
 

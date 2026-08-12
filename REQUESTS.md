@@ -21,6 +21,40 @@ version. This file is the *what and whether*; that one is the *how*.
 
 ---
 
+## While you were asleep — 12–13 Aug 2026
+
+**v6.35 → v6.54, twenty releases. Suite 190 → 228 tests, all green at desktop and at 380px.
+39 commits waiting for GitHub Desktop.**
+
+Your queue: **89** (Letterbox erasing layers, on the 4th attempt), **captions never opening the
+editor**, **58** (red delete bar), **53** (PC Group/Mask), **68** (Speed retimes keyframes),
+**74** (Favourites browser), **48** (Squish landed at last), plus the landscape-phone squeeze.
+
+Then I worked the BUG-HUNT backlog and closed ten findings — warp effects changing strength when
+the preview quality dropped, Particles being invisible in every phone preview, Edit Shape silently
+destroying keyframed borders, the locked crop decaying its own ratio, two group bugs that blanked
+the timeline, two ways audio escaped and played under the Home screen, the AI panel spending past
+its cap and faking its answers with a stale demo flag, exports being handed the 640px preview cache,
+and the text anchor doing nothing.
+
+**Four things want you, not more work from me:**
+- **72 — audio import.** The half you can SEE was already fixed in v6.08 and never ticked here (my
+  miss). The half you can HEAR I could not reproduce: synthetic files are clean through every path.
+  **Send me the file, or its name and format.**
+- **Three audio sliders** (Distortion Drive, Bit Crush Bits, Lo-Fi Amount) could be keyframed — I
+  measured the cost at 0.24ms, affordable. Reverb can't (12.5ms, and it clicks). I didn't build them
+  because it's audio automation I can't hear. Say the word and you can listen.
+- **74** — I did NOT delete the left-right pager. *"Replacing the swipe-right"* reads two ways and
+  I won't remove a working gesture on a coin flip. One line either way.
+- **"Color & Light"** is spelled the American way in the effects browser, which sits oddly next to
+  the "Colouring" rename you asked for. Your app's voice, not mine to change unasked.
+
+One fix I **reverted rather than ship**: the stage-resize hook. It's correct, but a ResizeObserver
+never fires in either browser I can drive here, so I couldn't demonstrate it — and a resize hook that
+silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to finish it.
+
+---
+
 ## Open
 
 Numbered with Ezra's own queue numbers where he gave them.
