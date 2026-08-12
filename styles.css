@@ -1318,6 +1318,9 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fxp-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .fxp-dur { font-size: 10.5px; font-weight: 500; color: var(--text-dim); background: var(--panel-3); border-radius: 6px; padding: 1px 6px; }
 .fxp-desc { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; }
+/* Said only when the thumbs below are NOT of your own layer, so the sheet never quietly shows a
+   stock ball while implying it is your footage. */
+.fxp-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.35; padding: 0 2px 2px; }
 .fxp-del { flex: none; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--text-dim); font-size: 13px; }
 .fxp-del:active { color: #ff5e6e; background: var(--panel-3); }
 .fxp-export { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-size: 11px; padding: 3px 9px; cursor: pointer; text-transform: none; letter-spacing: 0; }

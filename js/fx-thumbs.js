@@ -78,11 +78,10 @@ window.FM = window.FM || {};
     if (photoSettle) return;
     photoSettle = setTimeout(function () {
       photoSettle = 0;
-      const live = [].slice.call(document.querySelectorAll('canvas.fxb-thumb-cv')).filter(cv => cv._fxType && cv.isConnected);
-      FM.fxThumbs.stopAll();                                    // cancels the ticker, queue and rAF
       if (samples) Object.keys(samples).forEach(k => { if (k.indexOf(':') >= 0) delete samples[k]; });
-      cache.clear();
-      live.forEach(cv => mountKey(cv, cv._fxType, null));
+      // Re-mount through the shared path, which remembers what each key IS. Re-mounting with a bare
+      // key used to drop a preset tile's preset — see the note on `meta` — and paint the fallback.
+      FM.fxThumbs.remountLive();
     }, 80);
   }
 
@@ -864,6 +863,242 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ---- LAYER PREVIEWS — the tile shows YOUR layer, not a sample ------------------------------
+   * Ezra: "the presets menu should show a preview of what the layer will look like when you add the
+   * effects." Everything above renders a module-private SAMPLE scene, which answers "what does this
+   * preset DO" but never "what does it do to THIS". A layer preview renders the LIVE scene with the
+   * selected layer's effect stack extended by the preset — the same instance addEffect would push,
+   * anchored the same way (playhead if it is inside the clip, else the clip start) — so choosing a
+   * preset is choosing a picture of your own footage.
+   *
+   * THE WHOLE SCENE, not the layer on its own. Three reasons, all measured rather than assumed:
+   *   • a GROUP renders nothing by itself — its members are separate top-level layers that the
+   *     compositor finds through scene.layers, so a one-layer mini scene shows an empty frame;
+   *   • an ADJUSTMENT layer has no pixels of its own and only changes what is UNDER it, so its
+   *     honest preview is the frame, not the layer;
+   *   • in context is nearly free at tile size (the whole 8-layer scene 4.3ms vs 3.7ms for the
+   *     layer alone), because the tile is 65x116 device pixels and plateScale follows it down.
+   * The one layer that is CLONED is the target: it is the only one whose document we change.
+   *
+   * FM._mfGhost is set for every preview render, for exactly the reason the onion skin sets it
+   * (js/app.js): Motion Blur (Footage), Frame Stutter, Time Warp and Temporal Denoise each keep a
+   * per-LAYER-ID frame record, and a preview strip walks that record over its own ten timestamps.
+   * The clone must KEEP the real id (FM.media is keyed by layer id, so a renamed clone loses its
+   * footage), so the flag those four already honour is the only way a preview cannot corrupt the
+   * live render's history. The cost is that a preview of one of those four passes the frame through.
+   * ------------------------------------------------------------------------------------------- */
+
+  /* The .fxp-thumb box is 76x58 CSS (styles.css) and .fxb-thumb-cv is object-fit:cover, so a raster
+   * of exactly that shape — at the same 2x used everywhere else in this file — crops NOTHING. The
+   * project frame is then LETTERBOXED inside it: a 9:16 comp stretched to fill a 4:3 box is either
+   * squashed or loses 57% of its height, and half a preview is worse than no preview. */
+  const TW = 76 * R, TH = 58 * R, MAT = '#0a0d13';
+  const SLICE_MS = 8;   // main-thread budget per rAF for a layer strip — see layerStep
+
+  function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function strHash(s) {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36) + '_' + s.length.toString(36);   // length too: a free second opinion
+  }
+
+  let lwork = null, lctx = null;      // project-aspect work surface (one, shared, like `work` above)
+  function rasterFor(P) {
+    const k = Math.min(TW / Math.max(1, P.width || 1), TH / Math.max(1, P.height || 1));
+    return { w: Math.max(2, Math.round((P.width || 1) * k)), h: Math.max(2, Math.round((P.height || 1) * k)) };
+  }
+  function lrender(scene, t, r) {
+    if (!lwork) { lwork = document.createElement('canvas'); lctx = null; }
+    if (lwork.width !== r.w || lwork.height !== r.h) { lwork.width = r.w; lwork.height = r.h; }
+    if (!lctx) lctx = lwork.getContext('2d', { willReadFrequently: true });
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.clearRect(0, 0, r.w, r.h);
+    const g0 = FM._mfGhost;
+    FM._mfGhost = 1;
+    try { FM.renderScene(lctx, scene, t); } finally { FM._mfGhost = g0; }
+  }
+  function lsnap(r) {   // one cacheable tile-shaped frame: mat + the letterboxed project frame
+    const c = document.createElement('canvas'); c.width = TW; c.height = TH;
+    const g = c.getContext('2d');
+    g.fillStyle = MAT; g.fillRect(0, 0, TW, TH);
+    g.drawImage(lwork, Math.round((TW - r.w) / 2), Math.round((TH - r.h) / 2));
+    return c;
+  }
+
+  // The target and everything parented under it. Used to take the layer OUT of the scene: hiding a
+  // group clone would not hide its members, because isLayerVisibleAt resolves group ancestors
+  // through the LIVE FM.scene, not through the list it was handed.
+  function descendants(id) {
+    const out = {}; out[id] = 1;
+    for (let pass = 0, grew = true; grew && pass < 32; pass++) {
+      grew = false;
+      FM.scene.layers.forEach(function (l) { if (l.parent && out[l.parent] && !out[l.id]) { out[l.id] = 1; grew = true; } });
+    }
+    return out;
+  }
+  // The live scene with ONE layer replaced by a clone whose effect stack has `inst` appended.
+  // The clone comes from JSON so nothing mutable is shared with the real document — the compositor
+  // stashes caches on layer objects (_wrapCache) and on effect instances, and a preview must never
+  // be able to write into the thing being previewed. jsonReplacer drops those '_' keys on the way.
+  function sceneWith(target, inst) {
+    const doc = JSON.parse(JSON.stringify(target, FM.jsonReplacer));
+    doc.effects = (doc.effects || []).concat(inst ? [inst] : []);
+    return { project: FM.scene.project, layers: FM.scene.layers.map(function (l) { return l.id === target.id ? doc : l; }) };
+  }
+  function sceneWithout(target) {
+    const drop = descendants(target.id);
+    return { project: FM.scene.project, layers: FM.scene.layers.filter(function (l) { return !drop[l.id]; }) };
+  }
+
+  /* WHEN the strip is rendered. The anchor is addEffect's own rule verbatim (fx-browser.js) — the
+   * preview has to be of the effect you are about to get, and that one lands at the playhead when
+   * the playhead is inside the clip. The window is then clamped to the clip: past its end the layer
+   * stops existing and the strip would fade to an empty frame, which reads as a broken tile. */
+  function windowFor(layer, preset) {
+    const st = layer.start || 0, du = Math.max(0, layer.duration || 0), end = st + du;
+    const ph = (typeof FM.time === 'number') ? FM.time : st;
+    const anchor = (ph >= st && ph < end - 0.01) ? ph : st;
+    const span = Math.min(3, Math.max(0.9, (preset && preset.dur) || 0));
+    const t1 = Math.min(anchor + span, Math.max(anchor, end - 0.001));
+    return { t0: anchor, t1: t1, anchor: anchor, n: (t1 - anchor < 0.15) ? 1 : FRAMES };
+  }
+
+  /* One signature over everything a layer preview READS. Content-based on purpose: undo/redo
+   * rebuilds layer objects with the SAME ids, so object identity — or a _rev counter on the layer —
+   * hands back the pre-undo picture, which is the exact "stale preview of something else" defect
+   * this feature would otherwise introduce. Media is in here too: swapping a file, or a photo that
+   * has only just decoded, changes the picture without changing one byte of the document.
+   * Memoised for the current task only. A sheet builds all of its rows synchronously, so this is ONE
+   * hash per sheet open; the next open re-reads the scene rather than trusting a stamp. */
+  let _rev = null;
+  function sceneRev() {
+    if (_rev != null) return _rev;
+    const P = FM.scene.project;
+    let s = P.width + 'x' + P.height + ':' + (P.background || '-') + ':' + (P.fps || 0) + ':' + Math.round((FM.time || 0) * 30);
+    s += JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+    FM.scene.layers.forEach(function (l) {
+      const m = FM.media && FM.media.get(l.id);
+      if (!m) return;
+      const el = m.el || {};
+      s += '|' + l.id + ':' + (m.kind || '') + ':' + (el.readyState || 0) + ':' +
+           (el.naturalWidth || el.videoWidth || 0) + ':' + Math.round((el.currentTime || 0) * 1000);
+    });
+    _rev = strHash(s);
+    Promise.resolve().then(function () { _rev = null; });
+    return _rev;
+  }
+
+  /* Can this layer be previewed at all? Type first (a null/camera has no pixels, and an effect that
+   * cannot apply renders the layer untouched), then MEASURED: render the frame with the layer in it
+   * and again with it and its descendants taken out, and compare. Measurement rather than type is
+   * what catches an empty group, a layer at opacity 0, one scrolled off-frame, one hidden behind
+   * another, and a video whose first frame has not decoded — every one of which otherwise renders a
+   * column of identical dark rectangles. All four channels are compared, never alpha alone: the
+   * project background paints alpha 255 everywhere, so an alpha test says "identical" for all of
+   * them. Memoised per layer+scene signature, so a sheet pays for it once. */
+  const contribCk = new Map();
+  function contributes(layer) {
+    const r = rasterFor(FM.scene.project), w = windowFor(layer, null);
+    lrender(sceneWith(layer, null), w.anchor, r);
+    const on = lctx.getImageData(0, 0, r.w, r.h).data;
+    lrender(sceneWithout(layer), w.anchor, r);
+    const off = lctx.getImageData(0, 0, r.w, r.h).data;
+    for (let i = 0; i < on.length; i++) if (Math.abs(on[i] - off[i]) > 2) return true;
+    return false;
+  }
+  function canPreview(layer, fxType) {
+    if (!layer || !FM.scene || !FM.renderScene) return false;
+    if (fxType && FM.fxRegistry.supportsLayer && !FM.fxRegistry.supportsLayer(fxType, layer)) return false;
+    const key = layer.id + '#' + sceneRev();
+    if (contribCk.has(key)) return contribCk.get(key);
+    let ok = false;
+    try { ok = contributes(layer); } catch (e) { ok = false; }
+    if (contribCk.size > 32) contribCk.clear();
+    contribCk.set(key, ok);
+    return ok;
+  }
+
+  // What this row shows when the layer cannot be previewed (or its render threw): today's sample
+  // tile, unchanged — the Default row keeps its demo OVERRIDES, a preset keeps its scaled sample.
+  function syntheticFor(m) {
+    return m.preset ? (cache.get('p:' + m.preset.id) || generatePreset(m.preset))
+                    : (cache.get(m.fx) || generate(m.fx));
+  }
+
+  /* One SLICE of a layer strip. Cheap presets finish in a single rAF (a 10-frame shake strip on a
+   * 1080x1920 layer measured 3.8ms); the dear ones do not, and cannot be made to: nine kernels in
+   * compositor.js allocate and loop at P.width x P.height whatever the target size, so RGB Split
+   * measured 8.4ms PER FRAME at 1080p and 43ms at 4K — one frame of it already overruns a 16ms
+   * slice on its own. So the budget is per rAF and the strip resumes where it left off, which is
+   * the difference between a tile that streams in and a panel that freezes for half a second. */
+  const jobs = new Map();
+  function layerStep(key, m) {
+    let j = jobs.get(key);
+    if (!j) {
+      const layer = FM.scene.layers.find(function (l) { return l.id === m.layerId; });
+      if (!layer) return syntheticFor(m);
+      const w = windowFor(layer, m.preset);
+      let inst = null;
+      try {
+        inst = m.preset ? (FM.effectPresets ? FM.effectPresets.makeInstance(m.preset, w.anchor) : null)
+                        : FM.fxRegistry.makeInstance(m.fx);
+      } catch (e) { inst = null; }
+      if (!inst) return syntheticFor(m);
+      j = { scene: sceneWith(layer, inst), w: w, r: rasterFor(FM.scene.project), frames: [], i: 0, shown: 0 };
+      jobs.set(key, j);
+    }
+    const t0 = now();
+    do {
+      const at = now();
+      try {
+        lrender(j.scene, j.w.t0 + (j.w.n === 1 ? 0 : (j.i / j.w.n) * (j.w.t1 - j.w.t0)), j.r);
+        j.frames.push(lsnap(j.r));
+        /* ADAPTIVE STRIP LENGTH, decided by the first frame's measured cost. The nine kernels above
+         * cannot be sliced any finer than one frame, and at 3840x2160 one RGB Split frame measured
+         * 86ms — a ten-frame strip is ten dropped frames in a row, which is the panel stuttering
+         * rather than a tile animating. So a dear effect gets a SHORTER strip, and a very dear one
+         * gets a single frame: a still of your own layer beats a stutter, and it still beats the
+         * stock ball it replaces. Cheap effects (the overwhelming majority — a shake strip on a 4K
+         * 12-layer scene measured 2.2ms/frame) are untouched. */
+        if (j.i === 0) { const c = now() - at; j.w.n = (c <= 4) ? j.w.n : (c <= 20 ? Math.min(j.w.n, 4) : 1); }
+      } catch (e) {
+        // A broken effect must never break the sheet — same contract as generate() above.
+        jobs.delete(key);
+        if (!warned[key]) { warned[key] = 1; console.warn('fx-thumbs: layer preview failed for "' + key + '"', e); }
+        return syntheticFor(m);
+      }
+      j.i++;
+    } while (j.i < j.w.n && now() - t0 < SLICE_MS);
+    if (j.i < j.w.n) return null;   // not done — pump() keeps it at the head of the queue
+    jobs.delete(key);
+    return j.frames.length > 1 ? { kind: 'anim', frames: j.frames } : { kind: 'static', frame: j.frames[0] };
+  }
+
+  /* Eviction, which this cache has never had. A sample tile is keyed by effect type and there are
+   * 195 of those; a layer preview is keyed by preset AND layer AND scene signature, so every edit
+   * and every layer you look at mints a new one. One 10-frame strip is 10 x 152 x 116 x 4 = 705KB,
+   * so an unbounded cache is a phone's memory in an afternoon. Byte-capped LRU over the LAYER
+   * entries only: the sample tiles keep the documented session-long behaviour. */
+  const layerKeys = [];
+  let layerBytes = 0;
+  const LAYER_CACHE_MAX = 10 * 1024 * 1024;
+  function bytesOf(e) {
+    const f = e.kind === 'anim' ? e.frames[0] : e.frame;
+    return (e.kind === 'anim' ? e.frames.length : 1) * (f ? f.width * f.height * 4 : 0);
+  }
+  function remember(key, entry) {
+    const i = layerKeys.indexOf(key);
+    if (i >= 0) layerKeys.splice(i, 1); else layerBytes += bytesOf(entry);
+    layerKeys.push(key);
+    while (layerBytes > LAYER_CACHE_MAX && layerKeys.length > 1) {
+      const old = layerKeys.shift();
+      const e = cache.get(old);
+      if (e) layerBytes -= bytesOf(e);
+      cache.delete(old); meta.delete(old);
+    }
+  }
+  function touch(key) { const i = layerKeys.indexOf(key); if (i >= 0) { layerKeys.splice(i, 1); layerKeys.push(key); } }
+
   // ---- shared animation ticker (one interval repaints every live animated tile) ----
   const live = new Map();     // canvasEl -> frames[] (dropped once the canvas leaves the DOM)
   let ticker = 0, frameIdx = 0;
@@ -876,6 +1111,11 @@ window.FM = window.FM || {};
     if (!live.size) { clearInterval(ticker); ticker = 0; }
   }
   function paint(cv, entry) {
+    /* Entries no longer all have one shape: a sample tile is a 192² square, a layer preview is the
+     * .fxp-thumb box at the project's aspect. Sizing the canvas FROM THE ENTRY is what stops a
+     * fallback tile being blitted 1:1 into the corner of a canvas that was sized for the other one. */
+    const f0 = (entry.kind === 'anim') ? entry.frames[0] : entry.frame;
+    if (f0 && (cv.width !== f0.width || cv.height !== f0.height)) { cv.width = f0.width; cv.height = f0.height; }
     if (entry.kind === 'anim') {
       live.set(cv, entry.frames);
       cv.getContext('2d').drawImage(entry.frames[frameIdx % entry.frames.length], 0, 0);
@@ -890,58 +1130,133 @@ window.FM = window.FM || {};
   // ---- generation queue: at most ONE effect per rAF slice (a full strip counts as one), so
   // ~20 visible tiles stream in without ever janking the browser UI ----
   const pendingQ = new Map();   // cacheKey -> [canvasEl,…] waiting (dedup: many tiles, one generation)
-  const presetByKey = new Map();   // 'p:<id>' -> preset object awaiting generation
+  /* What each key needs in order to be (re)generated: { preset } for a sample preset tile, plus
+   * { layerId, rev, fx } for a layer preview. It used to be a preset-only map that was DELETED the
+   * moment the tile was generated, and that is a bug with pixels: when the fx-art photographs land,
+   * photosChanged() clears the cache and re-mounts every live tile — with no preset to re-mount
+   * WITH. generate() then looked 'p:s-beatslam' up in the effect registry, threw, and cached the
+   * generic fallback ball under the preset's key for the rest of the session. Measured on the build
+   * before this one: open the first preset sheet within ~1s of the browser opening and every tile
+   * mounted in that window is the same grey ball, permanently. The recipe outlives the entry. */
+  const meta = new Map();
   let queue = [], raf = 0;
   function schedule() { if (!raf && queue.length) raf = requestAnimationFrame(pump); }
   function pump() {
     raf = 0;
-    const key = queue.shift();
+    const key = queue[0];
     if (key != null) {
-      const pre = presetByKey.get(key);
-      const entry = cache.get(key) || (pre ? generatePreset(pre) : generate(key));
-      cache.set(key, entry);
-      presetByKey.delete(key);
-      const ws = pendingQ.get(key) || [];
-      pendingQ.delete(key);
-      ws.forEach(function (cv) { if (cv._fxType === key) paint(cv, entry); });   // skip tiles re-mounted to another key meanwhile
+      const m = meta.get(key);
+      let entry = cache.get(key);
+      if (!entry) entry = (m && m.layerId) ? layerStep(key, m) : (m && m.preset ? generatePreset(m.preset) : generate(key));
+      if (entry) {
+        queue.shift();
+        cache.set(key, entry);
+        if (m && m.layerId) remember(key, entry);
+        const ws = pendingQ.get(key) || [];
+        pendingQ.delete(key);
+        ws.forEach(function (cv) { if (cv._fxType === key) paint(cv, entry); });   // skip tiles re-mounted to another key meanwhile
+      } else {
+        // A strip too dear to finish in one slice: show its first frame now rather than an empty
+        // box, and carry on next rAF. The finished strip replaces it.
+        const j = jobs.get(key);
+        if (j && j.frames.length && !j.shown) {
+          j.shown = 1;
+          (pendingQ.get(key) || []).forEach(function (cv) { if (cv._fxType === key) paint(cv, { kind: 'static', frame: j.frames[0] }); });
+        }
+      }
     }
     schedule();
   }
   // Shared mount plumbing: size the canvas, paint from cache or join the generation queue.
-  function mountKey(cv, key, preset) {
+  function mountKey(cv, key, m) {
     if (!FM.renderScene || !FM.fxRegistry || !FM.makeLayer) {   // compositor/registry not loaded — nothing to render with
       if (!warned._init) { warned._init = 1; console.warn('fx-thumbs: FM.renderScene/fxRegistry missing'); }
       return;
     }
     preloadArt();          // kick every JPEG off on the first tile, not one at a time as tiles build
     ensureSamples();
-    if (cv.width !== PX) cv.width = PX;
-    if (cv.height !== PX) cv.height = PX;
+    const w = (m && m.layerId) ? TW : PX, h = (m && m.layerId) ? TH : PX;
+    if (cv.width !== w) cv.width = w;
+    if (cv.height !== h) cv.height = h;
     cv._fxType = key;
+    if (m) meta.set(key, m);
     const hit = cache.get(key);
-    if (hit) { paint(cv, hit); return; }
-    if (preset) presetByKey.set(key, preset);
+    if (hit) { paint(cv, hit); if (m && m.layerId) touch(key); return; }
     let ws = pendingQ.get(key);
     if (!ws) { pendingQ.set(key, ws = []); queue.push(key); }
     if (ws.indexOf(cv) < 0) ws.push(cv);
     schedule();
+  }
+  // A layer preview's key and recipe, or null when this layer cannot honestly be previewed (in which
+  // case the caller mounts the sample tile, exactly as before this feature existed).
+  function layerMeta(layer, fxType, preset) {
+    if (!layer || !canPreview(layer, fxType)) return null;
+    return { layerId: layer.id, rev: sceneRev(), preset: preset || null, fx: fxType };
   }
 
   FM.fxThumbs = {
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
     mount: function (cv, type) { mountKey(cv, type, null); },
-    /* Same contract for a PRESET's live preview (cache keyed by preset id). */
-    mountPreset: function (cv, preset) { if (preset && preset.id) mountKey(cv, 'p:' + preset.id, preset); },
+    /* A PRESET's live preview. With `layer`, the tile is THAT LAYER in its scene with the preset
+     * appended to its effect stack — the picture you are about to get. Without one (or when the
+     * layer has nothing to show) it is the sample tile, cache-keyed by preset id as before. */
+    mountPreset: function (cv, preset, layer) {
+      if (!preset || !preset.id) return;
+      const m = layerMeta(layer, preset.fx, preset);
+      // The no-layer path STILL carries the preset in its recipe. Passing null here instead cost a
+      // full session of grey balls once already: pump() would find no recipe for 'p:<id>', hand the
+      // key to generate(), which looks it up in the effect registry, misses, throws, and caches the
+      // fallback. That is the same failure the `meta` note above describes, by a second route.
+      mountKey(cv, m ? 'p:' + preset.id + '@' + m.layerId + '#' + m.rev : 'p:' + preset.id, m || { preset: preset });
+    },
+    /* Same, for an effect at its plain defaults — the sheet's "Default" row. Falls back to the
+     * ordinary sample tile, which keeps that effect's demo-only OVERRIDES (a preset instance skips
+     * them, so routing this through mountPreset would quietly weaken 30 tiles). */
+    mountLayerFx: function (cv, type, layer) {
+      if (!type) return;
+      const m = layerMeta(layer, type, null);
+      mountKey(cv, m ? 'd:' + type + '@' + m.layerId + '#' + m.rev : type, m);
+    },
+    /* Is a live preview of this layer meaningful (see canPreview)? Public so a sheet can say WHY it
+     * is showing a sample instead of guessing, and so the suite can assert the fallback. */
+    canPreviewLayer: function (layer, fxType) { try { return canPreview(layer, fxType); } catch (e) { return false; } },
     /* The exact scene a tile is rendered from — the subject, the effect instance and any demo-only
      * parameter overrides. Exposed so the suite can MEASURE a tile (render it, render it again with
      * the effect stripped out, diff) instead of taking "it looks right" on trust. Read-only: it
      * hands back a fresh clone each call, so mutating it cannot affect a real thumbnail. */
     previewScene: function (type) { preloadArt(); ensureSamples(); return sceneFor(type); },
+    /* The same, for a LAYER preview: the scene, the window and the raster a tile would use. Only the
+     * TARGET layer is a clone — the rest are the live objects, because rendering in context is the
+     * point. Returns null when this layer cannot be previewed, which is itself the assertion a test
+     * wants for a null/camera/empty layer. `frames` is the strip's FULL length; a real tile may
+     * render fewer, because layerStep shortens the strip when the first frame measures dear. */
+    previewLayerScene: function (layer, preset, fxType) {
+      const type = preset ? preset.fx : fxType;
+      if (!layerMeta(layer, type, preset)) return null;
+      const w = windowFor(layer, preset);
+      const inst = preset ? FM.effectPresets.makeInstance(preset, w.anchor) : FM.fxRegistry.makeInstance(type);
+      if (!inst) return null;
+      const r = rasterFor(FM.scene.project);
+      return { scene: sceneWith(layer, inst), plain: sceneWith(layer, null), t0: w.t0, t1: w.t1, anchor: w.anchor, frames: w.n, w: r.w, h: r.h, tw: TW, th: TH };
+    },
+    /* Re-mount every tile currently on screen against a cleared cache. This is what runs when the
+     * fx-art photographs decode, and it is exposed so the suite can prove that a preset tile comes
+     * back as its preset rather than as the fallback ball. */
+    remountLive: function () {
+      const els = [].slice.call(document.querySelectorAll('canvas.fxb-thumb-cv')).filter(function (cv) { return cv._fxType && cv.isConnected; });
+      FM.fxThumbs.stopAll();
+      cache.clear(); layerKeys.length = 0; layerBytes = 0;
+      els.forEach(function (cv) { mountKey(cv, cv._fxType, meta.get(cv._fxType) || null); });
+      return els.length;
+    },
+    /* What the layer-preview cache is holding. Exposed because "it is capped at 10MB" is a claim,
+     * and a claim about memory that nothing can read is a claim nobody will ever check. */
+    stats: function () { return { layerEntries: layerKeys.length, layerBytes: layerBytes, cap: LAYER_CACHE_MAX, keys: cache.size }; },
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
     stopAll: function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
-      queue.length = 0; pendingQ.clear(); presetByKey.clear();
+      queue.length = 0; pendingQ.clear(); jobs.clear();
       if (ticker) { clearInterval(ticker); ticker = 0; }
       live.clear();
     },

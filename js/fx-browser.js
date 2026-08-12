@@ -257,6 +257,12 @@ window.FM = window.FM || {};
     ta.remove();
   }
 
+  // The layer this browser is adding to, re-read from the LIVE scene. The overlay caches _layer at
+  // open(), and a delete or an undo rebuilds layer objects — addEffect has always re-resolved by id
+  // for that reason, and a preview rendered from a detached object would be a picture of a layer
+  // that no longer exists.
+  function liveLayer() { return (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null; }
+
   // Full-cover preset sheet for one effect (same chrome as the category view, incl. the
   // depth-tracked pause of the featured auto-scroll).
   function openPresets(reg) {
@@ -284,13 +290,28 @@ window.FM = window.FM || {};
     const scroller = el('div', 'fxb-catview-scroll');
     const list = el('div', 'fxp-list');
 
+    /* Every thumb in this sheet is a picture of THE SELECTED LAYER with that preset on it (Ezra:
+     * "the presets menu should show a preview of what the layer will look like when you add the
+     * effects"). Decided ONCE for the sheet, not per row: canPreviewLayer renders the frame with and
+     * without the layer to find out whether the layer contributes any pixels at all, and asking it
+     * six times would render it six times — it is memoised per scene signature, but the sheet also
+     * wants a single honest answer to put on screen. */
+    const target = liveLayer();
+    const onLayer = !!(target && FM.fxThumbs && FM.fxThumbs.canPreviewLayer && FM.fxThumbs.canPreviewLayer(target, reg.type));
+    if (target && !onLayer) {
+      const why = (FM.fxRegistry.supportsLayer && !FM.fxRegistry.supportsLayer(reg.id, target))
+        ? ('“' + reg.label + '” can’t apply to a ' + (target.type || 'layer') + ' layer')
+        : 'nothing of this layer is on screen at the playhead';
+      list.appendChild(el('div', 'fxp-note', 'Previews below use a sample — ' + why + '.'));
+    }
+
     // One tappable preset row: live animated thumb + name + duration badge + description.
     function presetRow(preset, mine) {
       const row = el('button', 'fxp-row');
       const th = el('div', 'fxb-thumb fxp-thumb'); th.dataset.cat = reg.category;
       const cv = el('canvas', 'fxb-thumb-cv');
       th.appendChild(cv);
-      if (FM.fxThumbs && FM.fxThumbs.mountPreset) FM.fxThumbs.mountPreset(cv, preset);
+      if (FM.fxThumbs && FM.fxThumbs.mountPreset) FM.fxThumbs.mountPreset(cv, preset, onLayer ? target : null);
       row.appendChild(th);
       const txt = el('div', 'fxp-txt');
       const nameLine = el('div', 'fxp-name', preset.name);
@@ -316,7 +337,12 @@ window.FM = window.FM || {};
     const plain = el('button', 'fxp-row');
     const pth = el('div', 'fxb-thumb fxp-thumb'); pth.dataset.cat = reg.category;
     const pcv = el('canvas', 'fxb-thumb-cv'); pth.appendChild(pcv);
-    if (FM.fxThumbs) FM.fxThumbs.mount(pcv, reg.type);
+    // Same rule for the plain-add row: your layer with the effect at its defaults, or the sample
+    // tile (with its demo overrides) when the layer has nothing to show.
+    if (FM.fxThumbs) {
+      if (onLayer && FM.fxThumbs.mountLayerFx) FM.fxThumbs.mountLayerFx(pcv, reg.type, target);
+      else FM.fxThumbs.mount(pcv, reg.type);
+    }
     plain.appendChild(pth);
     const ptxt = el('div', 'fxp-txt');
     ptxt.appendChild(el('div', 'fxp-name', 'Default'));

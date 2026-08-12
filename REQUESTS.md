@@ -52,9 +52,14 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **53 — PC is missing the Group and Mask options.**
 
 ### Features and changes
-- [ ] **The Presets menu should preview what the LAYER will look like** with the preset applied —
-      not a generic sample. Ezra: *"the presets menu should show a preview of what the layer will look
-      like when you add the effects"*. This is the concrete version of queue 37 below.
+- [ ] **Check I changed the right "Presets".** v6.30 gave live per-layer previews to the preset rows
+      in the EFFECTS BROWSER. The inspector category card literally named **Presets** is a different,
+      older system (saved effect stacks, no tiles, empty on a fresh install) and is untouched. If the
+      menu you meant was that one, say so and I will move it — merging the two is queue 37's real job.
+- [ ] **A documented conflict, your call.** `NEXT-SESSION.md:183-192` says in bold *"Supersedes the old
+      thumbnail spec — do not build preset thumbnails"* and specs a full-screen preview player instead.
+      I built the thumbnails because that is what you asked for tonight. The engine behind them is
+      exactly what that player would need, so nothing is wasted either way.
 - [ ] **68 — Speed should retime keyframes.** *"if you add a bunch of effects with key frames you may
       want to make it go faster or slower, changing all the key frames automatically to slow or speed
       with the layer instead of manually doing it"*. Also has to work on every layer type.
@@ -96,6 +101,8 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **Presets preview the selected layer** with the preset applied, instead of a generic sample.
+      Also fixed a cache-poisoning bug it exposed — v6.30
 - [x] **88 — Text adding fixed on PC.** A desktop layout had never been written — the phone
       bottom-sheet WAS the desktop layout. Also fixed a data-loss bug it exposed — v6.29
 - [x] **63 — Fractal Ridges: colour, overlay/blend, and it actually MOVES.** It was measurably a

@@ -4374,6 +4374,276 @@
     if (bad.length) throw new Error('tiles indistinguishable from their subject: ' + bad.join('; '));
   });
 
+  /* ---- preset previews of the USER'S OWN LAYER ------------------------------------------------
+   * Ezra: "the presets menu should show a preview of what the layer will look like when you add the
+   * effects." Before this, every tile in a preset sheet was a pure function of the preset — the same
+   * pixels whatever you had selected (measured: two visibly different layers, byte-identical tiles).
+   * These MEASURE the tile the same way the sample-tile tests above do: build the exact scene the
+   * tile is rendered from (FM.fxThumbs.previewLayerScene), render it, and diff. Nothing mounts a
+   * canvas except the last one, which has to, because it is about the re-mount path itself. */
+  function lpScene(layer, preset) {
+    if (!FM.fxThumbs.previewLayerScene) {
+      throw new Error('this build has no layer preview at all — FM.fxThumbs.mountPreset takes only a preset, ' +
+                      'so every tile in a preset sheet is the same picture whatever layer is selected');
+    }
+    return FM.fxThumbs.previewLayerScene(layer, preset, preset && preset.fx);
+  }
+  // The strip a tile animates, as one pixel signature per frame plus the frames' mean level.
+  function lpStrip(layer, preset) {
+    var v = lpScene(layer, preset);
+    if (!v) return null;
+    var c = offscreen(v.w, v.h), g = c.getContext('2d', { willReadFrequently: true });
+    var sig = '', mean = 0;
+    for (var i = 0; i < v.frames; i++) {
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, v.w, v.h);
+      FM.renderScene(g, v.scene, v.t0 + (v.frames === 1 ? 0 : (i / v.frames) * (v.t1 - v.t0)));
+      var d = g.getImageData(0, 0, v.w, v.h).data, h = 2166136261, s = 0;
+      for (var k = 0; k < d.length; k += 4) {
+        s += d[k] + d[k + 1] + d[k + 2];
+        h ^= d[k]; h = Math.imul(h, 16777619); h ^= d[k + 1]; h = Math.imul(h, 16777619); h ^= d[k + 2]; h = Math.imul(h, 16777619);
+      }
+      sig += (h >>> 0).toString(16) + ',';
+      mean += s / (d.length / 4) / 3;
+    }
+    return { sig: sig, mean: mean / v.frames, size: v.w + 'x' + v.h, frames: v.frames };
+  }
+  // Two layers that are impossible to confuse: a magenta block in the top half, green letters in the
+  // bottom half. Separated on purpose — an opaque layer ON TOP of another hides it, and a hidden
+  // layer correctly has no preview at all (which is what the fallback test below asserts).
+  function lpLayers() {
+    var P = FM.scene.project;
+    return {
+      A: FM.makeLayer('shape', { name: 'lpA', shape: 'rect', x: P.width / 2, y: P.height * 0.28, shapeW: P.width * 0.6, shapeH: P.height * 0.25, fill: '#ff00aa', start: 0, duration: 5 }),
+      B: FM.makeLayer('text', { name: 'lpB', text: 'ZZZ', x: P.width / 2, y: P.height * 0.72, fontSize: Math.round(P.height / 7), color: '#22ff66', start: 0, duration: 5 }),
+    };
+  }
+  function withLayers(list, sel, fn) {
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    FM.scene.layers.length = 0;
+    list.forEach(function (l) { FM.scene.layers.push(l); });
+    FM.selectLayer(sel); FM.time = 0;
+    try { return fn(); } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0); FM.time = t0;
+    }
+  }
+
+  test('preset previews: the tile is a picture of the SELECTED layer', { item: 'preset-layer-preview' }, function () {
+    var L = lpLayers();
+    var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === 's-quake'; })[0];
+    if (!preset) throw new Error('shipped preset s-quake missing');
+    withLayers([L.A, L.B], L.A.id, function () {
+      var a = lpStrip(L.A, preset), b = lpStrip(L.B, preset);
+      if (!a || !b) throw new Error('one of the two layers refused a preview: A=' + !!a + ' B=' + !!b);
+      // the load-bearing assertion: same preset, two layers, two DIFFERENT pictures
+      if (a.sig === b.sig) throw new Error('the same preset renders identical pixels on two very different layers — the tile is still generic (' + a.size + ', ' + a.frames + ' frames)');
+      if (Math.abs(a.mean - b.mean) < 2) throw new Error('the two tiles differ only in noise: means ' + a.mean.toFixed(2) + ' vs ' + b.mean.toFixed(2));
+      // …and the mutation check on the instrument: the SAME layer twice must be identical, or the
+      // signature is measuring the weather rather than the layer.
+      if (lpStrip(L.A, preset).sig !== a.sig) throw new Error('the same layer rendered twice gave two different strips — the probe is not deterministic');
+    });
+  });
+
+  test('preset previews: adding the preset changes the picture', { item: 'preset-layer-preview' }, function () {
+    var L = lpLayers();
+    /* Floors are ~60% of measured on this layer at 65x116: Beat Slam 34.4, Earthquake 31.4,
+     * Untwist In 37.1. The three chosen all MOVE the layer, which is what survives being shown at
+     * the layer's true size. The pixel-length presets deliberately do NOT appear here: Glitch Pop's
+     * 26px channel split measures 1.3 on a 1080-wide comp because 26 project pixels is 1.5 tile
+     * pixels, and that is the honest answer — a sample tile may exaggerate an effect to demonstrate
+     * it (see OVERRIDES in fx-thumbs.js), a preview of YOUR layer may not. */
+    var floors = { 's-beatslam': 20, 's-quake': 18, 'p-untwist': 22 };
+    withLayers([L.A, L.B], L.A.id, function () {
+      var bad = [];
+      Object.keys(floors).forEach(function (id) {
+        var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === id; })[0];
+        var v = lpScene(L.A, preset);
+        if (!v) { bad.push(id + ' refused'); return; }
+        var c = offscreen(v.w, v.h), g = c.getContext('2d', { willReadFrequently: true });
+        var best = 0;
+        for (var i = 0; i < v.frames; i++) {
+          var t = v.t0 + (i / v.frames) * (v.t1 - v.t0);
+          g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, v.w, v.h); FM.renderScene(g, v.scene, t);
+          var on = g.getImageData(0, 0, v.w, v.h).data;
+          g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, v.w, v.h); FM.renderScene(g, v.plain, t);
+          var off = g.getImageData(0, 0, v.w, v.h).data;
+          var s = 0;
+          for (var k = 0; k < on.length; k += 4) s += (Math.abs(on[k] - off[k]) + Math.abs(on[k + 1] - off[k + 1]) + Math.abs(on[k + 2] - off[k + 2])) / 3;
+          best = Math.max(best, s / (on.length / 4));
+        }
+        if (best < floors[id]) bad.push(id + ' mean ' + best.toFixed(2) + '/' + floors[id]);
+      });
+      if (bad.length) throw new Error('preset previews indistinguishable from the plain layer: ' + bad.join('; '));
+    });
+  });
+
+  test('preset previews: an edit to the layer changes its preview', { item: 'preset-layer-preview' }, function () {
+    var L = lpLayers();
+    var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === 's-quake'; })[0];
+    withLayers([L.A, L.B], L.A.id, function () {
+      var before = lpStrip(L.A, preset).sig;
+      L.A.transform.rotation = 28; L.A.fill = '#00d2ff';
+      if (lpStrip(L.A, preset).sig === before) throw new Error('rotating and recolouring the layer left the preview unchanged — it is stale');
+      // …and BACK. The signature has to be content-based, because undo/redo rebuilds layer objects
+      // with the same ids: anything keyed on object identity would hand back the pre-undo picture.
+      L.A.transform.rotation = 0; L.A.fill = '#ff00aa';
+      if (lpStrip(L.A, preset).sig !== before) throw new Error('undoing the edit did not restore the original preview');
+      // an added EFFECT is an edit too — the preview is the layer's whole stack plus the preset
+      var inv = FM.fxRegistry.makeInstance('invert') || FM.fxRegistry.makeInstance('grayscale');
+      if (inv) {
+        L.A.effects = [inv];
+        if (lpStrip(L.A, preset).sig === before) throw new Error('adding an effect to the layer left the preview unchanged');
+        L.A.effects = [];
+      }
+    });
+  });
+
+  test('preset previews: a layer with nothing on screen falls back to the sample', { item: 'preset-layer-preview' }, function () {
+    var P = FM.scene.project, L = lpLayers();
+    var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === 's-quake'; })[0];
+    var nul = FM.makeLayer('null', { name: 'lpN', x: 100, y: 100, start: 0, duration: 5 });
+    var cam = FM.makeLayer('camera', { name: 'lpC', x: P.width / 2, y: P.height / 2, start: 0, duration: 5 });
+    var off = FM.makeLayer('shape', { name: 'lpOff', shape: 'rect', x: -9000, y: -9000, shapeW: 50, shapeH: 50, fill: '#fff', start: 0, duration: 5 });
+    // covered completely by A, which sits above it — nothing of it reaches the frame
+    var under = FM.makeLayer('shape', { name: 'lpU', shape: 'rect', x: P.width / 2, y: P.height * 0.28, shapeW: 80, shapeH: 80, fill: '#0f0', start: 0, duration: 5 });
+    withLayers([L.A, under, nul, cam, off], L.A.id, function () {
+      var bad = [];
+      [['null', nul], ['camera', cam], ['off-frame', off], ['hidden under another layer', under]].forEach(function (p) {
+        if (lpScene(p[1], preset) !== null) bad.push(p[0] + ' was previewed');
+        if (FM.fxThumbs.canPreviewLayer(p[1], 'shake')) bad.push(p[0] + ' passed canPreviewLayer');
+      });
+      // an effect that cannot apply to this layer at all is the other fallback
+      if (FM.fxThumbs.canPreviewLayer(L.A, 'textspacing')) bad.push('a text-only effect passed on a shape layer');
+      // …and the control: the layer that IS on screen must still be previewable, or this test would
+      // pass just as well with the whole feature deleted.
+      if (!FM.fxThumbs.canPreviewLayer(L.A, 'shake')) bad.push('the visible layer was refused too');
+      if (bad.length) throw new Error(bad.join('; '));
+    });
+  });
+
+  test('preset previews: rendering one never touches the layer document', { item: 'preset-layer-preview' }, function () {
+    var L = lpLayers();
+    var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === 's-beatslam'; })[0];
+    withLayers([L.A, L.B], L.A.id, function () {
+      var before = JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+      lpStrip(L.A, preset); lpStrip(L.B, preset);
+      var after = JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+      if (before !== after) throw new Error('the scene document changed while previewing:\n' + before.slice(0, 200) + '\nvs\n' + after.slice(0, 200));
+      if ((L.A.effects || []).length) throw new Error('the preview left ' + L.A.effects.length + ' effect(s) on the real layer');
+    });
+  });
+
+  test('preset previews: the CACHE follows the layer, not just the preset', { item: 'preset-layer-preview' }, async function () {
+    /* The tests above measure the scene a tile is built from; this one measures the CACHE, which is
+     * where a stale preview would actually come from. Two tiles painted in the same instant show
+     * frames[frameIdx % n] of whatever entry they hold, so identical pixels mean "the same cache
+     * entry" and different pixels mean "a different one" — no sampling over time needed. */
+    var L = lpLayers();
+    var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === 's-quake'; })[0];
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:200px;height:400px;';
+    document.body.appendChild(host);
+    function tile() { var c = document.createElement('canvas'); c.className = 'fxb-thumb-cv'; host.appendChild(c); return c; }
+    async function ready(c) {
+      for (var i = 0; i < 400 && !c.classList.contains('ready'); i++) await new Promise(function (r) { requestAnimationFrame(r); });
+      if (!c.classList.contains('ready')) throw new Error('a tile never painted');
+    }
+    function pix(c) { return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; }
+    function same(a, b) {
+      if (a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 2) return false;
+      return true;
+    }
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    FM.scene.layers.length = 0; FM.scene.layers.push(L.A); FM.scene.layers.push(L.B);
+    FM.selectLayer(L.A.id);
+    try {
+      var t1 = tile(); FM.fxThumbs.mountPreset(t1, preset, L.A); await ready(t1);
+      // the same layer again: same key, same entry, same pixels — the control for everything below
+      var t1b = tile(); FM.fxThumbs.mountPreset(t1b, preset, L.A); await ready(t1b);
+      if (!same(pix(t1), pix(t1b))) throw new Error('two tiles of the same layer and preset disagree — the cache key is not stable');
+      // a DIFFERENT layer must not be served the first one's picture
+      var t2 = tile(); FM.fxThumbs.mountPreset(t2, preset, L.B); await ready(t2);
+      if (same(pix(t1), pix(t2))) throw new Error('layer B was served layer A’s cached tile');
+      // an EDIT to the same layer must not be served the pre-edit picture
+      L.A.transform.rotation = 33;
+      var t3 = tile(); FM.fxThumbs.mountPreset(t3, preset, L.A); await ready(t3);
+      if (same(pix(t1), pix(t3))) throw new Error('after rotating the layer the tile came back from the cache unchanged — the key ignores the layer’s content');
+      // …and undoing it must bring the original entry back (content-keyed, not a counter)
+      L.A.transform.rotation = 0;
+      var t4 = tile(); FM.fxThumbs.mountPreset(t4, preset, L.A); await ready(t4);
+      if (!same(pix(t1), pix(t4))) throw new Error('undoing the edit did not return the original cached tile');
+    } finally {
+      FM.fxThumbs.stopAll();
+      host.remove();
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+    }
+  });
+
+  test('preset previews: the art-decode re-mount keeps the preset', { item: 'preset-layer-preview' }, async function () {
+    /* The bug this encodes, measured on the build before the feature: when the fx-art photographs
+     * decode, photosChanged() clears the cache and re-mounts every live tile — and it re-mounted
+     * with the bare cache key, so a preset tile's PRESET was dropped, generate() looked
+     * 'p:s-beatslam' up in the effect registry, threw, and cached the generic fallback under the
+     * preset's key for the rest of the session. Open the first preset sheet within a second of
+     * opening the browser and every tile in it was the same grey ball, permanently.
+     * The tile's SHAPE is the crisp witness: a layer preview is the .fxp-thumb box (152x116), the
+     * sample fallback is 192². */
+    var L = lpLayers();
+    var preset = FM.EFFECT_PRESETS.filter(function (p) { return p.id === 's-quake'; })[0];
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:120px;height:120px;';
+    document.body.appendChild(host);
+    var cv = document.createElement('canvas'); cv.className = 'fxb-thumb-cv';
+    host.appendChild(cv);
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    FM.scene.layers.length = 0; FM.scene.layers.push(L.A); FM.scene.layers.push(L.B);
+    FM.selectLayer(L.A.id);
+    try {
+      FM.fxThumbs.mountPreset(cv, preset, L.A);
+      for (var i = 0; i < 400 && !cv.classList.contains('ready'); i++) await new Promise(function (r) { requestAnimationFrame(r); });
+      if (!cv.classList.contains('ready')) throw new Error('the tile never painted');
+      var shape = cv.width + 'x' + cv.height;
+      if (cv.width === 192) throw new Error('the tile is 192x192 — that is the sample tile, not a preview of the layer');
+      if (!FM.fxThumbs.remountLive) throw new Error('no remountLive: the art-decode path re-mounts with a bare key and drops the preset');
+      FM.fxThumbs.remountLive();
+      for (var j = 0; j < 400 && !cv.classList.contains('ready'); j++) await new Promise(function (r) { requestAnimationFrame(r); });
+      if (cv.width + 'x' + cv.height !== shape) throw new Error('after the re-mount the tile is ' + cv.width + 'x' + cv.height + ', was ' + shape + ' — it fell back to the sample');
+      /* The SAME trap by a second route, and one this suite did not have before: a preset mounted
+       * with NO layer (the sample path, which every un-previewable layer falls back to) must still
+       * carry its preset into the queue. When it did not, pump() handed 'p:<id>' to generate(), the
+       * effect registry missed, and every tile in the sheet came out as the same picture.
+       * The witness is TWO presets of the SAME effect: they share a subject, so if the preset is
+       * being dropped they are pixel-identical, and if it is honoured they cannot be. Compared in
+       * the SAME instant — one shared ticker paints both, so a paired sample needs no settling and
+       * cannot be fooled by the fx-art photographs decoding underneath the test. */
+      var other = FM.EFFECT_PRESETS.filter(function (p) { return p.fx === preset.fx && p.id !== preset.id; })[0];
+      if (!other) throw new Error('needs two shipped presets of one effect to compare');
+      var s1 = document.createElement('canvas'); s1.className = 'fxb-thumb-cv'; host.appendChild(s1);
+      var s2 = document.createElement('canvas'); s2.className = 'fxb-thumb-cv'; host.appendChild(s2);
+      FM.fxThumbs.mountPreset(s1, preset);                       // no layer on purpose
+      FM.fxThumbs.mountPreset(s2, other);
+      for (var k = 0; k < 400 && !(s1.classList.contains('ready') && s2.classList.contains('ready')); k++) await new Promise(function (r) { requestAnimationFrame(r); });
+      var apart = 0;
+      for (var n = 0; n < 6 && !apart; n++) {
+        var q1 = s1.getContext('2d').getImageData(0, 0, s1.width, s1.height).data;
+        var q2 = s2.getContext('2d').getImageData(0, 0, s2.width, s2.height).data;
+        for (var q = 0; q < q1.length; q += 4) if (Math.abs(q1[q] - q2[q]) > 2) { apart++; break; }
+        if (!apart) await new Promise(function (r) { setTimeout(r, 95); });
+      }
+      if (!apart) throw new Error('“' + preset.name + '” and “' + other.name + '” render the identical sample tile — the no-layer path dropped the preset');
+    } finally {
+      FM.fxThumbs.stopAll();
+      host.remove();
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+    }
+  });
+
   /* ---------------- Magnify Background (queue 32) ------------------------------------------
    * Copy Background with a lens: the layer fills with the scene BELOW it, scaled about the layer's
    * own anchor. It shipped once as a POST-EFFECT and was reverted for "doing nothing" — the stripe
