@@ -195,7 +195,36 @@ window.FM = window.FM || {};
     return rec._audioProbe;
   };
 
-  /* Compute (and cache on the media rec) a peak array for drawing the clip waveform. */
+  /* Compute (and cache on the media rec) a peak array for drawing the clip waveform.
+   *
+   * Two rules here, both bought with a bug. Ezra imported a full song and the strip came back with
+   * clean vertical holes at regular spacing — "it's missing parts". The audio was fine: the decoded
+   * buffer was sample-exact against the source and the export mix correlated 1.00000. Only the
+   * PICTURE was lossy. So:
+   *
+   * 1. SCAN EVERY SAMPLE. The old loop stepped each bin with `stride = max(1, floor(block/200))`,
+   *    which at this rate is floor(duration/15): 1 up to 29 s, then 2, 4 at a minute, 20 at five
+   *    minutes — i.e. a 5-minute song had each bar decided by 5% of its samples. Decimation is not
+   *    a small error, it is an ALIAS: a fixed stride lands every inspected sample at nearly the same
+   *    phase of any content near a multiple of the decimated rate, and when that phase sits near a
+   *    zero crossing the bar reads as SILENCE. Measured against a full scan of the very same buffer
+   *    (only the sampling differed), a 300 s constant-amplitude fixture — whose true envelope is a
+   *    dead-flat band — drew 30 of 600 bars under half their true height, worst 5.2%, with a dip
+   *    every 10 s. Broadband content aliased the same way, so it was not an artefact of a pure tone.
+   *    A max over a CONTIGUOUS run cannot do that; it can only ever read too high, never too low.
+   *    The stride was never worth it — a full scan of 5 minutes at 8 kHz is 2.4M compares (~4 ms).
+   *
+   * 2. RESOLUTION FOLLOWS DURATION. A fixed 600 peaks is one bar per 32 CSS pixels once a 5-minute
+   *    clip is stretched along the timeline — a comb, not a waveform. Peaks are cheap in a way PCM
+   *    is not (that is why the decode above stays at 8 kHz): the array is bounded at WAVE_MAX_PEAKS
+   *    plain numbers, ~64 KB, whatever the file.
+   *
+   * The cap degrades HONESTLY. Past ~5.5 minutes each peak simply covers more time; it is still the
+   * max of a contiguous span, so a quiet moment reads shorter — no span of the song ever vanishes. */
+  const WAVE_PEAKS_PER_SEC = 25;
+  const WAVE_MIN_PEAKS = 600;      // what short clips have always drawn; keeps their look identical
+  const WAVE_MAX_PEAKS = 8192;     // the clip canvas is itself capped at 8192 backing px (iOS), so more can never be drawn
+
   FM.getWaveform = async function (rec) {
     if (rec.waveform) return rec.waveform;
     if (rec._wfPending) return null;
@@ -211,15 +240,26 @@ window.FM = window.FM || {};
         : await FM.decodeAudio(rec.file, { rate: WAVE_RATE });
       if (!ab) { rec.waveform = []; rec._wfPending = false; return rec.waveform; }
       const ch = ab.getChannelData(0);
-      const N = 600, block = Math.floor(ch.length / N) || 1, stride = Math.max(1, Math.floor(block / 200));
+      const len = ch.length;
+      const dur = ab.duration || (len / (ab.sampleRate || WAVE_RATE));
+      // never more bins than samples — a sub-second clip would otherwise get empty bins between real ones
+      const N = Math.max(1, Math.min(len || 1, Math.max(WAVE_MIN_PEAKS,
+        Math.min(WAVE_MAX_PEAKS, Math.round(dur * WAVE_PEAKS_PER_SEC)))));
       const peaks = new Array(N);
       for (let i = 0; i < N; i++) {
-        let max = 0; const s = i * block, e = Math.min(ch.length, s + block);
-        for (let j = s; j < e; j += stride) { const v = Math.abs(ch[j]); if (v > max) max = v; }
+        // Bin edges from the FULL length, so the tail can't be dropped: the old `s = i*block` with
+        // block = floor(len/600) left up to 599 samples past the last bin unlooked-at.
+        const s = Math.floor(i * len / N);
+        const e = (i === N - 1) ? len : Math.max(s + 1, Math.floor((i + 1) * len / N));
+        let max = 0;
+        for (let j = s; j < e; j++) { const v = ch[j] < 0 ? -ch[j] : ch[j]; if (v > max) max = v; }
         peaks[i] = max;
       }
       rec.waveform = peaks;
-    } catch (e) { rec.waveform = []; }
+      // Peaks CHANGED. The timeline caches a rendered strip and used to key it on the peak COUNT
+      // alone, so a recomputed waveform of the same length silently kept the old canvas on screen.
+      rec.waveformV = (rec.waveformV || 0) + 1;
+    } catch (e) { rec.waveform = []; rec.waveformV = (rec.waveformV || 0) + 1; }
     rec._wfPending = false;
     return rec.waveform;
   };
