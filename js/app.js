@@ -1876,19 +1876,24 @@ window.FM = window.FM || {};
   };
 
   FM.layerMenuItems = function (layer) {
-    // DECLARED FIRST. The Duplicate labels below read selCount, and it used to be declared 36 lines
-    // further down next to the grouping entries — a const read before its declaration throws
-    // ReferenceError, so the whole menu died: nothing on right-click, and nothing from the ⋯ button
-    // with a layer selected. (Ezra: "the three dots don't work when a layer selected.")
+    // DECLARED FIRST, and it must stay that way. It used to be declared 36 lines further down beside
+    // the grouping entries, and a const read before its declaration throws ReferenceError — which
+    // killed the WHOLE menu: nothing on right-click, nothing from ⋯ with a layer selected. (Ezra:
+    // "the three dots don't work when a layer selected.") The Duplicate labels that first exposed
+    // that are gone as of v5.91, but the grouping entries below still read it, so the hazard is real.
     const selCount = FM.selectionIds ? FM.selectionIds().length : 0;
-    const items = [
-      { label: (selCount > 1 ? 'Duplicate ' + selCount + ' layers' : 'Duplicate'), action: () => FM.duplicateSelection() },
-      { label: (selCount > 1 ? 'Duplicate ' + selCount + ' in place' : 'Duplicate in place'), action: () => FM.duplicateSelection(true) },
-      { label: 'Copy', action: () => { const ids = FM.selectionIds ? FM.selectionIds() : []; if (!ids.includes(layer.id)) { FM.scene.selectedId = layer.id; FM.scene.selectedIds = [layer.id]; } FM.copySelection(); } },
-      { label: 'Paste Style…', disabled: !(FM.clipboard && FM.clipboard[0] && FM.clipboard[0].snapshot), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(layer); } },
-      { label: 'Split at playhead', action: () => FM.splitLayer(layer.id) },
-      { label: 'Move to playhead', action: () => FM.moveLayerToPlayhead(layer.id) },
-    ];
+    /* v5.91. Ezra circled the first six entries and said "Remove the circled options in this menu":
+       Duplicate, Duplicate in place, Copy, Paste Style…, Split at playhead, Move to playhead.
+       Every one of them already has a door somewhere the hand actually is — ⧉ in the top bar carries
+       Duplicate / Copy / Paste Style (js/app.js ~2486, and it is the surface AM uses for them), and
+       Split sits beside the playhead in the transport row where it was moved deliberately in v5.x.
+       This menu had become the place where a second copy of everything accumulated, which is the same
+       complaint as queue 35 about the project ⋯ menu. The ACTIONS are untouched — FM.duplicateSelection,
+       FM.copySelection, FM.openPasteStyle, FM.splitLayer and FM.moveLayerToPlayhead all still exist and
+       are still called from their real homes and from the keyboard — only this duplicate listing goes.
+       `selCount` is no longer read here; it stays declared because the grouping entries below use it,
+       and the comment above it records why its POSITION is load-bearing. */
+    const items = [];
     // cross-layer keyframe paste: the keyframe menu needs an existing diamond to long-press, so a
     // layer with NO keyframes had no touch path — this gives every platform the same entry
     if (FM.kfClipboard && FM.kfClipboard.length && FM.pasteKfAtPlayhead) items.push({ label: 'Paste keyframes at playhead', action: () => FM.pasteKfAtPlayhead() });
