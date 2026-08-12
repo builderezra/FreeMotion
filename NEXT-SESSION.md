@@ -136,8 +136,15 @@ Present: `channelremap` (ONE; AM has HSV **and** RGB), `copybg`, `magnifybg`, `f
     only. Worth adding, or is anchor-only enough?
 - **Fill Behind — SHIPPED 2026-08-12.** Ezra specified it: *"it adds the blur and fills the space that
   the layer isn't filling on the canvas."* That dissolves the old objection (plates are project-sized so
-  a naive fill paints the whole frame) — **painting the whole frame is the point**. Built as a third
-  Copy-Background sibling: `FM.fillBehindFx` + `drawFillBehind`, dispatched from `drawLayer` **above**
+  a naive fill paints the whole frame) — **painting the whole frame is the point**.
+  **STALE FROM HERE (v6.15).** That "dissolved objection" was real after all, and it shipped as a bug:
+  painting the whole frame is only harmless when the frame around the layer is EMPTY. In a stack it is
+  every layer below, and a 40x40 speck erased the entire composite — in the export as well as the
+  preview. Fixed at v6.15 by ORDER, not clipping: `paintFillBehind` now paints only the fill and
+  `fillBehindPass` lays every fill onto the backdrop before any layer draws, so the subject draws for
+  itself at its own z. The `drawLayer` dispatch described below no longer exists. Kept for the history.
+  Built as a third Copy-Background sibling: `FM.fillBehindFx` + `drawFillBehind`, dispatched from
+  `drawLayer` **above**
   the `pp.length → applyPostFx; return` gate and never in POSTFX/WARP_FX. The fill is the layer's own
   alpha bounds scaled to COVER the canvas, blurred, drawn with `destination-over` so it can only appear
   where the layer is not. Params Blur / Zoom / Dim. Three things were found by measuring, not reading:

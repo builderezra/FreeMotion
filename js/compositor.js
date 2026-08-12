@@ -546,10 +546,16 @@ window.FM = window.FM || {};
     // area is filled with an enlarged, blurred copy of THIS layer, and the sharp layer draws on top.
     // (Ezra, verbatim: "it adds the blur and fills the space that the layer isn't filling on the
     // canvas.") The old objection — "pixel-effect plates are project-sized so a naive fill paints
-    // the whole frame" — dissolves, because painting the whole frame IS the effect.
+    // the whole frame" — was answered here with "painting the whole frame IS the effect", and that
+    // answer was WRONG in the only place it mattered. It holds for a comp of one layer, where the
+    // frame around the subject really is empty. In a comp of four it is every layer below, and the
+    // full-frame plate wiped all of them — Ezra: "adding an effect to this layer for some reason
+    // makes the layer behind it invisible." Fixed by ORDER, not by clipping: the fill goes
+    // down as a backdrop under the whole stack (fillBehindPass) and the subject draws at its own z.
+    // The empty frame still gets filled; the layers below fill themselves in.
     // A COPY-BACKGROUND SIBLING, not a post-effect: never list it in POSTFX. See the note above for
     // what that mis-registration does (drawLayer returns inside applyPostFx and the layer draws zero
-    // pixels). drawFillBehind is dispatched from drawLayer directly, ABOVE the applyPostFx gate.
+    // pixels). paintFillBehind is dispatched from fillBehindPass, before the stack draws.
     // Defaults are meant to look right untouched: a heavy blur, a slight over-zoom so the copy reads
     // as a wash rather than a recognisable second picture, and a dim so the subject stays the subject.
     { type: 'fillbehind', label: 'Fill Behind', params: [
@@ -6663,9 +6669,11 @@ window.FM = window.FM || {};
     return Math.min(ax, bx) <= 0.01 && Math.min(ay, by) <= 0.01
       && Math.max(ax, bx) >= PW - 0.01 && Math.max(ay, by) >= PH - 0.01;
   }
-  /* Returns TRUE when it drew the layer; FALSE when there is nothing to fill and the caller should
-   * carry on down the ordinary draw path. */
-  function drawFillBehind(ctx, layer, t, scene, fx) {
+  /* Paints ONE layer's Fill Behind backdrop onto ctx — the fill only, never the subject, which
+   * draws for itself at its own z afterwards. Returns TRUE when a fill was painted; FALSE when
+   * there is nothing to fill (the layer already reaches every edge, or it drew no pixels), which is
+   * what keeps that case byte-identical: no plate is built and no blit happens. */
+  function paintFillBehind(ctx, layer, t, scene, fx) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return false;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
@@ -6841,11 +6849,28 @@ window.FM = window.FM || {};
         bctx.fillStyle = 'rgba(0,0,0,' + dim.toFixed(3) + ')';
         bctx.fillRect(0, 0, CW, CH);
       }
-      // destination-over IS the "only where the layer is not" half of the spec: it paints under the
-      // plate's existing alpha, so the sharp layer stays sharp and nothing shows through it.
+      /* THE FILL IS A BACKDROP — it is the only thing this function paints, and the subject is NOT
+       * in it. Until the fix below the two were merged here (destination-over put the fill under the sharp
+       * layer inside pA) and the single opaque frame-sized plate was blitted over the composite. In
+       * a one-layer comp that is right, and it is how the effect was written and tested. In a comp
+       * with anything underneath, that blit ERASED IT: cover-scaling the layer's own alpha bbox to
+       * contain the frame, plus the opaque colour floor below, makes pA opaque edge to edge, so a
+       * 40x40 speck carrying Fill Behind wiped every layer below it. Measured on a two-shape scene:
+       * 0 of 159,600 probe pixels of the lower layer survived, and 49,600 of 49,600 background
+       * pixels were repainted.
+       * The registry's own words are the contract — "fills the EMPTY frame around the layer" — and
+       * empty means empty, not "everything that is not this layer". So the fill goes down as a
+       * backdrop, in fillBehindPass, BEFORE any layer in the stack draws; the layers below then
+       * paint over it and the subject draws at its own z through the ordinary path. Nothing is
+       * clipped, tested per pixel or special-cased: it is ordering alone, which is also why it holds
+       * for stacked effects (every other effect bakes into pA before this line, exactly as before).
+       * pA's pixels are all spent by now — the bbox scan, the blur source and the average colour
+       * have each been read out of it — so it is reused as the fill's frame-sized plate rather than
+       * allocating a fourth. 'copy' replaces the layer render with the fill, which keeps the fill's
+       * journey to the target byte-for-byte what it always was: pB → a W x H plate → the target. */
       actx.setTransform(1, 0, 0, 1, 0, 0);
       actx.globalAlpha = 1; actx.filter = 'none';
-      actx.globalCompositeOperation = 'destination-over';
+      actx.globalCompositeOperation = 'copy';
       /* Source rect fw x fh, not the whole CW x CH plate: CW is ceil(W/k), so when the frame is not a
        * multiple of k the plate carries a sliver of extra column and stretching the WHOLE plate onto
        * W shrinks the fill by (k*CW - W) / (k*CW). That is small — 0.17% on a 1170px iPhone frame —
@@ -6856,7 +6881,7 @@ window.FM = window.FM || {};
       actx.globalCompositeOperation = 'source-over';
       ctx.save();
       baseT(ctx);
-      ctx.globalAlpha = opacity;                                            // opacity/blend apply ONCE, to fill and subject together
+      ctx.globalAlpha = opacity;                                            // the fill is part of the layer: it carries the layer's own opacity and blend
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
       try { ctx.drawImage(pA, 0, 0, PW, PH); } catch (e) {}                 // plate → project units; identical to drawImage(pA,0,0) at scale 1
@@ -6864,6 +6889,40 @@ window.FM = window.FM || {};
       return true;
     } finally { _fbDepth--; }
   }
+  /* THE BACKDROP PASS. EVERY Fill Behind in the frame is laid down here, on the background, before
+   * a single layer draws — in the same bottom-to-top order the layer loop uses, so fills stack
+   * against each other the way their layers do and no fill can ever cover a layer above it.
+   *
+   * `pick` is the caller's own visibility filter: it returns the layer whose pixels the fill is
+   * built from (or an array of them, or null to skip), so the pass never has to re-derive which
+   * layers are really about to draw. Solo, isolate and visibility all live in there.
+   *
+   * ONE PASS, ON THE FRAME — a group is not a second frame. A member's fill used to be painted onto
+   * its group's flattening plate instead, on the theory that it fills "the space inside the unit".
+   * It does not: the fill is frame-sized and opaque, so it made the whole flattened unit opaque edge
+   * to edge and the unit's own blit then erased everything below the GROUP. That is the original bug
+   * one level in, and the suite catches it ("a Fill Behind inside a group stays inside that group").
+   * A member's fill therefore goes down on the frame's backdrop like everyone else's. The cost is
+   * that it is no longer masked/graded/blended with its group — it is a backdrop, not a member —
+   * and the gain is that it cannot erase anything.
+   *
+   * This is the ONLY place Fill Behind is dispatched from. drawLayer used to do it too and no longer
+   * does: it is re-entered for every member while a group is flattened, and a fill painted there
+   * lands on the group's plate, which is the same bug one level in. */
+  function fillBehindPass(target, scene, t, pick) {
+    const layers = scene.layers;
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const got = pick(layers[i]);
+      if (!got) continue;
+      const list = Array.isArray(got) ? got : [got];
+      for (let j = 0; j < list.length; j++) {
+        const src = list[j];
+        const fx = src && FM.fillBehindFx(src);
+        if (fx) paintFillBehind(target, src, t, scene, fx);
+      }
+    }
+  }
+
   // ---- render scale (preview sharpness) ------------------------------------------------------
   // The preview canvas can carry MORE pixels than the project when zoomed in: at 4x zoom a 1080px
   // comp is stretched across ~4600 device pixels, and a CSS-scaled bitmap turns every vector edge
@@ -6950,20 +7009,21 @@ window.FM = window.FM || {};
     // layer by one degree used to drop it back to Normal with no warning. Re-entering with
     // blendMode:'normal' bakes the tilt into the plate first, then we blend the tilted result.
 
-    /* FILL BEHIND — blurred backdrop fill (see drawFillBehind). Its position in this ladder is the
-     * whole design and every neighbour is deliberate:
-     *   • BELOW the manual-blend branch, so an exotic blend mode still blends the finished result
-     *     (fill + subject) against the REAL backdrop rather than against an empty plate.
-     *   • ABOVE the 3D-tilt branch, so a tilted layer's fill is computed from the TILTED pixels and
-     *     still reaches the frame edges — inside the tilt the fill would be tilted with it and leave
-     *     the corners bare.
-     *   • ABOVE the `if (pp.length) { applyPostFx(…); return; }` gate ~40 lines below, which is the
-     *     line that makes a mis-registered effect silently draw nothing. Fill Behind must NEVER be
-     *     added to POSTFX/WARP_FX; it is dispatched here, and the plate render re-enters drawLayer
-     *     with this instance filtered out, so the rest of the stack composes normally inside it.
-     * Returns false when the layer already covers the canvas (nothing to fill) — then we simply
-     * carry on down the ordinary path, which is what keeps that case byte-identical. */
-    if (scene) { const _fbFx = FM.fillBehindFx(layer); if (_fbFx && drawFillBehind(ctx, layer, t, scene, _fbFx)) return; }
+    /* FILL BEHIND is NOT dispatched here. It used to be — this is where drawFillBehind drew the
+     * fill and the sharp layer as ONE opaque frame-sized plate and returned, and that plate is what
+     * erased every layer below (see paintFillBehind). It now goes down once per frame, on the
+     * background, from fillBehindPass in renderScene.
+     * There is deliberately no fallback dispatch left in drawLayer. Every rasterising path in the
+     * app — preview, export, thumbnails, poster frames, the AI's frame grabs — goes through
+     * FM.renderScene, so the pass covers all of them; and a second dispatch point here is actively
+     * harmful, because drawLayer is re-entered for every member while a group is being flattened and
+     * a fill painted onto that plate makes the whole unit opaque edge to edge (the same bug, one
+     * level in — the suite pins it: "a Fill Behind inside a group stays inside that group").
+     * A NEW caller that rasterises a layer with no composite around it therefore gets no fill, and
+     * should call fillBehindPass first rather than reviving a dispatch here.
+     * Fill Behind must still NEVER be listed in POSTFX/WARP_FX: applyPostFx has no kernel for it,
+     * falls through every branch and returns, and the layer then draws zero pixels — see the
+     * registry note on Magnify Background. */
 
     if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); return; }
     // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
@@ -7651,7 +7711,12 @@ window.FM = window.FM || {};
     return map;
   }
   let _mgA = null, _mgB = null;
-  function drawGroupUnit(ctx, u, t, scene) {
+  /* Flatten a group unit into the `_flat` proxy that carries the group's own effects/opacity/blend.
+   * Split out of drawGroupUnit so the backdrop pass can reach a fill that lives on the GROUP: that
+   * fill is built from the flattened pixels, so there has to be something to flatten before the
+   * layer loop gets here. Groups that do not carry Fill Behind are flattened exactly once, as
+   * before; one that does is flattened twice per frame, which is the price of an opt-in effect. */
+  function buildGroupUnit(u, t, scene) {
     const P = scene.project;
     if (!_mgA) _mgA = document.createElement('canvas');
     if (!_mgB) _mgB = document.createElement('canvas');
@@ -7662,6 +7727,11 @@ window.FM = window.FM || {};
     const a = _mgA.getContext('2d');
     baseT(a); a.clearRect(0, 0, P.width, P.height);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
+    /* No Fill Behind is painted onto this plate — not the group's, not a member's. renderScene's
+     * backdrop pass has already put every fill in the frame down on the background, and drawLayer's
+     * own dispatch is gone, which is what keeps the member draws below from putting one here. A
+     * frame-sized opaque fill on THIS plate is what made the whole flattened unit opaque edge to
+     * edge, so that the unit's own blit then erased everything under the group. */
     for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
       const L = scene.layers[i];
       if (!u.memberIds.has(L.id) || L.id === u.maskId || L.type === 'group') continue;
@@ -7712,7 +7782,10 @@ window.FM = window.FM || {};
     if (g.colorGrade && gFill === 'none') tmp.colorGrade = g.colorGrade;   // grade never shifts a picked fill colour
     tmp.transform.anchorX = 0; tmp.transform.anchorY = 0;
     tmp.transform.opacity = (g.transform && g.transform.opacity != null) ? g.transform.opacity : 1;
-    drawLayer(ctx, tmp, t, scene);
+    return tmp;
+  }
+  function drawGroupUnit(ctx, u, t, scene) {
+    drawLayer(ctx, buildGroupUnit(u, t, scene), t, scene);
   }
 
   FM.renderScene = function (ctx, scene, t) {
@@ -7820,6 +7893,37 @@ window.FM = window.FM || {};
     const _iso = (FM.isolate && FM.isolate.id && FM.isolate.mode && scene.layers.some(l => l.id === FM.isolate.id)) ? FM.isolate : null;
     const _isoTop = (_iso && _iso.mode === 2 && !(memberToUnit && memberToUnit[_iso.id]))
       ? scene.layers.find(l => l.id === _iso.id) : null;
+    /* FILL BEHIND goes down HERE — on the background, under every layer in the stack. See
+     * fillBehindPass and paintFillBehind: the fill is the layer's own blurred, blown-up copy, and
+     * blitting it at the layer's own z is what erased everything below it. The filter below mirrors
+     * the loop's skips exactly, so a fill only ever exists for a layer that is really about to draw:
+     * solo, isolate and visibility all have to agree, or the frame gains a wash from a layer that is
+     * not on screen. */
+    const _fbUnits = new Set();
+    fillBehindPass(target, scene, t, function (L) {
+      if (soloActive && !L.solo) return null;
+      if (_iso && _iso.mode === 1 && L.id !== _iso.id) return null;
+      if (L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return null;
+      const unit = memberToUnit && memberToUnit[L.id];
+      if (unit) {
+        /* A unit draws as ONE flattened plate, so there are two fills to find here and they are
+         * built from different pixels: the GROUP's own, which needs the unit flattened first, and
+         * each MEMBER's, which is built from that member alone. Both land on the frame's background
+         * — a fill painted onto the group's plate instead turns the whole unit opaque edge to edge
+         * and the unit's blit then erases everything below the group (see buildGroupUnit). The
+         * group's is taken at the bottom-most member, the z-slot the loop draws the unit at, so two
+         * units keep their order against each other. */
+        const out = [];
+        if (!_fbUnits.has(unit.group.id)) {
+          _fbUnits.add(unit.group.id);
+          if (FM.fillBehindFx(unit.group) && FM.isLayerVisibleAt(unit.group, t)) out.push(buildGroupUnit(unit, t, scene));
+        }
+        if (L.id !== unit.maskId && L.type !== 'group' && FM.isLayerVisibleAt(L, t)) out.push(L);
+        return out;
+      }
+      if (L.type === 'group') return null;   // a group that is not a unit rasterises nothing of its own
+      return FM.isLayerVisibleAt(L, t) ? L : null;
+    });
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;

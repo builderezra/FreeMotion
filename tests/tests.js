@@ -4717,6 +4717,165 @@
     });
   });
 
+  /* ---------------- Fill Behind is a BACKDROP, not a full-frame blit --------------------------
+   * Ezra, on a project of four shape layers: "I'm having a glitch where adding an effect to this
+   * layer for some reason makes the layer behind it invisible, really odd."
+   * The effect was Fill Behind, and ONE is enough. Its plate is frame-sized, the cover scale blows
+   * the layer's own bbox up until it contains the frame, and the average-colour floor underneath
+   * makes that plate opaque edge to edge — so blitting it at the layer's own z painted over every
+   * layer below. Measured on the scene these tests build, before the fix: 0 of 26,000 probe pixels
+   * of the lower layer survived, and a 40x40 speck in the corner erased the frame just as completely.
+   * The fill now goes down as a backdrop under the whole stack, so the layers below draw over it.
+   *
+   * EVERY test here asserts BOTH halves, and that is the point: the layer below must SURVIVE and the
+   * empty frame must still be FILLED. Either assertion alone is passable by breaking the other —
+   * "the fill erases nothing" is trivially true of an effect that draws nothing, which is the failure
+   * mode this file already warns about twice (see the Magnify Background note in the registry).
+   *
+   *   UPPER  squircle #2244ff  x 60..260  y 20..90    carries the effect
+   *   LOWER  rect     #00ff66  x 20..300  y 110..230  the layer that used to vanish
+   *   PROBE  x[30,290) y[125,225)  belongs to LOWER alone      SKY y[0,14) is empty frame
+   * The canvas is project-sized, which is exactly the canvas exporter.js hands FM.renderScene. */
+  function fbFx(params) {
+    var e = FM.fxRegistry.makeInstance('fillbehind');
+    if (!e) throw new Error('no registry entry for fillbehind');
+    if (params) Object.keys(params).forEach(function (k) { e.params[k] = params[k]; });
+    return e;
+  }
+  function fbUpper(fxs, over) {
+    var l = FM.makeLayer('shape', Object.assign({ shape: 'squircle', x: 160, y: 55, shapeW: 200, shapeH: 70, fill: '#2244ff', start: 0, duration: 5 }, over || {}));
+    if (fxs) l.effects = fxs;
+    return l;
+  }
+  function fbLower(over) {
+    return FM.makeLayer('shape', Object.assign({ shape: 'rect', x: 160, y: 170, shapeW: 280, shapeH: 120, fill: '#00ff66', start: 0, duration: 5 }, over || {}));
+  }
+  // survive% of the lower layer, lit% of the empty sky, and %(subject still its own colour)
+  function fbOcc(layers) {
+    var c = offscreen(320, 240);
+    var g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, scene(layers), 0);
+    var d = g.getImageData(0, 0, 320, 240).data;
+    var surv = 0, tot = 0, sky = 0, skyTot = 0, subj = 0, subjTot = 0, x, y, i;
+    for (y = 125; y < 225; y++) for (x = 30; x < 290; x++) {
+      i = (y * 320 + x) * 4; tot++;
+      if (d[i] < 8 && d[i + 1] > 247 && d[i + 2] > 94 && d[i + 2] < 110) surv++;
+    }
+    for (y = 0; y < 14; y++) for (x = 0; x < 320; x++) {
+      i = (y * 320 + x) * 4; skyTot++;
+      if (d[i] > 6 || d[i + 1] > 6 || d[i + 2] > 6) sky++;
+    }
+    for (y = 35; y < 72; y++) for (x = 80; x < 240; x++) {
+      i = (y * 320 + x) * 4; subjTot++;
+      if (Math.abs(d[i] - 34) < 10 && Math.abs(d[i + 1] - 68) < 10 && Math.abs(d[i + 2] - 255) < 10) subj++;
+    }
+    return { pct: 100 * surv / tot, surv: surv, tot: tot,
+             sky: 100 * sky / skyTot, subj: 100 * subj / subjTot };
+  }
+  function fbSays(r, what) {
+    return what + ': ' + r.surv + '/' + r.tot + ' (' + r.pct.toFixed(1) + '%) of the layer below survived, '
+      + r.sky.toFixed(0) + '% of the empty frame is filled, subject ' + r.subj.toFixed(0) + '%';
+  }
+
+  test('effects: Fill Behind does not erase the layer below it', { item: 'fill-behind' }, function () {
+    var r = fbOcc([fbUpper([fbFx()]), fbLower()]);
+    if (r.pct < 99.5) throw new Error(fbSays(r, 'Fill Behind wiped the layer underneath it') + ' — its frame-sized plate is being blitted over the composite at the layer’s own z instead of going down as a backdrop under the whole stack (fillBehindPass). This is Ezra’s bug: "adding an effect to this layer makes the layer behind it invisible"');
+    if (r.sky < 95) throw new Error(fbSays(r, 'Fill Behind stopped filling the empty frame') + ' — the occlusion half of this test is now passable by an effect that draws nothing at all, which is not a fix');
+    if (r.subj < 90) throw new Error(fbSays(r, 'the subject itself is gone') + ' — the fill went down but the layer no longer draws sharp on top of it');
+  });
+
+  test('effects: Fill Behind spares the layer below however small the subject is', { item: 'fill-behind' }, function () {
+    // 40x40 in the corner: cover-scale makes the plate opaque edge to edge regardless of size, so
+    // before the fix this speck erased the frame exactly as completely as a full-width layer did.
+    var r = fbOcc([fbUpper([fbFx()], { x: 40, y: 40, shapeW: 40, shapeH: 40 }), fbLower()]);
+    if (r.pct < 99.5) throw new Error(fbSays(r, 'a 40x40 layer erased the frame') + ' — size and position are irrelevant to the cover scale; only the ORDER of the fill keeps the layers below alive');
+    if (r.sky < 95) throw new Error(fbSays(r, 'the speck’s fill did not fill the frame') + ' — a small subject must still fill the empty frame with its own blown-up copy');
+  });
+
+  test('effects: Fill Behind spares the layer below when it is stacked with other effects', { item: 'fill-behind' }, function () {
+    // Gradient Overlay + Fill Behind is Ezra's screenshot exactly: the gradient recolours the layer,
+    // then the fill blew that pink→blue wash across the whole frame. Both orders, because the fill
+    // is built from the plate the rest of the stack has already baked into.
+    [['gradientoverlay', 'fillbehind'], ['fillbehind', 'gradientoverlay'], ['fillbehind', 'glow'], ['pixelate', 'fillbehind']].forEach(function (pair) {
+      var r = fbOcc([fbUpper(pair.map(function (id) { return id === 'fillbehind' ? fbFx() : FM.fxRegistry.makeInstance(id); })), fbLower()]);
+      if (r.pct < 99.5) throw new Error(fbSays(r, 'stacked as [' + pair.join(' + ') + ']') + ' — the fix must hold for a stack, not just a lone Fill Behind');
+      if (r.sky < 95) throw new Error(fbSays(r, 'stacked as [' + pair.join(' + ') + ']') + ' — the fill stopped filling once it was stacked');
+    });
+  });
+
+  test('effects: two Fill Behinds keep their z-order against each other', { item: 'fill-behind' }, function () {
+    /* The fills go down bottom-to-top in the same order their layers do, so the LOWER layer's own
+     * fill cannot cover the layer above it. Both subjects sit in the sky, clear of the probe, so
+     * anything the probe loses came from a fill. */
+    var top = fbUpper([fbFx()], { x: 80, y: 40, shapeW: 90, shapeH: 40 });                      // blue
+    var mid = fbUpper([fbFx()], { x: 240, y: 40, shapeW: 90, shapeH: 40, fill: '#ff8800' });    // orange
+    var r = fbOcc([top, mid, fbLower()]);
+    if (r.pct < 99.5) throw new Error(fbSays(r, 'two Fill Behinds') + ' — with more than one fill in the frame the layers below are being covered again');
+    if (r.sky < 95) throw new Error(fbSays(r, 'two Fill Behinds') + ' — neither fill reached the empty frame');
+    /* …and they stack in that order too. layers[0] is the TOP layer, so its fill is laid down LAST
+     * of the two and is the one you see in the empty frame. Walk the pass the other way and the
+     * bottom layer's fill wins instead — the frame goes orange — while every assertion above still
+     * passes, which is what this one is here to stop. */
+    var c = offscreen(320, 240);
+    FM.renderScene(c.getContext('2d', { willReadFrequently: true }), scene([top, mid, fbLower()]), 0);
+    var sd = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 320, 14).data;
+    var sr = 0, sb = 0;
+    for (var i = 0; i < sd.length; i += 4) { sr += sd[i]; sb += sd[i + 2]; }
+    if (!(sb > sr)) throw new Error('the empty frame reads rgb r=' + Math.round(sr / (sd.length / 4)) + ' b=' + Math.round(sb / (sd.length / 4)) + ' — the BOTTOM layer’s orange fill is covering the TOP layer’s blue one, so the backdrop pass is laying the fills down in the wrong order (it must walk the stack bottom-to-top, exactly like the layer loop)');
+  });
+
+  test('effects: a Fill Behind inside a group stays inside that group', { item: 'fill-behind' }, function () {
+    /* A member's fill fills the space inside its GROUP's plate, under the members above it — it must
+     * never reach past the group onto the frame and take the other layers with it. Run twice: a
+     * plain transform-only group (members draw straight into the frame) and a unit group (the
+     * members are flattened onto one plate first, which is a different pass). */
+    [false, true].forEach(function (unit) {
+      var g = FM.makeLayer('group', { name: 'G' });
+      if (unit) g.effects = [FM.fxRegistry.makeInstance('glow')];   // anything visual makes it a flattened unit
+      var m = fbUpper([fbFx()]); m.parent = g.id;
+      var r = fbOcc([g, m, fbLower()]);
+      if (r.pct < 99.5) throw new Error(fbSays(r, (unit ? 'unit' : 'plain') + ' group') + ' — a Fill Behind on a group MEMBER erased a layer outside the group');
+      if (r.sky < 95) throw new Error(fbSays(r, (unit ? 'unit' : 'plain') + ' group') + ' — the member’s fill did not fill the space around it');
+    });
+    // …and the same for a fill on the GROUP itself, which is built from the flattened unit.
+    var g2 = FM.makeLayer('group', { name: 'G2' });
+    g2.effects = [fbFx()];
+    var m2 = fbUpper(null); m2.parent = g2.id;
+    var r2 = fbOcc([g2, m2, fbLower()]);
+    if (r2.pct < 99.5) throw new Error(fbSays(r2, 'fill on the group itself') + ' — the group’s own fill erased the layer below the group');
+    if (r2.sky < 95) throw new Error(fbSays(r2, 'fill on the group itself') + ' — the group’s own fill never reached the frame');
+  });
+
+  test('effects: a Fill Behind that is not on screen paints no backdrop', { item: 'fill-behind' }, function () {
+    /* The backdrop pass runs BEFORE the layer loop, so it has to repeat the loop's own skips itself.
+     * Miss one and the frame gains a wash from a layer that is not being drawn — the fill would
+     * outlive its own layer. Hidden, disabled and not-solo each have to come out empty. */
+    var hidden = fbUpper([fbFx()]); hidden.visible = false;
+    var rh = fbOcc([hidden, fbLower()]);
+    if (rh.sky > 2) throw new Error(fbSays(rh, 'a HIDDEN layer') + ' — its fill is still being painted; the pass must skip what the layer loop skips');
+    var off = fbUpper([fbFx()]); off.effects[0].enabled = false;
+    var ro = fbOcc([off, fbLower()]);
+    if (ro.sky > 2) throw new Error(fbSays(ro, 'a DISABLED Fill Behind') + ' — an effect switched off must paint nothing');
+    var up = fbUpper([fbFx()]), low = fbLower(); low.solo = true;
+    var rs = fbOcc([up, low]);
+    if (rs.sky > 2) throw new Error(fbSays(rs, 'a non-solo layer while another layer is soloed') + ' — solo hides the layer but its fill still washed the frame');
+    if (rs.pct < 99.5) throw new Error(fbSays(rs, 'solo') + ' — the soloed layer itself did not survive');
+  });
+
+  test('effects: a scene with no Fill Behind renders byte-identically', { item: 'fill-behind' }, function () {
+    /* The backdrop pass walks every layer of every composite, so it must be provably free when the
+     * effect is not in use. Same scene, once with a DISABLED Fill Behind and once with none at all:
+     * one byte of difference means the pass is touching frames it has no business touching. */
+    var a = offscreen(320, 240), b = offscreen(320, 240);
+    var off = fbUpper([fbFx()]); off.effects[0].enabled = false;
+    FM.renderScene(a.getContext('2d', { willReadFrequently: true }), scene([off, fbLower()]), 0);
+    FM.renderScene(b.getContext('2d', { willReadFrequently: true }), scene([fbUpper(null), fbLower()]), 0);
+    var da = a.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 320, 240);
+    var db = b.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 320, 240);
+    var n = fbDiff(da, db);
+    if (n !== 0) throw new Error(n + ' bytes differ between a scene carrying a disabled Fill Behind and the same scene without one — the backdrop pass is changing frames that do not use the effect');
+  });
+
   /* ---------------- safe-area insets under viewport-fit=cover (queue 46) ----------------
    * v5.49 added viewport-fit=cover, so every position:fixed overlay now starts at the PHYSICAL top
    * of the screen and has to pay for the status bar itself. #topbar-m, .hm-top, .set-head and .te-bar
