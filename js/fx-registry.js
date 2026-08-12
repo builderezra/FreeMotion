@@ -233,8 +233,11 @@ window.FM = window.FM || {};
     innerglow: 'Glows inward from the layer\u2019s edges.',
     roundcorners: 'Rounds the layer\u2019s corners, Apple-style — a continuous curve, not a plain arc.',
     liquidglass: 'A glass panel over the layer: refraction, a lit rim and a soft specular.',
-    letterbox: 'Adds cinematic bars, cropping the frame to a wider ratio.',
-    border: 'Draws a frame around the edge of the composition.',
+    // Both used to promise the COMPOSITION, and both used to deliver it — by painting over the whole
+    // frame and erasing the layers underneath. They are bounded to their own layer now (v6.35,
+    // compositor fxBounds), so the blurbs say the layer or the UI documents the old bug.
+    letterbox: 'Adds cinematic bars across the layer, cropping it to a wider ratio.',
+    border: 'Draws a frame around the edge of the layer.',
     chromakey: 'Removes a colour — the green-screen key.',
     lumakey: 'Removes by brightness instead of colour.',
     mirror: 'Reflects one half of the frame onto the other.',

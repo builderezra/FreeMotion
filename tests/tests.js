@@ -9296,6 +9296,390 @@
       throw new Error('a typeless .m4a recording is not classified as audio by the importer');
   });
 
+  /* ---------------- Letterbox / Border Frame: bounded to their own layer (v6.35) ----------------
+   *
+   * Before this, both effects ran their kernel over the whole comp-sized effect PLATE and forced
+   * alpha to 255, so an effect on a 40x40 speck repainted the frame and erased everything under it.
+   * Measured on the shipped build with this exact scene: Letterbox size 14 left 71.1% of the layer
+   * below alive, Border Frame width 10 left 85.6%. Same family as the Fill Behind bug fixed in v6.15.
+   *
+   * EVERY ONE OF THESE ASSERTS BOTH HALVES, and that is the entire point. "Erases nothing" is
+   * trivially passable by an effect that draws nothing — which is exactly what deleting the alpha
+   * line produces (measured: layer below back to 100%, and Border Frame changing 0.0% of its own
+   * layer at every size), and exactly the Magnify Background mistake this codebase shipped and
+   * reverted once. A test that only checked the layer below would have waved that through. */
+  var LBX = { W: 320, H: 240 };
+  function lbxShot(layers) {
+    var c = offscreen(LBX.W, LBX.H);
+    var g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, scene(layers, { project: { width: LBX.W, height: LBX.H, fps: 30, duration: 5, background: null } }), 0);
+    return g.getImageData(0, 0, LBX.W, LBX.H).data;
+  }
+  function lbxUpper(w, h, fx) {
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'upper', x: 160, y: 120, shapeW: w, shapeH: h, fill: '#0000ff' });
+    L.effects = fx ? [fx] : [];
+    return L;
+  }
+  function lbxBelow() {
+    return FM.makeLayer('shape', { shape: 'rect', name: 'below', x: 160, y: 120, shapeW: LBX.W, shapeH: LBX.H, fill: '#00ff00' });
+  }
+  function lbxDiff(a, b, i) {
+    return Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]);
+  }
+  // Returns { survived, changedOnLayer, footprint } for a framing effect on a w x h layer.
+  //   survived        — pixels OUTSIDE the layer's box that the effect left alone, as a fraction
+  //   changedOnLayer  — pixels INSIDE the layer's own footprint that the effect changed, as a fraction
+  function lbxMeasure(w, h, fx) {
+    var aOff = lbxShot([lbxUpper(w, h, null)]);
+    var aOn = lbxShot([lbxUpper(w, h, fx)]);
+    var bOff = lbxShot([lbxUpper(w, h, null), lbxBelow()]);
+    var bOn = lbxShot([lbxUpper(w, h, fx), lbxBelow()]);
+    var nFoot = 0, nChanged = 0, nOut = 0, nSurv = 0;
+    for (var k = 0; k < LBX.W * LBX.H; k++) {
+      var i = k * 4;
+      if (aOff[i + 3] > 0) { nFoot++; if (lbxDiff(aOff, aOn, i) > 12) nChanged++; }
+      else { nOut++; if (lbxDiff(bOff, bOn, i) <= 12) nSurv++; }
+    }
+    return { survived: nSurv / Math.max(1, nOut), changedOnLayer: nChanged / Math.max(1, nFoot), footprint: nFoot };
+  }
+
+  test('effects: Letterbox bars the LAYER it is on and cannot erase what is under it', { item: 'fx-bounded-frame' }, function () {
+    [[200, 70], [100, 100], [40, 40]].forEach(function (d) {
+      var m = lbxMeasure(d[0], d[1], { type: 'letterbox', enabled: true, params: { size: 14, metric: 0 } });
+      if (m.survived < 0.9999) {
+        throw new Error('Letterbox on a ' + d[0] + 'x' + d[1] + ' layer destroyed the layer below: only '
+          + (100 * m.survived).toFixed(1) + '% of it survived outside the effected layer (was 71.1% on a 40x40 before v6.35)');
+      }
+      // the other half — an effect that draws nothing also erases nothing
+      if (!(m.changedOnLayer > 0.1)) {
+        throw new Error('Letterbox on a ' + d[0] + 'x' + d[1] + ' layer changed only '
+          + (100 * m.changedOnLayer).toFixed(1) + '% of that layer — it is a no-op, not a fix');
+      }
+    });
+  });
+
+  test('effects: Border Frame frames the LAYER it is on and cannot erase what is under it', { item: 'fx-bounded-frame' }, function () {
+    [[200, 70], [100, 100], [40, 40]].forEach(function (d) {
+      var m = lbxMeasure(d[0], d[1], { type: 'border', enabled: true, params: { width: 10, color: '#ffffff' } });
+      if (m.survived < 0.9999) {
+        throw new Error('Border Frame on a ' + d[0] + 'x' + d[1] + ' layer destroyed the layer below: only '
+          + (100 * m.survived).toFixed(1) + '% of it survived (was 85.6% on a 40x40 before v6.35)');
+      }
+      // Border Frame did not merely trespass before v6.35 — it drew its ring at the COMP edge, so it
+      // changed 0.0% of its own layer at every size below full-frame. This is the assertion that
+      // deleting the alpha line cannot pass.
+      if (!(m.changedOnLayer > 0.1)) {
+        throw new Error('Border Frame on a ' + d[0] + 'x' + d[1] + ' layer changed only '
+          + (100 * m.changedOnLayer).toFixed(1) + '% of that layer — the border is not on the layer at all');
+      }
+    });
+  });
+
+  test('effects: a framing effect paints nothing at all outside its layer’s box', { item: 'fx-bounded-frame' }, function () {
+    // The strict version of the promise, in raw pixels rather than a percentage, on subjects whose
+    // box is not the shape: an ellipse, a rotated rect, and a layer half off the frame. Measured
+    // before v6.35 across the same cases: 548624 pixels painted outside the box. Must be zero.
+    var CASES = [
+      ['ellipse 100x100', { shape: 'ellipse', x: 160, y: 120, shapeW: 100, shapeH: 100 }],
+      ['rect 120x90 rotated 30°', { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 90, rot: 30 }],
+      ['rect 160x100 half off frame', { shape: 'rect', x: 40, y: 120, shapeW: 160, shapeH: 100 }]
+    ];
+    var FXS = [['Letterbox', { type: 'letterbox', enabled: true, params: { size: 20, metric: 0 } }],
+               ['Border Frame', { type: 'border', enabled: true, params: { width: 8, color: '#ffffff' } }]];
+    CASES.forEach(function (cs) {
+      var mk = function (fx) {
+        var L = FM.makeLayer('shape', Object.assign({ name: 'u', fill: '#0000ff' }, cs[1]));
+        if (cs[1].rot) L.transform.rotation = cs[1].rot;
+        L.effects = fx ? [fx] : [];
+        return L;
+      };
+      var off = lbxShot([mk(null), lbxBelow()]);
+      // the layer's own box, from the effect-off render of the layer alone
+      var solo = lbxShot([mk(null)]);
+      var x0 = LBX.W, y0 = LBX.H, x1 = -1, y1 = -1;
+      for (var y = 0; y < LBX.H; y++) for (var x = 0; x < LBX.W; x++) if (solo[(y * LBX.W + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x1 < 0) throw new Error(cs[0] + ' drew nothing — the probe has no box to check against');
+      FXS.forEach(function (f) {
+        var on = lbxShot([mk(f[1]), lbxBelow()]);
+        var stray = 0, hit = 0;
+        for (var yy = 0; yy < LBX.H; yy++) for (var xx = 0; xx < LBX.W; xx++) {
+          var i = (yy * LBX.W + xx) * 4;
+          if (lbxDiff(off, on, i) <= 12) continue;
+          if (xx >= x0 && xx <= x1 && yy >= y0 && yy <= y1) hit++; else stray++;
+        }
+        if (stray > 0) {
+          throw new Error(f[0] + ' on ' + cs[0] + ' painted ' + stray + ' pixels outside the layer’s box ['
+            + x0 + ',' + y0 + ' ' + (x1 - x0 + 1) + 'x' + (y1 - y0 + 1) + ']');
+        }
+        if (!(hit > 0)) throw new Error(f[0] + ' on ' + cs[0] + ' changed nothing inside the layer’s box either — it is a no-op');
+      });
+    });
+  });
+
+  test('effects: on a FULL-FRAME layer both framing effects render exactly as they always did', { item: 'fx-bounded-frame' }, function () {
+    /* The backward-compatibility half. A full-frame layer's box IS the frame, so bounding the two
+     * effects must be a no-change there — that is the common case and every saved project full of
+     * these is sitting on it. The check that makes it real is the EDGE SNAP in fxBounds: alphaBBox
+     * pads 2px and clamps at the frame, so stripping the pad without snapping would inset a
+     * full-frame layer's box by 2px and shift every existing bar and border.
+     *
+     * Asserted structurally rather than against a stored hash (a hash would go red on any unrelated
+     * antialiasing change and teach people to re-bless it): the bars must start at row 0 and be
+     * exactly round(H * size/100) deep, and the border must start at column 0 and be exactly its
+     * width, which is what the pre-v6.35 kernels drew by construction. */
+    var full = function (fx) {
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'f', x: 160, y: 120, shapeW: LBX.W, shapeH: LBX.H, fill: '#c86432' });
+      L.effects = [fx];
+      return L;
+    };
+    [14, 30, 45].forEach(function (s) {
+      var d = lbxShot([full({ type: 'letterbox', enabled: true, params: { size: s } })]);
+      var want = Math.round(LBX.H * s / 100);
+      var bar = 0;
+      while (bar < LBX.H && d[(bar * LBX.W + 160) * 4 + 3] === 255 && d[(bar * LBX.W + 160) * 4] === 0
+             && d[(bar * LBX.W + 160) * 4 + 1] === 0 && d[(bar * LBX.W + 160) * 4 + 2] === 0) bar++;
+      if (bar !== want) throw new Error('full-frame Letterbox size ' + s + ' drew a ' + bar + 'px bar from row 0, not ' + want + 'px — a full-frame layer must be unchanged');
+    });
+    [1, 10, 30].forEach(function (w) {
+      var d = lbxShot([full({ type: 'border', enabled: true, params: { width: w, color: '#ffffff' } })]);
+      var run = 0, y = 120;
+      while (run < LBX.W && d[(y * LBX.W + run) * 4] === 255 && d[(y * LBX.W + run) * 4 + 1] === 255
+             && d[(y * LBX.W + run) * 4 + 2] === 255 && d[(y * LBX.W + run) * 4 + 3] === 255) run++;
+      if (run !== w) throw new Error('full-frame Border Frame width ' + w + ' drew a ' + run + 'px band from column 0, not ' + w + 'px — a full-frame layer must be unchanged');
+    });
+  });
+
+  test('effects: a Letterbox saved before v6.35 keeps the bar thickness it was saved with', { item: 'fx-bounded-frame' }, function () {
+    /* `size` is the one parameter whose meaning moved: it has always been "% of H", and H moved from
+     * the FRAME to the LAYER. An instance saved before the change has no `metric` key, and the
+     * renderer falls back to 1 (Frame) for exactly that reason — schema `legacy: 1`. It cannot
+     * reproduce the old PICTURE, because the old picture painted over the whole frame and erased the
+     * layers underneath; what it reproduces is the measurement.
+     *
+     * Half-height layer, size 20: frame metric => round(240 * 0.20) = 48px bars; layer metric =>
+     * round(120 * 0.20) = 24px. Both bounded to the layer, so the two are distinguishable only by
+     * thickness — which is the whole point of keeping the key. */
+    var mk = function (params) {
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'half', x: 160, y: 120, shapeW: 200, shapeH: 120, fill: '#0000ff' });
+      L.effects = [{ type: 'letterbox', enabled: true, params: params }];
+      return L;
+    };
+    var barAt = function (params) {                       // depth of the black bar down the layer's own top edge (y = 60)
+      var d = lbxShot([mk(params)]);
+      var y = 60, n = 0;
+      while (y < LBX.H && d[(y * LBX.W + 160) * 4 + 3] === 255 && d[(y * LBX.W + 160) * 4] === 0
+             && d[(y * LBX.W + 160) * 4 + 1] === 0 && d[(y * LBX.W + 160) * 4 + 2] === 0) { n++; y++; }
+      return n;
+    };
+    var legacy = barAt({ size: 20 });                     // no metric key: the pre-v6.35 instance
+    var layer = barAt({ size: 20, metric: 0 });           // what a NEW instance draws
+    var frame = barAt({ size: 20, metric: 1 });
+    if (legacy !== frame) throw new Error('an instance with no `metric` key drew a ' + legacy + 'px bar but metric:1 (Frame) draws ' + frame + 'px — the legacy fallback is not wired up');
+    if (legacy !== 48) throw new Error('legacy Letterbox size 20 on a half-height layer drew a ' + legacy + 'px bar, expected 48 (20% of the 240px FRAME)');
+    if (layer !== 24) throw new Error('Letterbox size 20 with metric Layer drew a ' + layer + 'px bar, expected 24 (20% of the 120px LAYER)');
+  });
+
+  /* ---- the same promise on a REDUCED plate: the PREVIEW path, not the export path ----------------
+   *
+   * Every test above renders at scale 1. That is not enough, and this test exists because it caught a
+   * real regression that scale 1 could not see. fxBounds works in PLATE pixels, and a layer's margin
+   * shrinks with the plate: the first cut of it snapped the box to the frame edge on a 4px tolerance,
+   * and a 300x220 layer in this 320x240 comp — a 10px margin, comfortably clear at scale 1 — fell
+   * under that tolerance at rs 0.35, was promoted to full-frame, and erased the layer below exactly
+   * as the shipped bug did. Measured then: 31.6% survival for Letterbox and 0.0% for Border at
+   * rs 0.35, while scale 1 read a clean 100%. The snap now reads the plate's four edge LINES
+   * directly (fxTouchesEdge), which is exact by construction and does not scale. */
+  function lbxShotAt(layers, rs) {
+    var c = offscreen(Math.round(LBX.W * rs), Math.round(LBX.H * rs));
+    c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;      // how the preview asks for a cheaper plate
+    var g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, scene(layers, { project: { width: LBX.W, height: LBX.H, fps: 30, duration: 5, background: null } }), 0);
+    return { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+  }
+
+  test('effects: the framing effects stay inside their layer on a reduced preview plate too', { item: 'fx-bounded-frame' }, function () {
+    var FXS = [['Letterbox', { type: 'letterbox', enabled: true, params: { size: 14 } }],
+               ['Border Frame', { type: 'border', enabled: true, params: { width: 10, color: '#ffffff' } }]];
+    [[300, 220], [200, 70], [40, 40]].forEach(function (sz) {
+      [1, 0.5, 0.35].forEach(function (rs) {
+        var solo = lbxShotAt([lbxUpper(sz[0], sz[1], null)], rs);
+        var x0 = solo.w, y0 = solo.h, x1 = -1, y1 = -1, foot = 0, i;
+        for (var y = 0; y < solo.h; y++) for (var x = 0; x < solo.w; x++) {
+          if (solo.d[(y * solo.w + x) * 4 + 3] > 0) {
+            foot++;
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+          }
+        }
+        if (x1 < 0) throw new Error('the ' + sz[0] + 'x' + sz[1] + ' probe layer drew nothing at rs ' + rs);
+        FXS.forEach(function (f) {
+          var off = lbxShotAt([lbxUpper(sz[0], sz[1], null), lbxBelow()], rs);
+          var on = lbxShotAt([lbxUpper(sz[0], sz[1], f[1]), lbxBelow()], rs);
+          var soloOn = lbxShotAt([lbxUpper(sz[0], sz[1], f[1])], rs);
+          var stray = 0, changed = 0;
+          for (var yy = 0; yy < solo.h; yy++) for (var xx = 0; xx < solo.w; xx++) {
+            i = (yy * solo.w + xx) * 4;
+            if (!(xx >= x0 && xx <= x1 && yy >= y0 && yy <= y1)) {
+              if (lbxDiff(off.d, on.d, i) > 12) stray++;
+            }
+            if (solo.d[i + 3] > 0 && lbxDiff(solo.d, soloOn.d, i) > 12) changed++;
+          }
+          if (stray > 0) {
+            throw new Error(f[0] + ' on a ' + sz[0] + 'x' + sz[1] + ' layer at plate scale ' + rs + ' painted '
+              + stray + ' pixels outside the layer, erasing what was below it');
+          }
+          // and the other half, on every plate: an effect that draws nothing also strays nothing
+          if (!(changed / Math.max(1, foot) > 0.05)) {
+            throw new Error(f[0] + ' on a ' + sz[0] + 'x' + sz[1] + ' layer at plate scale ' + rs + ' changed only '
+              + (100 * changed / Math.max(1, foot)).toFixed(1) + '% of that layer — it is a no-op at this scale');
+          }
+        });
+      });
+    });
+  });
+
+  /* ---- the layer that sits JUST inside the frame: the case the two earlier fixes both missed -----
+   *
+   * Scale a full-frame video or image down a few pixels — an entirely ordinary thing to do — and add
+   * either framing effect. Every test above passes on that scene while a 1-3px rim at the frame edge
+   * overwrites whatever is underneath, because the snap in fxBounds used to decide "this layer
+   * already touches the frame edge" by reading alphaBBox's box instead of the layer's pixels.
+   *
+   * alphaBBox PADS by 2 and SAMPLES ON A STRIDE OF 2. Those two together mean bb.x collapses to 0
+   * for content whose true edge is 1 or 2 plate px in — 2.8 with a soft edge, since a partly-covered
+   * pixel still clears the `> 8` test — and bb.x + bb.w reaches W for content stopping 1px short. So
+   * a layer with a real margin was promoted to full-frame and both kernels painted the whole plate
+   * again. The margin lands in that band whenever inset x renderScale falls in roughly 1..2.8, which
+   * is why it needs the plate scales as well as the insets: a 3px inset is safe at scale 1 and
+   * broken at 0.35, an 8px inset is the other way round. Neither shows up at a single scale.
+   *
+   * Measured on the tree with the snap on `bb.x === 0`: 32 of 192 swept configurations painted
+   * outside the layer, 17,079 stray pixels in total, and at rs 0.5 with a 2px inset the layer below
+   * survived 0.0%. THE MUTATION CHECK THAT MAKES THIS TEST WORTH ANYTHING: put `bb.x === 0` back and
+   * this test goes red while all five tests above stay green. That asymmetry is the whole proof —
+   * they cannot see this, because none of them puts a layer in the 1..2.8 plate-pixel band. */
+  test('effects: a framing effect on a layer just INSIDE the frame still cannot touch the composite', { item: 'fx-bounded-frame' }, function () {
+    var FXS = [['Letterbox', { type: 'letterbox', enabled: true, params: { size: 14 } }],
+               ['Border Frame', { type: 'border', enabled: true, params: { width: 10, color: '#ffffff' } }]];
+    [2, 3, 5, 8].forEach(function (inset) {
+      var w = LBX.W - 2 * inset, h = LBX.H - 2 * inset;
+      [1, 0.5, 0.35].forEach(function (rs) {
+        var solo = lbxShotAt([lbxUpper(w, h, null)], rs);
+        var x0 = solo.w, y0 = solo.h, x1 = -1, y1 = -1, foot = 0, i;
+        for (var y = 0; y < solo.h; y++) for (var x = 0; x < solo.w; x++) {
+          if (solo.d[(y * solo.w + x) * 4 + 3] > 0) {
+            foot++;
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+          }
+        }
+        if (x1 < 0) throw new Error('the ' + inset + 'px-inset probe layer drew nothing at rs ' + rs);
+        var off = lbxShotAt([lbxUpper(w, h, null), lbxBelow()], rs);
+        FXS.forEach(function (f) {
+          var on = lbxShotAt([lbxUpper(w, h, f[1]), lbxBelow()], rs);
+          var soloOn = lbxShotAt([lbxUpper(w, h, f[1])], rs);
+          var stray = 0, changed = 0, alive = 0, outside = 0;
+          for (var yy = 0; yy < solo.h; yy++) for (var xx = 0; xx < solo.w; xx++) {
+            i = (yy * solo.w + xx) * 4;
+            if (xx >= x0 && xx <= x1 && yy >= y0 && yy <= y1) {
+              if (solo.d[i + 3] > 0 && lbxDiff(solo.d, soloOn.d, i) > 12) changed++;
+            } else {
+              outside++;
+              if (lbxDiff(off.d, on.d, i) > 12) stray++; else alive++;
+            }
+          }
+          if (stray > 0) {
+            throw new Error(f[0] + ' on a full-frame layer inset ' + inset + 'px, at plate scale ' + rs
+              + ', painted ' + stray + ' pixels outside the layer — ' + (100 * alive / Math.max(1, outside)).toFixed(1)
+              + '% of the layer below survived. The layer has a real margin and must not be treated as full-frame.');
+          }
+          // both halves, here too: containment is free if the effect simply stops drawing
+          if (!(changed / Math.max(1, foot) > 0.05)) {
+            throw new Error(f[0] + ' on a full-frame layer inset ' + inset + 'px, at plate scale ' + rs
+              + ', changed only ' + (100 * changed / Math.max(1, foot)).toFixed(1) + '% of that layer — it is a no-op');
+          }
+        });
+      });
+    });
+  });
+
+  /* ---- a framing effect must never DELETE the layer it is attached to --------------------------
+   *
+   * fxBounds asks alphaBBox for the layer's box, and alphaBBox samples every 2nd ROW and every 2nd
+   * COLUMN. A layer under 2 plate px thick that lands entirely on odd lines is invisible to it, so
+   * it returns null — and the first cut of the bounded path read null as "give up", `return`ing out
+   * of drawPixelEffect BEFORE the drawImage that puts the layer on screen. The layer did not lose
+   * its frame. It disappeared from the composite.
+   *
+   * That band is not exotic. A 1-4px hairline — a divider, an underline, a rule beneath a title — is
+   * in it at scale 1, and ANY thin layer drops into it once a reduced preview plate shrinks it far
+   * enough. Measured on that tree: 39 of 240 thin-layer configurations vanished outright at
+   * rs 0.25/0.35/0.5/0.6, and a 1px layer on an odd plate row vanished at rs 1.0 as well — i.e. in
+   * the EXPORT. Zero of the same 240 vanish on the build before the bounded path existed, so it was
+   * a new, user-visible regression, and every other test in this block sailed past it: they all
+   * measure what the effect PAINTS, and not one of them checks the layer is still there at all.
+   *
+   * The assertion is deliberately the weakest one available — "the layer still draws" — because the
+   * failure is total, not partial. A 1px-tall layer cannot carry a two-sided bar or a ring, so the
+   * kernel is entitled to decline to draw one; it is not entitled to take the layer with it. */
+  test('effects: a framing effect on a hairline layer must not delete it', { item: 'fx-bounded-frame' }, function () {
+    var FXS = [['Letterbox', { type: 'letterbox', enabled: true, params: { size: 14 } }],
+               ['Border Frame', { type: 'border', enabled: true, params: { width: 10, color: '#ffffff' } }]];
+    var thin = function (h, yy, fx) {
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'hairline', x: 160, y: yy, shapeW: 200, shapeH: h, fill: '#0000ff' });
+      L.effects = fx ? [fx] : [];
+      return L;
+    };
+    var cover = function (s) {                            // pixels the layer actually puts on screen
+      var n = 0;
+      for (var k = 0; k < s.w * s.h; k++) if (s.d[k * 4 + 3] > 8) n++;
+      return n;
+    };
+    /* A faithful copy of alphaBBox's scan — same stride, same `> 8` threshold. It is here so the
+     * test can tell whether a config actually REACHED the null branch, rather than assuming it did.
+     * The y values below are not guesses: they were measured (tests/_hairline.html) as the ones
+     * where a rect lands entirely on odd plate rows once the shape renderer, its antialiasing and
+     * the preview downscale have had their say. My first draft of this test swept y = 120 and 120.5,
+     * which straddle two rows — one of them even — so the strided scan always found the layer, the
+     * null branch never ran, and the test passed against the BROKEN build. A test that cannot reach
+     * the defect it is named after is worse than no test, because it reads as coverage. Hence the
+     * `reached` counter and the hard failure below it. */
+    var strided = function (s) {
+      for (var y = 0; y < s.h; y += 2) { var row = y * s.w * 4;
+        for (var x = 0; x < s.w; x += 2) if (s.d[row + x * 4 + 3] > 8) return true; }
+      return false;
+    };
+    var reached = 0, seen = 0;
+    [1, 2].forEach(function (h) {
+      [121.5, 122, 122.5, 123, 123.5].forEach(function (yy) {
+        [1, 0.6, 0.5, 0.35].forEach(function (rs) {
+          var shot = lbxShotAt([thin(h, yy, null)], rs);
+          var off = cover(shot);
+          if (off === 0) return;                          // too thin to survive the downscale at all — nothing for the effect to lose
+          seen++;
+          if (!strided(shot)) reached++;                  // this config exercises the null branch
+          FXS.forEach(function (f) {
+            var on = cover(lbxShotAt([thin(h, yy, f[1])], rs));
+            if (on === 0) {
+              throw new Error(f[0] + ' on a ' + h + 'px hairline at y ' + yy + ', plate scale ' + rs
+                + ', ERASED the layer: it covers ' + off + ' pixels without the effect and 0 with it. '
+                + 'A layer too thin to frame must still be drawn.');
+            }
+            if (on < off * 0.5) {
+              throw new Error(f[0] + ' on a ' + h + 'px hairline at y ' + yy + ', plate scale ' + rs
+                + ', cut the layer from ' + off + ' pixels to ' + on + ' — a framing effect adds coverage, it never removes it.');
+            }
+          });
+        });
+      });
+    });
+    if (reached === 0) {
+      throw new Error('none of the ' + seen + ' hairline configurations landed entirely on odd plate rows, so this test '
+        + 'never reached the strided scan\'s blind spot — the thing it exists to guard. Re-measure the parities with '
+        + 'tests/_hairline.html and update the y values.');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

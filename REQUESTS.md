@@ -54,22 +54,22 @@ Numbered with Ezra's own queue numbers where he gave them.
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio.
 - [ ] **58 — The red delete bar flashes during fast scroll** in the effects list.
-- [ ] **89 — Letterbox and Border Frame paint over the layers below them.** *Status:* the fix is
-      BUILT and measures well (layer-below survival 65.4% → 100%, zero pixels painted outside the
-      layer's box across 28 configs, 239/239 byte-identical) — but it was cut against v6.22 and two
-      verifiers refused it because it no longer APPLIED to today's code.
-      *Forward-ported successfully* — it applies now, and the suite reads 196/196. **Still not landed.**
-      A verifier ran 183 configurations and found 12 that STILL erase the layer below: the "does this
-      layer touch the frame edge" test is not exact, because the bbox helper pads by 2 and samples
-      every other pixel. So a layer sitting a few pixels inside the frame — you scale a video down
-      slightly, which is completely ordinary — is treated as full-frame and wipes a rim of whatever is
-      underneath. At preview scale 0.5 with a 2px inset, nothing below survives. Third pass running
-      with the root cause named; it stays out of your hands until a full sweep comes back clean,
-      because shipping it would reintroduce the exact bug in a narrower band. Same class as Fill
-      Behind (fixed in v6.15). Both do `if (d[i+3] < 255) d[i+3] = 255`, manufacturing opaque coverage
-      where the layer has none. Deliberately deferred: the one-line removal turns them into effects
-      that do nothing on a non-fullscreen layer, which this codebase already had to revert once. The
-      real fix runs them on the layer's own bounds and needs bbox plumbing.
+- [x] **89 — Letterbox and Border Frame paint over the layers below them.** **DONE v6.35**, on the
+      fourth attempt. Both effects drew their frame against the effect PLATE's edges, and that plate
+      is the size of the project, not of the layer — so a Letterbox on a small layer barred the whole
+      frame, and each kernel forced alpha to 255 there, manufacturing opaque pixels that erased
+      whatever was underneath. Both are bounded to the layer's own box now, so they frame the layer
+      they are attached to and cannot reach anything else. Three passes were refused first: one no
+      longer applied to current code; one snapped to "full-frame" on a 4px tolerance measured in
+      plate pixels, which a shrinking preview slipped under; one tested the padded, strided bbox
+      instead of the pixels, so a layer a few px inside the frame still erased a rim. The edge test
+      now reads the plate's four edge lines directly. The third pass also carried a regression of its
+      own — a thin layer whose alpha the strided scan could not see was DELETED from the composite
+      rather than left unframed — which is fixed here and now has a test. Verified: 288-config
+      byte-identity sweep vs v6.34, 0 full-frame configs changed (saved projects don't shift), 0
+      control effects changed; suite 198/198 at desktop and 380px, both new tests mutation-checked.
+      Known and left: on a layer only ~1px tall at reduced preview scale the bar/ring can't be drawn
+      at all, so it no-ops — exports at scale 1 are unaffected.
 - [ ] **53 — PC is missing the Group and Mask options.**
 
 ### Features and changes

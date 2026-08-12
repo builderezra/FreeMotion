@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hairline-layer parity probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre-wrap; font-size: 12px; }
+  .bad { color: #ff7a85; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — HAIRLINE PARITY probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * WHY THIS EXISTS
+ *   alphaBBox samples every 2nd ROW and every 2nd COLUMN. A layer thinner than 2 plate px that
+ *   lands entirely on ODD lines is therefore invisible to it, and fxBounds returns null. The
+ *   question this page answers is not "does that happen in theory" — it is "at which y, height
+ *   and plate scale does it ACTUALLY happen once the shape renderer, its antialiasing and the
+ *   preview downscale have had their say".
+ *
+ *   I need that answer because a test written against the theory did not reproduce the bug: a
+ *   1px rect centred on an integer y straddles two rows at partial alpha, one of which is even,
+ *   so the strided scan finds it and the null branch never runs. Guessing at the parity produced
+ *   a test that passed against the broken build — decorative, and worse than no test, because it
+ *   reads as coverage.
+ *
+ * WHAT IT REPORTS
+ *   For each (height, y, plate scale): the layer's on-screen coverage in pixels, and whether
+ *   alphaBBox / alphaBBoxExact can see it. `bbox null` is the config a test must use.
+ * ============================================================================================ */
+(function () {
+  var W = 320, H = 240;
+  function offscreen(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function scene(layers) {
+    return { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: layers };
+  }
+  function thin(h, y, fx) {
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'hairline', x: 160, y: y, shapeW: 200, shapeH: h, fill: '#0000ff' });
+    L.effects = fx ? [fx] : [];
+    return L;
+  }
+  function shot(layers, rs) {
+    var c = offscreen(Math.round(W * rs), Math.round(H * rs));
+    c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, scene(layers), 0);
+    return { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+  }
+  function cover(s) { var n = 0; for (var k = 0; k < s.w * s.h; k++) if (s.d[k * 4 + 3] > 8) n++; return n; }
+  // Faithful copies of the two scans in compositor.js, so this page reports what THEY see.
+  function bboxStrided(d, W2, H2) {
+    var minX = W2, minY = H2, maxX = -1, maxY = -1;
+    for (var y = 0; y < H2; y += 2) { var row = y * W2 * 4;
+      for (var x = 0; x < W2; x += 2) if (d[row + x * 4 + 3] > 8) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
+    return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+  var LBX = { type: 'letterbox', enabled: true, params: { size: 14 } };
+  var BDR = { type: 'border', enabled: true, params: { width: 10, color: '#ffffff' } };
+  var lines = [], nulls = 0, vanish = 0;
+  [1, 2, 3].forEach(function (h) {
+    for (var yq = 0; yq < 16; yq++) {
+      var y = 120 + yq * 0.25;
+      [1, 0.6, 0.5, 0.35, 0.25].forEach(function (rs) {
+        var off = shot([thin(h, y, null)], rs);
+        var c0 = cover(off);
+        if (c0 === 0) return;
+        var bb = bboxStrided(off.d, off.w, off.h);
+        var cL = cover(shot([thin(h, y, LBX)], rs));
+        var cB = cover(shot([thin(h, y, BDR)], rs));
+        var isNull = !bb;
+        if (isNull) nulls++;
+        if (cL === 0 || cB === 0) vanish++;
+        if (isNull || cL === 0 || cB === 0) {
+          lines.push('h=' + h + ' y=' + y + ' rs=' + rs + '  cover=' + c0
+            + '  strided-bbox=' + (bb ? (bb.x + ',' + bb.y + ' ' + bb.w + 'x' + bb.h) : 'NULL')
+            + '  letterbox-cover=' + cL + '  border-cover=' + cB);
+        }
+      });
+    }
+  });
+  document.getElementById('out').textContent =
+    'configs with a NULL strided bbox: ' + nulls + '\nconfigs where the layer VANISHED: ' + vanish
+    + '\n\n' + (lines.length ? lines.join('\n') : '(none — the strided scan saw every config)');
+  window.__probe = { nulls: nulls, vanish: vanish, lines: lines };
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

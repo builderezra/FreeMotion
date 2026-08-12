@@ -432,7 +432,21 @@ window.FM = window.FM || {};
     { type: 'tealorange', label: 'Teal & Orange', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     { type: 'crossprocess', label: 'Cross Process', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     { type: 'lightleak', label: 'Light Leak', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6, color: true, defColor: '#ff7a3c', colorLabel: 'Leak' },
-    { type: 'letterbox', label: 'Letterbox', param: 'size', min: 0, max: 45, step: 1, def: 14, unit: '%' },
+    /* Letterbox. BARS ARE MEASURED AGAINST — the one param that had to change meaning when these two
+     * effects were confined to the layer they are attached to (see PIXEL_FX.letterbox / fxBounds).
+     * `size` has always been "% of H"; H moved from the FRAME to the LAYER, so on anything smaller
+     * than full-frame the same slider now draws thinner bars. `legacy: 1` is therefore not a taste
+     * call, it is the setting under which an instance saved before that change keeps the bar
+     * THICKNESS it had. It cannot keep the old picture exactly — the old picture painted bars across
+     * the whole frame and erased the layers underneath (measured: a 40x40 speck at size 14 left only
+     * 71.1% of a full-frame layer below alive), which is the bug being fixed. What legacy preserves
+     * is the measurement; the paint stays inside the layer in both modes.
+     * On a full-frame layer the two are the same number, so every existing instance on the common
+     * case is byte-identical either way — verified across size 0/14/30/45 at render scale 1/0.35/2. */
+    { type: 'letterbox', label: 'Letterbox', params: [
+      { key: 'size', label: 'Size', min: 0, max: 45, step: 1, def: 14, unit: '%' },
+      { key: 'metric', label: 'Bars sized to', options: [[0, 'Layer'], [1, 'Frame']], def: 0, legacy: 1 },
+    ] },
     { type: 'border', label: 'Border Frame', param: 'width', min: 1, max: 60, step: 1, def: 10, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Border' },
     // ---- batch 21 ----
     { type: 'faded', label: 'Faded Film', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -1681,6 +1695,144 @@ window.FM = window.FM || {};
   function anchorX(tr) { const v = tr && tr.anchorX; return (typeof v === 'number' && isFinite(v)) ? v : 0.5; }
   function anchorY(tr) { const v = tr && tr.anchorY; return (typeof v === 'number' && isFinite(v)) ? v : 0.5; }
 
+  /* ---- BOUNDED PIXEL EFFECTS -----------------------------------------------------------------
+   * Two effects DRAW A FRAME rather than grade what is already there: Letterbox lays black bars,
+   * Border Frame lays a coloured ring. Both write pixels the layer never drew, and both used to do
+   * it against the PLATE's edges — and drawPixelEffect's plate is the size of the PROJECT, not of
+   * the layer (see PW/PH below). So `bar = H * size/100` measured the FRAME's height and the ring
+   * hugged the FRAME's border, whatever the layer was. Each kernel then ran
+   *     if (d[i + 3] < 255) d[i + 3] = 255;
+   * over that region, manufacturing opaque coverage on pixels the layer never touched, and line
+   * "ctx.drawImage(pB, 0, 0, PW, PH)" blits the plate at the layer's own z with source-over — so
+   * the manufactured pixels ERASED every layer underneath. Same mechanism as the Fill Behind bug
+   * fixed in v6.15, one level up the stack.
+   *
+   * Measured on a 320x240 comp with a full-frame green layer below, before this change:
+   *     Letterbox size 14 on a 40x40 speck   left 71.1% of the layer below alive, lit 67.9% of the
+   *                                          empty background ring; at size 30, 38.7% / 82.1%
+   *     Border  width 10 on a 40x40 speck    left 85.6% alive, lit 84.0% of the ring
+   * and the damage did NOT scale with the layer — a 200x70 band did the same harm as the speck,
+   * because the bars and the ring were placed against the frame either way. Border Frame was worse
+   * than trespass: it changed 0.0% of its OWN layer at every size below full-frame, i.e. it drew
+   * the ring somewhere the layer was not.
+   *
+   * DELETING THE ALPHA LINE IS THE TRAP, not the fix. With it gone the erasure stops (measured:
+   * layer below back to 100%, ring 0%) but Border Frame still changes 0.0% of its own layer at
+   * every size — a total no-op. That is exactly the Magnify Background mistake this codebase has
+   * already shipped and reverted once. "Erases layers below" must not become "does nothing".
+   *
+   * THE FIX IS BOUNDS. An effect belongs to the layer it is attached to, like every other effect
+   * here — Stroke strokes the layer, Rounded Corners rounds the layer. Bound these two to the
+   * layer's own box and they finally frame the thing they are on, and as a side-effect they cannot
+   * reach anything else: paint confined to the layer's footprint cannot overwrite the composite.
+   *
+   * WHICH BOX. alphaBBox, the same scan Rounded Corners asks for by name because it masks EXACTLY
+   * at the content edge (:3630) — so a layer carrying both agrees with itself. NOT alphaBBoxFast
+   * (its ~12px slack would float the border off the layer) and NOT layer geometry, which is blind
+   * to the rest of the stack: effects bake in array order, so a Letterbox stacked above a Glow must
+   * bar the GLOWED picture, and only the alpha scan follows the pixels. Its `> 8` threshold is the
+   * generous end of a soft edge, which is what we want — a border AROUND a feather reads as a
+   * frame, one that bisects it reads as a mistake. (Change that threshold and three effects move.)
+   *
+   * COST: the scan mostly pays for itself, because bounding the kernel stops it walking the whole
+   * frame. Median ms added to a full renderScene of a 1080x1920 comp with one 300x300 layer, three
+   * runs of 25 frames each, shipped vs bounded:
+   *     Letterbox  4.4 -> 4.1   (break-even inside the noise: 3.9/4.4/4.6 against 4.0/4.6/4.1)
+   *     Border     5.5 -> 4.0   (consistently cheaper: 5.3/5.5/6.2 against 3.9/4.0/4.0)
+   * Border wins outright because its old loop ran an `if` over every pixel in the frame to write a
+   * ring of about 60k; the new one only visits the layer. Letterbox's old loop already `continue`d
+   * the middle rows, so there was less to win back and the scan roughly cancels it.
+   * (Measure this with the effect path WARMED. Timing a cold first effect render reports the
+   * bounded build 1.6ms slower, which is JIT and the plate-pool allocation, not the change.) */
+  const BOUNDED_FX = { letterbox: 1, border: 1 };
+  /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
+   * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
+   * content. No stride, no pad, nothing inferred — this reads the very pixels the question is about.
+   *
+   * It exists because the snap in fxBounds below cannot be answered from a padded, strided box, and
+   * two attempts to answer it from one both shipped the same bug. See the note there.
+   *
+   * COST: at most 2(W + H) alpha reads — and it early-exits the moment all four edges are known,
+   * which on the full-frame case is the first pixel of each loop. Against the W*H/4 that alphaBBox
+   * spends on this same buffer one line above, that is 6,000 reads against 518,400 on a 1080x1920
+   * plate: under 1.2% of a scan we pay for regardless. Measured end-to-end (1080x1920 comp, one
+   * 300x300 layer, median of 3 runs x 25 WARMED frames — cold frames time JIT and the plate-pool
+   * allocation, not this — ms per full renderScene, without this scan -> with it):
+   *     Letterbox  3.5 -> 3.6      Border  3.5 -> 3.4      Vignette (control) 5.7 -> 6.0
+   * The control moved further than either effect under test, so the cost is under the noise floor.
+   * This is why the four edge lines are read directly instead of calling alphaBBoxExact, which
+   * answers the same question exactly but walks the empty rows above the layer to do it — up to a
+   * full W*H pass, 345x the reads on that plate, for no better an answer. */
+  function fxTouchesEdge(d, W, H) {
+    let l = false, r = false, t = false, b = false;
+    const bot = (H - 1) * W * 4, rgt = (W - 1) * 4;
+    for (let x = 0; x < W; x++) {
+      if (!t && d[x * 4 + 3] > 8) t = true;
+      if (!b && d[bot + x * 4 + 3] > 8) b = true;
+      if (t && b) break;
+    }
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      if (!l && d[row + 3] > 8) l = true;
+      if (!r && d[row + rgt + 3] > 8) r = true;
+      if (l && r) break;
+    }
+    return { l: l, r: r, t: t, b: b };
+  }
+  function fxBounds(d, W, H) {
+    let x0, y0, x1, y1;
+    const bb = alphaBBox(d, W, H);
+    if (bb) {
+      x0 = bb.x + 2; y0 = bb.y + 2;                              // strip alphaBBox's 2px pad, exactly as roundcorners does at :4864
+      x1 = bb.x + bb.w - 2; y1 = bb.y + bb.h - 2;                // …and these are the EXCLUSIVE far edges
+    } else {
+      /* alphaBBox samples every 2nd ROW and every 2nd COLUMN, so a layer under 2 plate px thick
+       * that happens to land entirely on odd lines reads as "drew nothing" — a hairline divider, a
+       * text underline, any 1px rule, and any thin layer at all once a reduced preview plate has
+       * shrunk it into that band. Retry exactly instead of giving up. The full pass only ever runs
+       * where the strided scan already found zero, so it costs nothing that was being saved, and it
+       * is the difference between a hairline getting its frame and a hairline being dropped. */
+      const ex = alphaBBoxExact(d, W, H);
+      if (!ex) return null;                                      // the layer drew nothing: no bounds, no effect
+      x0 = ex.x; y0 = ex.y; x1 = ex.x + ex.w; y1 = ex.y + ex.h;  // exact bounds carry no pad to strip
+    }
+    /* SNAP to any frame edge the layer's content genuinely reaches. The snap is load-bearing for
+     * backward compatibility: on a full-frame layer alphaBBox clamps at 0 and W-1, so stripping the
+     * pad would inset the box by 2px and every existing full-frame Letterbox/Border would shift.
+     * With the snap a full-frame layer's box IS the frame and the output is byte-identical.
+     *
+     * ASK THE PIXELS, DO NOT INFER FROM THE BOX. This line has now been wrong twice, both times by
+     * trying to read "reaches the edge" out of alphaBBox's result:
+     *   1. `x0 <= 4` — a tolerance in PLATE pixels, so it scaled with the plate while a layer's real
+     *      margin did too. A 300x220 layer in a 320x240 comp has a 10px margin at scale 1 (correct,
+     *      no snap) but 3.5px on the 0.35 preview plate, which slipped under 4 and was promoted to
+     *      full-frame: survival 31.6% (Letterbox) / 0.0% (Border) at rs 0.35 against 100% at scale 1.
+     *   2. `bb.x === 0` — exact about the wrong quantity. alphaBBox PADS its result by 2 and SAMPLES
+     *      ON A STRIDE OF 2, so bb.x collapses to 0 for any content whose true edge is 1 or 2 plate
+     *      px in (2.8 with a soft edge, since a partly-covered pixel still clears the `> 8` test),
+     *      and bb.x + bb.w hits W for content stopping 1px short. Those margins are not exotic:
+     *      scale a full-frame video a few project px inside the frame — an ordinary thing to do —
+     *      and at rs 0.35 the inset lands inside that band. Measured on the tree before this line
+     *      changed: 12 of 183 swept configurations still painted outside the layer, up to 1116 stray
+     *      pixels, and at rs 0.5 with a 2px inset the layer below survived 0.0%.
+     * The pad and the stride are exactly the information alphaBBox throws away, so no reading of its
+     * output can recover it. fxTouchesEdge above answers the question from the edge pixels instead,
+     * which is exact by construction and costs ~1% of the scan already being done.
+     *
+     * Snapping only ever WIDENS the box, and only to a line where content was just found, so the
+     * box stays inside the layer's true bounds — which is the property that stops these two effects
+     * reaching the composite underneath. Verified over a 192-configuration sweep (16 subjects x 4
+     * effect variants x 3 plate scales): zero pixels painted outside the layer's box, against 32
+     * failing configurations and 17,079 stray pixels when the snap is put back on `bb.x === 0`. */
+    const e = fxTouchesEdge(d, W, H);
+    if (e.l) x0 = 0;
+    if (e.t) y0 = 0;
+    if (e.r) x1 = W;
+    if (e.b) y1 = H;
+    if (x1 <= x0 || y1 <= y0) return null;
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+
   const _pfPool = [];
   let _pfDepth = 0;
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
@@ -1707,7 +1859,18 @@ window.FM = window.FM || {};
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
       const img = actx.getImageData(0, 0, W, H);
-      fn(img.data, W, H, fx.params || {}, t, ps);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      // Effects that DRAW a frame get the layer's own box (plate pixels) as a 7th argument — see
+      // BOUNDED_FX above. Everything else is a grade and keeps the whole plate, unchanged.
+      let bb = null;
+      const bounded = !!BOUNDED_FX[fx.type];
+      if (bounded) bb = fxBounds(img.data, W, H);
+      /* No box means the layer really is empty, so there is nothing to frame and the KERNEL is
+       * skipped — but the layer is still blitted below, unchanged. Skipping the blit as well
+       * (an early `return` here) does not leave a layer unframed, it DELETES the layer from the
+       * composite: it drops the one drawImage that puts this layer on screen. Measured before this
+       * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
+       * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
+      if (!bounded || bb) fn(img.data, W, H, fx.params || {}, t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -3069,8 +3232,33 @@ window.FM = window.FM || {};
     tealorange: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=(l-0.5)*2; var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=cv(r,0.10,0.90), ng=cv(g,0.06,0.95), nb=cv(b,-0.12,1.10); d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
     lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15; var lx=W*(0.85+0.12*Math.sin(ph)), ly=H*(0.12+0.10*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H); for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*1.8; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
-    letterbox: function(d,W,H,p,t){ var s=FM.evalProp(p.size,t); if(s==null)s=14; if(s<0)s=0; if(s>48)s=48; var bar=Math.round(H*s/100); if(bar<=0)return; for(var y=0;y<H;y++){ if(y>=bar && y<H-bar) continue; var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; d[i]=0; d[i+1]=0; d[i+2]=0; if(d[i+3]<255)d[i+3]=255; } } },
-    border: function(d,W,H,p,t,ps){ var w=FM.evalProp(p.width,t); if(w==null)w=10; w=Math.round(w*(ps||1)); if(w<1)w=1; var mx=Math.floor(Math.min(W,H)/2); if(w>mx)w=mx; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; for(var y=0;y<H;y++){ var ey=(y<w||y>=H-w); var row=y*W*4; for(var x=0;x<W;x++){ if(ey||x<w||x>=W-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } } },
+    /* Letterbox / Border Frame — the two effects that DRAW a frame instead of grading one. Both take
+     * `bb`, the layer's own box in plate pixels, from BOUNDED_FX in drawPixelEffect; the full story
+     * of why (and of the erasure it stops) is in the block above fxBounds. Read them together.
+     *
+     * The `if (d[i+3] < 255) d[i+3] = 255` line STAYS. It is what makes a bar solid over a
+     * half-transparent layer and a ring solid over a soft edge — without it Letterbox on a line of
+     * text tints only the ink and Border Frame on anything smaller than the frame does literally
+     * nothing (measured: 0.0% of its own layer changed at every size below full-frame). It is only
+     * safe now because bb confines it: manufactured alpha inside the layer's own box cannot reach
+     * the composite underneath. `bb` absent => the whole plate, so the adjustment-layer path at
+     * applyPixelFx (which has no layer box, and whose bounds ARE the frame) is unchanged. */
+    letterbox: function(d,W,H,p,t,ps,bb){ var s=FM.evalProp(p.size,t); if(s==null)s=14; if(s<0)s=0; if(s>48)s=48;
+      var x0=bb?bb.x:0, y0=bb?bb.y:0, x1=bb?bb.x+bb.w:W, y1=bb?bb.y+bb.h:H, bh=y1-y0;
+      // metric 0 = % of the LAYER's height (the per-layer reading every other effect uses), 1 = % of
+      // the FRAME's height. Absent key => 1, so an instance saved before v6.35 keeps its bar
+      // thickness; `legacy: 1` in the schema at :394 says the same thing to the inspector.
+      var met=(p.metric==null)?1:Math.round(FM.evalProp(p.metric,t)||0);
+      var bar=Math.round((met===1?H:bh)*s/100); if(bar<=0)return;
+      var half=Math.floor(bh/2); if(bar>half)bar=half;   // frame-metric bars on a short layer would otherwise exceed it; never engages full-frame (s caps at 48% vs half at 50%)
+      for(var y=y0;y<y1;y++){ if(y>=y0+bar && y<y1-bar) continue; var row=y*W*4; for(var x=x0;x<x1;x++){ var i=row+x*4; d[i]=0; d[i+1]=0; d[i+2]=0; if(d[i+3]<255)d[i+3]=255; } } },
+    border: function(d,W,H,p,t,ps,bb){ var w=FM.evalProp(p.width,t); if(w==null)w=10; w=Math.round(w*(ps||1)); if(w<1)w=1;
+      // `width` does NOT change meaning: it is absolute project px (schema :396) already multiplied
+      // by plateScale, and it stays that. Only the rectangle it hugs moved from the frame to the layer.
+      var x0=bb?bb.x:0, y0=bb?bb.y:0, x1=bb?bb.x+bb.w:W, y1=bb?bb.y+bb.h:H;
+      var mx=Math.floor(Math.min(x1-x0,y1-y0)/2); if(w>mx)w=mx; if(w<1)return;   // a 40x40 layer can't be swallowed by a 60px border
+      var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2];
+      for(var y=y0;y<y1;y++){ var ey=(y<y0+w||y>=y1-w); var row=y*W*4; for(var x=x0;x<x1;x++){ if(ey||x<x0+w||x>=x1-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } } },
     // ---- batch 26 (AM parity fill-ins) ----
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with

@@ -513,7 +513,11 @@ window.FM = window.FM || {};
     // and 'other' resolves the card's art to the photo, which is the one that reads as a blurred
     // wash rather than as an abstract pattern.
     fillbehind: 'card',
-    // Whole-frame framing: these draw ON the comp edge, so the subject must reach it.
+    // Framing effects: these draw ON an edge, so the subject must reach the tile's own edges or the
+    // tile shows a frame floating in the middle of nothing. Letterbox and Border Frame draw on the
+    // LAYER's edge now rather than the comp's (v6.35 — before that they painted the whole frame and
+    // erased what was under them); a full-frame subject's box IS the frame, so both tiles are
+    // byte-identical to what they always rendered.
     letterbox: 'full', border: 'full', vignette: 'full', tiltshift: 'full',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
     halation: 'card',
