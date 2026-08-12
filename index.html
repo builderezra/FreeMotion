@@ -131,7 +131,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.37</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.38</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -154,6 +154,16 @@
           <button id="btn-save-proj" class="icon-btn" title="Save project file (.fmotion.json)"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5zM8 3v6h7V3M8 21v-7h8v7"/></svg></button>
         </div>
         <button id="btn-parent" class="icon-btn" title="Parent — link this layer to another layer" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="11" height="11" rx="2" stroke-dasharray="3 2"/><rect x="10" y="10" width="11" height="11" rx="2"/></svg></button>
+        <!-- Group / Masking Group on PC (queue 53). Ezra: "PC is missing the Group and Mask options."
+             He was right in the way that matters. The actions existed, but only inside the ⧉ layer-
+             actions menu — an unlabelled icon partway down the screen — while the PHONE puts a Group
+             button in the top bar the moment a second layer is selected. Measured at 1440x900 with two
+             layers selected: #m-group and #m-del both report zero-size, because they live inside
+             @media (max-width: 700px). So on a PC, selecting two layers offered no Group control at
+             all in the place you would look for one.
+             This is the phone's button, in the desktop bar, opening the same two-item menu — not a
+             third way to group things. Same icon as #m-group so it reads as the same control. -->
+        <button id="btn-group" class="icon-btn" title="Group selected layers" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
         <button id="btn-del-layer" class="icon-btn" title="Delete selected layer" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
         <!-- App Settings on PC (v4.99). Ezra: "on mobile, there's a settings cog, but on PC, there
              isn't… the settings code should be added to PC version." Until now FM.settings was
@@ -659,7 +669,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=47"></script>
-  <script src="js/app.js?v=229"></script>
+  <script src="js/app.js?v=230"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/voice-rec.js?v=1"></script>
   <script src="js/audio-react.js?v=4"></script>

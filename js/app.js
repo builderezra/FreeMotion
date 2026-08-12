@@ -622,6 +622,13 @@ window.FM = window.FM || {};
     if (delBtn) delBtn.style.display = sel ? '' : 'none';
     const parBtn = document.getElementById('btn-parent');
     if (parBtn) { parBtn.style.display = sel ? '' : 'none'; parBtn.classList.toggle('active', !!(sel && sel.parent)); }
+    // Group appears at 2+, not at 1 — FM.groupSelection needs two members, and an always-visible
+    // button that does nothing most of the time is how a control stops being believed. The phone's
+    // #m-group holds its slot with `visibility` instead, because there the bin sits beside it and must
+    // not move mid-gesture (see the note in styles.css); nothing here shifts under a thumb, so plain
+    // display is right. (queue 53)
+    const grpBtn = document.getElementById('btn-group');
+    if (grpBtn) grpBtn.style.display = (FM.selectionIds ? FM.selectionIds().length : 0) >= 2 ? '' : 'none';
   }
   FM.syncTopBar = syncTopBar;
 
@@ -2713,6 +2720,17 @@ window.FM = window.FM || {};
     if (prateEl) prateEl.addEventListener('change', () => FM.setPreviewRate(parseFloat(prateEl.value) || 1));
     const guidesBtn = document.getElementById('btn-guides');
     if (guidesBtn) guidesBtn.addEventListener('click', () => { FM.showGuides = !FM.showGuides; guidesBtn.classList.toggle('active', FM.showGuides); render(); });
+    // Group / Masking Group on PC (queue 53) — the same two-item menu mobile.js hangs off #m-group,
+    // so grouping means one thing on both. Deliberately NOT a third implementation: both entries call
+    // FM.groupSelection, which is also what the ⧉ menu and the timeline right-click already call.
+    const groupBtn = document.getElementById('btn-group');
+    if (groupBtn) groupBtn.addEventListener('click', () => {
+      const r = groupBtn.getBoundingClientRect();
+      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, [
+        { label: 'Group', action: () => FM.groupSelection() },
+        { label: 'Masking Group — top layer clips the rest', action: () => FM.groupSelection({ mask: true }) },
+      ]); else if (FM.groupSelection) FM.groupSelection();
+    });
     const undoBtn = document.getElementById('btn-undo'), redoBtn = document.getElementById('btn-redo');
     if (undoBtn) undoBtn.addEventListener('click', () => { if (FM.history) FM.history.undo(); });
     if (redoBtn) redoBtn.addEventListener('click', () => { if (FM.history) FM.history.redo(); });

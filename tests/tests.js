@@ -9806,6 +9806,67 @@
     })();
   });
 
+  /* ---- Group must be reachable on a PC, not only on a phone ------------------------------------
+   *
+   * Ezra, queue 53: "PC is missing the Group and Mask options." The ACTIONS existed — the layer-
+   * actions menu and the timeline right-click both offer Group Selection / Masking Group — but the
+   * button was phone-only. #m-group lives inside @media (max-width: 700px), so measured at 1440x900
+   * with two layers selected it reports zero-size, while the phone puts it in the top bar the moment
+   * a second layer is selected. A control that exists only inside an unlabelled icon menu partway
+   * down the screen is missing in the sense that matters.
+   *
+   * The assertion is about the DESKTOP bar specifically, so it forces a desktop width rather than
+   * trusting the runner's frame — the same mistake that let two "mobile" text tests pass for three
+   * releases while measuring a 900px desktop iframe.
+   *
+   * Both directions are asserted. Showing the button always would be the easy way to pass half of
+   * this, and it would be wrong: FM.groupSelection needs two members, so at one selected layer the
+   * button must not be offered at all. */
+  test('PC: the Group button appears in the top bar at 2+ selected layers', { item: 'pc-group-mask' }, function () {
+    var btn = document.getElementById('btn-group');
+    if (!btn) throw new Error('#btn-group does not exist — on a PC there is no Group control in the top bar at all');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var realMM = window.matchMedia;
+    try {
+      // Be a DESKTOP regardless of the runner's frame: syncSelectionChrome asks matchMedia, and the
+      // phone-only rules are what this test is proving do not apply.
+      window.matchMedia = function (q) { return /max-width:\s*700px/.test(q) ? { matches: false, media: q } : realMM.call(window, q); };
+      var A = FM.makeLayer('shape', { shape: 'rect', name: 'ga', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#4af' });
+      var B = FM.makeLayer('shape', { shape: 'rect', name: 'gb', x: 200, y: 150, shapeW: 80, shapeH: 80, fill: '#fa4' });
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B);
+
+      // ONE selected → no Group button. groupSelection needs two, so offering it here would be a lie.
+      FM.selectLayer(A.id);
+      FM.syncTopBar();
+      if (getComputedStyle(btn).display !== 'none') {
+        throw new Error('with ONE layer selected the Group button is showing — grouping needs two members, so it would do nothing if pressed');
+      }
+
+      // TWO selected → it must be there, and actually hit-testable, not merely display:block.
+      FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id, B.id];
+      FM.syncTopBar();
+      if (getComputedStyle(btn).display === 'none') {
+        throw new Error('with two layers selected the PC top bar still shows no Group button — this is the queue-53 report');
+      }
+      var r = btn.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) {
+        throw new Error('the Group button is display:' + getComputedStyle(btn).display + ' but measures ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — it is in the layout but not on screen');
+      }
+
+      // …and it must actually group, through the same FM.groupSelection everything else calls.
+      var before = FM.scene.layers.length;
+      FM.groupSelection();
+      var groups = FM.scene.layers.filter(function (l) { return l.type === 'group'; });
+      if (!groups.length) throw new Error('FM.groupSelection() made no group layer (' + before + ' layers before, ' + FM.scene.layers.length + ' after) — the button would be wired to nothing');
+    } finally {
+      window.matchMedia = realMM;
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

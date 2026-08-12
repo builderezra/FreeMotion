@@ -89,7 +89,13 @@ Numbered with Ezra's own queue numbers where he gave them.
       control effects changed; suite 198/198 at desktop and 380px, both new tests mutation-checked.
       Known and left: on a layer only ~1px tall at reduced preview scale the bar/ring can't be drawn
       at all, so it no-ops — exports at scale 1 are unaffected.
-- [ ] **53 — PC is missing the Group and Mask options.**
+- [x] **53 — PC is missing the Group and Mask options.** **DONE v6.38.** The actions were always
+      there (the ⧉ menu and right-clicking a clip both had them) but the BUTTON was phone-only —
+      measured at 1440x900 with two layers selected, the Group button reports zero size, because it
+      lives inside a phone-only media query. So on PC there was nothing in the place you'd look.
+      Now the same button sits in the PC bar and opens the same Group / Masking Group menu, appearing
+      once you have 2+ layers selected. Checked by actually clicking it in a 1440px window: menu
+      opens, Group makes a real group with both layers in it.
 
 ### Features and changes
 - [ ] **Check I changed the right "Presets".** v6.30 gave live per-layer previews to the preset rows
