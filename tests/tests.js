@@ -11067,6 +11067,61 @@
     }
   });
 
+  /* ---- Edit Points must agree with the compositor about which way is left -----------------------
+   *
+   * BUG-HUNT. applyLayerTransform ends with `ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1)`, so the
+   * mirror is the INNERMOST step of the placement matrix. point-edit re-derives that matrix by hand
+   * and composed only T·R·S·K — it never read flipH/flipV at all. With a flip on, the point markers,
+   * insert rings, curve preview and tangent handles were drawn mirrored about the anchor, often on
+   * the opposite side of the shape actually on screen.
+   *
+   * And it was worse than cosmetic: toLocal is the exact inverse of the same wrong matrix, so the
+   * overlay tracked the finger while the RENDERED point went the other way — drag a handle right and
+   * the shape's point moves left. Two taps apart in normal use: "Flip Horizontally" is on every
+   * layer's ⋯ menu with no type guard, and Edit Shape auto-enters Edit Points.
+   *
+   * The test asserts against the COMPOSITOR's own matrix, not against a hand-worked expectation —
+   * FM._layerCTM is the thing point-edit is supposed to agree with, so agreeing with it IS the
+   * property. Round-tripping toCanvas → toLocal is checked too, because that inverse is what the drag
+   * uses and it can be self-consistently wrong. */
+  test('Edit Points: the overlay honours flipH/flipV like the compositor does', { item: 'pointedit-flip' }, function () {
+    if (!FM.pointEdit || !FM.pointEdit._toCanvas) throw new Error('FM.pointEdit._toCanvas is not exposed — cannot test the mapping the drag actually uses');
+    var mk = function (flipH, flipV) {
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'pts', x: 200, y: 150, shapeW: 100, shapeH: 80, fill: '#4af' });
+      L.flipH = !!flipH; L.flipV = !!flipV;
+      return L;
+    };
+    var t0 = FM.time;
+    try {
+      FM.time = 0;
+      // A point at the shape's RIGHT edge (u = 1). With flipH on, the compositor draws it on the LEFT.
+      var plain = FM.pointEdit._toCanvas(mk(false, false), 1, 0.5);
+      var flipped = FM.pointEdit._toCanvas(mk(true, false), 1, 0.5);
+      if (!(plain.x > 200) ) throw new Error('unflipped, u=1 should sit right of the layer centre; got x=' + plain.x);
+      if (!(flipped.x < 200)) {
+        throw new Error('with flipH on, the u=1 edge maps to x=' + flipped.x + ', still right of centre — the overlay ' +
+          'ignores the mirror, so its markers sit on the opposite side of the shape and dragging one moves the point the wrong way');
+      }
+      if (Math.abs((plain.x - 200) + (flipped.x - 200)) > 0.01) {
+        throw new Error('the flip is not a clean mirror about the anchor: ' + plain.x + ' vs ' + flipped.x);
+      }
+      // Vertical too.
+      var fv = FM.pointEdit._toCanvas(mk(false, true), 0.5, 1);
+      var pv = FM.pointEdit._toCanvas(mk(false, false), 0.5, 1);
+      if (Math.abs((pv.y - 150) + (fv.y - 150)) > 0.01) throw new Error('flipV is not mirroring: ' + pv.y + ' vs ' + fv.y);
+      // ROUND TRIP — this is the inverse the drag uses.
+      if (FM.pointEdit._toLocal) {
+        var L = mk(true, true);
+        var c = FM.pointEdit._toCanvas(L, 0.25, 0.75);
+        var back = FM.pointEdit._toLocal(L, c.x, c.y);
+        if (Math.abs(back.u - 0.25) > 1e-6 || Math.abs(back.v - 0.75) > 1e-6) {
+          throw new Error('toCanvas → toLocal does not round-trip with both flips on (' + back.u.toFixed(4) + ', ' +
+            back.v.toFixed(4) + ' from 0.25, 0.75) — the drag would fight itself');
+        }
+      }
+    } finally { FM.time = t0; }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

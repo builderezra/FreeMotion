@@ -36,12 +36,24 @@ window.FM = window.FM || {};
       tanY: Math.tan((tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) * Math.PI / 180),
       ax: (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5,
       ay: (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5,
+      /* The FLIPS. applyLayerTransform ends with `ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1)`, so the
+       * mirror is the INNERMOST step of the compositor's matrix. This function re-derives that matrix
+       * by hand and composed only T·R·S·K, leaving the mirror out entirely — so with a flip on, the
+       * point markers, insert rings, curve preview and tangent handles were drawn mirrored about the
+       * anchor, often on the opposite side of the shape actually on screen. Worse than cosmetic:
+       * toLocal is the exact inverse of the same wrong matrix, so the overlay tracked the finger while
+       * the RENDERED point moved the other way — drag a handle right, the shape's point goes left. The
+       * X/Y readouts reported the mirrored position too. "Flip Horizontally" is on every layer's ⋯
+       * menu with no type guard, and Edit Shape auto-enters Edit Points, so this is two taps apart. */
+      fx: l.flipH ? -1 : 1,
+      fy: l.flipV ? -1 : 1,
       w: l.shapeW || 400, h: l.shapeH || 300,
     };
   }
   function toCanvas(l, u, v) {
     const m = xform(l);
     let px = (u - m.ax) * m.w, py = (v - m.ay) * m.h;
+    px *= m.fx; py *= m.fy;                              // flip is INNERMOST — before skew, as the compositor does it
     let qx = px + m.tanX * py, qy = m.tanY * px + py;   // skew
     qx *= m.sx; qy *= m.sy;                              // scale
     const c = Math.cos(m.rot), s = Math.sin(m.rot);
@@ -54,7 +66,7 @@ window.FM = window.FM || {};
     let sx = (dx * c - dy * s) / m.sx, sy = (dx * s + dy * c) / m.sy;
     const det = (1 - m.tanX * m.tanY) || 1e-6;
     const rx = (sx - m.tanX * sy) / det, ry = (sy - m.tanY * sx) / det;
-    return { u: rx / m.w + m.ax, v: ry / m.h + m.ay };
+    return { u: (rx / m.fx) / m.w + m.ax, v: (ry / m.fy) / m.h + m.ay };   // undo the flip last, since toCanvas applies it first
   }
   // preview-canvas px ↔ overlay display px
   function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
@@ -309,6 +321,10 @@ window.FM = window.FM || {};
   }
 
   FM.pointEdit = {
+    // Exposed for the suite: these two ARE the mapping a point drag uses, and the flip bug lived in
+    // exactly this pair, so a test has to be able to call them rather than a copy of their arithmetic.
+    _toCanvas: toCanvas,
+    _toLocal: toLocal,
     isActive() { return !!active; },
     // exposed so the touch target can be regression-tested without touching the live scene
     hitRadius(pointerType) { return hitPx({ pointerType: pointerType }); },
