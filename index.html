@@ -119,7 +119,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.91</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v5.92</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -178,7 +178,7 @@
         <div id="canvas-wrap">
           <canvas id="preview"></canvas>
           <div id="drop-hint">
-            <div class="dh-icon"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 9 4.5 4.5a1 1 0 0 1 1.2-.7L21 7.5 20 9"/><path d="m7.5 8 2-3.6M12 8.8l2-3.6M16.5 9.6l2-3.6"/></svg></div>
+            <div class="dh-icon"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><!-- v5.92. Ezra: "this shape looks a little shitty, fix it up so the lines aren't going through." The clapstick was an OPEN path forming a wedge 4.5 thick at the hinge and 1.5 at the tip, and the three stripes were fixed-length diagonals that fitted neither end of it: measured against the wedge, all three overshot its TOP edge by ~1.0, and two crossed BELOW y=9 into the board — the third started at y=9.6, i.e. entirely inside it. Now the clapstick is a CLOSED bar of constant 3.6 thickness and the stripes are inset 0.8 from both of its edges, so nothing can protrude at either end. Declaration order is load-bearing, as it was for the Template icon: stripes first, bar over their ends, board last. --><path d="M7.55 7.5 7.28 5.53M12.0 6.9 11.73 4.93M16.44 6.3 16.18 4.33"/><path d="M3.2 8.9 21 6.5 20.52 2.93 2.72 5.33Z"/><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div>
             <div>Drag a video or image here<br>or click <b>Import media</b></div>
           </div>
         </div>
