@@ -379,14 +379,65 @@ window.FM = window.FM || {};
     return vsDark > vsLight ? INK_DARK : INK_LIGHT;
   }
 
-  function drawWaveform(canvas, peaks) {
+  // Which slice of the SOURCE file a clip actually plays, as fractions of the whole file. A trimmed
+  // clip used to draw the ENTIRE song inside its bar, so the peaks under the playhead were not the
+  // audio you were hearing. Anything unknown — no source duration, a speed ramp that reports nothing
+  // finite — falls back to the whole file, i.e. the old behaviour, never to an empty strip.
+  function waveWindow(m, layer, srcSpan) {
+    const out = { a: 0, b: 1, reversed: !!layer.reversed };
+    const D = m && m.duration;
+    if (!isFinite(D) || D <= 0 || !isFinite(srcSpan) || srcSpan <= 0) return out;
+    const t0 = Math.max(0, Math.min(D, layer.trimStart || 0));
+    const t1 = Math.max(t0, Math.min(D, t0 + srcSpan));
+    if (t1 - t0 < 1e-6) return out;
+    out.a = t0 / D; out.b = t1 / D;
+    return out;
+  }
+
+  // Bar pitch in BACKING pixels. 1.25 is what a clip has always drawn at (600 peaks across a 10 s
+  // clip's 750 px bar at zoom 1) — chosen so short clips look byte-for-byte as they did.
+  const WAVE_BAR_PITCH = 1.25;
+
+  // The clip waveform. `win` is the source-time window from waveWindow (optional; omitted = whole
+  // file). `cssW` is the width the canvas is DISPLAYED at, which is not its backing width — see below.
+  //
+  // Bars come from the CANVAS WIDTH, not from the peak count, and each bar is the MAX of every peak
+  // inside it. That aggregation is the half of the gap fix that lives here. Peaks now arrive at a
+  // fixed rate per second, so a 5-minute song hands this thousands of them; drawing one bar per peak
+  // would overdraw them into a solid slab in a 380 px phone lane. Taking a max over a contiguous run
+  // instead keeps the envelope honest at every zoom — and since a max can only read too HIGH, this
+  // step can never invent a hole, which is exactly what the old decimated sampling did.
+  //
+  // The gap between bars is capped in SCREEN pixels rather than left at a flat 30% of the pitch. The
+  // backing buffer is clamped to 8192 px (iOS renders wider canvases blank) while the CSS width is
+  // not, so a 5-minute clip is stretched 2.33x at zoom 1 and 7x at zoom 3 — and the stretch applies
+  // to the gaps as much as the bars. A 30% gap became 9.3, then 28, CSS pixels of genuine blank: a
+  // comb, on screen, in a song with no silence in it. Dividing the cap by the stretch keeps the gap
+  // at most ~1.5 px of the timeline the eye actually sees, at any zoom and any clip length.
+  function drawWaveform(canvas, peaks, win, cssW) {
     const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    const total = peaks ? peaks.length : 0;
+    if (!total || !(W >= 1) || !(H >= 1)) return;
+    let a = (win && isFinite(win.a)) ? Math.max(0, Math.min(1, win.a)) : 0;
+    let b = (win && isFinite(win.b)) ? Math.max(0, Math.min(1, win.b)) : 1;
+    if (!(b > a)) { a = 0; b = 1; }
+    const i0 = Math.min(total - 1, Math.floor(a * total));
+    const i1 = Math.max(i0 + 1, Math.min(total, Math.ceil(b * total)));
+    const span = i1 - i0;
+    const bars = Math.max(1, Math.min(span, Math.round(W / WAVE_BAR_PITCH)));
+    const bw = W / bars;
+    const stretch = (isFinite(cssW) && cssW > 0) ? Math.max(1, cssW / W) : 1;
+    const barW = Math.max(0.6, bw - Math.min(bw * 0.3, 1.5 / stretch));
+    const rev = !!(win && win.reversed);   // a reversed clip plays that same source window backwards
     ctx.fillStyle = 'rgba(255,255,255,.28)';
-    const n = peaks.length, bw = W / n;
-    for (let i = 0; i < n; i++) {
-      const h = Math.max(1, peaks[i] * H * 0.9);
-      ctx.fillRect(i * bw, (H - h) / 2, Math.max(0.6, bw * 0.7), h);
+    for (let i = 0; i < bars; i++) {
+      const s = i0 + Math.floor(i * span / bars);
+      const e = (i === bars - 1) ? i1 : Math.max(s + 1, i0 + Math.floor((i + 1) * span / bars));
+      let mx = 0;
+      for (let j = s; j < e; j++) { const v = peaks[j]; if (v > mx) mx = v; }
+      const h = Math.max(1, mx * H * 0.9);
+      ctx.fillRect(rev ? W - (i + 1) * bw : i * bw, (H - h) / 2, barW, h);
     }
   }
 
@@ -1016,14 +1067,26 @@ window.FM = window.FM || {};
         } else if (m.file) {
           // a video with NO picture (used purely for audio) → waveform, not a black filmstrip
           if (m.waveform && m.waveform.length) {
-            const wKey = 'w' + stripW + '|' + m.waveform.length;
+            const wSpan = rampSpeed ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (layer.speed || 1);
+            const win = waveWindow(m, layer, wSpan);
+            // The width the canvas is SHOWN at. Above ~129 s at zoom 1 this runs away from stripW,
+            // which is clamped to 8192, and that ratio is what inflates every gap the strip draws.
+            const wCssW = Math.max(8, layer.duration * pps);
+            // The key has to name everything the picture depends on. It used to be width + peak
+            // COUNT, which never mentions the peak VALUES: a rebuild after the peaks changed handed
+            // back the stale canvas, and because stripW saturates at 8192 the key also stopped
+            // changing across a wide band of zooms, so long clips got STRETCHED instead of redrawn.
+            // m.waveformV is bumped by getWaveform on every (re)compute; the window terms cover trim,
+            // speed and reverse, which the strip now honours.
+            const wKey = 'w' + stripW + '|' + Math.round(wCssW) + '|' + m.waveform.length + '|' + (m.waveformV || 0)
+              + '|' + win.a.toFixed(6) + '|' + win.b.toFixed(6) + '|' + (win.reversed ? 'r' : 'f');
             const whit = stripCache.get('w' + layer.id);
             let wc = (whit && (whit.key === wKey || pinch)) ? whit.canvas : null;
             if (!wc) {
               wc = document.createElement('canvas');
               wc.className = 'clip-wave';
               wc.width = stripW; wc.height = 32;
-              drawWaveform(wc, m.waveform);
+              drawWaveform(wc, m.waveform, win, wCssW);
               stripCache.set('w' + layer.id, { key: wKey, canvas: wc });
               if (stripCache.size > 40) stripCache.delete(stripCache.keys().next().value);
             }

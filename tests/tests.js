@@ -7476,6 +7476,261 @@
     if (!rad || rad.legacy !== 3) throw new Error('the Radius control does not declare legacy 3, so an old instance would open showing ' + (rad && rad.default) + 'px while drawing 3px');
   });
 
+  /* ---- audio waveform strip: the "it's missing parts" gaps (v6.05) ------------------------------
+     Ezra imported a full song and its timeline strip came back with clean vertical holes at regular
+     spacing, and he could hear it cut out too. The audio turned out to be intact — the decoded buffer
+     was sample-exact against the source and the export mix correlated 1.00000 — so everything below
+     is about the PICTURE. Two independent defects, one per file:
+
+       js/media.js   the peak scan used `stride = max(1, floor(block/200))`, i.e. floor(duration/15)
+                     at the 8 kHz waveform rate, so past 30 s each bar was decided by a decimated
+                     sample of its block. Decimation ALIASES: every inspected sample lands at nearly
+                     the same phase of content near a multiple of the decimated rate, and when that
+                     phase is a zero crossing the bar reads as silence. A 300 s constant-amplitude
+                     fixture drew 30 of 600 bars under half their true height, worst 5.2%.
+       js/timeline.js bars were 70% of the pitch with a 30% gap, and the canvas is clamped to 8192
+                     backing px while the CSS width is not — so at 300 s the clip is stretched 2.33x
+                     and that gap became 9.3 CSS px of real blank, 4688 px of it across the clip.
+
+     Each test below is written so it goes RED on the pre-fix code, not merely green on the new. */
+
+  // An AudioBuffer stand-in. getWaveform only ever asks for getChannelData(0)/duration/sampleRate,
+  // and duck-typing keeps the test off a real AudioContext (iOS caps how many may exist at once).
+  function fakeAudioBuffer(samples, rate, fill) {
+    var d = new Float32Array(samples);
+    for (var i = 0; i < samples; i++) d[i] = fill(i);
+    return {
+      length: samples, sampleRate: rate, duration: samples / rate, numberOfChannels: 1,
+      getChannelData: function () { return d; }
+    };
+  }
+  // A media record that takes the timeline's WAVEFORM branch: a video with a file but no picture
+  // (0x0 is the audio-clip path an .m4a rides), so buildLane draws peaks instead of a filmstrip.
+  function fakeAudioRec(dur, peaks) {
+    var el = document.createElement('canvas'); el.width = 1; el.height = 1; el.readyState = 4;
+    return {
+      kind: 'video', el: el, width: 0, height: 0, duration: dur, waveform: peaks, waveformV: 1,
+      file: new File([new Uint8Array(8)], 'song.m4a', { type: 'audio/mp4' })
+    };
+  }
+  // The drawn strip, per canvas column: total alpha ("ink mass", proportional to bar height) and
+  // whether anything at all was painted. Mass rather than a hard threshold because at normal bar
+  // pitch the bars are sub-pixel and every column catches some antialiased bleed from a neighbour —
+  // a hard test reads "painted" for a bar that is 5% tall, which is exactly the bug.
+  // `height` is there because mass and dimness are both RELATIVE, and a relative detector is blind to
+  // a strip that has been destroyed evenly: the first cut of the aliasing test below compared each
+  // column against the median and stayed GREEN on the broken code, where every bar had collapsed to
+  // the 1px floor and so nothing was below the median. An absolute band height catches that.
+  function waveColumns(canvas) {
+    var W = canvas.width, H = canvas.height;
+    var d = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    var mass = [], painted = [], height = [];
+    for (var x = 0; x < W; x++) {
+      var m = 0, h = 0;
+      for (var y = 0; y < H; y++) { var a = d[(y * W + x) * 4 + 3]; m += a; if (a > 8) h++; }
+      mass.push(m); height.push(h); painted.push(h > 0 ? 1 : 0);
+    }
+    return { mass: mass, painted: painted, height: height, W: W, H: H };
+  }
+  function median(a) { var b = a.slice().sort(function (x, y) { return x - y; }); return b[b.length >> 1]; }
+  // Build one audio clip on the real timeline and hand back its .clip-wave canvas.
+  function waveCanvasFor(peaks, over) {
+    var o = over || {};
+    var L = FM.makeLayer('video', { name: 'song', start: 0, duration: o.duration || 300 });
+    // Assigned AFTER makeLayer on purpose: it builds from a whitelist and pins trimStart to 0 and
+    // reversed to false, so passing them in props drops them silently. The first cut of these tests
+    // did exactly that and the trim case went green while testing nothing.
+    Object.assign(L, o.layer || {});
+    FM.scene.layers = [L];
+    FM.media.set(L.id, fakeAudioRec(o.srcDuration || 300, peaks));
+    FM.timeline.setZoom(o.zoom || 1);
+    FM.timeline.rebuild();
+    var clip = document.querySelector('.clip[data-id="' + L.id + '"]');
+    return { layer: L, canvas: clip && clip.querySelector('canvas.clip-wave') };
+  }
+
+  test('waveform: the peak scan looks at EVERY sample, so a decimating stride cannot read silence',
+    { item: 'audio-gaps' }, async function () {
+      // sin(j*pi/2) = 0, 1, 0, -1, 0, 1 … Its true envelope is a flat 1. Sampling every SECOND
+      // sample — which is what the old floor(duration/15) stride did from 30 s on — only ever lands
+      // on the zeros, so every bar reads 0. 240000 samples is the exact length at which the old
+      // formula first produced stride 2 (block = 400).
+      var ab = fakeAudioBuffer(240000, 8000, function (j) { return Math.sin(j * Math.PI / 2); });
+      var rec = { file: new File([new Uint8Array(8)], 'a.m4a'), audioBuffer: ab };
+      var peaks = await FM.getWaveform(rec);
+      if (!peaks || !peaks.length) throw new Error('no peaks at all');
+      var lo = Math.min.apply(null, peaks), hi = Math.max.apply(null, peaks);
+      // control: the signal really does reach 1, so a low `lo` is lost signal and not a quiet source
+      if (hi < 0.99) throw new Error('the control failed: peak max is ' + hi.toFixed(4) + ', expected ~1');
+      if (lo < 0.9) throw new Error('a bar of a CONSTANT-amplitude signal read ' + lo.toFixed(4)
+        + ' of full scale — the scan is skipping samples (aliased hole)');
+    });
+
+  test('waveform: peak resolution follows duration and stays bounded', { item: 'audio-gaps' }, async function () {
+    // 600 peaks for a 5-minute song is one bar per 32 CSS px once it is stretched along the timeline.
+    var long = { file: new File([new Uint8Array(8)], 'a.m4a'), audioBuffer: fakeAudioBuffer(240000, 800, function () { return 0.5; }) };
+    var lp = await FM.getWaveform(long);                       // 240000/800 = 300 s
+    if (lp.length <= 600) throw new Error('a 300 s source still produced only ' + lp.length + ' peaks');
+    if (typeof long.waveformV !== 'number' || long.waveformV < 1) throw new Error('waveformV is '
+      + long.waveformV + ' after a compute — the strip cache keys off it and would keep a stale canvas');
+    // The CAP has to actually bite, so it is tested past the length where it engages (8192/25 ≈ 328 s),
+    // not at 300 s where an uncapped formula gives the same answer and the test proves nothing.
+    var huge = { file: new File([new Uint8Array(8)], 'd.m4a'), audioBuffer: fakeAudioBuffer(240000, 100, function () { return 0.5; }) };
+    var hp = await FM.getWaveform(huge);                       // 2400 s = 40 minutes
+    if (hp.length > 8192) throw new Error('a 40-minute source produced ' + hp.length
+      + ' peaks — past the 8192 cap; the clip canvas can never draw them and the array is unbounded');
+    // and the bound has to degrade by losing RESOLUTION, never spans of time: with a spike in the
+    // very last samples, the final peak must still see it. 80000 samples over 600 bins is the case
+    // that matters — the OLD `s = i*block` edges with block = floor(80000/600) = 133 stop at 79800
+    // and never look at the last 200 samples at all.
+    var n = 80000;
+    var spiky = { file: new File([new Uint8Array(8)], 'b.m4a'), audioBuffer: fakeAudioBuffer(n, 8000, function (j) { return j >= n - 100 ? 1 : 0.1; }) };
+    var sp = await FM.getWaveform(spiky);
+    if (sp[sp.length - 1] < 0.99) throw new Error('the last peak read ' + sp[sp.length - 1].toFixed(3)
+      + ' — the tail samples past the final bin were never scanned');
+    // a short clip keeps the resolution it has always had, so nothing about its look changes
+    var shortRec = { file: new File([new Uint8Array(8)], 'c.m4a'), audioBuffer: fakeAudioBuffer(80000, 8000, function () { return 0.5; }) };
+    var sh = await FM.getWaveform(shortRec);                   // 10 s
+    if (sh.length !== 600) throw new Error('a 10 s clip drew ' + sh.length + ' peaks, expected the historic 600');
+  });
+
+  // The longest run of unpainted columns, converted to the CSS pixels the eye actually sees. The
+  // backing buffer is clamped to 8192 and then stretched, so a run measured in backing columns
+  // understates the hole by the stretch factor — 2.33x at 5 minutes, 7x at zoom 3.
+  function longestHoleCSS(canvas) {
+    var col = waveColumns(canvas), run = 0, worst = 0;
+    for (var x = 0; x < col.W; x++) { if (!col.painted[x]) { run++; if (run > worst) worst = run; } else run = 0; }
+    return worst * (canvas.getBoundingClientRect().width / col.W);
+  }
+
+  test('waveform: a 5-minute clip is never broken into blocks, at any zoom or peak count',
+    { item: 'audio-gaps' }, function () {
+      var fx = importFixture();
+      try {
+        // Separated bars are the intended look; BLOCKS with visible dark lanes between them are the
+        // bug Ezra photographed. The line between the two is how wide the gap gets ON SCREEN, so
+        // that is what is asserted. Both peak counts are checked: 600 is what the app used to
+        // produce for every clip regardless of length, and it is the count that combed.
+        var counts = [600, 7500], zooms = [0.02, 0.3, 1];
+        for (var c = 0; c < counts.length; c++) {
+          var peaks = []; for (var i = 0; i < counts[c]; i++) peaks.push(0.8);   // flat: every hole is the drawing
+          for (var z = 0; z < zooms.length; z++) {
+            var w = waveCanvasFor(peaks, { zoom: zooms[z] });
+            if (!w.canvas) throw new Error('no .clip-wave canvas at zoom ' + zooms[z]);
+            var hole = longestHoleCSS(w.canvas);
+            if (hole > 2) throw new Error(counts[c] + ' peaks at zoom ' + zooms[z] + ': a ' + hole.toFixed(1)
+              + ' CSS px blank lane in a strip with no silence in it');
+          }
+        }
+      } finally { fx.restore(); }
+    });
+
+  test('waveform: an aliasing song draws an even band end to end', { item: 'audio-gaps' }, async function () {
+    var fx = importFixture();
+    try {
+      // End to end, decode-to-pixels, on the signal class that caused the report: constant amplitude
+      // (so the true strip is a flat band) with content that a decimating scan reads as silence.
+      var ab = fakeAudioBuffer(2400000, 8000, function (j) { return Math.sin(j * Math.PI / 2); });   // 300 s
+      var rec = { file: new File([new Uint8Array(8)], 'song.m4a'), audioBuffer: ab };
+      var peaks = await FM.getWaveform(rec);
+      var w = waveCanvasFor(peaks, { zoom: 0.02 });             // whole song in the phone lane
+      if (!w.canvas) throw new Error('no .clip-wave canvas');
+      var col = waveColumns(w.canvas);
+      // ABSOLUTE first: the source is full-scale, so the band must fill most of the 32px lane. This
+      // is the half that catches a strip flattened EVERYWHERE, which no relative measure can see.
+      var medH = median(col.height);
+      if (medH < col.H * 0.4) throw new Error('the band is only ' + medH + ' of ' + col.H
+        + ' px tall for a full-scale source — the peaks read near silence');
+      // …then RELATIVE, for holes punched into an otherwise correct band.
+      var medM = median(col.mass), dim = 0, worstAt = -1, worst = Infinity;
+      for (var x = 0; x < col.W; x++) {
+        if (col.mass[x] < medM * 0.5) dim++;
+        if (col.mass[x] < worst) { worst = col.mass[x]; worstAt = x; }
+      }
+      if (dim) throw new Error(dim + ' of ' + col.W + ' columns are under half the band height (worst at '
+        + (worstAt / col.W * 300).toFixed(1) + 's) — the strip has holes the song does not');
+    } finally { fx.restore(); }
+  });
+
+  test('waveform: a bar is the MAX of the peaks under it, not one sampled peak', { item: 'audio-gaps' }, function () {
+    var fx = importFixture();
+    try {
+      // The original bug was "decide a bar from a decimated sample of its span", and moving that
+      // same mistake from the peak scan into the DRAWING would reproduce it exactly: at whole-song
+      // zoom each bar covers ~24 peaks, so picking one of them instead of their max is the identical
+      // aliasing failure one layer up.
+      // SPARSE, not alternating. The first version of this used 0/1 on alternate peaks assuming every
+      // bar would start on an even index; bar edges are floor(i*span/bars) = floor(i*24.51), whose
+      // parity alternates, so half the bars picked up a 1 and the test stayed green under exactly the
+      // mutation it was written for. A spike every 5th peak puts ~5 spikes inside every bar — so a
+      // max always finds one, while a single sampled peak finds one only 20% of the time.
+      var peaks = []; for (var i = 0; i < 7500; i++) peaks.push(i % 5 === 3 ? 1 : 0.02);
+      var w = waveCanvasFor(peaks, { zoom: 0.02 });
+      if (!w.canvas) throw new Error('no .clip-wave canvas');
+      var col = waveColumns(w.canvas), medH = median(col.height);
+      if (medH < col.H * 0.4) throw new Error('the band is ' + medH + ' of ' + col.H
+        + ' px tall where the peaks under every bar reach full scale — bars are sampling, not maxing');
+    } finally { fx.restore(); }
+  });
+
+  test('waveform: a trimmed clip draws the part it PLAYS, not the whole song', { item: 'audio-gaps' }, function () {
+    var fx = importFixture();
+    try {
+      // loud second half, silent first half. A clip trimmed to the loud half must be loud all the
+      // way across; before the window was honoured it drew the whole file squeezed into its bar,
+      // so its left half was flat silence that has no counterpart in the audio you hear.
+      var peaks = []; for (var i = 0; i < 4000; i++) peaks.push(i < 2000 ? 0 : 0.9);
+      var w = waveCanvasFor(peaks, { zoom: 1, duration: 150, srcDuration: 300, layer: { trimStart: 150, duration: 150 } });
+      if (!w.canvas) throw new Error('no .clip-wave canvas');
+      var col = waveColumns(w.canvas), W = col.W;
+      var left = 0, right = 0;
+      for (var x = 0; x < W; x++) { if (x < W / 2) left += col.mass[x]; else right += col.mass[x]; }
+      if (!(right > 0)) throw new Error('the control failed: nothing drawn in the right half');
+      if (left < right * 0.7) throw new Error('the trimmed clip drew its left half at ' + (left / right).toFixed(2)
+        + 'x the right — it is still showing the untrimmed source, silence included');
+    } finally { fx.restore(); }
+  });
+
+  test('waveform: a reversed clip draws its window mirrored', { item: 'audio-gaps' }, function () {
+    var fx = importFixture();
+    try {
+      var peaks = []; for (var i = 0; i < 4000; i++) peaks.push(i < 2000 ? 0.05 : 0.9);   // quiet, then loud
+      var fwd = waveCanvasFor(peaks, { zoom: 1, duration: 300, srcDuration: 300 });
+      var fc = waveColumns(fwd.canvas), fW = fc.W, fL = 0, fR = 0;
+      for (var x = 0; x < fW; x++) { if (x < fW / 2) fL += fc.mass[x]; else fR += fc.mass[x]; }
+      if (!(fR > fL * 1.5)) throw new Error('the control failed: forward strip is not loud-on-the-right (' + fL + ' vs ' + fR + ')');
+      var rev = waveCanvasFor(peaks, { zoom: 1, duration: 300, srcDuration: 300, layer: { reversed: true } });
+      var rc = waveColumns(rev.canvas), rW = rc.W, rL = 0, rR = 0;
+      for (var y = 0; y < rW; y++) { if (y < rW / 2) rL += rc.mass[y]; else rR += rc.mass[y]; }
+      if (!(rL > rR * 1.5)) throw new Error('a reversed clip still drew loud-on-the-right (' + rL + ' vs ' + rR
+        + ') — the strip does not match the audio it plays');
+    } finally { fx.restore(); }
+  });
+
+  test('waveform: the cached strip is redrawn when the peaks change', { item: 'audio-gaps' }, function () {
+    var fx = importFixture();
+    try {
+      // The strip cache was keyed on width + peak COUNT, which never mentions the peak VALUES — so a
+      // rebuild after the waveform changed handed back the stale canvas. And because the backing
+      // width saturates at 8192, the key also stopped changing across a wide band of zooms.
+      var peaks = []; for (var i = 0; i < 4000; i++) peaks.push(0.9);
+      var w = waveCanvasFor(peaks, { zoom: 1 });
+      if (!w.canvas) throw new Error('no .clip-wave canvas');
+      var before = waveColumns(w.canvas).mass.reduce(function (a, b) { return a + b; }, 0);
+      var m = FM.media.get(w.layer.id);
+      for (var j = 0; j < m.waveform.length; j++) m.waveform[j] = 0.05;   // same LENGTH, new values
+      m.waveformV = (m.waveformV || 0) + 1;
+      FM.timeline.rebuild();
+      var clip = document.querySelector('.clip[data-id="' + w.layer.id + '"]');
+      var cv = clip && clip.querySelector('canvas.clip-wave');
+      if (!cv) throw new Error('no .clip-wave canvas after the rebuild');
+      var after = waveColumns(cv).mass.reduce(function (a, b) { return a + b; }, 0);
+      if (!(before > 0)) throw new Error('the control failed: nothing was drawn before the change');
+      if (!(after < before * 0.5)) throw new Error('the strip still has ' + (after / before).toFixed(2)
+        + 'x its old ink after the peaks were flattened — a stale cached canvas is on screen');
+    } finally { fx.restore(); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
