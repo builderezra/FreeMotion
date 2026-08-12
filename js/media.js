@@ -31,9 +31,21 @@ window.FM = window.FM || {};
       el.preload = 'auto';
       el.crossOrigin = 'anonymous';
       let settled = false;
+      // A file that fires NEITHER 'loadedmetadata' NOR 'error' leaves this promise pending for the
+      // life of the page, and every importer AWAITS it — so the import does nothing at all, with no
+      // layer, no error and no message. That reads as "the app is broken", which is the one thing a
+      // failure must never look like. Bounded, so an unreadable file becomes a NAMED failure that
+      // handleFiles() already knows how to show.
+      const metaTimer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        reject(new Error('Could not read “' + file.name + '” — the browser never reported its size or length.'));
+      }, 20000);
       const finish = () => {
         if (settled) return;
         settled = true;
+        clearTimeout(metaTimer);
         resolve({
           kind: 'video', el, url, file,
           width: el.videoWidth, height: el.videoHeight,
@@ -60,8 +72,36 @@ window.FM = window.FM || {};
           finish();
         }
       }, { once: true });
-      el.addEventListener('error', () => { try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load video: ' + file.name)); }, { once: true });   // failed imports must not pin the whole file blob for the page lifetime
+      el.addEventListener('error', () => { if (settled) return; settled = true; clearTimeout(metaTimer); try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load video: ' + file.name)); }, { once: true });   // failed imports must not pin the whole file blob for the page lifetime
     });
+  };
+
+  /* ---- Repaint the preview when a clip becomes DECODABLE -----------------------------------------
+   * The preview renders on demand — there is no idle loop — and the compositor SKIPS a video whose
+   * element is below HAVE_CURRENT_DATA (readyState 2). loadVideoFile resolves on 'loadedmetadata',
+   * which promises the file's dimensions and NOTHING about a decoded frame, so the render that
+   * follows an import can legitimately arrive too early and draw nothing. Without a listener for the
+   * moment the frame arrives, nothing ever asks the canvas to try again: the clip sits in the
+   * timeline at the right length, "visible" at the playhead, and the canvas stays black.
+   *
+   * Measured on v5.79, 390x844, with a 14s 1170x2532 clip held at HAVE_METADATA across the import:
+   * preview ink 0.00% at import, 0.00% after 3s, and STILL 0.00% five seconds after readyState
+   * reached 4 — renderScene frozen at 14 calls the whole time. Only a manual scrub brought it back
+   * (99.94%). On a fast machine the timeline's filmstrip build happens to seek the element and its
+   * 'seeked' events hide the hole; a phone decoding a big clip is exactly the case where it doesn't.
+   *
+   * 'seeked' cannot cover this on its own: seeking an element to the time it is ALREADY at fires no
+   * event, which is precisely the first clip of a project (playhead 0, clip starts at 0).
+   *
+   * 'loadeddata' is the exact complement of the compositor's gate — it fires when readyState reaches
+   * 2. 'canplay' is the belt to its braces. Added ALONGSIDE each call site's existing 'seeked'
+   * listener rather than replacing it, so nothing that works today changes. */
+  FM.wireVideoRepaint = function (rec) {
+    if (!rec || rec.kind !== 'video' || !rec.el || rec._repaintWired) return;
+    rec._repaintWired = true;
+    const repaint = () => { if (FM.requestRender) FM.requestRender(); };
+    rec.el.addEventListener('loadeddata', repaint);
+    rec.el.addEventListener('canplay', repaint);
   };
 
   /* Load an image file -> { kind:'image', el, width, height, url } */

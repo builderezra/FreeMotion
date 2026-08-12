@@ -5807,6 +5807,139 @@
     if (outside[3] > 20) throw new Error('the masked layer’s stencil gained coverage at 250,50 (alpha ' + outside[3] + ') — that is the MATTE layer’s mask, painted over it mid-render');
   });
 
+  /* ---- Video imports that go INVISIBLE without saying anything (v5.79 investigation) -------------
+     Ezra: "imported a 14 second screen recording … the clip just doesn't show up, it's like
+     invisible." Two mechanisms were measured, both of which leave a correct-looking clip in the
+     timeline and a black canvas, and neither of which says a word:
+
+       1. media with NO dimensions. The compositor sizes a media layer from m.width/m.height, so a
+          0×0 record makes cw/ch 0 and drawImage paints a zero-wide box. That is the deliberate
+          audio-clip path (an .m4a rides the video element) — but a VIDEO the browser can open and
+          not decode lands in it too. Measured: preview ink 0.00% at import, 0.00% after 8.4s,
+          0.00% after a scrub, with no alert / toast / console line.
+       2. the readyState hole. loadVideoFile resolves on 'loadedmetadata' — dimensions and nothing
+          more — and the compositor skips a video below readyState 2. The preview renders on demand,
+          so if the first frame has not decoded by then, nothing ever asks it again. Measured with
+          decode held at HAVE_METADATA: ink 0.00% at import and STILL 0.00% five seconds after
+          readyState reached 4, renderScene frozen at 14 calls.
+
+     The scene/time/save stubs below keep every one of these off the real project: this suite runs
+     inside the live app, which holds the only copy of Ezra's work. */
+  function importFixture(over) {
+    var saved = { scene: FM.scene, time: FM.time, toast: FM.toast, commit: FM.history && FM.history.commit, save: FM.storage && FM.storage.save, libAdd: FM.mediaLib && FM.mediaLib.add };
+    var toasts = [], warns = [], _warn = console.warn;
+    FM.scene = scene([], over || {});
+    FM.time = 0;
+    FM.toast = function (m) { toasts.push(String(m)); };
+    if (FM.history) FM.history.commit = function () {};
+    if (FM.storage) FM.storage.save = function () {};
+    if (FM.mediaLib) FM.mediaLib.add = function () {};
+    console.warn = function () { warns.push([].slice.call(arguments).join(' ')); _warn.apply(console, arguments); };
+    return {
+      toasts: toasts, warns: warns,
+      restore: function () {
+        console.warn = _warn;
+        FM.scene = saved.scene; FM.time = saved.time; FM.toast = saved.toast;
+        if (FM.history && saved.commit) FM.history.commit = saved.commit;
+        if (FM.storage && saved.save) FM.storage.save = saved.save;
+        if (FM.mediaLib && saved.libAdd) FM.mediaLib.add = saved.libAdd;
+        try { FM.refreshAll(); } catch (e) {}
+      }
+    };
+  }
+  // A media record the compositor can draw: a canvas stands in for the <video> (drawImage takes both,
+  // and the crop path reads .width/.height off the source either way), plus the readyState the
+  // compositor gates on.
+  function fakeVideoRec(w, h, name) {
+    var el = document.createElement('canvas');
+    el.width = 64; el.height = 64;
+    var c = el.getContext('2d'); c.fillStyle = '#ff0000'; c.fillRect(0, 0, 64, 64);
+    el.readyState = 4;
+    return { kind: 'video', el: el, width: w, height: h, duration: 12.8, file: new File([new Uint8Array(8)], name || 'ScreenRecording.mp4', { type: 'video/mp4' }) };
+  }
+  function redPixels(s, W, H) {
+    var c = offscreen(W, H), ctx = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(ctx, s, 0);
+    var d = ctx.getImageData(0, 0, W, H).data, n = 0;
+    for (var i = 0; i < W * H; i++) { var p = i * 4; if (d[p] > 180 && d[p + 1] < 70 && d[p + 2] < 70) n++; }
+    return n;
+  }
+
+  test('import: a video layer whose media has no dimensions paints nothing at all', { item: 'video-invisible' }, function () {
+    var L = FM.makeLayer('video', { name: 'clip', x: 160, y: 120, start: 0, duration: 5 });
+    var s = scene([L]);
+    FM.media.set(L.id, fakeVideoRec(64, 64));
+    var lit = redPixels(s, 320, 240);
+    FM.media.set(L.id, fakeVideoRec(0, 0));
+    var dark = redPixels(s, 320, 240);
+    FM.media.remove(L.id);
+    // The control half: without it, "0×0 draws nothing" would also pass on a compositor that draws
+    // nothing ever, and the notice this justifies would be guarding a fiction.
+    if (lit < 1000) throw new Error('the control clip barely drew (' + lit + ' red px) — nothing below is being exercised');
+    if (dark !== 0) throw new Error('expected a 0×0 media record to paint nothing, got ' + dark + ' red px');
+  });
+
+  test('import: a VIDEO file that yields no picture says so', { item: 'video-invisible' }, function () {
+    var fx = importFixture();
+    try {
+      FM.addMediaLayer(fakeVideoRec(0, 0, 'ScreenRecording.mp4'));
+      var said = fx.toasts.concat(fx.warns).join(' | ');
+      if (!/ScreenRecording/.test(said) || !/picture/i.test(said)) {
+        throw new Error('a 0×0 VIDEO import produced no notice — toasts: ' + JSON.stringify(fx.toasts) + ' warns: ' + JSON.stringify(fx.warns));
+      }
+    } finally { fx.restore(); }
+  });
+
+  test('import: an AUDIO file with no picture stays silent — it is not a fault', { item: 'video-invisible' }, function () {
+    var fx = importFixture();
+    try {
+      var rec = fakeVideoRec(0, 0, 'song.m4a');
+      rec.file = new File([new Uint8Array(8)], 'song.m4a', { type: 'audio/mp4' });
+      FM.addMediaLayer(rec);
+      if (fx.toasts.length) throw new Error('importing a song warned about its missing picture: ' + JSON.stringify(fx.toasts));
+    } finally { fx.restore(); }
+  });
+
+  test('import: the preview repaints when a clip’s first frame finally decodes', { item: 'video-invisible' }, function () {
+    var fx = importFixture();
+    var realReq = FM.requestRender, calls = 0;
+    FM.requestRender = function () { calls++; };
+    try {
+      var el = document.createElement('video');   // a real event target; readyState 0, never decodes
+      var rec = { kind: 'video', el: el, width: 1170, height: 2532, duration: 12.8, file: new File([new Uint8Array(8)], 'ScreenRecording.mp4', { type: 'video/mp4' }) };
+      FM.addMediaLayer(rec);
+      calls = 0;                                   // ignore whatever the import itself asked for
+      el.dispatchEvent(new Event('loadeddata'));   // the exact moment readyState reaches 2
+      if (calls === 0) throw new Error('the frame decoded and nothing asked the canvas to redraw — the clip stays black until the user scrubs');
+    } finally { FM.requestRender = realReq; fx.restore(); }
+  });
+
+  test('import: a clip added with the playhead past the end butts onto the end, not into a void', { item: 'video-invisible' }, function () {
+    var fx = importFixture();
+    try {
+      FM.addMediaLayer(fakeVideoRec(1170, 2532));           // first clip: 0 → 12.8
+      var end = FM.scene.project.duration;
+      FM.time = end + 4;                                     // playhead parked 4s beyond everything
+      FM.addMediaLayer(fakeVideoRec(1170, 2532));
+      var L = FM.scene.layers[0];
+      if (Math.abs(L.start - end) > 1e-6) throw new Error('the second clip started at ' + L.start.toFixed(3) + ', leaving a ' + (L.start - end).toFixed(3) + 's gap after the comp end of ' + end.toFixed(3));
+      if (Math.abs(FM.time - L.start) > 1e-6) throw new Error('the playhead stayed at ' + FM.time.toFixed(3) + ' instead of following the clip to ' + L.start.toFixed(3));
+      if (!FM.isLayerVisibleAt(L, FM.time)) throw new Error('the clip that was just added is not visible at the playhead');
+    } finally { fx.restore(); }
+  });
+
+  test('import: with the playhead inside the comp, a clip still starts exactly at the playhead', { item: 'video-invisible' }, function () {
+    var fx = importFixture();
+    try {
+      FM.addMediaLayer(fakeVideoRec(1170, 2532));
+      FM.time = 4.25;                                        // well inside the first clip
+      FM.addMediaLayer(fakeVideoRec(1170, 2532));
+      var L = FM.scene.layers[0];
+      if (Math.abs(L.start - 4.25) > 1e-6) throw new Error('import-at-the-playhead regressed: clip started at ' + L.start + ', expected 4.25');
+      if (Math.abs(FM.time - 4.25) > 1e-6) throw new Error('the playhead moved to ' + FM.time + ' on an ordinary import; it should not have');
+    } finally { fx.restore(); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

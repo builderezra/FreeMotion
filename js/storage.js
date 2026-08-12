@@ -185,6 +185,7 @@ window.FM = window.FM || {};
               const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
               FM.media.set(layer.id, loaded);
               if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
+              if (FM.wireVideoRepaint) FM.wireVideoRepaint(loaded);   // a reopened project decodes from cold — repaint when the frame lands
             }
           } catch (le) { /* this layer's media failed to decode — keep restoring the rest */ }
         }
@@ -539,7 +540,7 @@ window.FM = window.FM || {};
           const file = await dataURLToFile(md.dataURL, md.name);
           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
-          if (rec) { FM.media.set(nid, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
+          if (rec) { FM.media.set(nid, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
       }
     }
@@ -638,6 +639,7 @@ window.FM = window.FM || {};
         const rec = md.kind === 'video' ? await FM.loadVideoFile(md.file) : await FM.loadImageFile(md.file);
         FM.media.set(newLayerId, rec);
         if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
+        if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
         if (db) await idbPut(db, newLayerId, { file: md.file, kind: md.kind });
       } catch (e) { /* that layer loads media-less */ }
     }

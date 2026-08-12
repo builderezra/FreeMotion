@@ -986,9 +986,16 @@ window.FM = window.FM || {};
     // Use the clip's FULL length — never cap it to the existing composition. A still has no length
     // of its own, so it takes the default from Settings.
     const dur = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : FM.defaultLayerDuration();
+    // Import AT THE PLAYHEAD (the first clip anchors at 0) — but never PAST THE END of the
+    // composition. A playhead parked beyond everything (scrub to the end, then add) used to drop the
+    // clip out there and grow the comp over the hole, so the import produced a silent gap of nothing
+    // in front of it: measured 12.828s of comp, playhead at 16.828s, new clip at 16.828s, comp end
+    // 29.656s — four seconds of black the user never asked for, with the clip they just added
+    // stranded behind it. Clamped to the comp end it butts straight onto the existing work instead.
+    const start = first ? 0 : Math.min(FM.time, P.duration || 0);
     const layer = FM.makeLayer(rec.kind, {
       name: rec.file ? rec.file.name.replace(/\.[^.]+$/, '') : rec.kind,
-      x: P.width / 2, y: P.height / 2, start: first ? 0 : FM.time, duration: dur,   // import AT THE PLAYHEAD (first clip anchors at 0)
+      x: P.width / 2, y: P.height / 2, start: start, duration: dur,
     });
     const fit = Math.min(P.width / rec.width, P.height / rec.height);
     layer.transform.scale = (isFinite(fit) && fit > 0) ? fit : 1;
@@ -997,7 +1004,12 @@ window.FM = window.FM || {};
       // Always re-render when a seek completes — including during playback, so reversed
       // clips (which we drive by seeking each frame) actually update while playing.
       rec.el.addEventListener('seeked', () => render());
+      FM.wireVideoRepaint(rec);   // …and when the FIRST FRAME finally decodes, which no seek announces
     }
+    // The playhead follows a clamped import, so you are looking AT the clip you just added rather
+    // than at the empty time you happened to be parked in. Untouched in the normal case, where the
+    // clip already starts exactly at the playhead.
+    if (!first && start !== FM.time) FM.time = start;
     scene.layers.unshift(layer);
     scene.selectedId = layer.id;
     scene.selectedIds = [layer.id];
@@ -1010,6 +1022,22 @@ window.FM = window.FM || {};
     if (FM.storage && FM.storage.save) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close
     // Remember it in the Media library so it's one tap away next time — no picker, no Photos app.
     if (FM.mediaLib && rec.file) FM.mediaLib.add(rec, layer.id);
+    // A clip the browser can OPEN but can't give a picture for (videoWidth/Height 0) renders as an
+    // audio clip: the compositor's `cw = cr.w || w` becomes 0 and drawImage paints a zero-wide box.
+    // That is right for an .m4a and is exactly the "it's like invisible" report when the file the
+    // user picked was a VIDEO — measured with a 0-sized rec on v5.79: preview ink 0.00% at import,
+    // 0.00% after 8.4s, 0.00% after a scrub, and not one alert, toast or console line. A layer that
+    // can never show a picture has to SAY so; keyed on what the user picked (mediaKind), so importing
+    // an actual song stays silent.
+    if (rec.kind === 'video' && (!rec.width || !rec.height) && rec.file && FM.mediaKind && FM.mediaKind(rec.file) === 'video') {
+      const nm = String(rec.file.name || 'that clip');
+      // #toast shrink-fits inside the 50vw its left:50% containing block leaves it — ~190px at 380px.
+      // Measured wrap of the full name + "added as audio only": 4 lines at 380px. This wording holds
+      // 2 lines at 390px and 3 at 320px; the console line below keeps the untruncated name.
+      const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      if (FM.toast) FM.toast('No picture in “' + shortNm + '” — audio only', 6000);
+      try { console.warn('FreeMotion: “' + nm + '” reported 0×0 — this browser can read the file but not decode its video track, so the layer has sound and no picture.'); } catch (e) {}
+    }
   }
 
   FM.addTextLayer = function () {
@@ -1634,7 +1662,7 @@ window.FM = window.FM || {};
     dropAudioGraph(old);   // the new rec brings a new element, so the old source node has nothing left to feed
     FM.media.set(id, nrec);
     layer.type = nrec.kind;                          // video ↔ image as needed
-    if (nrec.kind === 'video' && nrec.el) nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
+    if (nrec.kind === 'video' && nrec.el) { nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); }); FM.wireVideoRepaint(nrec); }
     // Re-clamp timing to the NEW source so a long clip doesn't freeze on the last frame (and audio
     // length doesn't diverge from the visible duration). Keeps transform/keyframes/effects/masks.
     if (nrec.kind === 'video' && nrec.duration) {
