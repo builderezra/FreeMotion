@@ -8726,6 +8726,56 @@
     }
   });
 
+  /* The POP's half of the playhead guard (v6.31).
+   * The push already has a test above — a recompute landing mid-animation must not store the
+   * TRANSLATED edge of #timeline-panel, or --tl-panel-left is wrong for the rest of the session and
+   * the playhead parks off screen. That is the "playhead sometimes isn't there when a project opens"
+   * bug, and it needed an app restart to clear.
+   * v6.27 added two MORE animations that move #app — fm-pop-out and fm-pop-in, the return to home —
+   * so the same hazard now exists on the way back, and nothing covered it. panelLeft() walks ancestors
+   * subtracting translateX, and its comment already names all four keyframes, so this should hold;
+   * this test is what makes "should" into "does", and what stops the next animation being added
+   * without one.
+   * It asserts the stored var against the AT-REST truth, and separately records what the raw rect
+   * was doing — if the raw rect never drifts, the test is not exercising the hazard at all and would
+   * pass on a broken build. */
+  test('playhead: a rebuild during the return-to-home pop keeps --tl-panel-left honest', { item: 'playhead-pop' }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(r); }); };
+    var panel = document.getElementById('timeline-panel');
+    if (!panel || !FM.home || !FM.home.open || !FM.timeline) throw new Error('#timeline-panel / FM.home / FM.timeline missing');
+    var read = function () { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tl-panel-left')) || 0; };
+    var wasHome = FM.home.isOpen();
+    try {
+      if (wasHome && FM.home.close) { FM.home.close(); await sleep(120); }
+      FM.timeline.rebuild(); await sleep(40);
+      var truth = read();
+      FM.home.open();                       // fires the pop; #app carries fm-pop-out's transform
+      var maxStored = 0, maxRaw = 0;
+      for (var i = 0; i < 14; i++) {
+        await rAF();
+        FM.timeline.rebuild();              // recomputePad() lands mid-animation, as a filmstrip rebuild does
+        maxStored = Math.max(maxStored, Math.abs(read() - truth));
+        maxRaw = Math.max(maxRaw, Math.abs(panel.getBoundingClientRect().left - truth));
+      }
+      await sleep(500);
+      if (maxStored > 1) {
+        throw new Error('--tl-panel-left drifted ' + maxStored.toFixed(1) + 'px during the pop (truth ' +
+          truth.toFixed(1) + ') — the playhead will sit that far off for the rest of the session');
+      }
+      // The control. If the raw rect never moved either, no animation ran and this proved nothing.
+      if (maxRaw < 1) {
+        throw new Error('the panel never moved during the pop (raw drift ' + maxRaw.toFixed(2) +
+          'px) — the hazard was not exercised, so a green result here would be meaningless');
+      }
+    } finally {
+      if (!wasHome && FM.home.close) FM.home.close();
+      else if (wasHome && !FM.home.isOpen()) FM.home.open();
+      await sleep(120);
+      try { FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

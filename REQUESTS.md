@@ -36,9 +36,14 @@ Numbered with Ezra's own queue numbers where he gave them.
       two rows vs horizontal scroll — so it is yours to pick.
 - [ ] **Landscape phone (844x390) text editing is cramped** — 56x99 preview, because the app reserves
       the timeline row above 700px. The card no longer covers it, but the row reservation is untouched.
-- [ ] **Playhead missing when a project opens.** Needs an app restart to come back. Diagnosed once
-      (the push makes #app position:fixed and a recompute inside that window stores the translated
-      edge) but the fix was never landed — he hit it again after that.
+- [ ] **Playhead missing when a project opens.** Needs an app restart to come back.
+      *Status (v6.31):* the known cause IS fixed and now tested on BOTH paths — a recompute landing
+      mid-animation no longer stores the translated edge, on the project-open push and on the
+      return-to-home pop that v6.27 added. Measured drift under 1px on both, with a control assertion
+      proving the panel really was moving so the test cannot pass vacuously.
+      **Left open on purpose:** Ezra reported this AFTER the first fix, so if it happens again it is a
+      third cause and these two are ruled out. Worth knowing next time: does the playhead ELEMENT
+      exist and is it just mispositioned, or is it missing from the DOM entirely?
 - [ ] **Editing lags, and gets bad fast.**
 - [ ] **72 — Audio import loses parts of the file.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
