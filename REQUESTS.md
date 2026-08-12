@@ -53,7 +53,20 @@ Numbered with Ezra's own queue numbers where he gave them.
       every import you throw away. That one needs undo-stack surgery and was deliberately deferred.
 - [ ] **72 — Audio import loses parts of the file.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
-      Not lag — actual missing audio.
+      Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**
+      the half you can SEE was fixed back in **v6.08** ("fix the gaps in a long clip's waveform") and
+      nobody ticked it here, which is the exact thing this file exists to stop. Re-verified from
+      scratch tonight with a new probe (`tests/_audiogaps.html`): a synthetic file with no silence in
+      it at all, at 10s / 60s / 3min / 5min, decodes to its full length every time and produces **zero
+      silent bins** in the drawn waveform. So the timeline is no longer lying to you.
+      The half you can HEAR is still open, and I could not reproduce it. What I have RULED OUT, by
+      measurement rather than by reading: the decode is not truncated (full duration, all four
+      lengths), the decoded audio has no silent spans, the waveform binning invents no holes, and the
+      playback sync only hard-seeks past 350ms of drift with a 400ms minimum gap, so it is not
+      chopping the sound to stay in time. **What I need from you:** the actual file, or its name and
+      format. Synthetic WAV is clean through every path, so whatever this is lives in a real encoder's
+      output — a VBR mp3 or an m4a whose duration the browser reports wrong is the obvious suspect and
+      I can't conjure one that misbehaves. Related to 69 (audio clock) but not the same bug.
 - [ ] **58 — The red delete bar flashes during fast scroll** in the effects list.
 - [x] **89 — Letterbox and Border Frame paint over the layers below them.** **DONE v6.35**, on the
       fourth attempt. Both effects drew their frame against the effect PLATE's edges, and that plate

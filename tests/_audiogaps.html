@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Audio import gap probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre-wrap; font-size: 12px; }
+  .bad { color: #ff7a85; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — AUDIO IMPORT GAP probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * WHY THIS EXISTS
+ *   Ezra, queue 72: "when it's importing the audio it literally cuts out certain parts making it
+ *   jumpy, even on the timeline you can see how it's missing parts". That is two claims — the
+ *   SOUND is missing pieces, and the DRAWN waveform shows them missing — and they need not have
+ *   the same cause. This page tests the import path with a file whose content is known to be
+ *   continuous, so any gap it reports is the app's, not the material's.
+ *
+ * THE MATERIAL
+ *   A WAV synthesised here: full-scale sine, unbroken, at a chosen duration. Every peak bin over
+ *   such a file must come back near 1.0. A bin near 0 means a span of the file was never looked
+ *   at, or never decoded. WAV rather than MP3 because it can be built byte-exactly in the page —
+ *   no encoder, no silent padding, nothing to argue about afterwards.
+ *
+ * WHAT IS UNDER SUSPICION
+ *   FM.decodeAudio builds `new OfflineAudioContext(1, Math.ceil(rate), rate)` — a context whose
+ *   LENGTH is one second — and decodes into it. Per spec decodeAudioData ignores the context's
+ *   length and returns the whole file, but "per spec" is not a measurement, and a decode truncated
+ *   to one second would look exactly like Ezra's report. So the probe prints the decoded duration
+ *   against the real one before it looks at anything else.
+ * ============================================================================================ */
+(function () {
+  var out = document.getElementById('out');
+  var lines = [];
+  function say(s) { lines.push(s); out.textContent = lines.join('\n'); }
+
+  // ---- build a WAV (16-bit PCM mono) of a continuous full-scale sine -------------------------
+  function makeWav(seconds, rate) {
+    var n = Math.floor(seconds * rate);
+    var bytes = 44 + n * 2;
+    var b = new ArrayBuffer(bytes), v = new DataView(b);
+    function s(off, str) { for (var i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)); }
+    s(0, 'RIFF'); v.setUint32(4, bytes - 8, true); s(8, 'WAVE');
+    s(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    s(36, 'data'); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) {
+      var x = Math.sin(2 * Math.PI * 440 * i / rate);        // continuous, full scale, no envelope
+      v.setInt16(44 + i * 2, Math.round(x * 32767), true);
+    }
+    return new Blob([b], { type: 'audio/wav' });
+  }
+
+  function fileOf(blob, name) {
+    try { return new File([blob], name, { type: 'audio/wav' }); }
+    catch (e) { blob.name = name; return blob; }               // older Safari has no File constructor
+  }
+
+  async function run() {
+    var SRC_RATE = 44100;
+    var CASES = [10, 60, 180, 300];                            // 10s … a 5-minute song, which is the real case
+    for (var k = 0; k < CASES.length; k++) {
+      var secs = CASES[k];
+      var f = fileOf(makeWav(secs, SRC_RATE), 'probe-' + secs + 's.wav');
+      say('');
+      say('=== ' + secs + 's continuous sine, ' + (f.size / 1048576).toFixed(1) + ' MB ===');
+
+      // 1. THE DECODE ITSELF, exactly as the waveform path asks for it (8 kHz offline context).
+      var ab = null, t0 = performance.now();
+      try { ab = await FM.decodeAudio(f, { rate: 8000 }); }
+      catch (e) { say('  decodeAudio THREW: ' + e.message); continue; }
+      var dt = Math.round(performance.now() - t0);
+      if (!ab) { say('  decodeAudio returned null — no decodable audio'); continue; }
+      var got = ab.duration, lost = secs - got;
+      say('  decoded: ' + got.toFixed(3) + 's of ' + secs + 's at ' + ab.sampleRate + ' Hz'
+        + ' (' + ab.length + ' samples, ' + dt + ' ms)'
+        + (Math.abs(lost) > 0.05 ? '   <<< ' + lost.toFixed(3) + 's MISSING' : '   ok'));
+
+      // 2. GAPS IN THE DECODED PCM. A continuous full-scale sine can have no silent span.
+      var ch = ab.getChannelData(0), win = Math.round(ab.sampleRate * 0.02), gaps = 0, worst = 0, at = -1;
+      for (var i = 0; i + win <= ch.length; i += win) {
+        var mx = 0;
+        for (var j = i; j < i + win; j++) { var a = ch[j] < 0 ? -ch[j] : ch[j]; if (a > mx) mx = a; }
+        if (mx < 0.2) { gaps++; if (at < 0) at = i / ab.sampleRate; }
+        if (mx > worst) worst = mx;
+      }
+      say('  PCM: ' + gaps + ' silent 20ms windows' + (gaps ? ' (first at ' + at.toFixed(2) + 's)' : '')
+        + ', loudest window ' + worst.toFixed(3));
+
+      // 3. THE DRAWN WAVEFORM — the half Ezra can actually see on the timeline.
+      var rec = { file: f };
+      var peaks = await FM.getWaveform(rec);
+      if (!peaks || !peaks.length) { say('  getWaveform returned nothing'); continue; }
+      var zero = 0, low = 0, mn = 1, mni = -1;
+      for (var p = 0; p < peaks.length; p++) {
+        if (peaks[p] < 0.05) zero++;
+        if (peaks[p] < 0.5) low++;
+        if (peaks[p] < mn) { mn = peaks[p]; mni = p; }
+      }
+      say('  peaks: ' + peaks.length + ' bins, ' + zero + ' near-silent, ' + low + ' below half'
+        + ', quietest ' + mn.toFixed(3) + ' at bin ' + mni + ' (' + (mni / peaks.length * got).toFixed(2) + 's)');
+      if (zero) say('  <<< ' + zero + ' of ' + peaks.length + ' bins read as silence on a file that has none');
+    }
+    say('');
+    say('done');
+    window.__done = true;
+  }
+  run().catch(function (e) { say('THREW: ' + (e && e.message)); window.__done = true; });
+})();
+</script>
+</body>
+</html>
