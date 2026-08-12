@@ -271,8 +271,14 @@ window.FM = window.FM || {};
       + '<linearGradient id="fm-ic-tpB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">'
       + '<stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>'
       + '</defs>'
-      + '<path d="M4 10h16" stroke="url(#fm-ic-tpH)"/>'
+      /* Paint order, top to bottom: VERTICAL first, then the horizontal over its top end, then the
+         frame over everything. Ezra: "put the bottom straight up line ending under the horizontal
+         line." The vertical starts at y=10, exactly where the horizontal runs, and a round linecap
+         adds half a stroke width beyond that point — so drawn last it poked visibly through the
+         horizontal. Declaring it first lets the horizontal cover that cap, and the join reads as a T
+         with the upright ending beneath the crossbar rather than crossing it. */
       + '<path d="M10 10v10" stroke="url(#fm-ic-tpV)"/>'
+      + '<path d="M4 10h16" stroke="url(#fm-ic-tpH)"/>'
       + '<rect x="4" y="4" width="16" height="16" rx="2" stroke="url(#fm-ic-tpB)"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         return { label: t.name, icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
