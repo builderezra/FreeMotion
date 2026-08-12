@@ -108,16 +108,45 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* Every numeric property row in the inspector (v6.20). There are 37 call sites — Width, Height and
+   * Corner radius in Edit Shape, mask feather, gradient angle, fill opacity, stroke width, text
+   * spacing / line height / curve, audio fades, camera FOV / focus / depth of field, and the effects
+   * that declare a plain numeric param — and until now every one of them was a raw
+   * <input type="range">. Two of Ezra's reports are the same complaint about that: "the width and
+   * height in here actually need their own sliders" (queue 67) and "some effects use raw sliders"
+   * (queue 31). A browser range input in an app whose every other number is an AM-style ruler is not
+   * a slider, it is the absence of one.
+   * So this renders the SAME tickStrip the effect params and keyframe rows use: notched, snapping,
+   * with the momentum glide, and it is fixed here rather than at 37 call sites so they cannot drift
+   * apart again. Each caller's signature is untouched.
+   * No ◆ diamond, deliberately: kfNumRow's diamond writes through FM.setProp, and most of these
+   * properties are read by the compositor as RAW numbers (layer.shapeW is read at four places in
+   * compositor.js and never through evalProp). A diamond here would create keyframes the renderer
+   * ignores — a control that appears to work and does nothing, which is worse than not offering it. */
   function rangeRow(label, get, set, min, max, step, onCommit) {
+    step = step || 1;
+    const prec = step >= 1 ? 0 : (step >= 0.1 ? 1 : 2);
     const wrap = el('div', 'prop-wrap');
-    const row = el('div', 'prop-row');
+    const row = el('div', 'prop-row prop-row--scrub');
     row.appendChild(el('label', null, label));
-    const range = document.createElement('input'); range.type = 'range';
-    range.min = min; range.max = max; range.step = step || 1; range.value = get();
-    const val = el('span', 'fx-val', String(get()));
-    range.addEventListener('input', () => { set(parseFloat(range.value)); val.textContent = range.value; FM.requestRender(); });
-    range.addEventListener('change', () => { commitH(); if (onCommit) onCommit(); });   // onCommit fires on RELEASE (safe to rebuild the inspector here)
-    row.appendChild(range); row.appendChild(val);
+    const val = el('input', 'fx-scrub-val'); val.type = 'text'; val.value = (+get()).toFixed(prec);
+    const strip = tickStrip({
+      min: min, max: max, step: step, unit: '', dflt: null, read: () => +get(),
+      apply: (v) => { set(v); val.value = v.toFixed(prec); FM.requestRender(); },
+      // onCommit fires on RELEASE — it is safe to rebuild the inspector there, and doing it per-frame
+      // would tear the control out from under the finger still dragging it.
+      release: () => { commitH(); if (onCommit) onCommit(); },
+    });
+    // Typing an exact number still has to work: the ruler is for feel, the box is for precision.
+    val.addEventListener('change', () => {
+      const v = parseFloat(val.value);
+      if (isNaN(v)) { val.value = (+get()).toFixed(prec); return; }
+      const c = Math.max(min, Math.min(max, v));
+      set(c); val.value = c.toFixed(prec); strip._sync(c);
+      FM.requestRender(); commitH(); if (onCommit) onCommit();
+    });
+    val.addEventListener('keydown', (e) => { if (e.key === 'Enter') val.blur(); });
+    row.appendChild(strip); row.appendChild(val);
     wrap.appendChild(row);
     return wrap;
   }
