@@ -7986,6 +7986,60 @@
     }
   });
 
+  /* Select on all three home tabs (v6.17). Ezra: "Selecting templates and elements doesnt work
+   * properly." It half-worked, which is worse than not working: the tap went into the `selected` set
+   * and the bar counted it, but every in-place card update — toggleSel, paintClasses, cardEls — finds
+   * its card with `.hm-card[data-pid]`, and only projectCard ever set that attribute. So on Templates
+   * and Elements you got "1 selected" on the bar and no tick, no outline, nothing on the card. With
+   * Delete sitting on that bar, a selection you cannot see is the dangerous kind of wrong.
+   * The test asserts the SCREEN, not the set — asserting the set is what would have passed on the
+   * broken build. */
+  test('home: a tick appears on the card you select, on every tab', { item: 'home-select-tabs' }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    if (!FM.home || !FM.home.open) throw new Error('FM.home missing');
+    var wasOpen = FM.home.isOpen();
+    var madeT = [], madeE = [];
+    try {
+      FM.home.open(); await sleep(260);
+      // Fixtures, so the Templates and Elements tabs are not empty (an empty tab proves nothing).
+      var pid = (FM.projects.list()[0] || {}).id;
+      while ((FM.templates.list() || []).length < 2) { var tn = 'ZZ test tpl ' + madeT.length; await FM.templates.save(tn, pid); madeT.push(tn); }
+      while ((FM.elements.list() || []).length < 2) {
+        var en = 'ZZ test el ' + madeE.length;
+        await FM.elements.save(en, [FM.makeLayer('shape', { name: 'x', shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#fff' })]);
+        madeE.push(en);
+      }
+      var selBtn = document.getElementById('hm-select-btn');
+      if (!selBtn) throw new Error('the header Select button is missing');
+      for (var ti = 0; ti < 3; ti++) {
+        var name = ['projects', 'templates', 'elements'][ti];
+        var tabBtn = [].slice.call(document.querySelectorAll('.hm-tab')).filter(function (b) { return b.dataset.tab === name; })[0];
+        if (!tabBtn) throw new Error('no ' + name + ' tab');
+        tabBtn.click(); await sleep(200);
+        if (!document.body.classList.contains('hm-selecting')) { selBtn.click(); await sleep(200); }
+        var cards = [].slice.call(document.querySelectorAll('#hm-grid .hm-card, .hm-grid .hm-card'));
+        if (!cards.length) throw new Error('the ' + name + ' tab has no cards — this assertion would prove nothing');
+        var missing = cards.filter(function (c) { return !c.dataset.pid; }).length;
+        if (missing) throw new Error(name + ': ' + missing + ' of ' + cards.length + ' cards have no data-pid — every in-place update looks the card up by it');
+        cards[0].click(); await sleep(140);
+        if (cards[0].querySelectorAll('.hm-check.on').length !== 1) {
+          throw new Error(name + ': tapping a card in Select drew ' + cards[0].querySelectorAll('.hm-check.on').length
+            + ' ticks on it, expected exactly 1 — the bar counts the tap either way, so the card is the only honest witness');
+        }
+        if (!cards[0].classList.contains('hm-sel')) throw new Error(name + ': the selected card has no .hm-sel outline');
+        cards[0].click(); await sleep(140);   // and it must come back off
+        if (cards[0].querySelectorAll('.hm-check.on').length !== 0) throw new Error(name + ': the tick would not turn off again');
+        selBtn.click(); await sleep(200);     // leave Select before the next tab
+      }
+    } finally {
+      if (document.body.classList.contains('hm-selecting')) { var b = document.getElementById('hm-select-btn'); if (b) b.click(); }
+      for (var i = 0; i < madeT.length; i++) { var t = (FM.templates.list() || []).filter(function (x) { return x.name === madeT[i]; })[0]; if (t) await FM.templates.remove(t.id); }
+      for (var j = 0; j < madeE.length; j++) { var e = (FM.elements.list() || []).filter(function (x) { return x.name === madeE[j]; })[0]; if (e) await FM.elements.remove(e.id); }
+      await sleep(80);
+      if (!wasOpen && FM.home.close) FM.home.close();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

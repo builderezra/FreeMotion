@@ -493,7 +493,7 @@ window.FM = window.FM || {};
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
     th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
     if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
-    if (selectMode) th.appendChild(el('span', 'hm-check' + (selected.has(p.id) ? ' on' : ''), selected.has(p.id) ? '✓' : ''));
+    // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
     const name = el('div', 'hm-name', p.name || 'Untitled');
     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
     const meta = el('div', 'hm-meta');
@@ -573,65 +573,10 @@ window.FM = window.FM || {};
       glint.appendChild(document.createElement('i'));
       card.appendChild(glint);
     }
-    card.addEventListener('click', () => {
-      if (card._paintedAway) { card._paintedAway = false; cancelPress(card); return; }   // that "click" was the end of a drag-select
-      if (selectMode) { cancelPress(card); toggleSel(p.id); } else openProject(p.id, false, card);
-    });
-    // Drag across cards to select a run of them. In select mode a drag paints immediately; outside
-    // it, a HOLD enters select mode first and then paints — the same two ways in as the timeline.
-    let holdTimer = null, downY = 0, downX = 0;
-    card.addEventListener('pointerdown', (ev) => {
-      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-      if (ev.target.closest && ev.target.closest('.hm-card-more')) return;   // the ⋯ stays a button
-      downX = ev.clientX; downY = ev.clientY;
-      if (selectMode) { beginPaint(p.id, ev.clientY); }
-      else {
-        setPress(card);   // synchronous, on THIS frame — the press is the tap's only acknowledgement until the project has loaded
-        clearTimeout(holdTimer);
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          if (!card.isConnected) return;
-          cancelPress(card);   // a HOLD is not a tap: the render below throws this node away, so let the press go with it rather than leaving pressEl pointing at a detached card
-          selectMode = true; selected.clear(); selected.add(p.id);
-          document.body.classList.add('hm-selecting');
-          render();                                   // one rebuild to draw the checks, BEFORE painting starts
-          beginPaint(p.id, downY);
-          if (paint) {
-            paint.moved = true;
-            paint.y = downY;
-            // render() above replaced this card, so `card` is now a detached node — flag the LIVE one
-            // (whichever node the follow-up click actually lands on) or the release immediately
-            // un-ticks the project you just held to select.
-            const live = grid && grid.querySelector('.hm-card[data-pid="' + p.id + '"]');
-            if (live) live._paintedAway = true;
-            card._paintedAway = true;
-            // Arm the auto-scroll here too. The pointermove branch below only starts it on the
-            // moved:false → true transition, and this path has already set moved — so entering select
-            // mode by HOLD and then dragging to the edge of the list never scrolled.
-            paint.raf = requestAnimationFrame(paintAutoScroll);
-            paintClasses(); renderSelBar();
-          }
-        }, 380);
-      }
-    });
-    card.addEventListener('pointermove', (ev) => {
-      if (holdTimer && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) { clearTimeout(holdTimer); holdTimer = null; }
-      // a drag is a scroll, not a tap — let go of the press the moment it stops being one
-      if (pressEl === card && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) cancelPress(card);
-      if (!paint) return;
-      if (!paint.moved && Math.hypot(ev.clientX - downX, ev.clientY - downY) < 8) return;   // still a tap, not a drag
-      if (!paint.moved) { paint.moved = true; card._paintedAway = true; paint.raf = requestAnimationFrame(paintAutoScroll); }
-      ev.preventDefault();
-      paint.y = ev.clientY;
-      paintTo(ev.clientY);
-    });
-    const finish = () => { clearTimeout(holdTimer); holdTimer = null; endPaint(); };
-    // The release deliberately does NOT let go of the press: click fires next, and the push takes the
-    // card over from the same scale, so unpressing here would flash it back to full size first. The
-    // timer is the escape hatch for a tap that never opens anything (a second tap during a load, a
-    // release that turned out to be the end of a drag-select).
-    card.addEventListener('pointerup', () => { finish(); releasePress(card); });
-    card.addEventListener('pointercancel', () => { finish(); cancelPress(card); });
+    // Select, the ticks, the hold and the drag-paint all come from selectify now (v6.17) — this block
+    // used to hold its own copy, which is exactly why the other two tabs never had any of it.
+    // projectCard doesn't use the return value: its ⋯ is appended above, under its own `!selectMode`.
+    selectify(card, th, p.id, () => openProject(p.id, false, card));
     keyActivate(card);
     return card;
   }
@@ -810,20 +755,80 @@ window.FM = window.FM || {};
    * because the check occupies that corner, and two overlapping controls in one corner on a phone is
    * a coin flip about which one you hit. */
   function selectify(card, th, id, defaultAction) {
+    /* THE ID STAMP. Everything that updates a card in place finds it with
+     * `.hm-card[data-pid="<id>"]` — toggleSel, paintClasses, cardEls, the hold path's `live` lookup.
+     * Only projectCard used to set it, so on the Templates and Elements tabs (v6.17, Ezra:
+     * "Selecting templates and elements doesnt work properly") a tap in select mode went into the
+     * `selected` set and updated the count on the bar, and then failed to find the card — no tick, no
+     * outline, nothing on screen. The state was right and the screen was wrong, which is the worst of
+     * the two, because the next thing you press is Delete. */
+    card.dataset.pid = id;
     if (selectMode) {
       if (selected.has(id)) card.classList.add('hm-sel');
       th.appendChild(el('span', 'hm-check' + (selected.has(id) ? ' on' : ''), selected.has(id) ? '✓' : ''));
     }
-    card.addEventListener('click', () => { if (selectMode) { cancelPress(card); toggleSel(id); } else defaultAction(); });
-    // The same synchronous press projectCard gives its cards — templates and elements also push into
-    // the editor, and fm-push-lead starts from the pressed scale, so without this they would pop.
+    card.addEventListener('click', () => {
+      if (card._paintedAway) { card._paintedAway = false; cancelPress(card); return; }   // that "click" was the end of a drag-select
+      if (selectMode) { cancelPress(card); toggleSel(id); } else defaultAction();
+    });
+    /* …and the GESTURES, which lived in projectCard and so existed on one tab in three (v6.17).
+     * On Projects you could hold a card to enter Select and drag across to take a run; on Templates
+     * and Elements neither did anything, so the only way in was the header button and the only way to
+     * pick five was five taps. This function's whole reason for existing is that the three tabs
+     * "behave identically instead of approximately" — the gesture is part of behaving. */
+    let holdTimer = null, downY = 0, downX = 0;
     card.addEventListener('pointerdown', (ev) => {
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-      if (ev.target.closest && ev.target.closest('.hm-card-more')) return;
-      if (!selectMode) setPress(card);
+      if (ev.target.closest && ev.target.closest('.hm-card-more')) return;   // the ⋯ stays a button
+      downX = ev.clientX; downY = ev.clientY;
+      if (selectMode) { beginPaint(id, ev.clientY); }
+      else {
+        setPress(card);   // synchronous, on THIS frame — the press is the tap's only acknowledgement until the project has loaded
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          if (!card.isConnected) return;
+          cancelPress(card);   // a HOLD is not a tap: the render below throws this node away, so let the press go with it rather than leaving pressEl pointing at a detached card
+          selectMode = true; selected.clear(); selected.add(id);
+          document.body.classList.add('hm-selecting');
+          render();                                   // one rebuild to draw the checks, BEFORE painting starts
+          beginPaint(id, downY);
+          if (paint) {
+            paint.moved = true;
+            paint.y = downY;
+            // render() above replaced this card, so `card` is now a detached node — flag the LIVE one
+            // (whichever node the follow-up click actually lands on) or the release immediately
+            // un-ticks the thing you just held to select.
+            const live = grid && grid.querySelector('.hm-card[data-pid="' + id + '"]');
+            if (live) live._paintedAway = true;
+            card._paintedAway = true;
+            // Arm the auto-scroll here too. The pointermove branch below only starts it on the
+            // moved:false → true transition, and this path has already set moved — so entering select
+            // mode by HOLD and then dragging to the edge of the list never scrolled.
+            paint.raf = requestAnimationFrame(paintAutoScroll);
+            paintClasses(); renderSelBar();
+          }
+        }, 380);
+      }
     });
-    card.addEventListener('pointerup', () => releasePress(card));
-    card.addEventListener('pointercancel', () => cancelPress(card));
+    card.addEventListener('pointermove', (ev) => {
+      if (holdTimer && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) { clearTimeout(holdTimer); holdTimer = null; }
+      // a drag is a scroll, not a tap — let go of the press the moment it stops being one
+      if (pressEl === card && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) cancelPress(card);
+      if (!paint) return;
+      if (!paint.moved && Math.hypot(ev.clientX - downX, ev.clientY - downY) < 8) return;   // still a tap, not a drag
+      if (!paint.moved) { paint.moved = true; card._paintedAway = true; paint.raf = requestAnimationFrame(paintAutoScroll); }
+      ev.preventDefault();
+      paint.y = ev.clientY;
+      paintTo(ev.clientY);
+    });
+    const finish = () => { clearTimeout(holdTimer); holdTimer = null; endPaint(); };
+    // The release deliberately does NOT let go of the press: click fires next, and the push takes the
+    // card over from the same scale, so unpressing here would flash it back to full size first. The
+    // timer is the escape hatch for a tap that never opens anything (a second tap during a load, a
+    // release that turned out to be the end of a drag-select).
+    card.addEventListener('pointerup', () => { finish(); releasePress(card); });
+    card.addEventListener('pointercancel', () => { finish(); cancelPress(card); });
     return !selectMode;   // caller uses this to decide whether to append its ⋯ button
   }
 
