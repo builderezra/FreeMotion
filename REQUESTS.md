@@ -28,8 +28,9 @@ Numbered with Ezra's own queue numbers where he gave them.
 ### In flight right now
 
 ### Bugs
-- [ ] **Captions never open the text editor.** `FM.addCaptionLayer()` adds the layer but the editor
-      never appears — found while fixing 88, deliberately left alone as a separate bug.
+- [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
+      stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
+      opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.
 - [ ] **Six effects' option buttons run off a phone, last options untappable.** Measured at 380px:
       Channel Remap overflows by 434px, HSL Bands 169, Text Transform 106, Mirror 97, Thermal 71,
       Match Grade 25. Pre-existing. The fix is a taste call — equal-width-with-ellipsis vs wrapping to

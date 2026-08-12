@@ -9680,6 +9680,54 @@
     }
   });
 
+  /* ---- adding a caption track must land you IN the editor ---------------------------------------
+   *
+   * FM.addTextLayer ends by calling FM.textEdit.start with the placeholder pre-selected, so adding
+   * text goes "tap → keyboard up → type". FM.addCaptionLayer did everything else the same way and
+   * then simply stopped: it unshifted a track carrying two placeholder cues, selected it, and left
+   * you looking at them. The way in exists — the cue buttons in the Aa sheet — but it is several
+   * taps down a 46vh scroller, so in practice a caption track was a thing you added and could not
+   * type into. That is the "captions are a fake feature" experience arriving by a second route,
+   * after v5.99 fixed the first one.
+   *
+   * The scrub is half the fix and is asserted separately: text-edit binds to the cue at the PLAYHEAD
+   * (captions.indexAt), and if the playhead sits past the seeded cues that call ADDS an empty third
+   * one — so without moving the playhead first, adding a caption track at t=9s would open the editor
+   * on a blank cue at 9s and leave "First caption" untouched at 0. Hence the cue-count assertion:
+   * adding a track must produce exactly the cues it seeded, not one more. */
+  test('captions: adding a caption track opens the text editor on the first cue', { item: 'captions-editor-open' }, function () {
+    if (!FM.addCaptionLayer || !FM.textEdit || !FM.captions) throw new Error('need FM.addCaptionLayer, FM.textEdit and FM.captions');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      FM.time = Math.max(3, (FM.scene.project.duration || 5) - 0.5);   // deliberately PAST the seeded cues
+      FM.addCaptionLayer();
+      var L = FM.scene.layers[0];
+      if (!L || !Array.isArray(L.captions)) throw new Error('addCaptionLayer did not add a caption track');
+      var seeded = L.captions.length;
+      if (!FM.textEdit.isActive()) {
+        throw new Error('adding a caption track left the text editor closed — the track lands with placeholder cues and no way in that anyone would find (the cue buttons are several taps down the Aa sheet)');
+      }
+      if (FM.textEdit.layerId() !== L.id) {
+        throw new Error('the text editor opened on layer ' + FM.textEdit.layerId() + ', not the caption track ' + L.id);
+      }
+      var idx = FM.captions.indexAt(L, FM.time);
+      if (idx !== 0) {
+        throw new Error('after adding a caption track the playhead sits on cue ' + idx + ', not the first one — the editor binds to the cue AT the playhead, so it is not editing "' + (L.captions[0] && L.captions[0].text) + '"');
+      }
+      if (L.captions.length !== seeded) {
+        throw new Error('adding a caption track produced ' + L.captions.length + ' cues but seeded ' + seeded + ' — the editor bound past the end and captions.addCue manufactured an empty one');
+      }
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.time = t0;
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

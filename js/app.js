@@ -1447,6 +1447,17 @@ window.FM = window.FM || {};
     FM.scene.selectedIds = [layer.id];
     refreshAll();
     if (FM.history) FM.history.commit();
+    /* …and open the editor on the FIRST cue, exactly as addTextLayer does for a text layer. Without
+     * this, adding a caption track dropped two placeholder cues on the timeline and left you looking
+     * at them with no way in that you would find — the cue buttons are inside the Aa sheet, several
+     * taps away. The scrub is what makes the editor bind to cue 0 rather than to wherever the
+     * playhead happened to be: text-edit's bindCue asks captions.indexAt(layer, FM.time), and if the
+     * playhead is past the seeded cues that call ADDS a third, empty one. Landing on the cue and
+     * pre-selecting it means the first keystroke replaces "First caption" — the same "add → keyboard
+     * up → type" run a text layer gives you. Mirrors the cue button in captions.js. */
+    const c0 = layer.captions[0];
+    if (c0 && FM.scrubTime) FM.scrubTime((layer.start || 0) + c0.start + Math.min(0.05, (c0.end - c0.start) / 2));
+    if (FM.textEdit) FM.textEdit.start(layer.id, { selectAll: true });
   };
 
   // The current selection set (primary = FM.scene.selectedId, used by inspector/canvas-edit).
