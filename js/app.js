@@ -11,7 +11,8 @@ window.FM = window.FM || {};
   let canvas, ctx, readoutEl, dropHint;
   let renderQueued = false;
   let layerDragIdx = null;
-  let rafId = null, lastTs = 0;
+  let rafId = null;
+  let _lastDrawnFrame = -1;   // the project frame the canvas currently shows (see tick's frame-drop)
 
   /* ---------- rendering ---------- */
   let ghostC = null;
@@ -398,6 +399,10 @@ window.FM = window.FM || {};
   FM.previewRate = 1;
   FM.setPreviewRate = function (r) {
     FM.previewRate = r || 1;
+    // The transport clock multiplies real seconds by the rate, so a mid-play change has to re-origin
+    // it at the current scene time — otherwise the new rate would be applied retroactively to the
+    // whole pass and the playhead would jump.
+    if (FM.playing && FM.reanchorClock) FM.reanchorClock();
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
@@ -787,6 +792,7 @@ window.FM = window.FM || {};
     if (!FM.playing && !noSnap) t = FM.snapFrame(t);   // momentum glide passes noSnap for a smooth ride; it snaps on settle
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
     if (!FM.playing) FM.seekVideosToTime();
+    else clockAnchor(FM.time);                         // moving the playhead mid-play re-origins the clock, or the next tick would drag it straight back
     render();
     FM.timeline.updatePlayhead();
     updateReadout();
@@ -805,50 +811,171 @@ window.FM = window.FM || {};
       videoSeekQueued = true;
       requestAnimationFrame(() => { videoSeekQueued = false; if (!FM.playing) FM.seekVideosToTime(); });
     }
+    if (FM.playing) clockAnchor(FM.time);              // same as setTime: a scrub during playback wins over the clock
     FM.requestRender();
     FM.timeline.updatePlayhead();
     updateReadout();
   };
 
   /* ---------- playback ---------- */
+
+  /* ===== the transport clock =====================================================================
+   * Playback used to advance the playhead by ACCUMULATING requestAnimationFrame deltas, which made
+   * the main thread the transport clock. Sound does not run on the main thread: a <video> element's
+   * audio and a Web Audio graph both play from their own threads and keep going while the
+   * compositor is stuck on a heavy frame. So a slow render opened a gap between the playhead and
+   * the sound, and the resync below closed that gap by ASSIGNING currentTime — a hard seek, which
+   * on a playing element tears the waveform mid-slope and drops tens of ms of samples. The seek
+   * then stalled the element, which guaranteed the next frame's gap was at least as big, which
+   * fired another seek. Measured on a 24 s clip with a 300 ms busy-loop in the render path: 63
+   * seeks in 63 frames, 45% of the timeline replaced by digital silence, 186 of 409 tone bursts
+   * never emitted, 35+ hard discontinuities. Below ~150 ms of frame time the audio was perfect;
+   * above it, roughly half of it disappeared. That cliff is the frame gap crossing the 0.15
+   * threshold, not a tuning problem.
+   *
+   * So the clock is now READ, never accumulated, from whichever monotonic clock the sound is
+   * actually played on:
+   *   • AudioContext.currentTime when a context exists — it advances on the audio rendering thread
+   *     and cannot be stalled by the main thread at all, and it is the clock audio-play.js already
+   *     schedules reversed clips against.
+   *   • performance.now() otherwise. We do NOT create a context just to read its clock: iOS caps
+   *     live AudioContexts (~4) and audio-fx.js owns THE one, so a project with no effects and no
+   *     reversed audio must not spend a slot just by pressing play (same line audioFxLive.resume()
+   *     holds). Both clocks are continuous and can be evaluated at ANY instant, which is the part
+   *     that matters — the playhead no longer only exists at frame boundaries.
+   * ============================================================================================= */
+  const CLK = { on: false, src: 'raf', t0: 0, a0: 0, w0: 0, rate: 1, wdA: 0, wdW: 0, bad: false };
+  const CLK_WD_WIN = 0.35;   // watchdog window, seconds — see clockNow
+  function wallNow() { return performance.now() / 1000; }
+  function runningCtx() {
+    const c = FM.audioCtxIfAny ? FM.audioCtxIfAny() : null;   // never CREATES one — see above
+    return (c && c.state === 'running' && typeof c.currentTime === 'number') ? c : null;
+  }
+  // Anchor the clock at scene time t: play, every loop wrap, and anything that moves the playhead
+  // or the preview rate underneath a running transport.
+  function clockAnchor(t) {
+    CLK.on = true;
+    CLK.t0 = t;
+    CLK.w0 = wallNow();
+    CLK.rate = FM.previewRate || 1;
+    const c = runningCtx();
+    CLK.src = c ? 'audio' : 'raf';
+    CLK.a0 = c ? c.currentTime : 0;
+    CLK.wdA = 0; CLK.wdW = 0; CLK.bad = false;
+    _lastDrawnFrame = -1;
+  }
+  // Move to the wall clock WITHOUT a jump — whatever the audio clock produced so far is kept — and
+  // latch the context as unusable for the rest of this pass. Without the latch, clockAdopt below
+  // takes the same dead context straight back on the next frame and the transport sawtooths between
+  // the two clocks, advancing a few ms per watchdog cycle: measured, with a deliberately frozen
+  // context, at 0.335 s of scene time in 1.6 s of playback. A fresh anchor (play, seek, loop wrap)
+  // is what re-opens the question.
+  function clockDemote(elapsed) {
+    CLK.t0 = CLK.t0 + elapsed * CLK.rate;
+    CLK.w0 = wallNow();
+    CLK.src = 'raf';
+    CLK.bad = true;
+  }
+  // A context that appears mid-play (an audio effect added, a reversed clip started) is adopted
+  // at the CURRENT scene time, so upgrading the clock never shifts the playhead.
+  function clockAdopt() {
+    if (!CLK.on || CLK.src === 'audio' || CLK.bad) return;
+    const c = runningCtx(); if (!c) return;
+    CLK.t0 = FM.clockNow(); CLK.a0 = c.currentTime; CLK.w0 = wallNow(); CLK.src = 'audio';
+  }
+  // Scene time NOW — continuous, answered at the moment of the call rather than once per frame.
+  FM.clockNow = function () {
+    if (!CLK.on) return FM.time;
+    const wall = wallNow() - CLK.w0;
+    if (CLK.src === 'audio') {
+      const c = runningCtx();
+      if (c) {
+        const a = c.currentTime - CLK.a0;
+        // An interrupted context stops advancing (iOS phone call, a route change, a policy
+        // suspend). Freezing the transport because the SPEAKER stopped would be worse than the bug
+        // this replaces, so demote and carry on from exactly where the audio clock left off. The
+        // comparison is against a TRAILING window, not against the whole pass: a stall two minutes
+        // in has to be caught in a fraction of a second, not after it has swamped a two-minute
+        // average. An audio clock that is alive tracks the wall clock to within crystal drift, so a
+        // window that saw less than a quarter of the elapsed time is unambiguously stopped.
+        if (wall - CLK.wdW > CLK_WD_WIN) {
+          if (a - CLK.wdA < (wall - CLK.wdW) * 0.25) clockDemote(a);
+          else { CLK.wdA = a; CLK.wdW = wall; return CLK.t0 + a * CLK.rate; }
+        } else {
+          return CLK.t0 + a * CLK.rate;
+        }
+      } else {
+        clockDemote(wall);   // context closed, or never actually ran
+      }
+    }
+    return CLK.t0 + (wallNow() - CLK.w0) * CLK.rate;
+  };
+  // Which clock the transport is on right now: 'audio', 'raf', or 'stopped'. Exposed for tests.
+  FM.clockSource = function () { return CLK.on ? CLK.src : 'stopped'; };
+  // Re-origin the running clock at the scene time it currently reads (setPreviewRate, which is
+  // declared above this block, and anything else that changes the rate underneath playback).
+  FM.reanchorClock = function () { if (CLK.on) clockAnchor(FM.clockNow()); };
+
+  /* ===== keeping a free-running <video> element with the transport ===============================
+   * A forward clip plays its own element audio, so the element and the transport are two clocks
+   * that have to be held together. The old rule was "more than 150 ms apart → assign currentTime".
+   * A hard seek is the one correction a listener can always hear, so it is now the LAST resort:
+   *
+   *   SYNC_DEAD 0.045 s  do nothing below this. An element's currentTime is quantised to its
+   *     decoded frame — up to 41.7 ms at 24 fps — so a tighter band would chase quantisation noise
+   *     and modulate the rate forever. It also sits under the ~100 ms at which A/V slip is noticed.
+   *   SYNC_TRIM 0.10 / SYNC_TAU 1 s  the correction is a playbackRate trim of err/SYNC_TAU capped
+   *     at ±10%: the element is asked to run slightly fast or slow and pull itself level over about
+   *     a second. Nothing is cut, so there is nothing to hear but a brief, slight pitch shift.
+   *   SYNC_HARD 0.35 s  above this a nudge is not a correction, it is a promise — at ±10% it needs
+   *     3.5 s to close, and the picture would be visibly out of step for all of it. An error that
+   *     large is not drift anyway (the element stalled on a decode, the playhead was moved, the
+   *     clip was re-entered), so seek — but no more often than
+   *   SEEK_MIN_GAP 400 ms, because the seek itself stalls the element for tens of ms and
+   *     back-to-back seeks are precisely the storm being replaced. A suppressed seek still gets the
+   *     full ±10% trim, so the element is always being pulled the right way.
+   * ============================================================================================= */
+  const SYNC_DEAD = 0.045, SYNC_TAU = 1.0, SYNC_TRIM = 0.10, SYNC_HARD = 0.35, SEEK_MIN_GAP = 400;
+  FM.syncTuning = { dead: SYNC_DEAD, tau: SYNC_TAU, trim: SYNC_TRIM, hard: SYNC_HARD, seekGapMs: SEEK_MIN_GAP };
+  // The whole decision, as a pure function, so it can be tested without a media element:
+  //   err        = local - element.currentTime  (positive → the element is BEHIND the playhead)
+  //   base       = the rate the clip should play at (speed × previewRate)
+  //   sinceSeek  = ms since this element was last hard-seeked (Infinity if never)
+  FM.mediaSyncPlan = function (err, base, sinceSeek) {
+    const a = Math.abs(err);
+    if (a > SYNC_HARD && !(sinceSeek < SEEK_MIN_GAP)) return { action: 'seek', rate: base };
+    if (a > SYNC_DEAD) {
+      const trim = Math.max(-SYNC_TRIM, Math.min(SYNC_TRIM, err / SYNC_TAU));
+      return { action: 'trim', rate: Math.min(16, Math.max(0.0625, base * (1 + trim))) };
+    }
+    return { action: 'hold', rate: base };
+  };
+  // Playback instrumentation — what the picture gave up so the sound could keep going.
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0 };
+
   // Jump the playhead to t and resync video/audio (used by loop + loop-region wrap).
   function wrapTo(t) {
     FM.time = t;
+    const now = performance.now();
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id); if (!m) return;
       const local = FM.layerLocalTime(layer, t);
-      if (!layer.reversed && local != null) { try { m.el.currentTime = local; } catch (e) {} }
+      if (!layer.reversed && local != null) { try { m.el.currentTime = local; m._syncAt = now; } catch (e) {} }
     });
+    clockAnchor(t);                            // the wrap is a real discontinuity — re-origin the clock…
     if (FM.audioPlay) FM.audioPlay.start();
+    clockAdopt();                              // …and adopt the context if that call just created one
     render(); FM.timeline.updatePlayhead(); updateReadout();
   }
   // Is there an active loop in/out region?
   FM.hasLoopRegion = function () { const P = FM.scene.project; return P.loopIn != null && P.loopOut != null && P.loopOut > P.loopIn + 0.01; };
 
-  function tick(ts) {
-    if (!FM.playing) return;
-    if (!lastTs) lastTs = ts;
-    const dt = (ts - lastTs) / 1000;
-    lastTs = ts;
-    let nt = FM.time + dt * (FM.previewRate || 1);
-    // loop-region wrap (takes priority over end-of-timeline when looping). Guard the wrap TARGET:
-    // a stale loopIn at/after the end would re-fire this branch every frame with no progress (hang).
-    if (FM.loop && FM.hasLoopRegion() && nt >= FM.scene.project.loopOut && FM.scene.project.loopIn < FM.scene.project.duration) {
-      wrapTo(FM.scene.project.loopIn); rafId = requestAnimationFrame(tick); return;
-    }
-    if (nt >= FM.scene.project.duration) {
-      if (FM.loop && FM.scene.project.duration > 0) {   // an empty timeline (duration 0) must fall through to pause, else the wrap spins forever at 100% CPU
-        wrapTo(FM.hasLoopRegion() ? FM.scene.project.loopIn : 0);
-        rafId = requestAnimationFrame(tick);
-        return;
-      }
-      FM.time = FM.scene.project.duration;
-      render(); FM.timeline.updatePlayhead(); updateReadout();
-      FM.pause();
-      return;
-    }
-    FM.time = nt;
+  // Reconcile every media element with the playhead. Runs BEFORE the render in tick, so an
+  // overrunning frame delays the picture and never the sound.
+  function syncMediaToClock() {
+    FM.playbackStats.syncs++;
+    const now = performance.now();
     // Reversed clips with a frame cache render from it (smooth). Without a cache, fall
     // back to per-frame seeking (works, just choppy).
     FM.scene.layers.forEach(layer => {
@@ -867,10 +994,15 @@ window.FM = window.FM || {};
         const local = FM.layerLocalTime(layer, FM.time);
         if (local == null || layer.visible === false) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
         try {
-          if (m.el.paused) { m.el.currentTime = local; m.el.play().catch(() => {}); }              // re-entered the window → resume
-          else if (Math.abs((m.el.currentTime || 0) - local) > 0.15) { m.el.currentTime = local; } // resync drift (speed≠1)
-          // speed RAMP: follow the keyframed curve live (drift-resync above catches any residue)
-          if (FM.isAnimated(layer.speed)) m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
+          if (m.el.paused) { m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {}); }   // re-entered the window → resume
+          else {
+            // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
+            const base = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
+            const plan = FM.mediaSyncPlan(local - (m.el.currentTime || 0), base, m._syncAt == null ? Infinity : now - m._syncAt);
+            if (plan.action === 'seek') { m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++; }
+            else if (plan.action === 'trim') FM.playbackStats.trims++;
+            if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4) m.el.playbackRate = plan.rate;
+          }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
           const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);   // keyframed volume animates on forward clips
@@ -882,10 +1014,46 @@ window.FM = window.FM || {};
         } catch (e) {}
       }
     });
+  }
+
+  function tick() {
+    if (!FM.playing) return;
+    const P = FM.scene.project;
+    clockAdopt();                 // free unless a context appeared since the last frame
+    let nt = FM.clockNow();       // READ the clock; never accumulate into it
+    // loop-region wrap (takes priority over end-of-timeline when looping). Guard the wrap TARGET:
+    // a stale loopIn at/after the end would re-fire this branch every frame with no progress (hang).
+    if (FM.loop && FM.hasLoopRegion() && nt >= P.loopOut && P.loopIn < P.duration) {
+      wrapTo(P.loopIn); rafId = requestAnimationFrame(tick); return;
+    }
+    if (nt >= P.duration) {
+      if (FM.loop && P.duration > 0) {   // an empty timeline (duration 0) must fall through to pause, else the wrap spins forever at 100% CPU
+        wrapTo(FM.hasLoopRegion() ? P.loopIn : 0);
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      FM.time = P.duration;
+      render(); FM.timeline.updatePlayhead(); updateReadout();
+      FM.pause();
+      return;
+    }
+    FM.time = nt;
+    syncMediaToClock();                                   // sound first…
     if (FM.audioFxLive) FM.audioFxLive.applyAt(FM.time);   // keyframed audio-effect params follow the playhead
-    const _t0 = performance.now();
-    render();
-    notePlaybackCost(performance.now() - _t0);   // measures the RENDER, not the rAF gap — that's the part we can actually control
+    // …picture second, and best-effort. Draw at most one canvas frame per PROJECT frame: whatever
+    // the clock has already moved past is simply never drawn. Dropping frames is the correct
+    // response to a comp that costs more than its frame budget — the alternative is to slow the
+    // clock down to whatever the compositor can manage, which is the thing that used to shred the
+    // audio. It also stops repainting an identical frame twice on a 60 Hz screen showing 30 fps.
+    const fno = Math.floor(FM.time * (P.fps || 30) + 1e-6);
+    if (fno !== _lastDrawnFrame) {
+      if (_lastDrawnFrame >= 0 && fno > _lastDrawnFrame + 1) FM.playbackStats.drops += fno - _lastDrawnFrame - 1;
+      _lastDrawnFrame = fno;
+      FM.playbackStats.renders++;
+      const _t0 = performance.now();
+      render();
+      notePlaybackCost(performance.now() - _t0);   // measures the RENDER, not the rAF gap — that's the part we can actually control
+    }
     FM.timeline.updatePlayhead();
     updateReadout();
     rafId = requestAnimationFrame(tick);
@@ -896,7 +1064,7 @@ window.FM = window.FM || {};
     if (FM.timeline && FM.timeline.stopMomentum) FM.timeline.stopMomentum();   // don't fight a timeline glide
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
-    lastTs = 0;
+    FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0 };
     _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
@@ -909,14 +1077,19 @@ window.FM = window.FM || {};
       if (local == null) { try { m.el.pause(); } catch (e) {} return; }
       // Forward clips play natively; reversed clips are drawn from the frame cache by tick.
       if (!layer.reversed) {
-        try { m.el.currentTime = local; } catch (e) {}
+        try { m.el.currentTime = local; m._syncAt = performance.now(); } catch (e) {}
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
         m.el.volume = Math.max(0, Math.min(1, FM.layerVolume(layer, FM.time)));
         m.el.play().catch(() => {});
       }
     });
+    // Start the clock here, alongside the audio it has to agree with: audioPlay.start() anchors
+    // reversed buffers to audioCtx.currentTime, so both take their origin from the same reading.
+    // If that call is what CREATED the context, adopt it immediately after, at the same scene time.
+    clockAnchor(FM.time);
     if (FM.audioPlay) FM.audioPlay.start();   // reversed clips: play synthesized reversed audio
+    clockAdopt();
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';   // pause icon
     rafId = requestAnimationFrame(tick);
   };
@@ -935,6 +1108,7 @@ window.FM = window.FM || {};
 
   FM.pause = function () {
     FM.playing = false;
+    CLK.on = false;                                             // the transport clock stops with the transport
     if (rafId) cancelAnimationFrame(rafId);
     FM.time = FM.snapFrame ? FM.snapFrame(FM.time) : FM.time;   // land ON a frame, never between two
     if (FM.audioPlay) FM.audioPlay.stop();

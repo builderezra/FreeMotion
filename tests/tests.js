@@ -6606,6 +6606,321 @@
     } finally { fx.restore(); }
   });
 
+  /* ---------------- the transport clock, and audio that survives a slow comp ----------------
+   * Ezra: "the sound has lag issues too. In alight motion no matter how laggy the video is, the
+   * audio NEVER lags." Measured with an AudioWorklet tap on the real graph, a 24 s clip carrying a
+   * known 440 Hz carrier plus a 1320 Hz burst every 50 ms, and a busy-loop wrapped around
+   * FM.renderScene to stand in for a heavy comp:
+   *
+   *   frame time   seeks   silence      clicks   bursts heard
+   *   145 ms        0        0 ms         0        401/404      (fine)
+   *   185 ms      109/109  9403 ms       83        248/411      (half the audio gone)
+   *   300 ms       63/63   9960 ms       35        223/409
+   *
+   * A step function, not a slope, with the cliff exactly where the frame gap crosses the 150 ms
+   * drift threshold that used to hard-seek the <video> element. The seek stalls the element, which
+   * guarantees the next frame's drift is at least a frame gap, which fires the next seek: between
+   * consecutive seeks the element advanced 0.309 s across 13.114 s of wall clock. So the picture
+   * was not merely late — the sound was being shredded, ~2 clicks a second with 65 ms holes.
+   *
+   * The tests below hold the two halves of the fix: the playhead is READ from a clock the main
+   * thread cannot stall, and the element is pulled into line by a playbackRate trim instead of a
+   * seek. They run real playback against a fake free-running element, because reading the code is
+   * exactly what missed this in the first place. */
+
+  // An element that plays on its OWN clock, like a real <video>: nothing the main thread does slows
+  // it down, and a seek costs it a stall (measured: a real element advanced 2.4% of real time
+  // between back-to-back seeks; 30 ms here is deliberately kinder than that).
+  function freeRunEl(dur) {
+    var e = { paused: true, muted: false, volume: 1, readyState: 4, duration: dur, seeks: 0,
+              _pos: 0, _at: performance.now(), _rate: 1, _stall: 0 };
+    function advance() {
+      var now = performance.now();
+      if (!e.paused) {
+        var from = Math.max(e._at, e._stall);
+        if (now > from) e._pos = Math.min(e.duration, e._pos + (now - from) / 1000 * e._rate);
+      }
+      e._at = now;
+    }
+    Object.defineProperty(e, 'currentTime', {
+      get: function () { advance(); return e._pos; },
+      set: function (v) { advance(); e._pos = v; e.seeks++; e._stall = performance.now() + 30; }
+    });
+    Object.defineProperty(e, 'playbackRate', {
+      get: function () { return e._rate; },
+      set: function (v) { advance(); e._rate = v; }
+    });
+    e.play = function () { advance(); e.paused = false; return Promise.resolve(); };
+    e.pause = function () { advance(); e.paused = true; };
+    return e;
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function transportRig(opts) {
+    opts = opts || {};
+    var saved = {
+      scene: FM.scene, time: FM.time, loop: FM.loop, rate: FM.previewRate,
+      renderScene: FM.renderScene, ctxIfAny: FM.audioCtxIfAny, audioCtx: FM.audioCtx,
+      commit: FM.history && FM.history.commit, save: FM.storage && FM.storage.save,
+      autosave: FM.storage && FM.storage.autosave, dirty: FM.storage && FM.storage.markDirty
+    };
+    if (FM.playing && FM.pause) FM.pause();
+    if (FM.history) FM.history.commit = function () {};
+    if (FM.storage) { FM.storage.save = function () {}; FM.storage.autosave = function () {}; FM.storage.markDirty = function () {}; }
+    var dur = opts.duration || 60;
+    // opts.silent = a project with no sound in it at all (a shape, not a clip). NOT an empty
+    // timeline: the app recomputes an empty project's duration to 0 and playback then correctly
+    // stops on the first frame, which would make every assertion below vacuous.
+    var L = opts.silent
+      ? FM.makeLayer('shape', { shape: 'rect', name: 'box', start: 0, duration: dur, x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00' })
+      : FM.makeLayer('video', { name: 'tone', start: 0, duration: dur, trimStart: 0, speed: 1, volume: 1, x: 160, y: 120 });
+    FM.scene = scene([L], {
+      project: { width: 320, height: 240, fps: 30, duration: dur, background: '#000000', markers: [], loopIn: null, loopOut: null }
+    });
+    FM.time = 0; FM.previewRate = 1; FM.loop = !!opts.loop;
+    var el = freeRunEl(dur);
+    if (!opts.silent) FM.media.set(L.id, { kind: 'video', el: el, width: 320, height: 240, duration: dur });
+    // The comp's cost, injected exactly where a real one is paid — inside tick()'s call stack.
+    FM.renderScene = function () { var t = performance.now(); while (performance.now() - t < (opts.jankMs || 0)) { /* burn */ } };
+    var madeCtx = 0, fake = null;
+    FM.audioCtx = function () { madeCtx++; return null; };   // pressing play must never reach for one
+    FM.audioCtxIfAny = function () { return fake; };
+    return {
+      el: el, layer: L,
+      madeContexts: function () { return madeCtx; },
+      // A context whose clock runs at `ratio` × real time. Nothing else in the app reads it.
+      audioClock: function (ratio) {
+        var t0 = performance.now();
+        fake = { state: 'running', get currentTime() { return 100 + (performance.now() - t0) / 1000 * this._r; }, _r: ratio, _t0: t0 };
+        return fake;
+      },
+      freezeAudioClock: function () { var v = fake.currentTime; Object.defineProperty(fake, 'currentTime', { get: function () { return v; }, configurable: true }); },
+      noAudioClock: function () { fake = null; },
+      restore: function () {
+        if (FM.playing && FM.pause) FM.pause();
+        FM.media.remove(L.id);
+        FM.renderScene = saved.renderScene; FM.audioCtxIfAny = saved.ctxIfAny; FM.audioCtx = saved.audioCtx;
+        FM.scene = saved.scene; FM.time = saved.time; FM.loop = saved.loop; FM.previewRate = saved.rate;
+        if (FM.history && saved.commit) FM.history.commit = saved.commit;
+        if (FM.storage) { if (saved.save) FM.storage.save = saved.save; if (saved.autosave) FM.storage.autosave = saved.autosave; if (saved.dirty) FM.storage.markDirty = saved.dirty; }
+        try { FM.refreshAll(); } catch (e) {}
+      }
+    };
+  }
+
+  test('drift resync: the correction is a rate nudge, and a hard seek is the last resort', { item: 'audio-clock' }, function () {
+    if (typeof FM.mediaSyncPlan !== 'function') throw new Error('FM.mediaSyncPlan is missing — there is no resync policy to test');
+    var K = FM.syncTuning, P = FM.mediaSyncPlan;
+    // Inside the deadband nothing is touched at all.
+    var hold = P(K.dead * 0.5, 1, Infinity);
+    if (hold.action !== 'hold' || hold.rate !== 1) throw new Error('a ' + (K.dead * 500) + ' ms error should be left alone, got ' + JSON.stringify(hold));
+    // The exact error that used to fire a seek, and the thing Ezra could hear.
+    var was = P(0.16, 1, Infinity);
+    if (was.action !== 'trim') throw new Error('a 160 ms drift still ' + was.action + 's the element — that is the click this fix exists to remove');
+    // Sign: an element BEHIND the playhead must be asked to run FASTER.
+    if (!(P(0.16, 1, Infinity).rate > 1)) throw new Error('an element running behind was not sped up');
+    if (!(P(-0.16, 1, Infinity).rate < 1)) throw new Error('an element running ahead was not slowed down');
+    // …but never by more than the cap, at any base rate.
+    [0.5, 1, 2].forEach(function (base) {
+      [0.05, 0.2, 0.34, -0.34].forEach(function (err) {
+        var r = P(err, base, Infinity).rate;
+        if (Math.abs(r / base - 1) > K.trim + 1e-9) throw new Error('a ' + err + ' s error at base ' + base + ' asked for rate ' + r + ' — ' + Math.round(Math.abs(r / base - 1) * 100) + '% off, over the ' + Math.round(K.trim * 100) + '% cap');
+      });
+    });
+    // Past the point a nudge could recover, seek — but not twice in a row.
+    if (P(K.hard + 0.1, 1, Infinity).action !== 'seek') throw new Error('a ' + (K.hard + 0.1) + ' s error was not seeked; a nudge can never close it');
+    if (P(K.hard + 0.1, 1, K.seekGapMs * 0.25).action !== 'trim') throw new Error('a second seek fired ' + (K.seekGapMs * 0.25) + ' ms after the last one — that is the storm this replaces');
+    if (P(K.hard + 0.1, 1, K.seekGapMs * 2).action !== 'seek') throw new Error('the rate limit never lets go: no seek even ' + (K.seekGapMs * 2) + ' ms later');
+    // The thresholds have to make sense against each other and against the medium.
+    if (!(K.dead > 1 / 24)) throw new Error('the deadband (' + K.dead + ' s) is inside one media frame at 24 fps — it will chase currentTime quantisation forever');
+    if (!(K.dead < 0.1)) throw new Error('the deadband (' + K.dead + ' s) is past the ~100 ms where A/V slip is visible');
+    if (!(K.hard / K.trim <= 4)) throw new Error('the hard threshold (' + K.hard + ' s) needs ' + (K.hard / K.trim).toFixed(1) + ' s to nudge away — too long to sit out of sync');
+  });
+
+  test('a comp that costs 200 ms a frame drops frames instead of seeking the audio', { item: 'audio-clock' }, async function () {
+    var rig = transportRig({ jankMs: 200 });
+    try {
+      FM.play();
+      // Measured from AFTER play(), because play() itself pays one render — with a 200 ms comp that
+      // is 200 ms of startup, and charging it to the clock would be measuring the wrong thing.
+      var m0 = FM.clockNow(), t0 = performance.now();
+      await sleep(1500);
+      var stats = JSON.parse(JSON.stringify(FM.playbackStats));
+      var clockErr = Math.abs((FM.clockNow() - m0) - (performance.now() - t0) / 1000);
+      // Against clockNow(), not FM.time: FM.time is a per-frame SNAPSHOT, so between two 200 ms
+      // frames it is legitimately a third of a second stale, and comparing the free-running element
+      // to it measures that staleness rather than any drift. (First draft of this test did exactly
+      // that and failed on the unmutated build at 0.371 s.)
+      var elErr = Math.abs(rig.el.currentTime - FM.clockNow());
+      var elSeeks = rig.el.seeks;
+      FM.pause();
+      // CONTROL, both ways. Too few renders and playback never happened; too many and the jank was
+      // never applied, so every assertion below would pass on a machine that was never slow.
+      if (stats.renders < 3) throw new Error('only ' + stats.renders + ' renders in 1.5 s — playback did not run, so nothing here is under test');
+      if (stats.renders > 15) throw new Error(stats.renders + ' renders in 1.5 s — the 200 ms-per-frame comp was not actually applied, so this test is measuring an idle machine');
+      // The fix.
+      if (stats.seeks !== 0) throw new Error(stats.seeks + ' hard seeks in 1.5 s of slow rendering — every one of those is an audible click and a hole in the sound');
+      if (elSeeks > 1) throw new Error('the element was seeked ' + elSeeks + ' times (one at play start is expected)');
+      if (stats.drops < 1) throw new Error('no frames were dropped — the picture is keeping up by holding the clock back, which is what shredded the audio');
+      if (clockErr > 0.08) throw new Error('the transport lost ' + clockErr.toFixed(3) + ' s against the wall clock while the compositor was busy');
+      if (elErr > FM.syncTuning.hard) throw new Error('the element drifted ' + elErr.toFixed(3) + ' s from the playhead and was never pulled back');
+    } finally { rig.restore(); }
+  });
+
+  test('the canvas is painted once per project frame, not once per screen refresh', { item: 'audio-clock' }, async function () {
+    // The other half of "the picture is best-effort": on a 60 Hz screen a 30 fps project used to be
+    // composited twice per frame, and the second paint is byte-identical. Cheap frames matter — the
+    // seek storm only began once a frame cost more than 150 ms, so halving the work is also raising
+    // the floor at which the audio is at risk at all.
+    var rig = transportRig({ jankMs: 0 });
+    try {
+      var frames = 0, counting = true;
+      (function step() { if (!counting) return; frames++; requestAnimationFrame(step); })();
+      FM.play();
+      await sleep(1000);
+      var renders = FM.playbackStats.renders, raf = frames;
+      counting = false;
+      FM.pause();
+      if (raf < 45) throw new Error('this environment only offered ' + raf + ' animation frames in a second — it cannot tell a per-frame paint from a per-refresh one, so this test is asserting nothing');
+      if (renders > raf * 0.75) throw new Error('painted ' + renders + ' times against ' + raf + ' animation frames for a 30 fps project — the extra paints are identical frames');
+      if (renders < 22) throw new Error('only ' + renders + ' paints in a second for a 30 fps project — the picture is being starved, not merely de-duplicated');
+    } finally { rig.restore(); }
+  });
+
+  test('the playhead is derived from the audio clock, not from the frame loop', { item: 'audio-clock' }, async function () {
+    var rig = transportRig({ jankMs: 0 });
+    try {
+      rig.audioClock(0.5);          // a context whose clock deliberately runs at half real time
+      FM.play();
+      if (FM.clockSource() !== 'audio') throw new Error('with a running AudioContext the transport is still on ' + FM.clockSource() + ' — the playhead is not taking the audio clock');
+      var t0 = performance.now();
+      await sleep(900);
+      // FM.time, not clockNow(): the question is what the RENDER LOOP actually wrote to the
+      // playhead, not merely what the clock function would have said if asked.
+      var adv = FM.time, wall = (performance.now() - t0) / 1000;
+      FM.pause();
+      // A playhead driven by rAF/wall time advances ~1 s here. One derived from the audio clock
+      // advances ~0.5 s, because that is what the sound did. Nothing else can tell them apart.
+      if (Math.abs(adv / wall - 0.5) > 0.08) throw new Error('scene time advanced ' + adv.toFixed(3) + ' s while the audio clock advanced ' + (wall * 0.5).toFixed(3) + ' s and the wall clock ' + wall.toFixed(3) + ' s — the transport is following the wrong one');
+    } finally { rig.restore(); }
+  });
+
+  test('a context that appears mid-play is picked up without moving the playhead', { item: 'audio-clock' }, async function () {
+    // The common project has no AudioContext when play is pressed and gets one the moment an audio
+    // effect is added or a reversed clip starts. The transport has to change clocks underneath
+    // itself without the playhead so much as twitching.
+    var rig = transportRig({ jankMs: 0 });
+    try {
+      rig.noAudioClock();
+      FM.play();
+      if (FM.clockSource() !== 'raf') throw new Error('started on ' + FM.clockSource() + ' with no context at all');
+      await sleep(350);
+      var before = FM.clockNow(), t0 = performance.now();
+      rig.audioClock(1);
+      await sleep(60);
+      if (FM.clockSource() !== 'audio') throw new Error('a running context appeared and the transport stayed on ' + FM.clockSource() + ' — it will never use the audio clock on the projects that matter');
+      var atSwap = FM.clockNow() - before, swapWall = (performance.now() - t0) / 1000;
+      if (Math.abs(atSwap - swapWall) > 0.05) throw new Error('adopting the audio clock moved the playhead by ' + (atSwap - swapWall).toFixed(3) + ' s');
+      await sleep(500);
+      var adv = FM.clockNow() - before, wall = (performance.now() - t0) / 1000;
+      FM.pause();
+      if (Math.abs(adv - wall) > 0.06) throw new Error('after the swap the playhead advanced ' + adv.toFixed(3) + ' s in ' + wall.toFixed(3) + ' s');
+    } finally { rig.restore(); }
+  });
+
+  test('an AudioContext that stops advancing must not freeze playback', { item: 'audio-clock' }, async function () {
+    // iOS suspends the context for a phone call, a route change, or its own policy. Handing the
+    // transport to the audio clock is only safe if it can be handed back.
+    var rig = transportRig({ jankMs: 0 });
+    try {
+      rig.audioClock(1);
+      FM.play();
+      await sleep(300);
+      rig.freezeAudioClock();
+      await sleep(900);
+      var src = FM.clockSource();
+      var mark = FM.clockNow(), t0 = performance.now();
+      await sleep(500);
+      var adv = FM.clockNow() - mark, wall = (performance.now() - t0) / 1000;
+      var total = FM.clockNow(), stillAudio = FM.clockSource();
+      FM.pause();
+      if (src !== 'raf') throw new Error('the transport is still on a stopped audio clock (source=' + src + ') — playback is frozen until the context comes back');
+      if (stillAudio !== 'raf') throw new Error('the transport went back to the dead context (source=' + stillAudio + ') — it will sawtooth between the two clocks');
+      if (adv < wall * 0.85) throw new Error('playback advanced only ' + adv.toFixed(3) + ' s in ' + wall.toFixed(3) + ' s after the audio clock stopped');
+      if (total > 1.75 + 0.25) throw new Error('the playhead JUMPED to ' + total.toFixed(3) + ' s over ~1.7 s of playback — falling back re-ran time that had already passed');
+    } finally { rig.restore(); }
+  });
+
+  test('with no AudioContext at all, playback runs and never creates one', { item: 'audio-clock' }, async function () {
+    // A project with no audio effects and no reversed clip must not spend one of iOS's ~4 live
+    // AudioContexts just by pressing play — the clock is worth having, not at that price.
+    var rig = transportRig({ jankMs: 0, silent: true });
+    try {
+      rig.noAudioClock();
+      FM.play();
+      if (FM.clockSource() !== 'raf') throw new Error('with no context the transport claims to be on ' + FM.clockSource());
+      var t0 = performance.now();
+      await sleep(600);
+      var adv = FM.clockNow(), wall = (performance.now() - t0) / 1000;
+      var made = rig.madeContexts(), why = 'playing=' + FM.playing + ' src=' + FM.clockSource() + ' FM.time=' + FM.time.toFixed(3) + ' dur=' + FM.scene.project.duration + ' layers=' + FM.scene.layers.length;
+      FM.pause();
+      if (Math.abs(adv - wall) > 0.06) throw new Error('a silent project played ' + adv.toFixed(3) + ' s of scene time in ' + wall.toFixed(3) + ' s [' + why + ']');
+      if (made !== 0) throw new Error('pressing play created ' + made + ' AudioContext(s) on a project with no audio');
+    } finally { rig.restore(); }
+  });
+
+  test('loop wrap re-origins the clock instead of pinning the playhead', { item: 'audio-clock' }, async function () {
+    var rig = transportRig({ jankMs: 0, duration: 0.5, loop: true });
+    try {
+      FM.play();
+      var seen = [], wraps = 0, first = -1;
+      for (var i = 0; i < 36; i++) { await sleep(50); seen.push(FM.time); }
+      for (var j = 1; j < seen.length; j++) if (seen[j] < seen[j - 1] - 1e-6) { wraps++; if (first < 0) first = j; }
+      var playing = FM.playing;
+      // The measurement that matters is what happens AFTER the first wrap. A clock that kept its
+      // pre-wrap origin wraps again on every single frame, which still shows one decrease and a
+      // healthy-looking maximum from BEFORE the wrap, while the playhead is in fact pinned at 0.
+      var after = first < 0 ? [] : seen.slice(first);
+      var top = after.length ? Math.max.apply(null, after) : 0;
+      FM.pause();
+      if (!playing) throw new Error('looping playback stopped on its own');
+      if (wraps < 2) throw new Error('the playhead wrapped ' + wraps + ' time(s) in 1.8 s of a 0.5 s loop');
+      if (top < 0.25) throw new Error('after wrapping, the playhead never got past ' + top.toFixed(3) + ' s of a 0.5 s loop — it is being wrapped every frame, i.e. the clock kept its pre-wrap origin');
+    } finally { rig.restore(); }
+  });
+
+  test('changing the preview rate mid-play does not move the playhead', { item: 'audio-clock' }, async function () {
+    var rig = transportRig({ jankMs: 0 });
+    try {
+      FM.play();
+      await sleep(500);
+      var before = FM.clockNow();
+      FM.setPreviewRate(2);
+      var after = FM.clockNow();
+      if (Math.abs(after - before) > 0.03) throw new Error('2x preview jumped the playhead from ' + before.toFixed(3) + ' to ' + after.toFixed(3) + ' — the new rate was applied to time that had already elapsed');
+      var t0 = performance.now(), m0 = FM.clockNow();
+      await sleep(500);
+      var adv = FM.clockNow() - m0, wall = (performance.now() - t0) / 1000;
+      FM.pause();
+      if (Math.abs(adv / wall - 2) > 0.2) throw new Error('at 2x the playhead advanced ' + (adv / wall).toFixed(2) + '× real time');
+    } finally { rig.restore(); }
+  });
+
+  test('moving the playhead during playback wins over the clock', { item: 'audio-clock' }, async function () {
+    var rig = transportRig({ jankMs: 0 });
+    try {
+      FM.play();
+      await sleep(300);
+      FM.setTime(5);
+      if (Math.abs(FM.clockNow() - 5) > 0.03) throw new Error('setTime(5) during playback left the clock at ' + FM.clockNow().toFixed(3) + ' — the next frame would drag the playhead straight back');
+      var t0 = performance.now();
+      await sleep(400);
+      var adv = FM.clockNow() - 5, wall = (performance.now() - t0) / 1000;
+      FM.pause();
+      if (Math.abs(adv - wall) > 0.06) throw new Error('after a mid-play seek the clock advanced ' + adv.toFixed(3) + ' s in ' + wall.toFixed(3) + ' s');
+    } finally { rig.restore(); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

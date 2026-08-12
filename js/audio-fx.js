@@ -16,6 +16,10 @@ window.FM = window.FM || {};
     if (_ac.state === 'suspended') _ac.resume();
     return _ac;
   };
+  // The context if there IS one, without creating or resuming anything. app.js's transport clock
+  // reads this: it wants the audio clock when one is already running, but pressing play on a
+  // project with no effects and no reversed audio must not spend one of iOS's ~4 context slots.
+  FM.audioCtxIfAny = function () { return _ac; };
 
   function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
   function dbToLin(db) { return Math.pow(10, db / 20); }
