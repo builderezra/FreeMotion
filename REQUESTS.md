@@ -64,7 +64,6 @@ Numbered with Ezra's own queue numbers where he gave them.
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
 - [ ] **74 — Swipe up for a full-screen Favourites browser.** Replacing the swipe-right between
       Recent and Faves. Sorting by recency, effect type and A–Z, each with an inverted order.
-- [ ] **60 — Reverse the open animation when returning to home.**
 - [ ] **59 — Copy/paste button in the effects menu, and paste ONE effect.**
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
       exist fully"*.
@@ -98,6 +97,8 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **60 — Returning to home reverses the open animation** — editor leaves right, home returns from
+      the left — v6.27
 - [x] **Easter egg: pull the home list past the top and it slams back and shakes the screen** — v6.25,
       and on PC by *scrolling* past the top with a wheel or trackpad — v6.26
 - [x] **Onion skin, Snapping and Guides are one tap away again,** on the ⛶ view bar. They had moved

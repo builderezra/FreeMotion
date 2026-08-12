@@ -175,6 +175,12 @@ window.FM = window.FM || {};
   // what open() needs when you come back before the 280ms is up.
   function endPush(hide) {
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = 0; }
+    // A pop and a push are mutually exclusive, and fm-pop-out is `animation-fill-mode: both` — so if a
+    // pop is still classed on when a push begins or ends, its FINAL frame stays applied to #app. Even
+    // at the identity matrix that is fatal: any transform on #app makes it the containing block for
+    // every position:fixed panel in the editor, which then positions against #app instead of the
+    // viewport. The suite caught exactly that, reporting "matrix(1, 0, 0, 1, 0, 0)" after a push.
+    endPop();
     const app = document.getElementById('app');
     if (root) { root.classList.remove('fm-push-out'); if (hide) root.classList.add('hidden'); }
     if (app) app.classList.remove('fm-push-in');
@@ -187,6 +193,40 @@ window.FM = window.FM || {};
     clearPress();
     closing = false;
   }
+  /* ---- the POP: the push, run backwards, on the way back to home (v6.27, queue 60) --------------
+   * Ezra: "reverse the open animation when returning to home." Opening a project has pushed since
+   * v5.x — the card leaves left, the editor arrives from the right — but coming back was instant,
+   * so the two directions did not agree and the app felt like it only had a forward gear.
+   * The CSS for this already existed and had never been wired: fm-pop-out (the editor leaving right),
+   * fm-pop-in (home returning from the left), the #add-fab viewport variant, and the reduced-motion
+   * guard. All that was missing was the JS to put the classes on and take them off again.
+   *
+   * Cleanup is belt-and-braces for the same reason endPush is: animationend does NOT fire if the tab
+   * is hidden mid-animation, and a stranded transform on #app is a permanent, unrecoverable bug — the
+   * editor would sit a screen to the right forever. So a timer always finishes the job, and endPop is
+   * safe to call twice. */
+  let popTimer = 0, hasOpened = false;
+  function endPop() {
+    if (popTimer) { clearTimeout(popTimer); popTimer = 0; }
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('fm-pop-out');
+    if (root) root.classList.remove('fm-pop-in');
+    document.body.classList.remove('fm-popping');
+  }
+  function startPop() {
+    const app = document.getElementById('app');
+    if (!app || !root) return;
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;                       // the CSS zeroes these animations anyway; don't even class up
+    endPop();                                 // a second Back before the first finished restarts cleanly
+    void app.offsetWidth;
+    app.classList.add('fm-pop-out');
+    root.classList.add('fm-pop-in');
+    document.body.classList.add('fm-popping');
+    const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fm-push-ms')) || 380;
+    popTimer = setTimeout(endPop, ms + 140);
+  }
+
   function onPushEnd(e) {
     // #home-screen is the one element that animates on BOTH paths (slide and reduced-motion fade),
     // so it — not #app — is the honest end-of-push signal. Filter hard: the card entrances and the
@@ -1526,6 +1566,13 @@ window.FM = window.FM || {};
       if (FM.projects.migrateThumbs) FM.projects.migrateThumbs().then(() => { if (root && !root.classList.contains('hidden')) render(); });
       render();
       root.classList.remove('hidden');
+      // Only RETURNING plays the pop. The first open of the session is the app arriving from the
+      // splash, and sliding home in from the left there would look like it came back from somewhere
+      // it has never been. hasOpened is its own flag rather than piggy-backing on introShown, which
+      // never flips under reduced motion and would have made this fire on boot for exactly the people
+      // who least want it.
+      if (hasOpened) startPop();
+      hasOpened = true;
       document.body.classList.add('home-open');
       // Remember which screen the user is on, so a refresh / force-update reload puts them back
       // there instead of always landing on the project browser (the boot path reads this).
