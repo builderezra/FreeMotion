@@ -2761,17 +2761,26 @@
 
       const stage = document.getElementById('stage');
       const padB = parseFloat(getComputedStyle(stage).paddingBottom) || 0;
-      const dockH = document.querySelector('.te-dock') ? document.querySelector('.te-dock').getBoundingClientRect().height : 0;
-      // The lift should clear the keyboard AND the docked field — but never by more than that (a
-      // hardcoded guess used to overshoot), and never so far that the preview is squeezed out (the
-      // clamp, which is the only reason it may legitimately come up short on a short screen).
-      const stageH = stage.getBoundingClientRect().height;
+      const dockEl = document.querySelector('.te-dock');
+      const dockH = dockEl ? dockEl.getBoundingClientRect().height : 0;
+      // The lift should stop the stage's content 12px above where the docked field ACTUALLY is —
+      // but never so far that the preview is squeezed out (the clamp, which is the only reason it
+      // may legitimately come up short on a short screen).
+      //
+      // This used to be written as `336 + dockH + 12`, i.e. keyboard + dock, which silently assumed
+      // #stage reaches the bottom of the layout viewport. True on a phone; false in a desktop window
+      // and false in this very iframe, where the stage's grid row ends ~230px above the bottom and
+      // that formula lifted the canvas 148px higher than the dock needed, leaving a dead band above
+      // it. Measuring the dock instead is the same number on the phone and the right one everywhere.
+      const sr = stage.getBoundingClientRect();
       const topPad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
-      const want = 336 + dockH + 12, room = Math.max(0, stageH - topPad - 120);
+      const want = dockEl ? Math.max(0, sr.bottom - (dockEl.getBoundingClientRect().top - 12)) : 0;
+      const room = Math.max(0, sr.height - topPad - 120);
       const expect = Math.min(want, room);
       if (Math.abs(padB - expect) > 2) {
-        throw new Error('#stage is padded ' + Math.round(padB) + 'px; a 336px keyboard plus a ' + Math.round(dockH) +
-          'px dock wants ' + Math.round(want) + 'px and the stage has room for ' + Math.round(room) + 'px, so it should be ' + Math.round(expect));
+        throw new Error('#stage is padded ' + Math.round(padB) + 'px at the bottom; its box ends at y ' +
+          Math.round(sr.bottom) + ' and the docked field starts at y ' + Math.round(dockEl ? dockEl.getBoundingClientRect().top : 0) +
+          ', so it wants ' + Math.round(want) + 'px and the stage has room for ' + Math.round(room) + 'px — expected ' + Math.round(expect));
       }
       // …and the lift must never eat the preview entirely. A picture partly behind the keyboard beats
       // no picture at all, which is what a short screen used to get.
@@ -2788,6 +2797,131 @@
       const ev = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true });
       btn.dispatchEvent(ev);
       if (!ev.defaultPrevented) throw new Error('a pointerdown on a toolbar button is not prevented — on iOS the field blurs and the keyboard closes on every tap');
+    } finally {
+      if (vv0) Object.defineProperty(window, 'visualViewport', { value: vv0, configurable: true });
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
+
+  test('viewport: FM.screen reports where the VISIBLE window sits, not where the page starts', { item: 'text-edit-device' }, function () {
+    /* QUEUE 41. iOS has two viewports and the difference is invisible on a Mac, which is how this
+     * shipped: window.innerHeight (the LAYOUT viewport, what getBoundingClientRect and position:fixed
+     * live in) does NOT shrink when the keyboard opens. Only visualViewport does — and when the
+     * document cannot scroll, which is exactly what body.text-editing{overflow:hidden} guarantees,
+     * iOS reveals the focused field by sliding the visual viewport DOWN instead, up to its maximum
+     * offsetTop of innerHeight - visualViewport.height. Every consumer has to add that offset back.
+     * The suite's own keyboard test fakes offsetTop: 0, the one value at which nothing can go wrong,
+     * which is why 116 green tests never saw a bug that was plainly visible on the phone. */
+    if (!FM.screen) throw new Error('FM.screen is missing (js/screen.js)');
+    const vv0 = window.visualViewport, LH = window.innerHeight;
+    const H = LH - 200, OT = 200;      // exactly the shape iOS reports: layout unchanged, visual slid down
+    try {
+      Object.defineProperty(window, 'visualViewport', {
+        value: { width: window.innerWidth, height: H, offsetTop: OT, offsetLeft: 0, pageTop: OT, pageLeft: 0, scale: 1, addEventListener() {}, removeEventListener() {} },
+        configurable: true
+      });
+      const m = FM.screen.metrics();
+      const eq = (got, want, what) => { if (Math.abs(got - want) > 0.5) throw new Error(what + ': got ' + got + ', want ' + want); };
+      eq(m.layoutH, LH, 'layoutH must stay the LAYOUT viewport');
+      eq(m.visualH, H, 'visualH');
+      eq(m.offsetTop, OT, 'offsetTop');
+      eq(m.top, OT, 'the top of what you can see, in layout y');
+      eq(m.bottom, OT + H, 'the bottom of what you can see, in layout y');
+      eq(m.fixedTop, OT, 'the CSS top a fixed toolbar needs to sit on the visible top edge');
+      eq(m.fixedBottom, Math.max(0, LH - H - OT), 'the CSS bottom a fixed dock needs to sit on the keyboard');
+      eq(FM.screen.toScreen(OT + 50), 50, 'layout y -> the screen row it is actually on');
+      eq(FM.screen.toLayout(50), OT + 50, 'screen row -> layout y');
+
+      // The padding a NORMAL-FLOW box needs so its content starts just under a 96px toolbar. This is
+      // the number that was never computed: nothing may be positioned as if the page top were the
+      // top of the screen.
+      const box = { top: 100, bottom: 700, height: 600 };
+      eq(FM.screen.padTop(box, 96, m), OT + 96 - 100, 'padTop clears the toolbar in VISIBLE terms');
+      eq(FM.screen.padBottom(box, 99, m), Math.max(0, box.bottom - (OT + H - 99)), 'padBottom clears the dock');
+      eq(FM.screen.padTop({ top: OT + 500, bottom: 900, height: 400 }, 96, m), 0, 'a box already below the toolbar wants no padding, never a negative one');
+
+      // iOS reports transient nonsense while the keyboard animates; an unclamped subtraction turns
+      // that into negative padding and elements that fly off screen for a frame.
+      Object.defineProperty(window, 'visualViewport', {
+        value: { width: window.innerWidth, height: H, offsetTop: LH * 2, offsetLeft: 0, scale: 1, addEventListener() {}, removeEventListener() {} },
+        configurable: true
+      });
+      const m2 = FM.screen.metrics();
+      eq(m2.offsetTop, LH - H, 'an impossible offsetTop is clamped to the room it actually has');
+      eq(m2.fixedBottom, 0, 'and the derived keyboard height never goes negative');
+    } finally {
+      if (vv0) Object.defineProperty(window, 'visualViewport', { value: vv0, configurable: true });
+    }
+  });
+
+  test('text editor: iOS slides the viewport down and the text you are typing stays on screen', { item: 'text-edit-device' }, async function () {
+    /* QUEUE 41, the user-visible half. IMG_2466: correct toolbar, a huge near-black void, a thin band,
+     * a black box on the keyboard — and the 180pt text being edited nowhere on screen. Measured on a
+     * real 390x844 iPhone profile (tests/_kbdevice.py): with visualViewport.height 464 and offsetTop
+     * 380, the canvas ran from screen y -211 to 317 and the text sat at 33-69, entirely behind a 96pt
+     * toolbar. The cause: .te-bar and .te-dock are position:fixed and were both taught about
+     * offsetTop, but #stage is a normal-flow box and only its padding-BOTTOM was recomputed — its
+     * padding-top stayed a CSS constant, so the canvas was centred between a top that never moved and
+     * a bottom that tracked the keyboard, and the picture rose by exactly offsetTop / 2. */
+    if (!FM.textEdit || !FM.screen) throw new Error('need FM.textEdit and FM.screen');
+    const frame = () => new Promise(r => setTimeout(r, 60));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const vv0 = window.visualViewport;
+    const cv = document.getElementById('preview');
+    const stage = document.getElementById('stage');
+    if (!cv || !stage) throw new Error('need #preview and #stage');
+
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'kbslide', text: 'Hello', x: P.width / 2, y: P.height / 2, fontSize: 120 });
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.textEdit.start(L.id);
+      await frame();
+
+      const LH = window.innerHeight, OT = 200, H = LH - OT;
+      Object.defineProperty(window, 'visualViewport', {
+        value: { width: window.innerWidth, height: H, offsetTop: OT, offsetLeft: 0, pageTop: OT, pageLeft: 0, scale: 1, addEventListener() {}, removeEventListener() {} },
+        configurable: true
+      });
+      window.dispatchEvent(new Event('resize'));
+      await frame();
+
+      const bar = document.querySelector('.te-bar'), dock = document.querySelector('.te-dock');
+      if (!bar || !dock) throw new Error('the editor chrome is missing');
+      const br = bar.getBoundingClientRect(), dr = dock.getBoundingClientRect();
+      const cr = cv.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      const S = y => Math.round(y - OT);        // layout y -> the row of the SCREEN it is on
+      const where = ' [screen: toolbar ' + S(br.top) + '-' + S(br.bottom) + ', canvas ' + S(cr.top) + '-' +
+        S(cr.bottom) + ', dock ' + S(dr.top) + '-' + S(dr.bottom) + ', screen is 0-' + H + ']';
+
+      // 1. The two fixed elements — these were already right, and must stay right.
+      if (Math.abs(br.top - OT) > 1) throw new Error('the toolbar is at screen y ' + S(br.top) + ', not on the visible top edge' + where);
+      if (Math.abs(dr.bottom - (OT + H)) > 1) throw new Error('the docked field ends at screen y ' + S(dr.bottom) + ', not on the keyboard line (' + H + ')' + where);
+      // 2. The canvas — the half that was wrong. None of it may hang above the toolbar or below the
+      //    dock, which is what made two thirds of the phone an empty black void.
+      if (cr.top < br.bottom - 1) throw new Error('the preview starts at screen y ' + S(cr.top) + ', above the toolbar, so the top of the picture — where the text is — is hidden behind it' + where);
+      if (cr.bottom > dr.top + 1) throw new Error('the preview runs to screen y ' + S(cr.bottom) + ', under the docked field' + where);
+      if (cr.height < 20) throw new Error('the preview collapsed to ' + Math.round(cr.height) + 'px tall' + where);
+      // 3. …and it is centred in the band the editor leaves for it: the visible gap between toolbar
+      //    and dock, intersected with #stage's own box (in a desktop window the stage's grid row can
+      //    end well above the dock, and padding neither can nor should stretch it down there).
+      const top = Math.max(br.bottom, sr.top), bot = Math.min(dr.top, sr.bottom);
+      const off = (cr.top + cr.bottom) / 2 - (top + bot) / 2;
+      if (Math.abs(off) > 12) throw new Error('the preview sits ' + Math.round(off) + 'px off the centre of the band between the toolbar and the dock — offsetTop/2 is ' + (OT / 2) + 'px' + where);
+
+      // 4. Leaving the editor hands #stage back exactly as it was found. Both paddings are inline
+      //    styles now; a forgotten padding-top strands the canvas hundreds of px down the stage for
+      //    the rest of the session, with no keyboard on screen to explain why.
+      FM.textEdit.stop();
+      await frame();
+      if (stage.style.paddingTop || stage.style.paddingBottom) {
+        throw new Error('after Done #stage still carries inline padding (top "' + stage.style.paddingTop + '", bottom "' + stage.style.paddingBottom + '")');
+      }
     } finally {
       if (vv0) Object.defineProperty(window, 'visualViewport', { value: vv0, configurable: true });
       if (FM.textEdit.isActive()) FM.textEdit.stop();

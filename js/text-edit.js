@@ -12,6 +12,7 @@ window.FM = window.FM || {};
   let active = null;                 // { layerId, prevText, cueIndex, createdCue }
   const MIN_PREVIEW = 120;           // px of canvas that must survive the keyboard lift
   let bar = null, dock = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
+  let unwatch = null;                // FM.screen.watch()'s one-call unsubscribe
   let cueNav = null;                 // the ‹ n/N › strip shown on a caption track
 
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
@@ -196,32 +197,50 @@ window.FM = window.FM || {};
 
   // ---- keyboard docking (the one thing crop-tool didn't need) --------------
   function onViewport() {
-    const vv = window.visualViewport;
+    // ONE source of truth for "where is the part of the page the user can actually see" —
+    // js/screen.js, FM.screen. (NOT FM.viewport: that name is the canvas pan/zoom in canvas-edit.js.)
+    // Every number here is in LAYOUT coordinates (what
+    // getBoundingClientRect reports and what position:fixed resolves against); m.top / m.bottom say
+    // where the VISIBLE window currently sits inside that space. On iOS with the keyboard up those
+    // are 380 and 844 on a 390x844 phone, not 0 and 844 — see the file header.
+    const m = FM.screen.metrics();
     // iOS scrolls the whole page up when the keyboard opens, dragging position:fixed elements with it.
     // Re-pin the top toolbar to the top of the VISIBLE (visual) viewport, and the dock just above the
     // keyboard, so neither gets shoved off-screen.
-    const gap = vv ? Math.max(0, (window.innerHeight - vv.height - vv.offsetTop)) : 0;
-    if (bar) bar.style.top = (vv ? vv.offsetTop : 0) + 'px';
-    if (dock) dock.style.bottom = gap + 'px';
+    if (bar) bar.style.top = m.fixedTop + 'px';
+    if (dock) dock.style.bottom = m.fixedBottom + 'px';
     // While editing, the whole layout is fixed-position and there is nothing to scroll to — but iOS
     // scrolls the DOCUMENT anyway to bring the focused field into view, which is what "pushes the
     // screen down" is. body{overflow:hidden} does not stop that on iOS; putting the scroll back does.
-    if (window.scrollY || window.scrollX) { try { window.scrollTo(0, 0); } catch (_) {} }
+    FM.screen.unscroll();
     // Lift the canvas above the keyboard + docked field so the text you're typing stays visible.
-    // MEASURE the dock instead of assuming its height — it grows with the safe-area inset and with
-    // the field's own line count, and a fixed guess either crops the canvas or leaves a dead band.
+    // MEASURE the toolbar and the dock instead of assuming their heights — both grow with the
+    // safe-area inset, and the dock also grows with the field's own line count; a fixed guess either
+    // crops the canvas or leaves a dead band.
     const stage = document.getElementById('stage');
+    const barH = bar ? Math.round(bar.getBoundingClientRect().height) : 0;
     const dockH = dock ? Math.round(dock.getBoundingClientRect().height) : 0;
     if (stage) {
+      // BOTH paddings, from the same measurement. Re-computing only the BOTTOM one was the v5.89
+      // device bug: #stage is not fixed — it is a normal-flow box in the LAYOUT viewport — so when
+      // iOS slides the visible window down by offsetTop, the stage's top edge stays where it was and
+      // the CSS constant (56px) no longer clears the toolbar. The canvas is centred between a top
+      // that did not move and a bottom that tracks the keyboard, so the picture — with the text you
+      // are typing in the middle of it — is carried up by exactly offsetTop / 2. On the measured
+      // iPhone case that is 190px, and 180pt text ended up entirely behind the toolbar.
+      const r = stage.getBoundingClientRect();
       // CLAMPED. On a tall phone the keyboard and the dock leave plenty of room, but on a short one
-      // (landscape, a small device, a split view) gap + dock can exceed the stage outright and the
-      // preview collapses to 0x0 — no picture at all while you type, which is worse than a preview
-      // partly hidden behind the keyboard. #stage is border-box, so its height does not move with the
-      // padding and this cannot feed back on itself.
-      const stageH = stage.getBoundingClientRect().height;
-      const topPad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
-      const room = Math.max(0, stageH - topPad - MIN_PREVIEW);
-      stage.style.paddingBottom = Math.min(gap + dockH + 12, room) + 'px';
+      // (landscape, a small device, a split view) the toolbar + keyboard + dock can exceed the stage
+      // outright and the preview collapses to 0x0 — no picture at all while you type, which is worse
+      // than a preview partly hidden behind the keyboard. Neither padding can feed back on itself:
+      // #stage's height is imposed by its GRID TRACK, so it does not grow with its own padding, and
+      // both numbers are measured from the BORDER box (r), which the padding never moves. Measure
+      // the canvas instead of the stage here and every pass chases the last one — a real 8.6px/pass
+      // drift, which is what tests/_kbdevice.py --mutate padtop-feedback exists to catch.
+      const topPad = Math.min(FM.screen.padTop(r, barH, m), Math.max(0, r.height - MIN_PREVIEW));
+      const room = Math.max(0, r.height - topPad - MIN_PREVIEW);
+      stage.style.paddingTop = topPad + 'px';
+      stage.style.paddingBottom = Math.min(FM.screen.padBottom(r, dockH + 12, m), room) + 'px';
     }
     positionPop();
     // The selection box is positioned from the canvas's live bounding rect, and nothing tells it the
@@ -272,10 +291,12 @@ window.FM = window.FM || {};
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
     if (dock && dock.parentElement) dock.parentElement.removeChild(dock); dock = null;
     input = null; cueNav = null;
-    const stage = document.getElementById('stage'); if (stage) stage.style.paddingBottom = '';   // drop the keyboard-lift
+    // Drop the keyboard-lift — BOTH paddings. Leaving the inline padding-top behind would strand the
+    // canvas hundreds of px down the stage for the rest of the session, long after the editor closed.
+    const stage = document.getElementById('stage');
+    if (stage) { stage.style.paddingTop = ''; stage.style.paddingBottom = ''; }
     document.body.classList.remove('text-editing');
-    window.removeEventListener('resize', onViewport);
-    if (window.visualViewport) { window.visualViewport.removeEventListener('resize', onViewport); window.visualViewport.removeEventListener('scroll', onViewport); }
+    if (unwatch) { unwatch(); unwatch = null; }
     document.removeEventListener('pointerdown', onDocDown, true);
   }
 
@@ -362,8 +383,10 @@ window.FM = window.FM || {};
       });
 
       document.body.classList.add('text-editing');
-      window.addEventListener('resize', onViewport);
-      if (window.visualViewport) { window.visualViewport.addEventListener('resize', onViewport); window.visualViewport.addEventListener('scroll', onViewport); }
+      // resize + orientationchange + visualViewport resize/scroll, and one unsubscribe that cannot
+      // miss — see FM.screen.watch.
+      if (unwatch) unwatch();
+      unwatch = FM.screen.watch(onViewport);
       document.addEventListener('pointerdown', onDocDown, true);
 
       updateBarLabels();
