@@ -10498,6 +10498,66 @@
     });
   });
 
+  /* ---- Particles must land in the same PLACE at every preview scale ----------------------------
+   *
+   * BUG-HUNT, high: "Particles ignores plateScale: emitter origin and speeds are project units used
+   * as plate pixels, so the effect is invisible in every reduced-scale preview." Every sibling motion
+   * effect — drift, orbit, wiggle, shake — takes the plate scale as a 10th argument. particles
+   * declared nine, so it used layer.transform.x/y (PROJECT coords) as PLATE coords for the emitter,
+   * and speed/gravity/size (px) as plate quantities. Its own fallback cx = W * 0.5 IS in plate units,
+   * which is what makes the mismatch a fact rather than an opinion.
+   *
+   * THE ASSERTION IS THE BOUNDING BOX, NOT THE PIXEL COUNT, and that choice is the test. A count
+   * falls eightfold on a 0.28 plate for a perfectly correct effect, so it cannot separate "fewer
+   * pixels because the plate is smaller" from "the particles went somewhere else". The box in project
+   * units can: it is the same rectangle at every scale when the effect is right, and it was the
+   * actual symptom — the system was emitted off-plate, leaving only the emitter shape behind.
+   *
+   * Measured before the fix, box at scale 1 / 0.5 / 0.28:
+   *     11,0→235,207   ·   22,0→318,238 (spilling to the frame edge)   ·   39,39→179,189 (collapsed
+   *     onto the emitter — no particles at all)
+   * and after: 11,0→235,207 · 12,0→234,206 · 11,0→236,204. */
+  test('effects: Particles lands in the same place at every preview scale', { item: 'particles-plate-scale' }, function () {
+    var PW = 320, PH = 240;
+    var boxAt = function (rs) {
+      var c = offscreen(Math.round(PW * rs), Math.round(PH * rs));
+      c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      var L = FM.makeLayer('shape', { shape: 'rect', name: 'emit', x: 160, y: 170, shapeW: 40, shapeH: 40, fill: '#3355ff' });
+      L.start = 0; L.duration = 5;
+      L.effects = [{ type: 'particles', enabled: true, params: {} }];
+      FM.renderScene(g, scene([L], { project: { width: PW, height: PH, fps: 30, duration: 5, background: null } }), 1.5);
+      var d = g.getImageData(0, 0, c.width, c.height).data;
+      var minX = c.width, maxX = -1, minY = c.height, maxY = -1;
+      for (var y = 0; y < c.height; y++) for (var x = 0; x < c.width; x++) {
+        if (d[(y * c.width + x) * 4 + 3] > 8) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < 0) return null;
+      return { w: (maxX - minX + 1) / rs, h: (maxY - minY + 1) / rs };   // PROJECT px
+    };
+    var ref = boxAt(1);
+    if (!ref) throw new Error('Particles drew nothing at scale 1 — the probe is broken, not the effect');
+    // The emitter alone is 40x40. A box that small means the particles never made it onto the plate.
+    if (ref.w < 100 || ref.h < 100) {
+      throw new Error('at scale 1 Particles covers only ' + Math.round(ref.w) + 'x' + Math.round(ref.h) +
+        ' project px — barely more than the 40x40 emitter, so there is no particle system to measure');
+    }
+    [0.5, 0.28].forEach(function (rs) {
+      var b = boxAt(rs);
+      if (!b) throw new Error('Particles drew nothing at all at plate scale ' + rs + ' — the whole system is emitted off-plate, which is exactly the reported bug');
+      var dw = Math.abs(b.w / ref.w - 1) * 100, dh = Math.abs(b.h / ref.h - 1) * 100;
+      if (dw > 15 || dh > 15) {
+        throw new Error('at plate scale ' + rs + ' Particles covers ' + Math.round(b.w) + 'x' + Math.round(b.h) +
+          ' project px against ' + Math.round(ref.w) + 'x' + Math.round(ref.h) + ' at scale 1 (' +
+          dw.toFixed(1) + '% / ' + dh.toFixed(1) + '% out) — it is reading project coordinates as plate ' +
+          'pixels, so what you see while editing is not what exports');
+      }
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

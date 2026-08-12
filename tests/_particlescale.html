@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Particles scale probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — PARTICLES SCALE probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * BUG-HUNT, high: "Particles ignores plateScale: emitter origin and speeds are project units used
+ * as plate pixels, so the effect is invisible in every reduced-scale preview." Every sibling motion
+ * effect (drift, orbit, wiggle, shake) takes the plate scale; particles declared nine parameters
+ * and the scale is the tenth.
+ *
+ * WHAT IT MEASURES, and why this shape:
+ *   The lit area is compared as a FRACTION OF THE PLATE, not as a raw pixel count — a 0.28 plate has
+ *   an eighth of the pixels of a full one, so raw counts would fall by 8x on a correct effect and
+ *   prove nothing. It also reports the bounding box in PROJECT units, because the original symptom
+ *   was not "fewer particles" but "the whole system emitted off-plate, leaving only the emitter
+ *   shape" — a coverage number alone would miss that, and the box is what shows it.
+ * ============================================================================================ */
+(function () {
+  var W = 320, H = 240;
+  function measure(rs, withFx) {
+    var c = document.createElement('canvas');
+    c.width = Math.round(W * rs); c.height = Math.round(H * rs);
+    c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'emit', x: 160, y: 170, shapeW: 40, shapeH: 40, fill: '#3355ff' });
+    L.start = 0; L.duration = 5;
+    if (withFx) L.effects = [{ type: 'particles', enabled: true, params: {} }];
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: [L] }, 1.5);
+    var d = g.getImageData(0, 0, c.width, c.height).data;
+    var lit = 0, minX = c.width, maxX = -1, minY = c.height, maxY = -1;
+    for (var y = 0; y < c.height; y++) for (var x = 0; x < c.width; x++) {
+      if (d[(y * c.width + x) * 4 + 3] > 8) {
+        lit++;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+    return {
+      cover: lit / (c.width * c.height),                       // fraction of the plate — scale-comparable
+      box: maxX < 0 ? 'empty' : (Math.round(minX / rs) + ',' + Math.round(minY / rs) + ' → ' +
+                                 Math.round(maxX / rs) + ',' + Math.round(maxY / rs)),
+      spanY: maxY < 0 ? 0 : Math.round((maxY - minY + 1) / rs),
+    };
+  }
+  var lines = ['Particles at t=1.5s. The emitter alone is a 40x40 shape, so a working particle system',
+               'must cover far more of the plate than that and reach well beyond it.', ''];
+  lines.push('scale   emitter only   with particles   ratio    bbox (project px)      vertical span');
+  var SC = [1, 0.5, 0.28];
+  var ratios = [];
+  SC.forEach(function (rs) {
+    var bare = measure(rs, false), full = measure(rs, true);
+    var ratio = bare.cover > 0 ? full.cover / bare.cover : 0;
+    ratios.push(ratio);
+    lines.push(String(rs).padEnd(8) +
+      (bare.cover * 100).toFixed(2).padStart(9) + '%' +
+      (full.cover * 100).toFixed(2).padStart(15) + '%' +
+      ratio.toFixed(2).padStart(9) + '   ' + full.box.padEnd(22) + String(full.spanY).padStart(6));
+  });
+  var mn = Math.min.apply(null, ratios), mx = Math.max.apply(null, ratios);
+  lines.push('');
+  lines.push('particle coverage relative to the bare emitter — spread across scales: ' +
+    (mn > 0 ? ((mx / mn - 1) * 100).toFixed(1) + '%' : 'INFINITE (some scale drew no particles at all)'));
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

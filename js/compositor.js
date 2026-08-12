@@ -6070,7 +6070,22 @@ window.FM = window.FM || {};
     // yields the same frame — scrubbing repeats exactly and the frame-stepping exporter matches the
     // preview. Only the alive window [lo,hi] is iterated and a hard cap thins it, so the loop is bounded
     // no matter how large rate*lifetime gets.
-    particles: function (A, B, W, H, bb, p, t, tl, layer) {
+    /* `ps` (the 10th argument) is the plate scale, and every sibling motion effect here already takes
+     * it — drift, orbit, wiggle, shake. Particles did not even declare it, so it used
+     * layer.transform.x/y (PROJECT coordinates) directly as PLATE pixel coordinates for the emitter
+     * origin, and applied speed (px/s), gravity (px/s^2) and the start/end sizes (px) as plate
+     * quantities. Its own fallback `cx = W * 0.5` IS in plate units, which is what makes the mismatch
+     * unambiguous rather than a matter of opinion.
+     *
+     * The effect of that was not "slightly off": on a phone the preview plate is around 0.3, so an
+     * emitter at (540, 1200) in a 1080x1920 comp was placed at (540, 1200) on a 324x576 plate — off
+     * the plate entirely. Measured in the running app: 6,301 project px of particles at 1:1 against
+     * 1,600 at rs 0.30, and those 1,600 were exactly the 40x40 emitter shape and no particles at all.
+     * You saw nothing while editing and then found them in the exported video.
+     *
+     * At ps === 1 every multiplication below is a no-op, so exports and 1:1 previews are unchanged. */
+    particles: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const pk = ps || 1;   // PROJECT units -> PLATE px
       B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
       if (!(tl > 0)) return;
       const pHash = function (n) {   // integer avalanche → [0,1); same n → same value, forever
@@ -6084,9 +6099,9 @@ window.FM = window.FM || {};
       const lifetime = rd('lifetime', 2, 0.2, 8);
       const dirR = rd('direction', 270, 0, 360) * Math.PI / 180;
       const spreadR = rd('spread', 40, 0, 360) * Math.PI / 180;
-      const speed = rd('speed', 320, 0, 1500);
-      const gravity = rd('gravity', 400, -2000, 2000);
-      const sizeS = rd('sizeStart', 14, 0, 200), sizeE = rd('sizeEnd', 4, 0, 200);
+      const speed = rd('speed', 320, 0, 1500) * pk;
+      const gravity = rd('gravity', 400, -2000, 2000) * pk;
+      const sizeS = rd('sizeStart', 14, 0, 200) * pk, sizeE = rd('sizeEnd', 4, 0, 200) * pk;
       const opS = rd('opacityStart', 1, 0, 1), opE = rd('opacityEnd', 0, 0, 1);
       const spinR = rd('spin', 0, -720, 720) * Math.PI / 180;
       const shape = Math.round(rd('shape', 0, 0, 4));
@@ -6108,7 +6123,7 @@ window.FM = window.FM || {};
       // A static emitter has a constant origin — evaluate it once; a keyframed one is sampled at each
       // particle's BIRTH time below so a moving emitter leaves a trail.
       const statX = typeof trx === 'number' && isFinite(trx), statY = typeof trY === 'number' && isFinite(trY);
-      const ox0 = statX ? trx : cx, oy0 = statY ? trY : cy;
+      const ox0 = statX ? trx * pk : cx, oy0 = statY ? trY * pk : cy;   /* cx/cy are already plate units */
       const needsWorld = !!(layer && (layer.parent || (layer.behaviors && layer.behaviors.length)));   // plain emitters keep the cheap path
       const TAU = 6.283185307179586;
 
@@ -6132,12 +6147,12 @@ window.FM = window.FM || {};
 
         let ox = ox0, oy = oy0;
         if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
-          const wp = emitterWorldPos(layer, start + bornT, cx, cy);
-          ox = wp.x; oy = wp.y;
+          const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk);   /* it works in PROJECT units, so hand it the fallback in those too */
+          ox = wp.x * pk; oy = wp.y * pk;
         } else if (!statX || !statY) {
           const bt = start + bornT;
-          if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v : cx; }
-          if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v : cy; }
+          if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v * pk : cx; }
+          if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v * pk : cy; }
         }
         const px = ox + vx * age, py = oy + vy * age + 0.5 * gravity * age * age;
         if (!isFinite(px) || !isFinite(py)) continue;
