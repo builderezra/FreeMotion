@@ -2348,6 +2348,75 @@
     }
   });
 
+  test('motion blur leaves the layer where it is, at every preview scale and crop', { item: 'mb-plate' }, function () {
+    // v5.75, same family as the adjustment plate (v5.10) and the camera plate (v5.36). drawMotionBlur
+    // was the one composite in compositor.js that blitted its accumulator with
+    // ctx.setTransform(1,0,0,1,0,0) — "acc already shares the target's pixel grid" — instead of
+    // baseT(ctx) like every sibling. That claim only holds when __fmRS <= 1 and __fmOX/__fmOY are 0.
+    // The accumulator is sized from plateScale(), which is CAPPED at 1, so it can never share a
+    // supersampled target's grid, and acc.__fmOX is hardcoded 0 so it can never share a cropped one.
+    // Neither is a corner case: measured in the running app, a 320x240 comp on a desktop stage was
+    // given __fmRS 1.68 with no zoom at all, and any viewport zoom >= 1.35 stamps __fmRS 1..6 with
+    // __fmOX/__fmOY = the crop origin. Measured against the unfixed build, a 320x240 comp into a
+    // 640x480 preview canvas: without blur the layer covered canvas {260,180}-{379,299}; switching
+    // Motion Blur on moved it to {129,90}-{190,149} — half size, top-left quadrant. On the zoomed
+    // crop (__fmRS 2, __fmOX 80, __fmOY 60) it landed at {129,90}-{190,149} instead of
+    // {100,60}-{219,179}. Export renders 1:1, so preview and export disagreed and the preview was the
+    // wrong one.
+    // The assertion is the INVARIANT rather than the numbers: motion blur may SMEAR the layer, but it
+    // must never move it or resize it, whatever stamps the target canvas carries.
+    const PW = 320, PH = 240;
+    function measure(st, blur) {
+      const cv = offscreen(st.w, st.h);
+      // renderScene re-derives the stamps from canvas.width / P.width unless __fmCrop is set — a crop
+      // probe has to declare itself the way app.js resizeCanvas() does, or it is silently measured 1:1.
+      cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; cv.__fmCrop = !!(st.ox || st.oy);
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'R', x: 160, y: 120, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 5 });
+      L.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 1, v: 220, e: 'linear' }] };   // 120 px/s, so it is moving at t = 0.5
+      L.motionBlur = { enabled: blur, shutter: 0.5, samples: 8 };
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: PW, height: PH, fps: 30, duration: 5, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let sx = 0, sy = 0, n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+      for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) {
+        const i = (y * cv.width + x) * 4;
+        if (d[i] > 24) { sx += x; sy += y; n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      if (!n) return null;
+      // Read the stamps BACK off the canvas (renderScene may have derived them) and report in PROJECT
+      // units, so one expectation covers every target.
+      const rs = cv.__fmRS || 1, ox = cv.__fmOX || 0, oy = cv.__fmOY || 0;
+      return { cx: (sx / n) / rs + ox, cy: (sy / n) / rs + oy, w: (x1 - x0 + 1) / rs, h: (y1 - y0 + 1) / rs };
+    }
+    const stamps = [
+      { name: 'export / thumbnail 1:1', rs: 1, ox: 0, oy: 0, w: 320, h: 240 },
+      { name: 'reduced playback tier', rs: 0.5, ox: 0, oy: 0, w: 160, h: 120 },
+      { name: 'supersampled preview', rs: 2, ox: 0, oy: 0, w: 640, h: 480 },
+      { name: 'desktop stage, small comp', rs: 1.68125, ox: 0, oy: 0, w: 538, h: 403 },   // measured live, no zoom
+      { name: 'max supersample', rs: 4, ox: 0, oy: 0, w: 1280, h: 960 },
+      { name: 'zoomed viewport crop', rs: 2, ox: 40, oy: 30, w: 320, h: 280 },            // covers project 40..200 x 30..170
+    ];
+    // The blur must actually be DOING something, or every assertion below is decorative — a
+    // drawMotionBlur that declined (no travel) hands back to the plain draw and blur-on/blur-off
+    // would be identical and green at every stamp.
+    const a = measure(stamps[0], false), b = measure(stamps[0], true);
+    if (!a || !b) throw new Error('the probe layer did not draw at 1:1 — the test scene is wrong, not the app');
+    if (!(b.w > a.w)) throw new Error('switching motion blur on changed nothing at 1:1 (' + a.w + ' → ' + b.w + ' px wide) — this test is not exercising drawMotionBlur at all');
+    stamps.forEach(st => {
+      const off = measure(st, false), on = measure(st, true);
+      if (!off || !on) throw new Error(st.name + ': nothing was drawn (__fmRS ' + st.rs + ', __fmOX ' + st.ox + ', canvas ' + st.w + 'x' + st.h + ')');
+      if (Math.abs(on.cx - off.cx) > 1.5 || Math.abs(on.cy - off.cy) > 1.5) {
+        throw new Error(st.name + ' (__fmRS ' + st.rs + ', __fmOX ' + st.ox + '): motion blur moved the layer from project (' +
+          off.cx.toFixed(1) + ',' + off.cy.toFixed(1) + ') to (' + on.cx.toFixed(1) + ',' + on.cy.toFixed(1) + ')');
+      }
+      const rw = on.w / off.w, rh = on.h / off.h;
+      if (rw < 0.9 || rw > 1.6 || rh < 0.9 || rh > 1.6) {
+        throw new Error(st.name + ' (__fmRS ' + st.rs + '): motion blur resized the layer — ' +
+          off.w.toFixed(1) + 'x' + off.h.toFixed(1) + ' → ' + on.w.toFixed(1) + 'x' + on.h.toFixed(1) + ' project px');
+      }
+    });
+  });
+
   test('home: the OPEN badge says OPEN over any thumbnail', { item: 'open-badge-ink' }, async function () {
     // The badge art was keyed out of a black backdrop, which knocked the letters out along with the
     // background — so the word was a hole wearing whatever project thumbnail sat behind it, and it
@@ -4498,6 +4567,88 @@
     }
   });
 
+
+  /* ---- Pen-mask re-entrancy (v5.75 re-sweep of BUG-HUNT.md) -------------------------------------
+     drawPenMaskLayer holds two things alive across the nested drawLayer that rasterises the layer:
+     its in-flight plate, and the mask alpha it will stencil with. A Luma Matte / Compound Blur /
+     Displacement Map / Match Grade renders its SOURCE layer from inside that nested draw and keeps
+     the source layer's `masks`, so the whole thing re-entered itself. Both buffers used to be single
+     module canvases: the inner call repainted the outer's mask AND left its finished plate in the
+     outer's workspace. Measured on this exact scene at v5.75: 28800 red px instead of 9600, plus
+     9600 px of the matte layer that should never have been on screen. */
+  function penMaskMatteScene() {
+    function mkMask(pts) {
+      return { id: 'm' + Math.random().toString(36).slice(2), enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: pts };
+    }
+    // B — the matte source. White over the whole frame, pen-masked to the TOP half. Opacity 0 so it
+    // contributes nothing to the composite itself; drawLumaMatte forces opacity 1 for the matte read.
+    var B = FM.makeLayer('shape', { name: 'B-matte', shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#ffffff' });
+    B.masks = [mkMask([[0, 0], [320, 0], [320, 120], [0, 120]])];
+    B.transform.opacity = 0;
+    // A — red over x 80..320, pen-masked to the LEFT half, cut out by B's luma.
+    var A = FM.makeLayer('shape', { name: 'A-masked', shape: 'rect', x: 200, y: 120, shapeW: 240, shapeH: 240, fill: '#ff0000' });
+    A.masks = [mkMask([[0, 0], [160, 0], [160, 240], [0, 240]])];
+    A.effects = [{ id: 'fx-lm', type: 'lumamatte', enabled: true, params: { source: B.id, channel: 0, invert: 0, black: 10, white: 200, feather: 0 } }];
+    // A's own mask ∩ A's content ∩ B's luma = x 80..160, y 0..120 — and nothing else.
+    return { A: A, B: B, s: scene([A, B]) };
+  }
+
+  test('masks: a pen-masked layer keeps its OWN mask when the matte source is masked too', { item: 'penmask-reentrancy' }, function () {
+    var sc = penMaskMatteScene();
+    var c = offscreen(320, 240), ctx = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(ctx, sc.s, 0);
+    var d = ctx.getImageData(0, 0, 320, 240).data;
+    var lit = 0, spill = 0, ghost = 0;
+    for (var y = 0; y < 240; y++) {
+      for (var x = 0; x < 320; x++) {
+        var i = (y * 320 + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2];
+        if (r > 180 && g < 70 && b < 70) {                       // the masked layer's own red
+          if (x >= 90 && x <= 150 && y >= 10 && y <= 110) lit++;  // where it BELONGS
+          if (x >= 170 && y <= 110) spill++;                      // outside its mask, inside B's
+        } else if (r > 180 && g > 180 && b > 180) ghost++;        // the matte layer's white — never composited
+      }
+    }
+    // 1. the scene renders at all (a blank frame must not pass the other two by default)
+    if (lit < 5000) throw new Error('the masked layer barely drew: only ' + lit + ' red px inside its own mask (expected ~6100) — the scene did not render, so the leak checks below prove nothing');
+    // 2. stencilled through its OWN mask, not the matte source's
+    if (spill !== 0) throw new Error(spill + ' red px right of the layer’s own mask edge — it was stencilled through the MATTE layer’s mask instead (buildMaskAlpha’s buffer was repainted by the nested render)');
+    // 3. the matte source's plate never reaches the frame
+    if (ghost !== 0) throw new Error(ghost + ' white px of the matte layer are in the frame — the nested draw left its finished plate in the outer layer’s in-flight buffer');
+  });
+
+  test('masks: every mask alpha the compositor builds is a buffer the caller owns', { item: 'penmask-reentrancy' }, function () {
+    var sc = penMaskMatteScene();
+    var calls = [];
+    var real = FM.buildMaskAlpha;
+    FM.buildMaskAlpha = function (layer, t, W, H, out) {
+      calls.push({ name: layer && layer.name, out: out, argc: arguments.length });
+      return real.apply(this, arguments);
+    };
+    try {
+      var c = offscreen(320, 240);
+      FM.renderScene(c.getContext('2d'), sc.s, 0);
+    } finally { FM.buildMaskAlpha = real; }
+
+    // This test is worthless unless the render really did nest one build inside another.
+    var forA = calls.filter(function (k) { return k.name === 'A-masked'; });
+    var forB = calls.filter(function (k) { return k.name === 'B-matte'; });
+    if (!forA.length || !forB.length) throw new Error('the nesting never happened: ' + calls.length + ' buildMaskAlpha calls, ' + forA.length + ' for the masked layer and ' + forB.length + ' for the matte source — nothing below is being exercised');
+
+    // Every caller hands in its own buffer, so a future consumer cannot re-introduce the alias by
+    // simply forgetting to copy — there is no shared result left to repaint.
+    calls.forEach(function (k) {
+      if (!k.out || typeof k.out.getContext !== 'function') throw new Error('buildMaskAlpha was called for "' + k.name + '" with no caller-owned output canvas (' + k.argc + ' args) — that result is module-shared state and a nested render will repaint it');
+    });
+    // …and nested calls must not be handed the SAME buffer.
+    if (forA[0].out === forB[0].out) throw new Error('the masked layer and its matte source were given the same mask buffer — the inner build overwrites the outer’s stencil');
+
+    // The outer layer's stencil is still ITS mask after the whole nested render finished: white in
+    // the left half it drew, empty in the right half it did not.
+    var mc = forA[0].out.getContext('2d');
+    var inside = mc.getImageData(40, 50, 1, 1).data, outside = mc.getImageData(250, 50, 1, 1).data;
+    if (inside[3] < 200) throw new Error('the masked layer’s own stencil lost its coverage (alpha ' + inside[3] + ' at 40,50) by the time the nested render returned');
+    if (outside[3] > 20) throw new Error('the masked layer’s stencil gained coverage at 250,50 (alpha ' + outside[3] + ') — that is the MATTE layer’s mask, painted over it mid-render');
+  });
 
   async function run() {
     var results = [];

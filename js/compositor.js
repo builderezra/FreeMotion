@@ -1277,39 +1277,61 @@ window.FM = window.FM || {};
     return typeof FM.buildMaskAlpha === 'function' && layer.masks && layer.masks.length &&
       layer.masks.some(function (m) { return m && m.enabled; });
   }
-  let _penMaskCv = null;
+  /* RE-ENTRANCY. drawPenMaskLayer holds TWO buffers alive across step 1's nested drawLayer: the
+   * in-flight plate, and the mask alpha it will stencil with in step 2. That nested draw re-enters
+   * this very function whenever an effect renders ANOTHER layer — drawLumaMatte (line ~2732),
+   * drawCompoundBlur, drawDisplaceEffect and drawMatchGrade all render their source layer with
+   * `Object.assign({}, mLayer, …)`, which keeps `mLayer.masks`. With one module canvas each, the
+   * inner call repainted the outer call's mask (the outer layer came out stencilled through the
+   * SOURCE layer's mask shape) and left its own finished plate in the outer call's workspace (the
+   * source layer's pixels surfaced underneath the outer composite). Measured on a 320×240 comp:
+   * 28800 red px instead of 9600, plus 9600 px of the matte layer that should not have been on
+   * screen at all.
+   * Fixed BY CONSTRUCTION, the same way _mbPool and _dspPool already are: index both buffers on
+   * recursion depth, so no two live calls can ever name the same canvas. maskAlphaAt() is the only
+   * way this file obtains a mask alpha, so a future consumer inherits the guarantee instead of
+   * having to be added to a list. */
+  const _pmPool = []; let _pmDepth = 0;
+  function pmSlot(d) {
+    if (!_pmPool[d]) _pmPool[d] = { plate: document.createElement('canvas'), mask: document.createElement('canvas') };
+    return _pmPool[d];
+  }
+  function maskAlphaAt(layer, t, W, H, d) {
+    try { return FM.buildMaskAlpha(layer, t, W, H, pmSlot(d).mask); } catch (e) { return null; }
+  }
   function drawPenMaskLayer(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
-    let maskCanvas = null;
-    try { maskCanvas = FM.buildMaskAlpha(layer, t, W, H); } catch (e) { maskCanvas = null; }
-    // No drawable coverage (all masks empty / off) → render the layer as if it had none.
-    if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: null }), t, scene); return; }
-    if (!_penMaskCv) _penMaskCv = document.createElement('canvas');
-    const off = _penMaskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
-    const octx = off.getContext('2d');
-    baseT(octx); octx.clearRect(0, 0, W, H);
-    octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
-    // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
-    const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
-    drawLayer(octx, tmp, t, scene);
-    // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
-    octx.save();
-    baseT(octx);
-    octx.globalAlpha = 1; octx.globalCompositeOperation = 'destination-in'; octx.filter = 'none';
-    try { octx.drawImage(maskCanvas, 0, 0); } catch (e) {}
-    octx.restore();
-    octx.globalCompositeOperation = 'source-over';
-    // 3) blit onto the main canvas with the layer's real opacity + blend
-    ctx.save();
-    baseT(ctx);
-    ctx.globalAlpha = opacity;
-    ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
-    ctx.filter = 'none';
-    try { ctx.drawImage(off, 0, 0); } catch (e) {}
-    ctx.restore();
+    const d = _pmDepth++;
+    try {
+      const maskCanvas = maskAlphaAt(layer, t, W, H, d);
+      // No drawable coverage (all masks empty / off) → render the layer as if it had none.
+      if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: null }), t, scene); return; }
+      const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
+      const octx = off.getContext('2d');
+      baseT(octx); octx.clearRect(0, 0, W, H);
+      octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
+      // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
+      const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(octx, tmp, t, scene);
+      // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
+      octx.save();
+      baseT(octx);
+      octx.globalAlpha = 1; octx.globalCompositeOperation = 'destination-in'; octx.filter = 'none';
+      try { octx.drawImage(maskCanvas, 0, 0); } catch (e) {}
+      octx.restore();
+      octx.globalCompositeOperation = 'source-over';
+      // 3) blit onto the main canvas with the layer's real opacity + blend
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      try { ctx.drawImage(off, 0, 0); } catch (e) {}
+      ctx.restore();
+    } finally { _pmDepth--; }
   }
 
   // Motion blur: average K sub-frame renders across the shutter window. A moving/rotating layer
@@ -1413,12 +1435,24 @@ window.FM = window.FM || {};
       }
       if (!drawn) return false;                        // every slice fell outside the clip — let the plain draw handle it
 
+      /* Composite in PROJECT units, like every other plate in this file (drawPenMaskLayer:1279,
+       * drawPixelEffect:1531, draw3DTiltLayer:3280). This used to reset the target to the identity
+       * on the claim that "acc already shares the target's pixel grid" — which it cannot, in two
+       * separate ways: acc is sized from plateScale(), CAPPED at 1, so it never matches a
+       * supersampled target (__fmRS up to 6 on a zoomed preview, and 1.68 on nothing more exotic
+       * than a small comp on a desktop stage), and acc.__fmOX is hardcoded 0 so it never matches a
+       * cropped one. Measured on a 320x240 comp into a 640x480 preview canvas: the layer sat at
+       * canvas {260,180}-{379,299} unblurred and jumped to {129,90}-{190,149} — half size, top-left
+       * quadrant — the moment Motion Blur was switched on. baseT plus an explicit project-sized
+       * destination rect is right for EVERY target by construction rather than by case: at ps === 1
+       * on an unstamped canvas (export, thumbnails, 1:1 preview) AW/AH are PW/PH and baseT is the
+       * identity, so those outputs are byte-for-byte what they were. */
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);              // acc already shares the target's pixel grid
+      baseT(ctx);
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(acc, 0, 0);
+      ctx.drawImage(acc, 0, 0, PW, PH);
       ctx.restore();
     } finally { _mbDepth--; }
     return true;
@@ -6919,7 +6953,10 @@ window.FM = window.FM || {};
     // snapshot, so the ungraded frame below shows through everywhere else. drawLayer's pen-mask branch never
     // runs for adjustments (they return early and grade via this path), so it's applied here on the snapshot.
     if (scene && typeof hasPenMask === 'function' && hasPenMask(layer)) {
-      const mc = FM.buildMaskAlpha(layer, t, W, H);
+      // Through maskAlphaAt, not FM.buildMaskAlpha directly: an adjustment layer can be graded from
+      // INSIDE a pen-masked layer's plate (a group unit, a matte source), and _pmDepth is already
+      // advanced there, so this gets its own buffer rather than the outer call's live mask.
+      const mc = maskAlphaAt(layer, t, W, H, _pmDepth);
       if (mc) {
         a.save();
         baseT(a);   // the mask is built in PROJECT pixels; the plate is in the target's device pixels

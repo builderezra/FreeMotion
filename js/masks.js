@@ -94,12 +94,18 @@ window.FM = window.FM || {};
     return kfPts(last);
   };
 
-  // Scratch canvases, reused across frames AND across layers — JS is single-threaded, so one layer's alpha
-  // is fully built and consumed by the compositor before the next layer's. Never a new W×H per mask/frame.
+  /* Scratch canvases, reused across frames AND across layers. `_tmpCv` is safe as a singleton: it is
+   * built and consumed WITHIN one buildMaskAlpha call, which never re-enters the compositor.
+   * `_bufCv` is NOT, and was the bug: the RESULT canvas is handed back live, and drawPenMaskLayer
+   * holds that reference across a nested drawLayer (its step 1). A Luma Matte / Compound Blur /
+   * Displacement Map / Match Grade renders its SOURCE layer from inside that nested draw, keeping
+   * `mLayer.masks`, so the inner build repainted `_bufCv` with the SOURCE layer's mask and the outer
+   * layer was then stencilled through it. Hence the `out` parameter below — a caller that can nest
+   * hands in a buffer IT owns, so there is no shared result to repaint. */
   let _bufCv = null, _tmpCv = null;
   function sized(cv, W, H) { if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; } return cv; }
 
-  /* buildMaskAlpha(layer, t, W, H) -> a W×H mask <canvas>: WHITE (opaque) where the layer should show,
+  /* buildMaskAlpha(layer, t, W, H, out) -> a W×H mask <canvas>: WHITE (opaque) where the layer should show,
    * transparent where hidden — the compositor uses it as a destination-in stencil on the layer's plate.
    * Returns null when there is no enabled mask, OR when no enabled mask contributes any fillable geometry
    * (both mean "render the layer normally"), so an enabled-but-still-empty mask never blanks the layer.
@@ -107,8 +113,11 @@ window.FM = window.FM || {};
    * Ordered compositing: SEED the buffer FULL WHITE iff the first enabled mask is subtract/intersect (so a
    * lone subtract/intersect still reveals something — AE-practical), else EMPTY. Then STAMP each enabled
    * mask's filled path (blurred by feather; inverted within-frame if set; at its opacity) onto the buffer
-   * by its mode (add=source-over, subtract=destination-out, intersect=destination-in). */
-  FM.buildMaskAlpha = function (layer, t, W, H) {
+   * by its mode (add=source-over, subtract=destination-out, intersect=destination-in).
+   *
+   * `out` (optional) — a canvas the CALLER owns, rendered into instead of the module scratch. Pass one
+   * whenever the result has to stay valid across anything that can re-enter the compositor. */
+  FM.buildMaskAlpha = function (layer, t, W, H, out) {
     if (!(W > 0) || !(H > 0)) return null;
     const list = layer && layer.masks;
     if (!Array.isArray(list) || !list.length) return null;
@@ -116,9 +125,12 @@ window.FM = window.FM || {};
     for (let i = 0; i < list.length; i++) { if (list[i] && list[i].enabled) enabled.push(list[i]); }
     if (!enabled.length) return null;
 
-    if (!_bufCv) _bufCv = document.createElement('canvas');
+    if (!out || typeof out.getContext !== 'function') {
+      if (!_bufCv) _bufCv = document.createElement('canvas');
+      out = _bufCv;
+    }
     if (!_tmpCv) _tmpCv = document.createElement('canvas');
-    const buf = sized(_bufCv, W, H), tmp = sized(_tmpCv, W, H);
+    const buf = sized(out, W, H), tmp = sized(_tmpCv, W, H);
     const bctx = buf.getContext('2d'), tctx = tmp.getContext('2d');
 
     bctx.setTransform(1, 0, 0, 1, 0, 0);
