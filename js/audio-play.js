@@ -121,7 +121,17 @@ window.FM = window.FM || {};
           // it completes instead of being cut off mid-ramp when source audio is shorter than the clip.
           const audibleDur = Math.min(clipDur, buf.duration);
           gain.gain.setValueAtTime(FM.fadeMul(layer, Math.max(0, into), clipDur) * vol, when);
-          if (fi > 0 && base + fi / pr > when) gain.gain.linearRampToValueAtTime(vol, base + fi / pr);
+          /* Re-anchor at the audio's REAL start when the clip begins in the future. `into` is negative
+           * there, so `base` (buffer position 0) is LATER than `when`, and a single ramp from `when` to
+           * `base + fi/pr` spans the silent gap AND the fade window as one straight line. By the time
+           * the audio actually starts at `base`, the gain has already climbed to
+           * vol * |into| / (|into| + fi) — so a fade-in begins part-way up, which is a pop.
+           * The keyframed-volume branch directly above gets this right by clamping every point with
+           * `Math.max(when, base + b/pr)`; this branch just never did, which is what makes it an
+           * oversight rather than a decision. At into >= 0, base <= when and this is a no-op. */
+          const fadeT0 = Math.max(when, base);
+          if (fadeT0 > when) gain.gain.setValueAtTime(FM.fadeMul(layer, 0, clipDur) * vol, fadeT0);
+          if (fi > 0 && base + fi / pr > fadeT0) gain.gain.linearRampToValueAtTime(vol, base + fi / pr);
           if (fo > 0) { const fs = base + (audibleDur - fo) / pr; if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + audibleDur / pr); }
         } else {
           gain.gain.value = vol;
