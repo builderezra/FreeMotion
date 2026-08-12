@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nested group opacity probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — NESTED GROUP probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * BUG-HUNT, high: "A group nested inside another group loses its own opacity/effects/blend — or
+ * gets drawn twice." collectGroupUnits claims member ids first-come-first-served, so when an outer
+ * and an inner group both need a unit, whichever appears first in scene.layers takes the shared
+ * leaves and the other unit is orphaned or drawn twice.
+ *
+ * THE MEASUREMENT IS ONE PIXEL, and that is what makes it decisive. A white leaf inside group B
+ * inside group A, both at opacity 0.5, over a black background: the centre pixel must be 255 * 0.25
+ * = 64. If only ONE 0.5 is applied it reads 128; if the leaf is composited twice it reads ~192.
+ * So the number says not just "wrong" but WHICH of the two failure modes happened.
+ * ============================================================================================ */
+(function () {
+  var W = 120, H = 90;
+  function centre(layers) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: layers }, 0);
+    var d = g.getImageData(W >> 1, H >> 1, 1, 1).data;
+    return d[0];
+  }
+  function build(outerFirst) {
+    var leaf = FM.makeLayer('shape', { shape: 'rect', name: 'leaf', x: W / 2, y: H / 2, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+    var B = FM.makeLayer('group', { name: 'B' });
+    var A = FM.makeLayer('group', { name: 'A' });
+    leaf.parent = B.id; B.parent = A.id;
+    B.transform.opacity = 0.5; A.transform.opacity = 0.5;
+    // scene order decides who claims the shared leaf first — both orders are reachable in the app
+    return outerFirst ? [A, B, leaf] : [B, A, leaf];
+  }
+  var lines = ['white leaf inside B inside A, both opacity 0.5, over black.',
+               'correct centre pixel = 255 * 0.5 * 0.5 = 64.', ''];
+  [['outer group first (what groupSelection produces)', true],
+   ['inner group first (Edit group → Add → Group)', false]].forEach(function (c) {
+    var v = centre(build(c[1]));
+    var verdict = Math.abs(v - 64) <= 2 ? 'correct'
+      : (Math.abs(v - 128) <= 6 ? 'ONLY ONE 0.5 APPLIED — the inner group is silently dropped'
+      : (v > 150 ? 'DRAWN TWICE — the leaf is composited once per unit' : 'wrong'));
+    lines.push(c[0].padEnd(48) + String(v).padStart(4) + '   ' + verdict);
+  });
+  // Control: a SINGLE group at 0.5 must read 128, or the probe itself is lying.
+  var leaf2 = FM.makeLayer('shape', { shape: 'rect', name: 'l2', x: W / 2, y: H / 2, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+  var G = FM.makeLayer('group', { name: 'G' }); leaf2.parent = G.id; G.transform.opacity = 0.5;
+  var one = centre([G, leaf2]);
+  lines.push('');
+  lines.push('control — ONE group at 0.5 (must be 128): ' + one + (Math.abs(one - 128) <= 2 ? '  ok' : '  <<< the probe is wrong, not the app'));
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

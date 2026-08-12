@@ -149,6 +149,32 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Fix:** Composite in project units like every sibling path: replace `ctx.setTransform(1, 0, 0, 1, 0, 0);` with `baseT(ctx);` and `ctx.drawImage(acc, 0, 0);` with `ctx.drawImage(acc, 0, 0, PW, PH);` (identical output at scale 1, so export/thumbnails stay byte-for-byte).
 
 ### A group nested inside another group loses its own opacity/effects/blend — or gets drawn twice
+
+> **REPRODUCED AND SHARPENED, 2026-08-13 (v6.54). Not yet fixed — and the suggested fix below will
+> break if applied naively.** Probe: `tests/_nestgroup.html`, one decisive pixel. A white leaf inside
+> group B inside group A, both at opacity 0.5, over black: correct is 255 × 0.25 = **64**. Measured on
+> today's build:
+>
+> | scene order | centre px | meaning |
+> |---|---|---|
+> | outer group first (what `groupSelection` produces) | **128** | only ONE 0.5 applied — the inner group is silently dropped |
+> | inner group first (Edit group → Add → Group) | **191** | the leaf is composited TWICE, once per unit |
+> | control: a single group at 0.5 | 128 | correct, so the probe is trustworthy |
+>
+> **THE TRAP the original fix note misses.** `buildGroupUnit` renders onto `_mgA`/`_mgB`, which are
+> MODULE-LEVEL SINGLETONS (compositor.js:8866). Recursing into `drawGroupUnit` for a nested unit —
+> exactly what the fix proposes — would have the inner call clobber the outer call's plate mid-flatten.
+> So the fix needs the depth-pooled buffer pattern this file already uses twice (`_pfPool`/`_pfDepth`
+> at :1854, `_t3Pool`/`_t3Depth` at :4642) BEFORE the recursion is added, or it will produce a
+> different, weirder bug than the one it fixes.
+>
+> Also needed: after drawing an inner unit, the outer loop must skip that unit's whole subtree —
+> `memberIds` is built by a recursive `walk`, so it already contains every descendant leaf, and they
+> would otherwise be drawn a second time by the outer loop.
+>
+> Deliberately not attempted at the tail of a twenty-release overnight run: it is the most central
+> function in the app, the export path goes through it, and it wants a fresh head plus a byte-identity
+> sweep over grouped scenes. The probe makes it a ten-minute verification once someone starts.
 `js/compositor.js:6800`  · found by `compositor-transform`
 
 - **What:** collectGroupUnits builds one unit per group that needs flattening, then claims member ids first-come-first-served. When an outer group and an inner group both need a unit, whichever appears first in scene.layers claims the shared leaf members and the other unit is either orphaned (never drawn) or drawn as a second, overlapping copy. drawGroupUnit compounds it by skipping nested group rows entirely (`if (... || L.type === 'group') continue;` at 6818) and drawing their leaves with a bare `drawLayer`, so the inner group's `_flat` proxy — the thing that carries its opacity/effects/blend/shadow — is never constructed.
