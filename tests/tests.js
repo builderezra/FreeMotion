@@ -8824,6 +8824,135 @@
     }
   });
 
+
+  /* ---- preview resolution actually reaching the WORK (v6.23 lag pass) ---------------------------
+     The adaptive playback-quality tier shrinks the preview canvas. That only buys anything if the
+     per-pixel work follows it down. A dozen draw paths used to allocate their plate at PROJECT size
+     no matter how small the target was — measured on a 1080x1920 comp, one Compound Blur cost
+     154.6 ms into a full-size target and 143.3 ms into a 0.35 one (ratio 1.08, i.e. flat), and RGB
+     Split 17.3 vs 14.3. Because the cost did not move, the ladder dropped a tier, measured no
+     payoff, undid the drop and LATCHED OFF — so a heavy comp ended up soft AND slow. On the real
+     preview canvas that was 90.7 ms/frame with 149 dropped frames in 8 s; after, 17.5 ms and 2.
+     Asserted RELATIVELY (reduced render vs full render) rather than against a fixed number, so it
+     holds whatever granularity a path happens to read at. */
+  var PLATE_CASES = ['rgbsplit', 'displacemap', 'polardisplace', 'lumamatte', 'matchgrade', 'compoundblur'];
+  function biggestReadRendering(type, PW, PH, TW, TH) {
+    var src = FM.makeLayer('shape', { name: 'plate-src', shape: 'ellipse', x: PW * 0.35, y: PH * 0.35, shapeW: PW * 0.5, shapeH: PH * 0.5, fill: '#8899ff' });
+    var sub = FM.makeLayer('shape', { name: 'plate-sub', shape: 'rect', x: PW * 0.5, y: PH * 0.5, shapeW: PW * 0.65, shapeH: PH * 0.65, fill: '#ff5522' });
+    var inst = FM.fxRegistry.makeInstance(type);
+    if (!inst) return -1;
+    if (inst.params && Object.prototype.hasOwnProperty.call(inst.params, 'source')) inst.params.source = src.id;
+    sub.effects = [inst];
+    var s = scene([sub, src], { project: { width: PW, height: PH, fps: 30, duration: 5, background: '#000000' } });
+    var c = offscreen(TW, TH);
+    var real = CanvasRenderingContext2D.prototype.getImageData, biggest = 0;
+    try {
+      CanvasRenderingContext2D.prototype.getImageData = function (x, y, w, h) {
+        if (w * h > biggest) biggest = w * h;
+        return real.apply(this, arguments);
+      };
+      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), s, 0);
+    } finally { CanvasRenderingContext2D.prototype.getImageData = real; }
+    return biggest;
+  }
+
+  test('effects: a reduced preview shrinks the effect PLATE, not just the canvas', { item: 'preview-scale' }, function () {
+    var PW = 400, PH = 400, bad = [];
+    PLATE_CASES.forEach(function (type) {
+      var full = biggestReadRendering(type, PW, PH, PW, PH);      // 1:1 — the export/thumbnail path
+      var quarter = biggestReadRendering(type, PW, PH, 100, 100);  // a 0.25 preview
+      if (full < 0) return;                                        // effect not in this build
+      if (full === 0) { bad.push(type + ': the render read nothing at all, so this test proves nothing'); return; }
+      // 0.25 linear = 1/16 the pixels. Allow a generous 4x slop for rounding and quarter-res passes;
+      // a plate stuck at project size lands at ratio 1.0 and fails loudly.
+      if (quarter > full * 0.25) bad.push(type + ' read ' + quarter + 'px into a 100x100 target vs ' + full + 'px into ' + PW + 'x' + PH + ' — the plate is not following the preview down');
+    });
+    if (bad.length) throw new Error(bad.join('; '));
+  });
+
+  test('masks: a pen mask builds its stencil at the PREVIEW size, not the project size', { item: 'preview-scale' }, function () {
+    if (typeof FM.buildMaskAlpha !== 'function') return;
+    var real = FM.buildMaskAlpha, seen = [];
+    function run(TW, TH) {
+      var L = FM.makeLayer('shape', { name: 'pm', shape: 'rect', x: 200, y: 200, shapeW: 300, shapeH: 300, fill: '#ff0000' });
+      L.masks = [{ id: 'pm1', enabled: true, mode: 'add', feather: 8, opacity: 1, invert: false, closed: true,
+        path: [[60, 60], [340, 60], [340, 340], [60, 340]] }];
+      var s = scene([L], { project: { width: 400, height: 400, fps: 30, duration: 5, background: '#000000' } });
+      seen.length = 0;
+      FM.renderScene(offscreen(TW, TH).getContext('2d'), s, 0);
+      return seen.slice();
+    }
+    var full, quarter;
+    try {
+      FM.buildMaskAlpha = function (layer, t, W, H) { seen.push(W * H); return real.apply(this, arguments); };
+      full = run(400, 400);
+      quarter = run(100, 100);
+    } finally { FM.buildMaskAlpha = real; }
+    if (!full.length || !quarter.length) throw new Error('no pen mask was built — the test never exercised the path');
+    if (Math.max.apply(null, quarter) > Math.max.apply(null, full) * 0.25) {
+      throw new Error('the pen-mask stencil is ' + Math.max.apply(null, quarter) + 'px for a 100x100 preview and ' + Math.max.apply(null, full) + 'px for a 400x400 one — it is still being rasterised at project size');
+    }
+  });
+
+  /* ---- one rebuild per tap, one lane measurement per rebuild (v6.23 lag pass) -------------------
+     FM.layersPanel.refresh() is a shim whose whole body is FM.timeline.rebuild(), and FM.selectLayer
+     called both — so every tap on a layer rebuilt the WHOLE timeline twice. Separately, pxPerSec()
+     re-read timelineEl.clientWidth once PER CLIP while buildTracks was appending rows, forcing one
+     synchronous layout each time. Measured over 12 taps at 1440px: 2.0 rebuilds/tap at every layer
+     count and 24.1 / 61.4 / 111.4 / 211.4 forced layouts per tap at 5 / 20 / 40 / 80 layers, i.e.
+     the tap got linearly worse as the project grew (2.2 / 7.4 / 17.0 / 32.8 ms). */
+  function withTempLayers(n, fn) {
+    var hadLayers = FM.scene.layers, hadSel = FM.scene.selectedId, hadSelIds = FM.scene.selectedIds;
+    var hadDur = FM.scene.project.duration;
+    try {
+      FM.scene.layers = [];
+      for (var i = 0; i < n; i++) {
+        FM.scene.layers.push(FM.makeLayer('shape', { name: 'TL' + i, shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 60, fill: '#4488cc', start: i * 0.05, duration: 2 }));
+      }
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.timeline.rebuild();
+      return fn();
+    } finally {
+      FM.scene.layers = hadLayers; FM.scene.selectedId = hadSel; FM.scene.selectedIds = hadSelIds;
+      FM.scene.project.duration = hadDur;
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  }
+
+  test('timeline: selecting a layer rebuilds the timeline exactly ONCE', { item: 'select-cost' }, function () {
+    if (!FM.timeline || !FM.timeline.rebuild || !FM.selectLayer) return;
+    var calls = withTempLayers(6, function () {
+      var real = FM.timeline.rebuild, n = 0;
+      try {
+        FM.timeline.rebuild = function () { n++; return real.apply(FM.timeline, arguments); };
+        FM.selectLayer(FM.scene.layers[2].id);
+        FM.selectLayer(FM.scene.layers[4].id);
+        FM.selectLayer(FM.scene.layers[0].id);
+      } finally { FM.timeline.rebuild = real; }
+      return n;
+    });
+    if (calls !== 3) throw new Error(calls + ' timeline rebuilds for 3 layer selections (expected 3) — layersPanel.refresh() IS rebuild(), so calling both doubles the most common interaction in the app');
+  });
+
+  test('timeline: a rebuild measures the lane width once, not once per clip', { item: 'select-cost' }, function () {
+    if (!FM.timeline || !FM.timeline.rebuild) return;
+    var d = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+    if (!d || !d.get) return;   // no way to observe the read on this engine
+    var reads = 0;
+    function countDuringRebuild(n) {
+      return withTempLayers(n, function () {
+        reads = 0;
+        try {
+          Object.defineProperty(Element.prototype, 'clientWidth', { configurable: true, get: function () { reads++; return d.get.call(this); } });
+          FM.timeline.rebuild();
+        } finally { Object.defineProperty(Element.prototype, 'clientWidth', d); }
+        return reads;
+      });
+    }
+    var few = countDuringRebuild(4), many = countDuringRebuild(28);
+    if (many - few > 6) throw new Error('a rebuild read clientWidth ' + few + ' times with 4 clips and ' + many + ' times with 28 — it is measuring the lane once per clip again, and each read forces a synchronous layout mid-DOM-build');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

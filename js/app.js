@@ -112,6 +112,7 @@ window.FM = window.FM || {};
   const DROP_PAYOFF = 0.85;   // a drop must cut the average by 15%+ to be worth the softer picture
   const LOCK_ESCAPE = 1.35;   // once locked, only a cost this much higher re-opens the question
   let _dropFrom = 0, _dropPx = 0, _locked = 0, _lockAt = 0, _skipCost = 0, _costCtx = '';
+  let _noLowerPx = 0;   // backing store at which we already learned no lower tier changes a pixel — see nextUsefulTier
 
   /* Playback is not the only time the picture is MOVING. Dragging the playhead, a layer on the
    * canvas, or a slider re-renders continuously too, and the same trade applies there: shed pixels
@@ -152,6 +153,27 @@ window.FM = window.FM || {};
     if (mode === 'smooth') return PLAY_TIERS[Math.max(2, _playTier)];   // start low and stay low
     return PLAY_TIERS[Math.min(PLAY_TIERS.length - 1, _playTier)];
   }
+  /* The lowest tier BELOW the current one that would actually produce a different backing store, or
+   * the current tier when there is none. previewScale() clamps (0.25 floor, MAX_PREVIEW_PX budget,
+   * 'smooth' mode's tier-2 floor), so several PLAY_TIERS values routinely resolve to the same canvas
+   * — walking those one rung at a time buys nothing and costs a resizeCanvas() plus a wiped cost
+   * average each time. Asked only when a drop is about to happen (a few times per playback), and the
+   * "nothing lower exists" answer is remembered against the backing store it was learned at, so a
+   * struggling frame does not re-run this sweep every frame. */
+  function nextUsefulTier() {
+    const px = canvas.width * canvas.height;
+    if (_noLowerPx === px) return _playTier;
+    const save = _playTier, cur = previewScale();
+    let found = _playTier;
+    try {
+      for (let k = _playTier + 1; k < PLAY_TIERS.length; k++) {
+        _playTier = k;
+        if (previewScale() !== cur) { found = k; break; }
+      }
+    } finally { _playTier = save; }
+    _noLowerPx = (found === _playTier) ? px : 0;
+    return found;
+  }
   // Called once per rendered frame with the measured cost of that frame.
   function notePlaybackCost(ms) {
     if (!FM.playing && !_inMotion) return;
@@ -165,7 +187,7 @@ window.FM = window.FM || {};
     // other — a cost-to-beat carried out of a drag made playback undo a drop that was helping, then
     // locked adaptation out while it stuttered. The bookkeeping starts fresh when the regime changes.
     const ctx = FM.playing ? 'play' : 'drag';
-    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; }
+    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0; }
     // The frame straight after a tier change repaints into a freshly allocated backing store and is
     // the dearest one in the run. Letting it seed the average makes every drop look like it made
     // things worse — which is exactly the judgement the payoff test below has to get right.
@@ -200,7 +222,15 @@ window.FM = window.FM || {};
     if (_dropFrom && _renderAvg > _dropFrom * DROP_PAYOFF) {
       _playTier--; _locked = 1; _lockAt = _dropFrom; _dropFrom = 0;   // didn't pay — undo, and remember the cost at the tier we came BACK to
     } else if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_locked) {
-      _dropFrom = _renderAvg; _dropPx = canvas.width * canvas.height; _playTier++;   // struggling → shed pixels, remembering the cost AND the backing store to beat
+      /* Step to the next tier that actually MOVES PIXELS, not merely the next tier. The guard above
+       * stops a no-op probe being JUDGED; nothing stopped one being MADE, and on a dpr-1 PC
+       * previewScale()'s 0.25 floor collapses the bottom of the ladder into one backing store.
+       * Measured on a 13-layer 1080×1920 comp at 1280×900 dpr1: tiers 2, 3, 4 and 5 all produced
+       * exactly 129,600 px, and the ladder still walked rungs 3/4/5 one at a time — three full
+       * resizeCanvas() calls (forced reflow + re-render) and three wipes of the cost average, over
+       * 3.1s→6.9s, for zero pixel change. */
+      const nt = nextUsefulTier();
+      if (nt > _playTier) { _dropFrom = _renderAvg; _dropPx = canvas.width * canvas.height; _playTier = nt; }   // struggling → shed pixels, remembering the cost AND the backing store to beat
     } else if (_renderAvg < budget * 0.30 && _playTier > 0) {
       _dropFrom = 0; _playTier--;                                     // lots of headroom → give detail back
     } else if (_renderAvg <= budget * 0.72) {
@@ -282,6 +312,7 @@ window.FM = window.FM || {};
   }
 
   function resizeCanvas() {
+    _noLowerPx = 0;   // the ladder's "nothing lower changes a pixel" answer is only valid for one canvas geometry
     const P = FM.scene.project;
     const wrapEl = document.getElementById('canvas-wrap');
     // ALWAYS measure from an uncropped layout. The crop branch below lifts the canvas out of normal
@@ -1435,8 +1466,13 @@ window.FM = window.FM || {};
     if (FM.isolate && FM.isolate.id !== id && FM.setIsolate) FM.setIsolate(0);
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
-    FM.syncSelectionChrome();   // BEFORE the rebuilds — sel-mode/sel-multi change what they render
-    FM.layersPanel.refresh();
+    FM.syncSelectionChrome();   // BEFORE the rebuild — sel-mode/sel-multi change what it renders
+    /* ONE rebuild, not two. FM.layersPanel.refresh() is a compatibility shim whose whole body is
+     * FM.timeline.rebuild() (see the alias below), so calling it here and rebuild() four lines later
+     * rebuilt the ENTIRE timeline twice on the most common interaction in the app — autoFitDuration
+     * over every layer, up to ~1,900 ruler divs through innerHTML, a row per clip, twice.
+     * Measured (12 taps, 1440px, unthrottled): median tap 2.2 ms at 5 layers, 7.4 at 20, 17.0 at 40,
+     * 32.8 ms at 80, with a constant 2.0 rebuilds per tap. */
     FM.inspector.refresh();
     FM.timeline.rebuild();
     if (FM.syncTopBar) FM.syncTopBar();   // name field ↔ layer name + delete button
@@ -2095,7 +2131,7 @@ window.FM = window.FM || {};
       items.push({ label: 'Replace media…', action: () => FM.replaceMedia(layer.id) });
     }
     items.push(...[
-      { label: layer.locked ? 'Unlock' : 'Lock', action: () => { layer.locked = !layer.locked; FM.layersPanel.refresh(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } },
+      { label: layer.locked ? 'Unlock' : 'Lock', action: () => { layer.locked = !layer.locked; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } },   // one rebuild — layersPanel.refresh() IS rebuild() (see FM.layersPanel)
       { label: 'Reset transform', action: () => { const P = FM.scene.project, tr = layer.transform; tr.x = Math.round(P.width / 2); tr.y = Math.round(P.height / 2); tr.scale = 1; tr.rotation = 0; tr.opacity = 1; FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.history) FM.history.commit(); } },
     ]);
     if (layer.type === 'video') {

@@ -116,9 +116,15 @@ window.FM = window.FM || {};
    * by its mode (add=source-over, subtract=destination-out, intersect=destination-in).
    *
    * `out` (optional) — a canvas the CALLER owns, rendered into instead of the module scratch. Pass one
-   * whenever the result has to stay valid across anything that can re-enter the compositor. */
-  FM.buildMaskAlpha = function (layer, t, W, H, out) {
+   * whenever the result has to stay valid across anything that can re-enter the compositor.
+   *
+   * `s` (optional, default 1) — project pixels per canvas pixel, for a REDUCED PREVIEW plate. Mask
+   * paths are stored in project coordinates, so a W×H buffer that is not project-sized has to draw
+   * them through a matching scale or the stencil lands in the wrong place. Defaulted to 1 so every
+   * existing caller — and every export, which is always 1:1 — is byte-for-byte unchanged. */
+  FM.buildMaskAlpha = function (layer, t, W, H, out, s) {
     if (!(W > 0) || !(H > 0)) return null;
+    s = (s > 0 && isFinite(s)) ? s : 1;
     const list = layer && layer.masks;
     if (!Array.isArray(list) || !list.length) return null;
     const enabled = [];
@@ -156,12 +162,15 @@ window.FM = window.FM || {};
       // 1) render THIS mask's coverage into the temp: a white fill of its path, blurred by feather.
       tctx.setTransform(1, 0, 0, 1, 0, 0);
       tctx.globalAlpha = 1; tctx.globalCompositeOperation = 'source-over';
-      tctx.filter = feather > 0 ? ('blur(' + feather + 'px)') : 'none';
+      // feather is PROJECT px and ctx.filter is DEVICE px on this buffer, so it follows `s` too.
+      tctx.filter = feather > 0 ? ('blur(' + (feather * s) + 'px)') : 'none';
       tctx.clearRect(0, 0, W, H);
       tctx.fillStyle = '#fff';
+      if (s !== 1) tctx.setTransform(s, 0, 0, s, 0, 0);   // pts are project coordinates — see `s` above
       tctx.beginPath();
       FM.buildSubPath(tctx, pts, m.closed !== false, null);   // identity map: pts already in canvas space
       tctx.fill();
+      if (s !== 1) tctx.setTransform(1, 0, 0, 1, 0, 0);   // back to buffer pixels — the rect below must cover ALL of it
       // 2) invert WITHIN the frame if asked: source-out draws white only where the shape did NOT cover,
       //    so temp alpha becomes 1 - coverage (the feather edge reverses). No blur on the full-frame rect.
       if (m.invert) {

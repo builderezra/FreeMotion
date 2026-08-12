@@ -44,7 +44,12 @@ Numbered with Ezra's own queue numbers where he gave them.
       **Left open on purpose:** Ezra reported this AFTER the first fix, so if it happens again it is a
       third cause and these two are ruled out. Worth knowing next time: does the playhead ELEMENT
       exist and is it just mispositioned, or is it missing from the DOM entirely?
-- [ ] **Editing lags, and gets bad fast.**
+- [ ] **Editing lags, and gets bad fast.** *Status (v6.33):* the two measured causes are fixed —
+      playback went 95.09 → 17.43 ms/frame on a 6-layer comp (5.5x, dropped frames 191 → 3) and
+      forced layouts per tap are now FLAT with layer count instead of linear (211 → 5 at 80 layers).
+      Left open until Ezra confirms it feels better on his own device and projects.
+      **Known and NOT fixed:** FM.media never releases a deleted clip's record, so memory grows with
+      every import you throw away. That one needs undo-stack surgery and was deliberately deferred.
 - [ ] **72 — Audio import loses parts of the file.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio.

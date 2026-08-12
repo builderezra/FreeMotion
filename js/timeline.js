@@ -524,7 +524,22 @@ window.FM = window.FM || {};
   function endSlipGhost(sd) { if (sd && sd.ghost) { sd.ghost.remove(); sd.ghost = null; } }
 
   // Pixels per second within the clip LANE. Fit-to-viewport at zoom 1; scaled by `zoom`.
-  function laneViewW() { return Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W); }
+  /* clientWidth is a GEOMETRY READ, so asking for it while buildTracks is appending rows forces a
+   * synchronous layout — one PER CLIP, inside a single task. Measured with Chrome's LayoutCount over
+   * 12 taps: 24.1 forced layouts per tap at 5 layers, 61.4 at 20, 111.4 at 40, 211.4 at 80, costing
+   * 14.7 ms of layout alone at 80. The lane width cannot change during a rebuild, so cache it for the
+   * duration of one and let every clip read the same number.
+   * `_laneW` is seeded by the FIRST call inside the rebuild — which is applyInnerWidth(), exactly the
+   * value the ruler is already drawn with — so the ruler is unchanged and the clips now agree with it
+   * instead of possibly re-measuring after a scrollbar appeared. Cleared in rebuild()'s finally, so a
+   * genuine resize between rebuilds is still measured fresh. */
+  let _laneW = 0, _laneFrozen = 0;
+  function laneViewW() {
+    if (_laneFrozen && _laneW) return _laneW;
+    const w = Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W);
+    if (_laneFrozen) _laneW = w;
+    return w;
+  }
   // The REAL project duration drives the ruler extent + scrollable width. 0 = a genuinely empty,
   // zero-length timeline (no phantom scaffold, nothing to scroll).
   function viewDur() { return Math.max(0, FM.scene.project.duration || 0); }
@@ -1994,11 +2009,16 @@ window.FM = window.FM || {};
       // Recompute the project length from the clips on EVERY rebuild — the timeline is drawn right
       // afterwards, so its length can never be stale no matter which edit triggered the rebuild.
       if (FM.autoFitDuration) FM.autoFitDuration();
-      applyInnerWidth();
-      buildRuler();
-      buildTracks();
-      this.updateLoopRegion();
-      this.updatePlayhead();
+      // Freeze the lane width for this pass — see laneViewW. try/finally so a throw inside buildTracks
+      // cannot leave a stale width latched for the rest of the session.
+      _laneFrozen = 1; _laneW = 0;
+      try {
+        applyInnerWidth();
+        buildRuler();
+        buildTracks();
+        this.updateLoopRegion();
+        this.updatePlayhead();
+      } finally { _laneFrozen = 0; _laneW = 0; }
       if (timelineEl && timelineEl.scrollTop !== sTop) timelineEl.scrollTop = sTop;
     },
 

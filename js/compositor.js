@@ -1323,11 +1323,18 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height;
+    /* PW/PH project units, W/H the plate's real pixels — see plateScale. A soft-masked layer used to
+     * rasterise at PROJECT resolution however small the preview was: measured 21.9 ms/frame into a
+     * full-size 1080×1920 target and 19.1 ms into a 0.35 one (ratio 1.15 — flat). Masks are on a lot
+     * of layers, so this was a per-layer tax the quality tier could not lift. Export is unstamped, so
+     * ps is 1 and every number below is exactly what it was. */
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     if (!_maskCv) _maskCv = document.createElement('canvas');
     const off = _maskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
+    off.__fmRS = ps; off.__fmOX = 0; off.__fmOY = 0;   // the nested drawLayer renders through baseT
     const octx = off.getContext('2d');
-    baseT(octx); octx.clearRect(0, 0, W, H);
+    baseT(octx); octx.clearRect(0, 0, PW, PH);
     octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
     // 1) draw the layer content (no mask, full opacity, normal blend) into the offscreen
     const tmp = Object.assign({}, layer, { mask: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
@@ -1338,7 +1345,9 @@ window.FM = window.FM || {};
     octx.save();
     octx.globalCompositeOperation = layer.mask.invert ? 'destination-out' : 'destination-in';
     applyLayerTransform(octx, layer, t, scene);
-    octx.filter = 'blur(' + Math.max(0, layer.mask.feather || 0) + 'px)';
+    // ctx.filter is in DEVICE pixels on the plate and the current transform does not touch it, so a
+    // feather written in project px follows the plate's scale. × 1 on every export.
+    octx.filter = 'blur(' + (Math.max(0, layer.mask.feather || 0) * ps) + 'px)';
     octx.fillStyle = '#fff';
     const path = new Path2D(); addMaskShape(path, layer.mask); octx.fill(path);
     octx.restore();
@@ -1349,7 +1358,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    ctx.drawImage(off, 0, 0);
+    ctx.drawImage(off, 0, 0, PW, PH);   // plate → project units; identical to drawImage(off,0,0) at scale 1
     ctx.restore();
   }
 
@@ -1383,22 +1392,28 @@ window.FM = window.FM || {};
     if (!_pmPool[d]) _pmPool[d] = { plate: document.createElement('canvas'), mask: document.createElement('canvas') };
     return _pmPool[d];
   }
-  function maskAlphaAt(layer, t, W, H, d) {
-    try { return FM.buildMaskAlpha(layer, t, W, H, pmSlot(d).mask); } catch (e) { return null; }
+  // `s` = project pixels per buffer pixel, so a reduced-preview plate gets a matching stencil rather
+  // than a project-sized one drawn into a small buffer. Omitted (project-sized W/H) everywhere else.
+  function maskAlphaAt(layer, t, W, H, d, s) {
+    try { return FM.buildMaskAlpha(layer, t, W, H, pmSlot(d).mask, s); } catch (e) { return null; }
   }
   function drawPenMaskLayer(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height;
+    // PW/PH project units, W/H the plate's real pixels — see plateScale. Same flat-cost story as the
+    // feathered-mask path above: 22.8 ms/frame at full size vs 21.3 ms at 0.35 before this.
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _pmDepth++;
     try {
-      const maskCanvas = maskAlphaAt(layer, t, W, H, d);
+      const maskCanvas = maskAlphaAt(layer, t, W, H, d, ps);
       // No drawable coverage (all masks empty / off) → render the layer as if it had none.
       if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: null }), t, scene); return; }
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
+      off.__fmRS = ps; off.__fmOX = 0; off.__fmOY = 0;   // the nested drawLayer renders through baseT
       const octx = off.getContext('2d');
-      baseT(octx); octx.clearRect(0, 0, W, H);
+      baseT(octx); octx.clearRect(0, 0, PW, PH);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
       // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
       const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
@@ -1407,7 +1422,7 @@ window.FM = window.FM || {};
       octx.save();
       baseT(octx);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'destination-in'; octx.filter = 'none';
-      try { octx.drawImage(maskCanvas, 0, 0); } catch (e) {}
+      try { octx.drawImage(maskCanvas, 0, 0, PW, PH); } catch (e) {}
       octx.restore();
       octx.globalCompositeOperation = 'source-over';
       // 3) blit onto the main canvas with the layer's real opacity + blend
@@ -1416,7 +1431,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      try { ctx.drawImage(off, 0, 0); } catch (e) {}
+      try { ctx.drawImage(off, 0, 0, PW, PH); } catch (e) {}   // identical to drawImage(off,0,0) at scale 1
       ctx.restore();
     } finally { _pmDepth--; }
   }
@@ -3237,11 +3252,24 @@ window.FM = window.FM || {};
    * Compound Blur, Match Grade — takes a slot and is safe by construction. */
   const _dspPool = [];
   let _dspLvl = 0, _dispDepth = 0;
-  function dspSlot(W, H) {
+  /* W/H are PLATE PIXELS (project size × plateScale), `ps` the stamp that tells baseT and any nested
+   * effect what scale this workspace is in — the same contract _pfPool and the warp pool already use.
+   * These four effects used to allocate at project size no matter how small the preview was, which is
+   * why the adaptive quality tier could not touch them: measured on a 1080×1920 comp, one Compound
+   * Blur cost 154.6 ms into a full-size target and 143.3 ms into a 0.35 one (ratio 1.08 — flat), and
+   * Polar Displace 113.5 vs 108.4. The tier drops a rung, sees no gain, undoes it and LATCHES OFF, so
+   * the preview ends up soft AND slow. Every export canvas is unstamped, so ps is exactly 1 there and
+   * every dimension below is the number it always was. */
+  function dspSlot(W, H, ps) {
     const d = _dspLvl;
     if (!_dspPool[d]) _dspPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas'), C: document.createElement('canvas'), q: document.createElement('canvas') };
     const s = _dspPool[d];
     if (s.A.width !== W || s.A.height !== H) { s.A.width = W; s.A.height = H; s.B.width = W; s.B.height = H; s.M.width = W; s.M.height = H; s.C.width = W; s.C.height = H; }
+    const r = ps == null ? 1 : ps;
+    s.A.__fmRS = r; s.A.__fmOX = 0; s.A.__fmOY = 0;
+    s.B.__fmRS = r; s.B.__fmOX = 0; s.B.__fmOY = 0;
+    s.M.__fmRS = r; s.M.__fmOX = 0; s.M.__fmOY = 0;
+    s.C.__fmRS = r; s.C.__fmOX = 0; s.C.__fmOY = 0;
     return s;
   }
   /* Luma Matte — cut this layer out with ANOTHER layer's brightness.
@@ -3253,7 +3281,9 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    // PW/PH are project units (what everything DRAWS in); W/H the plate's real pixels — see dspSlot.
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
     const srcId = fx.params && fx.params.source;
     const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
@@ -3261,7 +3291,7 @@ window.FM = window.FM || {};
     // Draw the layer untouched rather than blanking it, so picking the matte is a visible step
     // forward instead of un-breaking something.
     if (!mLayer || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
-    const slot = dspSlot(W, H);
+    const slot = dspSlot(W, H, ps);
     _dspLvl++;
     try {
       const p = fx.params || {};
@@ -3271,12 +3301,12 @@ window.FM = window.FM || {};
       const wht = p.white == null ? 200 : FM.evalProp(p.white, t);
       const feather = Math.max(0, p.feather == null ? 0 : FM.evalProp(p.feather, t));
       const actx = slot.A.getContext('2d');
-      baseT(actx); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, PW, PH);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
       // the matte layer, at full opacity and with its own matte effects stripped so two cannot recurse
       const mctx = slot.M.getContext('2d');
-      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      baseT(mctx); mctx.clearRect(0, 0, PW, PH);
       mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
       const mtmp = Object.assign({}, mLayer, { blendMode: 'normal', effects: (mLayer.effects || []).filter(e => e.type !== 'lumamatte'), transform: Object.assign({}, mLayer.transform, { opacity: 1 }) });
       drawLayer(mctx, mtmp, t, scene);
@@ -3302,7 +3332,9 @@ window.FM = window.FM || {};
       mctx.putImageData(img, 0, 0);
       actx.setTransform(1, 0, 0, 1, 0, 0);
       actx.globalCompositeOperation = 'destination-in';
-      actx.filter = feather > 0.05 ? 'blur(' + feather.toFixed(2) + 'px)' : 'none';
+      // ctx.filter lengths are DEVICE pixels on the plate and the transform does not touch them, so a
+      // feather written in PROJECT px must be multiplied by the plate's scale. × 1 on every export.
+      actx.filter = feather > 0.05 ? 'blur(' + (feather * ps).toFixed(2) + 'px)' : 'none';
       actx.drawImage(slot.M, 0, 0);
       actx.filter = 'none'; actx.globalCompositeOperation = 'source-over';
       ctx.save();
@@ -3310,7 +3342,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(slot.A, 0, 0);
+      ctx.drawImage(slot.A, 0, 0, PW, PH);   // plate → project units; identical to drawImage(A,0,0) at scale 1
       ctx.restore();
     } finally { _dspLvl--; }
   }
@@ -3328,24 +3360,27 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see dspSlot
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
     const p = fx.params || {};
     const srcId = p.source;
     const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    // radius stays in PROJECT px here so the "too small to bother" branch is decided identically at
+    // every preview scale — a branch that flips with resolution is a different picture, not a softer one.
     const radius = Math.max(0, p.radius == null ? 26 : FM.evalProp(p.radius, t));
     if (!mLayer || radius < 0.4 || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
-    const slot = dspSlot(W, H);
+    const slot = dspSlot(W, H, ps);
     _dspLvl++;
     try {
       const inv = Math.round(FM.evalProp(p.invert, t) || 0) === 1;
       const levels = Math.max(2, Math.min(8, Math.round(p.levels == null ? 5 : FM.evalProp(p.levels, t))));
       const actx = slot.A.getContext('2d');
-      baseT(actx); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, PW, PH);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
       const mctx = slot.M.getContext('2d');
-      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      baseT(mctx); mctx.clearRect(0, 0, PW, PH);
       mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
       drawLayer(mctx, Object.assign({}, mLayer, { blendMode: 'normal', effects: (mLayer.effects || []).filter(e => e.type !== 'compoundblur'), transform: Object.assign({}, mLayer.transform, { opacity: 1 }) }), t, scene);
       const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
@@ -3377,7 +3412,7 @@ window.FM = window.FM || {};
         qc.putImageData(qi, 0, 0);
         cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over';
         cctx.clearRect(0, 0, W, H);
-        cctx.filter = 'blur(' + r.toFixed(2) + 'px)';
+        cctx.filter = 'blur(' + (r * ps).toFixed(2) + 'px)';   // DEVICE px on the plate — × 1 on every export
         cctx.drawImage(slot.A, 0, 0);
         cctx.filter = 'none';
         cctx.globalCompositeOperation = 'destination-in';
@@ -3391,7 +3426,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(slot.B, 0, 0);
+      ctx.drawImage(slot.B, 0, 0, PW, PH);   // plate → project units; identical to drawImage(B,0,0) at scale 1
       ctx.restore();
     } finally { _dspLvl--; }
   }
@@ -3408,23 +3443,24 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see dspSlot
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
     const p = fx.params || {};
     const srcId = p.source;
     const rLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
     const amount = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t));
     if (!rLayer || amount <= 0.002 || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
-    const slot = dspSlot(W, H);
+    const slot = dspSlot(W, H, ps);
     _dspLvl++;
     try {
       const mode = Math.round(FM.evalProp(p.mode, t) || 0);   // 0 both, 1 colour only, 2 contrast only
       const actx = slot.A.getContext('2d');
-      baseT(actx); actx.clearRect(0, 0, W, H);
+      baseT(actx); actx.clearRect(0, 0, PW, PH);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
       const mctx = slot.M.getContext('2d');
-      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      baseT(mctx); mctx.clearRect(0, 0, PW, PH);
       mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
       drawLayer(mctx, Object.assign({}, rLayer, { blendMode: 'normal', effects: (rLayer.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, rLayer.transform, { opacity: 1 }) }), t, scene);
       const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
@@ -3472,7 +3508,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(slot.A, 0, 0);
+      ctx.drawImage(slot.A, 0, 0, PW, PH);   // plate → project units; identical to drawImage(A,0,0) at scale 1
       ctx.restore();
     } finally { _dspLvl--; }
   }
@@ -3481,16 +3517,17 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see dspSlot
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     if (_dspLvl > 6) { drawLayer(ctx, Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) }), t, scene); return; }
-    const _slot = dspSlot(W, H);
+    const _slot = dspSlot(W, H, ps);
     const _dspA = _slot.A, _dspB = _slot.B, _dspM = _slot.M;
     _dspLvl++;
     try {
     // (body below runs at this depth's own scratch; the finally restores the level)
     // 1) target layer, clean (this fx stripped) — the pixels we resample from
     const actx = _dspA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
@@ -3502,7 +3539,7 @@ window.FM = window.FM || {};
     let map = src;
     if (mapLayer && _dispDepth < 3) {
       const mctx = _dspM.getContext('2d');
-      baseT(mctx); mctx.clearRect(0, 0, W, H);
+      baseT(mctx); mctx.clearRect(0, 0, PW, PH);
       mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
       const mtmp = Object.assign({}, mapLayer, { blendMode: 'normal', effects: (mapLayer.effects || []).filter(e => e.type !== 'displacemap' && e.type !== 'polardisplace'), transform: Object.assign({}, mapLayer.transform, { opacity: 1 }) });
       _dispDepth++;
@@ -3512,7 +3549,9 @@ window.FM = window.FM || {};
     const bctx = _dspB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
     const pr = fx.params || {};
     if (!polar) {
-      const amt = FM.evalProp(pr.amount, t); const amount = (amt == null ? 40 : amt);
+      // amount/radius are PROJECT pixels but index the PLATE, so they follow its scale — the same
+      // rule drawPixelEffect hands its kernels as `ps`. × 1 on every export.
+      const amt = FM.evalProp(pr.amount, t); const amount = (amt == null ? 40 : amt) * ps;
       const chan = Math.round(FM.evalProp(pr.channel, t) || 0);
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
@@ -3528,8 +3567,8 @@ window.FM = window.FM || {};
         }
       }
     } else {
-      const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt);
-      const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;
+      const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt) * ps;   // PROJECT px → plate px
+      const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;   // an angle: scale-free
       const cx = W / 2, cy = H / 2;
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
@@ -3549,7 +3588,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    ctx.drawImage(_dspB, 0, 0);
+    ctx.drawImage(_dspB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(B,0,0) at scale 1
     ctx.restore();
     } finally { _dspLvl--; }
   }
@@ -3887,15 +3926,22 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = proj.width, H = proj.height;
+    /* PW/PH project units, W/H the plate's real pixels — see plateScale. The plate, its alpha-bbox
+     * readback and the mesh all ran at project size regardless of the preview: measured 10.6 ms/frame
+     * into a full-size 1080×1920 target and 9.8 ms into a 0.35 one (ratio 1.08 — flat). Everything
+     * below stays in PLATE pixels (bbox, texture, mesh), which is why bctx is left on the identity
+     * transform; only the final blit converts back to project units. */
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _t3Depth++;
     try {
     if (!_t3Pool[d]) _t3Pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
     const _t3A = _t3Pool[d].A, _t3B = _t3Pool[d].B;
     if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
+    _t3A.__fmRS = ps; _t3A.__fmOX = 0; _t3A.__fmOY = 0;   // the nested drawLayer renders through baseT
     const actx = _t3A.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     // PLATE: the layer as it would look flat — tilt zeroed (so this drawLayer can't recurse back here),
     // opacity/blend neutral (re-applied at composite). Effects/masks/motion-blur/parent all bake in.
@@ -3905,7 +3951,7 @@ window.FM = window.FM || {};
     let bb = null;
     try { bb = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bb = null; }   // tainted-canvas guard
     const bctx = _t3B.getContext('2d');
-    baseT(bctx); bctx.clearRect(0, 0, W, H);
+    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);   // PLATE pixels — bb/renderMesh below are in them (identity at scale 1, i.e. exactly what baseT gave)
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     if (bb && bb.w > 1 && bb.h > 1) {
       const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
@@ -3917,11 +3963,11 @@ window.FM = window.FM || {};
     }
     ctx.save();
     baseT(ctx);
-    if (ctx.canvas === _t3A) ctx.clearRect(0, 0, W, H);   // paranoia: never composite over our own plate scratch
+    if (ctx.canvas === _t3A) ctx.clearRect(0, 0, PW, PH);   // paranoia: never composite over our own plate scratch
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    ctx.drawImage(_t3B, 0, 0);
+    ctx.drawImage(_t3B, 0, 0, PW, PH);   // plate → project units; identical to drawImage(B,0,0) at scale 1
     ctx.restore();
     } finally { _t3Depth--; }
   }
@@ -5404,18 +5450,26 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const W = P.width, H = P.height, dd = Math.round(Math.max(0, d));
+    /* PW/PH are project units; W/H the plate's real pixels — see plateScale. This plate used to be
+     * allocated at project size whatever the preview was, and the per-pixel resample below runs over
+     * the PLATE, so shrinking the preview canvas bought nothing: measured on a 1080×1920 comp, 17.3 ms
+     * into a full-size target and 14.3 ms into a 0.35 one. That flatness is what makes the adaptive
+     * quality ladder undo its own tier drop and latch off — soft AND slow. */
+    const PW = P.width, PH = P.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const dd = Math.round(Math.max(0, d) * ps);   // offset is PROJECT px, indexes the plate; × 1 on every export
     if (!_rgbA) _rgbA = document.createElement('canvas');
     if (!_rgbB) _rgbB = document.createElement('canvas');
     if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
     if (_rgbB.width !== W || _rgbB.height !== H) { _rgbB.width = W; _rgbB.height = H; }
+    _rgbA.__fmRS = ps; _rgbA.__fmOX = 0; _rgbA.__fmOY = 0;   // a nested effect inherits this scale
     const actx = _rgbA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(0, 0, PW, PH);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     // render the layer with the rgbsplit effect removed (full opacity, normal blend) — keeps other fx/mask/blur
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
-    if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, 0, 0); ctx.restore(); return; }
+    if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, 0, 0, PW, PH); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
     const bctx = _rgbB.getContext('2d'); const out = bctx.createImageData(W, H); const o = out.data;
     // Same three additions as the adjustment-layer path: an ANGLE so the tear isn't stuck horizontal,
@@ -5425,7 +5479,7 @@ window.FM = window.FM || {};
     const pp = (fx && fx.params) || {};
     const ang = (pp.angle == null ? 0 : FM.evalProp(pp.angle, t)) * Math.PI / 180;
     const radl = (pp.radial == null ? 0 : FM.evalProp(pp.radial, t)) / 100;
-    const gsh = pp.green == null ? 0 : FM.evalProp(pp.green, t);
+    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // PROJECT px → plate px
     const plain = (ang === 0 && radl === 0 && gsh === 0);
     const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
     const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
@@ -5459,8 +5513,8 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (ctx.canvas === _rgbA) ctx.clearRect(0, 0, W, H);   // two stacked RGB Splits: clear our own scratch so B replaces, not double-composites (see drawTint)
-    ctx.drawImage(_rgbB, 0, 0);
+    if (ctx.canvas === _rgbA) ctx.clearRect(0, 0, PW, PH);   // two stacked RGB Splits: clear our own scratch so B replaces, not double-composites (see drawTint)
+    ctx.drawImage(_rgbB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(B,0,0) at scale 1
     ctx.restore();
   }
 
