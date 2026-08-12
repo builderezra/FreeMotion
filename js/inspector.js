@@ -2085,6 +2085,24 @@ window.FM = window.FM || {};
     const boxes = el('div', 'es-boxes'); boxes.appendChild(boxW); boxes.appendChild(boxH);
     center.appendChild(boxes);
 
+    /* Width and Height get their own scrub strips, exactly like Move & Transform's Size — the two
+     * number boxes on their own gave you no way to ease a crop in, only to type at it. (#67)
+     * Aspect LOCKED is one strip (both edges move together, which is what the lock means); Resize
+     * Freely opens a second strip below it so the two axes are independent — the same shape the
+     * unlinked Size control already uses, so the gesture is learned once.
+     * Rate is derived from the SOURCE size, not fixed: a crop is measured in source pixels, so a
+     * constant px-per-finger-px would crawl on a 4K frame and bolt on a small one. */
+    const control = el('div', 'mt-control');
+    const rateW = Math.max(0.25, MW / 1400), rateH = Math.max(0.25, MH / 1400);
+    if (_szLock) {
+      control.appendChild(mtScrub(getW, v => resizeCrop('w', v), rateW, syncAll));
+    } else {
+      control.classList.add('mt-control-dual');
+      control.appendChild(mtScrub(getW, v => resizeCrop('w', v), rateW, syncAll));
+      control.appendChild(mtScrub(getH, v => resizeCrop('h', v), rateH, syncAll));
+    }
+    center.appendChild(control);
+
     // Free crop (not in AM) — drag a box right on the playback area, iPhone-style.
     const tools = el('div', 'es-crop-tools');
     const freeBtn = el('button', 'btn es-freecrop'); freeBtn.innerHTML = ES_ICONS.crop + '<span>Free crop</span>';
