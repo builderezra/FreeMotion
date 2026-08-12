@@ -12,6 +12,246 @@ window.FM = window.FM || {};
   const selected = new Set();             // ids ticked while in select mode
   let query = '';                         // live search text ('' = not searching)
 
+  /* ---------- home → project PUSH ---------------------------------------------------------------
+   * Ezra: "when you tap on a project the project that you tapped on swipes to the left and then the
+   * project actual screen comes in by swiping from the right."
+   *
+   * Five moving parts, all of them CSS (see the fm-push block in styles.css) — this file only
+   * stamps and unstamps classes:
+   *   .fm-card-press  on pointerdown, synchronously, so the card answers the finger on that frame
+   *   .fm-intro-cut   on a card tapped mid-entrance: the entrance is dropped so the press can be seen
+   *   .fm-card-lead   on the tapped card: it leaves ahead of its own screen
+   *   .fm-lead-cold   + on a lead whose press was never painted, so it leads from rest, not from .965
+   *   .fm-push-out / .fm-push-in  on #home-screen / #app: the two screens crossing
+   *
+   * The press is the whole hand-off and it is the part that has been wrong every round. An open is async —
+   * the media has to decode — so between the finger lifting and the push starting there can be a
+   * second or more with nothing else moving, and the press is the only thing telling the user their
+   * tap landed. So it has an OWNER (pressHeld) for the length of that wait, and the push starts the
+   * lead from wherever the press actually left it (pressPainted). Every path that gives the press up
+   * without handing it to a push eases it back rather than snapping.
+   *
+   * The push is armed only by the paths that actually LAND YOU IN A PROJECT. Every other caller of
+   * close() (text-edit's guard, settings' import, the test harnesses) gets the old instant close,
+   * unchanged, because they are not a screen transition and several of them measure the editor on
+   * the very next line.
+   *
+   * TEARDOWN IS NOT OPTIONAL. #app carries a transform for the length of the push, and a transform
+   * makes an element the containing block for every position:fixed descendant — leave it on and the
+   * editor's sheets, FAB and menus are re-rooted to #app forever. endPush() therefore runs from
+   * animationend AND from a timer backstop AND from open(), and it always strips both.
+   */
+  const PUSH_MS = 280;
+  // The two long waits, in one mutable object rather than as consts, so the regression suite can
+  // drive the abandon path without sleeping for eight seconds. Nothing in the app writes to it.
+  //   release — a finger lifted off a card that then opened nothing (see releasePress)
+  //   stuck   — an open that never settled at all (see holdPress and openAbandoned)
+  const WAIT = { release: 600, stuck: 8000 };
+  let pushTimer = 0, pushLead = null, pressEl = null, pressTimer = 0, closing = false;
+  // Who owns the press, and has it actually been seen. Both are load-bearing:
+  //   pressHeld    — an async open (project / template / element) has taken the press for the length
+  //                  of its wait. While it is set NOTHING else may move or drop the press: not a
+  //                  second tap on the same card, not a tap on a different card, not the release
+  //                  timer. Before this existed a second tap threw the press away and the push then
+  //                  snapped the card back to scale(.965) in one frame (numbers on openProject).
+  //   pressPainted — has the pressed card been on screen for a whole frame? Only then can the push
+  //                  start the lead from the pressed scale. A keyboard Enter, or a tap whose open
+  //                  finishes inside the same task, never paints the press, and starting the lead
+  //                  from .965 in that case is a pop in the other direction (see startPush).
+  let pressHeld = false, pressPainted = false;
+  // Declared up here rather than beside openProject because setPress reads it: a second card tapped
+  // while the first is still opening must not steal the press even before holdPress has run.
+  let _opening = false, _openingAt = 0;
+  // …and a way OUT of it. `_opening` is cleared in openProject's `finally`, which means it is never
+  // cleared at all if FM.projects.open()'s promise simply never settles — a decode that hangs, a
+  // rejected media permission that leaves a dangling await. Before this, that stranded the whole home
+  // screen for the rest of the session: setPress returned early on `_opening` forever, so NO card
+  // ever showed a press again, on any tab, and every tap was silently dropped. Past WAIT.stuck the
+  // press backstop has already eased the card off and nothing on screen is holding the wait, so the
+  // open is treated as abandoned: presses answer again and a fresh tap is allowed to try. Inside the
+  // window the guard is exactly as it was — two overlapping open() loads leaked media and raced
+  // refreshAll, which is the whole reason it exists.
+  function openAbandoned() { return _opening && (Date.now() - _openingAt) > WAIT.stuck; }
+
+  // ease=true lets the card glide back to rest (see .fm-card-unpress) instead of snapping. Used by
+  // every path that gives the press up WITHOUT handing it to a push; the hand-off itself is instant,
+  // because fm-push-lead takes the transform over on that same frame.
+  function clearPress(ease) {
+    clearTimeout(pressTimer); pressTimer = 0;
+    pressHeld = false; pressPainted = false;
+    const card = pressEl; pressEl = null;
+    if (!card) return;
+    card.classList.remove('fm-card-press');
+    if (!ease) { card.classList.remove('fm-card-unpress'); return; }
+    card.classList.add('fm-card-unpress');
+    setTimeout(() => card.classList.remove('fm-card-unpress'), 260);
+  }
+  // A CARD YOU HAVE YOUR FINGER ON IS NO LONGER ENTERING. The once-per-session entry stagger
+  // (stampIntro, below) runs @keyframes hm-rise, which animates TRANSFORM — and a running animation
+  // always beats a plain declaration, so for as long as it plays `.hm-card.fm-card-press { transform:
+  // scale(.965) }` does literally nothing. Measured on a real cold launch at 380x800 — splash played,
+  // dismissed by tapping it, Input.dispatchTouchEvent, per-frame computed style, top level: press
+  // class on at 79.5ms and the card sat at scale 1.0000 for 14 consecutive frames / 232ms, then the
+  // push arrived at 311.5ms and jumped it 1.0000 → 0.9650 in ONE frame. With a slower open the press
+  // stayed invisible for 34 frames / 533ms and then popped on its own the instant hm-rise ended.
+  // Two animations fighting over one property cannot be arbitrated, so the entrance is DROPPED on
+  // this card instead: removing .hm-in cancels it, nothing fills forwards, and the card lands exactly
+  // where the entrance was taking it. Only its OPACITY is eased on the way (see .fm-intro-cut) — a
+  // card caught at 8% would otherwise flash to solid on the same frame. The transform deliberately
+  // does NOT ease: the press is answering a finger and has to land on that frame.
+  function cutIntro(card) {
+    if (!card.classList.contains('hm-in') && !card.classList.contains('hm-in-fab')) return;
+    card.style.setProperty('--cut-from', getComputedStyle(card).opacity);   // read BEFORE the cancel
+    unstampIntro(card);
+    card.classList.add('fm-intro-cut');
+    setTimeout(() => { card.classList.remove('fm-intro-cut'); card.style.removeProperty('--cut-from'); }, 200);
+  }
+  function setPress(card) {
+    // An open in flight owns the press. A second tap — on that card or on any other — is ignored
+    // rather than moving the acknowledgement onto a card that is not the one loading; openProject
+    // ignores the tap itself for the same reason, so moving it would be a lie either way.
+    if (pressHeld || (_opening && !openAbandoned())) return;
+    if (pressEl === card) return;
+    clearPress();
+    pressEl = card; pressPainted = false;
+    card.classList.remove('fm-card-unpress');
+    cutIntro(card);                        // or the entrance animation owns transform and the press is invisible
+    card.classList.add('fm-card-press');   // synchronous: no rAF, no transition — see styles.css
+    // One frame later the press is really on screen, and only then may the push start the lead from
+    // the pressed scale. rAF callbacks run before that frame's paint, so this is exactly "a frame
+    // happened between the press and the push".
+    requestAnimationFrame(() => { if (pressEl === card) pressPainted = true; });
+  }
+  // The release arms a 600ms timer to drop the press (see projectCard's pointerup). That timer is for
+  // a tap that never opens anything — it must NOT fire while an open is actually running, and an open
+  // routinely runs longer than 600ms because the project's media has to decode. Measured on a 900ms
+  // open before this existed: press on at t=42, dropped at t=756, then 335ms of completely dead screen
+  // (card back at transform:none, nothing else moving), and at t=1108 the push started and snapped the
+  // card back to scale(.965) in ONE frame — the popped frame this whole hand-off is designed to avoid.
+  // So anything that takes the tap and then goes async calls this to take the press with it, and hands
+  // it to startPush (which clears it) or drops it itself when it gives up.
+  function releasePress(card) {
+    if (pressHeld || pressEl !== card) return;   // an open already owns it, or this is not its card
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => clearPress(true), WAIT.release);
+  }
+  // "That tap turned out not to be a tap" — a drag, a pointercancel, a select-mode tick. Never takes
+  // the press off a card that an open is still waiting on.
+  function cancelPress(card) {
+    if (pressHeld) return;
+    if (card && pressEl !== card) return;
+    clearPress(true);
+  }
+  // The long backstop is not the mechanism, only insurance: a load that never settles at all must not
+  // leave a card pressed for the rest of the session. It hands over CLEANLY — the press eases off
+  // (no snap) and pressPainted goes with it, so a push that finally arrives at t=12s leads from rest
+  // instead of jumping back to the pressed scale on its first frame.
+  function holdPress() {
+    clearTimeout(pressTimer);
+    pressHeld = !!pressEl;
+    pressTimer = pressEl ? setTimeout(() => clearPress(true), WAIT.stuck) : 0;
+  }
+  // Everything the once-per-session entry stagger leaves on an element (stampIntro, below: the .hm-in
+  // class plus an INLINE animation-delay, 0.49s on the first card). An inline delay outranks every
+  // stylesheet rule, and fm-push-lead is declared `both` — so a lead card still carrying one holds
+  // its `from` state for the whole push and never moves. Measured on a real cold launch at 380x800,
+  // before this call existed: computed animation-delay during the push 0.49s, card-minus-home offset
+  // 22.09px on the first push frame and 22.09px on the last, i.e. EXTRA LEAD 0.00px and opacity
+  // 1 → 1. The headline of the whole feature, absent on the one launch every new user sees.
+  // Two call sites, both load-bearing: setPress (via cutIntro) so the press can own the transform,
+  // and startPush so the lead is not frozen by an inherited delay. ONE line clears both halves of the
+  // stamp — assigning '' to the `animation` SHORTHAND removes every longhand it covers, delay
+  // included, so the `n.style.animationDelay = ''` that used to sit above it was dead code (which is
+  // why mutating it never turned the suite red).
+  function unstampIntro(n) {
+    n.classList.remove('hm-in', 'hm-in-fab');
+    n.style.animation = '';   // clears the inline animation-delay stampIntro wrote, and any other longhand
+  }
+  // hide=true finishes the push (the home screen goes away); hide=false just unwinds it, which is
+  // what open() needs when you come back before the 280ms is up.
+  function endPush(hide) {
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = 0; }
+    const app = document.getElementById('app');
+    if (root) { root.classList.remove('fm-push-out'); if (hide) root.classList.add('hidden'); }
+    if (app) app.classList.remove('fm-push-in');
+    document.body.classList.remove('fm-pushing');
+    if (pushLead) {
+      pushLead.classList.remove('fm-card-lead', 'fm-lead-cold');
+      pushLead.style.removeProperty('--lead-from');
+      pushLead = null;
+    }
+    clearPress();
+    closing = false;
+  }
+  function onPushEnd(e) {
+    // #home-screen is the one element that animates on BOTH paths (slide and reduced-motion fade),
+    // so it — not #app — is the honest end-of-push signal. Filter hard: the card entrances and the
+    // two backdrop drifts all bubble their animationend through this same node.
+    if (e.target !== root || e.pseudoElement) return;
+    if (e.animationName !== 'fm-push-out' && e.animationName !== 'fm-push-fade') return;
+    endPush(true);
+  }
+  // Returns whether a push actually started — close() uses that as the value of `closing`, so a page
+  // with no #app (never happens in the app, does happen in a stripped test page) still closes cleanly.
+  // The push is a PHONE behaviour: it was designed, measured and verified at 380/390/414 only, and a
+  // verifier caught the unscoped version playing the full 280ms slide on desktop with #app going
+  // position:fixed z-index 210 mid-flight at 1280x720 — where the Studio layout has its own fixed
+  // chrome to collide with and nothing had been measured. Desktop keeps the instant swap until that
+  // case is measured on its own terms.
+  let pushAllowed = function () {
+    return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
+  };
+
+  function startPush(lead) {
+    const app = document.getElementById('app');
+    if (!root || !app) { if (root) root.classList.add('hidden'); return false; }
+    // PHONE ONLY, and gated HERE rather than in the stylesheet on purpose. Every rule in the push
+    // block keys off `fm-pushing` / `fm-push-out` / `fm-push-in`, so withholding the class makes all
+    // of them inert at once — correct by construction, where a width-scoped @media block is one more
+    // list that the next rule added below it can quietly fall outside of. This repo has been bitten
+    // four times by exactly that shape of miss.
+    // The behaviour was measured only at phone widths (380/390/414). A verifier found the unscoped
+    // version playing the full 280ms slide on desktop, with #app going position:fixed z-index 210
+    // mid-flight at 1280x720 — unverified there, and the Studio layout has its own fixed chrome to
+    // collide with. Desktop keeps HEAD's instant swap until that case is measured on its own terms.
+    // Exposed as FM.home._pushAllowed so the suite can BOTH assert the gate itself (it must be false
+    // at desktop width) and override it to exercise the push, because tests/run.html drives the app in
+    // a 900px frame where the real gate is legitimately false and no push would ever run.
+    if (!pushAllowed()) {
+      root.classList.add('hidden');
+      return false;
+    }
+    if (pushTimer) endPush(false);           // a second push on top of a running one: restart it
+    // WARM = this card is pressed and that press has been painted, so fm-push-lead can start from the
+    // pressed scale and the release into the push is continuous. COLD = it has not: keyboard Enter
+    // (no finger, and click runs in the same task as the keydown), an open that resolved without a
+    // frame in between, or the 8s backstop having already let go. Starting a cold card at scale(.965)
+    // is a 3.5% jump on the push's first frame — the exact pop this hand-off exists to remove — so
+    // the cold card leads from rest instead. Measured, keyboard Enter at 380x800: 1.000 → 0.965 in
+    // one frame before this existed, 1.000 → 0.999 after.
+    const warm = !!(lead && lead === pressEl && pressPainted);
+    if (lead && lead.isConnected) {
+      pushLead = lead;
+      // Opacity gets the same treatment as scale: start the lead from where the card ACTUALLY is.
+      // A card tapped mid-entrance is still easing in (.fm-intro-cut) when the push takes over, and a
+      // flat `opacity: 1` in the keyframes stepped it 0.34829 → 1.00000 in one frame. Read before the
+      // classes go on, so this is the pre-push value and not the keyframe's own `from`.
+      lead.style.setProperty('--lead-from', getComputedStyle(lead).opacity);
+      unstampIntro(lead);                    // an inherited intro delay would freeze the lead: see unstampIntro
+      lead.classList.add('fm-card-lead');
+      if (!warm) lead.classList.add('fm-lead-cold');
+    }
+    clearPress();                            // instant, not eased — fm-push-lead owns the transform from this frame
+    document.body.classList.add('fm-pushing');
+    root.classList.add('fm-push-out');
+    app.classList.add('fm-push-in');
+    root.addEventListener('animationend', onPushEnd);   // same function ref every time, so this registers once
+    // Backstop. animationend does not fire if the tab is hidden mid-push, and a stranded transform
+    // on #app is a permanent bug — so the timer always finishes the job.
+    pushTimer = setTimeout(() => { pushTimer = 0; endPush(true); }, PUSH_MS + 140);
+    return true;
+  }
+
   function el(tag, cls, text) {
     const d = document.createElement(tag);
     if (cls) d.className = cls;
@@ -20,8 +260,21 @@ window.FM = window.FM || {};
   }
   // role=button divs don't synthesise a click from Enter/Space like a real <button> — wire it so the
   // cards are keyboard-activatable (they announce as buttons to screen readers but did nothing on Enter).
+  // Enter/Space is a tap with no finger, so it gets the same press: without one the card sat at
+  // transform:none for the whole load and then jumped to the pressed scale on the push's first frame.
+  // The press is set BEFORE click() and released on keyup, so a held key reads exactly like a held
+  // finger; if click() runs in the same task (an already-open project) the press never paints and
+  // startPush leads cold instead — see startPush's `warm`.
   function keyActivate(elm) {
-    elm.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); elm.click(); } });
+    elm.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      if (e.repeat) return;          // a held key must not re-fire the activation
+      setPress(elm);
+      elm.click();
+    });
+    elm.addEventListener('keyup', e => { if (e.key === 'Enter' || e.key === ' ') releasePress(elm); });
+    elm.addEventListener('blur', () => cancelPress(elm));   // focus moved on; an open in flight keeps its press
   }
   function ago(ts) {
     if (!ts) return '';
@@ -302,8 +555,8 @@ window.FM = window.FM || {};
     card.appendChild(th); card.appendChild(body);
     if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
     card.addEventListener('click', () => {
-      if (card._paintedAway) { card._paintedAway = false; return; }   // that "click" was the end of a drag-select
-      if (selectMode) toggleSel(p.id); else openProject(p.id);
+      if (card._paintedAway) { card._paintedAway = false; cancelPress(card); return; }   // that "click" was the end of a drag-select
+      if (selectMode) { cancelPress(card); toggleSel(p.id); } else openProject(p.id, false, card);
     });
     // Drag across cards to select a run of them. In select mode a drag paints immediately; outside
     // it, a HOLD enters select mode first and then paints — the same two ways in as the timeline.
@@ -314,10 +567,12 @@ window.FM = window.FM || {};
       downX = ev.clientX; downY = ev.clientY;
       if (selectMode) { beginPaint(p.id, ev.clientY); }
       else {
+        setPress(card);   // synchronous, on THIS frame — the press is the tap's only acknowledgement until the project has loaded
         clearTimeout(holdTimer);
         holdTimer = setTimeout(() => {
           holdTimer = null;
           if (!card.isConnected) return;
+          cancelPress(card);   // a HOLD is not a tap: the render below throws this node away, so let the press go with it rather than leaving pressEl pointing at a detached card
           selectMode = true; selected.clear(); selected.add(p.id);
           document.body.classList.add('hm-selecting');
           render();                                   // one rebuild to draw the checks, BEFORE painting starts
@@ -342,6 +597,8 @@ window.FM = window.FM || {};
     });
     card.addEventListener('pointermove', (ev) => {
       if (holdTimer && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) { clearTimeout(holdTimer); holdTimer = null; }
+      // a drag is a scroll, not a tap — let go of the press the moment it stops being one
+      if (pressEl === card && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) cancelPress(card);
       if (!paint) return;
       if (!paint.moved && Math.hypot(ev.clientX - downX, ev.clientY - downY) < 8) return;   // still a tap, not a drag
       if (!paint.moved) { paint.moved = true; card._paintedAway = true; paint.raf = requestAnimationFrame(paintAutoScroll); }
@@ -350,8 +607,12 @@ window.FM = window.FM || {};
       paintTo(ev.clientY);
     });
     const finish = () => { clearTimeout(holdTimer); holdTimer = null; endPaint(); };
-    card.addEventListener('pointerup', finish);
-    card.addEventListener('pointercancel', finish);
+    // The release deliberately does NOT let go of the press: click fires next, and the push takes the
+    // card over from the same scale, so unpressing here would flash it back to full size first. The
+    // timer is the escape hatch for a tap that never opens anything (a second tap during a load, a
+    // release that turned out to be the end of a drag-select).
+    card.addEventListener('pointerup', () => { finish(); releasePress(card); });
+    card.addEventListener('pointercancel', () => { finish(); cancelPress(card); });
     keyActivate(card);
     return card;
   }
@@ -534,7 +795,16 @@ window.FM = window.FM || {};
       if (selected.has(id)) card.classList.add('hm-sel');
       th.appendChild(el('span', 'hm-check' + (selected.has(id) ? ' on' : ''), selected.has(id) ? '✓' : ''));
     }
-    card.addEventListener('click', () => { if (selectMode) toggleSel(id); else defaultAction(); });
+    card.addEventListener('click', () => { if (selectMode) { cancelPress(card); toggleSel(id); } else defaultAction(); });
+    // The same synchronous press projectCard gives its cards — templates and elements also push into
+    // the editor, and fm-push-lead starts from the pressed scale, so without this they would pop.
+    card.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (ev.target.closest && ev.target.closest('.hm-card-more')) return;
+      if (!selectMode) setPress(card);
+    });
+    card.addEventListener('pointerup', () => releasePress(card));
+    card.addEventListener('pointercancel', () => cancelPress(card));
     return !selectMode;   // caller uses this to decide whether to append its ⋯ button
   }
 
@@ -562,9 +832,12 @@ window.FM = window.FM || {};
     });
     more.setAttribute('aria-label', 'Template actions');
     async function use() {
+      holdPress();   // building a project out of a template is the same long async wait as opening one
       if (FM.toast) FM.toast('Creating project…');
-      const ok = await FM.templates.useAsNew(t.id);
-      if (ok) FM.home.close(); else if (FM.toast) FM.toast('Could not load that template');
+      try {
+        const ok = await FM.templates.useAsNew(t.id);
+        if (ok) FM.home.close({ push: true, lead: card }); else if (FM.toast) FM.toast('Could not load that template');
+      } finally { clearPress(true); }   // eased: on the push path startPush already took it, so this only runs when nothing happened
     }
     if (selectify(card, th, t.id, use)) card.appendChild(more);
     keyActivate(card);
@@ -601,12 +874,16 @@ window.FM = window.FM || {};
       // Elements go INTO a project, so there has to be one open. Home is reachable with no project
       // loaded (first run, or after deleting the last one) — say so rather than failing silently.
       if (!FM.projects.currentId || !FM.projects.currentId()) {
+        cancelPress(card);
         if (FM.toast) FM.toast('Open a project first, then add the element', 2200);
         return;
       }
-      const ok = await FM.elements.insert(e.id);
-      if (ok) { FM.home.close(); if (FM.toast) FM.toast('Added “' + e.name + '”'); }
-      else if (FM.toast) FM.toast('That element’s data is missing — save it again');
+      holdPress();   // inserting an element decodes its media too — same wait, same press to hold
+      try {
+        const ok = await FM.elements.insert(e.id);
+        if (ok) { FM.home.close({ push: true, lead: card }); if (FM.toast) FM.toast('Added “' + e.name + '”'); }
+        else if (FM.toast) FM.toast('That element’s data is missing — save it again');
+      } finally { clearPress(true); }
     }
     if (selectify(card, th, e.id, use)) card.appendChild(more);
     keyActivate(card);
@@ -650,7 +927,7 @@ window.FM = window.FM || {};
           if (!pid) { if (FM.toast) FM.toast('Could not create that'); return; }
           FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
           if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
-          FM.home.close();
+          FM.home.close({ push: true });
           if (FM.toast) FM.toast('Build it, then Home → this project’s ⋯ → Save as element…', 4200);
         } },
         { label: 'From an existing project…', action: () => {
@@ -667,15 +944,35 @@ window.FM = window.FM || {};
     newProjectDialog();
   }
 
-  let _opening = false;
-  async function openProject(id, keepOpen) {
-    if (_opening) return false;   // ignore a second card tap while the first project's media is still decoding (two overlapping open() loads leaked media + raced refreshAll)
-    _opening = true;
+  // `lead` is the card you tapped, if you tapped one — it leads the push out (see the push block at
+  // the top of the file). The push starts HERE rather than on the tap because the editor sliding in
+  // has to be showing the project you asked for; starting it earlier would slide in the previous
+  // project and swap its contents mid-flight. The card's press state covers the wait.
+  async function openProject(id, keepOpen, lead) {
+    // A second tap while the first project's media is still decoding is IGNORED — the tap AND its
+    // press. (Two overlapping open() loads leaked media and raced refreshAll, which is why the tap is
+    // dropped at all.) It used to clearPress() here, which threw away the press the FIRST tap is
+    // still holding, and the card the user is waiting on went dead. Measured at 380x780 with a
+    // 1200ms open — same card tapped twice: press on at 33ms, gone at 739ms, 619ms of dead screen,
+    // then the push snapped it back to scale(.965) in ONE frame at 1358ms. A different card tapped
+    // was worse: the press moved to card B at 656ms, died 100ms later, and card A — the one actually
+    // loading — sat at rest for 717ms before popping. The card that is loading keeps the press; the
+    // second tap gets nothing, which is the truth of what the app is doing.
+    // …but only for as long as that first open is plausibly still running. An open whose promise
+    // never settles at all would otherwise wall the home screen off permanently — see openAbandoned.
+    if (_opening && !openAbandoned()) return false;
+    _opening = true; _openingAt = Date.now();
+    holdPress();   // this open now owns the press — no release timer, and no other card, may take it
     try {
       if (id !== FM.projects.currentId()) await FM.projects.open(id);
-      if (!keepOpen) FM.home.close();
+      if (!keepOpen) FM.home.close({ push: true, lead: lead });
       return true;   // callers (e.g. Export) need to know the switch actually happened, not got skipped
-    } finally { _opening = false; }
+    } finally {
+      _opening = false;
+      // Every way out: the push started (startPush already took the press, so this is a no-op), or
+      // keepOpen meant there was never going to be one, or open() threw. None of them may leave it on.
+      clearPress(true);
+    }
   }
 
   // ids visible in the grid right now, whichever tab is showing (search-aware; Select-all uses it).
@@ -970,7 +1267,7 @@ window.FM = window.FM || {};
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
     await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
-    FM.home.close();
+    FM.home.close({ push: true });   // same hand-off as tapping a card — every route from home into a project pushes
   }
 
   FM.home = {
@@ -1053,6 +1350,7 @@ window.FM = window.FM || {};
     },
     open() {
       if (!root) return;
+      endPush(false);   // coming back before the push finished: unwind it, and never leave the transform on #app
       if (FM.pause) FM.pause(); else FM.playing = false;   // silence playback under the overlay (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // home always shows the top-level project
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
@@ -1072,15 +1370,34 @@ window.FM = window.FM || {};
       // there instead of always landing on the project browser (the boot path reads this).
       try { localStorage.setItem('fm.view', 'home'); } catch (e) {}
     },
-    close() {
+    // close({ push, lead }) plays the home → project push (see the block at the top of this file).
+    // Called with nothing, it is byte-for-byte the close it has always been: the overlay is hidden on
+    // this line, which several callers depend on.
+    close(opts) {
       if (!root) return;
-      root.classList.add('hidden');
+      const push = !!(opts && opts.push) && !root.classList.contains('hidden');
       document.getElementById('hm-dialog').classList.add('hidden');
       document.body.classList.remove('home-open');
+      if (push) {
+        // `closing` makes isOpen() report false for the length of the push, so nothing downstream can
+        // tell an animating close from a finished one and try to close it a second time. Assigned
+        // AFTER the call: startPush may unwind a push already in flight, and that resets the flag.
+        closing = startPush(opts.lead);
+      } else {
+        endPush(false);
+        root.classList.add('hidden');
+      }
       if (FM.requestRender) FM.requestRender();
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
     },
-    isOpen() { return root && !root.classList.contains('hidden'); },
+    isOpen() { return !!root && !root.classList.contains('hidden') && !closing; },
     _splashIsUp: splashIsUp,   // exposed for the regression test — see armIntro
+    _waits: WAIT,              // ditto: the suite shortens WAIT.stuck rather than sleeping 8s for it
+    // The phone gate, as a swappable function rather than an inline matchMedia. The suite asserts the
+    // REAL one is false in its own 900px frame (that IS the desktop case) and then swaps in a stub to
+    // drive the push behaviour itself — otherwise every push assertion would be dead code in a runner
+    // that can never be 700px wide, which is exactly the "a test that cannot run is not a test" trap.
+    get _pushAllowed() { return pushAllowed; },
+    set _pushAllowed(fn) { pushAllowed = fn; },
   };
 })(window.FM);

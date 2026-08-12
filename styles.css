@@ -3324,6 +3324,207 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   #home-screen.hm-intro .hm-in, #home-screen.hm-intro .hm-in-fab { animation: none; }
 }
 
+/* ---------------- Home → project PUSH (queue 55) ------------------------------------------------
+ * Ezra: "when you tap on a project the project that you tapped on swipes to the left and then the
+ * project actual screen comes in by swiping from the right."
+ *
+ * So the tapped CARD is the lead actor: it leaves ahead of everything else, its own screen follows
+ * it out at a slower pace and dims, and the editor arrives over the top from the right. The two
+ * screens are on screen together for the whole push, which is what makes it read as one movement
+ * rather than a cut.
+ *
+ * NOTHING IS RE-LAID OUT. This is the entire point of the block and the reason the first attempt was
+ * thrown away: on every phone viewport it re-laid out the whole home screen at DOUBLE WIDTH for the
+ * length of the push, so every card, every tab and the whole grid reflowed twice — on exactly the
+ * frames that have to stay smooth. Here #home-screen keeps position:fixed;inset:0 and #app keeps
+ * width:100%; each is offset by a TRANSFORM, which the compositor applies to an already-painted
+ * layer and cannot change anyone's width. The only animated properties here are transform and
+ * opacity. What actually PRODUCES the doubling is measured and written up on the #app rule below —
+ * it is not the container you would expect, and it is easy to reintroduce by accident.
+ *
+ * Percentages are of each element's OWN border box, and every one of those boxes is the viewport
+ * (or, for the card, the card) — so the push scales itself to any phone without a media query.
+ *
+ * Curve: cubic-bezier(0,0,.2,1), the standard decelerate. ~84% of the distance is covered in the
+ * first half, so the editor is essentially home by 140ms and settles for the rest — a push that
+ * answers the tap immediately instead of gliding.
+ */
+@keyframes fm-push-out {          /* the screen you are leaving: less travel, and it dims away */
+  from { transform: translate3d(0, 0, 0);    opacity: 1; }
+  to   { transform: translate3d(-24%, 0, 0); opacity: .42; }
+}
+@keyframes fm-push-in {           /* the editor, arriving from off the right edge */
+  from { transform: translate3d(100%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+/* Same movement, measured in VIEWPORTS instead of in self-widths — for the editor's floating chrome,
+   which travels with the editor but is nowhere near its size. A % inside translate resolves against
+   the ANIMATED ELEMENT'S OWN border box, so the 64px + orb on fm-push-in starts 64px off its resting
+   place while the viewport-sized #app it belongs to starts a whole screen away. Measured at 380px:
+   the orb was 315.6px ahead of its own screen at the worst frame (326 at 390, 350 at 414 — viewport
+   minus 64, every time), which showed up twice: a 16px sliver of the orb painted at the right edge of
+   the HOME screen at t=0, next to home's own + button, with the editor still fully off-screen; and
+   then the orb swam left across the incoming editor's face and landed ~200ms early.
+   100vw is the same distance #app actually covers, so the two are locked together (measured after:
+   0.0px of desync at 380 / 390 / 414). It cannot bring back the double-width relayout described on
+   the #app rule below — both of these are already position:fixed and contribute nothing to the
+   document's scrollable overflow, so nothing can widen the layout viewport. */
+@keyframes fm-push-in-vw {
+  from { transform: translate3d(100vw, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+@keyframes fm-push-fade { from { opacity: 1; } to { opacity: 0; } }   /* the reduced-motion path, below */
+/* The tapped card. Its offset is ON TOP of the screen's (transforms compose down the tree), so at
+   every single frame it is further left than the list it came out of — that is what "the project you
+   tapped swipes to the left" means, and it is what separates this from a plain screen slide. It
+   starts from the pressed scale so the release into the push has no popped frame.
+   --lead-from is the same idea applied to OPACITY, and it is not hypothetical: a card tapped while it
+   is still fading in (see .fm-intro-cut) is mid-ease when the push takes over, and a hard `opacity: 1`
+   here snapped it. Measured at 380x800, cold launch, tapping the project that is already open so the
+   push lands three frames after the finger: opacity 0.34829 → 1.00000 in ONE frame. startPush writes
+   the card's real opacity into the property, so the lead continues from wherever it was; the 1
+   fallback is what every ordinary tap on a settled card resolves to anyway. */
+@keyframes fm-push-lead {
+  from { transform: translate3d(0, 0, 0) scale(.965);      opacity: var(--lead-from, 1); }
+  to   { transform: translate3d(-34%, 0, 0) scale(.925);   opacity: .22; }
+}
+/* The same lead for a card that was never pressed on screen: keyboard Enter (no finger, and the
+   click runs in the same task as the keydown, so the press cannot paint before the push), an open
+   that resolved without a frame in between, or the 8s press backstop having already let go. Starting
+   THOSE at scale(.965) is a 3.5% jump on the push's first frame — the same one-frame pop the press
+   hand-off exists to remove, just in the other direction. js/home.js decides which of the two it is
+   (startPush's `warm`) and stamps .fm-lead-cold; nothing else differs. */
+@keyframes fm-push-lead-cold {
+  from { transform: translate3d(0, 0, 0) scale(1);         opacity: var(--lead-from, 1); }
+  to   { transform: translate3d(-34%, 0, 0) scale(.925);   opacity: .22; }
+}
+body.fm-pushing #home-screen,
+body.fm-pushing #app,
+body.fm-pushing #add-fab { will-change: transform, opacity; }
+#home-screen.fm-push-out { animation: fm-push-out 280ms cubic-bezier(0, 0, .2, 1) both; }
+#home-screen.fm-push-out .hm-card.fm-card-lead { animation: fm-push-lead 280ms cubic-bezier(0, 0, .2, 1) both; }
+#home-screen.fm-push-out .hm-card.fm-card-lead.fm-lead-cold { animation-name: fm-push-lead-cold; }   /* name only: same 280ms, same curve, same fill */
+/* The incoming half, and the one rule in this block that had to be MEASURED rather than reasoned
+   about. #app is normally an unpositioned grid; the obvious way to lift it over the home overlay is
+   position:relative + z-index. That is wrong on a phone, and it reproduces the exact double-width
+   relayout the first attempt was rejected for — this version had it too, until it was measured:
+     an in-flow #app translated to +100% still contributes that 380px to the document's SCROLLABLE
+     OVERFLOW. Chrome on mobile (meta viewport width=device-width) answers horizontal overflow by
+     widening the LAYOUT VIEWPORT to contain it — measured at 380px: window.innerWidth went 380 → 760
+     the instant the animation started. Every fixed element is sized against that viewport, so the
+     home screen became 760px wide, .hm-grid jumped from 348 to its 700px cap, and the entire list
+     re-laid out at double width for the whole push and back again at the end.
+   position:fixed is the fix, not a workaround: a fixed box is positioned against the viewport and
+   takes no part in the document's scrollable overflow, so the editor can sit a full screen off to
+   the right without the page ever getting wider. It also carries the z-index for free (210 is the
+   smallest number that clears the home overlay's 200 and still sits under #ctx-menu's 300 and the
+   shortcuts overlay's 230). Geometry is unchanged: #app is already width:100%/height:100vh at 0,0.
+   Removed the instant the push ends (js/home.js) — a transform left on #app would re-root every
+   position:fixed descendant of the editor forever.
+   The explicit background matters: #app itself is transparent and only its four panels paint, so
+   without this the home screen would show through the seams while the two overlap. */
+body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; background: var(--bg); }
+#app.fm-push-in { animation: fm-push-in 280ms cubic-bezier(0, 0, .2, 1) both; }
+/* The + orb lives OUTSIDE #app (body-level, z-index 61), so without this it would sit still in the
+   middle of the vacated screen while everything else moved. It rides in on the SAME CURVE for the
+   SAME DISTANCE, one step above #app so it is not buried by its backdrop — but NOT on the same
+   @keyframes. fm-push-in travels 100% of the animated element, which for a 64px button is 64px; the
+   orb needs the viewport, so it gets fm-push-in-vw. Swapping this back to fm-push-in is the exact
+   defect written up on that keyframe, and tests/tests.js measures the orb's offset from #app's left
+   edge on every frame of the push to keep it swapped.
+   IT IS THE ONLY ONE. Walked, rather than assumed: every position:fixed element under <body> that is
+   outside #app and #home-screen, in the phone editor at 380x800 — #splash, #toast, #insp-toggle,
+   #add-fab, #add-sheet, #group-crumb, #fx-browser, #afx-browser, #export-overlay, #export-dialog,
+   #canvas-dialog, #draw-bar, #ai-panel. Every one of them is display:none there except #add-fab
+   (300,716 64x64), #add-sheet and #ai-panel — and those two are parked a full screen BELOW the
+   viewport (y=800 at height 800) until they are opened, so they have nothing to ride in. #toast can
+   be on screen, and is deliberately left out: it is a transient message about what just happened,
+   not part of either screen's furniture, and it dismisses itself inside the push. An earlier draft
+   also named #insp-toggle here and claimed it rode the same curve; that rule was dead and has been
+   deleted. #insp-toggle is display:none at EVERY width: the base rule at styles.css:1800 hides it
+   outright, the phone block re-styles it at :1887 but the LATER phone rule at :2210 hides it again
+   ("AM has no edit pencil"), so nothing ever un-hides it. Re-measured in the real editor at
+   320 / 380 / 414 / 700 / 701 / 900 / 1280 — display:none and a 0x0 box at all seven. */
+body.fm-pushing #add-fab { z-index: 212; animation: fm-push-in-vw 280ms cubic-bezier(0, 0, .2, 1) both; }
+/* The one thing that deliberately does NOT travel. A toast is a message about what just happened
+   ("Creating project…", "Added …"), not furniture belonging to either screen, so it stays exactly
+   where it is and stays readable while the two screens cross underneath it. It only needs the lift:
+   at its usual z-index 60 the incoming #app (210 for the length of the push) would slide straight
+   over the top of it and it would pop back into view at the end. */
+body.fm-pushing #toast { z-index: 213; }
+/* The press. Deliberately NOT a transition: a transition would only begin on the next style-change
+   event, so the frame the finger lands on would still show the card at rest — the tap has to answer
+   on that frame or it reads as lag. It is also the same scale fm-push-lead starts from, so the
+   release into the push is continuous (js/home.js holds the press until the push takes over). */
+.hm-card.fm-card-press { transform: scale(.965); }
+/* THE PRESS CANNOT WIN AGAINST AN ANIMATION, and on a cold launch there is one: the entry stagger
+   runs @keyframes hm-rise on every card, which animates transform, and a running animation always
+   beats a plain declaration no matter how specific. Measured at 380x800 on a real cold launch: press
+   class on at 79.5ms, card stuck at scale 1.0000 for 232ms, then the push jumped it to 0.9650 in one
+   frame. So js/home.js CANCELS that card's entrance instead of trying to out-specify it (cutIntro),
+   and this is the only part of the cancellation that is eased: the transform lands instantly, on the
+   frame the finger is on, and the opacity walks the rest of the way in so a card interrupted while it
+   is still invisible does not flash to solid on that same frame.
+   It is a KEYFRAME, not a transition, and that was measured rather than assumed: cancelling an
+   animation does not trigger a transition on the property it was animating, so `.fm-intro-cut {
+   transition: opacity 140ms }` was dead CSS — the opacity still stepped 0.00000 → 1.00000 in one
+   frame at 380x800. --cut-from is written by cutIntro from the card's real computed opacity at the
+   instant of the cut, so the ease starts from wherever the entrance had actually got to. */
+@keyframes fm-intro-cut { from { opacity: var(--cut-from, 0); } to { opacity: 1; } }
+.hm-card.fm-intro-cut { animation: fm-intro-cut 140ms linear both; }
+/* Letting the press GO when no push is coming (the tap opened nothing, the 8s backstop gave up). The
+   press arrives instantly because it is answering a finger; this leaves on a curve, because nothing
+   is answering it. Stamped for one beat by js/home.js and removed again — a permanent transition
+   here would put a 200ms lag on the press itself. */
+.hm-card.fm-card-unpress { transition: transform 200ms cubic-bezier(0, 0, .2, 1); }
+
+/* Reduced motion: same hand-off, no travel. The home screen simply fades off the editor, which is
+   already sitting there fully painted and opaque — so it is a true cross-dissolve with no dip to
+   black, and not one pixel of translation on either screen or on the card. */
+@media (prefers-reduced-motion: reduce) {
+  #home-screen.fm-push-out { animation: fm-push-fade 200ms linear both; }
+  /* BOTH lead selectors. `.fm-card-lead` alone is (1,3,0) and the cold variant above is
+     `…fm-card-lead.fm-lead-cold` at (1,4,0), so on the cold path — keyboard Enter, and every route
+     that leads with a card nobody pressed (templates, elements, New project) — that rule kept
+     winning `animation-name` inside this block and the computed name stayed "fm-push-lead-cold".
+     MEASURED, so the claim is the right size: name fm-push-lead-cold but duration 0s, fill none, no
+     animation attached, transform none, opacity .55 — i.e. it is a LEAK, not motion; nothing actually
+     moved (0.00px of travel at 380x800). It is closed anyway, because a rule that half-applies is a
+     trap: the computed style says the card is running the travel keyframes when it is not, and the
+     next edit that gives the lead a duration turns a naming inconsistency into a real one. Matching
+     the specificity and coming later in the file is what switches it off properly. */
+  #home-screen.fm-push-out .hm-card.fm-card-lead,
+  #home-screen.fm-push-out .hm-card.fm-card-lead.fm-lead-cold { animation: none; }
+  body.fm-pushing #app { position: static; left: auto; top: auto; z-index: auto; background: none; }
+  #app.fm-push-in { animation: none; }
+  /* back to the value the base rule gives it (61) — `auto` would drop the orb out of its own layer
+     and let the fading home screen paint underneath it for the length of the fade. */
+  body.fm-pushing #add-fab { animation: none; z-index: 61; }
+  /* THE TAP STILL HAS TO ANSWER. Killing the scale and stopping there left this path with no
+     acknowledgement at all: :active drops its background the instant the finger lifts, and the open
+     is async, so a reduced-motion user tapped a card and watched a completely unchanged screen until
+     the editor appeared — a second or more on a project with media. Reduced motion means no MOTION,
+     not no feedback, so the press is a dim + an accent edge instead: it lands on the same frame as
+     the finger, it survives the wait exactly like the scale does, and it holds through the
+     cross-dissolve on the lead card so the hand-off is continuous there too.
+     Scoped through #home-screen for its ID, and that is not cosmetic: theme-glass.css loads after
+     styles.css and gives every card `html[data-theme="glass"] .hm-card { border: 1px solid
+     var(--line-soft) }` — (0,2,1), which outranks a plain `.hm-card.fm-card-press` (0,2,0). Measured
+     with the flat selector: opacity took (0.55) and the border did NOT (rgb(18,32,41), still
+     --line, against an --accent of #5ac7ed). Glass is the shipped default theme, so that is the
+     path everyone is on. */
+  #home-screen .hm-card.fm-card-press,
+  #home-screen.fm-push-out .hm-card.fm-card-lead { transform: none; opacity: .55; border-color: var(--accent); }
+  /* and it fades out rather than snapping, for the same reason the scale eases back */
+  #home-screen .hm-card.fm-card-unpress { transition: opacity 200ms linear, border-color 200ms linear; }
+  /* No entrance to cut short here — armIntro never runs under reduced motion and the stagger is
+     `animation: none` anyway — so there is nothing for .fm-intro-cut to ease out of. It is switched
+     off rather than left harmless because an OPACITY ANIMATION on the card would outrank the press's
+     own `opacity: .55` declaration above it, which is exactly the defect (a running animation beating
+     a declaration) that the cut exists to fix in the first place. */
+  .hm-card.fm-intro-cut { animation: none; }
+}
+
 /* A settings row whose control performs an action rather than storing a preference (Import…, Show
    shortcuts). Sized to match .set-select so the right-hand column of the panel stays on one line. */
 .set-action {

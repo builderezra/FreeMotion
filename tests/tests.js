@@ -4427,6 +4427,845 @@
     }
   });
 
+  /* The home → project push must never re-lay-out either screen (queue 55).
+   *
+   * This is the test that would have caught the rejected first attempt, and it caught this one too
+   * before it shipped. The trap: an incoming screen that is still IN FLOW and translated a whole
+   * viewport to the right contributes that viewport as horizontal SCROLLABLE OVERFLOW, and Chrome on
+   * a phone answers horizontal overflow by widening the layout viewport to contain it. Measured at
+   * 380px on a real top-level page (not an iframe — an iframe hides this completely): innerWidth went
+   * 380 → 760 the moment the push started, #home-screen followed it to 760, and .hm-grid jumped from
+   * 348 to its 700px cap. Every card, every tab and the whole list reflowed twice, on exactly the
+   * 280ms that has to stay smooth.
+   *
+   * So the invariant is layout, not looks, and it is checkable at any viewport: with the push classes
+   * on, no width may move and the document may not gain any horizontal overflow. The classes are the
+   * real ones off styles.css — nothing here is stubbed — and the widths are read back while they are
+   * applied, so a future edit that reaches for `width` instead of `transform` fails here. */
+  test('home push: the two screens slide without either being re-laid-out', { item: 'home-push' }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var home = document.getElementById('home-screen');
+    var app = document.getElementById('app');
+    if (!home || !app) throw new Error('#home-screen / #app missing');
+    var wasHidden = home.classList.contains('hidden');
+    var grid = home.querySelector('.hm-grid');
+    if (!grid) throw new Error('.hm-grid missing — the home screen was never built');
+    try {
+      home.classList.remove('hidden');
+      await sleep(0);
+      var de = document.documentElement;
+      var before = { home: home.offsetWidth, grid: grid.offsetWidth, app: app.offsetWidth,
+                     doc: de.scrollWidth, client: de.clientWidth };
+      if (!(before.home > 0 && before.grid > 0 && before.app > 0)) throw new Error('nothing has a width to compare — the home screen is not laid out');
+
+      document.body.classList.add('fm-pushing');
+      home.classList.add('fm-push-out');
+      app.classList.add('fm-push-in');
+      await sleep(0);
+      // Sample across the animation rather than at one instant: a width that only moves mid-curve
+      // (a percentage width, a container that grows with the transform) has to be caught too.
+      for (var i = 0; i < 12; i++) {
+        var now = { home: home.offsetWidth, grid: grid.offsetWidth, app: app.offsetWidth,
+                    doc: de.scrollWidth, client: de.clientWidth };
+        if (now.home !== before.home) throw new Error('#home-screen was re-laid-out mid-push: ' + before.home + ' → ' + now.home + 'px');
+        if (now.grid !== before.grid) throw new Error('.hm-grid was re-laid-out mid-push: ' + before.grid + ' → ' + now.grid + 'px — every card reflows with it');
+        if (now.app !== before.app) throw new Error('#app was re-laid-out mid-push: ' + before.app + ' → ' + now.app + 'px');
+        if (now.doc > now.client) throw new Error('the push added ' + (now.doc - now.client) + 'px of horizontal overflow — on a phone that widens the layout viewport and reflows both screens');
+        await new Promise(function (r) { requestAnimationFrame(r); });
+      }
+
+      // The mechanism that makes the above true, asserted directly so it cannot be lost by accident:
+      // the incoming screen is taken OUT OF FLOW for the push. An in-flow #app translated a whole
+      // viewport to the right is the overflow, and position:fixed is what stops it counting.
+      // Everything above this line is true on BOTH paths — nothing may reflow either way. Everything
+      // below it is about travel, and under prefers-reduced-motion there is deliberately none: #app
+      // never leaves the flow, so asserting position:fixed there turned this test red for anyone who
+      // has the OS setting on. That is the reduced-motion contract, so it is checked, not skipped.
+      var cs = getComputedStyle(app);
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (cs.animationName !== 'none') throw new Error('#app still runs "' + cs.animationName + '" under prefers-reduced-motion — the editor is supposed to be sitting still while home fades off it');
+        if (cs.position !== 'static') throw new Error('#app is position:' + cs.position + ' under reduced motion — nothing is travelling, so nothing should leave the flow');
+        if (getComputedStyle(home).animationName !== 'fm-push-fade') throw new Error('home runs "' + getComputedStyle(home).animationName + '" under reduced motion instead of the cross-dissolve');
+      } else {
+        if (cs.position !== 'fixed') throw new Error('#app is position:' + cs.position + ' during the push — in flow, its transform counts as document overflow and the phone viewport doubles');
+        if (!(parseInt(cs.zIndex, 10) > 200)) throw new Error('#app sits at z-index ' + cs.zIndex + ' during the push — it must clear the home overlay (200) or the editor slides in underneath it');
+        if (cs.animationName !== 'fm-push-in') throw new Error('#app is running "' + cs.animationName + '" — the editor does not enter');
+        if (!(parseFloat(cs.animationDuration) > 0)) throw new Error('the push has no duration (' + cs.animationDuration + ')');
+        if (cs.animationTimingFunction === 'linear') throw new Error('the push eases linearly — it is supposed to decelerate in');
+      }
+
+      // Only transform and opacity may be animated. Anything else in these keyframes is a per-frame
+      // layout or paint cost on the frames that have to stay at 60.
+      var names = { 'fm-push-out': 1, 'fm-push-in': 1, 'fm-push-in-vw': 1, 'fm-push-lead': 1, 'fm-push-lead-cold': 1, 'fm-push-fade': 1 }, seen = 0;
+      [].slice.call(document.styleSheets).forEach(function (ss) {
+        var rules; try { rules = ss.cssRules; } catch (e) { return; }
+        [].slice.call(rules || []).forEach(function (r) {
+          if (r.type !== CSSRule.KEYFRAMES_RULE || !names[r.name]) return;
+          seen++;
+          [].slice.call(r.cssRules).forEach(function (kf) {
+            for (var j = 0; j < kf.style.length; j++) {
+              var p = kf.style[j];
+              if (p !== 'transform' && p !== 'opacity') throw new Error('@keyframes ' + r.name + ' animates "' + p + '" — the push must be transform/opacity only');
+            }
+          });
+        });
+      });
+      if (seen < 6) throw new Error('found only ' + seen + ' of the 6 push keyframes — this test would be asserting nothing');
+    } finally {
+      document.body.classList.remove('fm-pushing');
+      home.classList.remove('fm-push-out');
+      app.classList.remove('fm-push-in');
+      if (wasHidden) home.classList.add('hidden');
+    }
+    // NOTE ON WHAT IS *NOT* ASSERTED HERE. This test stamps the push classes itself, so it also has to
+    // strip them itself — and an earlier version then asserted, right here, that #app had no transform
+    // and was back to position:static. That is self-fulfilling: the four lines above had just removed
+    // the only classes that could have caused either. The teardown that actually matters is the app's
+    // own endPush(), and a stranded transform on #app is a real permanent bug (it re-roots every
+    // position:fixed descendant of the editor), so it is asserted where a REAL push has just run —
+    // see "the app cleans up after itself" in the press test below.
+  });
+
+  /* The push moves MORE than the two screens (queue 55). The editor's + orb is body-level
+   * position:fixed chrome that lives OUTSIDE #app, so it needs its own copy of the animation — and
+   * that is where the previous attempt broke, invisibly to the test above, because every assertion in
+   * it only ever walks #home-screen, .hm-grid and #app.
+   *
+   * A percentage inside translate resolves against the ANIMATED ELEMENT'S OWN border box. Put the
+   * 64px + orb on #app's fm-push-in (from: translate3d(100%,0,0)) and the orb starts 64px from home
+   * while the viewport-sized #app starts a whole screen away. Measured at 380px: 315.6px apart at the
+   * worst frame (326 at 390, 350 at 414 — viewport minus 64, every time). Two things you can see: at
+   * t=0, editor still entirely off-screen and home still at full opacity, a 16px sliver of the orb is
+   * already painted on the RIGHT EDGE OF THE HOME SCREEN beside home's own + button; and for the rest
+   * of the push the orb swims left across the incoming editor's face and lands ~200ms early.
+   * fm-push-in-vw (100vw — the distance #app actually covers) is the fix; this holds it there.
+   *
+   * THE ORB IS PHONE-ONLY (display:none above 700px) AND THE SUITE'S FRAME IS 900px WIDE. The first
+   * version of this test put the geometry, the hit-test and the curve sweep behind
+   * `if (fabCs.position === 'fixed' && fabCs.display !== 'none')` — a condition that is NEVER true
+   * inside tests/run.html. Measured there: display none, position static, box 0x0, so that whole half
+   * silently asserted nothing and reported green. A test that cannot run is not a test. So the runner
+   * is narrowed to a phone viewport for the length of this test and put back afterwards — same
+   * document, same stylesheets, real media queries, real boxes — and the sweep no longer names the
+   * orb at all: it WALKS every position:fixed element under <body> that is outside both screens and
+   * on screen during the push, and requires each one to be rigid with one of the two screens. That is
+   * the general form of the defect, so the next piece of floating chrome is covered for free.
+   *
+   * It also PAUSES and seeks the animations instead of sampling on rAF: this curve is ~20% of the way
+   * along by the end of the first frame, so "the first frame" is not reachable by waiting for one —
+   * and the sliver only ever existed at the very start. */
+  test('home push: the editor’s body-level chrome travels with the editor, not with itself', { item: 'home-push' }, async function () {
+    var home = document.getElementById('home-screen');
+    var app = document.getElementById('app');
+    var fab = document.getElementById('add-fab');
+    if (!home || !app || !fab) throw new Error('#home-screen / #app / #add-fab missing');
+    var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var wasHidden = home.classList.contains('hidden');
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); };
+
+    // the `from` transform of a named @keyframes, straight off the real stylesheet
+    function startTransform(name) {
+      var found = null;
+      [].slice.call(document.styleSheets).forEach(function (ss) {
+        var rules; try { rules = ss.cssRules; } catch (e) { return; }
+        [].slice.call(rules || []).forEach(function (r) {
+          if (r.type !== CSSRule.KEYFRAMES_RULE || r.name !== name) return;
+          [].slice.call(r.cssRules).forEach(function (k) {
+            if (k.keyText === 'from' || k.keyText === '0%') found = k.style.transform;
+          });
+        });
+      });
+      return found;
+    }
+    // …resolved to CSS pixels at THIS viewport. A % is of the animated element's own border box; any
+    // absolute or viewport unit is measured with a throwaway probe, so "100vw" is never assumed to
+    // mean anything — it is measured.
+    function startPx(name, ownBoxWidth) {
+      var t = startTransform(name);
+      if (!t) throw new Error('@keyframes ' + name + ' has no from/0% frame — the push has no start');
+      var m = /translate3?d?\(\s*([^,)]+)/.exec(t);
+      if (!m) throw new Error('@keyframes ' + name + ' starts from "' + t + '", which is not a translate');
+      var v = m[1].trim();
+      if (v.charAt(v.length - 1) === '%') return parseFloat(v) / 100 * ownBoxWidth;
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:absolute;left:-99999px;top:0;height:1px;width:' + v;
+      document.body.appendChild(probe);
+      var px = probe.getBoundingClientRect().width;
+      probe.parentNode.removeChild(probe);
+      return px;
+    }
+
+    // Narrow the suite's own frame to a phone. tests/run.html loads the app in an iframe and injects
+    // this script INTO it, so frameElement is that iframe and same-origin — resizing it is a real
+    // viewport change, media queries and all. Restored in the finally.
+    var frameEl = null; try { frameEl = window.frameElement; } catch (e) { frameEl = null; }
+    var restore = null;
+    if (innerWidth > 700) {
+      if (!frameEl) throw new Error('this test needs a ≤700px viewport (the + orb is display:none above that) and there is no frame to resize — run it from tests/run.html, or narrow the window');
+      restore = { w: frameEl.style.width, h: frameEl.style.height };
+      frameEl.style.width = '380px'; frameEl.style.height = '800px';
+      await rAF(); await rAF();
+      if (innerWidth > 700) throw new Error('narrowing the runner frame did not take: innerWidth is still ' + innerWidth);
+    }
+
+    try {
+      home.classList.remove('hidden');
+      await rAF();
+      document.body.classList.add('fm-pushing');
+      home.classList.add('fm-push-out');
+      app.classList.add('fm-push-in');
+      await rAF();
+
+      var fabCs = getComputedStyle(fab), appCs = getComputedStyle(app);
+      if (reduced) {
+        // The other half of the contract: under reduced motion NOTHING travels, and the orb has to
+        // drop back to its own z-index or the fading home screen paints underneath it.
+        if (fabCs.animationName !== 'none') throw new Error('the + orb still runs "' + fabCs.animationName + '" under prefers-reduced-motion');
+        if (appCs.animationName !== 'none') throw new Error('#app still runs "' + appCs.animationName + '" under prefers-reduced-motion');
+        if (appCs.position !== 'static') throw new Error('#app is position:' + appCs.position + ' under reduced motion — nothing is travelling, so nothing should leave the flow');
+        if (fabCs.zIndex !== '61') throw new Error('the + orb sits at z-index ' + fabCs.zIndex + ' under reduced motion — it must go back to 61 or the fading home screen paints over it');
+        return;
+      }
+
+      // A toast can be up when the push starts ("Creating project…" fires on home, "Added …" fires as
+      // the editor arrives). It does not travel — see the rigidity sweep below — but it does have to
+      // stay VISIBLE: at its resting z-index 60 the incoming #app, lifted to 210 for the length of
+      // the push, slides straight over the top of it and it pops back into view at the end. Checked
+      // from the computed style rather than from a live toast so it runs on every pass.
+      var toast = document.getElementById('toast');
+      if (toast) {
+        var tz = parseInt(getComputedStyle(toast).zIndex, 10), az = parseInt(appCs.zIndex, 10);
+        if (!(tz > az)) throw new Error('#toast sits at z-index ' + tz + ' during the push, under #app’s ' + az + ' — a toast that is already on screen gets buried by the incoming editor and reappears when the push ends');
+      }
+
+      /* ---- the orb is really there now, so this is a measurement and not a skipped branch ---- */
+      if (fabCs.display === 'none' || fabCs.position !== 'fixed') throw new Error('at ' + innerWidth + 'px the + orb is display:' + fabCs.display + ' position:' + fabCs.position + ' — the phone chrome this test exists to measure is not on screen, so nothing below would be asserting anything');
+
+      /* ---- same distance, same duration, same curve ---- */
+      if (fabCs.animationName === 'none') throw new Error('the + orb does not animate during the push — it would sit still in the middle of the screen everything else is leaving');
+      if (appCs.animationName === 'none') throw new Error('#app does not animate during the push');
+      if (fabCs.animationDuration !== appCs.animationDuration) throw new Error('the + orb runs for ' + fabCs.animationDuration + ' against #app’s ' + appCs.animationDuration + ' — it lands at a different moment from the screen it belongs to');
+      if (fabCs.animationTimingFunction !== appCs.animationTimingFunction) throw new Error('the + orb eases on ' + fabCs.animationTimingFunction + ' against #app’s ' + appCs.animationTimingFunction + ' — same distance, different shape, so it drifts mid-flight');
+      var appStart = startPx(appCs.animationName, app.getBoundingClientRect().width);
+      var fabStart = startPx(fabCs.animationName, fab.getBoundingClientRect().width);
+      if (Math.abs(appStart - fabStart) > 2) throw new Error('the + orb starts ' + Math.round(fabStart) + 'px off-screen where #app starts ' + Math.round(appStart) + 'px off-screen — a % inside translate is of the ANIMATED ELEMENT, so a 64px button on #app’s keyframes travels 64px while its screen travels a whole viewport');
+
+      if (typeof app.getAnimations !== 'function') throw new Error('this browser cannot seek CSS animations from script — the push cannot be measured at its first frame');
+      var pushNames = { 'fm-push-in': 1, 'fm-push-in-vw': 1, 'fm-push-out': 1, 'fm-push-fade': 1 };
+      var anims = [home, app, fab].reduce(function (acc, e) { return acc.concat(e.getAnimations()); }, [])
+        .filter(function (a) { return pushNames[a.animationName]; });
+      if (anims.length < 3) throw new Error('only ' + anims.length + ' push animation(s) are running (#home-screen, #app and the + orb each need one) — this test would be asserting nothing');
+      anims.forEach(function (a) { a.pause(); a.currentTime = 0; });
+
+      /* ---- FRAME ZERO: home is still fully up, so NOTHING of the editor may be on screen ---- */
+      var a0 = app.getBoundingClientRect();
+      if (a0.left < innerWidth - 1) throw new Error('#app starts the push already ' + Math.round(innerWidth - a0.left) + 'px on screen');
+      var f0 = fab.getBoundingClientRect();
+      if (f0.left < innerWidth - 1) throw new Error('the + orb starts the push ' + Math.round(innerWidth - f0.left) + 'px INSIDE the home screen — a sliver of the editor is painted over home before the editor has moved at all');
+
+      // The general form, so the next piece of floating chrome is caught for free: anything outside
+      // both screens that TRAVELS with the push, has been lifted above the home overlay's z-index 200
+      // and is on screen at frame zero is, by definition, the editor painting over home before it has
+      // moved. Something lifted but standing still is a different thing and is allowed — see #toast
+      // on the rigidity sweep below.
+      var over = [];
+      [].slice.call(document.querySelectorAll('body *')).forEach(function (n) {
+        if (n.closest('#home-screen') || n.closest('#app')) return;
+        var cs = getComputedStyle(n);
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.02) return;
+        if (cs.animationName === 'none') return;
+        if (!(parseInt(cs.zIndex, 10) > 200)) return;
+        var r = n.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return;
+        if (r.right <= 0.5 || r.left >= innerWidth - 0.5 || r.bottom <= 0.5 || r.top >= innerHeight - 0.5) return;
+        over.push((n.id ? '#' + n.id : n.tagName) + ' x' + Math.round(r.left) + '..' + Math.round(r.right));
+      });
+      if (over.length) throw new Error('at frame zero, with the editor still entirely off-screen, this sits above the home overlay AND on screen: ' + over.join(', '));
+
+      // Rects cannot see "covered" or "clipped", so hit-test the right edge of the home screen too —
+      // at the orb's own height, which is exactly where the sliver landed.
+      var hit = document.elementFromPoint(Math.max(1, innerWidth - 6), Math.max(1, innerHeight - 52));
+      if (hit && (hit.closest('#app') || hit.closest('#add-fab'))) throw new Error('the right edge of the home screen hit-tests to ' + (hit.id ? '#' + hit.id : hit.tagName) + ', which belongs to the editor — it is painting over home on the first frame of the push');
+
+      /* ---- and then the whole curve, walked rather than named ----
+         Every body-level fixed thing outside the two screens that is on screen at ANY point of the
+         push has to be rigid with SOMETHING: it rides with #app (it belongs to the editor), it leaves
+         with #home-screen (it belongs to home), or it does not move at all (it belongs to neither —
+         a toast is a message about what just happened, not screen furniture, and it stays put and
+         readable above both). Rigid with none of the three is the defect: something travelling on a
+         distance of its own, which is exactly what the 64px orb on a viewport-sized keyframe did.
+         Then, separately, the orb itself — which is not a naming shortcut but the result of walking
+         the phone editor at 380x800: of every body-level fixed element outside the two screens, it is
+         the only one with a visible box there, so it is the only one that has to RIDE. Written as its
+         own assertion because "the editor's chrome must travel with the editor" cannot be derived
+         from geometry alone: an orb left sitting still would satisfy the three-way rule above. */
+      var cands = [].slice.call(document.querySelectorAll('body *')).filter(function (n) {
+        if (n.closest('#home-screen') || n.closest('#app')) return false;
+        var cs = getComputedStyle(n);
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.02) return false;
+        var r = n.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      var tracked = [], onScreen = [];
+      cands.forEach(function (n) { tracked.push({ n: n, app: [], home: [], self: [], seen: false }); });
+      for (var ms = 0; ms <= 280; ms += 14) {
+        anims.forEach(function (a) { a.currentTime = ms; });
+        var aL = app.getBoundingClientRect().left, hL = home.getBoundingClientRect().left;
+        tracked.forEach(function (t) {
+          var r = t.n.getBoundingClientRect();
+          if (r.right > 0.5 && r.left < innerWidth - 0.5 && r.bottom > 0.5 && r.top < innerHeight - 0.5) t.seen = true;
+          t.app.push(r.left - aL); t.home.push(r.left - hL); t.self.push(r.left);
+        });
+      }
+      function spread(a) { return Math.max.apply(null, a) - Math.min.apply(null, a); }
+      var fabDrift = null;
+      tracked.forEach(function (t) {
+        if (!t.seen) return;   // never on screen during the push: it has nothing to ride in
+        var id = t.n.id ? '#' + t.n.id : t.n.tagName;
+        onScreen.push(id);
+        var dApp = spread(t.app), dHome = spread(t.home), dSelf = spread(t.self);
+        if (t.n === fab) fabDrift = dApp;
+        if (Math.min(dApp, dHome, dSelf) > 1) throw new Error(id + ' drifted ' + dApp.toFixed(1) + 'px from #app, ' + dHome.toFixed(1) + 'px from #home-screen and ' + dSelf.toFixed(1) + 'px from where it started, across the push — it is rigid with neither screen nor the viewport, so it travels on a distance of its own');
+      });
+      if (onScreen.indexOf('#add-fab') < 0) throw new Error('the + orb was never on screen during the push at ' + innerWidth + 'px — the one piece of body-level chrome this test exists for was not measured');
+      if (!(fabDrift <= 1)) throw new Error('the + orb drifted ' + fabDrift.toFixed(1) + 'px from #app’s left edge across the push — the editor’s own chrome has to travel with the editor, whether that means swimming across it or sitting still while it arrives');
+    } finally {
+      document.body.classList.remove('fm-pushing');
+      home.classList.remove('fm-push-out');
+      app.classList.remove('fm-push-in');
+      if (wasHidden) home.classList.add('hidden');
+      if (restore && frameEl) {
+        frameEl.style.width = restore.w; frameEl.style.height = restore.h;
+        await rAF(); await rAF();
+      }
+    }
+  });
+
+  /* THE PRESS HAND-OFF (queue 55, round three). The animation was never the hard part; this is. Opening a
+   * project is ASYNC — the media has to decode — so between the finger lifting and the push starting
+   * there is a gap of unknown length, routinely over a second, in which the pressed card is the only
+   * thing on screen saying the tap landed. Three rejected rounds were all failures of measurement
+   * SCOPE, not of mechanism: a single clean warm tap looks perfect while a cold launch, a repeat tap
+   * and a cross tap are all broken. So this test drives the real handlers through all of them, with
+   * the open stubbed SLOW, which is the only way the gap is visible at all.
+   *
+   * IT RUNS IN BOTH MOTION MODES, and that is not a detail. The previous version aborted on its
+   * seventh assertion under prefers-reduced-motion — it demanded a lead ANIMATION on the tapped card,
+   * and the reduced-motion block deliberately gives the lead `animation: none` — so every assertion
+   * about the press hand-off silently never executed for anyone with the OS setting on. Measured with
+   * Chrome's prefers-reduced-motion emulation: 6 of the section's assertions ran, the 7th threw, and
+   * the remaining 40-odd never ran at all while the suite reported one tidy red. Reduced motion is a
+   * legitimate state with its own contract (no travel, but the tap still has to be answered), so every
+   * check below either holds in both modes or has a reduced-motion counterpart that does.
+   *
+   * Every assertion goes through ck(), which COUNTS it and publishes the count on
+   * window.__fmPushAsserts. "A test that cannot run is not a test" is only checkable if the number of
+   * assertions that EXECUTE is reported, not the number that pass.
+   *
+   * It runs against a STUBBED project list, and the writers (saveIndex / touchCurrent) are stubbed
+   * out with it: the suite shares localStorage and IndexedDB with the real app, and a test that
+   * renders two fake projects must not be able to write them into anyone's library. */
+  test('home push: the press answers the tap, survives the wait, and hands over without a pop', { item: 'home-push' }, async function () {
+    var home = document.getElementById('home-screen');
+    var app = document.getElementById('app');
+    if (!home || !app) throw new Error('#home-screen / #app missing');
+    var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); };
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var executed = [];
+    function ck(label, ok, msg) { executed.push(label); if (!ok) throw new Error(msg); }
+    var P = FM.projects;
+    var saved = { list: P.list, open: P.open, currentId: P.currentId, saveIndex: P.saveIndex,
+                  touchCurrent: P.touchCurrent, getThumb: P.getThumb, migrateThumbs: P.migrateThumbs };
+    var W = FM.home._waits;
+    if (!W || typeof W.stuck !== 'number') throw new Error('FM.home._waits is not exposed — the abandoned-open section cannot run without shortening the backstop, and an 8s sleep in the suite is not a substitute');
+    var savedStuck = W.stuck;
+    /* THE PHONE GATE. The push is a phone behaviour — it was designed and measured at 380/390/414, and
+       an unscoped version was caught playing the full slide on desktop with #app going position:fixed
+       z-index 210 mid-flight at 1280x720. This runner's frame is ~900px, i.e. it IS the desktop case,
+       so assert the real gate says no here — and then stub it, because otherwise every push assertion
+       below would be dead code in a frame that can never be 700px wide. Restored in the finally. */
+    var savedGate = FM.home._pushAllowed;
+    if (typeof savedGate !== 'function') throw new Error('FM.home._pushAllowed is not exposed — the push gate cannot be asserted, and the push assertions below would silently never run');
+    ck('gate/desktop-width-gets-no-push', savedGate() === false,
+       'the runner frame is ' + innerWidth + 'px wide and the push gate still returned true — a full-screen 280ms slide would play on desktop, where it has never been measured');
+    FM.home._pushAllowed = function () { return true; };
+    var wasHidden = home.classList.contains('hidden');
+    var view = null; try { view = localStorage.getItem('fm.view'); } catch (e) {}
+    var fake = [{ id: '__push_a', name: 'ZZ push A', created: 2, modified: 2, width: 1080, height: 1920, fps: 30, duration: 3 },
+                { id: '__push_b', name: 'ZZ push B', created: 1, modified: 1, width: 1080, height: 1920, fps: 30, duration: 3 }];
+    var openMs = 0, cur = null, opens = 0;   // opens: two overlapping loads leaked media — see repeat/
+    P.list = function () { return fake.map(function (o) { return Object.assign({}, o); }); };
+    P.currentId = function () { return cur; };
+    function fastOpen(id) { opens++; return new Promise(function (r) { setTimeout(function () { cur = id; r(true); }, openMs); }); }
+    P.open = fastOpen;
+    P.saveIndex = function () {};                                  // nothing here may reach the real library
+    P.touchCurrent = function () {};
+    P.getThumb = function () { return Promise.resolve(null); };
+    P.migrateThumbs = function () { return Promise.resolve(); };
+
+    function press(el, type) {
+      var r = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1,
+        pointerType: 'touch', isPrimary: true, button: 0, buttons: type === 'pointerdown' ? 1 : 0,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+    }
+    function click(el) {
+      var r = el.getBoundingClientRect();
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+    }
+    function tap(el) { press(el, 'pointerdown'); press(el, 'pointerup'); click(el); }
+    function release(el) { press(el, 'pointerup'); click(el); }
+    function scaleOf(el) {
+      var t = getComputedStyle(el).transform;
+      return t === 'none' ? 1 : parseFloat(t.slice(t.indexOf('(') + 1).split(',')[0]);
+    }
+    function opacityOf(el) { return parseFloat(getComputedStyle(el).opacity); }
+    // "Is the press on screen?" is a different question in each mode: a scale under motion, a dim
+    // under reduced motion. Both are read off the REAL computed style, never off the class.
+    function pressShows(el) { return reduced ? opacityOf(el) < 0.9 : scaleOf(el) < 0.99; }
+    async function cards() {
+      FM.home.open();                       // also unwinds any push still running (endPush)
+      home.classList.remove('hm-preintro'); // the splash's business, not the push's
+      home.classList.remove('hm-intro');    // …and no section inherits the previous one's cold launch
+      await rAF();
+      var c = [].slice.call(document.querySelectorAll('#home-screen .hm-card'));
+      if (c.length < 2) throw new Error('the stubbed library rendered ' + c.length + ' card(s); this test needs two');
+      return c;
+    }
+    // Byte-for-byte what stampIntro (js/home.js) writes on the first card of a cold launch: the class,
+    // the INLINE animation-delay, and — the part the previous version of this test left out — the
+    // .hm-intro on #home-screen that the rule is scoped through. Without that class the selector
+    // `#home-screen.hm-intro .hm-in` never matches, no entry animation ever runs, and the section
+    // could not have seen the defect it exists to catch.
+    function stampColdLaunch(card, delay) {
+      home.classList.add('hm-intro');
+      card.classList.add('hm-in');
+      card.style.animationDelay = delay;
+    }
+
+    try {
+      /* ---- 1. COLD LAUNCH: the entry stagger vs the press ----
+         @keyframes hm-rise animates TRANSFORM, and a running animation always beats a plain
+         declaration, so while it plays `.hm-card.fm-card-press { transform: scale(.965) }` does
+         nothing at all. Measured on a real cold launch at 380x800 — splash played and dismissed by
+         tapping it, Input.dispatchTouchEvent, per-frame computed style, top level, before the fix:
+         press class on at 79.5ms, card at scale 1.0000 for 14 frames / 232ms, then the push arrived
+         at 311.5ms and jumped it 1.0000 → 0.9650 in ONE frame. On a slower open the press stayed
+         invisible for 34 frames / 533ms and then popped on its own the moment hm-rise ended. After:
+         0 frames invisible, hand-off jump 0.0000 on scale and 0.00000 on opacity, at 320/380/414 and
+         in both motion modes. */
+      var c = await cards();
+      stampColdLaunch(c[0], '0.49s');
+      await rAF();
+      var pre = getComputedStyle(c[0]);
+      if (reduced) {
+        // the contract on this path: there is no entrance to fight with in the first place
+        ck('cold/no-entry-animation-under-reduced-motion', pre.animationName === 'none',
+           'the entry stagger runs "' + pre.animationName + '" under prefers-reduced-motion — it is supposed to be switched off entirely there');
+      } else {
+        ck('cold/entry-really-running', pre.animationName === 'hm-rise',
+           'the cold-launch stamp did not reproduce the entry animation (computed animation-name "' + pre.animationName + '"), so nothing below this line would be testing the cold launch at all');
+        ck('cold/entry-owns-transform', pre.transform !== 'none',
+           'the entry animation is not driving transform (' + pre.transform + '), so the conflict this section exists to catch cannot occur and the section is decorative');
+        ck('cold/entry-delay-is-real', parseFloat(pre.animationDelay) > 0.4,
+           'the inline entry delay did not take (computed ' + pre.animationDelay + ')');
+      }
+
+      press(c[0], 'pointerdown');
+      ck('cold/press-class-on-the-touch-frame', c[0].classList.contains('fm-card-press'),
+         'pointerdown did not press the card at all');
+      ck('cold/press-is-VISIBLE-on-the-touch-frame', pressShows(c[0]),
+         'the press class is on the card but the card has not changed: computed transform ' + getComputedStyle(c[0]).transform + ', opacity ' + getComputedStyle(c[0]).opacity + ', animation-name "' + getComputedStyle(c[0]).animationName + '". A running animation beats a plain declaration, so on a cold launch the tap is unacknowledged until the entrance ends and the push then pops the card');
+      if (!reduced) {
+        ck('cold/entry-cancelled-on-the-tapped-card', getComputedStyle(c[0]).animationName !== 'hm-rise',
+           'the tapped card is still running its entrance — two animations cannot share one property, so the press cannot win while it plays');
+        ck('cold/entry-class-dropped', !c[0].classList.contains('hm-in'),
+           '.hm-in is still on the tapped card, so the entrance can restart on it');
+      }
+
+      /* Every frame of the wait, not just the first: the press must stay put and nothing may step.
+         The stub is LONGER THAN WAIT.release (600ms) on purpose — that timer is the release path for
+         a tap that opened nothing, and an open routinely outlasts it because the project's media has
+         to decode. With a 400ms stub the whole pressHeld ownership mechanism is unreachable and
+         mutating it away leaves the suite green; with this it goes red. */
+      openMs = 700; cur = null;
+      release(c[0]);
+      var frames = [], t0 = performance.now();
+      while (!document.body.classList.contains('fm-pushing') && performance.now() - t0 < 3000) {
+        frames.push({ s: scaleOf(c[0]), o: opacityOf(c[0]), on: c[0].classList.contains('fm-card-press'), shows: pressShows(c[0]) });
+        await rAF();
+      }
+      ck('wait/enough-frames-to-mean-anything', frames.length >= 8,
+         'only ' + frames.length + ' frame(s) elapsed between the finger and the push — the wait this section measures did not happen, so its assertions are decorative');
+      ck('wait/press-held-for-every-frame', frames.every(function (f) { return f.on; }),
+         'the press was dropped ' + frames.filter(function (f) { return !f.on; }).length + ' of ' + frames.length + ' frames into the wait — the card the user is waiting on goes dead mid-load');
+      ck('wait/press-VISIBLE-for-every-frame', frames.every(function (f) { return f.shows; }),
+         'the press was on the card but invisible for ' + frames.filter(function (f) { return !f.shows; }).length + ' of ' + frames.length + ' frames of the wait');
+      var worstStep = 0;
+      for (var i = 1; i < frames.length; i++) worstStep = Math.max(worstStep, Math.abs(frames[i].s - frames[i - 1].s));
+      ck('wait/no-step-mid-wait', worstStep < 0.003,
+         'the card stepped ' + worstStep.toFixed(4) + ' in scale during the wait — the press is supposed to land once and hold, not move again');
+
+      /* ---- 1b. THE HAND-OFF, on the frame it happens ----
+         Reachable only by making the push land in the same task as the click (the project is already
+         current, so openProject never awaits): the pressed card is still mid-fade from the cut when
+         fm-push-lead takes over, and a flat `opacity: 1` in those keyframes stepped it
+         0.34829 → 1.00000 in one frame at 380x800. --lead-from is the fix and this is what holds it. */
+      c = await cards();
+      stampColdLaunch(c[0], '0.49s');
+      await rAF();
+      openMs = 0; cur = c[0].dataset.pid;
+      press(c[0], 'pointerdown');
+      await rAF();                       // ONE frame: the press paints, so the lead is warm — without
+                                         // it the activation is a same-task one, the press was never
+                                         // on screen, and the lead correctly starts from rest instead
+      var beforeS = scaleOf(c[0]), beforeO = opacityOf(c[0]);
+      release(c[0]);
+      ck('handoff/push-started', document.body.classList.contains('fm-pushing'),
+         'the push did not start in the same task as the click on an already-open project, so the tightest hand-off there is was not measured');
+      ck('handoff/lead-is-warm', !c[0].classList.contains('fm-lead-cold'),
+         'the lead went cold one frame after a painted press — the hand-off measured below would be the wrong one');
+      ck('handoff/still-mid-cut', beforeO < 0.95,
+         'the card had already finished easing in (opacity ' + beforeO.toFixed(4) + ') by the time the push started, so the mid-ease hand-off this section exists for was not reproduced');
+      ck('handoff/transform-continuous', Math.abs(scaleOf(c[0]) - beforeS) < 0.004,
+         'the card jumped from scale ' + beforeS.toFixed(4) + ' to ' + scaleOf(c[0]).toFixed(4) + ' on the frame the push took over');
+      ck('handoff/opacity-continuous', Math.abs(opacityOf(c[0]) - beforeO) < 0.02,
+         'the card jumped from opacity ' + beforeO.toFixed(5) + ' to ' + opacityOf(c[0]).toFixed(5) + ' on the frame the push took over — a card tapped while it is still fading in is mid-ease at that instant, and the lead keyframes have to start from where it actually is');
+
+      /* ---- 1c. and the lead really LEADS its own screen ----
+         The headline of the whole feature: "the project that you tapped on swipes to the left". Under
+         motion that is measured as travel; under reduced motion the contract is the opposite — nothing
+         translates at all — so that is what is measured there instead. */
+      if (reduced) {
+        var rc0 = c[0].getBoundingClientRect().left, rh0 = home.getBoundingClientRect().left;
+        ck('lead/no-animation-under-reduced-motion', getComputedStyle(c[0]).animationName === 'none',
+           'the lead card runs "' + getComputedStyle(c[0]).animationName + '" under prefers-reduced-motion — nothing may travel on that path');
+        ck('lead/cross-dissolve-under-reduced-motion', getComputedStyle(home).animationName === 'fm-push-fade',
+           'home runs "' + getComputedStyle(home).animationName + '" under reduced motion instead of the cross-dissolve');
+        ck('lead/acknowledgement-survives-the-dissolve', opacityOf(c[0]) < 0.9,
+           'the tapped card is back at full opacity for the cross-dissolve (' + opacityOf(c[0]).toFixed(3) + ') — the acknowledgement is dropped exactly as the screens swap, which is the one moment it has to be continuous');
+        await sleep(120);
+        ck('lead/nothing-translates-under-reduced-motion',
+           Math.abs((c[0].getBoundingClientRect().left - home.getBoundingClientRect().left) - (rc0 - rh0)) < 0.5,
+           'the lead card moved relative to its screen under prefers-reduced-motion');
+      } else {
+        var la = c[0].getAnimations().filter(function (a) { return /^fm-push-lead/.test(a.animationName); });
+        var ha = home.getAnimations().filter(function (a) { return a.animationName === 'fm-push-out'; });
+        ck('lead/animation-attached', la.length > 0, 'no lead animation is attached to the tapped card');
+        ck('lead/screen-animation-attached', ha.length > 0, 'the home screen is not animating out');
+        ck('lead/no-inherited-entry-delay', parseFloat(getComputedStyle(c[0]).animationDelay) === 0,
+           'the lead card is running the push on a ' + getComputedStyle(c[0]).animationDelay + ' delay inherited from the entry stagger — with a `both` fill that holds it at its start frame for the whole push, so the card never moves');
+        la.concat(ha).forEach(function (a) { a.pause(); });
+        function leadOffset(ms) {
+          la.concat(ha).forEach(function (a) { a.currentTime = ms; });
+          return c[0].getBoundingClientRect().left - home.getBoundingClientRect().left;
+        }
+        var l0 = leadOffset(0), l1 = leadOffset(280);
+        // Proportional to the CARD, not a flat 40px. fm-push-lead moves it -34% of its own width, so
+        // on a 348px card the real lead is ~118px and a flat 40 let the travel be cut by 65% with the
+        // suite still green — a decorative assertion guarding the one thing Ezra actually asked for.
+        // 22% keeps slack for the ease and the scale change while still failing any real shortfall.
+        var leadMin = c[0].getBoundingClientRect().width * 0.22;
+        ck('lead/leads-its-own-screen', l0 - l1 > leadMin,
+           'the tapped card led its own screen by ' + (l0 - l1).toFixed(2) + 'px across the push, under the '
+           + leadMin.toFixed(2) + 'px floor (22% of its own width) — "the project you tapped swipes to the left" is the whole feature, and this is a plain screen slide');
+      }
+
+      /* ---- 2. REPEAT TAP mid-open: the press must not be dropped ----
+         The second tap is ignored (two overlapping opens leaked media), but it used to take the press
+         with it. Measured at 380x780 with a 1200ms open: pressed at 33ms, dropped at 739ms, 619ms of
+         dead screen, then the push snapped the card back to scale(.965) in ONE frame at 1358ms. */
+      c = await cards();
+      openMs = 750; cur = null; opens = 0;   // > WAIT.release, or the repeat tap's own release timer never gets the chance to be wrong
+      tap(c[0]);
+      ck('repeat/pressed-on-the-first-tap', c[0].classList.contains('fm-card-press'),
+         'the card is not pressed on the frame the finger lands — the tap has no acknowledgement at all until the project loads');
+      await rAF();
+      tap(c[0]);
+      ck('repeat/press-survives-the-second-tap', c[0].classList.contains('fm-card-press'),
+         'tapping the SAME card again while it is still opening dropped its press — the card the user is waiting on goes dead, and the push then snaps it back to the pressed scale in one frame');
+      await rAF(); await rAF();
+      ck('repeat/press-survives-a-frame-later', c[0].classList.contains('fm-card-press'),
+         'the press was dropped a frame after the second tap (a release timer re-armed by the tap that was supposed to be ignored)');
+      ck('repeat/press-still-VISIBLE', pressShows(c[0]),
+         'the press class survived the repeat tap but the card is back to looking untouched (transform ' + getComputedStyle(c[0]).transform + ', opacity ' + getComputedStyle(c[0]).opacity + ')');
+      // The reason the second tap is ignored at all, and the thing the abandoned-open escape hatch
+      // (section 6) must not have loosened: two overlapping open() loads leaked media and raced
+      // refreshAll. Inside the window the guard has to be exactly as strict as it always was.
+      ck('repeat/second-open-ignored', opens === 1,
+         'the second tap started ' + opens + ' loads — two overlapping open() calls leak media and race refreshAll, which is the whole reason a second tap is dropped');
+
+      /* ---- 3. CROSS TAP mid-open: the press must not MOVE ----
+         Measured before: setPress moved the press to card B at 656ms and the _opening guard killed it
+         100ms later, so card A — the one actually loading — sat at rest for 717ms and then popped. */
+      tap(c[1]);
+      ck('cross/other-card-not-pressed', !c[1].classList.contains('fm-card-press'),
+         'tapping a DIFFERENT card mid-open pressed it — that card is not loading and never will be (the tap is ignored), so the acknowledgement is a lie');
+      ck('cross/loading-card-keeps-its-press', c[0].classList.contains('fm-card-press'),
+         'tapping a different card mid-open stole the press from the card that IS loading');
+      await rAF();
+      ck('cross/still-right-a-frame-later', c[0].classList.contains('fm-card-press') && !c[1].classList.contains('fm-card-press'),
+         'a frame after the cross tap the press had moved anyway (press on A: ' + c[0].classList.contains('fm-card-press') + ', on B: ' + c[1].classList.contains('fm-card-press') + ')');
+      // "That turned out not to be a tap" arriving AFTER the tap already started a load — the browser
+      // handing the pointer stream to the scroller is the common way. The gesture is over; the project
+      // is not, so the card that is loading keeps its acknowledgement.
+      press(c[0], 'pointercancel');
+      ck('cross/cancel-cannot-take-a-loading-press', c[0].classList.contains('fm-card-press'),
+         'a pointercancel arriving while the project is still loading dropped the press — the card goes dead mid-load and the push then snaps it back to the pressed scale in one frame');
+      // and when the push finally arrives it continues from the pressed state, it does not jump to it
+      var beforeCross = scaleOf(c[0]), beforeCrossO = opacityOf(c[0]);
+      await sleep(820);
+      ck('cross/push-arrived', document.body.classList.contains('fm-pushing'),
+         'the push never started after the stubbed 750ms open');
+      ck('cross/lead-is-warm', !c[0].classList.contains('fm-lead-cold'),
+         'the lead went cold after a press that was on screen for the whole wait — it would start from rest and jump backwards to the pressed scale');
+      if (!reduced) {
+        var wa = c[0].getAnimations().filter(function (a) { return /^fm-push-lead/.test(a.animationName); });
+        ck('cross/lead-animation-attached', wa.length > 0, 'no lead animation on the card the push is leading with');
+        wa[0].pause(); wa[0].currentTime = 0;   // the hand-off frame, which is not reachable by waiting for one
+      }
+      ck('cross/no-pop-at-the-hand-off', Math.abs(scaleOf(c[0]) - beforeCross) < 0.004,
+         'the card jumped from scale ' + beforeCross.toFixed(4) + ' to ' + scaleOf(c[0]).toFixed(4) + ' on the frame the push took over — the hand-off is exactly the frame this design exists to remove');
+      ck('cross/no-opacity-pop-at-the-hand-off', Math.abs(opacityOf(c[0]) - beforeCrossO) < 0.02,
+         'the card jumped from opacity ' + beforeCrossO.toFixed(4) + ' to ' + opacityOf(c[0]).toFixed(4) + ' on the frame the push took over');
+
+      /* ---- 3b. THE APP CLEANS UP AFTER ITSELF ----
+         Not the test cleaning up and then admiring its own work: this lets a REAL push run to its end
+         and checks what endPush() left behind. A transform stranded on #app makes it the containing
+         block for every position:fixed descendant of the editor — every sheet, menu and FAB — for the
+         rest of the session, and the push is the only thing that ever puts one there. */
+      c = await cards();
+      openMs = 0; cur = null;
+      tap(c[0]);
+      // WAIT FOR IT TO START FIRST. openProject awaits its stub, so at the instant tap() returns the
+      // push has not begun — and "wait while it is running" over a push that has not started yet
+      // exits on its first check and every assertion below it passes for free.
+      var began = performance.now();
+      while (!document.body.classList.contains('fm-pushing') && performance.now() - began < 2000) await rAF();
+      ck('teardown/push-started', document.body.classList.contains('fm-pushing'),
+         'the push never started, so nothing below this line would be testing a teardown');
+      var settled = performance.now();
+      while (document.body.classList.contains('fm-pushing') && performance.now() - settled < 3000) await rAF();
+      ck('teardown/push-finished-on-its-own', !document.body.classList.contains('fm-pushing'),
+         'the push never ended by itself — body.fm-pushing is still on after 3s, so #app keeps its transform forever');
+      ck('teardown/app-class-stripped', !app.classList.contains('fm-push-in'), '#app kept .fm-push-in after the push');
+      ck('teardown/app-has-no-transform', getComputedStyle(app).transform === 'none',
+         '#app kept a transform (' + getComputedStyle(app).transform + ') after the push — every fixed-position panel in the editor is now positioned against #app instead of the viewport');
+      ck('teardown/app-back-in-flow', getComputedStyle(app).position === 'static',
+         '#app kept position:' + getComputedStyle(app).position + ' after the push');
+      ck('teardown/lead-classes-stripped', !c[0].classList.contains('fm-card-lead') && !c[0].classList.contains('fm-lead-cold'),
+         'the lead card kept its push classes after the push ended');
+      ck('teardown/lead-var-stripped', !c[0].style.getPropertyValue('--lead-from'),
+         'the lead card kept its inline --lead-from after the push ended, so the NEXT push from that card starts from a stale opacity');
+      ck('teardown/home-hidden', home.classList.contains('hidden'),
+         'the home screen is still showing after the push finished (className "' + home.className + '", isOpen ' + FM.home.isOpen() + ')');
+
+      /* ---- 4. KEYBOARD Enter: no press to hand over from, so the lead starts from REST ----
+         There is no finger, and click() runs in the same task as the keydown, so the press cannot
+         paint before the push. Leading from the pressed scale there is a 3.5% jump on the first frame:
+         measured 1.0000 → 0.9650 in one frame, at 1280x800 and at 380x800, before .fm-lead-cold. */
+      c = await cards();
+      openMs = 0; cur = c[0].dataset.pid;   // already current → openProject never awaits at all
+      c[0].focus();
+      c[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(40);
+      ck('key/push-started', c[0].classList.contains('fm-card-lead'), 'Enter on a focused card did not start the push');
+      ck('key/lead-is-cold', c[0].classList.contains('fm-lead-cold'),
+         'a keyboard activation led the push warm — its press never painted, so the lead starts at the pressed scale and pops on frame one');
+      if (!reduced) {
+        var kcs = getComputedStyle(c[0]);
+        ck('key/cold-keyframes', kcs.animationName === 'fm-push-lead-cold',
+           'the cold lead runs "' + kcs.animationName + '" — it must run the keyframes that start from rest');
+        var ka = c[0].getAnimations().filter(function (a) { return a.animationName === 'fm-push-lead-cold'; });
+        ck('key/cold-animation-attached', ka.length > 0, 'no cold-lead animation attached');
+        ka[0].pause(); ka[0].currentTime = 0;
+        ck('key/cold-starts-at-rest', Math.abs(scaleOf(c[0]) - 1) < 0.002,
+           'the cold lead starts at scale ' + scaleOf(c[0]).toFixed(4) + ' — from a card sitting at rest that is a one-frame pop of ' + Math.abs(1 - scaleOf(c[0])).toFixed(4));
+        ka[0].currentTime = 280;
+        ck('key/cold-actually-shrinks', scaleOf(c[0]) < 0.94,
+           'the cold lead does not actually shrink away (ends at ' + scaleOf(c[0]).toFixed(4) + ')');
+      } else {
+        // Two checks, because they are not the same claim. The first is the one a user feels; the
+        // second is the one that keeps the reduced-motion block honest. `animation: none` in that
+        // block is (1,3,0) and the cold rule is (1,4,0), so before this the computed name here read
+        // "fm-push-lead-cold" while the duration was still 0s — measured: no animation attached,
+        // transform none, 0.00px of travel. A leak, not motion; closed so the computed style stops
+        // describing a path the card is not on.
+        var rmPush = c[0].getAnimations().filter(function (a) { return /^fm-push/.test(a.animationName); });
+        ck('key/cold-lead-does-not-travel-under-reduced-motion', rmPush.length === 0 && getComputedStyle(c[0]).transform === 'none',
+           'the cold lead has ' + rmPush.length + ' push animation(s) attached and transform ' + getComputedStyle(c[0]).transform + ' under prefers-reduced-motion — nothing may move on that path');
+        ck('key/cold-lead-name-cleared-under-reduced-motion', getComputedStyle(c[0]).animationName === 'none',
+           'the cold lead computes animation-name "' + getComputedStyle(c[0]).animationName + '" under prefers-reduced-motion. Nothing moves today (the duration is 0s), but the reduced-motion rule is being half-overridden by the higher-specificity .fm-lead-cold rule, so the computed style claims a travel path the card is not on and one added duration would make it real');
+      }
+      // …and the OTHER half of keyboard activation: a keyboard user waits exactly as long as a finger
+      // does, so Enter has to press the card for the length of that wait too. Measured before the
+      // press was wired to keydown: 0 of 59 pre-push frames pressed on a 900ms load, at 1280x800 and
+      // at 380x800 — the card sat at rest for the whole load and then moved.
+      c = await cards();
+      openMs = 300; cur = null;
+      c[1].focus();
+      c[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      ck('key/press-on-keydown', c[1].classList.contains('fm-card-press'),
+         'Enter on a focused card gives it no press — a keyboard user gets no acknowledgement at all until the project has finished loading');
+      ck('key/press-VISIBLE-on-keydown', pressShows(c[1]),
+         'the keyboard press is on the card but the card looks untouched (transform ' + getComputedStyle(c[1]).transform + ', opacity ' + getComputedStyle(c[1]).opacity + ')');
+      await rAF(); await rAF();
+      ck('key/press-survives-the-load', c[1].classList.contains('fm-card-press'),
+         'the keyboard press was dropped while the project was still loading (keyup released it even though the open owns it)');
+      // NOT ASSERTED HERE: the blur half of the same rule (keyActivate cancels the press when focus
+      // moves on, unless an open owns it). It cannot be tested from this runner — the suite's frame is
+      // parked off-screen and never holds system focus, so element.focus() sets document.activeElement
+      // but Chrome fires no focus/blur EVENTS in it. Both a `blur → cancelPress` mutation and a
+      // `cancelPress ignores pressHeld` mutation stayed GREEN through an assertion written on it, which
+      // is the definition of decorative, so it was removed rather than left in looking like coverage.
+      // The same ownership rule IS asserted, through a path that really fires, in cross/ below.
+      await sleep(380);
+      ck('key/reaches-the-push', document.body.classList.contains('fm-pushing'),
+         'Enter with a 300ms open never reached the push');
+
+      /* ---- 5. GIVING THE PRESS UP CLEANLY ----
+         Every path that lets go WITHOUT a push (a drag that turned out to be a scroll, a
+         pointercancel, the backstop on a load that never settles) eases the card back instead of
+         snapping it. Measured with the 8s backstop against an 11s load: before, the card snapped
+         .965 → 1 in one frame at 8147ms and the push snapped it back in one frame at 11149ms; after,
+         it eases over ~200ms and the push then leads COLD from rest, jump 0.0000. */
+      c = await cards();
+      openMs = 0; cur = null;
+      press(c[1], 'pointerdown');
+      ck('release/pressed', c[1].classList.contains('fm-card-press'), 'pointerdown did not press the card');
+      press(c[1], 'pointercancel');
+      ck('release/press-dropped', !c[1].classList.contains('fm-card-press'), 'a cancelled press stayed on the card');
+      ck('release/eased-not-snapped', c[1].classList.contains('fm-card-unpress'),
+         'the press was dropped without the eased release class — it snaps back to full size in one frame');
+      var ucs = getComputedStyle(c[1]);
+      ck('release/ease-has-a-transition', /transform|opacity/.test(ucs.transitionProperty) && parseFloat(ucs.transitionDuration) > 0,
+         '.fm-card-unpress carries no transition (' + ucs.transitionProperty + ' / ' + ucs.transitionDuration + '), so the release still snaps');
+
+      /* ---- 6. AN OPEN THAT NEVER SETTLES MUST NOT WALL THE SCREEN OFF ----
+         `_opening` is cleared in openProject's `finally`, which never runs if FM.projects.open()'s
+         promise never settles. Before this, that stranded the home screen for the rest of the
+         session: setPress returned early on `_opening` forever, so no card on any tab ever showed a
+         press again and every tap was silently dropped. The backstop is shortened here rather than
+         slept through — 8s inside the suite is not a test, it is a hang. */
+      var hangs = [];
+      W.stuck = 120;
+      P.open = function () { return new Promise(function (r) { hangs.push(r); }); };
+      c = await cards();
+      openMs = 0; cur = null;
+      tap(c[0]);
+      ck('stuck/press-taken-by-the-open', c[0].classList.contains('fm-card-press'),
+         'the hung open did not take the press at all');
+      await sleep(260);
+      ck('stuck/press-let-go-by-the-backstop', !c[0].classList.contains('fm-card-press'),
+         'a load that never settles left the card pressed forever');
+      c = await cards();
+      press(c[1], 'pointerdown');
+      ck('stuck/presses-work-again', c[1].classList.contains('fm-card-press'),
+         'after an open that never settled, no card ever shows a press again for the rest of the session — _opening is stuck true and setPress returns early on it forever');
+      // …and the other half, which matters more: the TAP has to work again too. A card that presses
+      // and then does nothing is a worse lie than a card that does nothing at all. The stub goes back
+      // to a real (fast) open first — the recovery attempt has to be able to finish.
+      P.open = fastOpen;
+      openMs = 0; cur = null; opens = 0;
+      release(c[1]);
+      var retry = performance.now();
+      while (!document.body.classList.contains('fm-pushing') && performance.now() - retry < 2000) await rAF();
+      ck('stuck/opens-work-again', document.body.classList.contains('fm-pushing') && opens === 1,
+         'after an open that never settled, the next tap is still swallowed by the _opening guard (loads started: ' + opens + ') — the home screen never opens another project for the rest of the session');
+      hangs.forEach(function (r) { try { r(true); } catch (e) {} });   // let the abandoned opens finish so nothing after this inherits _opening
+      W.stuck = savedStuck;
+      await sleep(30);
+      c = await cards();
+      press(c[0], 'pointerdown');
+      ck('stuck/state-clean-for-the-next-test', c[0].classList.contains('fm-card-press'),
+         'the abandoned-open section left _opening set, so every test after this one runs against a home screen that ignores taps');
+      press(c[0], 'pointercancel');
+
+      /* ---- 7. A LEAD THAT WAS NEVER PRESSED ----
+         Templates, elements and "New project" all end in FM.home.close({ push: true, lead: card })
+         without any pointerdown on that card, so startPush is the only thing that can strip the entry
+         stamp there. An inline animation-delay outranks every stylesheet rule and fm-push-lead is
+         declared `both`, so a lead still carrying one holds its `from` frame for the whole push and
+         never moves: measured on a real cold launch, computed delay 0.49s during the push, card-minus-
+         home offset 22.09px on the first push frame and 22.09px on the last — 0.00px of lead. */
+      c = await cards();
+      stampColdLaunch(c[1], '0.49s');
+      await rAF();
+      FM.home.close({ push: true, lead: c[1] });
+      await rAF();
+      ck('api-lead/leading', c[1].classList.contains('fm-card-lead'),
+         'FM.home.close({push,lead}) did not make that card lead the push');
+      ck('api-lead/entry-delay-cleared', parseFloat(getComputedStyle(c[1]).animationDelay) === 0,
+         'the lead card kept the entry stagger’s ' + getComputedStyle(c[1]).animationDelay + ' inline delay — with a `both` fill it holds its first frame for the whole push and never moves');
+      ck('api-lead/entry-class-cleared', !c[1].classList.contains('hm-in'),
+         'the lead card kept .hm-in, so its entrance can restart on top of the push');
+      ck('api-lead/is-cold', c[1].classList.contains('fm-lead-cold'),
+         'a card that was never pressed led the push warm — it would start at the pressed scale and pop on frame one');
+
+      /* ---- 8. REDUCED MOTION STILL HAS TO ANSWER THE TAP ----
+         Read through the CSSOM, so it executes in BOTH modes: the suite cannot switch the media query
+         on, and the rule being present-but-wrong is exactly the failure. The reduced-motion block
+         kills the press scale, and :active drops its own feedback the moment the finger lifts — so
+         before this, a reduced-motion user tapped a card and NOTHING changed until the editor
+         appeared: measured 0 of 122 frames differing from rest across a 1200ms wait. */
+      var rm = null;
+      [].slice.call(document.styleSheets).forEach(function (ss) {
+        var rules; try { rules = ss.cssRules; } catch (e) { return; }
+        [].slice.call(rules || []).forEach(function (r) {
+          if (r.type !== CSSRule.MEDIA_RULE || !/prefers-reduced-motion/.test(r.conditionText)) return;
+          [].slice.call(r.cssRules).forEach(function (k) {
+            if (k.type === CSSRule.STYLE_RULE && /\.hm-card\.fm-card-press/.test(k.selectorText)) rm = k;
+          });
+        });
+      });
+      ck('rm/rule-exists', !!rm, 'prefers-reduced-motion has no rule for .hm-card.fm-card-press — that path gets the full scale, or nothing at all');
+      ck('rm/no-transform', rm.style.transform === 'none', 'the reduced-motion press still sets transform:' + rm.style.transform);
+      var ack = ['opacity', 'background', 'background-color', 'border-color', 'outline', 'outline-color', 'box-shadow', 'filter']
+        .filter(function (p) { return rm.style.getPropertyValue(p); });
+      ck('rm/has-an-acknowledgement', ack.length > 0,
+         'the reduced-motion press sets transform:none and nothing else — a reduced-motion user taps a card and gets no acknowledgement at all for the whole load. Reduced motion means no motion, not no feedback');
+      // …and it must actually WIN THE CASCADE, which is not a given: theme-glass.css loads after
+      // styles.css and restyles every card with `html[data-theme="glass"] .hm-card { border: 1px
+      // solid var(--line-soft) }` — specificity (0,2,1), which beats a plain `.hm-card.fm-card-press`
+      // (0,2,0). Glass is the shipped default. Measured with the flat selector: the opacity in the
+      // declaration took (0.55) and the border-color in the SAME declaration did not (rgb(18,32,41),
+      // still --line, against an --accent of #5ac7ed).
+      var contested = ['background', 'background-color', 'border-color', 'border', 'box-shadow']
+        .filter(function (p) { return !!rm.style.getPropertyValue(p); });
+      var pressSel = rm.selectorText.split(',').map(function (s) { return s.trim(); })
+        .filter(function (s) { return /\.hm-card\.fm-card-press/.test(s); })[0] || '';
+      ck('rm/beats-theme-glass', !contested.length || pressSel.indexOf('#') >= 0,
+         'the reduced-motion press sets ' + contested.join('/') + ' from "' + pressSel + '" — theme-glass.css sets the same thing on .hm-card from a higher-specificity selector and loads later, so this silently does nothing on the default theme');
+      // The cut has to be switched off on this path for the same reason the press exists: an opacity
+      // ANIMATION on the card outranks the press's own `opacity` DECLARATION, which is the exact
+      // shape of the cold-launch defect this whole section is about.
+      var rmCut = null;
+      [].slice.call(document.styleSheets).forEach(function (ss) {
+        var rules; try { rules = ss.cssRules; } catch (e) { return; }
+        [].slice.call(rules || []).forEach(function (r) {
+          if (r.type !== CSSRule.MEDIA_RULE || !/prefers-reduced-motion/.test(r.conditionText)) return;
+          [].slice.call(r.cssRules).forEach(function (k) {
+            if (k.type === CSSRule.STYLE_RULE && /\.fm-intro-cut/.test(k.selectorText)) rmCut = k;
+          });
+        });
+      });
+      ck('rm/intro-cut-disabled', !!rmCut && rmCut.style.animationName === 'none',
+         'the entry-cut ease is still an opacity animation under prefers-reduced-motion — it outranks the press’s own opacity declaration, so the tap goes unacknowledged on exactly the path that has nothing else to show for it');
+    } finally {
+      try { window.__fmPushAsserts = { reduced: reduced, executed: executed.length, labels: executed }; } catch (e) {}
+      if (savedGate) FM.home._pushAllowed = savedGate;   // put the real phone gate back before anything else runs
+      P.list = saved.list; P.open = saved.open; P.currentId = saved.currentId;
+      P.saveIndex = saved.saveIndex; P.touchCurrent = saved.touchCurrent;
+      P.getThumb = saved.getThumb; P.migrateThumbs = saved.migrateThumbs;
+      W.stuck = savedStuck;
+      home.classList.remove('hm-intro');
+      FM.home.open();                       // unwind any push, and rebuild the grid from the REAL library
+      if (wasHidden) FM.home.close();
+      try { if (view === null) localStorage.removeItem('fm.view'); else localStorage.setItem('fm.view', view); } catch (e) {}
+    }
+  });
+
 
   /* v5.71 — queue 52 + 35. The cog inside a project used to open the HOME screen's preferences and
      nothing else; the project's own settings lived behind the ⋯ button beside it. Measured before the
