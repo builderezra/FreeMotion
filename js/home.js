@@ -41,7 +41,11 @@ window.FM = window.FM || {};
    * editor's sheets, FAB and menus are re-rooted to #app forever. endPush() therefore runs from
    * animationend AND from a timer backstop AND from open(), and it always strips both.
    */
-  const PUSH_MS = 280;
+  /* Ezra: "I need the animation for when you open a project to be a bit slower". 280 -> 380.
+     Published to CSS as --fm-push-ms just below, so the stylesheet's durations and this constant
+     cannot drift apart — this number also drives the backstop timer, and a backstop that fires before
+     the animation it guards leaves a stranded transform on #app. */
+  const PUSH_MS = 380;
   // The two long waits, in one mutable object rather than as consts, so the regression suite can
   // drive the abandon path without sleeping for eight seconds. Nothing in the app writes to it.
   //   release — a finger lifted off a card that then opened nothing (see releasePress)
@@ -201,6 +205,8 @@ window.FM = window.FM || {};
   let pushAllowed = function () {
     return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
   };
+
+  try { document.documentElement.style.setProperty('--fm-push-ms', PUSH_MS + 'ms'); } catch (e) {}
 
   function startPush(lead) {
     const app = document.getElementById('app');

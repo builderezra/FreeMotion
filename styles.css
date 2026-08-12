@@ -3378,6 +3378,33 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
  * first half, so the editor is essentially home by 140ms and settles for the rest — a push that
  * answers the tap immediately instead of gliding.
  */
+/* GOING BACK — the same movement played the other way (Ezra: "make it do the animation in reverse
+   when you go back to the home screen"). Deliberately mirrored rather than reused with
+   animation-direction: reverse, because reverse would also reverse the EASING, and an ease-out played
+   backwards is an ease-in — the motion would start slowly and slam to a stop, which reads as a
+   different, worse animation rather than the same one going the other way. Same curve, mirrored
+   endpoints. */
+@keyframes fm-pop-out {           /* the editor, leaving to the right */
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(100%, 0, 0); }
+}
+@keyframes fm-pop-out-vw {        /* the editor's floating chrome — viewports, not self-widths */
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(100vw, 0, 0); }
+}
+@keyframes fm-pop-in {            /* home, coming back from where it went */
+  from { transform: translate3d(-24%, 0, 0); opacity: .42; }
+  to   { transform: translate3d(0, 0, 0);    opacity: 1; }
+}
+#app.fm-pop-out { animation: fm-pop-out var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+body.fm-popping #add-fab { z-index: 212; animation: fm-pop-out-vw var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+#home-screen.fm-pop-in { animation: fm-pop-in var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+body.fm-popping #app { position: fixed; inset: 0; z-index: 210; }
+@media (prefers-reduced-motion: reduce) {
+  #app.fm-pop-out, #home-screen.fm-pop-in, body.fm-popping #add-fab { animation: none; }
+  body.fm-popping #app { position: static; z-index: auto; }
+}
+
 @keyframes fm-push-out {          /* the screen you are leaving: less travel, and it dims away */
   from { transform: translate3d(0, 0, 0);    opacity: 1; }
   to   { transform: translate3d(-24%, 0, 0); opacity: .42; }
@@ -3430,9 +3457,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 body.fm-pushing #home-screen,
 body.fm-pushing #app,
 body.fm-pushing #add-fab { will-change: transform, opacity; }
-#home-screen.fm-push-out { animation: fm-push-out 280ms cubic-bezier(0, 0, .2, 1) both; }
-#home-screen.fm-push-out .hm-card.fm-card-lead { animation: fm-push-lead 280ms cubic-bezier(0, 0, .2, 1) both; }
-#home-screen.fm-push-out .hm-card.fm-card-lead.fm-lead-cold { animation-name: fm-push-lead-cold; }   /* name only: same 280ms, same curve, same fill */
+/* Every duration below reads --fm-push-ms, which js/home.js publishes from its own PUSH_MS at init —
+   ONE source of truth. It used to be the literal 280ms written out in five CSS rules plus a JS const,
+   which is six places to keep in step and exactly how a backstop timer ends up firing before or after
+   the animation it is meant to backstop. The fallback keeps the stylesheet sane on its own. */
+#home-screen.fm-push-out { animation: fm-push-out var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+#home-screen.fm-push-out .hm-card.fm-card-lead { animation: fm-push-lead var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+#home-screen.fm-push-out .hm-card.fm-card-lead.fm-lead-cold { animation-name: fm-push-lead-cold; }   /* name only: same duration, same curve, same fill */
 /* The incoming half, and the one rule in this block that had to be MEASURED rather than reasoned
    about. #app is normally an unpositioned grid; the obvious way to lift it over the home overlay is
    position:relative + z-index. That is wrong on a phone, and it reproduces the exact double-width
@@ -3453,7 +3484,7 @@ body.fm-pushing #add-fab { will-change: transform, opacity; }
    The explicit background matters: #app itself is transparent and only its four panels paint, so
    without this the home screen would show through the seams while the two overlap. */
 body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; background: var(--bg); }
-#app.fm-push-in { animation: fm-push-in 280ms cubic-bezier(0, 0, .2, 1) both; }
+#app.fm-push-in { animation: fm-push-in var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
 /* The + orb lives OUTSIDE #app (body-level, z-index 61), so without this it would sit still in the
    middle of the vacated screen while everything else moved. It rides in on the SAME CURVE for the
    SAME DISTANCE, one step above #app so it is not buried by its backdrop — but NOT on the same
@@ -3474,7 +3505,7 @@ body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; backgroun
    outright, the phone block re-styles it at :1887 but the LATER phone rule at :2210 hides it again
    ("AM has no edit pencil"), so nothing ever un-hides it. Re-measured in the real editor at
    320 / 380 / 414 / 700 / 701 / 900 / 1280 — display:none and a 0x0 box at all seven. */
-body.fm-pushing #add-fab { z-index: 212; animation: fm-push-in-vw 280ms cubic-bezier(0, 0, .2, 1) both; }
+body.fm-pushing #add-fab { z-index: 212; animation: fm-push-in-vw var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
 /* The one thing that deliberately does NOT travel. A toast is a message about what just happened
    ("Creating project…", "Added …"), not furniture belonging to either screen, so it stays exactly
    where it is and stays readable while the two screens cross underneath it. It only needs the lift:

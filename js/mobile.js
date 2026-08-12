@@ -55,6 +55,21 @@ window.FM = window.FM || {};
       var key = multi ? 'multi:' + ids.length : id;
       if (key !== lastSyncKey) { userClosed = false; lastSyncKey = key; }   // a NEW selection always gets the sheet back
       if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
+      /* A timeline clip drag owns the screen. Dragging a clip SELECTS it first, on purpose, so you can
+         see what you grabbed — but the sheet is derived from the selection, so that selection used to
+         throw the panel up over the very timeline being dragged on (Ezra, twice: "I still need it so I
+         can drag clips on the timeline without it opening up the editing panel").
+         Grabbing a clip stamps its id; the sheet leaves that one selection alone and any other
+         selection clears the stamp. Read here rather than having timeline.js reach into the sheet, so
+         the "derived from the selection" rule this function exists to enforce still holds. */
+      // Stamped by timeline.js when you GRAB a clip. It names the layer, so a stamp left behind by
+      // a gesture on some other layer — or set while the viewport was not a phone and this
+      // function was returning early — cannot suppress an unrelated panel: anything that does not
+      // match is cleared on sight.
+      if (FM._sheetSuppressFor) {
+        var grabbed = FM._sheetSuppressFor; FM._sheetSuppressFor = null;
+        if (!multi && grabbed === id) { userClosed = true; return; }
+      }
       if (userClosed) return;                                               // swiped away on purpose — leave it down
       if (!insp.classList.contains('open')) { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); open(); }
       if (multi) { insp.style.top = ''; insp.style.maxHeight = ''; }        // the docked position belongs to ONE clip

@@ -62,6 +62,7 @@ window.FM = window.FM || {};
   const KF_HOLD_MS = 320;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
+
   let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
   let cueDrag = null;    // moving / trimming one CAPTION CUE inside its track's clip
   let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
@@ -1009,6 +1010,21 @@ window.FM = window.FM || {};
                 // Grabbing a clip that was NOT selected selects it first, so what you are dragging is
                 // visibly the thing you grabbed. Safe to rebuild here: the pointer capture lives on
                 // innerEl, which survives a rebuild, not on the clip element which does not.
+                /* Ezra, twice: "I still need it so I can drag clips on the timeline without it opening
+                   up the editing panel." The select below is deliberate — you must SEE which clip you
+                   grabbed — but on a phone the inspector sheet is DERIVED from the selection
+                   (js/mobile.js syncSheet), so showing the grab also threw the panel over the timeline
+                   you were dragging on. Grabbing STAMPS THE LAYER ID here, and the sheet
+                   leaves that one selection alone.
+                   Two earlier shapes of this were caught by the suite and are worth recording. A
+                   "drag in progress" predicate polled the live drag state, and a clip drag can end by a
+                   path that leaves that state set — the sheet then never opened again all session. A
+                   bare boolean one-shot fared no better: syncSheet returns early when the viewport is
+                   not a phone, so a flag set on desktop survived until some later phone-sized sync
+                   consumed it and suppressed an unrelated panel. Stamping the LAYER ID bounds the
+                   blast radius to the one selection it was meant for, and any other selection clears
+                   it on sight. */
+                FM._sheetSuppressFor = layer.id;
                 if (FM.scene.selectedId !== layer.id && !(FM.selectionIds && FM.selectionIds().indexOf(layer.id) >= 0)) {
                   FM.selectLayer(layer.id);
                 }
@@ -1018,6 +1034,12 @@ window.FM = window.FM || {};
                   group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
                 }
                 clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
+                /* Ezra, twice: "I still need it so I can drag clips on the timeline without it opening
+                   up the editing panel." The selectLayer above is deliberate — you must be able to SEE
+                   which clip you grabbed — but on a phone the inspector sheet is DERIVED from the
+                   selection (js/mobile.js syncSheet), so selecting to show the grab also threw the
+                   panel up over the timeline you were dragging on. This flag says "a clip drag owns
+                   the screen"; the sheet consults it and stays down. Cleared on pointerup/cancel. */
                 clipTap = null;
                 if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
               } else {
