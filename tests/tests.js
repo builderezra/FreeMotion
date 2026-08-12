@@ -513,6 +513,131 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
+  test('the playhead survives a rebuild that lands mid project-open push', { item: 'playhead-open-push' }, async function () {
+    // v5.93 field bug, reported twice: "the playhead sometimes isn't there when a project opens", and
+    // only restarting the app brought it back. The project-open push (js/home.js) makes #app
+    // position:fixed and slides it a WHOLE VIEWPORT across the screen for PUSH_MS. recomputePad()
+    // measures #timeline-panel with getBoundingClientRect — which reports where the box is PAINTED —
+    // and publishes it as --tl-panel-left, off which the CSS pins the line at
+    // calc(50vw - var(--tl-panel-left)). A recompute inside that window therefore stored the
+    // TRANSLATED edge, and the line parked half a screen off the left edge for the rest of the
+    // session, because nothing recomputes again once the push has ended.
+    //
+    // It is not hypothetical. The deferred filmstrip build in timeline.js
+    // (`FM.buildClipStrip(m, 8).then(… FM.timeline.rebuild())`) resolves a couple of ms AFTER the push
+    // starts, so it fires on every open of any project holding an image or a video clip. Measured on
+    // v5.93 at 390x844, cold opens driven by a real touch tap on the home card: 20 of 20 left the line
+    // at x = -195 on a 390px screen with the clip content 267px out of register with it; 0 of 8 with a
+    // media-free project, which has no deferred rebuild to land inside the window. That difference is
+    // the whole of the "sometimes".
+    //
+    // BOTH consumers are checked, because they are fed by the same measurement and a repair that fixes
+    // only the CSS var leaves every clip in the wrong place. The content check is made WHILE the push
+    // is still on, and deliberately so: line and clip are both inside #app, so their separation is
+    // invariant under the push's transform, and measuring there is what stops a teardown rebuild from
+    // quietly recomputing PAD and hiding the defect. An earlier draft of this test measured after the
+    // teardown and was a DUD — it stayed green against a mutation that repaired the var and left PAD
+    // reading the painted edge.
+    var app = document.getElementById('app');
+    var panel = document.getElementById('timeline-panel');
+    var line = document.getElementById('tl-centerline');
+    var scroller = document.getElementById('timeline');
+    if (!app || !panel || !line) throw new Error('#app / #timeline-panel / #tl-centerline missing');
+    if (!FM.timeline || !FM.timeline.rebuild) throw new Error('FM.timeline.rebuild missing');
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(r); }); };
+    var readVar = function () {
+      return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tl-panel-left')) || 0;
+    };
+    var gap = function () {
+      var el = document.querySelector('.clip[data-id="' + probe.id + '"]');
+      if (!el) throw new Error('the probe clip is not in the timeline — the content half of this test proves nothing');
+      return el.getBoundingClientRect().left - line.getBoundingClientRect().left;
+    };
+
+    var probe = FM.makeLayer('shape', { shape: 'rect', name: 'ZZ push probe', start: 0, duration: 1 });
+    var wasTime = FM.time, wasScroll = scroller ? scroller.scrollLeft : 0;
+    FM.scene.layers.push(probe);
+    try {
+      FM.time = 0;
+      FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+      var truth = readVar();
+      if (Math.abs(truth - panel.getBoundingClientRect().left) > 0.6) {
+        throw new Error('at rest --tl-panel-left (' + truth + ') already disagrees with the panel (' +
+                        panel.getBoundingClientRect().left.toFixed(2) + ') — nothing below can be trusted');
+      }
+      // A clip at t=0 with the playhead at t=0 has to start under the line even before we touch
+      // anything. If it does not, the content assertion further down is measuring noise.
+      var restGap = gap();
+      if (Math.abs(restGap) > 2) {
+        throw new Error('at rest a t=0 clip is already ' + restGap.toFixed(1) +
+                        'px away from the playhead — the content check below would prove nothing');
+      }
+
+      // The push, exactly as js/home.js applies it. Under prefers-reduced-motion the stylesheet
+      // deliberately cancels both the animation AND position:fixed, so there would be no transform to
+      // be fooled by — fall back to the same geometry by hand, or this test passes for the wrong
+      // reason on a reduced-motion machine.
+      document.body.classList.add('fm-pushing');
+      app.classList.add('fm-push-in');
+      await rAF(); await rAF();
+      var shifted = app.getBoundingClientRect().left - truth;
+      if (Math.abs(shifted) < 8) {
+        app.style.position = 'fixed'; app.style.left = '0px'; app.style.top = '0px';
+        app.style.transform = 'translate3d(' + Math.round(window.innerWidth * 0.6) + 'px, 0, 0)';
+        await rAF();
+        shifted = app.getBoundingClientRect().left - truth;
+      }
+      // THE INSTRUMENT CHECK. If #app is not actually displaced on the frame we sample, this test
+      // cannot tell the bug from the fix, and must say so rather than going quietly green.
+      if (Math.abs(shifted) < 8) {
+        throw new Error('#app never moved during the push (offset ' + shifted.toFixed(1) +
+                        'px) — this test cannot see the defect it exists to catch');
+      }
+
+      // …and now the thing that actually happens in the field: a rebuild, mid-flight.
+      FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+
+      var during = readVar();
+      if (Math.abs(during - truth) > 0.6) {
+        throw new Error('a rebuild during the open push published --tl-panel-left: ' + during +
+                        'px instead of ' + truth + 'px (#app was ' + shifted.toFixed(1) +
+                        'px off) — the playhead is then pinned at calc(50vw - ' + during + 'px) = ' +
+                        (window.innerWidth / 2 - during).toFixed(0) + 'px, and nothing recomputes after the push');
+      }
+      // Consumer 2: PAD, the content origin, off the same measurement. Measured here rather than after
+      // the teardown — see the note at the top.
+      var pushGap = gap();
+      if (Math.abs(pushGap - restGap) > 2) {
+        throw new Error('a rebuild during the open push moved the t=0 clip ' + (pushGap - restGap).toFixed(1) +
+                        'px away from the playhead — PAD kept the painted edge, so every clip is drawn in the wrong place');
+      }
+    } finally {
+      document.body.classList.remove('fm-pushing');
+      app.classList.remove('fm-push-in');
+      app.style.position = ''; app.style.left = ''; app.style.top = ''; app.style.transform = '';
+      var i = FM.scene.layers.indexOf(probe);
+      if (i >= 0) FM.scene.layers.splice(i, 1);
+      FM.time = wasTime;
+    }
+    await rAF(); await rAF();
+    FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    if (scroller) scroller.scrollLeft = wasScroll;
+
+    // And the user-visible end state: the line is drawn, on screen, on true screen centre.
+    var lr = line.getBoundingClientRect();
+    var cs = getComputedStyle(line);
+    if (cs.display === 'none' || cs.visibility === 'hidden') throw new Error('#tl-centerline is not being drawn after the push');
+    if (!(lr.height > 2)) throw new Error('#tl-centerline has no height (' + lr.height.toFixed(1) + 'px) after the push');
+    if (lr.left < 0 || lr.left > window.innerWidth) {
+      throw new Error('after the push the playhead sits at x=' + lr.left.toFixed(1) + ' in a ' +
+                      window.innerWidth + 'px viewport — off screen, which is the reported bug');
+    }
+    if (Math.abs(lr.left - window.innerWidth / 2) > 2) {
+      throw new Error('after the push the playhead is ' + Math.abs(lr.left - window.innerWidth / 2).toFixed(1) +
+                      'px off screen centre');
+    }
+  });
+
   test('Select all on a non-project tab ticks THAT tab, never the projects', { item: 'select-cross-tab' }, async function () {
     // v5.04. Select used to be projects-only, and every part of it was hardwired to FM.projects —
     // including a `shownIds.length ? shownIds : FM.projects.list()` fallback in Select all. Opening

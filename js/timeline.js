@@ -40,9 +40,49 @@ window.FM = window.FM || {};
   // consumers, so they cannot drift apart. It is written on every recompute (init, rebuild, resize,
   // and the ResizeObserver below that catches a layout switch), never per frame during a drag: the
   // iOS URL-bar drift this file warns about came from per-frame rect reads, not from this.
+  //
+  // …and it is measured in the editor's OWN LAYOUT, with any ancestor transform taken back out.
+  // getBoundingClientRect() reports where a box is PAINTED, and the project-open push (js/home.js)
+  // makes #app position:fixed and slides it a whole viewport across the screen for PUSH_MS. Any
+  // recompute landing inside that window used to store the TRANSLATED edge — and one reliably does:
+  // the deferred filmstrip build below (`FM.buildClipStrip(m, 8).then(… rebuild())`) resolves a
+  // couple of ms AFTER the push starts, so opening any project holding an image or video clip
+  // stored `--tl-panel-left: 390px` on a 390px phone. The line is pinned at
+  // calc(50vw - var(--tl-panel-left)) = 195 - 390 = -195px, i.e. a full half-screen off the left
+  // edge, and nothing recomputes again once the push ends — so the playhead is simply GONE for the
+  // rest of the session and only a restart brings it back. Measured on v5.93 at 390x844: 12 of 12
+  // cold opens of a one-image project, 8 of 8 with four images, 0 of 8 with no media at all (no
+  // media, no deferred strip, no rebuild inside the window) — which is exactly why it reads as
+  // intermittent from the outside.
+  //
+  // Both consumers of this number — the line and the clip content — live INSIDE that transform and
+  // ride it, so the transform is precisely the part that must not be counted. Subtracting it makes
+  // the measurement correct at EVERY instant of the animation instead of only after it: no timer,
+  // no setTimeout tuned against PUSH_MS, nothing to race. Verified against the truth (the at-rest
+  // value) on every frame of a real push: raw rect drifted 0 → 1440px, this drifted 0.00px, in
+  // classic and in Studio (where the honest answer is 405.59px, not 0).
   function panelLeft() {
     const p = document.getElementById('timeline-panel');
-    return p ? p.getBoundingClientRect().left : 0;
+    if (!p) return 0;
+    let L = p.getBoundingClientRect().left;
+    for (let n = p; n && n !== document.documentElement; n = n.parentElement) {
+      const t = getComputedStyle(n).transform;
+      if (t && t !== 'none') L -= translateX(t);
+    }
+    return L;
+  }
+  // translateX out of a computed `transform`. Every transform this app ever puts on an ancestor of
+  // the timeline is a pure translate3d — the four project-open/close keyframes (fm-push-in,
+  // fm-push-out, fm-pop-in, fm-pop-out) and nothing else — so the x offset is the matrix's e/m41
+  // component. Falls back to parsing the string where DOMMatrixReadOnly is missing, and to 0 (i.e.
+  // today's raw behaviour) if it cannot tell, because a wrong guess here moves the playhead.
+  function translateX(t) {
+    try { if (window.DOMMatrixReadOnly) return new DOMMatrixReadOnly(t).m41 || 0; } catch (e) {}
+    const m3 = /matrix3d\(([^)]+)\)/.exec(t);
+    if (m3) return parseFloat(m3[1].split(',')[12]) || 0;
+    const m2 = /matrix\(([^)]+)\)/.exec(t);
+    if (m2) return parseFloat(m2[1].split(',')[4]) || 0;
+    return 0;
   }
   function recomputePad() {
     const L = panelLeft();
