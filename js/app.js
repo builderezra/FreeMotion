@@ -370,6 +370,10 @@ window.FM = window.FM || {};
     readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
     const ds = Math.round(FM.scene.project.duration), mm = Math.floor(ds / 60), ss = ds % 60;   // round to whole seconds FIRST, else 119.7s → 1:60 instead of 2:00
     readoutEl.title = FM.scene.layers.length + (FM.scene.layers.length === 1 ? ' layer · ' : ' layers · ') + 'total ' + mm + ':' + String(ss).padStart(2, '0');
+    // Parked on a benchmark? Light the timecode chip in marker yellow. A phone has no hover, so
+    // this is the half that actually reports "you are ON a marker" on device. (#61)
+    const mks = FM.scene.project.markers || [], halfF = 0.5 / f;
+    readoutEl.classList.toggle('on-mark', mks.some(mk => Math.abs(mk.t - FM.time) <= halfF));
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();

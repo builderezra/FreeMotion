@@ -490,6 +490,11 @@ window.FM = window.FM || {};
       el.className = 'tl-marker' + (mk.thumb ? ' thumb' : '');   // the pinned thumbnail-frame marker is a smaller distinct pin
       el.style.left = (PAD + mk.t * pps) + 'px';
       el.title = mk.thumb ? ('Thumbnail frame @ ' + mk.t.toFixed(2) + 's') : ((mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's  (double-click to rename)');
+      // Hovering a benchmark lights the timecode chip yellow. The marker's own glow is pure CSS
+      // (:hover); only the chip needs JS, because CSS can't reach across to it. Separate class from
+      // the parked-on-a-marker state so updateReadout's toggle can't clobber a live hover. (#61)
+      el.addEventListener('pointerenter', () => markHover(true));
+      el.addEventListener('pointerleave', () => markHover(false));
       el.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         const input = document.createElement('input');
@@ -502,6 +507,16 @@ window.FM = window.FM || {};
       });
       rulerEl.appendChild(el);
     });
+    // A rebuild replaces the marker elements, so a pointerleave for the old one never arrives and
+    // the chip would be stranded yellow. Re-derive from the browser's own hit-testing instead of
+    // remembering: :hover is accurate for wherever the cursor actually is now. (#61)
+    markHover(!!rulerEl.querySelector('.tl-marker:hover'));
+  }
+
+  // The timecode chip's hover half. Kept next to the markers that drive it.
+  function markHover(on) {
+    const ro = document.getElementById('time-readout');
+    if (ro) ro.classList.toggle('mark-hover', on);
   }
 
   function isSelected(id) { return id === FM.scene.selectedId || !!(FM.scene.selectedIds && FM.scene.selectedIds.indexOf(id) >= 0); }
