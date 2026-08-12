@@ -10558,6 +10558,105 @@
     });
   });
 
+  /* ---- Edit Shape must not silently destroy keyframed stroke settings -------------------------
+   *
+   * BUG-HUNT, two high findings with one cause. Border & Shadow makes stroke.width and stroke.color
+   * keyframable, so both can legitimately hold a {kf:[…]} container. Edit Shape bound them RAW —
+   * `() => stk.width` and `v => { stk.width = v; }` — which is destructive in both directions:
+   *
+   *   READING  an object into <input type=range> makes the browser silently substitute the mid-range,
+   *            so the row showed a thumb at 30 and the literal text "[object Object]"; the colour
+   *            swatch stringified to "[object object]", failed its hex regex and showed #000000. The
+   *            panel misreported the layer before you touched anything.
+   *   WRITING  replaced the whole container with a plain number/string. Every border keyframe gone,
+   *            silently, on one nudge. Verified in the original report: {kf:[{t:0,v:30},{t:1,v:2}]}
+   *            became 42, and {kf:[…#ffffff…#ff0000]} became "#00ff00".
+   *
+   * This asserts the DATA, not the widget, because the data loss is the part that cannot be undone by
+   * looking again — and it drives FM.setProp / FM.evalProp, which is what the rows now call, so a
+   * future rebinding back to raw fails here rather than in a project. */
+  test('Edit Shape: nudging stroke width or colour keeps their keyframes', { item: 'stroke-kf-safe' }, function () {
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'stk', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#4af' });
+    L.stroke = { enabled: true,
+      width: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 1, v: 2, e: 'linear' }] },
+      color: { kf: [{ t: 0, v: '#ffffff', e: 'linear' }, { t: 1, v: '#ff0000', e: 'linear' }] } };
+    var t0 = FM.time;
+    try {
+      FM.time = 0;
+      // READ: the panel must report the value AT THE PLAYHEAD, not an object and not a fallback.
+      var wRead = FM.evalProp(L.stroke.width, FM.time);
+      if (wRead !== 30) throw new Error('a keyframed stroke width reads as ' + JSON.stringify(wRead) + ' at t=0, expected 30 — the row would show the wrong number before anything is touched');
+      var cRead = FM.evalProp(L.stroke.color, FM.time) || '#ffffff';
+      if (String(cRead).toLowerCase() !== '#ffffff') throw new Error('a keyframed stroke colour reads as ' + JSON.stringify(cRead) + ' at t=0, expected #ffffff — the swatch misreports the layer');
+
+      /* WRITE — through the REAL panel, not through FM.setProp. Driving the helper directly would
+       * test the helper, and the defect was never in the helper: it was in what the Edit Shape row
+       * was bound to. A test that called setProp would stay green if someone rebound the row to a
+       * raw assignment tomorrow, which is exactly the regression it exists to catch. So: render the
+       * panel, find the row by its label, and type into the box a person would type into. */
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('element');
+      FM.inspector.refresh();
+      var rowFor = function (name) {
+        var labels = [].slice.call(document.querySelectorAll('#inspector .prop-row label'));
+        var lab = labels.filter(function (e) { return (e.textContent || '').trim() === name; })[0];
+        return lab ? lab.parentNode : null;
+      };
+      var wRow = rowFor('Stroke width');
+      if (!wRow) throw new Error('the Edit Shape panel has no "Stroke width" row — this test can no longer reach what it guards');
+      var wBox = wRow.querySelector('input');
+      if (!wBox) throw new Error('the "Stroke width" row has no input to drive');
+      // What the row SHOWS must already be the value at the playhead, not an object or a fallback.
+      if (String(wBox.value).indexOf('object') >= 0 || Math.abs(parseFloat(wBox.value) - 30) > 0.51) {
+        throw new Error('the "Stroke width" row displays "' + wBox.value + '" for a keyframed width that is 30 at the playhead — the panel misreports the layer before anything is touched');
+      }
+      wBox.value = '42';
+      wBox.dispatchEvent(new Event('input', { bubbles: true }));
+      wBox.dispatchEvent(new Event('change', { bubbles: true }));
+      wBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (!FM.isAnimated(L.stroke.width)) {
+        throw new Error('one stroke-width nudge replaced the keyframe container with ' + JSON.stringify(L.stroke.width) +
+          ' — every border-size keyframe destroyed silently, in preview, export and the saved project');
+      }
+      if (L.stroke.width.kf.length !== 2) throw new Error('the stroke-width keyframes went from 2 to ' + L.stroke.width.kf.length);
+      if (FM.evalProp(L.stroke.width, 0) !== 42) throw new Error('the nudge did not take: t=0 still reads ' + FM.evalProp(L.stroke.width, 0));
+      if (FM.evalProp(L.stroke.width, 1) !== 2) throw new Error('the nudge at t=0 also changed the t=1 keyframe to ' + FM.evalProp(L.stroke.width, 1));
+
+      var cRow = rowFor('Stroke color');
+      if (!cRow) throw new Error('the Edit Shape panel has no "Stroke color" row');
+      var cBox = cRow.querySelector('input[type=text], input:not([type=color])') || cRow.querySelector('input');
+      if (!cBox) throw new Error('the "Stroke color" row has no field to drive');
+      if (/000000|object/i.test(String(cBox.value))) {
+        throw new Error('the "Stroke color" field shows "' + cBox.value + '" for a keyframed colour that is #ffffff at the playhead — the swatch misreports the layer');
+      }
+      cBox.value = '#00ff00';
+      cBox.dispatchEvent(new Event('input', { bubbles: true }));
+      cBox.dispatchEvent(new Event('change', { bubbles: true }));
+      if (!FM.isAnimated(L.stroke.color)) {
+        throw new Error('one stroke-colour pick replaced the keyframe container with ' + JSON.stringify(L.stroke.color) +
+          ' — every colour keyframe lost and the animation stops rendering');
+      }
+      if (String(FM.evalProp(L.stroke.color, 1)).toLowerCase() !== '#ff0000') {
+        throw new Error('picking a colour at t=0 also changed the t=1 keyframe to ' + FM.evalProp(L.stroke.color, 1));
+      }
+
+      // …and a PLAIN (unkeyframed) stroke must still behave exactly as it always did.
+      var P = { width: 8, color: '#ffffff' };
+      FM.setProp(P, 'width', 12, FM.time);
+      FM.setProp(P, 'color', '#123456', FM.time);
+      if (P.width !== 12 || P.color !== '#123456') {
+        throw new Error('a static stroke no longer takes a plain value (' + JSON.stringify(P) + ') — the fix must not turn ordinary edits into keyframes');
+      }
+    } finally {
+      FM.time = t0;
+      FM.scene.layers.length = 0;
+      FM.selectLayer(null);
+      FM.inspector.openCategory('home');
+      FM.inspector.refresh();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

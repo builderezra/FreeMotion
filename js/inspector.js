@@ -2472,7 +2472,8 @@ window.FM = window.FM || {};
     if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
     const stk = layer.stroke;
     if (layer.shape === 'path' && !layer.closed) {
-      center.appendChild(rangeRow('Line width', () => stk.width, v => { stk.width = Math.max(1, v); }, 1, 60, 1));
+      center.appendChild(rangeRow('Line width', () => FM.evalProp(stk.width, FM.time),
+        v => { FM.setProp(stk, 'width', Math.max(1, v), FM.time); }, 1, 60, 1));   /* keyframe-safe — see the note in the Edit Shape panel */
     }
     panel.appendChild(center);
     body.appendChild(panel);
@@ -3614,13 +3615,29 @@ window.FM = window.FM || {};
         if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
         const stk = layer.stroke;
         if (openStroke) {
-          body.appendChild(rangeRow('Line width', () => stk.width, v => { stk.width = Math.max(1, v); }, 1, 60, 1));
+        /* Read and write stroke.width through evalProp/setProp, NOT raw. Border & Shadow makes this
+         * very field keyframable (kfNumRow(stk, 'width', …)), so it can legitimately hold a {kf:[…]}
+         * container — and a raw binding did two destructive things with one. Reading it handed an
+         * object to an <input type=range>, which silently substitutes the mid-range, so the row
+         * showed a thumb at 30 and the literal text "[object Object]" whatever the layer's real
+         * width was. Writing it REPLACED the container with a plain number: every border-size
+         * keyframe destroyed, silently, on one nudge — verified, {kf:[{t:0,v:30},{t:1,v:2}]} became
+         * 42. setProp assigns plainly when the property is static and upserts a keyframe when it is
+         * animated, so the ordinary case is unchanged and the animated one stops being wiped. */
+          body.appendChild(rangeRow('Line width', () => FM.evalProp(stk.width, FM.time),
+            v => { FM.setProp(stk, 'width', Math.max(1, v), FM.time); }, 1, 60, 1));
         } else {
           body.appendChild(checkRow('Stroke', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
           if (stk.enabled) {
-            body.appendChild(rangeRow('Stroke width', () => stk.width, v => { stk.width = v; }, 0, 60, 1));
+            body.appendChild(rangeRow('Stroke width', () => FM.evalProp(stk.width, FM.time),
+              v => { FM.setProp(stk, 'width', v, FM.time); }, 0, 60, 1));
             const sr = el('div', 'prop-row'); sr.appendChild(el('label', null, 'Stroke color'));
-            sr.appendChild(colorField(() => stk.color || '#ffffff', v => { stk.color = v; }));
+            /* Same defect on the colour channel, and the same fix. Raw, the {kf:[…]} object went
+             * into normHex(), stringified to "[object object]", failed the hex regex and came back
+             * #000000 — so the swatch misreported the layer before you touched it — and the first
+             * pick assigned a bare string over the whole container, losing every colour keyframe. */
+            sr.appendChild(colorField(() => FM.evalProp(stk.color, FM.time) || '#ffffff',
+              v => { FM.setProp(stk, 'color', v, FM.time); }));
             body.appendChild(sr);
           }
         }
