@@ -1087,7 +1087,12 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fx-kf.here { color: var(--kf); }
 .fx-kf-spacer { width: 20px; flex: none; }
 .fx-scrub-label { font-size: 12px; color: var(--text-dim); min-width: 72px; }
-.fx-scrub { flex: 1 1 100%; order: 2; height: 38px; border-radius: 8px; background-color: var(--panel-3); position: relative; cursor: ew-resize; overflow: hidden; touch-action: none; }
+/* pan-y, not none (v6.19). `none` hands this element EVERY direction, so a finger that landed on a
+   slider could never scroll the panel — and on an effect with a dozen sliders most of the panel is
+   slider. `pan-y` splits it: the browser keeps vertical scrolling, the JS keeps horizontal scrubbing,
+   and the directional lock in tickStrip decides which one a given touch turns out to be. Same idiom
+   as .fx-head directly above. */
+.fx-scrub { flex: 1 1 100%; order: 2; height: 38px; border-radius: 8px; background-color: var(--panel-3); position: relative; cursor: ew-resize; overflow: hidden; touch-action: pan-y; }
 .fx-scrub-ticks { position: absolute; left: 50%; top: 0; bottom: 0; pointer-events: none; will-change: transform;
   background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.5) 0 1px, transparent 1px 35px),   /* every 5th notch: taller + brighter */
     repeating-linear-gradient(90deg, rgba(255,255,255,.28) 0 1px, transparent 1px 7px);

@@ -387,7 +387,7 @@ window.FM = window.FM || {};
     strip.appendChild(ruler); strip.appendChild(el('div', 'fx-scrub-notch'));
     const sync = v => { ruler.style.transform = 'translateX(' + (-((v - o.min) / q) * TICK) + 'px)'; };
     sync(o.read());
-    let drag = null, cur = o.read(), lastApplied = null;
+    let drag = null, pend = null, cur = o.read(), lastApplied = null;
     // Push dx SCREEN px through the ruler. `cur` carries the un-quantised position so a slow drag or a
     // decaying glide accumulates sub-notch movement instead of losing it to rounding every frame.
     // REVERSED (AM): you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
@@ -400,20 +400,49 @@ window.FM = window.FM || {};
       return Math.abs(cur - before) > 1e-9;   // false at a wall → the glide stops rather than spinning
     };
     const glide = attachGlide(strip, applyDx, () => { o.release(); });
+    /* DIRECTIONAL LOCK on touch (v6.19). Ezra: "sometimes when scrolling through an effect with lots
+     * of sliders it doesn't let me scroll up because I placed my finger on the slider, which is
+     * annoying." The old code claimed the gesture on pointerdown — setPointerCapture plus
+     * preventDefault — before the finger had moved a single pixel, and .fx-scrub carried
+     * touch-action:none, which tells the browser this element handles EVERY direction. Between them
+     * the scroll was dead on contact: on a panel with a dozen sliders most of the panel IS slider, so
+     * most of the panel could not be scrolled.
+     * Now a touch is only PENDING until it proves which way it is going. Past a 6px slop, whichever
+     * axis is winning takes the gesture: horizontal → we capture and scrub from the ORIGINAL down
+     * point (not from the point where the lock resolved, or the value would jump by the slop);
+     * vertical → we let go completely and the browser scrolls, which it can now do because the CSS
+     * says touch-action: pan-y. glide.cancelDrag() matters on that branch — attachGlide starts
+     * tracking velocity on every pointerdown, so without it a scroll-flick would release into a
+     * momentum glide and move a value the user never touched.
+     * A mouse keeps the old immediate behaviour: you cannot scroll a panel by dragging with a mouse,
+     * so there is no ambiguity to resolve and adding a 6px dead zone would only make it feel loose. */
+    const LOCK = 6;
     strip.addEventListener('pointerdown', (e) => {
-      drag = { x: e.clientX };
       cur = o.read(); lastApplied = null;          // re-read: the value may have been typed or keyframed since
-      try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault();
+      if (e.pointerType === 'mouse') {
+        drag = { x: e.clientX };
+        try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault();
+        return;
+      }
+      pend = { x: e.clientX, y: e.clientY, id: e.pointerId };
     });
-    const end = () => { if (drag) { drag = null; glide.cancelDrag(); o.release(); } };
+    const end = () => { pend = null; if (drag) { drag = null; glide.cancelDrag(); o.release(); } };
     // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
     // hover would otherwise KEEP scrubbing.
     strip.addEventListener('pointermove', (e) => {
+      if (pend) {
+        const px = e.clientX - pend.x, py = e.clientY - pend.y;
+        if (Math.abs(px) < LOCK && Math.abs(py) < LOCK) return;      // still too small to call
+        if (Math.abs(py) > Math.abs(px)) { pend = null; glide.cancelDrag(); return; }   // theirs: a scroll
+        drag = { x: pend.x };                                        // ours: measure from where the finger LANDED
+        try { strip.setPointerCapture(pend.id); } catch (err) {}
+        pend = null;
+      }
       if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end();
       const dx = e.clientX - drag.x; drag.x = e.clientX;
       if (dx) applyDx(dx);
     });
-    strip.addEventListener('pointerup', () => { drag = null; });   // attachGlide's own pointerup starts the glide and settles
+    strip.addEventListener('pointerup', () => { pend = null; drag = null; });   // attachGlide's own pointerup starts the glide and settles
     strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
     strip._sync = sync;
     return strip;

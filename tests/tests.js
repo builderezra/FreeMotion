@@ -8040,6 +8040,72 @@
     }
   });
 
+  /* Queue 65 (v6.19). Ezra: "sometimes when scrolling through an effect with lots of sliders it
+   * doesn't let me scroll up because I placed my finger on the slider, which is annoying."
+   * The strip used to claim the gesture on pointerdown — capture + preventDefault — before the finger
+   * had moved at all, and its CSS said touch-action:none. So a vertical swipe that happened to start
+   * on a slider was swallowed: no scroll, and often a value change you never asked for.
+   * This drives real PointerEvents at a real .fx-scrub and asserts BOTH halves: a vertical swipe must
+   * leave the value alone, and a horizontal one must still scrub. Testing only the horizontal half is
+   * what would have passed on the broken build. */
+  test('effect sliders: a vertical swipe scrolls, a horizontal one scrubs', { item: 'slider-scroll-lock' }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      var L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 });
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      if (!L.effects[0]) throw new Error('could not build a blur instance to scrub');
+      FM.scene = scene([L]);
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+      // open the effect so its sliders are on screen
+      var opened = false;
+      var cat = [].slice.call(document.querySelectorAll('#inspector button')).filter(function (b) { return /Effects/.test(b.textContent); })[0];
+      if (cat) { cat.click(); await sleep(160); opened = true; }
+      var strip = document.querySelector('#inspector .fx-scrub');
+      if (!strip) {
+        var head = document.querySelector('#inspector .fx-head');
+        if (head) { head.click(); await sleep(160); strip = document.querySelector('#inspector .fx-scrub'); }
+      }
+      if (!strip) throw new Error('no .fx-scrub on screen' + (opened ? ' after opening Effects' : '') + ' — nothing to test');
+
+      // touch-action must leave the vertical axis to the browser, or nothing below can help
+      var ta = getComputedStyle(strip).touchAction;
+      if (ta !== 'pan-y') throw new Error('.fx-scrub touch-action is "' + ta + '", not "pan-y" — with `none` the browser can never scroll a panel whose rows are sliders');
+
+      var r = strip.getBoundingClientRect();
+      var cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+      var lastDownPrevented = null;
+      var swipe = async function (dx, dy) {
+        var opts = function (x, y) { return { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', clientX: x, clientY: y, button: 0, buttons: 1 }; };
+        var down = new PointerEvent('pointerdown', opts(cx, cy));
+        strip.dispatchEvent(down);
+        lastDownPrevented = down.defaultPrevented;
+        for (var s = 1; s <= 6; s++) strip.dispatchEvent(new PointerEvent('pointermove', opts(cx + dx * s / 6, cy + dy * s / 6)));
+        strip.dispatchEvent(new PointerEvent('pointerup', opts(cx + dx, cy + dy)));
+        await sleep(60);
+      };
+      var read = function () { return JSON.stringify(FM.scene.layers[0].effects[0].params); };
+
+      var before = read();
+      // DRIFT ON PURPOSE. A real thumb never swipes exactly vertically, and a dx of 0 would make this
+      // half of the test pass on the broken build too — applyDx(0) is a no-op, so the old code looked
+      // innocent for a perfectly straight swipe while mangling every real one. 8px across, 90 down.
+      await swipe(8, -90);
+      if (read() !== before) throw new Error('a mostly-vertical swipe changed the effect: ' + before + ' → ' + read() + ' — the slider ate a scroll');
+      // …and the browser must have been LEFT free to scroll. preventDefault on the pointerdown is the
+      // other half of how the old build killed it, and no amount of touch-action can undo that.
+      if (lastDownPrevented) throw new Error('pointerdown was preventDefault()ed on touch — the browser cannot scroll a gesture that was cancelled before it began');
+
+      await swipe(-70, 0);                         // a scrub: straight across
+      var after = read();
+      if (after === before) throw new Error('a horizontal drag changed nothing (' + after + ') — the lock is refusing the gesture it is supposed to allow');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
