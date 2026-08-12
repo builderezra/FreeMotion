@@ -73,7 +73,6 @@ Numbered with Ezra's own queue numbers where he gave them.
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
 - [ ] **74 — Swipe up for a full-screen Favourites browser.** Replacing the swipe-right between
       Recent and Faves. Sorting by recency, effect type and A–Z, each with an inverted order.
-- [ ] **59 — Copy/paste button in the effects menu, and paste ONE effect.**
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
       exist fully"*.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
@@ -106,6 +105,8 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **59 — One effect clipboard.** There were two that could not see each other, so copying one
+      effect from a row's ⋯ left the panel's Paste greyed out — v6.32
 - [x] **Presets preview the selected layer** with the preset applied, instead of a generic sample.
       Also fixed a cache-poisoning bug it exposed — v6.30
 - [x] **88 — Text adding fixed on PC.** A desktop layout had never been written — the phone

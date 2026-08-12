@@ -218,24 +218,48 @@ window.FM = window.FM || {};
   // Copies carry the live params, which means they carry keyframes: an animated parameter IS a
   // channel object sitting in fx.params[key], so the deep clone takes the animation with it. That is
   // the same reason Duplicate clones instead of building a fresh default instance.
+  /* ONE effect clipboard (v6.32, queue 59). There used to be two, and they could not see each other:
+   * this one, holding a single effect in localStorage, behind each row's ⋯ menu; and
+   * FM.effectClipboard, an in-memory array of the WHOLE stack, behind the panel's Copy/Paste buttons.
+   * So "Copy effect" from a row's ⋯ followed by the panel's Paste did not paste that effect — the
+   * panel button was reading the other clipboard, and was usually disabled, which reads as broken.
+   * Ezra: "copy/paste button in the effects menu, and paste ONE effect."
+   * It stores an ARRAY either way now, so one effect and a whole stack are the same shape and every
+   * Copy feeds every Paste. It also keeps the localStorage backing the panel buttons never had — the
+   * in-memory one died on every reload, and copying a look from one project into another is exactly
+   * the case where you close and reopen something. */
   FM.fxClipboard = {
     _key: 'fm.fxclip',
-    copy(fx) {
+    // Accepts one effect or an array of them.
+    copy(fxOrList) {
+      const list = (Array.isArray(fxOrList) ? fxOrList : [fxOrList]).filter(Boolean);
+      if (!list.length) return false;
       // jsonReplacer drops the runtime '_' props — without it the clipboard carries _expanded, and a
       // pasted effect arrives with its editor already open, shoving the stack around.
-      try { localStorage.setItem(this._key, JSON.stringify(fx, FM.jsonReplacer)); return true; }
+      try { localStorage.setItem(this._key, JSON.stringify(list, FM.jsonReplacer)); return true; }
       catch (e) { return false; }
     },
+    // Always an array, never null. Empty means nothing usable is on it.
     read() {
       try {
-        const fx = JSON.parse(localStorage.getItem(this._key) || 'null');
+        const raw = JSON.parse(localStorage.getItem(this._key) || 'null');
+        if (!raw) return [];
+        // Tolerate the pre-v6.32 single-object format, so a clipboard written by an older build
+        // still pastes instead of silently reading as empty.
+        const list = Array.isArray(raw) ? raw : [raw];
         // A type that no longer exists (older build, renamed effect) would paste a row that renders
-        // nothing and cannot be edited — treat it as an empty clipboard.
-        if (!fx || !fx.type || !FM.fxRegistry.get(fx.type)) return null;
-        return fx;
-      } catch (e) { return null; }
+        // nothing and cannot be edited — drop those rather than land them.
+        return list.filter(fx => fx && fx.type && FM.fxRegistry.get(fx.type));
+      } catch (e) { return []; }
     },
-    label() { const fx = this.read(); if (!fx) return null; const reg = FM.fxRegistry.get(fx.type); return (reg && reg.label) || fx.type; }
+    count() { return this.read().length; },
+    // Names ONE effect, or says how many — the menu uses this to say what you are about to land.
+    label() {
+      const list = this.read();
+      if (!list.length) return null;
+      if (list.length === 1) { const reg = FM.fxRegistry.get(list[0].type); return (reg && reg.label) || list[0].type; }
+      return list.length + ' effects';
+    }
   };
 
   /* A reorder that has JUST finished (v5.56). Ezra: "if I only have two effects and I try to drag the
@@ -686,11 +710,12 @@ window.FM = window.FM || {};
     // land on it. Absent entirely when there is nothing to paste, rather than present and dead.
     if (clipLabel) {
       items.push({ label: 'Paste ' + clipLabel, action: () => {
-        const fxIn = FM.fxClipboard.read();
-        if (!fxIn) { if (FM.toast) FM.toast('Nothing to paste', 1400); return; }
-        delete fxIn._expanded;
+        const list = FM.fxClipboard.read();
+        if (!list.length) { if (FM.toast) FM.toast('Nothing to paste', 1400); return; }
+        list.forEach(fxIn => delete fxIn._expanded);
         if (!Array.isArray(layer.effects)) layer.effects = [];
-        layer.effects.splice(idx + 1, 0, fxIn);   // below the effect you opened the menu on
+        // …below the effect you opened the menu on, in clipboard order.
+        layer.effects.splice(idx + 1, 0, ...list);
         afterFx();
         if (FM.toast) FM.toast('Pasted ' + clipLabel, 1400);
       } });
@@ -964,10 +989,29 @@ window.FM = window.FM || {};
     s.appendChild(add);
     // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)
     const tools = el('div', 'fx-stack-tools');
+    /* Both buttons speak to FM.fxClipboard now (v6.32) — see the note on it. They used to use a
+       separate in-memory FM.effectClipboard, so "Copy effect" from a row's ⋯ left this Paste greyed
+       out, and copying a stack here did nothing for the ⋯ menu's Paste. One clipboard, so every Copy
+       feeds every Paste, and it survives a reload because it is in localStorage. */
+    const clipN = FM.fxClipboard.count();
     const cp = el('button', 'fx-act', 'Copy'); cp.disabled = !(layer.effects && layer.effects.length);
-    cp.addEventListener('click', () => { FM.effectClipboard = JSON.parse(JSON.stringify(layer.effects || [], FM.jsonReplacer)); if (FM.toast) FM.toast('Copied ' + FM.effectClipboard.length + ' effect(s)'); FM.inspector.refresh(); });
-    const pa = el('button', 'fx-act', 'Paste'); pa.disabled = !(FM.effectClipboard && FM.effectClipboard.length);
-    pa.addEventListener('click', () => { if (!FM.effectClipboard || !FM.effectClipboard.length) return; if (!layer.effects) layer.effects = []; FM.effectClipboard.forEach(e => layer.effects.push(JSON.parse(JSON.stringify(e)))); afterFx(); });
+    cp.addEventListener('click', () => {
+      const n = (layer.effects || []).length;
+      if (!FM.fxClipboard.copy(layer.effects)) { if (FM.toast) FM.toast('Couldn’t copy'); return; }
+      if (FM.toast) FM.toast('Copied ' + n + (n === 1 ? ' effect' : ' effects'));
+      FM.inspector.refresh();   // the Paste button's label and disabled state are derived from the clipboard
+    });
+    // Says WHAT it will paste. "Paste" alone gives you no way to tell whether you are about to land
+    // one effect or somebody's whole stack on this layer.
+    const pa = el('button', 'fx-act', clipN > 1 ? 'Paste ' + clipN : 'Paste'); pa.disabled = !clipN;
+    pa.addEventListener('click', () => {
+      const list = FM.fxClipboard.read();
+      if (!list.length) return;
+      if (!layer.effects) layer.effects = [];
+      list.forEach(e => { delete e._expanded; layer.effects.push(e); });
+      afterFx();
+      if (FM.toast) FM.toast('Pasted ' + list.length + (list.length === 1 ? ' effect' : ' effects'));
+    });
     const sv = el('button', 'fx-act', 'Save preset…'); sv.disabled = !(layer.effects && layer.effects.length);
     sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });
     tools.appendChild(cp); tools.appendChild(pa); tools.appendChild(sv);

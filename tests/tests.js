@@ -2988,8 +2988,11 @@
       if (!/Paste .+/.test(paste)) throw new Error('the paste entry does not name the effect: ' + paste);
 
       // Apply it the way the menu does, onto the OTHER layer.
-      const got = FM.fxClipboard.read();
-      if (!got) throw new Error('clipboard read back null straight after a successful copy');
+      // read() returns an ARRAY since v6.32 — one clipboard for a single effect and for a whole
+      // stack, so the ⋯ menu and the panel buttons can no longer disagree about what is copied.
+      const gotList = FM.fxClipboard.read();
+      if (gotList.length !== 1) throw new Error('clipboard holds ' + gotList.length + ' straight after copying ONE effect');
+      const got = gotList[0];
       if (got.params[pk] !== 7.5) throw new Error('the copy lost its edited parameter: ' + got.params[pk]);
       if ('_expanded' in got) throw new Error('the copy carried the runtime _expanded flag, so a paste arrives with its editor already open');
       dst.effects.push(got);
@@ -3001,7 +3004,7 @@
       fx.params[pk] = { kf: [{ t: 0, v: 3 }, { t: 1, v: 9 }] };
       if (!FM.isAnimated(fx.params[pk])) throw new Error('the probe channel is not what FM calls animated — this check would prove nothing');
       if (!FM.fxClipboard.copy(fx)) throw new Error('copying an animated effect returned false');
-      const anim = FM.fxClipboard.read();
+      const anim = FM.fxClipboard.read()[0];
       if (!anim || !FM.isAnimated(anim.params[pk])) throw new Error('the copy lost its keyframes — an animated effect pastes back as a static one');
       if (anim.params[pk].kf.length !== 2 || anim.params[pk].kf[1].v !== 9) {
         throw new Error('the pasted channel does not match what was copied: ' + JSON.stringify(anim.params[pk]));
@@ -3009,7 +3012,7 @@
 
       // A type this build no longer knows must read as an empty clipboard, not paste a dead row.
       localStorage.setItem('fm.fxclip', JSON.stringify({ type: 'no-such-effect-xyz', params: {} }));
-      if (FM.fxClipboard.read()) throw new Error('an unknown effect type on the clipboard still reads as pasteable');
+      if (FM.fxClipboard.read().length) throw new Error('an unknown effect type on the clipboard still reads as pasteable');
       if (FM.fxClipboard.label()) throw new Error('an unknown effect type still produces a menu label');
     } finally {
       if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
@@ -8773,6 +8776,51 @@
       else if (wasHome && !FM.home.isOpen()) FM.home.open();
       await sleep(120);
       try { FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* Queue 59 (v6.32). Ezra: "copy/paste button in the effects menu, and paste ONE effect."
+   * There were two clipboards that could not see each other — FM.fxClipboard (one effect,
+   * localStorage, behind a row's ⋯) and FM.effectClipboard (the whole stack, in memory, behind the
+   * panel's buttons). Copying one effect from ⋯ left the panel's Paste greyed out, which reads as
+   * broken. This asserts they are now ONE: a single effect copied is a single effect pasted, a stack
+   * copied is a stack pasted, and the clipboard survives being re-read from storage. */
+  test('effects: one clipboard — copy one effect, paste one effect', { item: 'fx-clipboard-unified' }, async function () {
+    if (!FM.fxClipboard || !FM.fxRegistry) throw new Error('FM.fxClipboard / FM.fxRegistry missing');
+    var saved = localStorage.getItem('fm.fxclip');
+    try {
+      if (typeof FM.effectClipboard !== 'undefined' && FM.effectClipboard) {
+        throw new Error('FM.effectClipboard is back — a second clipboard is the bug being fixed');
+      }
+      var a = FM.fxRegistry.makeInstance('blur'), b = FM.fxRegistry.makeInstance('glow');
+      if (!a || !b) throw new Error('could not build two effect instances to copy');
+      // ONE effect in, ONE effect out — the literal ask.
+      if (!FM.fxClipboard.copy(a)) throw new Error('copy(single) refused');
+      var one = FM.fxClipboard.read();
+      if (one.length !== 1) throw new Error('copied 1 effect, clipboard holds ' + one.length);
+      if (one[0].type !== 'blur') throw new Error('clipboard holds ' + one[0].type + ', expected blur');
+      if (FM.fxClipboard.count() !== 1) throw new Error('count() disagrees with read()');
+      if (!/blur/i.test(FM.fxClipboard.label() || '')) throw new Error('label() does not name the effect: ' + FM.fxClipboard.label());
+      // …and a whole stack goes through the SAME clipboard, which is what makes the panel buttons and
+      // the ⋯ menu one feature instead of two.
+      if (!FM.fxClipboard.copy([a, b])) throw new Error('copy(list) refused');
+      var many = FM.fxClipboard.read();
+      if (many.length !== 2) throw new Error('copied 2 effects, clipboard holds ' + many.length);
+      if (FM.fxClipboard.label() !== '2 effects') throw new Error('label() for a stack is "' + FM.fxClipboard.label() + '"');
+      // An effect type that no longer exists must be dropped, not landed as an uneditable dead row.
+      localStorage.setItem('fm.fxclip', JSON.stringify([{ type: 'zzz_not_an_effect', params: {} }, { type: 'blur', params: {} }]));
+      var filtered = FM.fxClipboard.read();
+      if (filtered.length !== 1 || filtered[0].type !== 'blur') {
+        throw new Error('an unknown effect type survived the clipboard: ' + JSON.stringify(filtered.map(function (f) { return f.type; })));
+      }
+      // The pre-v6.32 single-OBJECT format must still paste, or an older build's clipboard reads empty.
+      localStorage.setItem('fm.fxclip', JSON.stringify({ type: 'glow', params: {} }));
+      var legacy = FM.fxClipboard.read();
+      if (legacy.length !== 1 || legacy[0].type !== 'glow') {
+        throw new Error('the old single-object clipboard format no longer reads: ' + JSON.stringify(legacy));
+      }
+    } finally {
+      if (saved == null) localStorage.removeItem('fm.fxclip'); else localStorage.setItem('fm.fxclip', saved);
     }
   });
 
