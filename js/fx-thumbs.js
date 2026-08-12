@@ -534,6 +534,11 @@ window.FM = window.FM || {};
     timewarp: 'full',
     // These two throw ghosts/streaks OUTSIDE the layer, which only shows if there is an outside.
     rgbsplit: 'card', innerblur: 'card', motionblur: 'card',
+    // Squish needs something that can HANG OVER an edge, and its category default ('grid') is a
+    // full-frame lattice touching all four edges with nothing over any of them — the tile would show
+    // an untouched picture. The ball is also the effect's own pitch: drop it on the floor and watch
+    // it squash. (See the OVERRIDE, which supplies the drop.)
+    squish: 'ball',
   };
   DETAIL_BOUND.forEach(t => { SUBJECT_OF[t] = 'detail'; });
   SUBJECT_OF.pixelsort = 'bars';   // the stylize section's own drawn art, kept now that the section leads with a photo
@@ -601,6 +606,22 @@ window.FM = window.FM || {};
     // Magnify Background gets the same treatment for the same reason (its window has to read as a
     // window), and the tilt also separates the blown-up copy from the picture around it.
     copybg: tilted16, magnifybg: tilted16,
+    /* Squish only does anything when the layer is OVER an edge, so a static tile is just a ball.
+     * Drive it into the floor and back: round in the air, flat and wide on the floor, which IS the
+     * pitch. The cycle is 0.9s against the strip's 10 frames at 0.15s, so four of them land on or
+     * near the impact whatever phase the shared ticker is in — a one-shot Bounce ease is over in
+     * ~0.08s and the strip would step straight past it. Floor only: a ball squashing on the ceiling
+     * on the way down reads as a glitch. */
+    squish: function (layers, hero) {
+      hero.transform = Object.assign({}, hero.transform, {
+        y: { kf: [{ t: 0, v: 30, e: 'easeIn', bez: [0.5, 0, 1, 1] },
+                  { t: 0.45, v: 86, e: 'easeOut', bez: [0, 0, 0.5, 1] },
+                  { t: 0.9, v: 30, e: 'easeIn', bez: [0.5, 0, 1, 1] },
+                  { t: 1.35, v: 86, e: 'easeOut', bez: [0, 0, 0.5, 1] },
+                  { t: 1.8, v: 30, e: 'linear' }] },
+      });
+      hero.effects[0].params.walls = 1;
+    },
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
     counter: kf01('progress'), textprogress: kf01('progress'),
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect

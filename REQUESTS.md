@@ -156,13 +156,17 @@ Numbered with Ezra's own queue numbers where he gave them.
       doesn't animate. Say the word and I'll build the three cheap ones and you can listen.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
-- [ ] **48 — Squish:** a new effect where the layer deforms against the canvas edges. Part of the
-      recovered diff (see below).
+- [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
+      The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
+      of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls
+      (amount, spread, bulge, firmness, inset, walls). Same story as the voice recorder — it was built
+      and verified weeks ago, never committed, and survived only in a worktree. Proof it works: a ball
+      driven past the right wall is clipped to 100x140 without it and squashes to 100x212 with it.
+      Nothing else moved — 288 of 288 configurations byte-identical against v6.41.
 - [ ] **37 — Presets rework:** AM's "Preset preview" screen. Supersedes the earlier thumbnail spec.
 - [ ] **31b — Transform blur can't smear effect- or camera-driven motion.**
 
 ### Work that exists but isn't landed
-- [ ] **Land the recovered Squish diff.** Same story, 3509 lines, cut against v5.89.
 - [ ] **Rebuild the two lost audio diffs** (reverse + misc). These were verified but staged in /tmp and
       the reboot destroyed them. No worktree has them — they are genuinely gone and must be rebuilt.
       *Held:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.

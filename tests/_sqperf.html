@@ -1,0 +1,43 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>squish perf probe</title></head><body><pre id="out">…</pre>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+(function () {
+  var PW = 1920, PH = 1080, N = 40;
+  var cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+  var g = cv.getContext('2d');
+  function run(withFx, x) {
+    var t0 = performance.now();
+    for (var i = 0; i < N; i++) {
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, PW, PH);
+      var L = FM.makeLayer('shape', { shape: 'ellipse', x: x + (i % 3), y: 540, shapeW: 400, shapeH: 400, fill: '#2fd0b5', start: 0, duration: 10 });
+      if (withFx) L.effects = [FM.fxRegistry.makeInstance('squish')];
+      FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 10, background: '' }, layers: [L], selectedId: null, selectedIds: [] }, 0);
+    }
+    return (performance.now() - t0) / N;
+  }
+  var cases = [
+    ['airborne (nowhere near a wall)', 960],
+    ['half over the right wall', 1920],
+    ['wholly off-canvas right', 2400],
+    ['far off-canvas right', 3200],
+  ];
+  var lines = ['1920x1080 comp, 400px ball, ' + N + ' frames each, ms/frame'];
+  cases.forEach(function (c) {
+    run(true, c[1]); run(false, c[1]);                     // warm
+    var a = run(false, c[1]), b = run(true, c[1]);
+    lines.push('  ' + c[0].padEnd(34) + ' no fx ' + a.toFixed(2) + '   squish ' + b.toFixed(2) + '   x' + (b / a).toFixed(1));
+  });
+  document.getElementById('out').textContent = lines.join('\n');
+  document.title = 'DONE';
+})();
+</script>
+</body></html>

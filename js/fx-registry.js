@@ -102,6 +102,8 @@ window.FM = window.FM || {};
     compresscrunch: 'stylize', temporaldenoise: 'blur',
     // batch 38 (round 11 opens)
     lensdistort: 'distort', pixelsort: 'stylize', lumamatte: 'matte', compoundblur: 'blur', matchgrade: 'color',
+    // batch 39 (the frame edges become solid)
+    squish: 'distort',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -139,7 +141,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['fractalridges', 'fillbehind', 'magnifybg', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion'];
+  FM.FX_FEATURED = ['squish', 'fractalridges', 'fillbehind', 'magnifybg', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
@@ -297,6 +299,7 @@ window.FM = window.FM || {};
     stretchseg: 'Grabs one horizontal band and stretches it — the glitchy pulled-taffy smear.',
     tileshift: 'Chops the frame into tiles and slides alternate rows sideways.',
     tilerotate: 'Chops the frame into tiles and rotates each one in place.',
+    squish: 'Makes the canvas edges solid: a layer sliding off-frame squashes against the edge instead of being cut off. Pair it with a Bounce ease on Position and the impact squash comes free.',
     displacemap: 'Pushes each pixel by the colour of another layer at that spot — red moves it sideways, green up and down.',
     polardisplace: 'The same, in circles: another layer’s brightness pushes pixels toward or around the centre.',
 
@@ -483,6 +486,11 @@ window.FM = window.FM || {};
       // the pixels. There is nothing left to neutralise, so dragging the group WOULD smear it. Offer
       // it on the members instead of shipping a control that does the reverse of its own name.
       if (id === 'motionflow' && layer.type === 'group') return false;
+      // Squish deforms whatever hangs OFF the frame — and a group reaches the effect stack already
+      // flattened into a COMP-SIZED plate, so the overhang has been clipped away before the effect
+      // can see it. Measured: a group holding a ball 40% past the wall renders byte-identically with
+      // Squish on and off. Offer it on the members instead of shipping a control that cannot act.
+      if (id === 'squish' && layer.type === 'group') return false;
       return true;
     },
   };

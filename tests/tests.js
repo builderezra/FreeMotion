@@ -10103,6 +10103,340 @@
     }
   });
 
+  /* ---------------- Squish (batch 39) ----------------------------------------------------------
+   * The frame edges become walls: a layer that would slide off-canvas is compressed against the
+   * edge instead of being clipped. Four things have to hold or it is not shippable — it must be an
+   * EXACT no-op when it is off, it must actually contain the layer, it must be deterministic, and
+   * it must not change strength with preview quality. Each assertion below was mutation-checked
+   * (break the mechanism, watch that one go red) — a green assertion that survives the fix being
+   * removed is worthless, and this project has shipped three of those. */
+  var SQP = { width: 240, height: 240, fps: 30, duration: 5, background: null };
+  // A ball 50% past the RIGHT wall: half of it would normally be clipped away.
+  function squishShot(effects, rs, x) {
+    rs = rs || 1;
+    var w = Math.round(SQP.width * rs), h = Math.round(SQP.height * rs);
+    var c = offscreen(w, h);
+    c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+    var L = FM.makeLayer('shape', { shape: 'ellipse', x: x == null ? 240 : x, y: 120, shapeW: 150, shapeH: 150, fill: '#2fd0b5' });
+    L.effects = effects;
+    FM.renderScene(c.getContext('2d'), { project: SQP, layers: [L], selectedId: null, selectedIds: [] }, 0);
+    return c.getContext('2d').getImageData(0, 0, w, h);
+  }
+  function squishFx(params) { return [{ type: 'squish', enabled: true, params: params || {} }]; }
+  function sqDiff(a, b) { var n = 0; for (var i = 0; i < a.data.length; i++) if (a.data[i] !== b.data[i]) n++; return n; }
+  function sqLit(img) { var n = 0, d = img.data; for (var i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; }
+  function sqLastCol(img) {   // lit pixels in the frame's last column = the layer being cut off by it
+    var n = 0, W = img.width, d = img.data;
+    for (var y = 0; y < img.height; y++) if (d[(y * W + W - 1) * 4 + 3] > 8) n++;
+    return n;
+  }
+  function sqBox(img) {
+    var W = img.width, H = img.height, d = img.data, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      if (d[(y * W + x) * 4 + 3] <= 8) continue;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    return x1 < 0 ? { w: 0, h: 0 } : { w: x1 - x0 + 1, h: y1 - y0 + 1, x1: x1 };
+  }
+
+  test('effects: Squish at strength 0 is byte-identical to the effect not being there', { item: 'fx-squish' }, function () {
+    // Strength 0 must be the effect ABSENT, not "a warp that happens to be the identity": with the
+    // short-circuit removed, this exact probe comes back 210 bytes different, because the plate
+    // round trip is not lossless on antialiased alpha (getImageData is unpremultiplied 8-bit, the
+    // canvas premultiplied). Invisible — and still wrong, because it means a keyframed fade-in of
+    // Squish starts with a step instead of at zero.
+    var none = squishShot([]);
+    var zero = squishShot(squishFx({ amount: 0 }));
+    var on = squishShot(squishFx({}));
+    var d0 = sqDiff(none, zero);
+    if (d0 !== 0) throw new Error('strength 0 differs from no effect by ' + d0 + ' bytes — it must be exactly 0');
+    // The control: if the effect did nothing at its default either, the assertion above is vacuous.
+    var d1 = sqDiff(none, on);
+    if (d1 < 5000) throw new Error('Squish at its default only changed ' + d1 + ' bytes — the probe is not actually squashing anything');
+    // And the other half of "off": a layer whose alpha only just REACHES the wall, without crossing
+    // it, must be left alone byte for byte. This is the no-false-positives case — the wall has to
+    // react to real overhang, not to proximity. (x = 165 puts the 150px ball's right edge exactly on
+    // the 240px frame edge.) Measured on the real thing: 0 bytes here, 947 with 1px of overhang.
+    var tang = sqDiff(squishShot([], 1, 165), squishShot(squishFx({}), 1, 165));
+    if (tang !== 0) throw new Error('a layer merely TOUCHING the wall changed by ' + tang + ' bytes — Squish is deforming something that does not overhang');
+  });
+
+  test('effects: Squish keeps a layer that crosses the wall inside the frame', { item: 'fx-squish' }, function () {
+    // Without it the ball is simply CUT by the frame — a long run of lit pixels down the last
+    // column, and half the ink gone. With it the ball lands tangent to the wall and most of the ink
+    // is still on screen. Both halves matter: recovering ink while still being cut would just mean
+    // a fatter smear against the edge.
+    var none = squishShot([]);
+    var on = squishShot(squishFx({}));
+    var cutNone = sqLastCol(none), cutOn = sqLastCol(on);
+    if (cutNone < 40) throw new Error('the control is not being clipped (' + cutNone + 'px in the last column) — the probe proves nothing');
+    if (cutOn > cutNone * 0.5) throw new Error('still hard against the wall: ' + cutOn + 'px lit in the last column vs ' + cutNone + ' clipped — the layer is not being brought inside');
+    var litNone = sqLit(none), litOn = sqLit(on);
+    if (litOn < litNone * 1.15) throw new Error('only ' + litOn + ' lit px vs ' + litNone + ' clipped — no material was recovered from off-frame');
+    // and nothing may hang outside the frame (there is nowhere for it to go — the plate IS the comp)
+    var b = sqBox(on);
+    if (b.x1 > SQP.width - 1) throw new Error('drew past the frame edge');
+  });
+
+  test('effects: Squish renders the same frame twice identically', { item: 'fx-squish' }, function () {
+    // No Math.random anywhere in the render: a non-deterministic effect flickers in playback and
+    // does not survive export, where each frame is rendered once, cold.
+    var a = squishShot(squishFx({})), b = squishShot(squishFx({}));
+    var n = sqDiff(a, b);
+    if (n !== 0) throw new Error(n + ' bytes differ between two renders of the same frame');
+    if (sqLit(a) < 3000) throw new Error('the probe rendered almost nothing (' + sqLit(a) + ' lit px) — two blank frames are identical too');
+  });
+
+  test('effects: Squish deforms the same at a reduced preview scale', { item: 'fx-squish' }, function () {
+    // Every length inside the effect is measured on the PLATE, and the plate follows the adaptive
+    // playback tier (down to 0.28). `inset` is the one parameter that arrives in PROJECT px, so it
+    // has to be multiplied by plateScale — otherwise the walls sit somewhere else in a reduced
+    // preview and the deformation changes as playback quality changes. Measured in PROJECT px so
+    // the two scales compare directly.
+    [0, 40].forEach(function (inset) {
+      var full = sqBox(squishShot(squishFx({ inset: inset })));
+      var half = sqBox(squishShot(squishFx({ inset: inset }), 0.5));
+      if (!full.w || !half.w) throw new Error('inset ' + inset + ': nothing rendered at one of the two scales');
+      var dw = Math.abs(full.w - half.w * 2), dh = Math.abs(full.h - half.h * 2);
+      if (dw > 8 || dh > 8) throw new Error('inset ' + inset + ': the squashed layer measures ' + full.w + 'x' + full.h
+        + ' at 1:1 but ' + (half.w * 2) + 'x' + (half.h * 2) + ' (project px) at half scale — a length is not being multiplied by plateScale');
+    });
+    // the control: inset 40 must actually move the wall, or the loop above is comparing two no-ops
+    var a = sqBox(squishShot(squishFx({ inset: 0 }))), b = sqBox(squishShot(squishFx({ inset: 40 })));
+    if (Math.abs(a.w - b.w) < 10) throw new Error('inset 40 barely changed the result — the probe is not exercising the wall position');
+  });
+
+  /* ---- the two blockers that sent Squish back for a second pass ------------------------------
+   * Both were found by RENDERING, not by reading, and each is reachable by one ordinary action:
+   * animate a layer off-screen, drag one slider to its end stop, or add a second effect.
+   * These probes run on a 480x480 comp rather than SQP's 240 because the Wall inset slider's own
+   * maximum (200px) puts the two walls PAST each other on a 240 comp — every layer is then
+   * legitimately crushed into the 2px sliver that is left, and the case that actually broke cannot
+   * be set up at all. 480 leaves an 80px live band, which is a setting a person might really dial. */
+  var SQP4 = { width: 480, height: 480, fps: 30, duration: 5, background: null };
+  function sq480(effects, x, y, size) {
+    var c = offscreen(480, 480);
+    c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+    var D = size || 150;
+    var L = FM.makeLayer('shape', { shape: 'ellipse', x: x, y: y == null ? 240 : y, shapeW: D, shapeH: D, fill: '#2fd0b5' });
+    L.effects = effects || [];
+    FM.renderScene(c.getContext('2d'), { project: SQP4, layers: [L], selectedId: null, selectedIds: [] }, 0);
+    return c.getContext('2d').getImageData(0, 0, 480, 480);
+  }
+  // bbox + lit count in one pass — the sweeps below call it thousands of times.
+  function sqMeas(img) {
+    var W = img.width, H = img.height, d = img.data, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, n = 0;
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      if (d[(y * W + x) * 4 + 3] <= 8) continue;
+      n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    return x1 < 0 ? { lit: 0, w: 0, h: 0 } : { lit: n, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  function sqFirmness() {
+    var pr = (FM.fxRegistry.paramsOf('squish') || []).filter(function (p) { return p.key === 'firmness'; })[0];
+    if (!pr || !(pr.default > 0)) throw new Error('the squish catalogue has no `firmness` param — the compression cap is not exposed, so this test is aimed at nothing');
+    return pr.default / 100;
+  }
+  // Read the end stop off the CATALOGUE rather than hard-coding 200, so that if the slider's range is
+  // ever widened this test follows it to the new end stop instead of quietly testing the old one.
+  function sqInsetMax() {
+    var pr = (FM.fxRegistry.paramsOf('squish') || []).filter(function (p) { return p.key === 'inset'; })[0];
+    if (!pr || !(pr.max > 0)) throw new Error('the squish catalogue has no `inset` range param — this test is aimed at nothing');
+    return pr.max;
+  }
+
+  test('effects: Squish leaves a layer that has gone right off the canvas alone', { item: 'fx-squish' }, function () {
+    /* The map pins the layer's FAR edge and pulls everything else toward the wall, so the squashed
+     * layer occupies exactly [far edge → wall]. Once the far edge has CROSSED the wall that width is
+     * negative — and the first build clamped it back up to 2px instead of letting the wall go. A
+     * layer sitting nowhere near the frame therefore painted a fully OPAQUE stripe down the whole
+     * edge of it: measured on this probe before the fix, x=620 → bbox 1x458 lit 458 and x=700 →
+     * 2x479 lit 661, against a control that lit 0. It held until the plate margin ran out at 0.6 ×
+     * comp and then popped to nothing, so "slide a title in from off-screen" drew that stripe for
+     * 648px of travel on a 1080-wide comp, on every frame.
+     * NOTE THIS IS NOW EARNED, NOT DECLARED. The per-wall early-out that used to guarantee it was
+     * removed (it was a hard switch, and it popped — see the continuity tests): the wall still acts
+     * on a layer this far past it, and what makes the frame come back byte-identical is that the
+     * capped squash of an off-canvas layer is itself off-canvas. All FOUR walls, because there is
+     * no shared "did we leave the frame" branch any more — each one has to hold on its own. */
+    var OFF = {
+      right:  [[560, 240], [620, 240], [700, 240], [900, 240]],
+      left:   [[-80, 240], [-140, 240], [-220, 240], [-420, 240]],
+      bottom: [[240, 560], [240, 620], [240, 700], [240, 900]],
+      top:    [[240, -80], [240, -140], [240, -220], [240, -420]],
+    };
+    Object.keys(OFF).forEach(function (wall) {
+      OFF[wall].forEach(function (pt) {
+        var none = sq480([], pt[0], pt[1]), on = sq480(squishFx({}), pt[0], pt[1]);
+        if (sqLit(none) !== 0) throw new Error(wall + ' ' + pt + ': the control lit ' + sqLit(none) + ' px — it is not off-canvas, so the probe is aimed wrong');
+        var d = sqDiff(none, on);
+        if (d !== 0) {
+          var b = sqBox(on);
+          throw new Error(wall + ' wall, layer at ' + pt + ': a layer wholly off the canvas differs from no effect by ' + d + ' bytes — Squish painted ' + sqLit(on) + ' lit px, bbox ' + b.w + 'x' + b.h + ', for a layer that has left the frame');
+        }
+      });
+    });
+    // The control. Without it this test is equally happy with a Squish that does nothing at all: one
+    // that is only PARTLY over the wall must still be compressed, and hard.
+    var over = sqDiff(sq480([], 520), sq480(squishFx({}), 520));
+    if (over < 5000) throw new Error('a layer only partly over the wall changed by just ' + over + ' bytes — the early-out is swallowing the live cases too');
+  });
+
+  test('effects: Squish at the Wall inset slider\'s maximum squashes the layer to the firmness floor, not to a nub', { item: 'fx-squish' }, function () {
+    /* Wall inset moves the walls INWARD, so at 200 on a 480 comp the live box is x/y 200..280 and a
+     * ball at x=400 is wholly past the RIGHT wall while still sitting in plain sight on the frame.
+     * The first build crushed it there: a layer that measured 161x162 lit 20,620 with no effect came
+     * back as a 2x76 nub of 116 pixels, glued to a wall it had already passed. One drag of one
+     * slider, on a layer at an ordinary position.
+     * The FIRMNESS CAP is what stops that now, and this pins it from BOTH sides — the width must
+     * land on the floor the cap sets, which is neither a nub (the crush) nor the untouched 150 (the
+     * hard per-wall switch that replaced the crush, and popped a whole ball into existence in one
+     * notch of the slider; see the continuity test below). */
+    var mx = sqInsetMax(), firm = sqFirmness();
+    var none = sq480([], 400), on = sq480(squishFx({ inset: mx }), 400);
+    var bn = sqBox(none), bo = sqBox(on), litN = sqLit(none), litO = sqLit(on);
+    if (litN < 15000) throw new Error('the control only lit ' + litN + ' px — the probe is not on screen');
+    var floor = bn.w * firm;                      // the thinnest the cap allows: firmness × extent
+    if (bo.w < floor * 0.8) throw new Error('inset ' + mx + ': the layer was squashed to ' + bo.w + 'px wide, below the ' + Math.round(floor) + 'px firmness floor (' + Math.round(firm * 100) + '% of its own ' + bn.w + 'px) — it is being crushed past the cap');
+    if (bo.w > floor * 1.4) throw new Error('inset ' + mx + ': the layer is ' + bo.w + 'px wide against a ' + Math.round(floor) + 'px floor — the right wall stopped acting on a layer that is past it, which is the hard switch this cap replaced');
+    // It is still a real object on screen, not a sliver: measured 45x80, lit 2,927.
+    if (litO < 1500) throw new Error('inset ' + mx + ': only ' + litO + ' lit px (bbox ' + bo.w + 'x' + bo.h + ') — the layer has effectively been deleted');
+    // …and the walls must still DO something at the end stop, or the assertions above are satisfied
+    // by an effect that simply ignores a large inset. The 80px live band is what sets the height.
+    if (bo.h > bn.h * 0.75) throw new Error('inset ' + mx + ': height ' + bo.h + ' vs ' + bn.h + ' — the inset walls are not being applied at all');
+  });
+
+  /* ---- CONTINUITY: the assertion that would have caught all three failures ---------------------
+   * Squish has now been sent back twice, and both rejections were the same shape: something in it
+   * SWITCHED. Strength 0 short-circuits, the plate re-cut, the per-wall early-out — every one of
+   * them is a branch, and every branch is a place where one pixel of travel or one notch of a
+   * slider can change the picture completely. The three shipped bugs were:
+   *     a 2px band stretched to full frame height for a layer that had left the frame,
+   *     a layer snapping from a hairline back to fully undeformed as its far edge crossed a wall,
+   *     the same snap from dragging the inset slider with the layer standing still.
+   * Every earlier assertion here (no-op when off, contains the layer, deterministic, ps-invariant)
+   * was satisfiable by a fix that simply switched the wall off at a different moment. This one is
+   * not: it walks the layer across each wall ONE PIXEL AT A TIME and requires the result to move
+   * like a picture, not like a state machine.
+   *
+   * THE INVARIANT, and why it is not an arbitrary tolerance. A one-pixel translation can only
+   * uncover or cover ONE COLUMN of the frame, and a column holds at most as many lit pixels as the
+   * bounding box is tall. So |Δlit| / (bbox extent across the sweep axis) is ~1 for anything that
+   * is really just moving, whatever its shape and however fast the deformation is changing.
+   * Measured on the shipped code across all 20 sweeps below: worst ratio exactly 1.00.
+   * With the per-wall early-out put back: 1.98 (inset 0), 8.88 (inset 40), 69.8 (inset 120),
+   * 118.9 (inset 200). The threshold is 1.5.
+   * The bbox rule is the same idea stated in pixels, and it skips the last few frames of the slide
+   * off the frame edge — a shape whose final 500 pixels are leaving MUST have a collapsing bbox,
+   * with or without this effect, so that is translation, not a discontinuity. Shipped worst: 15px.
+   * Early-out restored: 220px. */
+  function sqSweep(wall, inset, size, params) {
+    var horiz = (wall === 'right' || wall === 'left');
+    var wallPos = 480 - inset;                    // in "distance travelled toward the wall" coords
+    var s0 = Math.round(wallPos - size / 2 - 6), s1 = Math.round(wallPos + size / 2 + 14);
+    var prev = null, worstR = { r: -1 }, worstB = { d: -1 };
+    for (var s = s0; s <= s1; s++) {
+      var p = { inset: inset };
+      Object.keys(params || {}).forEach(function (k) { p[k] = params[k]; });
+      // all four walls are the same arithmetic once the sweep coordinate is "distance toward it"
+      var cx = wall === 'right' ? s : wall === 'left' ? 480 - s : 240;
+      var cy = wall === 'bottom' ? s : wall === 'top' ? 480 - s : 240;
+      var m = sqMeas(sq480(squishFx(p), cx, cy, size));
+      if (prev) {
+        var dl = Math.abs(m.lit - prev.lit);
+        var col = Math.max(horiz ? prev.h : prev.w, horiz ? m.h : m.w);
+        var r = dl / (col + 1);
+        if (r > worstR.r) worstR = { r: r, s: s, dl: dl, col: col, from: prev, to: m };
+        var db = Math.max(Math.abs(m.w - prev.w), Math.abs(m.h - prev.h));
+        if (m.lit >= 500 && prev.lit >= 500 && db > worstB.d) worstB = { d: db, s: s, from: prev, to: m };
+      }
+      prev = m;
+    }
+    return { worstR: worstR, worstB: worstB, s0: s0, s1: s1 };
+  }
+  function sqShape(m) { return m.w + 'x' + m.h + ' lit ' + m.lit; }
+
+  test('effects: Squish is continuous — a layer swept across a wall one pixel at a time never jumps', { item: 'fx-squish' }, function () {
+    var SIZE = 110;
+    // inset 0 is the default (walls ON the frame edge); +40/+120/+200 put the wall INSIDE the
+    // frame, where both sides of the crossing are visible and a switch cannot hide; -80 puts it
+    // outside, so the layer is clipped by the frame before it ever reaches the wall.
+    var insets = [0, 40, 120, 200, -80];
+    var walls = ['right', 'left', 'bottom', 'top'];
+    var seen = 0;
+    walls.forEach(function (wall) {
+      insets.forEach(function (inset) {
+        var r = sqSweep(wall, inset, SIZE, null);
+        if (r.worstR.r < 0) throw new Error(wall + '/inset ' + inset + ': the sweep produced no steps');
+        seen++;
+        if (r.worstR.r > 1.5) throw new Error(wall + ' wall, inset ' + inset + ': one pixel of travel at s=' + r.worstR.s
+          + ' changed the lit count by ' + r.worstR.dl + ' px against a bounding box only ' + r.worstR.col
+          + ' px across (ratio ' + r.worstR.r.toFixed(2) + ') — ' + sqShape(r.worstR.from) + ' -> ' + sqShape(r.worstR.to)
+          + '. A single pixel of travel can only uncover one column, so this is a jump, not motion.');
+        if (r.worstB.d > 40) throw new Error(wall + ' wall, inset ' + inset + ': one pixel of travel at s=' + r.worstB.s
+          + ' changed a bounding-box dimension by ' + r.worstB.d + ' px — ' + sqShape(r.worstB.from) + ' -> ' + sqShape(r.worstB.to));
+      });
+    });
+    if (seen !== 20) throw new Error('only ' + seen + ' of 20 wall/inset sweeps ran');
+    // The control: a sweep that never deforms anything would sail through the two rules above.
+    // Somewhere in the inset-120 right-wall sweep the ball must actually be squashed, hard.
+    var mid = sqMeas(sq480(squishFx({ inset: 120 }), 360, 240, SIZE));
+    var raw = sqMeas(sq480([], 360, 240, SIZE));
+    if (!(mid.w < raw.w * 0.75) || !(mid.h > raw.h * 1.2)) throw new Error('the sweep is not exercising a real squash: at x=360 inset 120 the ball measured '
+      + sqShape(mid) + ' against an un-effected ' + sqShape(raw) + ' — the continuity rules above are passing on a no-op');
+  });
+
+  test('effects: Squish is continuous — dragging the Wall inset slider with the layer standing still', { item: 'fx-squish' }, function () {
+    /* The other way to reach the same crossing: hold the layer and move the WALL. The layer does
+     * not translate at all here, so every changed pixel is deformation and the bar is far lower
+     * than the sweep above. With the per-wall early-out in place this went 2x152 lit 302 at inset
+     * 154 to 150x150 lit 17,862 at inset 155 — a whole ball appearing on one notch of a slider.
+     * Shipped: worst step 209 lit px / 4 bbox px over the slider's entire -200..200 range. */
+    var pr = (FM.fxRegistry.paramsOf('squish') || []).filter(function (p) { return p.key === 'inset'; })[0];
+    var lo = pr.min, hi = pr.max;
+    var prev = null, worstL = { d: -1 }, worstB = { d: -1 }, n = 0;
+    for (var iv = lo; iv <= hi; iv++) {
+      var m = sqMeas(sq480(squishFx({ inset: iv }), 400, 240, 150));
+      if (prev) {
+        var dl = Math.abs(m.lit - prev.lit), db = Math.max(Math.abs(m.w - prev.w), Math.abs(m.h - prev.h));
+        if (dl > worstL.d) worstL = { d: dl, i: iv, from: prev, to: m };
+        if (db > worstB.d) worstB = { d: db, i: iv, from: prev, to: m };
+      }
+      prev = m; n++;
+    }
+    if (n < 100) throw new Error('the inset slider only produced ' + n + ' notches — this test is aimed at nothing');
+    if (worstL.d > 900) throw new Error('inset ' + (worstL.i - 1) + ' -> ' + worstL.i + ': one notch of the Wall inset slider changed the lit count by '
+      + worstL.d + ' px — ' + sqShape(worstL.from) + ' -> ' + sqShape(worstL.to) + '. The layer did not move; the wall moved one pixel.');
+    if (worstB.d > 40) throw new Error('inset ' + (worstB.i - 1) + ' -> ' + worstB.i + ': one notch changed a bounding-box dimension by '
+      + worstB.d + ' px — ' + sqShape(worstB.from) + ' -> ' + sqShape(worstB.to));
+    // The control: the slider must actually DO something across that range, or the two rules above
+    // are measuring a parameter the effect ignores.
+    var a = sqMeas(sq480(squishFx({ inset: 0 }), 400, 240, 150)), b = sqMeas(sq480(squishFx({ inset: hi }), 400, 240, 150));
+    if (Math.abs(a.h - b.h) < 40) throw new Error('inset 0 gave ' + sqShape(a) + ' and inset ' + hi + ' gave ' + sqShape(b) + ' — the slider is not moving the walls');
+  });
+
+  test('effects: Squish deforms wherever it sits in the effect stack', { item: 'fx-squish' }, function () {
+    // fx-browser.js pushes a newly added effect onto the END of layer.effects, and drawLayer
+    // composites the LAST entry outermost — so the newcomer wraps everything before it. Every other
+    // effect renders its clean copy of the layer into a COMP-SIZED plate, which throws away the one
+    // thing Squish exists to use: the part of the layer hanging outside the frame. Its alpha bbox
+    // then stops exactly ON the wall, no penetration is measured, and it early-outs.
+    // So adding Squish to a layer that already had an effect was a byte-identical no-op — measured
+    // at EXACTLY 0 bytes against that effect alone for pixelate, bulge, tint, tiles, dropshadow,
+    // glitch and wave alike. Squish composites innermost now, so both orders must deform, and land
+    // on the same pixels: where it sits in the list is not allowed to change what it does.
+    ['pixelate', 'bulge', 'dropshadow'].forEach(function (ty) {
+      var alone = sq480([FM.fxRegistry.makeInstance(ty)], 480);
+      var after = sq480(squishFx({}).concat([FM.fxRegistry.makeInstance(ty)]), 480);   // [squish, X]
+      var befor = sq480([FM.fxRegistry.makeInstance(ty)].concat(squishFx({})), 480);   // [X, squish]
+      var dA = sqDiff(after, alone), dB = sqDiff(befor, alone);
+      if (dA < 5000) throw new Error(ty + ': [squish, ' + ty + '] differs from ' + ty + ' alone by only ' + dA + ' bytes — Squish is not deforming under a later effect');
+      if (dB < 5000) throw new Error(ty + ': [' + ty + ', squish] differs from ' + ty + ' alone by only ' + dB + ' bytes — adding Squish on top of an existing effect silently did nothing');
+      var dOrder = sqDiff(after, befor);
+      if (dOrder !== 0) throw new Error(ty + ': the two stack orders differ by ' + dOrder + ' bytes — Squish is not pinned to one place in the pipeline');
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

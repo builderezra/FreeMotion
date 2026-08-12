@@ -174,6 +174,20 @@ window.FM = window.FM || {};
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'radius', label: 'Lens size', min: 5, max: 200, step: 1, def: 100, unit: '%' },
     ] },
+    /* Squish — the frame edges become walls the layer squashes against instead of being clipped by.
+     * Pair it with a Bounce ease on Position and the impact squash is automatic. See drawSquish. */
+    { type: 'squish', label: 'Squish', tags: ['squash', 'stretch', 'bounce', 'impact', 'collide', 'wall', 'edge', 'rubber', 'jelly', 'ball', 'floor', 'flatten', 'deform'], params: [
+      { key: 'amount', label: 'Strength', min: 0, max: 2, step: 0.02, def: 1 },
+      { key: 'spread', label: 'Spread', min: 20, max: 300, step: 5, def: 120, unit: '%' },
+      { key: 'bulge', label: 'Bulge', min: 0, max: 150, step: 5, def: 65, unit: '%' },
+      // Firmness is the thinnest the walls may squash the layer to, as a % of its own size. It is
+      // the compression CAP: past it the layer stops flattening and simply slides on. Low = jelly,
+      // high = a stiff ball that barely gives. Capped at 45% so two opposing walls can never want
+      // the layer thicker than the gap they leave. See drawSquish.
+      { key: 'firmness', label: 'Firmness', min: 15, max: 45, step: 1, def: 30, unit: '%' },
+      { key: 'inset', label: 'Wall inset', min: -200, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'walls', label: 'Walls', options: [[0, 'All'], [1, 'Floor'], [2, 'Sides'], [3, 'Floor + ceiling']], def: 0 },
+    ] },
     // ---- batch 5 ----
     { type: 'kaleidoscope', label: 'Kaleidoscope', params: [
       { key: 'segments', label: 'Segments', min: 2, max: 12, step: 1, def: 6 },
@@ -1583,7 +1597,7 @@ window.FM = window.FM || {};
     solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
     vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1,
     wave: 1, ripple: 1, twirl: 1, bulge: 1,
-    edge: 1, emboss: 1, exposure: 1, fisheye: 1,
+    edge: 1, emboss: 1, exposure: 1, fisheye: 1, squish: 1,
     kaleidoscope: 1, glitch: 1, zoomblur: 1, crt: 1,
     boxblur: 1, spinblur: 1, gradientmap: 1, colorize: 1, checker: 1, grid: 1,
     mosaic: 1, lensblur: 1, dots: 1, polarcoords: 1, bend: 1, glass: 1,
@@ -1624,6 +1638,9 @@ window.FM = window.FM || {};
     if (fx.type === 'tint') return drawTint(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#ff3366', fx);   // catalog def is 1 (matches the inspector slider + a fresh makeInstance)
     if (fx.type === 'threshold') return drawThreshold(ctx, layer, t, scene, p.level == null ? 0.5 : FM.evalProp(p.level, t), fx);
     if (fx.type === 'duotone') return drawDuotone(ctx, layer, t, scene, p.amount == null ? 1 : FM.evalProp(p.amount, t), p.color || '#241a52', p.color2 || '#ff9e5e', fx);
+    // Squish needs a plate BIGGER than the frame (the off-canvas part is the part that gets squashed
+    // back in) and the layer's own alpha edges, so it cannot ride the generic WARP_FX path. See drawSquish.
+    if (fx.type === 'squish') return drawSquish(ctx, layer, t, scene, fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
@@ -3423,6 +3440,518 @@ window.FM = window.FM || {};
       ctx.restore();
     } finally { _wpDepth--; }
   }
+
+  /* ============================== SQUISH — the frame edges are walls ==============================
+   * Ezra: "it makes the edges of the clip interact with the borders of the canvas, so if you were to
+   * get a circle and move it so it would be halfway outside the canvas, instead it squishes the ball."
+   * That is automatic SQUASH AND STRETCH against the frame. A layer that would go off-canvas is
+   * normally just clipped; here the canvas edges are walls, the layer stays whole, and it compresses
+   * against them with a perpendicular spread so it keeps roughly its area. Put a Bounce ease on
+   * Position and the impact squash comes out of the collision, with no extra keyframes.
+   *
+   * WHY THIS IS NOT A WARP_FX ENTRY. Two reasons, both fatal to the generic path:
+   *  1. THE PLATE MUST BE BIGGER THAN THE FRAME. A warp plate is exactly comp-sized, so the part of
+   *     the layer hanging past the wall has ALREADY been clipped before the map runs — there is
+   *     nothing left to squash back in. This renders the clean layer into a plate padded on every
+   *     side (the same __fmOX/__fmOY origin machinery renderExpandedPlate uses), so the off-frame
+   *     content still exists and can be pulled inside. Without it the effect is a lie: the ball
+   *     would deform and stay chopped.
+   *  2. THE MAP DEPENDS ON THE LAYER'S OWN EDGES, which are a property of the rendered pixels, not
+   *     of (x, y). WARP_FX's mapFn signature has no channel for that.
+   *
+   * WHERE THE EDGES COME FROM: the ALPHA BOUNDING BOX of that padded plate, never the transform box.
+   * Measured on this very code (tests/_squish_probe.html), 300x300 layers whose transform box sits
+   * exactly on the right wall, counting lit pixels in the frame's LAST COLUMN (a long run = still
+   * being cut by the frame, a handful = landing tangent to it):
+   *     square rotated 45   alpha bbox 362x424   clipped 126 -> squished 6     (the corner was over)
+   *     circle + its ring   alpha bbox 312x324   clipped 122 -> squished 53    (the stroke draws outside)
+   *     pentagon            alpha bbox 286x272   clipped   0 -> squished 0     (never reached the wall)
+   *     circle, no stroke   alpha bbox 300x300   clipped  33 -> squished 33    (exactly tangent: no-op)
+   * Read off the transform box, Squish would sit doing nothing on the rotated square and squash the
+   * pentagon that never touched anything. Pixels are what a viewer sees touching the wall, so pixels
+   * are what the wall reacts to. The price is one alpha scan of the plate per frame, which is why
+   * that scan is written the way it is (u32 fast-reject, each row walked inward from both ends).
+   *
+   * THE DEFORMATION, per axis, written dest -> source (so it is the INVERSE of the motion):
+   *     penetration  p    = how far the alpha bbox reaches past that wall, x Strength
+   *     far edge     D    = wall -> the layer's far edge on this axis
+   *     falloff      L    = Spread x sqrt(extent x p)
+   *     shift        s(d) = p ((1-d/L)^3 - c0)/(1 - c0),  c0 = max(0, 1 - D/L)^3, for d < min(L, D)
+   *     source       src  = x + s(d): the pixel ON the wall reads from p px FURTHER OUT — the tip
+   *                         that was off-frame — so content moves INWARD, hardest at the contact.
+   *     compression  J(d) = d(src)/d(x) = 1 + (3p/L)(1-d/L)^2/(1-c0), its peak at the contact.
+   *
+   *   THE sqrt IS THE WHOLE EFFECT. L = Spread x extent (a fixed fraction of the layer) fails at both
+   *   ends: a deep hit puts the entire shape inside a falloff shorter than itself and a bouncing ball
+   *   comes out a POINTED TENT (measured on an earlier build: 250x88 with straight sides meeting at
+   *   an apex). sqrt(extent x p) is the contact-patch scale of a sphere pressed into a plane
+   *   (a ~ sqrt(2Rd)): it dimples locally on a light touch and grows to flatten the whole shape on a
+   *   deep one, with no special case, and goes to 0 with the penetration so nothing pops on contact.
+   *
+   *   THE c0 SUBTRACTION IS WHAT KEEPS THE LAYER FROM GROWING. Without it s(D) > 0 on a deep hit, so
+   *   the FAR edge reads from further out and migrates AWAY from the wall — the squashed ball ends up
+   *   occupying more of the frame than it did before, which is the opposite of being squashed.
+   *   (Measured without it: 171px wide where the visible part of the layer was 162, and 136px where
+   *   it was 81.) Subtracting c0 lands the shift on exactly 0 at the far edge, so the far side is
+   *   pinned. Note it is NOT the same as shortening L to D, which also pins the edge but takes the
+   *   compression there to zero and leaves the ball with a pointed apex (measured at 47% deep: top
+   *   tenth 24px wide shortening L, 38px subtracting c0 — and 38px for the version that was not
+   *   contained at all). c0 is 0 whenever the falloff already dies inside the shape, so a light touch
+   *   is the plain cubic and the far side is untouched.
+   *   The cubic (not a quadratic) is load-bearing too — J' = 0 at d = L, so the spread below inherits
+   *   no corner. A quadratic shift drew a visible kink down the silhouette.
+   *
+   * THE SPREAD (the "stretch" half), applied perpendicular about the bbox centre, is two factors:
+   *   VOLUME       1 + Bulge x (J - 1). The pair's Jacobian is triangular, so at Bulge 100% its
+   *                determinant is exactly J/J = 1: area preserved pixel for pixel. 65% is the
+   *                default because exact preservation is correct and looks overblown.
+   *   FLATNESS     the destination row sitting ON the wall reads the shape's outermost TIP, which is
+   *                nearly zero-width, so a pure volume spread leaves the contact face rounded rather
+   *                than flat — the one thing three earlier builds all failed at. The measured width
+   *                profile of the source fixes it: material that was past the wall is widened toward
+   *                the chord the wall cuts through the shape, 1 + Bulge x (wChord/wHere - 1), which
+   *                is 1 exactly at the chord (no seam) and grows toward the tip. Flat contact,
+   *                round back. It costs nothing extra to measure — the alpha scan already walks
+   *                every row inward from both ends, so the profile IS its by-product.
+   * Both are then SOFT-capped so the spread cannot push the layer out of the frame it is being
+   * squashed into: 1 + m(1 - e^(-x/m)) is x for small x, never exceeds m, and is smooth everywhere.
+   * A hard min() would leave a corner in the expansion, and a corner in the expansion is a crease.
+   *
+   * NO-OP GUARANTEE: Strength 0, no live wall within reach, or nothing overhanging, all return the
+   * plain drawLayer of the effect-free copy — the SAME call the compositor makes when the effect is
+   * not in the stack, so it is byte-identical by construction rather than by luck. Running an
+   * identity pass instead is NOT good enough: with the short-circuits removed and the strength at 0,
+   * a layer half off the frame comes back 210 bytes different (the plate round trip is not lossless
+   * on antialiased alpha — getImageData is unpremultiplied 8-bit, the canvas premultiplied). 210
+   * bytes is invisible, but it means every keyframed fade-in of Squish would start with a step
+   * instead of at zero, and "the effect is off" would not be a thing the tests could pin down.
+   *
+   * Sampling is BILINEAR on PREMULTIPLIED alpha (straight-alpha lerp fringes dark against transparent
+   * edges; nearest, as WARP_FX uses, stair-steps a 2x compression along the very contact edge the
+   * effect exists to sell), with an integer fast path so untouched pixels are copied, not resampled.
+   * Reads outside the plate return TRANSPARENT rather than clamping — an edge-replicating clamp
+   * smears the last row along exactly the wall you are looking at. Nothing here is random or
+   * frame-history-dependent, so two renders of one frame are byte-identical and preview == export.
+   * ============================================================================================ */
+  const _sqPool = [];
+  let _sqDepth = 0;
+  const SQ_A_MIN = 8;        // alpha floor — the same visibility floor the harness measures with
+  const SQ_FLAT_CAP = 6;     // ceiling on the contact-flattening term (the tip's width -> 0)
+  const SQ_SOFT = 0.12;      // smoothing on the volume/flatness max, in expansion units
+
+  // Strength 0 / nothing overhanging IS "the effect is not here". Re-enter the ordinary layer path
+  // with this instance filtered out, which is literally what absent means.
+  function drawSquishOff(ctx, layer, t, scene, fx) {
+    drawLayer(ctx, Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) }), t, scene);
+  }
+  function sqBuf(slot, key, N, Ctor) {
+    let a = slot[key];
+    if (!a || a.length !== N) a = slot[key] = new Ctor(N);
+    return a;
+  }
+
+  /* One axis of the map, precomputed per column/row: it is separable apart from the spread's cross
+   * term, so this turns a per-pixel polynomial into two array lookups. Allocation-free — it runs per
+   * effect per FRAME. `out` gets the mapped source coordinate, `jac` the local compression.
+   * Everything is in pixel-EDGE coordinates — pixel i spans [i, i+1) and sits at i+0.5 — the same
+   * frame the alpha bbox and the walls are measured in. Mixing the two conventions is not cosmetic:
+   * indexing by the integer i put the shape's centre half a pixel off and a floor squash came out
+   * visibly LOP-SIDED (measured: 1208 channels differing between the render and its own mirror). */
+  function sqAxis(N, wLo, wHi, pLo, pHi, Llo, Lhi, Dlo, Dhi, out, jac) {
+    /* The shift is normalised to land on EXACTLY zero at the layer's far edge D:
+     *     s(d) = p ((1-d/L)^3 - c0) / (1 - c0),   c0 = max(0, 1 - D/L)^3
+     * When the falloff already dies inside the shape (L <= D, a light touch) c0 is 0 and this IS
+     * the plain cubic — the far side is untouched, which is what a light touch should look like.
+     * When the shape is shallower than the falloff (a deep hit) the subtraction pins the far edge
+     * instead of letting it drift AWAY from the wall, and — unlike simply shortening L to D — it
+     * keeps a compression at the far edge, so the ball's far side widens too and the silhouette
+     * stays full rather than tapering to an apex. (Measured on a 47%-deep hit: top tenth 24px wide
+     * with L clamped to D, 40px with this, against 38px for the drifting version that was not
+     * contained at all.) The far edge is the shape's own extremity, so the slope break there has
+     * no material on the other side of it to crease. */
+    const c0Hi = pHi > 0 ? Math.pow(Math.max(0, 1 - Dhi / Lhi), 3) : 0;
+    const c0Lo = pLo > 0 ? Math.pow(Math.max(0, 1 - Dlo / Llo), 3) : 0;
+    const nHi = 1 / (1 - c0Hi), nLo = 1 / (1 - c0Lo);
+    const kHi = pHi > 0 ? 3 * pHi * nHi / Lhi : 0, kLo = pLo > 0 ? 3 * pLo * nLo / Llo : 0;
+    const eHi = Math.min(Lhi, Dhi), eLo = Math.min(Llo, Dlo);
+    for (let i = 0; i < N; i++) {
+      const pos = i + 0.5;
+      let m = pos, J = 1;
+      if (pHi > 0) {
+        const dd = wHi - pos;
+        // Past the wall (only reachable with a positive inset): carry the contact slope on, so the
+        // strip between wall and frame edge reads from beyond the layer — i.e. stays empty.
+        if (dd <= 0) { m += pHi - dd * kHi; J += kHi; }
+        else if (dd < eHi) { const u = 1 - dd / Lhi; m += pHi * (u * u * u - c0Hi) * nHi; J += kHi * u * u; }
+      }
+      if (pLo > 0) {
+        const dd = pos - wLo;
+        if (dd <= 0) { m -= pLo - dd * kLo; J += kLo; }
+        else if (dd < eLo) { const u = 1 - dd / Llo; m -= pLo * (u * u * u - c0Lo) * nLo; J += kLo * u * u; }
+      }
+      out[i] = m; jac[i] = J;
+    }
+  }
+
+  /* Alpha bounds AND the layer's own width profile, in ONE pass over the padded plate.
+   * A cleared canvas pixel is 32 zero bits, so a u32 view rejects the empty majority in one compare
+   * instead of four byte reads, and each row is walked inward from BOTH ends and stops at its first
+   * lit pixel — a lit row costs two short walks, not a full-width scan. rowLo/rowHi are that walk's
+   * by-product and are exactly the width profile the contact-flattening term needs. */
+  function sqScanRows(src, u32, EW, EH, rowLo, rowHi) {
+    let ax0 = 1e9, ay0 = -1, ax1 = -1, ay1 = -1;
+    for (let y = 0; y < EH; y++) {
+      const row = y * EW;
+      let lo = -1, hi = -1, x;
+      for (x = 0; x < EW; x++) {
+        if (u32[row + x] === 0) continue;
+        if (src[(row + x) * 4 + 3] < SQ_A_MIN) continue;
+        lo = x; break;
+      }
+      if (lo < 0) { rowLo[y] = -1; rowHi[y] = -1; continue; }
+      for (x = EW - 1; x > lo; x--) {
+        if (u32[row + x] === 0) continue;
+        if (src[(row + x) * 4 + 3] < SQ_A_MIN) continue;
+        hi = x; break;
+      }
+      if (hi < 0) hi = lo;
+      rowLo[y] = lo; rowHi[y] = hi;
+      if (lo < ax0) ax0 = lo;
+      if (hi > ax1) ax1 = hi;
+      if (ay0 < 0) ay0 = y;
+      ay1 = y;
+    }
+    return ax1 < 0 ? null : { x0: ax0, y0: ay0, x1: ax1, y1: ay1 };
+  }
+  // The same profile down the COLUMNS, for a side wall. Needs the interior, so it is only walked
+  // when a side wall is actually being hit, and only across the bbox's own rows.
+  function sqScanCols(src, u32, EW, bb, rowLo, rowHi, colLo, colHi) {
+    for (let x = bb.x0; x <= bb.x1; x++) { colLo[x] = -1; colHi[x] = -1; }
+    for (let y = bb.y0; y <= bb.y1; y++) {
+      const lo = rowLo[y];
+      if (lo < 0) continue;
+      const hi = rowHi[y], row = y * EW;
+      for (let x = lo; x <= hi; x++) {
+        if (u32[row + x] === 0) continue;
+        if (src[(row + x) * 4 + 3] < SQ_A_MIN) continue;
+        if (colLo[x] < 0) colLo[x] = y;
+        colHi[x] = y;
+      }
+    }
+  }
+
+  /* The perpendicular spread, per destination index, stored as 1/E because the map is dest -> source.
+   *   map/jac   this axis's source coordinate and local compression
+   *   lo/hi     the profile ACROSS this axis (rowLo/rowHi for y, colLo/colHi for x), plate-indexed
+   *   refLo/refHi  the two walls in frame coords, or NaN when that wall is inert
+   *   lim       how far the bbox can still expand before it reaches the perpendicular walls */
+  function sqStretch(N, map, jac, lo, hi, i0, i1, off, refLo, refHi, bulgeF, lim, out) {
+    const mSoft = lim - 1, soft = mSoft > 1e-4;
+    const ext = function (s) {
+      let k = Math.round(s) + off;
+      if (k < i0) k = i0; else if (k > i1) k = i1;
+      const a = lo[k];
+      return a < 0 ? 0 : hi[k] - a + 1;
+    };
+    const hasHi = refHi === refHi, hasLo = refLo === refLo;   // NaN means that wall is inert
+    const wHi = hasHi ? ext(refHi) : 0, wLo = hasLo ? ext(refLo) : 0;
+    for (let i = 0; i < N; i++) {
+      let E = 1 + bulgeF * (jac[i] - 1);
+      const s = map[i];
+      // Only material that was PAST a wall is flattened, and only up to the CHORD the wall cuts
+      // through the shape: F = wChord / wHere makes that band exactly wChord wide, so the contact
+      // face is flat instead of running out to the tip's zero width. At the chord F is exactly 1,
+      // so it joins with no step. It REPLACES the volume spread rather than multiplying it — a
+      // product made the very last row the widest row and the ball came out a triangular tent.
+      const wRef = (hasHi && s > refHi) ? wHi : ((hasLo && s < refLo) ? wLo : 0);
+      if (wRef > 0) {
+        const w = ext(s);
+        let F = w > 0.5 ? wRef / w : SQ_FLAT_CAP;
+        if (F > SQ_FLAT_CAP) F = SQ_FLAT_CAP;
+        F = 1 + bulgeF * (F - 1);
+        // soft max: a hard one leaves a slope break at the crossover, and a slope break in the
+        // expansion is a visible crease down the silhouette
+        if (F > E) { const q = F - E; E = F + SQ_SOFT * Math.log1p(Math.exp(-q / SQ_SOFT)); }
+        else { const q = E - F; E = E + SQ_SOFT * Math.log1p(Math.exp(-q / SQ_SOFT)); }
+      }
+      out[i] = 1 / (soft ? 1 + mSoft * (1 - Math.exp(-(E - 1) / mSoft)) : 1);
+    }
+  }
+  function sqRoom(avail, half) { return half > 1e-6 ? avail / half : Infinity; }
+
+  function drawSquish(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const p = fx.params || {};
+    // Every read falls back to the CATALOG default: FM.evalProp(undefined, t) returns 0, not the
+    // default, so a missing key (older project, imported or AI-authored node) would otherwise render
+    // Squish at strength 0 — present in the stack and silently doing nothing.
+    let amt = p.amount == null ? 1 : FM.evalProp(p.amount, t);
+    if (!(amt > 0)) return drawSquishOff(ctx, layer, t, scene, fx);        // Strength 0 IS "not here"
+    if (amt > 2) amt = 2;
+    let spread = (p.spread == null ? 120 : FM.evalProp(p.spread, t)) / 100;
+    if (!(spread > 0.05)) spread = 0.05; else if (spread > 4) spread = 4;
+    let bulgeF = (p.bulge == null ? 65 : FM.evalProp(p.bulge, t)) / 100;
+    if (!(bulgeF > 0)) bulgeF = 0; else if (bulgeF > 2) bulgeF = 2;
+    /* FIRMNESS — the minimum thickness the walls may squash this layer to, as a fraction of the
+     * layer's own extent along that axis. It is what makes the wall continuous: see the cap below.
+     * Clamped hard at both ends because both ends are load-bearing, not cosmetic. LOW: the thin
+     * tall sliver comes back — swept off the right wall of a 480 comp, a 150px ball's last frames
+     * measure 7x187 at the shipped default of 30%, 4x382 at 5%, which is the stripe again, only
+     * asked for. The slider stops at 15% for that reason and this clamp leaves a little room under
+     * it for older/imported instances. HIGH: at 50% two opposing walls that both bind would want
+     * the layer thicker than the gap between them and their effective walls would cross, so 0.45
+     * keeps (1 - 2 x firm) x extent positive whatever a stored value says. */
+    let firm = (p.firmness == null ? 30 : FM.evalProp(p.firmness, t)) / 100;
+    if (!(firm > 0.10)) firm = 0.10; else if (firm > 0.45) firm = 0.45;
+    const insP = p.inset == null ? 0 : FM.evalProp(p.inset, t);            // PROJECT px — x ps below
+    const mode = Math.round(p.walls == null ? 0 : FM.evalProp(p.walls, t)) | 0;
+    const liveX = (mode === 0 || mode === 2);          // 0 All · 1 Floor · 2 Sides · 3 Floor+ceiling
+    const liveT = (mode === 0 || mode === 3);
+    const liveB = (mode === 0 || mode === 1 || mode === 3);
+
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see plateScale — 1 for export/1:1
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    // The inset is the one param that arrives as a LENGTH in project units, so it is multiplied by
+    // ps or the walls would move as preview quality changed. Clamped per axis so opposing walls can
+    // meet but never cross (an inset of 300 on a 480 comp would otherwise put left right of right).
+    const insX = Math.min(insP * ps, W / 2 - 1), insY = Math.min(insP * ps, H / 2 - 1);
+    const xL = insX, xR = W - insX, yT = insY, yB = H - insY;
+
+    /* WHERE COULD THIS LAYER POSSIBLY BE? A conservative box in PROJECT space, used twice: to skip
+     * the whole pass when no live wall is even reachable, and to size the padded plate.
+     * It reads the placement MATRIX, not transform.x/y, and that is not a nicety — x/y are LOCAL to
+     * the parent, so a layer parented to a null that carries it into a wall has a transform.x still
+     * sitting mid-frame; read that and the pass is skipped and the layer clips as though the effect
+     * were not there. layerCTM composes parenting, behaviours, wiggle, z and the camera.
+     * THE EARLY-OUT IS THE POINT: during a bounce, most frames are the ball in flight, overhanging
+     * nothing, and a result byte-identical to doing nothing should cost what doing nothing costs. */
+    const tr = layer.transform || {};
+    const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
+    const strokeW = (layer.stroke && layer.stroke.enabled) ? Math.abs(layer.stroke.width || 0) : 0;
+    let gx0, gy0, gx1, gy1;
+    const Mx = layerCTM(layer, t, scene);
+    if (Mx) {
+      const kx = anchorX(tr), ky = anchorY(tr), bw = sz.w || 0, bh = sz.h || 0;
+      gx0 = gy0 = Infinity; gx1 = gy1 = -Infinity;
+      for (let i = 0; i < 4; i++) {
+        const lxc = ((i & 1) ? 1 - kx : -kx) * bw, lyc = ((i & 2) ? 1 - ky : -ky) * bh;
+        const qx = Mx.a * lxc + Mx.c * lyc + Mx.e, qy = Mx.b * lxc + Mx.d * lyc + Mx.f;
+        if (qx < gx0) gx0 = qx; if (qx > gx1) gx1 = qx;
+        if (qy < gy0) gy0 = qy; if (qy > gy1) gy1 = qy;
+      }
+      // A stroke is centred on the path, so it draws OUTSIDE the box; +4 covers antialiasing.
+      const msc = Math.max(Math.hypot(Mx.a, Mx.b), Math.hypot(Mx.c, Mx.d)) || 1;
+      const slack = strokeW * msc * 0.75 + 4;
+      gx0 -= slack; gy0 -= slack; gx1 += slack; gy1 += slack;
+    } else {
+      // No getTransform: the anchor plus half the diagonal, the exact bound on reach under any
+      // rotation. Parenting is not resolved on this path, so it is the looser fallback.
+      const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
+      const reach = 0.5 * Math.hypot(sz.w || 0, sz.h || 0) * sc + strokeW * sc + 4;
+      const qx = FM.evalProp(tr.x, t) || 0, qy = FM.evalProp(tr.y, t) || 0;
+      gx0 = qx - reach; gx1 = qx + reach; gy0 = qy - reach; gy1 = qy + reach;
+    }
+    const iPX = Math.min(insP, PW / 2 - 1), iPY = Math.min(insP, PH / 2 - 1);
+    if (!(liveX && (gx1 > PW - iPX || gx0 < iPX)) && !(liveB && gy1 > PH - iPY) && !(liveT && gy0 < iPY)) {
+      return drawSquishOff(ctx, layer, t, scene, fx);
+    }
+
+    const d = _sqDepth++;
+    try {
+      const slot = _sqPool[d] || (_sqPool[d] = { E: document.createElement('canvas'), B: document.createElement('canvas') });
+      const eCv = slot.E, bCv = slot.B;
+      // PER SIDE, not one symmetric margin: a layer hanging off the right needs nothing on the left,
+      // and the plate is read back with getImageData every frame — the wasted half is the single
+      // biggest thing you can hand back. (700px layer over the right wall of a 1080p comp: a
+      // symmetric plate is 2680x1080, per-side is 2300x1080.)
+      const capX = PW * 0.6, capY = PH * 0.6;      // cost ceiling: at most ~4.8x the comp's pixels
+      let ndL = Math.max(0, -gx0), ndR = Math.max(0, gx1 - PW), ndT = Math.max(0, -gy0), ndB = Math.max(0, gy1 - PH);
+      let mxp = 0, myp = 0, mxq = 0, myq = 0, EW = 0, EH = 0, src = null, u32 = null, bb = null, rowLo = null, rowHi = null;
+      /* Up to two cuts. The margin is an ESTIMATE (the transform box plus the stroke), and the layer
+       * can paint outside it — a text layer's own shadow, a group proxy whose members reach past the
+       * proxy's box. If the measured alpha touches the plate's border, the estimate was short: re-cut
+       * once at double, capped, and measure again. Costs a second drawLayer, only when it happens.
+       * (It is no longer an EFFECT that overruns the estimate: Squish composites innermost now — see
+       * the pin in drawLayer — so the plate holds the bare layer and nothing is stacked below it.) */
+      for (let attempt = 0; attempt < 2; attempt++) {
+        mxp = Math.ceil(Math.min(ndL, capX) * ps); mxq = Math.ceil(Math.min(ndR, capX) * ps);
+        myp = Math.ceil(Math.min(ndT, capY) * ps); myq = Math.ceil(Math.min(ndB, capY) * ps);
+        EW = W + mxp + mxq; EH = H + myp + myq;    // INTEGER plate px, so plate pixel (mxp,myp) IS
+                                                   // project (0,0) exactly and an untouched pixel copies
+        if (eCv.width !== EW || eCv.height !== EH) { eCv.width = EW; eCv.height = EH; }
+        eCv.__fmRS = ps; eCv.__fmOX = -mxp / ps; eCv.__fmOY = -myp / ps;
+        const ectx = eCv.getContext('2d', { willReadFrequently: true });
+        ectx.setTransform(1, 0, 0, 1, 0, 0); ectx.clearRect(0, 0, EW, EH);
+        baseT(ectx);
+        ectx.globalAlpha = 1; ectx.globalCompositeOperation = 'source-over'; ectx.filter = 'none';
+        const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+        drawLayer(ectx, tmp, t, scene);
+        src = ectx.getImageData(0, 0, EW, EH).data;
+        u32 = new Uint32Array(src.buffer, src.byteOffset, EW * EH);
+        rowLo = sqBuf(slot, 'rl', EH, Int32Array); rowHi = sqBuf(slot, 'rh', EH, Int32Array);
+        bb = sqScanRows(src, u32, EW, EH, rowLo, rowHi);
+        if (!bb) return drawSquishOff(ctx, layer, t, scene, fx);   // the layer drew nothing
+        if (attempt === 1) break;
+        let grew = false;
+        if (bb.x0 === 0 && ndL < capX) { ndL = Math.max(ndL * 2, PW * 0.08); grew = true; }
+        if (bb.x1 === EW - 1 && ndR < capX) { ndR = Math.max(ndR * 2, PW * 0.08); grew = true; }
+        if (bb.y0 === 0 && ndT < capY) { ndT = Math.max(ndT * 2, PH * 0.08); grew = true; }
+        if (bb.y1 === EH - 1 && ndB < capY) { ndB = Math.max(ndB * 2, PH * 0.08); grew = true; }
+        if (!grew) break;
+      }
+
+      // ---- the layer's edges, in FRAME-plate coords (0,0 = the frame's top-left, W,H its bottom-right,
+      // so the walls need no further plumbing). Half-open: [bx0, bx1).
+      const bx0 = bb.x0 - mxp, bx1 = bb.x1 + 1 - mxp, by0 = bb.y0 - myp, by1 = bb.y1 + 1 - myp;
+      /* THE COMPRESSION IS CAPPED; THE WALL IS NEVER SWITCHED OFF. ==============================
+       * The map pins the layer's FAR edge and pulls everything else toward the wall, so the squashed
+       * layer occupies exactly [far edge, wall] — thickness D. Push the layer further and D shrinks
+       * toward 0, and a shape crushed to nothing is what produced every artifact this effect has
+       * ever been sent back for. Two dead ends, both measured on a 480x480 comp with a 150px ball:
+       *
+       *   (a) CLAMPING D up to a 2px floor. D ~ 0 sends c0 = (1 - D/L)^3 to 1 and nHi = 1/(1 - c0)
+       *       to infinity: the layer becomes a 2px band which the perpendicular spread then stretches
+       *       to the full height of the frame.  x=555 -> 6x476,  x=620 -> 1x458,  x=700 -> 2x479 —
+       *       an opaque stripe down the frame edge for a layer that had left the frame entirely.
+       *   (b) SWITCHING THE WALL OFF once the far edge has crossed it (`bx0 < xR`). At inset 0 the
+       *       crossing coincides with leaving frame, so it looks clean — but Wall inset ranges to
+       *       +200, which puts the wall INSIDE the frame with both sides of the crossing on screen,
+       *       and the layer SNAPS from a hairline back to undeformed in one pixel of travel:
+       *           inset 40   x=513 -> 2x353 lit 703     x=515 -> 40x134 lit 3854
+       *           inset 120  x=430 -> 5x242 lit 984     x=435 -> 120x150 lit 15290  (= no effect)
+       *           inset 200  x=354 -> 2x72  lit 144     x=355 -> 150x80 lit 9774
+       *       Dragging the inset slider with the layer parked did the same on ONE notch (154 -> 155).
+       *       An early-out is a hard switch, and a hard switch pops wherever its condition is
+       *       reachable on screen. It also still allowed the hairline right up to the switch.
+       *
+       * So neither. A real ball resists to a limit and then the whole ball moves, and that is what
+       * this does: the wall may not compress the layer below `firm` of its own extent along that
+       * axis. Express it as an EFFECTIVE wall — max(real wall, far edge + minimum thickness) — and
+       * everything downstream (penetration, falloff, far-edge pin, the contact chord) follows for
+       * free. Once the cap binds, the effective wall TRAVELS WITH THE LAYER: D and p both go
+       * constant, the deformed silhouette freezes, and further travel is pure translation that the
+       * frame clips like any ordinary layer. Continuous by construction, in both sweeps:
+       *     phase 1  D = wall - far edge (shrinking), p = tip - wall (growing)
+       *     phase 2  D = firm x extent   (constant),  p = extent - D (constant), wall rides along
+       * and the two agree exactly at D = firm x extent, which is where they meet.
+       * Nothing is crushed to a sliver, so there is no stripe to leave behind either. */
+      const exX = Math.max(1, bx1 - bx0), exY = Math.max(1, by1 - by0), Lmin = 2 * ps;
+      const tMinX = firm * exX, tMinY = firm * exY;      // the thinnest this layer may be made
+      // EFFECTIVE walls. Equal to the real wall until the cap binds, then they ride with the layer.
+      const wR = Math.max(xR, bx0 + tMinX), wL = Math.min(xL, bx1 - tMinX);
+      const wB = Math.max(yB, by0 + tMinY), wT = Math.min(yT, by1 - tMinY);
+      const pR = liveX ? Math.max(0, bx1 - wR) * amt : 0;
+      const pL = liveX ? Math.max(0, wL - bx0) * amt : 0;
+      const pB = liveB ? Math.max(0, by1 - wB) * amt : 0;
+      const pT = liveT ? Math.max(0, wT - by0) * amt : 0;
+      const EPS = 0.01 * ps;
+      /* Nothing overhangs => the effect is inert, and inert means the same call the compositor makes
+       * when it is absent. Also the common case: every airborne frame of a bounce.
+       * This is NOT the switch that was removed: p rises from 0 continuously as the layer arrives at
+       * a wall and never returns to 0 while it is engaged, so the branch is only ever taken on the
+       * identity side of a continuous boundary. */
+      if (pR < EPS && pL < EPS && pB < EPS && pT < EPS) return drawSquishOff(ctx, layer, t, scene, fx);
+
+      // Falloff and far-edge distance, per WALL, measured against the EFFECTIVE wall. D is how far
+      // it is from that wall to the layer's own far edge; sqAxis normalises the shift to reach
+      // exactly 0 there, so the layer can never come out occupying more of the frame along the
+      // wall's normal than it went in with. Every D is >= tMin > 0 by construction now, so
+      // `Math.max(Lmin, …)` is what it was always meant to be: a sub-pixel floor that keeps
+      // 1/(1 - c0) finite, not a lifeline for a negative D.
+      const LxR = Math.max(spread * Math.sqrt(exX * pR), Lmin), DxR = Math.max(Lmin, wR - bx0);
+      const LxL = Math.max(spread * Math.sqrt(exX * pL), Lmin), DxL = Math.max(Lmin, bx1 - wL);
+      const LyB = Math.max(spread * Math.sqrt(exY * pB), Lmin), DyB = Math.max(Lmin, wB - by0);
+      const LyT = Math.max(spread * Math.sqrt(exY * pT), Lmin), DyT = Math.max(Lmin, by1 - wT);
+      const Cx = (bx0 + bx1) / 2, Cy = (by0 + by1) / 2;
+
+      const MX = sqBuf(slot, 'mx', W, Float64Array), JX = sqBuf(slot, 'jx', W, Float64Array);
+      const MY = sqBuf(slot, 'my', H, Float64Array), JY = sqBuf(slot, 'jy', H, Float64Array);
+      const invExOfY = sqBuf(slot, 'iex', H, Float64Array);   // indexed by ROW, scales x
+      const invEyOfX = sqBuf(slot, 'iey', W, Float64Array);   // indexed by COLUMN, scales y
+      sqAxis(W, wL, wR, pL, pR, LxL, LxR, DxL, DxR, MX, JX);
+      sqAxis(H, wT, wB, pT, pB, LyT, LyB, DyT, DyB, MY, JY);
+
+      // How far can each axis spread before it runs into ITS OWN walls? (an x-squash spreads in y,
+      // so the y walls are what cap it). Never below 1 — that would turn the spread into a second
+      // compression — and infinite when the bbox is already past that wall.
+      const limY = Math.max(1, Math.min(sqRoom(yB - Cy, by1 - Cy), sqRoom(Cy - yT, Cy - by0)));
+      const limX = Math.max(1, Math.min(sqRoom(xR - Cx, bx1 - Cx), sqRoom(Cx - xL, Cx - bx0)));
+      // An inert wall is passed as NaN, which fails every comparison in sqStretch — so it neither
+      // flattens against a wall nothing crossed nor needs a second flag threaded through.
+      // x-compression spreads in y, and the profile that needs is the layer's height per COLUMN,
+      // which costs an extra walk of the bbox — so it is only measured when a side wall is live.
+      if (pR > 0 || pL > 0) {
+        const colLo = sqBuf(slot, 'cl', EW, Int32Array), colHi = sqBuf(slot, 'ch', EW, Int32Array);
+        sqScanCols(src, u32, EW, bb, rowLo, rowHi, colLo, colHi);
+        sqStretch(W, MX, JX, colLo, colHi, bb.x0, bb.x1, mxp, pL > 0 ? wL : NaN, pR > 0 ? wR : NaN, bulgeF, limY, invEyOfX);
+      } else {
+        for (let i = 0; i < W; i++) invEyOfX[i] = 1;
+      }
+      if (pB > 0 || pT > 0) {
+        sqStretch(H, MY, JY, rowLo, rowHi, bb.y0, bb.y1, myp, pT > 0 ? wT : NaN, pB > 0 ? wB : NaN, bulgeF, limX, invExOfY);
+      } else {
+        for (let i = 0; i < H; i++) invExOfY[i] = 1;
+      }
+
+      /* ONLY THE DESTINATION RUN THAT CAN READ THE LAYER. Both maps are monotone and the spread only
+       * ever divides by E >= 1, so |map - centre| <= (half the bbox)/min(1/E) bounds every
+       * destination pixel that could possibly sample a lit source pixel. Everything outside reads
+       * transparent, and createImageData already IS transparent, so it is skipped rather than
+       * resampled — on a 1080p frame that is most of the 2M pixels. Solved, not tested per pixel. */
+      let iexMin = 1, ieyMin = 1;
+      for (let i = 0; i < H; i++) if (invExOfY[i] < iexMin) iexMin = invExOfY[i];
+      for (let i = 0; i < W; i++) if (invEyOfX[i] < ieyMin) ieyMin = invEyOfX[i];
+      const Rx = (Math.max(Cx - bx0, bx1 - Cx) + 2) / Math.max(iexMin, 1e-6);
+      const Ry = (Math.max(Cy - by0, by1 - Cy) + 2) / Math.max(ieyMin, 1e-6);
+      let x0r = 0, x1r = W - 1, y0r = 0, y1r = H - 1;
+      while (x0r <= x1r && MX[x0r] < Cx - Rx) x0r++;
+      while (x1r >= x0r && MX[x1r] > Cx + Rx) x1r--;
+      while (y0r <= y1r && MY[y0r] < Cy - Ry) y0r++;
+      while (y1r >= y0r && MY[y1r] > Cy + Ry) y1r--;
+
+      if (bCv.width !== W || bCv.height !== H) { bCv.width = W; bCv.height = H; }
+      const bctx = bCv.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+      const EWm1 = EW - 1, EHm1 = EH - 1;
+      for (let y = y0r; y <= y1r; y++) {
+        const iex = invExOfY[y], myv = MY[y], di0 = y * W * 4;
+        for (let x = x0r; x <= x1r; x++) {
+          // edge coords -> padded-plate PIXEL indices (hence the -0.5). Identity maps to exactly x+mxp.
+          const sx = Cx + (MX[x] - Cx) * iex - 0.5 + mxp;
+          const sy = Cy + (myv - Cy) * invEyOfX[x] - 0.5 + myp;
+          if (sx < 0 || sy < 0 || sx > EWm1 || sy > EHm1) continue;   // outside the plate: transparent
+          const di = di0 + x * 4;
+          const x0 = sx | 0, y0 = sy | 0, fxr = sx - x0, fyr = sy - y0;
+          if (fxr === 0 && fyr === 0) {                        // untouched pixel: copy, do not resample
+            const si = (y0 * EW + x0) * 4;
+            o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+            continue;
+          }
+          const x1 = x0 < EWm1 ? x0 + 1 : x0, y1 = y0 < EHm1 ? y0 + 1 : y0;
+          const i00 = (y0 * EW + x0) * 4, i10 = (y0 * EW + x1) * 4, i01 = (y1 * EW + x0) * 4, i11 = (y1 * EW + x1) * 4;
+          const a00 = src[i00 + 3] * (1 - fxr) * (1 - fyr), a10 = src[i10 + 3] * fxr * (1 - fyr);
+          const a01 = src[i01 + 3] * (1 - fxr) * fyr, a11 = src[i11 + 3] * fxr * fyr;
+          const aa = a00 + a10 + a01 + a11;
+          if (aa <= 0) continue;
+          // premultiplied interpolation — a straight-alpha lerp fringes dark against transparent edges
+          o[di] = (src[i00] * a00 + src[i10] * a10 + src[i01] * a01 + src[i11] * a11) / aa;
+          o[di + 1] = (src[i00 + 1] * a00 + src[i10 + 1] * a10 + src[i01 + 1] * a01 + src[i11 + 1] * a11) / aa;
+          o[di + 2] = (src[i00 + 2] * a00 + src[i10 + 2] * a10 + src[i01 + 2] * a01 + src[i11 + 2] * a11) / aa;
+          o[di + 3] = aa;
+        }
+      }
+      bctx.putImageData(outImg, 0, 0);
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(bCv, 0, 0, PW, PH);   // plate -> project units; identical to drawImage(bCv,0,0) at ps 1
+      ctx.restore();
+    } finally { _sqDepth--; }
+  }
+
 
   // ---- Displacement Map (batch 29): warp the layer by ANOTHER layer's pixels. Unlike WARP_FX (a pure
   // coordinate function), this needs a second rendered image — the "map" — so it has its own render
@@ -7615,8 +8144,28 @@ window.FM = window.FM || {};
       // group when you DRAG it, the exact opposite of what it promises. The browser no longer offers
       // it there; this drops it from any project that already had one, rather than rendering the
       // reverse of the effect's own name.
-      const pp = layer.effects.filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false
+      const pp0 = layer.effects.filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false
         && !(e.type === 'motionflow' && layer.type === '_flat'));
+      /* SQUISH COMPOSITES INNERMOST, wherever it sits in the stack.
+       * Every other effect renders its clean copy of the layer into a COMP-SIZED plate, so anything
+       * that runs before Squish has already thrown away the one thing Squish exists to use: the part
+       * of the layer hanging outside the frame. Its alpha bbox then stops exactly ON the wall, no
+       * penetration is measured, and it early-outs. Measured on a 480x480 comp, a 150px ball half off
+       * the right edge — `[effect, squish]` against that effect ALONE:
+       *     pixelate 0   bulge 0   tint 0   tiles 0   dropshadow 0   glitch 0   wave 0  bytes differ
+       * Byte-identical: adding Squish to a layer that already had ANY effect did nothing whatsoever,
+       * silently, because fx-browser pushes the newcomer onto the END of the array. (The other order,
+       * `[squish, effect]`, always worked — 21,888 bytes for pixelate, 39,707 for bulge.)
+       * So the rule is a RENDER-ORDER one, not a stack-order one: no add, drag-reorder, undo, project
+       * import or AI-authored node can put an effect underneath Squish, because there is no "under
+       * Squish" any more. Pinning it in the DATA instead would have to be re-enforced at every one of
+       * those sites, and each one is a chance to lose the effect again in silence.
+       * The stack still reads top-down as before; only Squish is special-cased, the same way the
+       * dispatcher below already special-cases motionflow, and the way pen masks / 3D tilt / manual
+       * blends are pinned outside the effect array entirely. */
+      const pp = (pp0.length > 1 && pp0.some(e => e.type === 'squish'))
+        ? pp0.filter(e => e.type === 'squish').concat(pp0.filter(e => e.type !== 'squish'))
+        : pp0;
       const outer = pp[pp.length - 1];
       // Motion Blur (Content): blur ONLY what moves INSIDE the layer, never the layer's own transform.
       // Render the content at a neutral transform, blur it there, then composite with the REAL

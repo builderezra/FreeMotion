@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>squish continuity probe</title></head>
+<body>
+<pre id="out">booting…</pre>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* Dev probe: sweep a ball across each wall ONE PIXEL AT A TIME and report the largest
+ * single-step change in lit-pixel count and in either bbox dimension. A hard switch shows up
+ * as one enormous step; a continuous deformation shows up as a handful of pixels. */
+(function () {
+  'use strict';
+  var Q = new URLSearchParams(location.search);
+  function num(k, d) { var v = parseFloat(Q.get(k)); return isFinite(v) ? v : d; }
+  var PW = num('W', 480), PH = num('H', 480), SIZE = num('size', 150);
+  var STEP = num('step', 1), SPAN = num('span', 130);
+  var EXTRA = {};
+  try { EXTRA = JSON.parse(Q.get('p') || '{}') || {}; } catch (e) { EXTRA = {}; }
+
+  var cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+  var g = cv.getContext('2d');
+
+  var NOFX = Q.get('fx') === 'none';
+  function shot(params, x, y) {
+    if (NOFX) params = null;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, PW, PH);
+    var L = FM.makeLayer('shape', { shape: 'ellipse', x: x, y: y, shapeW: SIZE, shapeH: SIZE, fill: '#2fd0b5', start: 0, duration: 10 });
+    if (params) { var inst = FM.fxRegistry.makeInstance('squish'); Object.keys(params).forEach(function (k) { inst.params[k] = params[k]; }); L.effects = [inst]; }
+    FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 10, background: '' }, layers: [L], selectedId: null, selectedIds: [] }, 0);
+    var d = g.getImageData(0, 0, PW, PH).data;
+    var n = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+    for (var yy = 0; yy < PH; yy++) for (var xx = 0; xx < PW; xx++) {
+      if (d[(yy * PW + xx) * 4 + 3] <= 8) continue;
+      n++; if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+    }
+    return { lit: n, w: x1 < 0 ? 0 : x1 - x0 + 1, h: x1 < 0 ? 0 : y1 - y0 + 1, x0: x0, x1: x1 };
+  }
+
+  // wall -> position of the moving centre as a function of the sweep coordinate s
+  var WALLS = {
+    right:  function (s) { return { x: s, y: PH / 2 }; },
+    left:   function (s) { return { x: PW - s, y: PH / 2 }; },
+    bottom: function (s) { return { x: PW / 2, y: s }; },
+    top:    function (s) { return { x: PW / 2, y: PH - s }; },
+  };
+  // where the wall sits along the sweep axis for a given inset (sweep coordinate is always
+  // "distance travelled toward the wall", so all four are the same arithmetic)
+  function wallPos(inset) { return (WALLS.right === WALLS.right ? PW : PW) - inset; }
+
+  var res = [], t0 = performance.now();
+  var insets = (Q.get('insets') || '0,40,120,200,-80').split(',').map(Number);
+  var walls = (Q.get('walls') || 'right,left,bottom,top').split(',');
+
+  walls.forEach(function (wall) {
+    var axisLen = (wall === 'right' || wall === 'left') ? PW : PH;
+    insets.forEach(function (inset) {
+      var wp = axisLen - inset;                       // wall in sweep coords
+      var s0 = Math.round(wp - SIZE / 2 - SPAN * 0.35), s1 = Math.round(wp + SIZE / 2 + SPAN * 0.65);
+      var horiz = (wall === 'right' || wall === 'left');
+      var prev = null, worstL = { d: -1 }, worstB = { d: -1 }, worstB2 = { d: -1 }, worstR = { d: -1 }, rows = [];
+      for (var s = s0; s <= s1; s += STEP) {
+        var pos = WALLS[wall](s);
+        var params = { inset: inset };
+        Object.keys(EXTRA).forEach(function (k) { params[k] = EXTRA[k]; });
+        var m = shot(params, pos.x, pos.y);
+        rows.push([s, m.lit, m.w, m.h]);
+        if (prev) {
+          var dl = Math.abs(m.lit - prev.lit), db = Math.max(Math.abs(m.w - prev.w), Math.abs(m.h - prev.h));
+          if (dl > worstL.d) worstL = { d: dl, s: s, from: prev, to: m };
+          if (db > worstB.d) worstB = { d: db, s: s, from: prev, to: m };
+          if (m.lit >= 500 && prev.lit >= 500 && db > worstB2.d) worstB2 = { d: db, s: s, from: prev, to: m };
+          // a ONE-PIXEL translation can only uncover/cover one column, and a column is at most as
+          // tall as the bounding box — so this ratio is ~1 for translation, however fast it moves
+          var col = Math.max(horiz ? prev.h : prev.w, horiz ? m.h : m.w);
+          var rat = dl / (col + 1);
+          if (rat > worstR.d) worstR = { d: rat, s: s, from: prev, to: m, col: col, dl: dl };
+        }
+        prev = m;
+      }
+      res.push({ wall: wall, inset: inset, s0: s0, s1: s1, maxDlit: worstL, maxDbox: worstB, maxDbox2: worstB2, maxRatio: worstR, rows: rows });
+    });
+  });
+
+  /* ---- the OTHER sweep: the layer stands still and the WALL INSET SLIDER is dragged one notch
+   * at a time. Same invariant, different driver. Here the layer does not translate at all, so any
+   * change in lit count is pure deformation and the bar is much lower. */
+  if (Q.get('slider') === '1') {
+    var sx = num('sx', 400), sy = num('sy', 240);
+    var i0 = num('i0', -200), i1 = num('i1', 200);
+    var prevS = null, wL2 = { d: -1 }, wB2 = { d: -1 };
+    for (var iv = i0; iv <= i1; iv++) {
+      var pp = { inset: iv };
+      Object.keys(EXTRA).forEach(function (k) { pp[k] = EXTRA[k]; });
+      var mm = shot(pp, sx, sy);
+      if (prevS) {
+        var dl2 = Math.abs(mm.lit - prevS.lit);
+        var db2 = Math.max(Math.abs(mm.w - prevS.w), Math.abs(mm.h - prevS.h));
+        if (dl2 > wL2.d) wL2 = { d: dl2, i: iv, from: prevS, to: mm };
+        if (db2 > wB2.d) wB2 = { d: db2, i: iv, from: prevS, to: mm };
+      }
+      prevS = mm;
+    }
+    res.push({ slider: true, wall: 'inset slider @ x=' + sx + ',y=' + sy, inset: i0 + '..' + i1,
+               maxDlit: wL2, maxDbox: wB2 });
+  }
+
+  var lines = ['ms=' + Math.round(performance.now() - t0), 'params=' + JSON.stringify(EXTRA), 'size=' + SIZE + ' comp=' + PW + 'x' + PH];
+  res.forEach(function (r) {
+    if (r.slider) {
+      lines.push('SLIDER ' + r.wall + '  inset ' + r.inset
+        + '  maxDlit=' + r.maxDlit.d + ' at inset=' + r.maxDlit.i
+        + ' (' + r.maxDlit.from.w + 'x' + r.maxDlit.from.h + ' lit ' + r.maxDlit.from.lit
+        + ' -> ' + r.maxDlit.to.w + 'x' + r.maxDlit.to.h + ' lit ' + r.maxDlit.to.lit + ')'
+        + '  maxDbox=' + r.maxDbox.d + ' at inset=' + r.maxDbox.i
+        + ' (' + r.maxDbox.from.w + 'x' + r.maxDbox.from.h + ' -> ' + r.maxDbox.to.w + 'x' + r.maxDbox.to.h + ')');
+      return;
+    }
+    lines.push('WALL ' + r.wall + ' inset ' + r.inset + '  s ' + r.s0 + '..' + r.s1
+      + '  maxDlit=' + r.maxDlit.d + ' at s=' + r.maxDlit.s
+      + ' (' + r.maxDlit.from.w + 'x' + r.maxDlit.from.h + ' lit ' + r.maxDlit.from.lit
+      + ' -> ' + r.maxDlit.to.w + 'x' + r.maxDlit.to.h + ' lit ' + r.maxDlit.to.lit + ')'
+      + '  maxDbox=' + r.maxDbox.d + ' at s=' + r.maxDbox.s
+      + ' (' + r.maxDbox.from.w + 'x' + r.maxDbox.from.h + ' -> ' + r.maxDbox.to.w + 'x' + r.maxDbox.to.h + ')'
+      + '  maxDboxLIT=' + r.maxDbox2.d + ' at s=' + r.maxDbox2.s
+      + ' (' + r.maxDbox2.from.w + 'x' + r.maxDbox2.from.h + ' -> ' + r.maxDbox2.to.w + 'x' + r.maxDbox2.to.h + ')'
+      + '  maxRatio=' + r.maxRatio.d.toFixed(2) + ' at s=' + r.maxRatio.s
+      + ' (dlit ' + r.maxRatio.dl + ' / col ' + r.maxRatio.col + ')');
+  });
+  if (Q.get('rows') === '1') lines.push('ROWS=' + JSON.stringify(res.map(function (r) { return { wall: r.wall, inset: r.inset, rows: r.rows }; })));
+  document.getElementById('out').textContent = lines.join('\n');
+  document.body.setAttribute('data-ready', '1');
+  document.title = 'DONE';
+})();
+</script>
+</body>
+</html>
