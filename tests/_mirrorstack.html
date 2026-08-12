@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stacked Mirror probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — STACKED MIRROR probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * BUG-HUNT, high: drawMirror renders the clean layer into a module-singleton plate `_miA` and then
+ * blits mirrored strips FROM that plate INTO ctx. Stack two Mirrors — Left→Right plus Top→Bottom,
+ * which is simply how you build a kaleidoscope — and the outer call re-enters drawLayer with the
+ * plate's own context as the target, so the inner call's source and destination are the SAME bitmap.
+ * Every strip blit is source-over onto the pixels it is reading, so nothing is ever replaced.
+ *
+ * WHY THIS SETUP IS THE DECISIVE ONE
+ *   A 50x50 shape at x=180 sits ENTIRELY in the right half of a 240-wide comp. Mirror Left→Right
+ *   keeps the left half and reflects it, so the correct output is an EMPTY frame — a strong, exact
+ *   expectation with no tolerance argument. Adding a second Mirror on top can only ever mirror
+ *   emptiness, so it must stay empty too. If the second Mirror instead RESURRECTS the shape at its
+ *   original un-mirrored x, that is the read-write aliasing and nothing else: those pixels cannot
+ *   arrive by any legitimate route, because the first Mirror already removed them.
+ *
+ * THE CONTROL IS LOAD-BEARING. The headline expectation here is "zero opaque pixels", and a probe
+ * that renders nothing at all — wrong scene, dead compositor, effect not registered — also reports
+ * zero and would read as a pass. So the same shape is also placed in the LEFT half, where a single
+ * Mirror must produce a VISIBLE, doubled result. If the control is empty the instrument is broken
+ * and every other row on the page is worthless.
+ * ============================================================================================ */
+(function () {
+  var W = 240, H = 240;
+  var MIR_LR = { type: 'mirror', enabled: true, params: { mode: 0 } };
+  var MIR_TB = { type: 'mirror', enabled: true, params: { mode: 2 } };
+
+  function measure(x, fx) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: x, y: 120,
+                                    shapeW: 50, shapeH: 50, fill: '#ffffff' });
+    L.effects = fx;
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null },
+                        layers: [L] }, 0);
+    var d = g.getImageData(0, 0, W, H).data;
+    var lit = 0, minX = W, maxX = -1;
+    for (var y = 0; y < H; y++) for (var xx = 0; xx < W; xx++) {
+      if (d[(y * W + xx) * 4 + 3] > 8) { lit++; if (xx < minX) minX = xx; if (xx > maxX) maxX = xx; }
+    }
+    return { lit: lit, span: maxX < 0 ? '—' : (minX + '-' + maxX) };
+  }
+
+  var lines = ['50x50 white shape in a 240x240 comp. Mirror Left→Right keeps the LEFT half.', ''];
+  lines.push('case                                              opaque px   x-span    verdict');
+
+  /* --- the bug, in two rows: one Mirror, then two ------------------------------------------ */
+  var one = measure(180, [MIR_LR]);
+  var two = measure(180, [MIR_LR, MIR_TB]);
+  lines.push('shape at x=180 (right half), [L→R]'.padEnd(50) +
+    String(one.lit).padStart(9) + '   ' + one.span.padEnd(9) +
+    (one.lit === 0 ? 'correct — right half discarded' : 'UNEXPECTED — should be empty'));
+  lines.push('shape at x=180 (right half), [L→R, T→B]'.padEnd(50) +
+    String(two.lit).padStart(9) + '   ' + two.span.padEnd(9) +
+    (two.lit === 0 ? 'correct — mirroring empty stays empty'
+                   : 'RESURRECTED — the 2nd Mirror undid the 1st'));
+
+  /* --- the control: without this, "0 opaque px" above could just mean "nothing rendered" ---- */
+  lines.push('');
+  var bare = measure(60, []);
+  var ctl  = measure(60, [MIR_LR]);
+  var ctl2 = measure(60, [MIR_LR, MIR_TB]);
+  lines.push('CONTROL — shape at x=60 (left half), so a Mirror MUST show something:');
+  lines.push('  no effects'.padEnd(50) + String(bare.lit).padStart(9) + '   ' + bare.span);
+  lines.push('  [L→R]'.padEnd(50) + String(ctl.lit).padStart(9) + '   ' + ctl.span +
+    (ctl.lit > bare.lit ? '   ok — reflected copies added' : '   <<< instrument is dead'));
+  lines.push('  [L→R, T→B]'.padEnd(50) + String(ctl2.lit).padStart(9) + '   ' + ctl2.span +
+    (ctl2.lit > 0 ? '   ok — still drawing' : '   <<< instrument is dead'));
+
+  lines.push('');
+  var broken = two.lit > 0 || one.lit > 0;
+  var dead = ctl.lit <= bare.lit || bare.lit === 0;
+  lines.push(dead ? 'PROBE IS LYING — the control never drew; ignore every row above.'
+                  : (broken ? 'STACKED MIRROR IS BROKEN' : 'stacked Mirror is correct'));
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>

@@ -6550,13 +6550,32 @@ window.FM = window.FM || {};
   }
 
   // Mirror / kaleidoscope: render the layer clean, then reflect one half onto the other.
-  let _miA = null;
+  /* DEPTH-POOLED, same reason as drawPixelate above. drawMirror renders the clean layer into a plate
+   * and then blits mirrored strips FROM that plate INTO ctx. Stack two Mirrors — the standard
+   * kaleidoscope build, Left→Right plus Top→Bottom — and the outer call re-enters drawLayer with the
+   * plate's own context as the target, so the inner call's source and destination were the SAME
+   * bitmap. Every strip blit was source-over onto the pixels it was reading, so nothing was ever
+   * replaced and the inner Mirror did literally nothing.
+   *
+   * Verified in the report: 240x240 comp, 50x50 shape at x=180 (entirely in the right half). With
+   * [Mirror L→R] alone the frame has 0 opaque pixels — correct, it keeps the empty left half and
+   * mirrors it. Adding a second Mirror yields 5000 opaque pixels at x 155-204, the layer's ORIGINAL
+   * un-mirrored position: adding an effect RESURRECTED content the previous effect had removed.
+   *
+   * A `ctx.canvas === _miA` clearRect guard cannot fix this one — the strip loop reads the plate
+   * while writing it, so the output has to land somewhere else. Pooling gives the inner call its own
+   * plate, which makes source and destination different canvases by construction. */
+  const _miPool = [];
+  let _miDepth = 0;
   function drawMirror(ctx, layer, t, scene, mode, fx, position) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height; mode = Math.round(mode) || 0;
-    if (!_miA) _miA = document.createElement('canvas');
+    const _d = _miDepth++;
+    try {
+    if (!_miPool[_d]) _miPool[_d] = document.createElement('canvas');
+    const _miA = _miPool[_d];
     if (_miA.width !== W || _miA.height !== H) { _miA.width = W; _miA.height = H; }   // cleared below
     const actx = _miA.getContext('2d');
     baseT(actx); actx.clearRect(0, 0, W, H);
@@ -6601,6 +6620,7 @@ window.FM = window.FM || {};
       }
     }
     ctx.restore();
+    } finally { _miDepth--; }   // the four `aw/ah < 0.5` early returns above exit through here too
   }
 
   // Pixelate / mosaic: render the layer clean, downscale (averaging) then upscale with smoothing off.

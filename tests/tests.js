@@ -5286,6 +5286,52 @@
     });
   });
 
+  test('effects: stacking two Mirrors does not resurrect what the first one removed', { item: 'mirror-stack' }, function () {
+    /* drawMirror renders the clean layer into a scratch plate and then blits mirrored strips FROM
+     * that plate INTO ctx. While the plate was a module singleton, stacking two Mirrors — Left→Right
+     * plus Top→Bottom, which is just how you build a kaleidoscope — made the inner call's source and
+     * destination the SAME bitmap: every strip blit was source-over onto the pixels it was reading,
+     * so nothing was ever replaced and the inner Mirror silently did nothing.
+     *
+     * THE SCENE IS CHOSEN SO THE EXPECTED ANSWER IS EXACTLY ZERO, with no tolerance to argue about.
+     * A 50x50 square at x=180 sits entirely in the RIGHT half of a 240-wide comp; Left→Right keeps
+     * the left half and reflects it, so the correct frame is empty. A second Mirror can only mirror
+     * emptiness, so it must stay empty. Pre-fix this read 2500 opaque px spanning x 155-204 — the
+     * square's ORIGINAL, un-mirrored position, pixels that cannot arrive by any legitimate route
+     * because the first Mirror already removed them.
+     *
+     * THE CONTROL BELOW IS LOAD-BEARING: "zero opaque pixels" is also what a scene that rendered
+     * nothing at all reports, so a broken registry or a dead compositor would read as a pass here.
+     * The same square on the LEFT, where a Mirror must visibly double it, is what tells the two
+     * apart. Pixelate carries the identical fix for the identical reason. */
+    function lit(x, fx) {
+      var c = offscreen(240, 240);
+      var l = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: x, y: 120, shapeW: 50, shapeH: 50, fill: '#ffffff' });
+      l.effects = fx.map(function (mode) {
+        var e = FM.fxRegistry.makeInstance('mirror');
+        if (!e) throw new Error('no registry entry for mirror');
+        e.params.mode = mode;
+        return e;
+      });
+      var s = scene([l]);
+      s.project = { width: 240, height: 240, fps: 30, duration: 5, background: null };
+      var g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, s, 0);
+      var d = g.getImageData(0, 0, 240, 240).data, n = 0, minX = 240, maxX = -1;
+      for (var i = 0; i < 240 * 240; i++) {
+        if (d[i * 4 + 3] > 8) { n++; var xx = i % 240; if (xx < minX) minX = xx; if (xx > maxX) maxX = xx; }
+      }
+      return { n: n, span: maxX < 0 ? '—' : minX + '-' + maxX };
+    }
+    var bare = lit(60, []), ctl = lit(60, [0]);
+    if (!(bare.n > 2000)) throw new Error('the control square did not render at all (' + bare.n + ' opaque px) — every assertion below would pass vacuously');
+    if (!(ctl.n > bare.n * 1.5)) throw new Error('a single Mirror on a left-half square took ' + bare.n + ' opaque px to ' + ctl.n + ' — the Mirror effect is not reflecting anything, so this test cannot see the bug it is for');
+
+    var one = lit(180, [0]), two = lit(180, [0, 2]);
+    if (one.n !== 0) throw new Error('Left→Right on a square that sits entirely in the RIGHT half left ' + one.n + ' opaque px at x ' + one.span + ' — it should discard the right half entirely');
+    if (two.n !== 0) throw new Error('adding a second Mirror to that empty frame brought back ' + two.n + ' opaque px at x ' + two.span + ' — the second Mirror is reading and writing the same scratch bitmap as the first, so its blits never replace anything. Depth-index the scratch plate (see _miPool in drawMirror)');
+  });
+
   test('effects: two Fill Behinds keep their z-order against each other', { item: 'fill-behind' }, function () {
     /* The fills go down bottom-to-top in the same order their layers do, so the LOWER layer's own
      * fill cannot cover the layer above it. Both subjects sit in the sky, clear of the probe, so
