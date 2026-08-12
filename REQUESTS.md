@@ -167,6 +167,13 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **31b — Transform blur can't smear effect- or camera-driven motion.**
 
 ### Work that exists but isn't landed
+- [x] **Every other recovered diff is now landed.** Checked at v6.42, and the answer is that the
+      `.claude/staged/` folder was lying to us: all twelve diffs in it had ALREADY shipped. Confirmed
+      two ways — none of them still applies, and the feature each carries is present in main
+      (fractal → v6.x, iridescence → v6.x, occlude → v6.15, lag → v6.33, preset-preview → v6.30,
+      textedit → v6.29, voice-recorder → v6.34, letterbox → v6.35, squish → v6.42). They have moved to
+      `.claude/staged/applied/` with a README saying so, because a folder named "staged" full of
+      diffs reads as unlanded work and costs a session an hour to disprove.
 - [ ] **Rebuild the two lost audio diffs** (reverse + misc). These were verified but staged in /tmp and
       the reboot destroyed them. No worktree has them — they are genuinely gone and must be rebuilt.
       *Held:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
