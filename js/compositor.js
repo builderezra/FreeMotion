@@ -307,10 +307,33 @@ window.FM = window.FM || {};
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     { type: 'contourlines', label: 'Contour Lines', param: 'levels', min: 2, max: 24, step: 1, def: 8 },
     { type: 'grunge', label: 'Grunge', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
+    /* Iridescence. BLUR and MOTION were both added after this shipped, and both are the answer to a
+     * thing the effect could not do at all.
+     *  - BLUR softens the SHEEN, not the footage. Blurring the composited RESULT is what stacking the
+     *    existing Blur effect after this one already does, and it wrecks the shot: on a 640x360 test
+     *    plate at radius 8 it drops luma detail to 0.11 of the untouched picture. Blurring the hue
+     *    triangle alone and re-multiplying by each pixel's own SHARP luma leaves luma detail at 0.68
+     *    while chroma detail falls to 0.29 — a soft oil-slick over a sharp shot, which is what
+     *    "soften the sheen" means. There is no saturation control here, so this is the only knob that
+     *    can take the hard edge off the rainbow. `max: 60` is deliberate even though the top of it
+     *    washes out at small Scale — averaging across more than about half a band period cancels
+     *    opposite hues to grey, and at Scale 100 the bands are only 85px apart, so chroma detail runs
+     *    4.445 → 2.568 → 0.664 at Blur 0/8/60. At Scale 300 the same three read 3.983 → 2.446 → 1.938,
+     *    so the top half of the slider is a real soften there rather than a wash. Both are looks.
+     *  - MOTION says HOW MUCH it moves. Drift is a RATE and it defaults to 0, so at the shipped
+     *    defaults this effect rendered byte-identical frames forever: measured mean |Δ| between
+     *    consecutive frames at 30fps was 0.0000, which is also why the browser tile (which auto-detects
+     *    motion by diffing probe frames) showed a still. Motion is a BOUNDED sweep — the sheen slides
+     *    and comes back — so it shimmers in place instead of marching off frame the way Drift does.
+     * `legacy: 0` on Motion is the Edge Glow radius precedent: an instance saved before this control
+     * existed renders AND displays 0, so nothing already in a project starts moving. Blur needs no
+     * legacy — its default IS the kernel's absent-key fallback. */
     { type: 'iridescence', label: 'Iridescence', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
       { key: 'scale', label: 'Scale', min: 10, max: 500, step: 5, def: 100, unit: '%' },
       { key: 'bands', label: 'Bands', min: 0.5, max: 10, step: 0.1, def: 3 },
+      { key: 'blur', label: 'Blur', min: 0, max: 60, step: 1, def: 0, unit: 'px' },
+      { key: 'motion', label: 'Motion', min: 0, max: 100, step: 1, def: 25, legacy: 0, unit: '%' },
       { key: 'speed', label: 'Drift', min: -4, max: 4, step: 0.1, def: 0 },
     ] },
     { type: 'fractalwarp', label: 'Fractal Warp', param: 'amount', min: 0, max: 60, step: 1, def: 24, unit: 'px' },
@@ -358,7 +381,38 @@ window.FM = window.FM || {};
     { type: 'electricedges', label: 'Electric Edges', params: [{ key: 'amount', label: 'Glow', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'speed', label: 'Speed', min: 0, max: 10, step: 0.1, def: 4 }], color: true, defColor: '#7df9ff', colorLabel: 'Electric' },
     { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
     { type: 'spinstreaks', label: 'Spin Streaks', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
-    { type: 'fractalridges', label: 'Fractal Ridges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'scale', label: 'Scale', min: 8, max: 120, step: 1, def: 48, unit: 'px' }] },
+    /* FRACTAL RIDGES — reworked. It shipped with two sliders over a picture that never moved and had
+     * no colour at all. Measured before the rework (real app, real renderScene, 240x240, ps 1): the
+     * per-frame mean absolute difference between t=0 and t=0.5, t=1.0 and t=1.667 was 0.000000 — not
+     * "small", exactly zero, because the pixel loop had no time term. The Add-Effect tile agreed and
+     * cached it as static. And because it PAINTS a texture rather than rearranging the source, the
+     * missing palette cost the layer its colour outright: over a #e42a3a fill at Amount 1 the mean
+     * per-pixel RGB spread went 186.0 -> 0.000, i.e. pure grey, the layer's colour simply gone.
+     * With the palette it is 67.9 in Gradient and 202.9 in Spectrum; with Overlay it is 195.1,
+     * ABOVE the untouched source, because the texture is now sitting on the picture.
+     *
+     * Every key added here carries `legacy:` — the value the kernel falls back to when the key is
+     * ABSENT — so a project saved before today still renders byte for byte as it always did: Mono,
+     * Normal, no repeat, no reshape, still. `def:` is what a NEW instance gets, which is why Colour
+     * opens on Gradient and Speed opens at 0.6 rather than 0. */
+    { type: 'fractalridges', label: 'Fractal Ridges', color: true, defColor: '#1b2a4a', colorLabel: 'Low', color2: true, defColor2: '#ffb86c', color2Label: 'High', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'scale', label: 'Scale', min: 8, max: 120, step: 1, def: 48, unit: 'px' },
+      { key: 'sharpness', label: 'Sharpness', min: 0.3, max: 4, step: 0.1, def: 1, legacy: 1 },
+      { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0, legacy: 0 },
+      { key: 'mode', label: 'Colour', options: [[0, 'Mono'], [1, 'Tint'], [2, 'Gradient'], [3, 'Spectrum']], def: 2, legacy: 0 },
+      { key: 'bands', label: 'Bands', min: 1, max: 8, step: 0.1, def: 1, legacy: 1 },
+      // Four, not six. Add and Soft Light were built and measured (Soft Light preserved the source
+      // best of all of them, luma correlation +0.985 at Amount 1) and then cut, because a six-option
+      // segment is 312px of buttons in a 252px panel at 380px: the last two rendered off the side of
+      // the phone with nothing to scroll, i.e. untappable. Overlay covers the same "keep the picture,
+      // add the texture" job at +0.969. The four that ship are exactly PIXEL_FX.colorize's Blend set,
+      // which is the in-house precedent and is measured as fitting.
+      { key: 'blend', label: 'Overlay', options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']], def: 0, legacy: 0 },
+      { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.6, legacy: 0 },
+      { key: 'driftX', label: 'Drift X', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
+      { key: 'driftY', label: 'Drift Y', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
+    ] },
     { type: 'smoothbevel', label: 'Smooth Bevel', params: [{ key: 'depth', label: 'Depth', min: 1, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'strength', label: 'Light Strength', min: 0, max: 2, step: 0.05, def: 1 }] },
     // ---- batch 18: Blur / Proc / Distort / Drawing ----
     { type: 'zoomstreaks', label: 'Zoom Streaks', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -2709,7 +2763,61 @@ window.FM = window.FM || {};
     },
     contourlines: function(d,W,H,p,t){ var clLv=Math.round(FM.evalProp(p.levels,t)||8); if(clLv<2)clLv=2; if(clLv>24)clLv=24; var clS=d.slice(),clW4=W*4,clScl=clLv/255; var clBand=new Int16Array(W*H); for(var clI=0,clJ=0;clI<clS.length;clI+=4,clJ++){ var clLum=0.299*clS[clI]+0.587*clS[clI+1]+0.114*clS[clI+2],clB=Math.floor(clLum*clScl); if(clB>=clLv)clB=clLv-1; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ d[clIdx]=0; d[clIdx+1]=0; d[clIdx+2]=0; } } } },
     grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4; for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_h=(gr_x*73856093)^(gr_y*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216; var gr_h2=(gr_x*83492791)^(gr_y*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216; var gr_mul=1-gr_mot*(gr_n-0.5); if(gr_n<gr_thr){ gr_mul*=(0.25+0.6*gr_n2); } if(gr_mul<0)gr_mul=0; gr_d[gr_i]=gr_d[gr_i]*gr_mul; gr_d[gr_i+1]=gr_d[gr_i+1]*gr_mul; gr_d[gr_i+2]=gr_d[gr_i+2]*gr_mul; } } },
-    iridescence: function(d,W,H,p,t,ps){ var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7; var iri_scP=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var iri_sc=(iri_scP===100?120:120*(iri_scP/100))*(ps||1); var iri_bd=p.bands==null?3:FM.evalProp(p.bands,t); var iri_sp=p.speed==null?0:FM.evalProp(p.speed,t); var iri_ph=iri_sp*t; iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return; for(var iri_y=0;iri_y<H;iri_y++){ var iri_row=iri_y*W*4; for(var iri_x=0;iri_x<W;iri_x++){ var iri_i=iri_row+iri_x*4; if(d[iri_i+3]<=0)continue; var iri_r=d[iri_i],iri_g=d[iri_i+1],iri_b=d[iri_i+2]; var iri_l=(0.299*iri_r+0.587*iri_g+0.114*iri_b)/255; var iri_h=(iri_l*iri_bd+(iri_x+iri_y)/iri_sc+iri_ph); iri_h=iri_h-Math.floor(iri_h); var iri_h6=iri_h*6; var iri_cr=Math.abs(iri_h6-3)-1; iri_cr=iri_cr<0?0:(iri_cr>1?1:iri_cr); var iri_cg=2-Math.abs(iri_h6-2); iri_cg=iri_cg<0?0:(iri_cg>1?1:iri_cg); var iri_cb=2-Math.abs(iri_h6-4); iri_cb=iri_cb<0?0:(iri_cb>1?1:iri_cb); var iri_sr=iri_cr*iri_l*255,iri_sg=iri_cg*iri_l*255,iri_sb=iri_cb*iri_l*255; d[iri_i]=iri_r+(iri_sr-iri_r)*iri_amt; d[iri_i+1]=iri_g+(iri_sg-iri_g)*iri_amt; d[iri_i+2]=iri_b+(iri_sb-iri_b)*iri_amt; } } },
+    /* Iridescence — its FM.EFFECTS def says WHY Blur and Motion exist; this says how.
+     *
+     * MOTION IS A PHASE, NOT A LENGTH, which is why it is the one number in here with no `ps` on it.
+     * It joins the spatial term (x+y)/iri_sc, and iri_sc already carries ps, so one hue cycle covers
+     * the same distance on a reduced preview plate as on the export. Measured against a full-res
+     * render, a half-size plate lands 2.468 mean |Δ| away with Motion off and 2.463 with Motion 60 —
+     * that is the plate's own resample floor, not drift. BLUR *is* a length and does multiply by ps;
+     * take that multiply away and the same half-size plate goes from 1.626 to 7.028 at Blur 12, i.e.
+     * WORSE than not blurring at all, i.e. a preview that visibly disagrees with the export.
+     * (Neither is a ctx.filter length, so renderScale never applies here — a PIXEL_FX kernel is
+     * handed a byte array and no ctx.)
+     *
+     * The blur is ALPHA-WEIGHTED: the hue planes are premultiplied by coverage, coverage is blurred
+     * alongside them, and the colour is divided back out at the end. A naive blur averages
+     * TRANSPARENT frame into the sheen and leaves a dark rim around the layer — measured on a
+     * half-size card, mean sheen brightness in the 12px band inside the edge, relative to the
+     * interior: 0.632 unblurred, 0.556 naive, 0.634 alpha-weighted.
+     *
+     * Two box passes, not one: one box leaves square steps in a gradient this smooth. Two ≈ a
+     * triangle kernel (sigma ≈ 0.82 x radius). The sliding-window loops are innerblur's. */
+    iridescence: function(d,W,H,p,t,ps){
+      var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7;
+      var iri_scP=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t));
+      var iri_sc=(iri_scP===100?120:120*(iri_scP/100))*(ps||1);
+      var iri_bd=p.bands==null?3:FM.evalProp(p.bands,t);
+      var iri_sp=p.speed==null?0:FM.evalProp(p.speed,t);
+      var iri_mo=p.motion==null?0:FM.evalProp(p.motion,t); if(!(iri_mo>0))iri_mo=0; else if(iri_mo>100)iri_mo=100;
+      /* Bounded sweep: ±(motion/100) hue cycles, one there-and-back every 4s (1.5707963… = π/2 rad/s,
+       * so peak rate is motion/100 cycles per second — Motion 100 moves like Drift 1.57, Motion 25
+       * like Drift 0.39). Expressed in CYCLES rather than pixels on purpose: the sheen then slides
+       * the same fraction of a band whatever Scale is set to, instead of crawling at Scale 10 and
+       * tearing across at Scale 500. sin(0)=0, so t=0 is the frame it always was, Motion up or not,
+       * and += leaves iri_ph bit-for-bit `iri_sp*t` when Motion is 0. */
+      var iri_ph=iri_sp*t; if(iri_mo>0)iri_ph+=(iri_mo/100)*Math.sin(t*1.5707963267948966);
+      iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return;
+      var iri_bl=p.blur==null?0:FM.evalProp(p.blur,t); if(!(iri_bl>0))iri_bl=0; else if(iri_bl>60)iri_bl=60;
+      iri_bl=Math.round(iri_bl*(ps||1));   /* PROJECT px → plate px — see plateScale */
+      if(iri_bl<1){
+        for(var iri_y=0;iri_y<H;iri_y++){ var iri_row=iri_y*W*4; for(var iri_x=0;iri_x<W;iri_x++){ var iri_i=iri_row+iri_x*4; if(d[iri_i+3]<=0)continue; var iri_r=d[iri_i],iri_g=d[iri_i+1],iri_b=d[iri_i+2]; var iri_l=(0.299*iri_r+0.587*iri_g+0.114*iri_b)/255; var iri_h=(iri_l*iri_bd+(iri_x+iri_y)/iri_sc+iri_ph); iri_h=iri_h-Math.floor(iri_h); var iri_h6=iri_h*6; var iri_cr=Math.abs(iri_h6-3)-1; iri_cr=iri_cr<0?0:(iri_cr>1?1:iri_cr); var iri_cg=2-Math.abs(iri_h6-2); iri_cg=iri_cg<0?0:(iri_cg>1?1:iri_cg); var iri_cb=2-Math.abs(iri_h6-4); iri_cb=iri_cb<0?0:(iri_cb>1?1:iri_cb); var iri_sr=iri_cr*iri_l*255,iri_sg=iri_cg*iri_l*255,iri_sb=iri_cb*iri_l*255; d[iri_i]=iri_r+(iri_sr-iri_r)*iri_amt; d[iri_i+1]=iri_g+(iri_sg-iri_g)*iri_amt; d[iri_i+2]=iri_b+(iri_sb-iri_b)*iri_amt; } }
+        return;
+      }
+      var iri_n=W*H, iri_pr=new Float32Array(iri_n), iri_pg=new Float32Array(iri_n), iri_pb=new Float32Array(iri_n), iri_pa=new Float32Array(iri_n), iri_tm=new Float32Array(iri_n);
+      /* pass 1 — the hue triangle ONLY (no luma in it yet). Coverage stays 0 on transparent px: that
+       * zero IS the alpha weight the divide below undoes. */
+      for(var iri_ay=0;iri_ay<H;iri_ay++){ var iri_ar=iri_ay*W; for(var iri_ax=0;iri_ax<W;iri_ax++){ var iri_aj=iri_ar+iri_ax, iri_ai=iri_aj*4; if(d[iri_ai+3]<=0)continue; var iri_al=(0.299*d[iri_ai]+0.587*d[iri_ai+1]+0.114*d[iri_ai+2])/255; var iri_ah=(iri_al*iri_bd+(iri_ax+iri_ay)/iri_sc+iri_ph); iri_ah=iri_ah-Math.floor(iri_ah); var iri_a6=iri_ah*6; var iri_ur=Math.abs(iri_a6-3)-1; iri_ur=iri_ur<0?0:(iri_ur>1?1:iri_ur); var iri_ug=2-Math.abs(iri_a6-2); iri_ug=iri_ug<0?0:(iri_ug>1?1:iri_ug); var iri_ub=2-Math.abs(iri_a6-4); iri_ub=iri_ub<0?0:(iri_ub>1?1:iri_ub); iri_pr[iri_aj]=iri_ur; iri_pg[iri_aj]=iri_ug; iri_pb[iri_aj]=iri_ub; iri_pa[iri_aj]=1; } }
+      /* pass 2 — separable sliding-window box, clamped at the plate edge, run twice over all four planes */
+      function iri_bh(s,o){ var dv=iri_bl*2+1; for(var y=0;y<H;y++){ var rw=y*W, ac=0, k; for(k=-iri_bl;k<=iri_bl;k++){ var c0=k<0?0:(k>=W?W-1:k); ac+=s[rw+c0]; } for(var x=0;x<W;x++){ o[rw+x]=ac/dv; var xo=x-iri_bl, xi=x+iri_bl+1; var co=xo<0?0:(xo>=W?W-1:xo), ci=xi<0?0:(xi>=W?W-1:xi); ac+=s[rw+ci]-s[rw+co]; } } }
+      function iri_bv(s,o){ var dv=iri_bl*2+1; for(var x=0;x<W;x++){ var ac=0, k; for(k=-iri_bl;k<=iri_bl;k++){ var c0=k<0?0:(k>=H?H-1:k); ac+=s[c0*W+x]; } for(var y=0;y<H;y++){ o[y*W+x]=ac/dv; var yo=y-iri_bl, yi=y+iri_bl+1; var ro=yo<0?0:(yo>=H?H-1:yo), ri=yi<0?0:(yi>=H?H-1:yi); ac+=s[ri*W+x]-s[ro*W+x]; } } }
+      function iri_bp(pl){ iri_bh(pl,iri_tm); iri_bv(iri_tm,pl); }
+      for(var iri_pz=0;iri_pz<2;iri_pz++){ iri_bp(iri_pr); iri_bp(iri_pg); iri_bp(iri_pb); iri_bp(iri_pa); }
+      /* pass 3 — un-premultiply, then re-multiply by this pixel's OWN SHARP luma. d still holds the
+       * untouched source at this point (every pixel is read before it is written), which is the whole
+       * trick: the picture keeps its edges and only the colour went soft. */
+      for(var iri_zy=0;iri_zy<H;iri_zy++){ var iri_zr=iri_zy*W; for(var iri_zx=0;iri_zx<W;iri_zx++){ var iri_zj=iri_zr+iri_zx, iri_zi=iri_zj*4; if(d[iri_zi+3]<=0)continue; var iri_zc=iri_pa[iri_zj]; if(iri_zc<=0.0001)continue; var iri_zR=d[iri_zi],iri_zG=d[iri_zi+1],iri_zB=d[iri_zi+2]; var iri_zk=(0.299*iri_zR+0.587*iri_zG+0.114*iri_zB)/iri_zc; var iri_sr=iri_pr[iri_zj]*iri_zk, iri_sg=iri_pg[iri_zj]*iri_zk, iri_sb=iri_pb[iri_zj]*iri_zk; d[iri_zi]=iri_zR+(iri_sr-iri_zR)*iri_amt; d[iri_zi+1]=iri_zG+(iri_sg-iri_zG)*iri_amt; d[iri_zi+2]=iri_zB+(iri_sb-iri_zB)*iri_amt; } }
+    },
     // ---- batch 11 (multi-param pixel) ----
     // (motionblur moved to CANVAS_FX: the per-pixel 9-tap JS loop cost ~28ms/frame at 1080×1920 —
     //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
@@ -2749,7 +2857,192 @@ window.FM = window.FM || {};
     electricedges: function(d,W,H,p,t){ var eeAmt=FM.evalProp(p.amount,t); if(eeAmt==null)eeAmt=0.6; if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd=FM.evalProp(p.speed,t); if(eeSpd==null)eeSpd=4; if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var ees=d.slice(); var eew4=W*4; var eeFrame=Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; var eeAdd=eeMag*eeAmt*eeFlick; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
     glowscan: function(d,W,H,p,t){ var gsSpeed=FM.evalProp(p.speed,t); if(gsSpeed==null)gsSpeed=1.5; if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth=FM.evalProp(p.width,t); if(gsWidth==null)gsWidth=60; if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
     spinstreaks: function(d,W,H,p,t){ var ssAmt=FM.evalProp(p.amount,t); if(ssAmt==null) ssAmt=0.5; if(ssAmt<0) ssAmt=0; if(ssAmt>1) ssAmt=1; if(ssAmt<=0.001) return; var ssSrc=d.slice(); var ssCx=W/2, ssCy=H/2, ssW4=W*4; var ssSpan=ssAmt*0.5; var ssN=10; var ssDa=ssSpan/(ssN-1); for(var ssY=0; ssY<H; ssY++){ for(var ssX=0; ssX<W; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssR=Math.sqrt(ssDx*ssDx+ssDy*ssDy); var ssA=Math.atan2(ssDy,ssDx); var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0, ssWsum=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=1/(1+ssK*0.6); var ssSa=ssA - ssK*ssDa; var ssSx=ssCx + ssR*Math.cos(ssSa); var ssSy=ssCy + ssR*Math.sin(ssSa); var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; ssWsum+=ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWsum; d[ssOut+1]=ssAccG/ssWsum; d[ssOut+2]=ssAccB/ssWsum; d[ssOut+3]=ssAccA/ssWsum; } } },
-    fractalridges: function(d,W,H,p,t){ var fr_amt=FM.evalProp(p.amount,t); if(fr_amt==null) fr_amt=0.6; fr_amt=fr_amt<0?0:(fr_amt>1?1:fr_amt); var fr_sc=FM.evalProp(p.scale,t); if(fr_sc==null) fr_sc=48; fr_sc=fr_sc<8?8:(fr_sc>120?120:fr_sc); function fr_hash(ix,iy){ var fr_h=(ix*374761393+iy*668265263)|0; fr_h=(fr_h^(fr_h>>>13))*1274126177; fr_h=(fr_h^(fr_h>>>16))>>>0; return fr_h/4294967295; } function fr_sm(a){ return a*a*(3-2*a); } function fr_oct(fx,fy,cell){ var fr_gx=fx/cell, fr_gy=fy/cell; var fr_x0=Math.floor(fr_gx), fr_y0=Math.floor(fr_gy); var fr_tx=fr_sm(fr_gx-fr_x0), fr_ty=fr_sm(fr_gy-fr_y0); var fr_c00=fr_hash(fr_x0,fr_y0); var fr_c10=fr_hash(fr_x0+1,fr_y0); var fr_c01=fr_hash(fr_x0,fr_y0+1); var fr_c11=fr_hash(fr_x0+1,fr_y0+1); var fr_a=fr_c00+(fr_c10-fr_c00)*fr_tx; var fr_b=fr_c01+(fr_c11-fr_c01)*fr_tx; return fr_a+(fr_b-fr_a)*fr_ty; } var fr_w4=W*4; var fr_c1=fr_sc, fr_c2=fr_sc/2, fr_c3=fr_sc/4; for(var fr_y=0; fr_y<H; fr_y++){ for(var fr_x=0; fr_x<W; fr_x++){ var fr_i=(fr_y*W+fr_x)*4; if(d[fr_i+3]<=0) continue; var fr_n1=fr_oct(fr_x,fr_y,fr_c1); var fr_n2=fr_oct(fr_x,fr_y,fr_c2); var fr_n3=fr_oct(fr_x,fr_y,fr_c3); var fr_r1=1-Math.abs(2*fr_n1-1); var fr_r2=1-Math.abs(2*fr_n2-1); var fr_r3=1-Math.abs(2*fr_n3-1); var fr_sum=fr_r1*0.5+fr_r2*0.3+fr_r3*0.2; var fr_grey=fr_sum*255; if(fr_grey<0) fr_grey=0; else if(fr_grey>255) fr_grey=255; d[fr_i]=d[fr_i]+(fr_grey-d[fr_i])*fr_amt; d[fr_i+1]=d[fr_i+1]+(fr_grey-d[fr_i+1])*fr_amt; d[fr_i+2]=d[fr_i+2]+(fr_grey-d[fr_i+2])*fr_amt; } } },
+    /* FRACTAL RIDGES. Three octaves of value noise, each folded to a ridge (1 - |2n-1|) and summed
+     * at the fixed weights 0.5 / 0.3 / 0.2. The catalogue entry above says what this looked like
+     * before the rework and what was measured; this block is about the three rules it has to obey.
+     *
+     * 1. TEST THE PARAM, NOT THE EVALUATED VALUE. FM.evalProp returns 0 for an absent key, not null
+     *    (scene.js:73) — so `FM.evalProp(p.bands,t) || 1` would be fine but `evalProp(p.bands,t)`
+     *    alone reads a missing Bands as 0, and a 0 there folds every ridge flat. Every new key is
+     *    read as `p.k == null ? <legacy> : FM.evalProp(...)`, the same shape PIXEL_FX.edgeglow uses,
+     *    and each legacy value is the one that reproduces the pre-rework picture exactly.
+     *
+     * 2. PLATE-SCALE RULE. `scale`, `driftX` and `driftY` are lengths in PROJECT pixels. This kernel
+     *    did not even take `ps`, so while the preview played at reduced quality (app.js drops
+     *    __fmRS to 0.5) the lattice kept its size in PLATE pixels — i.e. drew twice as coarse as the
+     *    export it was previewing. The tell is row roughness measured in each raster's OWN pixels:
+     *    the same project-sized feature crossing half as many pixels should read about twice as
+     *    rough. Measured 1.841 full / 1.786 half before (ratio 0.97 — the pattern was locked to the
+     *    plate) and 1.841 / 3.559 after (ratio 1.93). Full-res against half-res-then-upscaled fell
+     *    from MAD 17.272 to 1.569. ps is exactly 1 on every export and every thumbnail (plateScale
+     *    caps at 1), so this corrects the playing preview and changes nothing else.
+     *
+     * 3. THE CORNER CACHE IS AN OPTIMISATION, NOT A REWRITE. The old inner loop called the hash 12
+     *    times per pixel — four lattice corners x three octaves — and measured 60.3 ms/frame at
+     *    1080x1920 on headless swiftshader, dearer than everything else measured alongside it bar
+     *    Clouds, and paid on every frame to redraw a picture that never changed. Those four corners
+     *    only change when the walk crosses a cell boundary, so they are cached per octave and
+     *    refetched only on the crossing: at scale 48 the cells are 48/24/12, so 4*(1/48+1/24+1/12)
+     *    = 0.58 hash calls per pixel instead of 12. Same scene now measures 35.6 ms/frame while
+     *    doing strictly more work. The per-pixel ARITHMETIC is untouched — same lerps, same
+     *    operands, same order — which is what keeps it byte-identical. */
+    fractalridges: function (d, W, H, p, t, ps) {
+      var fr_amt = FM.evalProp(p.amount, t); if (fr_amt == null) fr_amt = 0.6;
+      fr_amt = fr_amt < 0 ? 0 : (fr_amt > 1 ? 1 : fr_amt);
+      var fr_sc = FM.evalProp(p.scale, t); if (fr_sc == null) fr_sc = 48;
+      fr_sc = fr_sc < 8 ? 8 : (fr_sc > 120 ? 120 : fr_sc);
+      var fr_ps = ps || 1;
+      fr_sc = fr_sc * fr_ps;                                     // rule 2
+      var fr_mode = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
+      var fr_bl = p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0);
+      var fr_bands = p.bands == null ? 1 : FM.evalProp(p.bands, t);
+      if (!(fr_bands >= 1)) fr_bands = 1; else if (fr_bands > 8) fr_bands = 8;
+      var fr_sh = p.sharpness == null ? 1 : FM.evalProp(p.sharpness, t);
+      if (!(fr_sh > 0)) fr_sh = 1; else if (fr_sh > 4) fr_sh = 4;
+      var fr_spd = p.speed == null ? 0 : FM.evalProp(p.speed, t);
+      if (!isFinite(fr_spd)) fr_spd = 0;
+      var fr_dxv = p.driftX == null ? 0 : FM.evalProp(p.driftX, t);
+      var fr_dyv = p.driftY == null ? 0 : FM.evalProp(p.driftY, t);
+      var fr_dx = (isFinite(fr_dxv) ? fr_dxv : 0) * t * fr_ps;   // px/s -> plate px at this instant
+      var fr_dy = (isFinite(fr_dyv) ? fr_dyv : 0) * t * fr_ps;
+      var fr_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
+      /* `p.color ? hexToRGB(...) : default`, NOT `hexToRGB(p.color) || default` — hexToRGB coerces an
+       * absent value to '#000000' and hands back [0,0,0], which is a truthy array, so the `||` form
+       * is dead code and the gradient silently collapses to black-to-black. Found by deliberately
+       * breaking the legacy fallback for `mode` and watching a flat black plate come out. */
+      var fr_lo = p.color ? hexToRGB(p.color) : [27, 42, 74];
+      var fr_hi = p.color2 ? hexToRGB(p.color2) : [255, 184, 108];
+      var fr_lr = fr_lo[0], fr_lg = fr_lo[1], fr_lb = fr_lo[2];
+      var fr_dr = fr_hi[0] - fr_lr, fr_dg = fr_hi[1] - fr_lg, fr_db = fr_hi[2] - fr_lb;
+      var fr_tr = fr_lr / 255, fr_tg = fr_lg / 255, fr_tb = fr_lb / 255;   // Tint multipliers
+
+      /* The seed is mixed INTO the hash, not added to the coordinates. hash(ix+k, iy-k) is the same
+       * rock translated, which is what Scale and the two drifts already give you; a term inside the
+       * mix is a different rock at the same scale. At seed 0 the term is 0, so the hash is the
+       * original function bit for bit. */
+      var fr_sk = (fr_seed * 1442695041) | 0;
+      function fr_hash(ix, iy) {
+        var fr_h = (ix * 374761393 + iy * 668265263 + fr_sk) | 0;
+        fr_h = (fr_h ^ (fr_h >>> 13)) * 1274126177;
+        fr_h = (fr_h ^ (fr_h >>> 16)) >>> 0;
+        return fr_h / 4294967295;
+      }
+      function fr_sm(a) { return a * a * (3 - 2 * a); }
+
+      /* SPEED is a churn, not a slide. Drift moves all three octaves together, which reads as
+       * wallpaper sliding behind a window — and this texture is plate-locked, so wallpaper is
+       * exactly what it looks like. Giving each octave its own non-parallel offset makes them slide
+       * THROUGH one another, so ridge intersections form and break in place. That is what "it
+       * actually moves" means for noise, and it costs three hoisted adds per row, not per pixel.
+       * The offsets are in CELLS rather than pixels so the churn follows Scale instead of crawling
+       * at scale 120 and boiling at scale 8. */
+      var fr_ph = fr_spd * t;
+      var fr_cell = [fr_sc, fr_sc / 2, fr_sc / 4];
+      var fr_wt = [0.5, 0.3, 0.2];
+      var fr_ex = [fr_ph * 0.9, fr_ph * -1.3, fr_ph * 1.7];
+      var fr_ey = [fr_ph * -1.4, fr_ph * 0.8, fr_ph * 1.1];
+      // Per-octave row state + the cached lattice column. -2147483648 is a column no Math.floor of a
+      // finite grid coordinate reaches here, so the first pixel of every row always refetches.
+      var fr_y0 = [0, 0, 0], fr_ty = [0, 0, 0], fr_cx = [-2147483648, -2147483648, -2147483648];
+      var fr_h00 = [0, 0, 0], fr_h10 = [0, 0, 0], fr_h01 = [0, 0, 0], fr_h11 = [0, 0, 0];
+      var fr_w4 = W * 4, fr_o, fr_gy, fr_yy;
+
+      for (var fr_y = 0; fr_y < H; fr_y++) {
+        for (fr_o = 0; fr_o < 3; fr_o++) {
+          fr_gy = (fr_y + fr_dy) / fr_cell[fr_o] + fr_ey[fr_o];
+          fr_yy = Math.floor(fr_gy);
+          fr_y0[fr_o] = fr_yy; fr_ty[fr_o] = fr_sm(fr_gy - fr_yy);
+          fr_cx[fr_o] = -2147483648;   // new row: the cached corners belong to the wrong lattice line
+        }
+        var fr_row = fr_y * fr_w4;
+        for (var fr_x = 0; fr_x < W; fr_x++) {
+          var fr_i = fr_row + fr_x * 4;
+          if (d[fr_i + 3] <= 0) continue;   // alpha-gated: this never paints outside the layer
+          var fr_sum = 0;
+          for (fr_o = 0; fr_o < 3; fr_o++) {
+            var fr_gx = (fr_x + fr_dx) / fr_cell[fr_o] + fr_ex[fr_o];
+            var fr_x0 = Math.floor(fr_gx);
+            if (fr_x0 !== fr_cx[fr_o]) {
+              var fr_ly = fr_y0[fr_o];
+              fr_cx[fr_o] = fr_x0;
+              fr_h00[fr_o] = fr_hash(fr_x0, fr_ly);     fr_h10[fr_o] = fr_hash(fr_x0 + 1, fr_ly);
+              fr_h01[fr_o] = fr_hash(fr_x0, fr_ly + 1); fr_h11[fr_o] = fr_hash(fr_x0 + 1, fr_ly + 1);
+            }
+            var fr_tx = fr_sm(fr_gx - fr_x0);
+            var fr_a = fr_h00[fr_o] + (fr_h10[fr_o] - fr_h00[fr_o]) * fr_tx;
+            var fr_b = fr_h01[fr_o] + (fr_h11[fr_o] - fr_h01[fr_o]) * fr_tx;
+            var fr_n = fr_a + (fr_b - fr_a) * fr_ty[fr_o];
+            fr_sum += (1 - Math.abs(2 * fr_n - 1)) * fr_wt[fr_o];   // the RIDGE fold
+          }
+          /* Sharpness reshapes the ridge field before it becomes colour: under 1 the peaks broaden
+           * into cloth, over 1 they pinch into rock. Guarded rather than always applied because
+           * Math.pow(x, 1) is an implementation-approximated result, not a specified identity, and
+           * byte-identity for an absent key is the rule this whole rework is built on. */
+          if (fr_sh !== 1) fr_sum = Math.pow(fr_sum, fr_sh);
+          /* Bands repeats the colour ramp up the ridge as a TRIANGLE rather than a sawtooth, so the
+           * ramp meets itself instead of snapping back to Low with a visible seam every cycle. At 1
+           * the fold is exactly the identity over [0,1] (u = sum, floor(u/2) = 0, u <= 1) — skipped
+           * anyway, so an absent key cannot cost a float. */
+          if (fr_bands !== 1) {
+            var fr_u = fr_sum * fr_bands;
+            fr_u = fr_u - Math.floor(fr_u / 2) * 2;
+            fr_sum = fr_u <= 1 ? fr_u : 2 - fr_u;
+          }
+          var fr_cr, fr_cg, fr_cb;
+          if (fr_mode === 1) {          // Tint — the grey ridge times Low (PIXEL_FX.clouds idiom)
+            var fr_v = fr_sum * 255;
+            fr_cr = fr_v * fr_tr; fr_cg = fr_v * fr_tg; fr_cb = fr_v * fr_tb;
+          } else if (fr_mode === 2) {   // Gradient — Low -> High by ridge height (gradientmap idiom)
+            fr_cr = fr_lr + fr_dr * fr_sum;
+            fr_cg = fr_lg + fr_dg * fr_sum;
+            fr_cb = fr_lb + fr_db * fr_sum;
+          } else if (fr_mode === 3) {
+            /* Spectrum — the ridge height IS the hue, through the same inline six-segment HSV ramp
+             * PIXEL_FX.iridescence uses (:2735); it is the one effect in this file that already
+             * generates hue rather than borrowing it, so there is no reason to invent a second one.
+             * Value rides the ridge (0.5 + 0.5*sum) instead of sitting at 1: a flat-value rainbow
+             * throws the relief away, and the relief is the only reason this is called Ridges. */
+            var fr_h6 = fr_sum * 6;
+            fr_cr = Math.abs(fr_h6 - 3) - 1; fr_cr = fr_cr < 0 ? 0 : (fr_cr > 1 ? 1 : fr_cr);
+            fr_cg = 2 - Math.abs(fr_h6 - 2); fr_cg = fr_cg < 0 ? 0 : (fr_cg > 1 ? 1 : fr_cg);
+            fr_cb = 2 - Math.abs(fr_h6 - 4); fr_cb = fr_cb < 0 ? 0 : (fr_cb > 1 ? 1 : fr_cb);
+            var fr_vv = (0.5 + 0.5 * fr_sum) * 255;
+            fr_cr = fr_cr * fr_vv; fr_cg = fr_cg * fr_vv; fr_cb = fr_cb * fr_vv;
+          } else {                      // Mono — the grey this effect has always drawn
+            fr_cr = fr_cg = fr_cb = fr_sum * 255;
+          }
+          /* OVERLAY. Without this the only composite was a lerp toward the ridge colour, i.e. Normal
+           * at opacity `amount` — the texture REPLACED the picture instead of sitting on it, which
+           * is why a rock over a face looked like a rock rather than a rocky face. Measured at
+           * Amount 1 over a real subject, as the correlation between the effected luma and the
+           * untouched luma (1 = the picture is intact, 0 = it is gone): Normal -0.026, Multiply
+           * +0.921, Screen +0.876, Overlay +0.969. Normal is the old behaviour and the number says
+           * exactly what the complaint was. Per-pixel switch lifted from PIXEL_FX.colorize (:2540),
+           * which already ships this same four; `amount` stays the final lerp, so Normal is byte
+           * for byte what this effect drew before. */
+          if (fr_bl !== 0) {
+            var fr_sr = d[fr_i], fr_sg = d[fr_i + 1], fr_sb = d[fr_i + 2];
+            if (fr_bl === 1) {          // Multiply
+              fr_cr = fr_sr * fr_cr / 255; fr_cg = fr_sg * fr_cg / 255; fr_cb = fr_sb * fr_cb / 255;
+            } else if (fr_bl === 2) {   // Screen
+              fr_cr = 255 - (255 - fr_sr) * (255 - fr_cr) / 255;
+              fr_cg = 255 - (255 - fr_sg) * (255 - fr_cg) / 255;
+              fr_cb = 255 - (255 - fr_sb) * (255 - fr_cb) / 255;
+            } else if (fr_bl === 3) {   // Overlay
+              fr_cr = fr_sr < 128 ? (2 * fr_sr * fr_cr / 255) : (255 - 2 * (255 - fr_sr) * (255 - fr_cr) / 255);
+              fr_cg = fr_sg < 128 ? (2 * fr_sg * fr_cg / 255) : (255 - 2 * (255 - fr_sg) * (255 - fr_cg) / 255);
+              fr_cb = fr_sb < 128 ? (2 * fr_sb * fr_cb / 255) : (255 - 2 * (255 - fr_sb) * (255 - fr_cb) / 255);
+            }
+          }
+          if (fr_cr < 0) fr_cr = 0; else if (fr_cr > 255) fr_cr = 255;
+          if (fr_cg < 0) fr_cg = 0; else if (fr_cg > 255) fr_cg = 255;
+          if (fr_cb < 0) fr_cb = 0; else if (fr_cb > 255) fr_cb = 255;
+          d[fr_i] = d[fr_i] + (fr_cr - d[fr_i]) * fr_amt;
+          d[fr_i + 1] = d[fr_i + 1] + (fr_cg - d[fr_i + 1]) * fr_amt;
+          d[fr_i + 2] = d[fr_i + 2] + (fr_cb - d[fr_i + 2]) * fr_amt;
+        }
+      }
+    },
     smoothbevel: function(d,W,H,p,t){ var sb_depth=FM.evalProp(p.depth,t); if(sb_depth==null) sb_depth=6; sb_depth=Math.max(1,Math.min(20,Math.round(sb_depth))); var sb_str=FM.evalProp(p.strength,t); if(sb_str==null) sb_str=1; sb_str=Math.max(0,Math.min(2,sb_str)); var sb_N=W*H, sb_i, sb_x, sb_y, sb_idx; var sb_mask=new Float32Array(sb_N); for(sb_i=0; sb_i<sb_N; sb_i++){ sb_mask[sb_i]=(d[sb_i*4+3]>0)?1:0; } var sb_tmp=new Float32Array(sb_N); var sb_soft=new Float32Array(sb_N); var sb_r=sb_depth, sb_win=sb_r*2+1; var sb_inv=1/sb_win; var sb_acc, sb_k; for(sb_y=0; sb_y<H; sb_y++){ var sb_rowo=sb_y*W; sb_acc=sb_mask[sb_rowo]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_mask[sb_rowo+Math.min(sb_k,W-1)]; } for(sb_x=0; sb_x<W; sb_x++){ sb_tmp[sb_rowo+sb_x]=sb_acc*sb_inv; var sb_ox=sb_x-sb_r; if(sb_ox<0) sb_ox=0; var sb_nx=sb_x+sb_r+1; if(sb_nx>W-1) sb_nx=W-1; sb_acc+=sb_mask[sb_rowo+sb_nx]-sb_mask[sb_rowo+sb_ox]; } } for(sb_x=0; sb_x<W; sb_x++){ sb_acc=sb_tmp[sb_x]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_tmp[Math.min(sb_k,H-1)*W+sb_x]; } for(sb_y=0; sb_y<H; sb_y++){ sb_soft[sb_y*W+sb_x]=sb_acc*sb_inv; var sb_oy=sb_y-sb_r; if(sb_oy<0) sb_oy=0; var sb_ny=sb_y+sb_r+1; if(sb_ny>H-1) sb_ny=H-1; sb_acc+=sb_tmp[sb_ny*W+sb_x]-sb_tmp[sb_oy*W+sb_x]; } } var sb_lx=-0.7071, sb_ly=-0.7071; for(sb_y=0; sb_y<H; sb_y++){ for(sb_x=0; sb_x<W; sb_x++){ sb_i=sb_y*W+sb_x; sb_idx=sb_i*4; if(d[sb_idx+3]<=0) continue; var sb_s=sb_soft[sb_i]; var sb_band=4*sb_s*(1-sb_s); if(sb_band<=0) continue; if(sb_band>1) sb_band=1; var sb_xm=sb_x>0?sb_x-1:0, sb_xp=sb_x<W-1?sb_x+1:W-1; var sb_ym=sb_y>0?sb_y-1:0, sb_yp=sb_y<H-1?sb_y+1:H-1; var sb_gx=sb_soft[sb_y*W+sb_xp]-sb_soft[sb_y*W+sb_xm]; var sb_gy=sb_soft[sb_yp*W+sb_x]-sb_soft[sb_ym*W+sb_x]; var sb_dot=sb_gx*sb_lx+sb_gy*sb_ly; var sb_term=sb_dot*sb_str*sb_band*255*3; var sb_rr=d[sb_idx]+sb_term; var sb_gg=d[sb_idx+1]+sb_term; var sb_bb=d[sb_idx+2]+sb_term; d[sb_idx]=sb_rr<0?0:(sb_rr>255?255:sb_rr); d[sb_idx+1]=sb_gg<0?0:(sb_gg>255?255:sb_gg); d[sb_idx+2]=sb_bb<0?0:(sb_bb>255?255:sb_bb); } } },
     // ---- batch 18 (blur / proc / drawing pixel) ----
     zoomstreaks: function(d,W,H,p,t){ var zs_amt=FM.evalProp(p.amount,t); if(zs_amt==null) zs_amt=0.5; if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; var zs_s=d.slice(); var zs_cx=W/2, zs_cy=H/2; var zs_w4=W*4; var zs_steps=10; var zs_strength=0.16+0.74*zs_amt; for(var zs_y=0; zs_y<H; zs_y++){ for(var zs_x=0; zs_x<W; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },

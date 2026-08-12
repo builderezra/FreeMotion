@@ -7934,6 +7934,111 @@
     } finally { fx.restore(); }
   });
 
+  /* ---------------- Fractal Ridges rework (queue 63) ---------------------------------------
+   * The complaint was "more colour options and overlay options and animation options so it actually
+   * moves", and the middle word was literal: measured before the rework on this exact scene, the
+   * frame at t=0 and the frame at t=1.667 were the SAME BYTES — mean absolute difference 0.000000,
+   * because the pixel loop had no time term. The effect also had no colour control at all, and it
+   * paints a texture rather than rearranging the source, so at Amount 1 the layer's own colour was
+   * simply gone.
+   *
+   * Two things are guarded here and they pull against each other: the new controls must MOVE PIXELS
+   * (a slider that changes nothing is the defect being fixed), and an instance saved BEFORE the
+   * rework — which carries only `amount` and `scale` — must still render byte for byte as it always
+   * did. That second one is why every new key in the schema carries `legacy:`. */
+  function frScene(params, t, cw) {
+    var W = 200, H = 200;
+    var L = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#7f7f7f' });
+    L.effects = [{ type: 'fractalridges', enabled: true, params: params }];
+    var c = offscreen(cw || W, (cw || W) * H / W);
+    FM.renderScene(c.getContext('2d'), {
+      project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' },
+      layers: [L], selectedId: null, selectedIds: []
+    }, t);
+    return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  }
+  function frMad(a, b) {
+    var s = 0, n = 0;
+    for (var i = 0; i < a.length; i += 4) { for (var k = 0; k < 3; k++) { s += Math.abs(a[i + k] - b[i + k]); n++; } }
+    return s / n;
+  }
+
+  test('fractal ridges: an instance saved before the rework renders byte-identical', { item: 'fx-fractalridges' }, function () {
+    // The legacy params ONLY. Every key the rework added has to fall back to the value the old
+    // kernel hardcoded: Mono colour, Normal overlay, no band repeat, no reshape, and standing still.
+    var legacy = frScene({ amount: 0.6, scale: 48 }, 0.4);
+    var spelled = frScene({ amount: 0.6, scale: 48, mode: 0, blend: 0, bands: 1, sharpness: 1, speed: 0, driftX: 0, driftY: 0, seed: 0 }, 0.4);
+    for (var i = 0; i < legacy.length; i++) {
+      if (legacy[i] !== spelled[i]) throw new Error('a pre-rework instance no longer renders as Mono/Normal/still (byte ' + i + ': ' + legacy[i] + ' vs ' + spelled[i] + ')');
+    }
+    // …and standing still is not a figure of speech: same bytes at three different times.
+    var a = frScene({ amount: 0.6, scale: 48 }, 0), b = frScene({ amount: 0.6, scale: 48 }, 1.667);
+    if (frMad(a, b) !== 0) throw new Error('a legacy instance started animating — its Speed must fall back to 0');
+  });
+
+  test('fractal ridges: it actually moves, and every new control moves pixels', { item: 'fx-fractalridges' }, function () {
+    var D = {};
+    FM.fxRegistry.paramsOf('fractalridges').forEach(function (p) { D[p.key] = p.default; });
+    function withP(k, v) { var o = {}; for (var q in D) o[q] = D[q]; o[k] = v; return o; }
+
+    // 1. THE HEADLINE. A fresh instance must not be a still image.
+    var t0 = frScene(D, 0);
+    if (!(frMad(t0, frScene(D, 0.5)) > 3)) throw new Error('a default instance is still a frozen picture across t');
+    if (frMad(t0, frScene(D, 0)) !== 0) throw new Error('the control failed: the same frame twice did not match, so nothing below can be trusted');
+    // …and Speed 0 must switch the motion back OFF, or "Speed" is not what the slider does.
+    var s0 = withP('speed', 0);
+    if (frMad(frScene(s0, 0), frScene(s0, 1)) !== 0) throw new Error('Speed 0 still animates');
+
+    // 2. Every new control, swept off its default. Floors are ~60% of measured so a revert goes red.
+    var sweeps = [
+      ['mode', 1, 25], ['mode', 3, 20],          // Tint / Spectrum against the default Gradient
+      // Multiply / Screen against Normal. NOT Overlay: this subject is a flat #7f7f7f, and 127 sits
+      // one below Overlay's 128 branch, so Overlay over it is ~0.996x Normal — a real result that
+      // would make a 20-point floor fail for a correct implementation. Overlay is measured instead
+      // over a subject that has tones (see the blend numbers quoted in the kernel).
+      ['blend', 1, 20], ['blend', 2, 20],
+      ['bands', 3, 15], ['sharpness', 3, 10], ['seed', 7, 6],
+      ['driftX', 150, 6], ['driftY', 150, 6], ['speed', 3, 5],
+    ];
+    var base = frScene(D, 0.4), bad = [];
+    sweeps.forEach(function (s) {
+      var m = frMad(base, frScene(withP(s[0], s[1]), 0.4));
+      if (m < s[2]) bad.push(s[0] + '=' + s[1] + ' moved ' + m.toFixed(2) + ' (floor ' + s[2] + ')');
+    });
+    // The two swatches, in the mode that reads them — and NOT in Mono, where they must be inert.
+    var g = { mode: 2 }, k;
+    for (k in D) if (!(k in g)) g[k] = D[k];
+    var grad = frScene(g, 0.4);
+    ['color', 'color2'].forEach(function (key) {
+      var o = {}; for (var q in g) o[q] = g[q]; o[key] = '#ff0000';
+      var m = frMad(grad, frScene(o, 0.4));
+      if (m < 15) bad.push(key + ' swatch moved only ' + m.toFixed(2));
+    });
+    var mono = withP('mode', 0), monoRed = withP('mode', 0); monoRed.color = '#ff0000';
+    if (frMad(frScene(mono, 0.4), frScene(monoRed, 0.4)) !== 0) bad.push('the Low swatch is not inert in Mono');
+    if (bad.length) throw new Error('controls that do not do what they say: ' + bad.join('; '));
+  });
+
+  test('fractal ridges: the lattice is sized in project pixels, not plate pixels', { item: 'fx-fractalridges' }, function () {
+    /* THE PLATE-SCALE RULE. `scale` is a length in pixels, and this kernel used to take no `ps` at
+     * all — so while the preview played at reduced quality (__fmRS 0.5) it drew the pattern the same
+     * size in PLATE pixels, i.e. twice as coarse as the export it was previewing. The tell is row
+     * roughness: measured in each raster's OWN pixels it must roughly DOUBLE at half resolution,
+     * because the same project-sized feature is being drawn across half as many pixels. Before the
+     * fix it barely moved (1.841 -> 1.786); the bug is a ratio near 1, not near 2. */
+    function rough(data, w) {
+      var s = 0, n = 0;
+      for (var y = 0; y < w; y++) for (var x = 1; x < w; x++) { var i = (y * w + x) * 4; s += Math.abs(data[i] - data[i - 4]); n++; }
+      return s / n;
+    }
+    var P = { amount: 0.6, scale: 48 };
+    var full = rough(frScene(P, 0, 200), 200);
+    if (!(full > 0.5)) throw new Error('the control failed: the full-resolution plate has no texture to measure (roughness ' + full.toFixed(3) + '), so the ratio below would be 0/0');
+    var ratio = rough(frScene(P, 0, 100), 100) / full;
+    if (!(ratio > 1.6)) throw new Error('a half-resolution plate drew the lattice at ' + ratio.toFixed(2)
+      + 'x the roughness of a full one — expected ~2. The preview is not showing what the export renders.');
+  });
+
   /* Import history (v6.13). Both tests write a FAKE library into localStorage and put the real one
    * back in a finally — the suite must never touch Ezra's own imports, and this is the one feature
    * whose whole job is deleting that list. */

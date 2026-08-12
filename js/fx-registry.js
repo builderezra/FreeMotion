@@ -139,7 +139,7 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  FM.FX_FEATURED = ['fillbehind', 'magnifybg', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion', 'lightwrap'];
+  FM.FX_FEATURED = ['fractalridges', 'fillbehind', 'magnifybg', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort', 'compresscrunch', 'temporaldenoise', 'vhstape', 'dispersion'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],
@@ -269,7 +269,7 @@ window.FM = window.FM || {};
     longshadow: 'Throws a long flat shadow off the layer at 45°, the way flat-design posters do.',
     radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls.',
     bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief.',
-    iridescence: 'An oil-slick sheen: hue cycles with brightness, so it shifts as the picture does.',
+    iridescence: 'An oil-slick sheen that shimmers across the picture. Motion sets how much it moves, Blur how soft it is.',
     colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast.',
     highlightsshadows: 'Recovers blown highlights and lifts crushed shadows without touching the midtones.',
     gradientoverlay: 'Lays a colour gradient over the layer at any angle.',
@@ -309,7 +309,7 @@ window.FM = window.FM || {};
     grunge: 'Grimy blotches and speckle, for dirtying up something too clean.',
     lensflare: 'A lens flare from a light you position, with the streaks and ghosts a real one throws.',
     hexarray: 'A honeycomb of hexagons over the frame.',
-    fractalridges: 'Sharp ridged fractal noise — reads as rock, cloth or turbulence depending on scale.',
+    fractalridges: 'Ridged fractal noise that churns in place — rock, cloth or turbulence, depending on Scale and Sharpness. Colour it flat, tinted, as a two-stop gradient or a full spectrum, and Overlay decides whether it sits on the picture or replaces it.',
     contourstrips: 'Slices the brightness range into flat bands and colours them, like a topographic map.',
     voronoi: 'Breaks the frame into organic cells, the pattern of cracked mud or a giraffe’s coat.',
     lightning: 'Draws branching lightning bolts across the layer.',

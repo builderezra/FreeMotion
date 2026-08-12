@@ -26,11 +26,6 @@ version. This file is the *what and whether*; that one is the *how*.
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
-- [ ] **63 — Fractal Ridges needs work.** *"more colour options and overlay options and animation
-      options so it actually moves"* — workflow running: study → build in a worktree → adversarial verify.
-- [ ] **64 — Iridescence: a blur option, and a motion amount.** Two separate asks —
-      *"add a blur option to iridescence effect"* and *"you should be able to decide how much it
-      actually moves"*. Same workflow as 63.
 - [ ] **88 — Text adding is broken on PC, and still on mobile.** On PC the editor lays out as a phone
       bottom-sheet: toolbar stretched across a 2000px window, "Type your text…" stranded a full
       viewport below it. Workflow running: 3 parallel diagnoses → fix in a worktree → 4 adversarial
@@ -97,6 +92,9 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **63 — Fractal Ridges: colour, overlay/blend, and it actually MOVES.** It was measurably a
+      still image before — t=0 vs t=0.5 differed by exactly 0 — v6.28
+- [x] **64 — Iridescence gained Blur and Motion.** It also did not move at all before — v6.28
 - [x] **60 — Returning to home reverses the open animation** — editor leaves right, home returns from
       the left — v6.27
 - [x] **Easter egg: pull the home list past the top and it slams back and shakes the screen** — v6.25,

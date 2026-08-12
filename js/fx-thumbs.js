@@ -630,7 +630,15 @@ window.FM = window.FM || {};
     tileshift: function (l, h) { h.effects[0].params.size = 24; },
     tilerotate: function (l, h) { h.effects[0].params.size = 24; },
     turbulentdisplace: function (l, h) { h.effects[0].params.amount = 10; h.effects[0].params.scale = 22; },
-    fractalridges: function (l, h) { h.effects[0].params.scale = 20; },
+    /* Scale is the usual 1080p-vs-96px correction: a 48px lattice is two cells across this frame.
+     * Amount and Sharpness are the same argument one step on — measured off-vs-on against the tile's
+     * own sample scene at the tile's own geometry (96 units, 192px raster), the rework's default
+     * Gradient palette read 38.1 where the old grey read 41.6, because a navy-to-amber ramp sits
+     * closer to the art than pure white does. 0.9 + 1.4 puts it at 49.8, above where it was, and
+     * lifts the strip's own t=0.15 -> 1.5 difference from 13.5 to 22.8 so the churn is visible in a
+     * 1.35s loop. Colour mode and Bands are left at their panel defaults on purpose: a tile that
+     * advertises a look the effect does not open on is a lie, however good it looks. */
+    fractalridges: function (l, h) { const p = h.effects[0].params; p.scale = 20; p.amount = 0.9; p.sharpness = 1.4; },
     glass: function (l, h) { h.effects[0].params.amount = 4; },
     // A horizontal flip of a picture you have never seen is not a flip — it is just a picture.
     // Vertical is the same effect and reads instantly, because the diagonal changes hands.
