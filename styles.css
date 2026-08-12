@@ -2696,24 +2696,35 @@ body.hm-selecting .hm-card { touch-action: none; }
    SUBTLE is the whole brief, so: .055 opacity, white grain with only the ALPHA varying (coloured
    noise would tint the user's own thumbnails), and it sits UNDER the thumb and the text (z-index 1,
    against the glint's 3) rather than over them.
-   Real static re-randomises every frame, which is why this steps() between five unrelated offsets
-   instead of sliding: a smoothly-translating noise field reads as fabric moving past, not as static.
-   8 jumps a second is enough to read as alive and is a fifth of the repaints of a per-frame animation.
-   It also costs nothing off this screen — #home-screen is display:none inside a project, and browsers
+   DIRECTION REVERSED at v6.62 (queue 94), and the old reasoning is left above deliberately so the
+   change is legible rather than looking like drift. The original argued FOR the jumpiness: real static
+   re-randomises every frame, so it steps() between five unrelated offsets instead of sliding, on the
+   grounds that "a smoothly-translating noise field reads as fabric moving past, not as static".
+   Ezra, looking at it on his phone: "the film grain in the menu is too jumpy and too noticeable, need
+   to make it move smoothly and less noticeable." He is the one seeing it every day, so it slides now,
+   and it slides SLOWLY — the whole point of the reversal is that the eye should never catch it moving.
+   The two dials are independent and both came down: amplitude .055 -> .032, and the motion is a
+   continuous 19s drift instead of 8 discrete jumps a second. Slower and smoother is also cheaper: a
+   linear background-position drift is one compositor-friendly animation rather than 8 repaints/sec.
+   It still costs nothing off this screen — #home-screen is display:none inside a project, and browsers
    do not animate what is not displayed. */
 .hm-card::after {
   content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   border-radius: 16px;   /* the background is clipped to this box, so the corners round on their own */
   background-image: var(--hm-static); background-repeat: repeat;
-  opacity: .055;
-  animation: hm-static .6s steps(1) infinite;
+  opacity: .032;
+  animation: hm-static 19s linear infinite;
 }
+/* One unbroken loop, not five jumps: the offsets are multiples of the 64px tile, so the field arrives
+   back where it started with no seam and nothing to see at the wrap. The path is deliberately not a
+   straight line — a pure diagonal drift reads as a moving texture, whereas wandering through a few
+   directions keeps it feeling like grain that is alive without ever snapping. */
 @keyframes hm-static {
-  0%   { background-position:   0px   0px; }
-  20%  { background-position: -11px   7px; }
-  40%  { background-position:   9px -13px; }
-  60%  { background-position: -17px  -5px; }
-  80%  { background-position:  13px  11px; }
+  0%   { background-position:    0px    0px; }
+  25%  { background-position:  -64px   64px; }
+  50%  { background-position: -128px    0px; }
+  75%  { background-position:  -64px  -64px; }
+  100% { background-position:    0px    0px; }
 }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
    the other sense. And reduced motion gets the texture without the flicker. */
