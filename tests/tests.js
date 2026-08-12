@@ -6921,6 +6921,196 @@
     } finally { rig.restore(); }
   });
 
+  /* ---------------- Edge Glow: Glow on = Layer / Media / Both -------------------------------
+   * The control is not a mode flag: "the layer" versus "the media inside the layer" IS "alpha edges
+   * versus luminance edges", and the instrument below is built to show exactly that separation.
+   *
+   * THE INSTRUMENT. A 100x80 picture centred in the 320x240 comp, near-black on its left half and
+   * near-white on its right. It therefore has TWO kinds of edge and they are in different places:
+   *   • a SILHOUETTE, the alpha step at x = 110 / 210 and y = 80 / 160;
+   *   • one INTERNAL luminance seam, straight down x = 160.
+   * Nothing else in the frame has an edge, so "did the seam light up" and "did anything outside the
+   * silhouette light up" are two independent questions with one answer each. Everything is on
+   * integer boundaries, so there is no antialiasing anywhere and the numbers are exact.
+   *
+   * Measured 2026-08-12 (radius 8, amount 1.5, white):
+   *   source          px lit OUTSIDE the silhouette      mean lift along the seam
+   *   0 Layer                     3068                            0.0
+   *   1 Media                        0                          235.0
+   *   2 Both                      3068                          235.0
+   * Those zeros are the load-bearing half: Layer must not find the seam, Media must not leave the
+   * shape. */
+  function egArt(id, paint, w, h) {
+    var c = offscreen(w, h); paint(c.getContext('2d'), w, h);
+    FM.media.set(id, { kind: 'image', el: c, width: w, height: h, duration: 0 });
+    return id;
+  }
+  function egTwoTone(g) {
+    g.fillStyle = '#141414'; g.fillRect(0, 0, 50, 80);
+    g.fillStyle = '#ececec'; g.fillRect(50, 0, 50, 80);
+  }
+  var _egArtDone = false;
+  function egPicture(params) {
+    if (!_egArtDone) { egArt('_egTwo', egTwoTone, 100, 80); _egArtDone = true; }
+    var l = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 5 });
+    l.id = '_egTwo';
+    if (params) l.effects = [egFx(params)];
+    return l;
+  }
+  // A flat-filled rectangle: ONE colour, so it has a silhouette and no interior luminance at all.
+  function egRect(params, fill, w, h) {
+    var l = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: w || 100, shapeH: h || 80, fill: fill || '#808080', start: 0, duration: 5 });
+    if (params) l.effects = [egFx(params)];
+    return l;
+  }
+  function egText(params) {
+    var l = FM.makeLayer('text', { text: 'Abc', fontSize: 70, color: '#8fa0b8', x: 160, y: 120, start: 0, duration: 5 });
+    if (params) l.effects = [egFx(params)];
+    return l;
+  }
+  function egFx(params) { return { type: 'edgeglow', enabled: true, params: params }; }
+  // background '' so renderScene paints none: OUTSIDE the silhouette really is alpha 0, which is
+  // what makes "the glow grew the layer" measurable at all.
+  function egPix(layers, cw, ch) {
+    var c = offscreen(cw || 320, ch || 240);
+    FM.renderScene(c.getContext('2d', { willReadFrequently: true }),
+      { project: { width: 320, height: 240, fps: 30, duration: 5, background: '' }, layers: layers, selectedId: null, selectedIds: [] }, 0);
+    return c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data;
+  }
+  function egAlpha(d, w, x, y) { return d[(y * w + x) * 4 + 3]; }
+  // px that were fully transparent and now carry alpha — the glow that escaped the shape
+  function egOutside(off, on) {
+    var n = 0;
+    for (var i = 0; i < off.length; i += 4) if (off[i + 3] === 0 && on[i + 3] > 8) n++;
+    return n;
+  }
+  // mean red lift down a column, away from the silhouette — how hard the internal seam lit
+  function egSeamLift(off, on, x) {
+    var s = 0, n = 0;
+    for (var y = 100; y < 140; y++) { var q = (y * 320 + x) * 4; s += on[q] - off[q]; n++; }
+    return s / n;
+  }
+  // Adler-ish fingerprint. The subjects are integer-aligned flat fills, so this is exact everywhere.
+  function egSum(d) { var a = 0, b = 0; for (var i = 0; i < d.length; i++) { a = (a + d[i]) >>> 0; b = (b + a) >>> 0; } return ((b << 8) ^ a) >>> 0; }
+
+  test('effects: Edge Glow reads the LAYER, the MEDIA, or both — and each one only its own edges', { item: 'edge-glow' }, function () {
+    var off = egPix([egPicture(null)]);
+    var seen = [0, 1, 2].map(function (s) {
+      var on = egPix([egPicture({ amount: 1.5, color: '#ffffff', radius: 8, source: s })]);
+      return { outside: egOutside(off, on), seam: egSeamLift(off, on, 158) };
+    });
+    // LAYER: the silhouette, and nothing but the silhouette.
+    if (!(seen[0].outside > 1500)) throw new Error('Glow on Layer lit ' + seen[0].outside + ' pixels outside the silhouette — the alpha edge is not being found');
+    if (!(seen[0].seam < 6)) throw new Error('Glow on Layer lifted the internal seam by ' + seen[0].seam.toFixed(1) + ' — it is reading luminance, which is Media’s job');
+    // MEDIA: the picture, and only inside the shape.
+    if (!(seen[1].seam > 120)) throw new Error('Glow on Media lifted the internal seam by only ' + seen[1].seam.toFixed(1) + ' — the luminance edge is not being found');
+    if (seen[1].outside !== 0) throw new Error('Glow on Media lit ' + seen[1].outside + ' pixels outside the silhouette — Media is the setting that keeps an old project unchanged, and it must stay inside the shape');
+    // BOTH: genuinely both, not a rename of either.
+    if (!(seen[2].outside > 1500)) throw new Error('Glow on Both lit ' + seen[2].outside + ' pixels outside the silhouette against Layer’s ' + seen[0].outside);
+    if (!(seen[2].seam > 120)) throw new Error('Glow on Both lifted the internal seam by only ' + seen[2].seam.toFixed(1) + ' against Media’s ' + seen[1].seam.toFixed(1));
+  });
+
+  test('effects: Edge Glow lights a flat shape and a line of text — the case luminance alone cannot see', { item: 'edge-glow' }, function () {
+    // A flat fill has no interior luminance whatsoever, so this is the case the old kernel could not
+    // do: before this change a flat shape FILLING the frame measured 0 of 76800 pixels changed.
+    var flatOff = egPix([egRect(null, '#808080', 400, 320)]);
+    var flatMedia = egPix([egRect({ amount: 1.5, color: '#ffffff', radius: 8, source: 1 }, '#808080', 400, 320)]);
+    var moved = 0;
+    for (var i = 0; i < flatOff.length; i += 4) if (Math.abs(flatOff[i] - flatMedia[i]) > 8) moved++;
+    if (moved !== 0) throw new Error('the luminance path found ' + moved + ' pixels of edge in a flat colour — this subject has none, so the instrument below is not measuring what it claims');
+
+    var rOff = egPix([egRect(null)]), rOn = egPix([egRect({ amount: 1.5, color: '#ffffff', radius: 8, source: 0 })]);
+    if (!(egOutside(rOff, rOn) > 1500)) throw new Error('a flat shape glowed on only ' + egOutside(rOff, rOn) + ' pixels outside its outline — Edge Glow still does nothing on shapes');
+
+    var tOff = egPix([egText(null)]), tOn = egPix([egText({ amount: 1.5, color: '#ffffff', radius: 8, source: 0 })]);
+    var subject = 0;
+    for (i = 0; i < tOff.length; i += 4) if (tOff[i + 3] > 8) subject++;
+    if (!(subject > 800)) throw new Error('the text subject only drew ' + subject + ' pixels — the font never arrived, so nothing below is a test of the glow');
+    if (!(egOutside(tOff, tOn) > subject)) throw new Error('the letterforms glowed on ' + egOutside(tOff, tOn) + ' pixels against ' + subject + ' pixels of text — a glow should cover more ground than the letters it comes off');
+  });
+
+  test('effects: Edge Glow leaves the silhouette — a glow, not a rim painted inside the shape', { item: 'edge-glow' }, function () {
+    var off = egPix([egRect(null)]), on = egPix([egRect({ amount: 1.5, color: '#ffffff', radius: 12, source: 0 })]);
+    // the rect's right edge is the column x = 210; scan outward from it along the middle row
+    if (egAlpha(off, 320, 212, 120) !== 0) throw new Error('the subject already covers x=212 — the scan line is inside the shape, so it cannot show an outward bloom');
+    var prof = [];
+    for (var k = 1; k <= 16; k++) prof.push(egAlpha(on, 320, 210 + k, 120));
+    var reach = 0;
+    for (k = 0; k < prof.length; k++) if (prof[k] > 25) reach = k + 1;
+    if (!(reach >= 6)) throw new Error('at radius 12 the glow reached ' + reach + 'px past the outline — it is still trapped inside the shape (profile ' + prof.join(',') + ')');
+    if (!(prof[0] > 120)) throw new Error('the glow is faint where it should be strongest: alpha ' + prof[0] + ' one pixel outside the outline');
+    // and it must FALL AWAY, not sit there as a flat slab with a cliff — that is what one box pass
+    // gives, and it reads as a band rather than as light.
+    if (!(prof[2] > prof[6] && prof[6] > prof[10] && prof[10] > 0)) throw new Error('the bloom does not fall off with distance (profile ' + prof.join(',') + ') — a flat plateau is a band, not a glow');
+    // …and none of that may happen when the glow is switched off.
+    var zero = egPix([egRect({ amount: 0, color: '#ffffff', radius: 12, source: 0 })]);
+    if (egSum(zero) !== egSum(off)) throw new Error('Amount 0 still changed the frame — a switched-off effect must be a byte-exact no-op');
+  });
+
+  test('effects: Edge Glow’s radius is a PROJECT length, so the reduced preview matches the export', { item: 'edge-glow' }, function () {
+    /* Every length inside a pixel effect multiplies by plateScale, because the plate shrinks with the
+     * playback quality tier while the user's number does not. renderScene derives __fmRS from
+     * canvas.width / project.width, so a 160x120 target of this 320x240 comp IS a half-scale preview.
+     * BRIGHTNESS is a length here too, and that is the part that is easy to miss: a Sobel ridge
+     * carries fixed energy, the blur spreads it over the window, so the peak goes as 1/(radius x ps)
+     * and scaling the radius alone leaves the preview 1/ps times too bright. Both are checked. */
+    var pr = { amount: 1.5, color: '#ffffff', radius: 20, source: 0 };
+    function reachAt(rs) {
+      var w = Math.round(320 * rs), h = Math.round(240 * rs);
+      var d = egPix([egRect(pr)], w, h);
+      var edge = Math.round(210 * rs), y = Math.round(120 * rs), last = 0;
+      for (var x = edge; x < w; x++) if (egAlpha(d, w, x, y) > 25) last = x;
+      return { reach: (last - edge + 1) / rs, at8: egAlpha(d, w, Math.round(edge + 8 * rs), y) };
+    }
+    var full = reachAt(1), half = reachAt(0.5);
+    if (!(full.reach > 8)) throw new Error('at radius 20 the 1:1 render only reached ' + full.reach.toFixed(1) + 'px — nothing below can measure a scale error');
+    if (!(half.reach > full.reach * 0.7 && half.reach < full.reach * 1.3))
+      throw new Error('the half-scale preview reached ' + half.reach.toFixed(1) + ' project px where the 1:1 render reached ' + full.reach.toFixed(1) + ' — the radius is not being multiplied by plateScale, so the preview no longer matches the export');
+    if (!(half.at8 > full.at8 * 0.7 && half.at8 < full.at8 * 1.3))
+      throw new Error('8 project px out, the half-scale preview measured alpha ' + half.at8 + ' against the 1:1 render’s ' + full.at8 + ' — the glow’s BRIGHTNESS is not being scaled by plateScale');
+  });
+
+  test('effects: Edge Glow defaults to a white glow, on the layer and the media at once', { item: 'edge-glow' }, function () {
+    var def = null;
+    (FM.EFFECTS || []).forEach(function (e) { if (e.type === 'edgeglow') def = e; });
+    if (!def) throw new Error('no edgeglow entry in FM.EFFECTS');
+    if (def.defColor !== '#ffffff') throw new Error('Edge Glow’s default colour is ' + def.defColor + ', not white');
+    var inst = FM.fxRegistry.makeInstance('edgeglow');
+    if (!inst || inst.params.color !== '#ffffff') throw new Error('a NEW Edge Glow instance carries colour ' + (inst && inst.params.color) + ' — the catalogue default is not reaching the instance');
+    if (inst.params.source !== 2) throw new Error('a NEW Edge Glow instance opens on source ' + inst.params.source + ' — the default is Both, so it works on shapes, text and footage without being configured first');
+    // and the glow it draws really is neutral, not merely labelled white
+    var off = egPix([egRect(null, '#404040')]), on = egPix([egRect(inst.params, '#404040')]);
+    var q = -1;
+    for (var i = 0; i < off.length; i += 4) if (off[i + 3] === 0 && on[i + 3] > 200) { q = i; break; }
+    if (q < 0) throw new Error('the default instance lit nothing outside the shape, so its colour cannot be read');
+    var spread = Math.max(on[q], on[q + 1], on[q + 2]) - Math.min(on[q], on[q + 1], on[q + 2]);
+    if (spread > 6) throw new Error('the default glow measured rgb(' + on[q] + ',' + on[q + 1] + ',' + on[q + 2] + ') — that is a tint, not white');
+  });
+
+  test('effects: a project saved before the Glow-on control still renders exactly as it did', { item: 'edge-glow' }, function () {
+    /* An instance saved before this change has ONLY {amount, color} — fxRegistry.makeInstance writes
+     * every key, so an absent `source` can only mean "older than the control". That single fact is
+     * the whole migration: it selects luminance edges, clipped to the silhouette, one box pass,
+     * radius 3 — the original kernel, byte for byte at plate scale 1. Fingerprints captured
+     * 2026-08-12 against a flat integer-aligned rect (no antialiasing anywhere, so they are exact in
+     * any browser), and verified equal to the same render on the commit BEFORE this feature. */
+    var subject = egPix([egRect(null)]);
+    if (egSum(subject) !== 3522248896) throw new Error('the SUBJECT itself rasterised differently (' + egSum(subject) + ' vs 3522248896) — fix that before reading the two fingerprints below as an Edge Glow regression');
+    var cyan = egSum(egPix([egRect({ amount: 1.5, color: '#00ffea' })]));
+    if (cyan !== 3319139432) throw new Error('an Edge Glow saved before the Glow-on control now renders differently (' + cyan + ' vs 3319139432) — someone’s finished project just changed appearance');
+    var hot = egSum(egPix([egRect({ amount: 3, color: '#ffffff' })]));
+    if (hot !== 1705790320) throw new Error('the same, at amount 3 in white (' + hot + ' vs 1705790320)');
+    // the most visible way that could go wrong, named separately so the failure says which
+    var on = egPix([egRect({ amount: 1.5, color: '#00ffea' })]);
+    if (egOutside(subject, on) !== 0) throw new Error('an old instance now blooms ' + egOutside(subject, on) + ' pixels past the layer’s outline — the new bloom must not reach back into saved work');
+    // and the panel must SAY what the renderer is drawing, or the first tap moves the picture
+    var schema = FM.fxRegistry.paramsOf('edgeglow');
+    var src = schema.filter(function (p) { return p.key === 'source'; })[0];
+    var rad = schema.filter(function (p) { return p.key === 'radius'; })[0];
+    if (!src || src.legacy !== 1) throw new Error('the Glow-on control does not declare legacy 1 (Media), so an old instance would open showing Both while drawing Media');
+    if (!rad || rad.legacy !== 3) throw new Error('the Radius control does not declare legacy 3, so an old instance would open showing ' + (rad && rad.default) + 'px while drawing 3px');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

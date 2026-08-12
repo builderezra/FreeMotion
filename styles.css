@@ -1046,6 +1046,13 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fx-seg { flex: 1; display: flex; background: var(--panel-3); border-radius: 8px; padding: 3px; gap: 3px; }
 .fx-seg-btn { flex: 1; padding: 7px 4px; background: none; border: none; color: var(--text-dim); font-size: 11.5px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
 .fx-seg-btn.on { background: var(--accent); color: #06231d; font-weight: 600; }
+/* A segment is the one effect control you TAP rather than drag, and 7px of padding round 11.5px text
+   measures 28px — well under a finger. On phones give every segmented control the 44px minimum (the
+   .be-row override at the bottom of this file already does this for the behaviours panel); the
+   desktop panel keeps its compact row, where the pointer is exact and vertical space is scarcer. */
+@media (max-width: 700px) {
+  .fx-seg-btn { min-height: 44px; font-size: 12.5px; }
+}
 .fx-add-btn { width: 100%; margin-top: 10px; padding: 13px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .fx-add-btn:hover { border-color: var(--accent); }
 .fx-stack-tools { display: flex; gap: 6px; margin-top: 9px; justify-content: center; }

@@ -293,7 +293,18 @@ window.FM = window.FM || {};
     ] },
     // ---- batch 10 ----
     { type: 'bumpmap', label: 'Bump Map', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.2 },
-    { type: 'edgeglow', label: 'Edge Glow', param: 'amount', min: 0, max: 4, step: 0.05, def: 1.5, color: true, defColor: '#00ffea', colorLabel: 'Glow' },
+    /* Edge Glow. GLOW ON is the design, not a mode flag bolted on: "the layer" versus "the media
+     * inside the layer" IS "alpha edges versus luminance edges", which is why the control is honest.
+     * Layer reads the SILHOUETTE (a flat shape and a line of text finally glow); Media reads contrast
+     * INSIDE the picture, which is all this effect has ever done — so `legacy: 1` is not a taste
+     * call, it is the one setting that renders a pre-existing instance unchanged. See PIXEL_FX.edgeglow. */
+    { type: 'edgeglow', label: 'Edge Glow', params: [
+      { key: 'source', label: 'Glow on', options: [[0, 'Layer'], [1, 'Media'], [2, 'Both']], def: 2, legacy: 1 },
+      { key: 'amount', label: 'Amount', min: 0, max: 4, step: 0.05, def: 1.5 },
+      // legacy 3 = the radius the kernel used to hardcode, so an instance saved without this key
+      // still SAYS 3 in the panel instead of advertising the new default it is not drawing.
+      { key: 'radius', label: 'Radius', min: 2, max: 60, step: 1, def: 8, legacy: 3, unit: 'px' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     { type: 'contourlines', label: 'Contour Lines', param: 'levels', min: 2, max: 24, step: 1, def: 8 },
     { type: 'grunge', label: 'Grunge', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.5 },
     { type: 'iridescence', label: 'Iridescence', params: [
@@ -2500,7 +2511,177 @@ window.FM = window.FM || {};
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4; for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue; var sf_h=(sf_x*374761393+sf_y*668265263)|0; sf_h=(sf_h^(sf_h>>>13))*1274126177; sf_h=sf_h^(sf_h>>>16); var sf_r=(sf_h>>>0)/4294967295; if(sf_r<sf_thr){ sf_d[sf_i]=sf_col[0]; sf_d[sf_i+1]=sf_col[1]; sf_d[sf_i+2]=sf_col[2]; sf_d[sf_i+3]=255; } } } },
     // ---- batch 10 (pixel) ----
     bumpmap: function(d,W,H,p,t){ var bmAmt=FM.evalProp(p.amount,t); if(bmAmt==null)bmAmt=1.2; bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=d.slice(); var bmW4=W*4; var bmK=4; var bmLx=-0.5,bmLy=-0.5,bmLz=1; var bmLlen=Math.sqrt(bmLx*bmLx+bmLy*bmLy+bmLz*bmLz); bmLx/=bmLlen; bmLy/=bmLlen; bmLz/=bmLlen; for(var bmY=0;bmY<H;bmY++){ var bmYu=bmY>0?bmY-1:0; var bmYd=bmY<H-1?bmY+1:H-1; for(var bmX=0;bmX<W;bmX++){ var bmI=(bmY*W+bmX)*4; if(bmS[bmI+3]===0){ d[bmI]=bmS[bmI]; d[bmI+1]=bmS[bmI+1]; d[bmI+2]=bmS[bmI+2]; continue; } var bmXl=bmX>0?bmX-1:0; var bmXr=bmX<W-1?bmX+1:W-1; var bmIl=(bmY*W+bmXl)*4; var bmIr=(bmY*W+bmXr)*4; var bmIu=(bmYu*W+bmX)*4; var bmId=(bmYd*W+bmX)*4; var bmLumL=0.299*bmS[bmIl]+0.587*bmS[bmIl+1]+0.114*bmS[bmIl+2]; var bmLumR=0.299*bmS[bmIr]+0.587*bmS[bmIr+1]+0.114*bmS[bmIr+2]; var bmLumU=0.299*bmS[bmIu]+0.587*bmS[bmIu+1]+0.114*bmS[bmIu+2]; var bmLumD=0.299*bmS[bmId]+0.587*bmS[bmId+1]+0.114*bmS[bmId+2]; var bmGx=(bmLumR-bmLumL)/255; var bmGy=(bmLumD-bmLumU)/255; var bmNx=-bmGx, bmNy=-bmGy, bmNz=bmK; var bmNlen=Math.sqrt(bmNx*bmNx+bmNy*bmNy+bmNz*bmNz); if(bmNlen<1e-6)bmNlen=1e-6; bmNx/=bmNlen; bmNy/=bmNlen; bmNz/=bmNlen; var bmDiff=bmNx*bmLx+bmNy*bmLy+bmNz*bmLz; if(bmDiff<0)bmDiff=0; var bmF=0.5+bmAmt*0.6*bmDiff; var bmR=bmS[bmI]*bmF; var bmG=bmS[bmI+1]*bmF; var bmB=bmS[bmI+2]*bmF; d[bmI]=bmR>255?255:(bmR<0?0:bmR); d[bmI+1]=bmG>255?255:(bmG<0?0:bmG); d[bmI+2]=bmB>255?255:(bmB<0?0:bmB); } } },
-    edgeglow: function(d,W,H,p,t){ var egAmt=FM.evalProp(p.amount,t); if(egAmt==null)egAmt=1.5; egAmt=Math.max(0,Math.min(4,egAmt)); if(egAmt<=0)return; var egCol=hexToRGB(p.color); if(!egCol)egCol=[0,255,234]; var egW4=W*4, egN=W*H, s=d.slice(); var egLum=new Float32Array(egN); var egi,egx,egy,egp; for(egi=0;egi<egN;egi++){ egp=egi*4; egLum[egi]=0.299*s[egp]+0.587*s[egp+1]+0.114*s[egp+2]; } var egEdge=new Float32Array(egN); for(egy=0;egy<H;egy++){ var egym=egy>0?egy-1:0, egyp=egy<H-1?egy+1:H-1; for(egx=0;egx<W;egx++){ var egxm=egx>0?egx-1:0, egxp=egx<W-1?egx+1:W-1; var egTL=egLum[egym*W+egxm], egT=egLum[egym*W+egx], egTR=egLum[egym*W+egxp], egL=egLum[egy*W+egxm], egR=egLum[egy*W+egxp], egBL=egyp*W+egxm, egB=egyp*W+egx, egBR=egyp*W+egxp; var egGx=(egTR+2*egR+egLum[egBR])-(egTL+2*egL+egLum[egBL]); var egGy=(egLum[egBL]+2*egLum[egB]+egLum[egBR])-(egTL+2*egT+egTR); egEdge[egy*W+egx]=Math.sqrt(egGx*egGx+egGy*egGy); } } var egRad=3, egDiv=egRad*2+1; var egTmp=new Float32Array(egN), egBlur=new Float32Array(egN); for(egy=0;egy<H;egy++){ var egAcc=0, egRow=egy*W, egk; for(egk=-egRad;egk<=egRad;egk++){ var egcx=egk<0?0:(egk>W-1?W-1:egk); egAcc+=egEdge[egRow+egcx]; } for(egx=0;egx<W;egx++){ egTmp[egRow+egx]=egAcc/egDiv; var egout=egx-egRad, egin=egx+egRad+1; var egoc=egout<0?0:(egout>W-1?W-1:egout); var egic=egin<0?0:(egin>W-1?W-1:egin); egAcc+=egEdge[egRow+egic]-egEdge[egRow+egoc]; } } for(egx=0;egx<W;egx++){ var egAccV=0, egj; for(egj=-egRad;egj<=egRad;egj++){ var egcy=egj<0?0:(egj>H-1?H-1:egj); egAccV+=egTmp[egcy*W+egx]; } for(egy=0;egy<H;egy++){ egBlur[egy*W+egx]=egAccV/egDiv; var egouty=egy-egRad, eginy=egy+egRad+1; var egocy=egouty<0?0:(egouty>H-1?H-1:egouty); var egicy=eginy<0?0:(eginy>H-1?H-1:eginy); egAccV+=egTmp[egicy*W+egx]-egTmp[egocy*W+egx]; } } var egcr=egCol[0], egcg=egCol[1], egcb=egCol[2]; for(egi=0;egi<egN;egi++){ egp=egi*4; if(d[egp+3]<=0)continue; var egg=(egBlur[egi]/255)*egAmt; if(egg<=0)continue; var egsr=egcr*egg, egsg=egcg*egg, egsb=egcb*egg; if(egsr>255)egsr=255; if(egsg>255)egsg=255; if(egsb>255)egsb=255; d[egp]=255-(255-d[egp])*(255-egsr)/255; d[egp+1]=255-(255-d[egp+1])*(255-egsg)/255; d[egp+2]=255-(255-d[egp+2])*(255-egsb)/255; } },
+    /* EDGE GLOW — finds edges, blurs the edge magnitude, and screens a colour over the result.
+     *
+     * GLOW ON is the whole design, and the mapping is not a coincidence: "the layer" versus "the
+     * media inside the layer" IS "alpha edges versus luminance edges". That is why the control can
+     * be an honest description of what changes rather than a mode flag bolted on the side.
+     *   LAYER (0) — Sobel over the ALPHA channel: the SILHOUETTE. A flat-colour rectangle and a line
+     *       of single-colour text have no interior luminance for the old path to find, so the effect
+     *       was a silent no-op on them — measured at 0 of 76800 pixels changed on a flat shape
+     *       filling the frame. This is the setting that makes it work on shapes and text.
+     *   MEDIA (1) — Sobel over LUMINANCE: contrast edges INSIDE the picture. Exactly what this
+     *       effect has always done, which is why `legacy: 1` in the schema is not a taste call: it
+     *       is the one setting under which an instance saved before this change renders unchanged.
+     *   BOTH (2) — max() of the two, not a sum. Where only one field fires the two rules agree
+     *       exactly (x + 0 = max(x, 0)), so the choice only shows up where both fire — the silhouette,
+     *       and anything thin enough that its two edges sit inside one blur radius. That is precisely
+     *       where the glow is already at its brightest, and adding there just clips. Measured at
+     *       amount 1.5, radius 8, white, with the alternative built and run: on a photograph sum blew
+     *       3470 pixels to pure white against max's 2684 (+29%), on a line of 70px text 5120 against
+     *       4439 (+15%), and the reach was the same in both. max keeps the falloff; sum spends it.
+     *
+     * BLOOM. A glow that cannot leave the shape is not a glow. Layer and Both may write pixels that
+     * were fully transparent and raise their alpha — Stroke and Drop Shadow already grow a silhouette
+     * the same way, so nothing downstream assumes they can't: the plate drawPixelEffect hands us is
+     * PROJECT-sized (cleared, so "outside" really is alpha 0), and the composite step draws the whole
+     * plate through the layer's opacity and blend mode, so a grown silhouette needs nothing from it.
+     * The frame is the limit — a glow on a layer at the edge of the comp is cut by the comp, like
+     * every other pixel effect here. MEDIA deliberately stays inside the silhouette: its edges belong
+     * to the picture, the outer halo it would throw IS the silhouette (which Layer draws better from
+     * the alpha), and holding it in is what keeps an untouched old project byte-identical.
+     *
+     * COMPOSITE. Over an opaque pixel this is the original screen blend, byte for byte. Where the
+     * glow reaches transparent ground it lays down its own colour at coverage ga = min(1, g):
+     *     A' = a + (1-a)*ga          A'*C' = a*screen(C, colour*g) + (1-a)*ga*colour
+     * At a = 1 that collapses to the old line exactly; at a = 0 it is flat glow colour at alpha ga.
+     *
+     * FALLOFF. One box pass over a 1px Sobel ridge is a flat-topped slab with a hard cutoff — it
+     * reads as a band, not as light. Three passes (a near-Gaussian by the central limit theorem)
+     * cost two extra sweeps and give a falloff that actually looks like a glow. The user's radius is
+     * split across the passes so it still means "how far the glow reaches" (measured: radius 8 ->
+     * 8px of reach). A sliding-window box blur is O(N) regardless of radius, so a wide glow costs
+     * the same as a tight one — which is why the slider can run to 60px without a performance cap.
+     *
+     * LENGTHS. radius is PROJECT px and multiplies by ps — see plateScale. Take the multiply away and
+     * a half-scale preview blooms 24 project px where the export blooms 15 (measured, radius 20), so
+     * you would be judging a glow the file will not contain.
+     *
+     * LEGACY. `source` absent = saved before this control existed: luminance only, clipped to the
+     * silhouette, one box pass, radius 3 — the original kernel, byte for byte at ps 1. Touching any
+     * control writes `source` and moves that instance onto the new engine, which is what touching a
+     * control is supposed to mean. */
+    edgeglow: function (d, W, H, p, t, ps) {
+      /* Both fallbacks here USED to be unreachable, and between them a params-less instance drew
+       * absolutely nothing (measured: 0 pixels changed). evalProp(undefined) returns 0, not null, so
+       * `if (egAmt == null) egAmt = 1.5` never fired and Amount defaulted to 0; hexToRGB(undefined)
+       * returns [0,0,0], not null, so `if (!egCol)` never fired and the colour defaulted to black,
+       * which screen-blends to nothing anyway. Test the PARAM, not the evaluated value — the same
+       * fix applyPixelFx already carries for a params-less Threshold. Every instance the app itself
+       * creates goes through fxRegistry.makeInstance, which writes both keys, so nothing saved
+       * changes; this is for presets, imported JSON and hand-written ops. */
+      var egAmt = p.amount == null ? 1.5 : FM.evalProp(p.amount, t);
+      egAmt = Math.max(0, Math.min(4, egAmt)); if (!(egAmt > 0)) return;
+      var egCol = p.color ? hexToRGB(p.color) : [255, 255, 255];
+      var egLegacy = (p.source == null);
+      var egSrc = egLegacy ? 1 : Math.max(0, Math.min(2, Math.round(FM.evalProp(p.source, t) || 0)));
+      var egS = ps || 1;
+      var egRadP = p.radius == null ? 3 : FM.evalProp(p.radius, t);   // PROJECT px (3 = the old hardcode)
+      if (!(egRadP >= 1)) egRadP = 3; if (egRadP > 60) egRadP = 60;
+      var egRad = Math.max(1, Math.round(egRadP * egS));              // -> PLATE px
+      var egN = W * H, egi, egx, egy, egp;
+
+      // --- edge field ---------------------------------------------------------------------------
+      // Sobel magnitude of `src` into `out`; take=1 keeps whichever of the two sources is stronger.
+      // Both fields are 0..1020, so Layer and Media are on one scale and Amount means the same thing
+      // in every setting.
+      function egSobel(src, out, take) {
+        var y, x, xm, xp, r0, r1, r2, TL, Tv, TR, Lv, Rv, BL, Bv, BR, gx, gy, m;
+        for (y = 0; y < H; y++) {
+          r0 = (y > 0 ? y - 1 : 0) * W; r1 = y * W; r2 = (y < H - 1 ? y + 1 : H - 1) * W;
+          for (x = 0; x < W; x++) {
+            xm = x > 0 ? x - 1 : 0; xp = x < W - 1 ? x + 1 : W - 1;
+            TL = src[r0 + xm]; Tv = src[r0 + x]; TR = src[r0 + xp];
+            Lv = src[r1 + xm]; Rv = src[r1 + xp];
+            BL = src[r2 + xm]; Bv = src[r2 + x]; BR = src[r2 + xp];
+            gx = (TR + 2 * Rv + BR) - (TL + 2 * Lv + BL);
+            gy = (BL + 2 * Bv + BR) - (TL + 2 * Tv + TR);
+            m = Math.sqrt(gx * gx + gy * gy);
+            if (take && m <= out[r1 + x]) continue;
+            out[r1 + x] = m;
+          }
+        }
+      }
+      var egE = new Float32Array(egN), egField = new Float32Array(egN);
+      if (egSrc !== 0) {   // MEDIA / BOTH: luminance
+        for (egi = 0; egi < egN; egi++) { egp = egi * 4; egField[egi] = 0.299 * d[egp] + 0.587 * d[egp + 1] + 0.114 * d[egp + 2]; }
+        egSobel(egField, egE, 0);
+      }
+      if (egSrc !== 1) {   // LAYER / BOTH: the alpha silhouette (no luminance pass at all in Layer)
+        for (egi = 0; egi < egN; egi++) egField[egi] = d[egi * 4 + 3];
+        egSobel(egField, egE, egSrc === 2 ? 1 : 0);
+      }
+
+      /* --- blur the edge magnitude ---------------------------------------------------------------
+       * THREE passes, and the number is measured, not guessed. Alpha of the outward bloom read pixel
+       * by pixel out from a rect's edge (radius 12, amount 1.5, white):
+       *   1 pass   122 122 122 122 122 122 122 122 122 122 122 122 61 0   <- a flat slab and a cliff
+       *   2 passes 226 208 190 172 154 136 118 100 81 63 45 27 9 0        <- a linear tent
+       *   3 passes 254 246 229 204 170 134 103 76 52 34 19 8 2 0          <- a bright rim, smooth tail
+       *   4 passes 255 255 246 210 169 127 89 58 35 19 9 3 1 0            <- clipped, no better
+       * One box pass over a 1px Sobel ridge cannot be a glow: it is a band of constant brightness
+       * with a hard edge, and it looks like one. Cost at the phone backing store, interleaved over
+       * 15 rounds x 2 sessions: 47-51ms at 1 pass, 63-65 at 2, 72-81 at 3, 88-91 at 4. The third
+       * pass buys the falloff; the fourth buys clipping.
+       * A LEGACY instance still runs exactly one pass — that IS its old look.
+       * The radius is split across the passes so `radius` keeps meaning total reach, and each pass
+       * is the same clamped-edge sliding window the old code used, H into egField then V back into
+       * egE, so a one-pass run reproduces the original values exactly (divide, not multiply by a
+       * reciprocal — 1/win is inexact and the last ULP can flip a rounded byte). */
+      var egPasses = egLegacy ? 1 : 3, egRp = [], egPi, egBase = Math.floor(egRad / egPasses), egRem = egRad - egBase * egPasses;
+      for (egPi = 0; egPi < egPasses; egPi++) egRp.push(Math.max(1, egBase + (egPi < egRem ? 1 : 0)));
+      for (egPi = 0; egPi < egPasses; egPi++) {
+        var egR = egRp[egPi], egDiv = egR * 2 + 1, egk, egj, egAcc, egRow, egc;
+        for (egy = 0; egy < H; egy++) {
+          egAcc = 0; egRow = egy * W;
+          for (egk = -egR; egk <= egR; egk++) { egc = egk < 0 ? 0 : (egk > W - 1 ? W - 1 : egk); egAcc += egE[egRow + egc]; }
+          for (egx = 0; egx < W; egx++) {
+            egField[egRow + egx] = egAcc / egDiv;
+            var egin = egx + egR + 1, egout = egx - egR;
+            egAcc += egE[egRow + (egin > W - 1 ? W - 1 : egin)] - egE[egRow + (egout < 0 ? 0 : egout)];
+          }
+        }
+        for (egx = 0; egx < W; egx++) {
+          egAcc = 0;
+          for (egj = -egR; egj <= egR; egj++) { egc = egj < 0 ? 0 : (egj > H - 1 ? H - 1 : egj); egAcc += egField[egc * W + egx]; }
+          for (egy = 0; egy < H; egy++) {
+            egE[egy * W + egx] = egAcc / egDiv;
+            var eginy = egy + egR + 1, egouty = egy - egR;
+            egAcc += egField[(eginy > H - 1 ? H - 1 : eginy) * W + egx] - egField[(egouty < 0 ? 0 : egouty) * W + egx];
+          }
+        }
+      }
+
+      // --- composite ----------------------------------------------------------------------------
+      /* BRIGHTNESS also scales with ps, and that is not obvious. A Sobel magnitude is a per-pixel
+       * derivative, so an edge's ridge carries the same total energy at any plate scale; the blur
+       * then spreads that fixed energy over the window, so the PEAK goes as 1/egRad — and egRad is
+       * radius x ps. Scaling the radius alone therefore fixes the glow's SIZE and leaves it 1/ps
+       * times too bright: measured on the shape subject at radius 10, the bloom carried 2577 px of
+       * alpha at ps 1 and 3920 at ps 0.34, a 52% brighter preview than the export. One factor of ps
+       * cancels it exactly, and is a no-op at ps 1 (export, thumbnails, a 1:1 preview). */
+      var egcr = egCol[0], egcg = egCol[1], egcb = egCol[2], egBloom = (egSrc !== 1);
+      for (egi = 0; egi < egN; egi++) {
+        egp = egi * 4;
+        var ega0 = d[egp + 3];
+        if (ega0 <= 0 && !egBloom) continue;
+        var egg = (egE[egi] / 255) * egAmt * egS;
+        if (egg <= 0) continue;
+        var egsr = egcr * egg, egsg = egcg * egg, egsb = egcb * egg;
+        if (egsr > 255) egsr = 255; if (egsg > 255) egsg = 255; if (egsb > 255) egsb = 255;
+        var egr = 255 - (255 - d[egp]) * (255 - egsr) / 255;
+        var egG = 255 - (255 - d[egp + 1]) * (255 - egsg) / 255;
+        var egb = 255 - (255 - d[egp + 2]) * (255 - egsb) / 255;
+        if (!egBloom || ega0 >= 255) { d[egp] = egr; d[egp + 1] = egG; d[egp + 2] = egb; continue; }   // the original line
+        var ega = ega0 / 255, egga = egg > 1 ? 1 : egg, egA = ega + (1 - ega) * egga;
+        if (egA <= 0) continue;
+        var egw0 = ega / egA, egw1 = (1 - ega) * egga / egA;
+        d[egp] = egr * egw0 + egcr * egw1;
+        d[egp + 1] = egG * egw0 + egcg * egw1;
+        d[egp + 2] = egb * egw0 + egcb * egw1;
+        d[egp + 3] = egA * 255;
+      }
+    },
     contourlines: function(d,W,H,p,t){ var clLv=Math.round(FM.evalProp(p.levels,t)||8); if(clLv<2)clLv=2; if(clLv>24)clLv=24; var clS=d.slice(),clW4=W*4,clScl=clLv/255; var clBand=new Int16Array(W*H); for(var clI=0,clJ=0;clI<clS.length;clI+=4,clJ++){ var clLum=0.299*clS[clI]+0.587*clS[clI+1]+0.114*clS[clI+2],clB=Math.floor(clLum*clScl); if(clB>=clLv)clB=clLv-1; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ d[clIdx]=0; d[clIdx+1]=0; d[clIdx+2]=0; } } } },
     grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4; for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_h=(gr_x*73856093)^(gr_y*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216; var gr_h2=(gr_x*83492791)^(gr_y*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216; var gr_mul=1-gr_mot*(gr_n-0.5); if(gr_n<gr_thr){ gr_mul*=(0.25+0.6*gr_n2); } if(gr_mul<0)gr_mul=0; gr_d[gr_i]=gr_d[gr_i]*gr_mul; gr_d[gr_i+1]=gr_d[gr_i+1]*gr_mul; gr_d[gr_i+2]=gr_d[gr_i+2]*gr_mul; } } },
     iridescence: function(d,W,H,p,t,ps){ var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7; var iri_scP=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var iri_sc=(iri_scP===100?120:120*(iri_scP/100))*(ps||1); var iri_bd=p.bands==null?3:FM.evalProp(p.bands,t); var iri_sp=p.speed==null?0:FM.evalProp(p.speed,t); var iri_ph=iri_sp*t; iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return; for(var iri_y=0;iri_y<H;iri_y++){ var iri_row=iri_y*W*4; for(var iri_x=0;iri_x<W;iri_x++){ var iri_i=iri_row+iri_x*4; if(d[iri_i+3]<=0)continue; var iri_r=d[iri_i],iri_g=d[iri_i+1],iri_b=d[iri_i+2]; var iri_l=(0.299*iri_r+0.587*iri_g+0.114*iri_b)/255; var iri_h=(iri_l*iri_bd+(iri_x+iri_y)/iri_sc+iri_ph); iri_h=iri_h-Math.floor(iri_h); var iri_h6=iri_h*6; var iri_cr=Math.abs(iri_h6-3)-1; iri_cr=iri_cr<0?0:(iri_cr>1?1:iri_cr); var iri_cg=2-Math.abs(iri_h6-2); iri_cg=iri_cg<0?0:(iri_cg>1?1:iri_cg); var iri_cb=2-Math.abs(iri_h6-4); iri_cb=iri_cb<0?0:(iri_cb>1?1:iri_cb); var iri_sr=iri_cr*iri_l*255,iri_sg=iri_cg*iri_l*255,iri_sb=iri_cb*iri_l*255; d[iri_i]=iri_r+(iri_sr-iri_r)*iri_amt; d[iri_i+1]=iri_g+(iri_sg-iri_g)*iri_amt; d[iri_i+2]=iri_b+(iri_sb-iri_b)*iri_amt; } } },

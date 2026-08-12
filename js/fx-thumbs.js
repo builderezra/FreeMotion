@@ -458,8 +458,13 @@ window.FM = window.FM || {};
   const SUBJECT_OF = {
     // Edge/alpha work: the effect happens at the layer's BORDER, so the tile has to show a border
     // and some backdrop outside it. A full-frame subject would push the whole thing off-tile.
-    glow: 'card', softglow: 'card', darkglow: 'card', lightglow: 'card', edgeglow: 'card',
+    glow: 'card', softglow: 'card', darkglow: 'card', lightglow: 'card',
     innerglow: 'card', stroke: 'card', dropshadow: 'card', longshadow: 'card', radialshadow: 'card',
+    // Edge Glow's headline is that it works on SHAPES and text — a tile showing a photograph would
+    // say the opposite, because a photograph is the one subject the old luminance-only version
+    // already handled. 'ball' is a flat-filled ellipse with clear backdrop all round it: no interior
+    // luminance for Media to find, so everything in the tile comes from the layer's own outline.
+    edgeglow: 'ball',
     smoothedges: 'card', roughenedges: 'card', smoothbevel: 'card', roundcorners: 'card', electricedges: 'card',
     // Particles stream OUT of the emitter, so a small compact emitter reads; a full-frame one just
     // sprays from everywhere at once.

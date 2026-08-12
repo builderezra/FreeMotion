@@ -423,13 +423,18 @@ window.FM = window.FM || {};
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
     const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : 2);
-    const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : p.default); };
+    // An ABSENT param renders at the effect's own fallback — `legacy` where the schema declares one
+    // (a param added to an existing effect keeps that effect's original hardcoded value), otherwise
+    // the default. Same rule fxSegment already follows; a slider that displays a number the renderer
+    // is not using is the same lie in a different control.
+    const fallback = p.legacy != null ? p.legacy : p.default;
+    const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : fallback); };
     // keyframe gutter (only for keyframable params)
     if (p.keyframable) {
       const c = fx.params[p.key];
       const kfb = el('button', 'fx-kf' + (FM.isAnimated(c) ? ' active' : '') + (FM.hasKeyframeAt(c, FM.time) ? ' here' : ''), '◆');
       kfb.title = FM.isAnimated(c) ? 'Keyframe at playhead (click to remove)' : 'Animate this parameter';
-      kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, p.default); afterFx(); });
+      kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, fallback); afterFx(); });
       row.appendChild(kfb);
     } else { row.appendChild(el('span', 'fx-kf-spacer')); }
     // easing curve for THIS parameter's keyframes (every effect param eases, like Move & Transform)

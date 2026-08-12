@@ -163,7 +163,11 @@ window.FM = window.FM || {};
         // the schema default (byte-identity: an old instance must keep rendering as it always did).
         // The UI needs it so the highlighted button matches what actually draws.
         else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false });
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '' });
+        // A RANGE carries `legacy` for the same reason a segment does: an absent key renders at the
+        // renderer's fallback, which for a param added to an existing effect is the value that effect
+        // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
+        // Radius as 8 on an instance the kernel is drawing at 3.
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '' });
       });
     } else if (def.options) {
       out.push({ key: def.param, label: def.label, type: 'segment', options: normOptions(def.options), default: def.def, legacy: def.legacy, keyframable: false });
@@ -314,7 +318,7 @@ window.FM = window.FM || {};
     halftonelines: 'Rebuilds the image out of lines of varying weight, like an engraving.',
     crosshatch: 'Redraws the image in crossed pen strokes, denser where it is darker.',
     contourlines: 'Draws a line wherever the brightness crosses a level — the picture as a contour map.',
-    edgeglow: 'Finds the edges and makes them glow in a colour you choose.',
+    edgeglow: 'Blooms a glow out of the edges, in a colour you choose. Glow on Layer traces the layer’s own outline, so a flat shape or a line of text glows; Media finds the contrast edges inside the picture; Both does the two together.',
     electricedges: 'Edges that crackle and glow, and keep moving — a live-wire outline.',
     glowscan: 'A band of light sweeps across the layer over and over.',
     smoothedges: 'Feathers the layer’s outline so it fades out instead of stopping dead.',
