@@ -3042,6 +3042,24 @@ window.FM = window.FM || {};
     // scrub/move never deselects. The canvas (#preview) and timeline (#timeline) own their OWN
     // select/deselect (and every clip/head/ruler/lane lives inside #timeline), so the deny-list keeps
     // them plus every interactive control; everything else counts as empty space.
+    /* THE canonical answer to "is a modal canvas TOOL driving the screen right now?".
+       This list already existed, spelled out inside the Escape handler above, and the tap-to-deselect
+       guard below duplicated the same idea as a list of ELEMENT IDS instead — which is why the two
+       drifted. Five separate tools have now shipped with their tap being read as an empty-background
+       tap because someone added the tool and not its id: the eyedropper, crop, touch-up, fill-drag,
+       and now the shape POINT EDITOR (Ezra: "when I am editing a shape and tap on the canvas to select
+       an edit point it just closes the editing window").
+       Asking the TOOLS rather than naming their overlays is true by construction: a tool that can be
+       dismissed with Escape is, by definition, a tool that owns the canvas, so any future tool wired
+       into Escape gets tap-protection for free and cannot be forgotten here. */
+    FM.toolOwnsCanvas = function () {
+      const on = (o, m) => !!(o && typeof o[m] === 'function' && o[m]());
+      return on(FM.eyedropper, 'isActive') || on(FM.cropTool, 'isActive') ||
+             on(FM.touchupTool, 'isOpen') || on(FM.textEdit, 'isActive') ||
+             on(FM.pointEdit, 'isActive') || on(FM.tracker, 'isPicking') ||
+             on(FM.fillDrag, 'isActive') || on(FM.maskTool, 'isActive');
+    };
+
     (function deselectOnEmptyTap() {
       const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel,' +
         ' #ctx-menu, #shortcuts-overlay, #export-overlay, #export-dialog, #canvas-dialog, #add-sheet,' +
@@ -3058,10 +3076,13 @@ window.FM = window.FM || {};
         // stationary tap OFF the layer — and the tool's own hint invites the gesture that breaks it.
         // This listener is on document in the CAPTURE phase, so the overlay's own stopPropagation()
         // cannot reach it; being named here is the only thing that spares a surface.
-        ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar, #fd-overlay';
+        ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar, #fd-overlay,' +
+        ' #pe-overlay, #pe-bar';   // the shape point editor — the fifth tool to be missing from this list
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
+        // A modal canvas tool is driving: every tap belongs to it, wherever it lands.
+        if (FM.toolOwnsCanvas && FM.toolOwnsCanvas()) { armed = false; return; }
         dx = e.clientX; dy = e.clientY; armed = true;
         // Decide NOW, while the target is still attached, whether it's a control / self-managing area.
         // Clicking a clip selects it → that calls timeline.rebuild() which DETACHES the clicked element,

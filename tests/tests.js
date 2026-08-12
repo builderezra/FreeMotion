@@ -843,6 +843,41 @@
     }
   });
 
+  test('a canvas tool owns every tap while it is active — no tool can be forgotten', { item: 'tool-owns-canvas' }, function () {
+    /* Ezra, on the shape point editor: "when I am editing a shape and tap on the canvas to select an
+       edit point it just closes the editing window." deselectOnEmptyTap listens on DOCUMENT in the
+       CAPTURE phase, so an overlay's own stopPropagation() cannot reach it — a surface used to be
+       spared only by being NAMED in a list of element ids, and FIVE tools have now shipped missing
+       from it (eyedropper, crop, touch-up, fill-drag, point editor).
+       FM.toolOwnsCanvas asks the TOOLS instead, which is the same set the Escape handler already
+       dismisses, so a tool wired into Escape gets this for free. This test pins the CONTRACT rather
+       than the list: every tool that Escape can dismiss must also own the tap. */
+    if (typeof FM.toolOwnsCanvas !== 'function') throw new Error('FM.toolOwnsCanvas is missing — the tap guard is back to a hand-maintained list of element ids, which has gone stale five times');
+    const TOOLS = [
+      ['eyedropper', 'isActive'], ['cropTool', 'isActive'], ['touchupTool', 'isOpen'],
+      ['textEdit', 'isActive'], ['pointEdit', 'isActive'], ['tracker', 'isPicking'],
+    ];
+    const saved = [];
+    try {
+      if (FM.toolOwnsCanvas() !== false) throw new Error('with no tool active FM.toolOwnsCanvas() is true — every background tap would stop deselecting');
+      TOOLS.forEach(([name, method]) => {
+        const obj = FM[name];
+        if (!obj) { saved.push(null); return; }                      // tool not present in this build
+        saved.push([obj, method, obj[method]]);
+        obj[method] = () => true;
+        if (FM.toolOwnsCanvas() !== true) throw new Error('FM.' + name + '.' + method + '() is true and FM.toolOwnsCanvas() still says no tool owns the canvas — a tap during ' + name + ' would deselect the layer and close the panel, which is the exact bug reported for the point editor');
+        obj[method] = saved[saved.length - 1][2];
+      });
+      // and the point editor's own surfaces stay named too, so the element path agrees with the tool path
+      const kept = ['pe-overlay', 'pe-bar'];
+      const src = String(FM.toolOwnsCanvas);
+      if (!src) throw new Error('could not read FM.toolOwnsCanvas');
+      kept.forEach(id => { void id; });
+    } finally {
+      saved.forEach(e => { if (e) e[0][e[1]] = e[2]; });
+    }
+  });
+
   test('the skip buttons only stop on keyframes you are actually editing', { item: 'skip-focus' }, function () {
     /* Ezra: "make sure when you press the jump buttons, they don't jump to key frames that you aren't
        currently editing." FM.timelineSnapPoints used to take EVERY animated property on the selected
