@@ -5286,6 +5286,59 @@
     });
   });
 
+  test('groups: a group nested inside another group keeps its own opacity', { item: 'nested-groups' }, function () {
+    /* collectGroupUnits builds one flattened unit per group that has visual state of its own, then
+     * claimed member ids first-come by scene order. An outer group's member list is built by a
+     * RECURSIVE walk, so it already contains every descendant leaf — meaning an outer and an inner
+     * unit both wanted the same leaves, and whichever came first in scene.layers took them. Outer
+     * first (what groupSelection produces): the inner group was never drawn and its opacity/effects/
+     * blend vanished silently. Inner first (Edit group → Add → Group): the leaves were composited
+     * twice, once per unit.
+     *
+     * ONE PIXEL DECIDES IT, and it says which failure happened rather than just "wrong". A white
+     * leaf inside B inside A, both at opacity 0.5, over black: correct is 255 × 0.5 × 0.5 = 64. One
+     * 0.5 applied reads 128. Composited twice reads ~191. Both orders are reachable in the app, so
+     * both are checked — and they must now agree with each other, since which order the user
+     * happened to create the groups in should never have been visible in the render.
+     *
+     * The control is a SINGLE group at 0.5, which must read 128. Without it, a build where group
+     * units broke entirely would drop to one opacity and look like a pass on the 64 assertion. */
+    function centre(layers) {
+      var c = offscreen(120, 90);
+      var sc = scene(layers);
+      sc.project = { width: 120, height: 90, fps: 30, duration: 5, background: '#000000' };
+      var g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, sc, 0);
+      return g.getImageData(60, 45, 1, 1).data[0];
+    }
+    function nest(outerFirst) {
+      var leaf = FM.makeLayer('shape', { shape: 'rect', name: 'leaf', x: 60, y: 45, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+      var B = FM.makeLayer('group', { name: 'B' }), A = FM.makeLayer('group', { name: 'A' });
+      leaf.parent = B.id; B.parent = A.id;
+      B.transform.opacity = 0.5; A.transform.opacity = 0.5;
+      return outerFirst ? [A, B, leaf] : [B, A, leaf];
+    }
+    var leaf2 = FM.makeLayer('shape', { shape: 'rect', name: 'l2', x: 60, y: 45, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+    var G = FM.makeLayer('group', { name: 'G' });
+    leaf2.parent = G.id; G.transform.opacity = 0.5;
+    var one = centre([G, leaf2]);
+    if (Math.abs(one - 128) > 2) throw new Error('the control — ONE group at opacity 0.5 over black — rendered ' + one + ' where 128 is correct, so group units are broken outright and the nesting assertions below cannot be trusted');
+
+    [['outer group first (what groupSelection produces)', true],
+     ['inner group first (Edit group → Add → Group)', false]].forEach(function (c) {
+      var v = centre(nest(c[1]));
+      if (Math.abs(v - 64) > 2) {
+        var why = Math.abs(v - 128) <= 6 ? ' — only ONE 0.5 was applied, so the inner group was dropped entirely'
+                : (v > 150 ? ' — the leaf was composited TWICE, once per unit' : '');
+        throw new Error('with ' + c[0] + ', a leaf inside B(0.5) inside A(0.5) over black rendered ' + v + ' where 255 × 0.5 × 0.5 = 64 is correct' + why + '. Units must nest: the deepest unit holding a member draws it, and the shallowest is the one renderScene dispatches');
+      }
+    });
+    // …and the two orders must agree, because which order the groups were created in is not
+    // something the render should ever be able to see.
+    var a = centre(nest(true)), b = centre(nest(false));
+    if (a !== b) throw new Error('the same nested scene rendered ' + a + ' with the outer group first and ' + b + ' with the inner group first — group flattening is still sensitive to scene order');
+  });
+
   test('effects: Tiles “Whole clip” does not throw away the other effect on the layer', { item: 'tiles-scratch' }, function () {
     /* drawCanvasEffect renders the clean layer into scratch A, hands A to the effect fn to write
      * into B, then blits B into ctx. Those were module singletons, defended by a comment arguing a

@@ -8896,6 +8896,7 @@ window.FM = window.FM || {};
   }
   function collectGroupUnits(scene, t) {
     let map = null;
+    const units = [];
     for (const g of scene.layers) {
       if (g.type !== 'group' || !g.visible || !groupNeedsUnit(g, t)) continue;
       const members = [];
@@ -8919,13 +8920,38 @@ window.FM = window.FM || {};
         drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
         maskId = mask.id;
       }
-      const unit = { group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, drawn: false };
-      map = map || {};
-      unit.memberIds.forEach(id => { if (!map[id]) map[id] = unit; });   // nearest-first: an outer unit wins over a nested one
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, drawn: false, depth: 0 });
     }
+    if (!units.length) return null;
+    /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
+     * leaves — `walk` above is recursive, so an outer unit's memberIds already contains every
+     * descendant. Claiming those leaves first-come by scene order is what broke nested groups: the
+     * outer unit took them and the inner one was never drawn (its opacity/effects/blend silently
+     * dropped), or, in the reversed scene order that Edit group → Add → Group produces, the inner
+     * unit took them and the outer loop drew the same leaves a second time on top.
+     *
+     * Depth fixes both, and is also the plate index. Two units at the SAME depth are never alive at
+     * once — a sibling is fully flattened and blitted before the next one starts — so a plate per
+     * depth is exactly enough, and needs no counter the way _cfPool and _pfPool do. */
+    const byId = {};
+    scene.layers.forEach(l => { byId[l.id] = l; });
+    const unitByGroup = {};
+    units.forEach(u => { unitByGroup[u.group.id] = u; });
+    units.forEach(u => {
+      let d = 0, p = byId[u.group.parent], n = 0;
+      while (p && n++ < 64) { if (unitByGroup[p.id]) d++; p = byId[p.parent]; }   // n: the same parent-cycle guard `walk` carries
+      u.depth = d;
+    });
+    const innerOf = {};      // the DEEPEST unit holding this id — the one that actually draws it
+    map = {};                // the SHALLOWEST — the one renderScene dispatches, so the whole nest goes down as one
+    units.forEach(u => u.memberIds.forEach(id => {
+      if (!innerOf[id] || u.depth > innerOf[id].depth) innerOf[id] = u;
+      if (!map[id] || u.depth < map[id].depth) map[id] = u;
+    }));
+    units.forEach(u => { u.innerOf = innerOf; });
     return map;
   }
-  let _mgA = null, _mgB = null;
+  const _mgPool = [];   // one { A, B } per NESTING DEPTH — see collectGroupUnits for why depth is the right index
   /* Flatten a group unit into the `_flat` proxy that carries the group's own effects/opacity/blend.
    * Split out of drawGroupUnit so the backdrop pass can reach a fill that lives on the GROUP: that
    * fill is built from the flattened pixels, so there has to be something to flatten before the
@@ -8933,8 +8959,9 @@ window.FM = window.FM || {};
    * before; one that does is flattened twice per frame, which is the price of an opt-in effect. */
   function buildGroupUnit(u, t, scene) {
     const P = scene.project;
-    if (!_mgA) _mgA = document.createElement('canvas');
-    if (!_mgB) _mgB = document.createElement('canvas');
+    const _d = u.depth || 0;
+    if (!_mgPool[_d]) _mgPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    const _mgA = _mgPool[_d].A, _mgB = _mgPool[_d].B;
     // Skip the full-frame realloc when comp dims are unchanged — this fires per group, per frame. _mgA is
     // cleared just below; _mgB is cleared before its only use (mask branch), so the buffers stay correct.
     if (_mgA.width !== P.width || _mgA.height !== P.height) { _mgA.width = P.width; _mgA.height = P.height; }
@@ -8947,9 +8974,23 @@ window.FM = window.FM || {};
      * own dispatch is gone, which is what keeps the member draws below from putting one here. A
      * frame-sized opaque fill on THIS plate is what made the whole flattened unit opaque edge to
      * edge, so that the unit's own blit then erased everything under the group. */
+    /* Per BUILD, not per frame. The fill-behind pass flattens some units before the main layer loop
+     * does, and a flag living on the unit would make the main loop's rebuild skip every nested unit
+     * the earlier pass had already drawn — the group would come out empty. */
+    const drawnHere = new Set();
     for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
       const L = scene.layers[i];
-      if (!u.memberIds.has(L.id) || L.id === u.maskId || L.type === 'group') continue;
+      if (!u.memberIds.has(L.id) || L.id === u.maskId) continue;
+      /* A nested group that carries visual state of its own is composited as its own flattened unit
+       * and then skipped wholesale — its leaves are in OUR memberIds too, and drawing them here as
+       * well is the double-composite half of this bug. It goes down at the z-slot of its bottom-most
+       * member, which is the same convention renderScene uses for a top-level unit. */
+      const own = u.innerOf && u.innerOf[L.id];
+      if (own && own !== u) {
+        if (!drawnHere.has(own.group.id)) { drawnHere.add(own.group.id); drawGroupUnit(a, own, t, scene); }
+        continue;
+      }
+      if (L.type === 'group') continue;   // a group with nothing visual of its own rasterises nothing
       // An ADJUSTMENT member grades the unit's buffer at its z-slot (the members below it, already
       // accumulated) — drawLayer no-ops for adjustments, so without this branch a grade inside any
       // flattened group silently stopped applying the moment the group gained opacity/effects/blend.

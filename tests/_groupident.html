@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grouped-scene byte-identity sweep</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — GROUPED-SCENE BYTE-IDENTITY sweep.  Dev-only; not shipped, not linked from the app.
+ *
+ * WHY THIS EXISTS
+ *   The nested-group fix rewrites collectGroupUnits and buildGroupUnit — the most central function
+ *   in the compositor, and the one the EXPORT path runs through. The fix is only supposed to change
+ *   scenes where one unit-group sits inside another. Every other grouped scene in the app — a plain
+ *   group, a group with effects, a masked group, two sibling groups, a group holding an adjustment
+ *   layer — must come out of this change byte-for-byte identical, because those are what almost
+ *   every real project actually contains and a silent shift there would be far worse than the bug.
+ *
+ * HOW TO READ IT
+ *   Prints a checksum per scene. Run it on the pre-fix build and on the fixed build and diff the two
+ *   outputs. The NESTED rows are expected to change — that is the fix. Every row marked `flat`
+ *   MUST be identical across the two runs; a single differing checksum there is a regression.
+ *
+ * Rendering is at exactly project size, unstamped, which is the export path: plateScale is 1, so
+ * these numbers are the exported pixels and not a preview approximation.
+ * ============================================================================================ */
+(function () {
+  var W = 200, H = 150;
+
+  function sum(cv) {
+    var d = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    // FNV-1a over the raw bytes: order-sensitive, so a shifted layer changes it, unlike a mean.
+    var h = 0x811c9dc5;
+    for (var i = 0; i < d.length; i++) { h ^= d[i]; h = (h * 0x01000193) >>> 0; }
+    var lit = 0;
+    for (var j = 3; j < d.length; j += 4) if (d[j] > 8) lit++;
+    return { h: ('00000000' + h.toString(16)).slice(-8), lit: lit };
+  }
+  function render(layers) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    FM.renderScene(c.getContext('2d', { willReadFrequently: true }),
+      { project: { width: W, height: H, fps: 30, duration: 5, background: '#101820' }, layers: layers }, 0.5);
+    return sum(c);
+  }
+  function shape(name, o) {
+    return FM.makeLayer('shape', Object.assign({ shape: 'rect', name: name, x: 100, y: 75,
+                                                 shapeW: 60, shapeH: 40, fill: '#ffffff' }, o || {}));
+  }
+  function grp(name, o) { return FM.makeLayer('group', Object.assign({ name: name }, o || {})); }
+  function fx(type, params) {
+    var e = FM.fxRegistry.makeInstance(type);
+    Object.keys(params || {}).forEach(function (k) { e.params[k] = params[k]; });
+    return e;
+  }
+
+  var CASES = [];
+  // ---- flat: everything a project normally has. These must not move. --------------------------
+  CASES.push(['flat', 'two loose shapes, no group', function () {
+    return [shape('s1', { x: 70 }), shape('s2', { x: 130, fill: '#ff8800' })];
+  }]);
+  CASES.push(['flat', 'plain transform-only group (no unit)', function () {
+    var g = grp('G'); var s = shape('s1'); s.parent = g.id; return [g, s];
+  }]);
+  CASES.push(['flat', 'group at opacity 0.5', function () {
+    var g = grp('G'); g.transform.opacity = 0.5; var s = shape('s1'); s.parent = g.id; return [g, s];
+  }]);
+  CASES.push(['flat', 'group with an effect', function () {
+    var g = grp('G'); g.effects = [fx('pixelate', { size: 8 })];
+    var s = shape('s1'); s.parent = g.id; return [g, s];
+  }]);
+  CASES.push(['flat', 'group with a blend mode', function () {
+    var g = grp('G'); g.blendMode = 'screen';
+    var s = shape('s1'); s.parent = g.id;
+    return [g, s, shape('bg', { x: 100, shapeW: 180, shapeH: 120, fill: '#3355ff' })];
+  }]);
+  CASES.push(['flat', 'masked group', function () {
+    var g = grp('G'); g.maskGroup = true;
+    var m = shape('mask', { x: 80, shapeW: 40, shapeH: 40 }), s = shape('s1', { fill: '#ff8800' });
+    m.parent = g.id; s.parent = g.id; return [g, m, s];
+  }]);
+  CASES.push(['flat', 'two sibling groups, both at 0.5', function () {
+    var a = grp('A'), b = grp('B');
+    a.transform.opacity = 0.5; b.transform.opacity = 0.5;
+    var s1 = shape('s1', { x: 70 }), s2 = shape('s2', { x: 130, fill: '#ff8800' });
+    s1.parent = a.id; s2.parent = b.id; return [a, b, s1, s2];
+  }]);
+  CASES.push(['flat', 'group holding an adjustment layer', function () {
+    var g = grp('G'); g.transform.opacity = 0.5;
+    var adj = FM.makeLayer('adjustment', { name: 'adj' });
+    adj.colorGrade = { hue: 40, sat: 1, lift: 0, gamma: 1, gain: 1 };
+    var s = shape('s1'); s.parent = g.id; adj.parent = g.id; return [g, adj, s];
+  }]);
+  CASES.push(['flat', 'group with a colour grade', function () {
+    var g = grp('G'); g.colorGrade = { hue: 90, sat: 1.4, lift: 0, gamma: 1, gain: 1 };
+    var s = shape('s1'); s.parent = g.id; return [g, s];
+  }]);
+  CASES.push(['flat', 'nested groups but only the OUTER has a unit', function () {
+    var a = grp('A'), b = grp('B'); a.transform.opacity = 0.5;
+    var s = shape('s1'); b.parent = a.id; s.parent = b.id; return [a, b, s];
+  }]);
+  CASES.push(['flat', 'nested groups but only the INNER has a unit', function () {
+    var a = grp('A'), b = grp('B'); b.transform.opacity = 0.5;
+    var s = shape('s1'); b.parent = a.id; s.parent = b.id; return [a, b, s];
+  }]);
+
+  // ---- nested: the scenes the fix is FOR. These are expected to change. -----------------------
+  CASES.push(['NESTED', 'B(0.5) inside A(0.5), outer first', function () {
+    var a = grp('A'), b = grp('B'); a.transform.opacity = 0.5; b.transform.opacity = 0.5;
+    var s = shape('s1'); b.parent = a.id; s.parent = b.id; return [a, b, s];
+  }]);
+  CASES.push(['NESTED', 'B(0.5) inside A(0.5), inner first', function () {
+    var a = grp('A'), b = grp('B'); a.transform.opacity = 0.5; b.transform.opacity = 0.5;
+    var s = shape('s1'); b.parent = a.id; s.parent = b.id; return [b, a, s];
+  }]);
+  CASES.push(['NESTED', 'inner group has an effect, outer has opacity', function () {
+    var a = grp('A'), b = grp('B'); a.transform.opacity = 0.5; b.effects = [fx('pixelate', { size: 8 })];
+    var s = shape('s1'); b.parent = a.id; s.parent = b.id; return [a, b, s];
+  }]);
+  CASES.push(['NESTED', 'three deep, all at 0.5', function () {
+    var a = grp('A'), b = grp('B'), c = grp('C');
+    a.transform.opacity = 0.5; b.transform.opacity = 0.5; c.transform.opacity = 0.5;
+    var s = shape('s1'); b.parent = a.id; c.parent = b.id; s.parent = c.id; return [a, b, c, s];
+  }]);
+  CASES.push(['NESTED', 'outer holds a nested unit AND a loose sibling leaf', function () {
+    var a = grp('A'), b = grp('B'); a.transform.opacity = 0.5; b.transform.opacity = 0.5;
+    var s1 = shape('s1', { x: 70 }), s2 = shape('s2', { x: 130, fill: '#ff8800' });
+    b.parent = a.id; s1.parent = b.id; s2.parent = a.id; return [a, b, s1, s2];
+  }]);
+
+  var lines = ['Rendered at exactly project size (the EXPORT path: plateScale 1).',
+               'Diff this output between the pre-fix and fixed builds.',
+               '`flat` rows MUST match. `NESTED` rows are expected to change — that is the fix.', ''];
+  lines.push('kind     checksum   lit px   scene');
+  CASES.forEach(function (c) {
+    var r;
+    try { r = render(c[2]()); } catch (e) { r = { h: 'THREW   ', lit: -1 }; lines.push('  ' + e.message); }
+    lines.push(c[0].padEnd(8) + ' ' + r.h + '   ' + String(r.lit).padStart(6) + '   ' + c[1]);
+  });
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>
