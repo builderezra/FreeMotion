@@ -57,8 +57,15 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **89 — Letterbox and Border Frame paint over the layers below them.** *Status:* the fix is
       BUILT and measures well (layer-below survival 65.4% → 100%, zero pixels painted outside the
       layer's box across 28 configs, 239/239 byte-identical) — but it was cut against v6.22 and two
-      verifiers refused it because it no longer APPLIES to today's code. Being forward-ported now.
-      Not landed until a plain `git apply --check` passes, which is the bar `--3way` can fake. Same class of bug as Fill
+      verifiers refused it because it no longer APPLIED to today's code.
+      *Forward-ported successfully* — it applies now, and the suite reads 196/196. **Still not landed.**
+      A verifier ran 183 configurations and found 12 that STILL erase the layer below: the "does this
+      layer touch the frame edge" test is not exact, because the bbox helper pads by 2 and samples
+      every other pixel. So a layer sitting a few pixels inside the frame — you scale a video down
+      slightly, which is completely ordinary — is treated as full-frame and wipes a rim of whatever is
+      underneath. At preview scale 0.5 with a 2px inset, nothing below survives. Third pass running
+      with the root cause named; it stays out of your hands until a full sweep comes back clean,
+      because shipping it would reintroduce the exact bug in a narrower band. Same class as Fill
       Behind (fixed in v6.15). Both do `if (d[i+3] < 255) d[i+3] = 255`, manufacturing opaque coverage
       where the layer has none. Deliberately deferred: the one-line removal turns them into effects
       that do nothing on a non-fullscreen layer, which this codebase already had to revert once. The
