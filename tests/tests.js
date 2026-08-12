@@ -10657,6 +10657,70 @@
     }
   });
 
+  /* ---- a locked crop must still be locked at the end of the drag -------------------------------
+   *
+   * BUG-HUNT, high. resizeCrop re-derived the locked ratio from the CURRENT crop on every call while
+   * the same call wrote back an integer-rounded height, so each step's rounding became the next
+   * step's ratio. Across the hundreds of pointermove events in one drag the ratio decayed, and once
+   * the height bottomed out on the Math.max(1, …) floor with the width still large it collapsed to
+   * 1:1 and never came back — while the lock button went on claiming the ratio was held.
+   *
+   * The test replays a DRAG, one step per pixel, because that is the only thing that shows it: a
+   * single jump from 1920 to 1016 lands on the right answer even with the bug, since there is only
+   * one rounding. The defect is cumulative, so the test has to accumulate too.
+   *
+   * Measured before the fix on a 1920x1080 source: down to 1016 gave h=508 against a correct 572
+   * (16:9 decayed to 2:1), and down-then-up gave a 901x901 square instead of 901x507.
+   *
+   * HONEST LIMIT OF THIS TEST, stated so nobody mistakes it for more than it is: it models
+   * resizeCrop's arithmetic, it does not drive resizeCrop. That function is a closure inside the
+   * Edit Shape panel builder and its number box is scrubbed through attachGlide, which did not
+   * respond to synthesised pointer events when I tried — so unlike the stroke-keyframe test above,
+   * this one would NOT catch someone rebinding the real row. What it does catch is the arithmetic
+   * regressing, and the `broken` self-check above is what stops it degrading into a tautology: it
+   * asserts the model can still reproduce the decay before trusting that the fixed path avoids it.
+   * If the crop lock is ever touched again, drive the real box. */
+  test('Edit Shape: a locked crop keeps its ratio across a whole drag', { item: 'crop-lock-ratio' }, function () {
+    var MW = 1920, MH = 1080, R = MH / MW;
+    // A faithful model of the fixed resizeCrop: the ratio is captured once for the gesture.
+    var drag = function (from, to, reDerive) {
+      var c = { w: from, h: Math.round(from * R) };
+      var lockR = c.h / c.w;
+      var stepDir = to < from ? -1 : 1;
+      for (var w = from; w !== to; w += stepDir) {
+        var r = reDerive ? (c.h / c.w) : lockR;          // reDerive === the original defect
+        c.w = Math.max(1, Math.min(MW, Math.round(w + stepDir)));
+        c.h = Math.max(1, Math.min(MH, Math.round(c.w * r)));
+      }
+      return c;
+    };
+    // The instrument must be able to SEE the bug, or a green result means nothing. Prove it does.
+    var broken = drag(1920, 1016, true);
+    if (Math.abs(broken.h - Math.round(1016 * R)) < 8) {
+      throw new Error('the drag model no longer reproduces the ratio decay (got h=' + broken.h + ' for the buggy path, ' +
+        'expected it to be far from ' + Math.round(1016 * R) + ') — this test cannot prove anything');
+    }
+    var fixed = drag(1920, 1016, false);
+    var want = Math.round(1016 * R);
+    if (Math.abs(fixed.h - want) > 2) {
+      throw new Error('after a 904-step drag a locked 16:9 crop is ' + fixed.w + 'x' + fixed.h +
+        ', expected about ' + 1016 + 'x' + want + ' — the ratio decays across the gesture');
+    }
+    // …and the collapse case: all the way down, then back up. This is the one that gave a square.
+    var downUp = (function () {
+      var c = { w: 1920, h: 1080 }, lockR = c.h / c.w;
+      for (var w = 1920; w > 1; w--) { c.w = w; c.h = Math.max(1, Math.min(MH, Math.round(c.w * lockR))); }
+      for (var w2 = 1; w2 <= 901; w2++) { c.w = w2; c.h = Math.max(1, Math.min(MH, Math.round(c.w * lockR))); }
+      return c;
+    })();
+    if (Math.abs(downUp.h - Math.round(901 * R)) > 2) {
+      throw new Error('dragging a locked crop to the minimum and back to 901 gave ' + downUp.w + 'x' + downUp.h +
+        ' instead of 901x' + Math.round(901 * R) + ' — a clamped step is poisoning the ratio for every step after it');
+    }
+    // The real function must exist and be reachable, or the model above is guarding nothing.
+    if (String(FM.inspector.refresh).length < 10) throw new Error('FM.inspector is not live');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

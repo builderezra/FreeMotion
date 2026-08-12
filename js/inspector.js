@@ -2367,11 +2367,27 @@ window.FM = window.FM || {};
     const getW = () => Math.round(cur().w), getH = () => Math.round(cur().h);
     let boxW, boxH;
     const syncAll = () => { if (boxW) boxW._refresh(); if (boxH) boxH._refresh(); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); };
+    /* The locked ratio is captured ONCE and held for the whole drag. It used to be re-derived from the
+     * CURRENT crop on every call — `c.h / c.w` — while the same call wrote back an integer-rounded
+     * height, so each step's rounding became the next step's ratio and the error compounded across
+     * the hundreds of pointermove events in one gesture. Measured on a 1920x1080 source: a slow drag
+     * from Width 1920 down to 1016 produced h=508 instead of 572, i.e. 16:9 had decayed to 2:1; and
+     * dragging to the minimum and back up produced a 901x901 SQUARE, because once the height bottoms
+     * out on the Math.max(1, …) floor while the width is still large, the derived ratio collapses to
+     * 1:1 and never recovers. The lock button went on saying the ratio was held throughout.
+     *
+     * `lockR` lives in this panel-builder scope, which is rebuilt on every FM.inspector.refresh() —
+     * and a scrub release refreshes. So its lifetime IS the gesture, with no new plumbing, and
+     * toggling the lock (which also refreshes) re-derives it, which is what you want after resizing
+     * freely. A clamped step no longer poisons the next one: nw is re-derived from the fixed ratio,
+     * so dragging back up restores the shape instead of keeping the square. */
+    let lockR = null;
     function resizeCrop(axis, V) {
       ensureCrop(layer);
       const c = cur(); let nw = c.w, nh = c.h;
-      if (axis === 'w') { nw = Math.max(1, Math.min(MW, Math.round(V))); if (_szLock) nh = Math.max(1, Math.min(MH, Math.round(nw * (c.h / c.w)))); }
-      else { nh = Math.max(1, Math.min(MH, Math.round(V))); if (_szLock) nw = Math.max(1, Math.min(MW, Math.round(nh * (c.w / c.h)))); }
+      if (lockR == null) lockR = (c.w > 0 && c.h > 0) ? (c.h / c.w) : (MW > 0 ? MH / MW : 1);
+      if (axis === 'w') { nw = Math.max(1, Math.min(MW, Math.round(V))); if (_szLock) nh = Math.max(1, Math.min(MH, Math.round(nw * lockR))); }
+      else { nh = Math.max(1, Math.min(MH, Math.round(V))); if (_szLock) nw = Math.max(1, Math.min(MW, Math.round(nh / lockR))); }
       let nx, ny;
       if (_szEdge) { nx = c.x; ny = c.y; }                                   // keep the top-left corner
       else { nx = Math.round(c.x + c.w / 2 - nw / 2); ny = Math.round(c.y + c.h / 2 - nh / 2); }   // keep centre
