@@ -690,6 +690,220 @@
     }
   });
 
+  /* ---- the restroom-pictogram pair: person + woman ------------------------------------------
+   * Every number below is measured from RENDERED PIXELS — reading the path data is what let three
+   * bad versions of these two ship. The tests are deliberately PROPERTY tests: not one coordinate
+   * is pinned, because pinning coordinates only freezes whatever was last drawn. What is pinned is
+   * what makes a pictogram a pictogram, and each one is a defect that actually shipped:
+   *   · the head is a true circle in the box the picker actually spawns  (the CAR bug: a wrong
+   *     SHAPE_ASPECT stretches every feature by exactly the box ratio while the path data still
+   *     looks perfectly reasonable — the car's wheels became 3.1:1 ellipses that way);
+   *   · the two agree on height, head and stance — they appear side by side, and the previous pair
+   *     had her shoulders at 0.69x his and her legs at 0.62x his while a comment claimed they matched;
+   *   · the torso tapers and never widens on the way down — his had a literal rectangle torso and a
+   *     26px concave nick where a hand-round undercut the hip;
+   *   · both are symmetric to a pixel;
+   *   · at 24 and 48px the head stays off the shoulders and the legs stay apart — his merged into
+   *     one solid column at 24px, which is the documented failure mode for these two shapes.
+   */
+  const FIG_CACHE = {};
+  function figMask(kind, bw, bh) {
+    const c = offscreen(bw, bh), g = c.getContext('2d');
+    FM.traceShapePath(g, { shape: kind }, 0, 0, bw, bh);
+    g.fillStyle = '#000'; g.fill();          // canvas default fill rule = nonzero, exactly as the app draws it
+    const d = g.getImageData(0, 0, bw, bh).data, m = new Uint8Array(bw * bh);
+    for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 127 ? 1 : 0;
+    return { m: m, w: bw, h: bh };
+  }
+  function figTopo(f) {   // 4-connected ink components, and background regions enclosed by ink
+    const N = f.w * f.h, seen = new Uint8Array(N), st = new Int32Array(N);
+    const push = (arr, p, sp) => { arr[p] = 1; st[sp] = p; return sp + 1; };
+    let comps = 0;
+    const flood = (start, want, marks) => {
+      let sp = push(marks, start, 0);
+      while (sp) {
+        const p = st[--sp], x = p % f.w, y = (p - x) / f.w;
+        if (x > 0 && f.m[p - 1] === want && !marks[p - 1]) sp = push(marks, p - 1, sp);
+        if (x < f.w - 1 && f.m[p + 1] === want && !marks[p + 1]) sp = push(marks, p + 1, sp);
+        if (y > 0 && f.m[p - f.w] === want && !marks[p - f.w]) sp = push(marks, p - f.w, sp);
+        if (y < f.h - 1 && f.m[p + f.w] === want && !marks[p + f.w]) sp = push(marks, p + f.w, sp);
+      }
+    };
+    for (let i = 0; i < N; i++) if (f.m[i] && !seen[i]) { comps++; flood(i, 1, seen); }
+    const bg = new Uint8Array(N);
+    for (let x = 0; x < f.w; x++) { [x, x + (f.h - 1) * f.w].forEach(p => { if (!f.m[p] && !bg[p]) flood(p, 0, bg); }); }
+    for (let y = 0; y < f.h; y++) { [y * f.w, y * f.w + f.w - 1].forEach(p => { if (!f.m[p] && !bg[p]) flood(p, 0, bg); }); }
+    let holes = 0; const hs = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (!f.m[i] && !bg[i] && !hs[i]) { holes++; flood(i, 0, hs); }
+    return { components: comps, holes: holes };
+  }
+  function figStats(kind, bw, bh) {
+    const key = kind + '@' + bw + 'x' + bh;
+    if (FIG_CACHE[key]) return FIG_CACHE[key];
+    const f = figMask(kind, bw, bh), rows = [];
+    for (let y = 0; y < f.h; y++) {
+      let n = 0, l = -1, r = -1, runs = 0, prev = 0;
+      for (let x = 0; x < f.w; x++) {
+        const v = f.m[y * f.w + x];
+        if (v) { n++; if (l < 0) l = x; r = x; if (!prev) runs++; }
+        prev = v;
+      }
+      rows.push({ n: n, l: l, r: r, runs: runs, w: n ? r - l + 1 : 0 });
+    }
+    let y0 = -1, y1 = -1, x0 = f.w, x1 = -1, ink = 0;
+    rows.forEach((r, y) => { if (r.n) { if (y0 < 0) y0 = y; y1 = y; if (r.l < x0) x0 = r.l; if (r.r > x1) x1 = r.r; ink += r.n; } });
+    if (y0 < 0) throw new Error(kind + ' drew no ink at all in a ' + bw + 'x' + bh + ' box');
+    const H = y1 - y0 + 1, at = fr => Math.min(y1, Math.max(y0, Math.round(y0 + fr * H)));
+    let gapS = -1, gapE = -1;                                   // the neck: first empty row inside the figure
+    for (let y = y0; y <= y1; y++) {
+      if (!rows[y].n && gapS < 0) gapS = y;
+      else if (rows[y].n && gapS >= 0 && gapE < 0) { gapE = y; break; }
+    }
+    let headW = 0; const headH = gapS > 0 ? gapS - y0 : 0;
+    for (let y = y0; y < (gapS > 0 ? gapS : y0); y++) headW = Math.max(headW, rows[y].w);
+    let split = -1;                                              // where it becomes two legs and stays two
+    for (let y = (gapE > 0 ? gapE : y0); y <= y1; y++) {
+      if (rows[y].runs >= 2) {
+        let ok = true;
+        for (let z = y; z <= y1 - Math.round(H * 0.02); z++) if (rows[z].runs < 2) { ok = false; break; }
+        if (ok) { split = y; break; }
+      }
+    }
+    const body = gapE > 0 ? gapE : y0;
+    // direction changes in the outer silhouette, from below the shoulder round to the split.
+    // A pictogram man tapers: 0 changes. A pictogram woman narrows then flares: 1. A hip nick,
+    // a wrist step or any other accidental bulge shows up as an extra one.
+    const dead = Math.max(3, Math.round(H * 0.006));
+    let dir = 0, changes = 0, ref = rows[at((body - y0) / H + 0.08)].w, minSeen = Infinity, rebound = 0;
+    for (let y = at((body - y0) / H + 0.08); y < (split > 0 ? split : y1); y++) {
+      const w = rows[y].w;
+      if (w < minSeen) minSeen = w; else if (w - minSeen > rebound) rebound = w - minSeen;
+      if (Math.abs(w - ref) >= dead) { const d = w > ref ? 1 : -1; if (dir && d !== dir) changes++; dir = d; ref = w; }
+    }
+    let diff = 0, maxOff = 0; const cx2 = x0 + x1;               // mirror about the ink centre
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const mx = cx2 - x;
+        if (f.m[y * f.w + x] !== ((mx >= 0 && mx < f.w) ? f.m[y * f.w + mx] : 0)) diff++;
+      }
+      if (rows[y].n) maxOff = Math.max(maxOff, Math.abs((rows[y].l + rows[y].r) - cx2) / 2);
+    }
+    const lr = rows[at(0.90)];
+    let gap90 = 0, g0 = -1;
+    for (let x = lr.l; x <= lr.r; x++) {
+      if (!f.m[at(0.90) * f.w + x]) { if (g0 < 0) g0 = x; }
+      else if (g0 >= 0) { gap90 = Math.max(gap90, x - g0); g0 = -1; }
+    }
+    const t = figTopo(f);
+    const S = {
+      kind: kind, H: H, W: x1 - x0 + 1, ink: ink,
+      headW: headW, headH: headH,
+      headCirc: headH ? headW / headH : 0,
+      headsPerHeight: headH ? H / headH : 0,
+      neckGap: gapE > 0 ? gapE - gapS : 0,
+      shoulderW: rows[at((body - y0) / H + 0.07)].w,
+      hipW: split > 0 ? rows[at((split - y0) / H - 0.02)].w : 0,
+      splitFrac: split > 0 ? (split - y0) / H : 0,
+      legLenFrac: split > 0 ? 1 - (split - y0) / H : 0,
+      legW: lr.runs ? lr.n / lr.runs : 0, legGap: gap90, legRuns90: lr.runs,
+      dirChanges: changes, reboundPx: rebound,
+      symPct: 100 * diff / ink, centreOffPx: maxOff,
+      components: t.components, holes: t.holes,
+    };
+    FIG_CACHE[key] = S;
+    return S;
+  }
+  // The box the picker ACTUALLY spawns, straight out of app.js's private SHAPE_ASPECT table.
+  function figSpawnBox(kind) {
+    const savedScene = FM.scene, savedTime = FM.time;
+    try {
+      FM.scene = { project: { width: 600, height: 600, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      FM.time = 0;
+      FM.addShapeLayer(kind, { name: kind });
+      const L = FM.scene.layers[0];
+      if (!L || L.shape !== kind) throw new Error('addShapeLayer did not add a ' + kind + ' layer');
+      const s = 512 / Math.max(L.shapeW, L.shapeH);
+      return { w: Math.round(L.shapeW * s), h: Math.round(L.shapeH * s), raw: L.shapeW + 'x' + L.shapeH };
+    } finally {
+      FM.scene = savedScene; FM.time = savedTime;
+      // addShapeLayer selects what it adds and re-renders the inspector against it. Putting the
+      // scene back is not enough — without this the panel is still showing the scratch shape's
+      // inspector, and the NEXT test to ask for the add menu fails with "the desktop add menu is
+      // not rendered even with nothing selected". (Caught by running the suite, not by reading it.)
+      try { if (FM.inspector) FM.inspector.refresh(); } catch (e) {}
+    }
+  }
+
+  test('figures: the pictogram head is a true circle in the box the picker spawns', { item: 'figure-shapes' }, function () {
+    // The car test by another name. The art carries its own proportion inside its unit box and the
+    // box only SCALES it, so any declared aspect other than the one it was drawn at (1:1) turns the
+    // head into an ellipse by exactly the box ratio — while the path data still reads fine.
+    ['person', 'woman'].forEach(function (kind) {
+      const box = figSpawnBox(kind);
+      const s = figStats(kind, box.w, box.h);
+      if (!(s.headCirc > 0.97 && s.headCirc < 1.03)) {
+        throw new Error(kind + "'s head renders " + s.headW + 'x' + s.headH + ' (' + s.headCirc.toFixed(3) +
+          ':1) in the ' + box.raw + ' box it spawns at — it is an ellipse, so the declared SHAPE_ASPECT no longer matches the art');
+      }
+    });
+  });
+
+  test('figures: person and woman are the same figure below the neck', { item: 'figure-shapes' }, function () {
+    // They appear side by side in the picker and in a project. Before v5.90 they shared only a head:
+    // her shoulders were 0.69x his and her legs 0.62x his.
+    const p = figStats('person', 512, 512), w = figStats('woman', 512, 512);
+    const same = (a, b, tol, what) => {
+      if (Math.abs(a - b) > tol) throw new Error('the pair disagree on ' + what + ': person ' + a + ' vs woman ' + b + ' px (tolerance ' + tol + ')');
+    };
+    same(p.H, w.H, 1, 'total height');
+    same(p.headH, w.headH, 1, 'head height');
+    same(p.headW, w.headW, 1, 'head width');
+    same(p.neckGap, w.neckGap, 1, 'the neck gap');
+    same(p.shoulderW, w.shoulderW, 3, 'shoulder width');
+    same(p.legW, w.legW, 3, 'leg thickness');
+    same(p.legGap, w.legGap, 3, 'the gap between the legs');
+  });
+
+  test('figures: pictogram proportions — 1:6–1:7 head, legs, shoulders, and a torso that only tapers', { item: 'figure-shapes' }, function () {
+    const p = figStats('person', 512, 512), w = figStats('woman', 512, 512);
+    [p, w].forEach(function (s) {
+      if (!(s.headsPerHeight >= 6 && s.headsPerHeight <= 7)) {
+        throw new Error(s.kind + ' is 1:' + s.headsPerHeight.toFixed(2) + ' heads tall — outside the 1:6–1:7 pictogram band');
+      }
+      if (!(s.shoulderW / s.headW >= 1.7 && s.shoulderW / s.headW <= 2.3)) {
+        throw new Error(s.kind + "'s shoulders are " + (s.shoulderW / s.headW).toFixed(2) + ' head-widths (want 1.7–2.3); at 1.0 the head is as wide as the body and it reads as a bell');
+      }
+      if (!(s.legLenFrac >= 0.35)) throw new Error(s.kind + "'s legs are " + (100 * s.legLenFrac).toFixed(1) + '% of height — under 35% the figure reads squat');
+      if (!(s.neckGap >= 2)) throw new Error(s.kind + "'s head is touching the shoulders (" + s.neckGap + 'px of neck)');
+    });
+    // his silhouette must TAPER to the hip and must never widen on the way down…
+    if (!(p.hipW < p.shoulderW * 0.92)) throw new Error('person: hips ' + p.hipW + 'px under shoulders ' + p.shoulderW + 'px — that is a fridge, not a torso (want at least 8% of taper)');
+    if (p.dirChanges !== 0) throw new Error('person: the silhouette narrows and then widens again between the shoulder and the crotch (' + p.dirChanges + ' direction change(s), worst rebound ' + p.reboundPx + 'px) — that is the hip nick');
+    // …and hers must do it exactly once, at the waist where the dress starts to flare
+    if (w.dirChanges > 1) throw new Error('woman: the dress outline changes direction ' + w.dirChanges + ' times between shoulder and hem — a pictogram dress narrows once, then flares');
+  });
+
+  test('figures: both are mirror-symmetric to within a pixel', { item: 'figure-shapes' }, function () {
+    ['person', 'woman'].forEach(function (kind) {
+      const s = figStats(kind, 512, 512);
+      if (s.symPct > 0.5) throw new Error(kind + ' is ' + s.symPct.toFixed(3) + '% asymmetric by ink — over the 0.5% rasteriser-noise floor');
+      if (s.centreOffPx > 2) throw new Error(kind + ' leans: a row centre sits ' + s.centreOffPx.toFixed(1) + 'px off the figure centre');
+    });
+  });
+
+  test('figures: still legible at 24 and 48px — head off the shoulders, legs apart, no holes', { item: 'figure-shapes' }, function () {
+    // The documented failure: at 24px person measured ONE ink run at the feet — a solid black column.
+    [24, 48].forEach(function (n) {
+      ['person', 'woman'].forEach(function (kind) {
+        const s = figStats(kind, n, n);
+        if (!(s.ink > n * n * 0.1)) throw new Error(kind + ' at ' + n + 'px is almost blank: ' + s.ink + ' ink pixels');
+        if (s.components !== 2) throw new Error(kind + ' at ' + n + 'px renders ' + s.components + ' components — a pictogram is exactly 2 (head, body+legs), so the head has fused to the shoulders');
+        if (s.holes !== 0) throw new Error(kind + ' at ' + n + 'px has ' + s.holes + ' enclosed hole(s) — the nonzero union of the parts has broken');
+        if (s.legRuns90 !== 2) throw new Error(kind + ' at ' + n + 'px has ' + s.legRuns90 + ' ink run(s) across the legs — they have merged into one column');
+      });
+    });
+  });
+
   test('shape tiles keep their big icons; only the labelled cards are trimmed', { item: 'shape-icon-size' }, function () {
     // v5.05. Trimming the Elements grid's cards used a 4-class selector, which outranks the shape
     // grid's own 2-class `.addmenu-card--ico` rule — so it also shrank every shape icon from 34px to

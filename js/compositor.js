@@ -5765,71 +5765,97 @@ window.FM = window.FM || {};
     S.boat = [[[0.5,0.02],[0.54,0.02],[0.54,0.62],[0.5,0.62]],[[0.58,0.1],[0.94,0.6],[0.58,0.6]],[[0.46,0.22],[0.46,0.6],[0.1,0.6]],[[0.06,0.68],[0.94,0.68],[0.82,0.94],[0.18,0.94]]];
     S.magnifier = [circleS(0.42,0.42,0.34,0.34),[[0.62,0.68],[0.7,0.6],[0.98,0.86],[0.9,0.94]]];
     (function(){ const polys=[circleS(0.5,0.5,0.24,0.24)]; for(let i=0;i<8;i++){ const a=i*PI/4; polys.push(rot([[0.5,0.02],[0.56,0.18],[0.44,0.18]],0.5,0.5,a)); } S.sun=polys; })();
-    // person: PROPORTIONAL head (was comically big) + a corner point at every joint — shoulders,
-    // elbows, wrists, hips, knees, ankles — with smooth points only for hand/foot tips. Move the
-    // wrist + elbow points and he waves.
-    // person: restroom-pictogram PARTS (head / torso / arms / legs — nonzero fill unions them).
-    // The old single-outline figure traced every limb in one path and rendered noodly.
-    // person / woman: the international restroom pictogram, rebuilt from Ezra's reference so the two
-    // read as a matched pair. Construction is deliberately the same for both — detached head circle,
-    // one solid body with ROUNDED shoulders and rounded limb ends, then two legs below — so they sit
-    // together in a sign. Everything is derived from a few named proportions rather than loose
-    // numbers, which is what keeps the pair consistent when one of them is tweaked.
+    // ---- the restroom-pictogram pair: person + woman, from ONE proportion table ----
+    // History, so this is not re-learned a fourth time. (a) The original was a single traced outline
+    // that went round every limb and rendered noodly — hence PARTS (detached head circle, one body,
+    // two legs) unioned by nonzero fill, which is right and is kept. (b) The head was then shrunk
+    // for being "comically big". (c) A later pass claimed in a comment to have rebuilt both from a
+    // reference "so the two match". Rendered and measured at 1200px, that claim was false: her
+    // shoulders were 0.69x his, her legs 0.62x his, her split 0.034H lower — two drawing systems
+    // sharing one head. What the pixels showed on top of that: his torso was a LITERAL RECTANGLE
+    // (constant 382px from f=0.23 to f=0.575 — a fridge), his legs only 0.319H so he read squat,
+    // a hand-round that undercut the hip and left a 26px concave nick in the silhouette, legs that
+    // merged into one solid column at 24px, and a head at 1:5.57 against the 1:6–1:7 convention.
+    // Her shoulders were 1.04 head-widths — the head was as wide as her body — so she read as a bell.
+    //
+    // The fix is structural, not cosmetic: both figures are generated from the table below, so the
+    // head, neck gap, shoulder line, shoulder width, shoulder round, leg thickness, leg gap and feet
+    // are LITERALLY the same values for both and cannot drift again. Only what the convention says
+    // must differ does: he tapers to a hip and splits into legs, she flares into a hem.
+    // Every number is a fraction of FIGURE HEIGHT, not of the box, so they read as pictogram
+    // proportions ("head is 0.15 of height") instead of as coordinates.
+    // Neither figure has a SHAPE_ASPECT entry, i.e. both spawn SQUARE, and the art carries its own
+    // proportion inside that square box — same rule as the car. Do not add an aspect without
+    // re-authoring the art to fill the box: any ratio but 1:1 turns the head into an ellipse.
+    const PICTO = (function () {
+      const top = 0.005, H = 0.98;                    // the band both figures fill inside the unit box
+      const P = {
+        H,
+        Y: f => r4(top + f * H),                      // fraction of figure height → box y
+        X: s => r4(0.5 + s * H),                      // signed half-width in height units → box x
+        R: v => r4(v * H),                            // a length in height units → box units
+        headR: 0.075, headF: 0.075,   // head Ø 0.150H → 1:6.67 tall, inside the 1:6–1:7 band (was 1:5.57)
+        shF: 0.192,                   // shoulder line = head bottom (0.150) + a 0.042H neck gap. The gap is
+                                      // sized by RENDER, not by taste: below ~0.038H the head fuses to the
+                                      // shoulders at 24px (measured across every size from 18 to 64).
+        shW: 0.150,                   // half shoulder width → 0.300H, two head diameters. IDENTICAL for both.
+        shR: 0.045,                   // shoulder round: square corners read as a box lid, a big radius domes them
+        splitF: 0.575,                // his crotch — a standing pictogram splits at 0.57–0.60 (was 0.681)
+        hemF: 0.615,                  // her hem sits just below his crotch; that IS the convention, not a mismatch
+        waistF: 0.360, waistW: 0.140, // where her dress leaves the arm line and starts to flare
+        hemW: 0.205,                  // half hem width
+        gapW: 0.0275,                 // half the leg gap → 0.055H ≈ 1.3px at 24px, so he stays two legs
+        hipW: 0.118,                  // half hip width → 0.236H ≈ 1.57 head-widths under 2.0 at the shoulder
+        footR: 0.026,                 // rounded foot corners
+      };
+      P.legW = r4(P.hipW - P.gapW);   // each leg, both figures — the leg's outer line continues the hip line
+      // One leg: straight from the split/hem to the floor, both bottom corners rounded.
+      P.leg = (s0, s1, fromF) => {
+        const x0 = P.X(s0), x1 = P.X(s1), yT = P.Y(fromF - 0.012), yB = P.Y(1), r = P.R(P.footR);
+        return [].concat(
+          [[x0, yT], [x1, yT], [x1, r4(yB - r)]],
+          arcS(x1 - r, yB - r, r, r, 0, PI / 2, 3, true),
+          [[r4(x0 + r), yB]],
+          arcS(x0 + r, yB - r, r, r, PI / 2, PI, 3, true)
+        );
+      };
+      // Shoulders: the top of the body, rounded at both corners, shared verbatim by both figures.
+      P.shoulders = () => {
+        const r = P.R(P.shR), yc = P.Y(P.shF) + r;
+        return [].concat(
+          arcS(P.X(-P.shW) + r, yc, r, r, PI, PI * 1.5, 3, true),
+          arcS(P.X(P.shW) - r, yc, r, r, PI * 1.5, PI * 2, 3, true)
+        );
+      };
+      P.head = () => circleS(0.5, P.Y(P.headF), P.R(P.headR), P.R(P.headR));
+      return P;
+    })();
+    // person: head, one tapering body (shoulders → hips; the arms are part of that mass, as they are
+    // in the sign — the taper is what reads as arms, and there is no wrist step to nick the hip), legs.
     S.person = (function () {
-      const hc = 0.093, hr = 0.088;          // head centre / radius
-      const shY = 0.205, armX = 0.159;       // shoulder line, outer edge of the hanging arms
-      const r1 = 0.036;                      // shoulder round — small: the reference's shoulders are square-ish, a big radius domes them
-      const handY = 0.600, r2 = 0.032;       // where the hands stop, and their round
-      const hipX = 0.140, crotchY = 0.672;   // hips are a touch narrower than the arms — the step reads as a wrist
-      const gap = 0.037, footY = 0.985, r3 = 0.040;
-      const L = 0.5 - hipX, R = 0.5 + hipX, gL = 0.5 - gap / 2, gR = 0.5 + gap / 2;
-      const leg = (x0, x1) => [].concat(
-        [[x0, crotchY - 0.01], [x1, crotchY - 0.01], [x1, footY - r3]],
-        arcS(x1 - r3, footY - r3, r3, r3, 0, PI / 2, 3, true),
-        [[x0 + r3, footY]],
-        arcS(x0 + r3, footY - r3, r3, r3, PI / 2, PI, 3, true)
-      );
+      const P = PICTO;
       return [
-        circleS(0.5, hc, hr, hr),
-        [].concat(
-          arcS(0.5 - armX + r1, shY + r1, r1, r1, PI, PI * 1.5, 3, true),          // left shoulder
-          arcS(0.5 + armX - r1, shY + r1, r1, r1, PI * 1.5, PI * 2, 3, true),      // right shoulder
-          [[0.5 + armX, handY - r2]],
-          arcS(0.5 + armX - r2, handY - r2, r2, r2, 0, PI / 2, 3, true),           // right hand
-          [[R, handY], [R, crotchY], [L, crotchY], [L, handY], [0.5 - armX + r2, handY]],
-          arcS(0.5 - armX + r2, handY - r2, r2, r2, PI / 2, PI, 3, true)           // left hand
-        ),
-        leg(L, gL),
-        leg(gR, R),
+        P.head(),
+        P.shoulders().concat([[P.X(P.hipW), P.Y(P.splitF)], [P.X(-P.hipW), P.Y(P.splitF)]]),
+        P.leg(-P.hipW, -P.gapW, P.splitF),
+        P.leg(P.gapW, P.hipW, P.splitF),
       ];
     })();
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
-    // woman: proportional head, shoulder/elbow/wrist joints on both arms, flared dress, legs with
-    // ankle joints + smooth foot tips.
-    // woman: same pictogram construction — head / flared dress / arms / legs below the hem.
+    // woman: the SAME head, the SAME shoulders (she had none — 1.04 head-widths, so her head was as
+    // wide as her body and she read as a bell) and the SAME legs as `person` — see PICTO above. The
+    // only difference is the middle: her sides fall from the shoulder to the arm line and then flare
+    // to a hem, instead of tapering to a hip.
     S.woman = (function () {
-      const hc = 0.093, hr = 0.088;          // identical head to `person` — they must match in a sign
-      const shY = 0.205, shX = 0.107;        // narrower shoulders; the flare does the rest
-      const r1 = 0.034;
-      const armX = 0.132, armY = 0.545;      // the arm line leaves the shoulder at a shallow angle; the skirt kicks out below it
-      const hemX = 0.186, hemY = 0.706;      // the dress hem, square-cornered
-      const gap = 0.050, legX = 0.101, footY = 0.985, r3 = 0.034;
-      const gL = 0.5 - gap / 2, gR = 0.5 + gap / 2;
-      const leg = (x0, x1) => [].concat(
-        [[x0, hemY - 0.01], [x1, hemY - 0.01], [x1, footY - r3]],
-        arcS(x1 - r3, footY - r3, r3, r3, 0, PI / 2, 3, true),
-        [[x0 + r3, footY]],
-        arcS(x0 + r3, footY - r3, r3, r3, PI / 2, PI, 3, true)
-      );
+      const P = PICTO;
       return [
-        circleS(0.5, hc, hr, hr),
-        [].concat(
-          arcS(0.5 - shX + r1, shY + r1, r1, r1, PI, PI * 1.5, 3, true),           // left shoulder
-          arcS(0.5 + shX - r1, shY + r1, r1, r1, PI * 1.5, PI * 2, 3, true),       // right shoulder
-          [[0.5 + armX, armY], [0.5 + hemX, hemY], [0.5 - hemX, hemY], [0.5 - armX, armY]]
-        ),
-        leg(0.5 - legX, gL),
-        leg(gR, 0.5 + legX),
+        P.head(),
+        P.shoulders().concat([
+          [P.X(P.waistW), P.Y(P.waistF)], [P.X(P.hemW), P.Y(P.hemF)],
+          [P.X(-P.hemW), P.Y(P.hemF)], [P.X(-P.waistW), P.Y(P.waistF)],
+        ]),
+        P.leg(-P.hipW, -P.gapW, P.hemF),
+        P.leg(P.gapW, P.hipW, P.hemF),
       ];
     })();
     // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),
