@@ -1741,11 +1741,12 @@ window.FM = window.FM || {};
       if (audioOnly) return CATEGORIES.filter(c => ['speed', 'volume', 'effects'].indexOf(c.key) >= 0);
       return CATEGORIES.filter(c => c.key !== 'editgroup');
     }
-    // shape / text / image show the same grid, with Speed and Volume DISABLED (categoryGrid greys
-    // them): Volume because there's no audio, Speed because there's no source clock to re-time —
-    // see layerHasSource.
+    // shape / text / image show the same grid with Volume DISABLED (categoryGrid greys it) because
+    // there is no audio. Speed used to be greyed here too; since v6.39 it re-times the clip and
+    // stretches its keyframes, so it works on these — see viewAllowed.
     if (['shape', 'text', 'image'].indexOf(layer.type) >= 0) return CATEGORIES.filter(c => c.key !== 'editgroup');
-    return CATEGORIES.filter(c => c.key !== 'speed' && c.key !== 'volume' && c.key !== 'editgroup');
+    // …and everything else (group, null, camera) keeps Speed for the same reason, losing only Volume.
+    return CATEGORIES.filter(c => c.key !== 'volume' && c.key !== 'editgroup');
   }
   function layerHasAudio(layer) { return !!layer && layer.type === 'video'; }   // only the video/audio path carries sound — shapes/text/images/groups don't
   // Speed re-times a layer's SOURCE clock and nothing else: layer.speed feeds FM.layerSourceAdvance →
@@ -1819,7 +1820,13 @@ window.FM = window.FM || {};
   // that DESTROYED keyframed volume), or a persisted 'volume'/'speed' view after a media replace.
   function viewAllowed(layer, v) {
     if (!layer || v === 'home') return true;
-    if (v === 'speed') return layerHasSource(layer);   // speed only re-times a source clock — see layerHasSource
+    /* Speed is offered on EVERY layer type since v6.39 (queue 68: "also has to work on every layer
+     * type"). It used to be gated to layers with a source, because re-timing a source clock was the
+     * only thing it did — which is why queue 38 complained that it was a dead control on a shape.
+     * It now also stretches the layer's KEYFRAMES with the clip, and that is meaningful on anything
+     * that can be animated, i.e. anything. So the control does something on every type, which is what
+     * queue 38 actually asked for; hiding it was the cheap answer to that, not the right one. */
+    if (v === 'speed') return true;
     if (v === 'volume') return layer.type === 'video';   // volume needs an audio track
     if (v === 'cameraopts') return layer.type === 'camera';   // the lens belongs to the camera and nothing else
     // Effects is the ONE view a song may still open, because since queue 45 the audio stack lives
@@ -1845,8 +1852,10 @@ window.FM = window.FM || {};
       const card = el('button', 'cat-card');
       const label = cat.key === 'element' ? elementLabel(layer) : cat.label;
       const volDisabled = cat.key === 'volume' && !layerHasAudio(layer);   // Volume card shows on shapes/text but can't do anything with no audio
-      const spdDisabled = cat.key === 'speed' && !layerHasSource(layer);   // same for Speed: nothing to re-time without video/audio frames
-      if (volDisabled || spdDisabled) card.classList.add('cat-card-disabled');
+      // Speed is live on EVERY type since v6.39 — it re-times the clip AND stretches its keyframes,
+      // so there is nothing left for it to be dead on. (It was greyed here when all it could do was
+      // re-time a source clock; see viewAllowed.)
+      if (volDisabled) card.classList.add('cat-card-disabled');
       // Number badge (1-based) — press that key to open the category (see openCategoryByIndex).
       const gico = catIco(cat.key, layer);
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') +
@@ -1854,7 +1863,6 @@ window.FM = window.FM || {};
         '<span class="cat-label">' + label + '</span>';
       card.addEventListener('click', () => {
         if (volDisabled) { if (FM.toast) FM.toast('This layer has no audio', 1200); return; }   // pressing Volume on a no-audio layer does nothing (Ezra)
-        if (spdDisabled) { if (FM.toast) FM.toast('Speed only re-times video or audio — this layer has neither', 1800); return; }   // it used to open a panel whose slider changed nothing on screen
         if (cat.key === 'editgroup') { if (FM.enterGroup) FM.enterGroup(layer.id); return; }   // opens the group's own timeline
         // Text: open the focused editor SYNCHRONOUSLY inside this tap — iOS only pops the keyboard
         // when .focus() runs in the gesture's call stack (the refresh() interception's setTimeout won't).
@@ -3261,6 +3269,7 @@ window.FM = window.FM || {};
         if (FM.isAnimated(layer.speed)) {
           FM.setProp(layer, 'speed', sp, FM.time);          // ramp: writes/updates a keyframe at the playhead; clip window stays fixed
         } else {
+          const durBefore = layer.duration;                   // measured BEFORE, so the keyframes below scale by what ACTUALLY happened
           const span = layer.duration * (layer.speed || 1);   // source span is invariant → re-time the clip
           layer.speed = sp;
           layer.duration = Math.max(0.1, span / sp);
@@ -3273,6 +3282,13 @@ window.FM = window.FM || {};
           if (layer.type === 'video' && isFinite(srcDur)) {
             layer.duration = Math.max(0.1, Math.min(layer.duration, (srcDur - (layer.trimStart || 0)) / sp));
           }
+          /* …and the animation rides with the clip (queue 68). The factor is taken from the durations
+           * that actually resulted, not from the speed ratio, because layer.duration is CLAMPED just
+           * above — by the 0.1s floor and, on a video, by the source that is really left. Deriving it
+           * from sp instead would let the keyframes stretch past a bar that had stopped growing.
+           * This runs per slider step, and that is fine: each step scales by the ratio between two
+           * consecutive real durations, so the product telescopes to the exact total ratio. */
+          if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
           const end = layer.start + layer.duration;
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;
         }

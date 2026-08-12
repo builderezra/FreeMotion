@@ -106,9 +106,14 @@ Numbered with Ezra's own queue numbers where he gave them.
       thumbnail spec — do not build preset thumbnails"* and specs a full-screen preview player instead.
       I built the thumbnails because that is what you asked for tonight. The engine behind them is
       exactly what that player would need, so nothing is wasted either way.
-- [ ] **68 — Speed should retime keyframes.** *"if you add a bunch of effects with key frames you may
-      want to make it go faster or slower, changing all the key frames automatically to slow or speed
-      with the layer instead of manually doing it"*. Also has to work on every layer type.
+- [x] **68 — Speed should retime keyframes.** **DONE v6.39.** Changing Speed already re-timed the
+      clip but left every keyframe where it was, so a 2x speed-up halved the bar and left the
+      animation running past the end of it. Now the whole animation stretches with the clip. And
+      Speed is offered on **every layer type** — which looks like it undoes 83/38 ("Speed does
+      nothing on shapes but is still offered") and doesn't: greying it out was the cheap answer to
+      that, and now that it retimes keyframes it genuinely does something on a shape or text layer,
+      so the control is live instead of hidden. Checked by actually dragging it on a shape: speed
+      100% → 200% takes a 4s clip to 2s and moves its keyframes from 0/2/4 to 0/1/2.
 - [ ] **69 — Audio must never lag.** Make the audio clock the master.
 - [ ] **70 — Extracted audio should look like an audio track.** *"it doesn't show it like an audio
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.

@@ -4051,13 +4051,26 @@
   // Registered LAST on purpose. The preintro-stuck test above races a wall clock — index.html's boot
   // script removes #splash ~5.3s after load — so every test that runs BEFORE it eats into that margin.
   // Adding this one further up turned that test red (measured: 63/64 with it mid-file, 64/64 here).
-  test('Speed is disabled on layers with no source to re-time', { item: 'speed-dead-control' }, function () {
-    // Queue 38. layer.speed only retimes the SOURCE clock (FM.layerSourceAdvance -> FM.layerLocalTime),
-    // and every consumer of that is gated on layer.type === 'video'. A shape/text layer's own keyframes
-    // are read at absolute project time, so a speed ramp on one changed nothing on screen — measured:
-    // transform.x 0->400 sat at x=100 at t=1 with speed 1 AND with a 0.25x->4x ramp. Images are stills
-    // (the compositor draws m.el with no time argument), so they have nothing to retime either. The
-    // card now greys out like Volume already does, instead of opening a panel whose slider is inert.
+  test('Speed is live on every layer type, and never a dead control', { item: 'speed-dead-control' }, function () {
+    /* THIS TEST CHANGED MEANING IN v6.39, and the reason is worth keeping.
+     *
+     * Queue 38 was "Speed does nothing on shape/text layers, but the control is still offered", and
+     * the v5.x answer was to GREY IT OUT: layer.speed only re-timed the source clock, every consumer
+     * of that was gated on type === 'video', and a shape's own keyframes are read at absolute project
+     * time — measured then, transform.x 0->400 sat at x=100 at t=1 with speed 1 AND with a 0.25x->4x
+     * ramp. So the card was disabled and the panel refused to open.
+     *
+     * Queue 68 then asked for the other half: "changing all the key frames automatically to slow or
+     * speed with the layer", and "also has to work on every layer type". Speed now stretches the
+     * layer's KEYFRAMES along with the clip, which is meaningful on anything that can be animated —
+     * so the honest fix for queue 38 is that the control does something everywhere, not that it is
+     * hidden where it did nothing. Hiding it was the cheap answer.
+     *
+     * The REQUIREMENT queue 38 actually stated is unchanged and is still what this asserts: no dead
+     * control. It is just met by making it work instead of by greying it. So the assertions flip —
+     * the card must be live and the panel must open on every type — and the "it genuinely re-times"
+     * half lives in the scaleLayerKeyframes test above, which is what stops this becoming a test that
+     * merely proves a button is clickable. */
     var savedScene = FM.scene;
     try {
       FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
@@ -4076,12 +4089,13 @@
       [shape, text, image].forEach(function (L) {
         FM.selectLayer(L.id);
         var card = speedCard();
-        if (!card) throw new Error(L.type + ': the Speed card vanished — it should still be shown, just disabled (AM parity)');
-        if (!card.classList.contains('cat-card-disabled')) throw new Error(L.type + ': Speed card class="' + card.className + '" — expected cat-card-disabled, the panel does nothing on this layer');
+        if (!card) throw new Error(L.type + ': the Speed card vanished from the grid');
+        if (card.classList.contains('cat-card-disabled')) throw new Error(L.type + ': the Speed card is greyed — since v6.39 speed re-times this layer\'s keyframes, so it is not a dead control here any more');
         card.click();
-        if (insp.querySelector('.spd-panel')) throw new Error(L.type + ': clicking the disabled Speed card still opened the Speed panel');
+        if (!insp.querySelector('.spd-panel')) throw new Error(L.type + ': clicking the Speed card did not open the Speed panel');
+        FM.inspector.openCategory('home'); FM.inspector.refresh();
         FM.inspector.openCategory('speed');
-        if (insp.querySelector('.spd-panel')) throw new Error(L.type + ': openCategory("speed") opened the panel — the timeline dbl-click / number-key route is still unguarded');
+        if (!insp.querySelector('.spd-panel')) throw new Error(L.type + ': openCategory("speed") did not open the panel — the timeline dbl-click / number-key route is still gated to layers with a source');
       });
       // …and it must stay fully live where it does work. Video used to park Speed in the quick-action
       // icon strip; since queue 45 it is card 5 there too, exactly as it already was on a shape —
@@ -5723,7 +5737,9 @@
       // The disabled treatment is the v5.61 one: present, dim, and it says why when tapped.
       const sVol = sCards[5], sSpd = sCards[4], vVol = vCards[5], vSpd = vCards[4];
       if (!sVol.off) throw new Error('the Volume card on a shape is not greyed (.cat-card-disabled) — a shape has no audio');
-      if (!sSpd.off) throw new Error('the Speed card on a shape is not greyed — a shape has no source clock to re-time');
+      // Speed is NOT in the greyed set any more (v6.39, queue 68): it re-times the layer's keyframes,
+      // so it does something on a shape. Volume still is — a shape genuinely has no audio.
+      if (sSpd.off) throw new Error('the Speed card on a shape is greyed — since v6.39 speed stretches this layer\'s keyframes with the clip, so it is live on every type');
       if (vVol.off) throw new Error('the Volume card is greyed on a VIDEO, which does have audio');
       if (vSpd.off) throw new Error('the Speed card is greyed on a VIDEO, which does have frames to re-time');
       if (Number(getComputedStyle(sVol.el).opacity) > 0.7) throw new Error('.cat-card-disabled no longer dims its card (opacity ' + getComputedStyle(sVol.el).opacity + ') — this check would prove nothing');
@@ -9864,6 +9880,94 @@
       layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(sel0);
       FM.refreshAll();
+    }
+  });
+
+  /* ---- Speed re-times the KEYFRAMES, not just the clip (queue 68) -------------------------------
+   *
+   * Ezra: "if you add a bunch of effects with key frames you may want to make it go faster or slower,
+   * changing all the key frames automatically to slow or speed with the layer instead of manually
+   * doing it". Changing Speed already re-timed the CLIP — the source span is invariant, so the bar
+   * grows or shrinks — but every keyframe stayed at its absolute project time. Double the speed and
+   * the bar halved while the animation carried on running past the end of it, and you had to drag
+   * every diamond back by hand. Which is the job he was asking to have done for him.
+   *
+   * FM.scaleLayerKeyframes is tested directly rather than through the slider, because the slider is
+   * a rangeRow whose gesture plumbing is not what is on trial here — and because the arithmetic is
+   * the part that can silently corrupt a project. It rewrites times IN PLACE; a wrong factor does not
+   * look wrong, it destroys the timing, and undo is the only way back.
+   *
+   * The SPEED track being excluded is asserted on purpose. A ramp's keyframes describe the re-timing,
+   * so scaling them by the re-timing they caused compounds — each edit would re-time the ramp that
+   * produced it. Getting that wrong is invisible until someone's ramp drifts over several edits. */
+  test('speed: changing it stretches the layer\'s keyframes with the clip', { item: 'speed-retime-kf' }, function () {
+    if (!FM.scaleLayerKeyframes) throw new Error('FM.scaleLayerKeyframes is missing — speed cannot re-time keyframes');
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'spd', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#4af' });
+    L.start = 2; L.duration = 4;
+    L.transform.x = { kf: [{ t: 2, v: 0, e: 'linear' }, { t: 4, v: 100, e: 'linear' }, { t: 6, v: 200, e: 'linear' }] };
+    L.transform.opacity = { kf: [{ t: 3, v: 1, e: 'linear' }, { t: 6, v: 0, e: 'linear' }] };
+    L.speed = { kf: [{ t: 2, v: 1, e: 'linear' }, { t: 6, v: 2, e: 'linear' }] };   // a ramp, which must NOT be scaled
+
+    // 2x faster → the clip halves, so a keyframe 2s in belongs 1s in. Pivot is the clip START (2s).
+    var n = FM.scaleLayerKeyframes(L, 0.5);
+    if (!n) throw new Error('scaleLayerKeyframes reported 0 keyframes moved');
+    var xs = L.transform.x.kf.map(function (k) { return k.t; });
+    if (Math.abs(xs[0] - 2) > 1e-6 || Math.abs(xs[1] - 3) > 1e-6 || Math.abs(xs[2] - 4) > 1e-6) {
+      throw new Error('x keyframes went to [' + xs.join(', ') + '] — expected [2, 3, 4]: the clip starts at 2s and halved, so 2/4/6 must become 2/3/4');
+    }
+    var os = L.transform.opacity.kf.map(function (k) { return k.t; });
+    if (Math.abs(os[0] - 2.5) > 1e-6 || Math.abs(os[1] - 4) > 1e-6) {
+      throw new Error('opacity keyframes went to [' + os.join(', ') + '] — expected [2.5, 4]; every animated property must ride, not just transform.x');
+    }
+    var sp = L.speed.kf.map(function (k) { return k.t; });
+    if (Math.abs(sp[0] - 2) > 1e-6 || Math.abs(sp[1] - 6) > 1e-6) {
+      throw new Error('the SPEED ramp itself was re-timed to [' + sp.join(', ') + '] — it describes the re-timing, so scaling it compounds on every edit');
+    }
+
+    // Reversible: going back the other way must land exactly where it started (no drift).
+    FM.scaleLayerKeyframes(L, 2);
+    var back = L.transform.x.kf.map(function (k) { return k.t; });
+    if (Math.abs(back[0] - 2) > 1e-6 || Math.abs(back[1] - 4) > 1e-6 || Math.abs(back[2] - 6) > 1e-6) {
+      throw new Error('scaling 0.5 then 2 left the keyframes at [' + back.join(', ') + '] instead of [2, 4, 6] — the re-time drifts, so repeated speed edits would walk the animation off the clip');
+    }
+
+    // Nonsense factors must be refused outright, not applied. This rewrites times in place.
+    [0, -1, NaN, Infinity].forEach(function (bad) {
+      var before = L.transform.x.kf.map(function (k) { return k.t; }).join(',');
+      FM.scaleLayerKeyframes(L, bad);
+      var after = L.transform.x.kf.map(function (k) { return k.t; }).join(',');
+      if (before !== after) throw new Error('a factor of ' + bad + ' was APPLIED (' + before + ' -> ' + after + ') — that destroys the timing and only undo gets it back');
+    });
+  });
+
+  /* Speed must be offered on every layer type (the second half of queue 68). It was gated to layers
+   * with a source because re-timing a source clock was all it did — which is exactly why queue 38
+   * complained it was a dead control on a shape. Now that it stretches keyframes too, it does
+   * something on anything, so the gate goes rather than the control. */
+  test('speed: the Speed panel is available on layers with no source', { item: 'speed-retime-kf' }, function () {
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      ['shape', 'text'].forEach(function (ty) {
+        var L = ty === 'text'
+          ? FM.makeLayer('text', { name: 'spd-' + ty, text: 'hi', x: 100, y: 100 })
+          : FM.makeLayer('shape', { shape: 'rect', name: 'spd-' + ty, x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#4af' });
+        FM.scene.layers.length = 0; FM.scene.layers.push(L);
+        FM.selectLayer(L.id);
+        FM.inspector.openCategory('speed');
+        FM.inspector.refresh();
+        if (FM.inspector.view && FM.inspector.view() !== 'speed') {
+          throw new Error('opening Speed on a ' + ty + ' layer landed on "' + FM.inspector.view() + '" instead — the panel is still gated to layers with a source');
+        }
+        var card = document.querySelector('.cat-card-disabled .cat-label');
+        var labels = [].slice.call(document.querySelectorAll('.cat-card-disabled .cat-label')).map(function (e) { return e.textContent; });
+        if (labels.indexOf('Speed') >= 0) throw new Error('the Speed card is still greyed out on a ' + ty + ' layer');
+      });
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+      FM.inspector.openCategory('home');
+      FM.inspector.refresh();
     }
   });
 

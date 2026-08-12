@@ -257,6 +257,40 @@ window.FM = window.FM || {};
     FM.animatedProps(layer).forEach(p => p.kf.forEach(k => { k.t += delta; }));
   };
 
+  /* STRETCH a layer's whole animation about its own start: a keyframe `d` seconds into the clip moves
+   * to `d * factor` seconds in. The companion to shiftLayerKeyframes — that one slides the animation,
+   * this one changes how long it takes.
+   *
+   * Ezra, queue 68: "if you add a bunch of effects with key frames you may want to make it go faster
+   * or slower, changing all the key frames automatically to slow or speed with the layer instead of
+   * manually doing it." Changing Speed already re-times the CLIP (the source span is invariant, so the
+   * bar grows or shrinks) but left every keyframe at its absolute project time — so a 2x speed-up
+   * halved the bar and left the animation running past the end of it, and every keyframe had to be
+   * dragged by hand afterwards. This is what makes them ride along.
+   *
+   * The pivot is layer.start, NOT the playhead: the clip re-times about its own beginning (that is
+   * where duration is measured from), so anything else would slide the animation off the clip as well
+   * as stretching it.
+   *
+   * The SPEED track is excluded, and that is load-bearing rather than tidy. A speed ramp's keyframes
+   * say "at this moment, play at this rate"; they describe the re-timing, so scaling them by the
+   * re-timing they caused would compound — each edit would re-time the ramp that produced it. The
+   * ramp branch of the Speed control does not resize the clip either, for the same reason.
+   *
+   * Guarded against nonsense factors (0, negative, NaN, Infinity) because this REWRITES times in
+   * place: a bad factor does not merely look wrong, it destroys the timing and undo is the only way
+   * back. */
+  FM.scaleLayerKeyframes = function (layer, factor, pivot) {
+    if (!layer || !isFinite(factor) || factor <= 0 || factor === 1) return 0;
+    const t0 = (pivot == null) ? (layer.start || 0) : pivot;
+    let n = 0;
+    FM.animatedProps(layer).forEach(p => {
+      if (p === layer.speed) return;   // the ramp describes the re-timing; it must not be re-timed by it
+      p.kf.forEach(k => { k.t = t0 + (k.t - t0) * factor; n++; });
+    });
+    return n;
+  };
+
   /* Toggle a keyframe for a transform prop at `time`. Converts static<->animated. */
   function toggleKeyframe(layer, key, time) {
     let p = layer.transform[key];
