@@ -530,6 +530,22 @@ window.FM = window.FM || {};
     { type: 'magnifybg', label: 'Magnify Background', params: [
       { key: 'zoom', label: 'Zoom', min: 0.1, max: 8, step: 0.1, def: 2, unit: '×' },   // U+00D7, matching Glitch's "RGB tear" — the catalog's only other multiplier
     ] },
+    // ---- Fill Behind: the blurred-backdrop fill every phone video app has. When the layer does NOT
+    // cover the whole canvas — a portrait clip in a landscape comp, anything scaled down — the empty
+    // area is filled with an enlarged, blurred copy of THIS layer, and the sharp layer draws on top.
+    // (Ezra, verbatim: "it adds the blur and fills the space that the layer isn't filling on the
+    // canvas.") The old objection — "pixel-effect plates are project-sized so a naive fill paints
+    // the whole frame" — dissolves, because painting the whole frame IS the effect.
+    // A COPY-BACKGROUND SIBLING, not a post-effect: never list it in POSTFX. See the note above for
+    // what that mis-registration does (drawLayer returns inside applyPostFx and the layer draws zero
+    // pixels). drawFillBehind is dispatched from drawLayer directly, ABOVE the applyPostFx gate.
+    // Defaults are meant to look right untouched: a heavy blur, a slight over-zoom so the copy reads
+    // as a wash rather than a recognisable second picture, and a dim so the subject stays the subject.
+    { type: 'fillbehind', label: 'Fill Behind', params: [
+      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px' },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×' },
+      { key: 'dim', label: 'Dim', min: 0, max: 100, step: 1, def: 22, unit: '%' },
+    ] },
     // ---- batch 30: Particles — deterministic generative emitter (Procedural) ----
     { type: 'particles', label: 'Particles', params: [
       { key: 'rate', label: 'Rate', min: 1, max: 200, step: 1, def: 40, unit: '/s' },
@@ -6347,6 +6363,185 @@ window.FM = window.FM || {};
     try { ctx.drawImage(_cbA, 0, 0); } catch (e) {}
     ctx.restore();
   }
+
+  /* ---- Fill Behind ----------------------------------------------------------------------------
+   * The blurred-backdrop fill from phone video apps. A layer that does not cover the canvas — a
+   * portrait clip in a landscape comp, or anything scaled down — leaves empty frame around it; this
+   * fills that space with a blown-up, blurred copy of the SAME layer and draws the sharp layer on
+   * top of it.
+   *
+   * Wiring: a Copy Background sibling, dispatched straight out of drawLayer, never in POSTFX /
+   * WARP_FX / PIXEL_FX / CANVAS_FX. Unlike Copy Background it needs no `_bgSnap` — its source is the
+   * layer itself, not the scene below — so it is deliberately NOT in BG_SNAP_FX either and costs no
+   * backdrop capture.
+   *
+   * Why it sits ABOVE the `pp.length → applyPostFx; return` gate in drawLayer: the fill has to be
+   * shaped by the layer's FINISHED pixels, so everything inner (post-effects, masks, motion blur,
+   * 3D tilt) must bake into the plate first. Sitting below that gate would also mean a layer with
+   * any other effect on it never reached this code at all.
+   */
+  const _fbPool = []; let _fbDepth = 0, _fbAvg = null;
+  /* Two probes, exposed the way FM._layerCTM is exposed for the motion-blur tests. _fbPlates counts
+   * the ONLY expensive thing this effect does — the extra full render of the layer — so a test can
+   * assert that a layer which already covers the canvas never pays it, which is a claim no pixel
+   * comparison can make (the fill would be hidden behind the layer either way). */
+  FM._fbPlates = 0;
+  FM._fbLast = null;
+  // The enabled Fill Behind instance on a layer, or null. Cheap enough to call per layer per frame.
+  FM.fillBehindFx = function (layer) {
+    const fx = layer && layer.effects;
+    if (!fx) return null;
+    for (let i = 0; i < fx.length; i++) if (fx[i].type === 'fillbehind' && fx[i].enabled !== false) return fx[i];
+    return null;
+  };
+  /* Does this layer's rectangular footprint already reach every edge of the comp? Then there is no
+   * space to fill and the effect must cost NOTHING VISIBLE — so we say so BEFORE building any plate
+   * and let drawLayer fall through to its ordinary path, which is byte-identical by construction
+   * rather than by a blit that happens to round the same way.
+   * Deliberately conservative: media only (the one layer class whose footprint really is the
+   * rectangle), and only when the matrix is axis-aligned, because a rotated rect that covers the
+   * frame is a containment test this does not attempt. Saying "not covered" when it is covered
+   * costs a plate; saying "covered" when it is not would leave a black margin, so the test only
+   * ever errs the cheap way. */
+  function fillBehindCovered(layer, t, scene, PW, PH) {
+    if (layer.type !== 'video' && layer.type !== 'image') return false;
+    const M = layerCTM(layer, t, scene);
+    if (!M) return false;
+    if (Math.abs(M.b) > 1e-6 || Math.abs(M.c) > 1e-6) return false;   // rotated / skewed
+    const tr = layer.transform || {};
+    const cr = FM.cropOf ? FM.cropOf(layer, t) : null, sz = FM.layerSize ? FM.layerSize(layer) : null;
+    const w = (cr && cr.w) || (sz && sz.w) || 0, h = (cr && cr.h) || (sz && sz.h) || 0;
+    if (!(w > 0 && h > 0)) return false;
+    const x0 = -w * anchorX(tr), y0 = -h * anchorY(tr);
+    const ax = M.a * x0 + M.e, bx = M.a * (x0 + w) + M.e;
+    const ay = M.d * y0 + M.f, by = M.d * (y0 + h) + M.f;
+    return Math.min(ax, bx) <= 0.01 && Math.min(ay, by) <= 0.01
+      && Math.max(ax, bx) >= PW - 0.01 && Math.max(ay, by) >= PH - 0.01;
+  }
+  /* Returns TRUE when it drew the layer; FALSE when there is nothing to fill and the caller should
+   * carry on down the ordinary draw path. */
+  function drawFillBehind(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return false;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see plateScale — 1 for export/1:1, smaller for a reduced preview
+    if (fillBehindCovered(layer, t, scene, PW, PH)) return false;
+    const p = fx.params || {};
+    // Catalog defaults on absence, not evalProp(undefined)=0 — an instance saved before a key existed
+    // would otherwise render with blur 0 (no effect at all) instead of the default look.
+    const blur = Math.max(0, p.blur == null ? 60 : FM.evalProp(p.blur, t));
+    const zoom = Math.max(1, p.zoom == null ? 1.15 : FM.evalProp(p.zoom, t));
+    const dim = Math.max(0, Math.min(100, p.dim == null ? 22 : FM.evalProp(p.dim, t))) / 100;
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const d = _fbDepth++;
+    try {
+      if (!_fbPool[d]) _fbPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const pA = _fbPool[d].A, pB = _fbPool[d].B;
+      if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }   // resize only on change — see drawPixelEffect
+      pA.__fmRS = ps; pA.__fmOX = 0; pA.__fmOY = 0;
+      const actx = pA.getContext('2d');
+      baseT(actx); actx.clearRect(0, 0, PW, PH);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      // THIS fx removed from the copy: that is what stops the nested render re-entering here, and it
+      // lets the rest of the stack (post-effects, motion blur, masks, tilt) bake into the plate.
+      const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(actx, tmp, t, scene);
+      FM._fbPlates++;   // the whole cost of this effect is here; the tests assert the cheap path never reaches it
+      let bb = null; try { bb = alphaBBoxFast(pA, W, H); } catch (e) { bb = null; }   // tainted-canvas guard
+      if (!bb || bb.w < 2 || bb.h < 2) return false;                                  // nothing drew
+      // The layer really does reach every edge (a rotated/odd-shaped one the cheap test above
+      // declined to judge). Same answer, same reason: fall through, don't blit.
+      if (bb.x <= 0 && bb.y <= 0 && bb.x + bb.w >= W && bb.y + bb.h >= H) return false;
+      /* alphaBBoxFast deliberately reports LOOSE bounds — it scans a 1/4-scale copy and then pads a
+       * whole scan cell outward on every side, so the rect it returns carries 4-8 transparent device
+       * pixels of border. Multiplied by the cover scale below that border becomes 20-30px of
+       * transparency INSIDE the drawn rect, which is what ate the whole overscan on the first
+       * measurement: the fill's alpha at the frame edge came out 137/255 on the left and 74/255 on
+       * the right instead of 255. Strip the slack back off before scaling — its own contract bounds
+       * it at 2 scan cells (4..8 device px) per side, so 8 is the inset that always clears it.
+       * Insetting is the safe direction: at worst it crops 4 device pixels off a source about to be
+       * scaled up several times and blurred, which nothing can see; leaving them in puts a
+       * transparent border inside the fill, which shows up as a dark vignette on the comp edge.
+       * Guarded so a subject only a few pixels wide is never inset to nothing. */
+      const SLACK = 8;
+      let sx = bb.x, sy = bb.y, sw = bb.w, sh = bb.h;
+      if (sw > 4 * SLACK) { sx += SLACK; sw -= 2 * SLACK; }
+      if (sh > 4 * SLACK) { sy += SLACK; sh -= 2 * SLACK; }
+      /* The fill, built at 1/k resolution. A full-frame blur is the whole cost of this effect, and
+       * the output is a heavy blur either way, so dropping the working surface to a quarter on each
+       * axis is invisible and ~16x cheaper. k is chosen off the PROJECT-space blur, never off the
+       * device-space one, so the preview and the export pick the same k. */
+      const blurDev = blur * ps;   // a blur radius is a LENGTH: device pixels, like every filter in this file
+      const k = blur >= 12 ? 4 : (blur >= 6 ? 2 : 1);
+      const CW = Math.max(1, Math.ceil(W / k)), CH = Math.max(1, Math.ceil(H / k));
+      if (pB.width !== CW || pB.height !== CH) { pB.width = CW; pB.height = CH; }
+      const bctx = pB.getContext('2d');
+      bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, CW, CH);   // device pixels throughout — pB is deliberately an identity surface
+      bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over';
+      bctx.filter = blurDev > 0.3 ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
+      /* COVER, not fit: scale the layer's own alpha bounds up until they contain the frame,
+       * preserving aspect and letting the long axis overflow. The extra `m` margin is not styling —
+       * a blur samples transparency from OUTSIDE the drawn rect, so without it the comp's own edges
+       * fade out and the fill reads as a vignette. `blur(Npx)` is a Gaussian of standard deviation
+       * N, so 3x the radius is the point past which it has nothing left to contribute. */
+      const m = blurDev * 3;
+      const s = Math.max((W + 2 * m) / sw, (H + 2 * m) / sh) * zoom;
+      const dw = sw * s, dh = sh * s;
+      FM._fbLast = { W: W, H: H, ps: ps, bb: bb, src: { x: sx, y: sy, w: sw, h: sh }, k: k, blurDev: blurDev, m: m, s: s, dw: dw, dh: dh };   // exposed for the tests, like FM._layerCTM
+      try { bctx.drawImage(pA, sx, sy, sw, sh, (W - dw) / 2 / k, (H - dh) / 2 / k, dw / k, dh / k); } catch (e) {}
+      /* FLOOR THE FILL IN THE LAYER'S OWN AVERAGE COLOUR. Cover scaling a RECTANGLE guarantees the
+       * frame is covered; cover scaling an alpha BOUNDING BOX does not, because a layer that is not
+       * a rectangle leaves transparent corners inside that box and the scale carries them along in
+       * proportion — no amount of extra zoom ever pushes them out. Measured before this: a clip
+       * rotated 24° rendered rgb(0,0,0) in the frame corner, i.e. nothing, and so did a 6x6 layer
+       * (too small for the slack inset above to apply). One 1x1 downscale is the cheapest average
+       * there is, and on the ordinary case — an upright rectangular clip, where the copy already
+       * reaches every corner — it is completely hidden, so it costs one tiny blit and changes no
+       * pixel. Drawn BEFORE the dim so the floor is dimmed with everything else. */
+      try {
+        // 8x8 and averaged HERE, not a 1x1 downscale: a straight shrink to one pixel goes through
+        // whatever cheap filter the browser feels like, and on a mostly-transparent subject it came
+        // back as rgb(8,8,8) for white text — the un-premultiply falls apart at low coverage. Sixty-
+        // four samples weighted by their own alpha is still nothing to compute and is the actual
+        // mean colour of the visible pixels.
+        if (!_fbAvg) { _fbAvg = document.createElement('canvas'); _fbAvg.width = _fbAvg.height = 8; }
+        const av = _fbAvg.getContext('2d', { willReadFrequently: true });
+        av.setTransform(1, 0, 0, 1, 0, 0); av.clearRect(0, 0, 8, 8); av.filter = 'none';
+        av.drawImage(pA, sx, sy, sw, sh, 0, 0, 8, 8);
+        const ad = av.getImageData(0, 0, 8, 8).data;
+        let ar = 0, ag = 0, ab = 0, aa = 0;
+        for (let i = 0; i < ad.length; i += 4) { const w2 = ad[i + 3] / 255; ar += ad[i] * w2; ag += ad[i + 1] * w2; ab += ad[i + 2] * w2; aa += w2; }
+        if (aa > 0.02) {
+          bctx.filter = 'none';
+          bctx.globalCompositeOperation = 'destination-over';
+          bctx.fillStyle = 'rgb(' + Math.round(ar / aa) + ',' + Math.round(ag / aa) + ',' + Math.round(ab / aa) + ')';
+          bctx.fillRect(0, 0, CW, CH);
+          bctx.globalCompositeOperation = 'source-over';
+        }
+      } catch (e) {}   // tainted canvas: no floor, same as before
+      if (dim > 0) {
+        bctx.filter = 'none';
+        bctx.globalCompositeOperation = 'source-atop';   // darken the FILL, never the empty frame around it
+        bctx.fillStyle = 'rgba(0,0,0,' + dim.toFixed(3) + ')';
+        bctx.fillRect(0, 0, CW, CH);
+      }
+      // destination-over IS the "only where the layer is not" half of the spec: it paints under the
+      // plate's existing alpha, so the sharp layer stays sharp and nothing shows through it.
+      actx.setTransform(1, 0, 0, 1, 0, 0);
+      actx.globalAlpha = 1; actx.filter = 'none';
+      actx.globalCompositeOperation = 'destination-over';
+      try { actx.drawImage(pB, 0, 0, W, H); } catch (e) {}
+      actx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;                                            // opacity/blend apply ONCE, to fill and subject together
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      try { ctx.drawImage(pA, 0, 0, PW, PH); } catch (e) {}                 // plate → project units; identical to drawImage(pA,0,0) at scale 1
+      ctx.restore();
+      return true;
+    } finally { _fbDepth--; }
+  }
   // ---- render scale (preview sharpness) ------------------------------------------------------
   // The preview canvas can carry MORE pixels than the project when zoomed in: at 4x zoom a 1080px
   // comp is stretched across ~4600 device pixels, and a CSS-scaled bitmap turns every vector edge
@@ -6432,6 +6627,22 @@ window.FM = window.FM || {};
     // with BLEND[layer.blendMode], which has no key for a manual mode — so tilting a Vivid Light
     // layer by one degree used to drop it back to Normal with no warning. Re-entering with
     // blendMode:'normal' bakes the tilt into the plate first, then we blend the tilted result.
+
+    /* FILL BEHIND — blurred backdrop fill (see drawFillBehind). Its position in this ladder is the
+     * whole design and every neighbour is deliberate:
+     *   • BELOW the manual-blend branch, so an exotic blend mode still blends the finished result
+     *     (fill + subject) against the REAL backdrop rather than against an empty plate.
+     *   • ABOVE the 3D-tilt branch, so a tilted layer's fill is computed from the TILTED pixels and
+     *     still reaches the frame edges — inside the tilt the fill would be tilted with it and leave
+     *     the corners bare.
+     *   • ABOVE the `if (pp.length) { applyPostFx(…); return; }` gate ~40 lines below, which is the
+     *     line that makes a mis-registered effect silently draw nothing. Fill Behind must NEVER be
+     *     added to POSTFX/WARP_FX; it is dispatched here, and the plate render re-enters drawLayer
+     *     with this instance filtered out, so the rest of the stack composes normally inside it.
+     * Returns false when the layer already covers the canvas (nothing to fill) — then we simply
+     * carry on down the ordinary path, which is what keeps that case byte-identical. */
+    if (scene) { const _fbFx = FM.fillBehindFx(layer); if (_fbFx && drawFillBehind(ctx, layer, t, scene, _fbFx)) return; }
+
     if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); return; }
     // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
     // (fill+stroke, caption pill, keyed video) would otherwise each re-clip the canvas below.

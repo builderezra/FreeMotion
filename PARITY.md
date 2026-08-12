@@ -176,7 +176,7 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Omino Glass | 🟡 partial | nice | Re-audited 2026-07-10: a generic `glass` ('Glass') distortion ships; not the branded Omino variant. |
 | Omino Diffusion+ | ❌ missing | nice | Confirmed absent. |
 | Copy Background | ✅ done | common | Re-audited 2026-07-10: shipped v2.55. `copybg` effect def + `drawCopyBg` + `FM.hasCopyBg`; featured in the fx browser. |
-| Fill Behind | ❌ missing | common | Confirmed absent. |
+| Fill Behind | ✅ done | common | Shipped 2026-08-12: `fillbehind` — a Copy Background SIBLING, dispatched straight out of `drawLayer` and **never** in POSTFX/WARP_FX. Fills the frame the layer does not cover with a blurred, cover-scaled copy of **the layer itself**, sharp layer on top (`destination-over`). Blur / Zoom / Dim; the radius is × `plateScale`; a mean-colour floor keeps non-rectangular layers from leaving bare corners. A layer that already covers the canvas is byte-identical to the effect being off and builds no plate. Costs ~10–14 ms/frame at 1080×1920, 1.2–2.7 ms on a reduced phone preview. |
 | Magnify Background | ✅ done | nice | Shipped 2026-08-12: `magnifybg` — a Copy Background SIBLING (`FM.hasCopyBg` / `BG_SNAP_FX`, never POSTFX), `magnifyPlate` + `copyBgZoom` in compositor.js. One Zoom param (0.1–8×, def 2), magnifies about the layer's own anchor, edge-clamped. Zoom 1 renders byte-identical to plain Copy Background. Costs ~2.2× Copy Background per layer. **Not** AM-complete: no offset/centre control. |
 | Echo Keyframes (motion trails) | 🟡 partial | nice | Re-audited 2026-07-10: `motionflow`'s Echo style gives long-exposure echo trails; not discrete time-offset keyframe echoes. |
 | Time Quantization | ❌ missing | nice | Confirmed absent. |

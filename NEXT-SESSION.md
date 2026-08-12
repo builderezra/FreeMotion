@@ -120,8 +120,8 @@ compositor 1314, 1369, 1412, 6113, 6317; fx-browser.js 176-183; inspector `motio
 for other hand-rendered pseudo-effects — fx-browser calls this "the same trick as **Mask**".
 
 ### 32. AM's "Other" effects
-Present: `channelremap` (ONE; AM has HSV **and** RGB), `copybg`, `magnifybg`. **Absent: Fill Behind,
-Echo Keyframes, Time Quantization.**
+Present: `channelremap` (ONE; AM has HSV **and** RGB), `copybg`, `magnifybg`, `fillbehind`.
+**Absent: Echo Keyframes, Time Quantization.**
 - **Magnify Background — SHIPPED 2026-08-12.** The reverted first attempt was wired as a **post-effect**:
   a type in `POSTFX` routes `drawLayer` into `applyPostFx`, which had no kernel for it, so the layer drew
   **zero pixels** and the identical stripe counts at zoom 1/2/4 were the bare backdrop. (The old "next
@@ -134,8 +134,27 @@ Echo Keyframes, Time Quantization.**
     through the layer. **Clamp, or allow minifying with transparent margins?**
   - AM's magnifier has an **offset / centre control**; this one magnifies about the layer's own anchor
     only. Worth adding, or is anchor-only enough?
-- **Fill Behind** — deliberately not built: pixel-effect plates are **project-sized**, so a naive fill
-  paints the whole frame. **Ask Ezra what it should do** rather than guessing from one thumbnail.
+- **Fill Behind — SHIPPED 2026-08-12.** Ezra specified it: *"it adds the blur and fills the space that
+  the layer isn't filling on the canvas."* That dissolves the old objection (plates are project-sized so
+  a naive fill paints the whole frame) — **painting the whole frame is the point**. Built as a third
+  Copy-Background sibling: `FM.fillBehindFx` + `drawFillBehind`, dispatched from `drawLayer` **above**
+  the `pp.length → applyPostFx; return` gate and never in POSTFX/WARP_FX. The fill is the layer's own
+  alpha bounds scaled to COVER the canvas, blurred, drawn with `destination-over` so it can only appear
+  where the layer is not. Params Blur / Zoom / Dim. Three things were found by measuring, not reading:
+  the radius needs `× plateScale` (or the preview stops matching the export); the copy has to overshoot
+  the frame by ~3× the radius **and** have `alphaBBoxFast`'s 4–8px of slack stripped off, or the comp
+  edge fades (measured 137/255 and 231/255 alpha); and cover-scaling a bounding BOX does not cover the
+  frame for a non-rectangle — a clip rotated 24° and a 6×6 layer both left bare corners, fixed with a
+  mean-colour floor under the copy. Two things are **Ezra's call**:
+  - **Ordering.** The fill is derived from the layer *after* its other effects, and is not re-processed
+    by them. So a Vignette on the same layer darkens the clip, not the filled frame. Moving the dispatch
+    below the post-effect gate would flip that; measured, the two positions differ by well under 1 unit
+    of mean row detail, so no test holds it — only the comment at the dispatch site does.
+  - **Cost.** ~10–14 ms/frame per layer at 1080×1920 (about Magnify Background, cheaper than a plain
+    Blur), of which the blur itself is only ~0.5 ms — the rest is the full-resolution plate round trip.
+    A gated fast path (opacity 1 + normal blend → composite the fill straight to the target and let the
+    ordinary draw put the sharp layer on top, sourcing the fill from a 1/4-scale render) would take it
+    to roughly a third. Not built: it is a second compositing path, and this one is provably correct.
 
 ### 33. Drag on the canvas to position a gradient / image fill — *workflow in flight*
 Must **claim the canvas the way FM.cropTool / FM.pointEdit do**, not by special-casing canvas-edit, and

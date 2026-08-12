@@ -3781,6 +3781,239 @@
     });
   });
 
+  /* ---------------- Fill Behind (queue 32, the last of AM's "Other") --------------------------
+   * The blurred-backdrop fill from phone video apps: a layer that does not cover the canvas gets the
+   * empty space filled with an enlarged, blurred copy of ITSELF, and draws sharp on top. Third
+   * member of the Copy Background family, and wired the same way — dispatched out of drawLayer,
+   * never in POSTFX.
+   * The subject is a 100x180 picture, green on its left half and blue on its right, centred in a
+   * 320x240 comp. That asymmetry is the whole instrument: a fill that is a real scaled copy of the
+   * LAYER puts green down the left margin and blue down the right, while a flat wash, the comp
+   * backdrop, or a copy of the wrong thing cannot. */
+  function fbArt(id, w, h, paint) {
+    var c = offscreen(w, h); paint(c.getContext('2d'), w, h);
+    FM.media.set(id, { kind: 'image', el: c, width: w, height: h, duration: 0 });
+    return id;
+  }
+  function fbHalves(g, w, h) {
+    g.fillStyle = '#00c000'; g.fillRect(0, 0, w / 2, h);
+    g.fillStyle = '#0000c0'; g.fillRect(w / 2, 0, w / 2, h);
+  }
+  function fbStripes(g, w, h) {
+    g.fillStyle = '#101010'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f0f0f0';
+    for (var x = 0; x < w; x += 10) g.fillRect(x, 0, 5, h);
+  }
+  // an image layer of size w x h centred in the 320x240 comp, optionally carrying Fill Behind
+  function fbLayer(id, w, h, paint, params) {
+    fbArt(id, w, h, paint);
+    var l = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 5 });
+    l.id = id;
+    if (params) {
+      var e = FM.fxRegistry.makeInstance('fillbehind');
+      if (!e) throw new Error('no registry entry for fillbehind');
+      Object.keys(params).forEach(function (k) { e.params[k] = params[k]; });
+      l.effects = [e];
+    }
+    return l;
+  }
+  function fbPix(layers, cw, ch, bg) {
+    var c = offscreen(cw || 320, ch || 240);
+    var s = scene(layers);
+    if (bg !== undefined) s.project = { width: 320, height: 240, fps: 30, duration: 5, background: bg };
+    FM.renderScene(c.getContext('2d', { willReadFrequently: true }), s, 0);
+    return c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height);
+  }
+  function fbAt(im, x, y) { var i = (y * im.width + x) * 4; return [im.data[i], im.data[i + 1], im.data[i + 2], im.data[i + 3]]; }
+  function fbDiff(a, b) { var n = 0; for (var i = 0; i < a.data.length; i++) if (a.data[i] !== b.data[i]) n++; return n; }
+  // mean |delta| between horizontally adjacent samples on one row: high = sharp detail, ~0 = smooth
+  function fbEdgeEnergy(im, y, x0, x1) {
+    var s = 0, n = 0;
+    for (var x = x0; x < x1 - 1; x++) {
+      var i = (y * im.width + x) * 4, j = i + 4;
+      s += Math.abs(im.data[i] - im.data[j]) + Math.abs(im.data[i + 1] - im.data[j + 1]) + Math.abs(im.data[i + 2] - im.data[j + 2]);
+      n++;
+    }
+    return n ? s / n : 0;
+  }
+
+  test('effects: Fill Behind fills the empty frame with a blown-up copy of the layer', { item: 'fill-behind' }, function () {
+    if (!FM.fxRegistry.get('fillbehind')) throw new Error('fillbehind is not in the effect registry');
+    var off = fbPix([fbLayer('_fbT1', 100, 180, fbHalves, null)]);
+    var on = fbPix([fbLayer('_fbT1', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 })]);
+
+    // 1. THE TRIPWIRE, the same one Magnify Background needed: did the effect draw ANYTHING. An
+    // effect mis-registered in POSTFX is routed into applyPostFx, which has no kernel for it, and
+    // the layer silently renders zero extra pixels.
+    if (fbDiff(off, on) === 0) throw new Error('Fill Behind changed nothing: the frame is byte-identical with the effect on and off — check it has not been listed in POSTFX/WARP_FX, which returns from drawLayer ~40 lines before the Fill Behind dispatch');
+
+    // 2. the fill is a copy of THE LAYER, not a wash and not the backdrop: the subject is green on
+    // its left half and blue on its right, so a cover-scaled copy must be green down the left
+    // margin and blue down the right.
+    var L = fbAt(on, 20, 120), R = fbAt(on, 300, 120);
+    if (!(L[1] > 120 && L[1] > L[2] + 60)) throw new Error('the left margin is rgb(' + L.slice(0, 3) + '), expected the green half of the layer — the fill is not a copy of the layer');
+    if (!(R[2] > 120 && R[2] > R[1] + 60)) throw new Error('the right margin is rgb(' + R.slice(0, 3) + '), expected the blue half of the layer — the fill is not a copy of the layer');
+
+    /* 3a. it reaches every edge with no transparent hole. Read on a TRANSPARENT comp so this is the
+     * fill's own alpha and not a composite over black. */
+    var clear = fbPix([fbLayer('_fbT1', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 })], 320, 240, null);
+    [[1, 1], [1, 238], [160, 1], [160, 238], [318, 1], [318, 238], [1, 120], [318, 120]].forEach(function (p) {
+      var a = fbAt(clear, p[0], p[1])[3];
+      if (a < 248) throw new Error('at ' + p + ' the fill is only ' + a + '/255 opaque — it fades out before the comp edge, which reads as a dark border');
+    });
+    /* 3b. …and it reaches them UNCONTAMINATED, which is the assertion with teeth. Two things pull
+     * the copy away from the frame edge, and since the mean-colour floor sits underneath, neither
+     * shows up as transparency any more — they show up as the edge blending toward that flat floor:
+     *   • a blur samples from OUTSIDE the copy, so the copy has to overshoot the frame by about
+     *     three times the radius. Measured with no overshoot: the left edge went 192 green / 0 blue
+     *     -> 136 / 56, i.e. more than a quarter of the way to the mean.
+     *   • alphaBBoxFast reports LOOSE bounds (up to 8 transparent device px a side) and the cover
+     *     scale multiplies that border up. Measured un-stripped: 185 / 7.
+     * The subject is green on the left and blue on the right, so "pure" is a thing this can check. */
+    var eL = fbAt(on, 1, 120), eR = fbAt(on, 318, 120);
+    if (!(eL[1] >= 190 && eL[2] <= 4)) throw new Error('at the left edge the fill is rgb(' + eL.slice(0, 3) + ') where the layer’s own green is rgb(0,192,0) — the copy stops short of the frame and the mean-colour floor is showing through. Check the overscan margin and that alphaBBoxFast’s slack is stripped off the source rect');
+    if (!(eR[2] >= 188 && eR[1] <= 8)) throw new Error('at the right edge the fill is rgb(' + eR.slice(0, 3) + ') where the layer’s own blue is rgb(0,0,192) — same cause as the left edge');
+
+    // 4. …and it is BEHIND: every pixel of the subject's own interior is untouched.
+    var bad = 0;
+    for (var y = 40; y < 200; y++) for (var x = 118; x < 202; x++) {
+      var i = (y * 320 + x) * 4;
+      for (var k = 0; k < 4; k++) if (off.data[i + k] !== on.data[i + k]) bad++;
+    }
+    if (bad) throw new Error(bad + ' bytes of the SUBJECT changed — the fill is drawing over the layer instead of behind it');
+  });
+
+  test('effects: Fill Behind leaves no bare corner on a layer that is not a rectangle', { item: 'fill-behind' }, function () {
+    /* Cover-scaling a RECTANGLE guarantees the frame is covered. Cover-scaling an alpha BOUNDING BOX
+     * does not: a rotated clip, an ellipse, a small subject all leave transparent corners inside
+     * that box, and the scale carries them along in proportion — extra zoom never pushes them out.
+     * Found by rendering rather than by reading: a clip rotated 24° put rgb(0,0,0) in the frame
+     * corner, and so did a 6x6 layer. The fix is a floor of the layer's own mean colour under the
+     * blurred copy, so this asserts on the corners of exactly those two shapes. */
+    var rot = fbLayer('_fbT6', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 });
+    rot.transform.rotation = 24;
+    var im = fbPix([rot]);
+    [[3, 3], [316, 3], [3, 236], [316, 236]].forEach(function (p) {
+      var c = fbAt(im, p[0], p[1]);
+      if (c[0] + c[1] + c[2] < 40) throw new Error('a clip rotated 24° left the frame corner at ' + p + ' bare: rgb(' + c.slice(0, 3) + ') — the fill is a straight copy of the alpha bounding box, whose corners are transparent');
+    });
+    var tiny = fbLayer('_fbT7', 6, 6, fbHalves, { blur: 20, zoom: 1, dim: 0 });
+    var im2 = fbPix([tiny]);
+    var c2 = fbAt(im2, 3, 3);
+    if (c2[0] + c2[1] + c2[2] < 40) throw new Error('a 6x6 layer left the frame corner bare: rgb(' + c2.slice(0, 3) + ')');
+    // an ellipse: same bounding-box problem, and the one whose corners are transparent by definition
+    var el = FM.makeLayer('shape', { shape: 'ellipse', x: 160, y: 120, shapeW: 90, shapeH: 90, fill: '#e0a020', start: 0, duration: 5 });
+    var e3 = FM.fxRegistry.makeInstance('fillbehind');
+    e3.params.blur = 20; e3.params.zoom = 1; e3.params.dim = 0;
+    el.effects = [e3];
+    var c3 = fbAt(fbPix([el]), 3, 3);
+    if (c3[0] + c3[1] + c3[2] < 40) throw new Error('an ellipse left the frame corner bare: rgb(' + c3.slice(0, 3) + ')');
+  });
+
+  test('effects: Fill Behind blurs the fill, and the radius scales with the plate', { item: 'fill-behind' }, function () {
+    // a) the blur does something: fine stripes in the fill must survive at blur 0 and vanish at 40.
+    var sharp = fbPix([fbLayer('_fbT2', 100, 180, fbStripes, { blur: 0, zoom: 1, dim: 0 })]);
+    var soft = fbPix([fbLayer('_fbT2', 100, 180, fbStripes, { blur: 40, zoom: 1, dim: 0 })]);
+    var eS = fbEdgeEnergy(sharp, 10, 0, 320), eB = fbEdgeEnergy(soft, 10, 0, 320);
+    if (!(eS > 8)) throw new Error('at blur 0 the fill should be a sharp copy, but its horizontal detail measured ' + eS.toFixed(2));
+    if (!(eB < eS / 8)) throw new Error('at blur 40 the fill measured ' + eB.toFixed(2) + ' of detail against ' + eS.toFixed(2) + ' at blur 0 — the blur is barely doing anything');
+
+    /* b) A BLUR RADIUS IS A LENGTH. Every filter length in the compositor is multiplied by
+     * plateScale, because ctx.filter works in DEVICE pixels and a reduced-scale preview has fewer of
+     * them per project pixel. Drop the multiply and the effect stops matching the export in every
+     * preview that isn't 1:1 — the repo has that same bug written up for several other effects.
+     * renderScene derives __fmRS from canvas.width / project.width, so a 160x120 target of a
+     * 320x240 comp IS the reduced preview. Compare its detail against the 1:1 render shrunk to the
+     * same size: with the multiply they match; without it the reduced render is blurred twice as
+     * hard relative to its own width and comes out visibly smoother. */
+    var full = offscreen(320, 240);
+    FM.renderScene(full.getContext('2d'), scene([fbLayer('_fbT2', 100, 180, fbStripes, { blur: 40, zoom: 1, dim: 0 })]), 0);
+    var shrunk = offscreen(160, 120);
+    shrunk.getContext('2d').drawImage(full, 0, 0, 160, 120);
+    var half = fbPix([fbLayer('_fbT2', 100, 180, fbStripes, { blur: 40, zoom: 1, dim: 0 })], 160, 120);
+    var eHalf = fbEdgeEnergy(half, 5, 0, 160);
+    var eRef = fbEdgeEnergy(shrunk.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 160, 120), 5, 0, 160);
+    if (!(eHalf > eRef * 0.5 && eHalf < eRef * 2)) throw new Error('the reduced preview measured ' + eHalf.toFixed(3) + ' of detail where the 1:1 render measured ' + eRef.toFixed(3) + ' — the blur radius is not being multiplied by plateScale, so the preview no longer matches the export');
+  });
+
+  test('effects: Fill Behind costs nothing when the layer already covers the canvas', { item: 'fill-behind' }, function () {
+    /* "The space the layer isn't filling" can be empty, and then the effect must be invisible AND
+     * free. Two different guards do that and they are tested separately:
+     *   • a cheap geometric one for media, which skips the plate entirely — measured with
+     *     FM._fbPlates, because no pixel comparison can see it (the fill would be hidden behind an
+     *     opaque layer either way);
+     *   • an alpha-bounds one for everything else, measured with a HALF-TRANSPARENT shape, through
+     *     which a fill drawn behind would be plainly visible. */
+    var mk = function (fx) { return fbLayer('_fbT3', 400, 300, fbHalves, fx); };
+    var before = FM._fbPlates;
+    var off = fbPix([mk(null)]);
+    var on = fbPix([mk({})]);
+    var built = FM._fbPlates - before;
+    var d = fbDiff(off, on);
+    if (d !== 0) throw new Error('a layer that already covers the frame rendered ' + d + ' bytes differently with Fill Behind on — it must be a no-op there');
+    if (built !== 0) throw new Error('Fill Behind built ' + built + ' full-resolution plate(s) for a layer that already covers the frame — the geometric guard is not catching it, so it is paying ~10ms/frame to draw nothing');
+
+    // the alpha-bounds guard, on a shape the geometric one deliberately declines to judge
+    var shape = function (fx) {
+      var l = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 400, shapeH: 300, fill: 'rgba(255,0,0,0.5)', start: 0, duration: 5 });
+      if (fx) { var e = FM.fxRegistry.makeInstance('fillbehind'); l.effects = [e]; }
+      return l;
+    };
+    var sd = fbDiff(fbPix([shape(null)]), fbPix([shape(true)]));
+    if (sd !== 0) throw new Error('a half-transparent shape covering the whole frame rendered ' + sd + ' bytes differently with Fill Behind on — the fill is showing through it');
+  });
+
+  test('effects: Fill Behind still fills when the layer also carries a post-effect', { item: 'fill-behind' }, function () {
+    /* A one-effect scene is the easy case. This is the one that broke Magnify Background: drawLayer's
+     * `if (pp.length) { applyPostFx(…); return; }` gate returns before everything below it, so an
+     * effect that is mis-registered in POSTFX, or whose dispatch goes missing, works on a bare layer
+     * and does nothing the moment the user adds a second effect. Pixelate is a POSTFX effect, so
+     * this scene only renders a fill if Fill Behind survives being stacked.
+     * WHAT IT DOES NOT COVER, measured rather than assumed (2026-08-12): physically MOVING the
+     * dispatch below that gate does NOT turn this red, and no rendering test reasonably could.
+     * Every applyPostFx kernel renders the clean layer by re-entering drawLayer, so the fill is
+     * still drawn — it just lands on the other side of the post-effect. With Pixelate stacked, the
+     * two dispatch positions differ by 0.13 vs 0.03 of mean row detail in the left margin and 0.47
+     * vs 0.00 in the right: a real ordering difference, far too small to assert on. The position is
+     * held by the comment at the dispatch site, not by this test. */
+    var mk = function (withFill) {
+      var l = fbLayer('_fbT4', 100, 180, fbHalves, null);
+      var fx = [FM.fxRegistry.makeInstance('pixelate')];
+      if (withFill) {
+        var e = FM.fxRegistry.makeInstance('fillbehind');
+        e.params.blur = 20; e.params.zoom = 1; e.params.dim = 0;
+        fx.push(e);
+      }
+      l.effects = fx;
+      return l;
+    };
+    var bare = fbPix([mk(false)]), both = fbPix([mk(true)]);
+    var c = fbAt(both, 4, 4), b = fbAt(bare, 4, 4);
+    if (b[1] + b[2] > 40) throw new Error('the control scene already has something in the corner (rgb ' + b.slice(0, 3) + ') — the test cannot tell the fill apart from it');
+    if (c[1] + c[2] < 120) throw new Error('with Pixelate on the same layer the corner is rgb(' + c.slice(0, 3) + ') — Fill Behind drew nothing once it was stacked. Check it has not been added to POSTFX, and that its dispatch in drawLayer is still there and still above the applyPostFx gate');
+  });
+
+  test('effects: Fill Behind’s Zoom and Dim each move only their own half of the picture', { item: 'fill-behind' }, function () {
+    // Zoom is a multiplier ON the cover scale, so doubling it must double the scale the fill is
+    // drawn at — read from FM._fbLast, which the renderer publishes for exactly this.
+    fbPix([fbLayer('_fbT5', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 })]);
+    var s1 = FM._fbLast && FM._fbLast.s;
+    fbPix([fbLayer('_fbT5', 100, 180, fbHalves, { blur: 20, zoom: 2, dim: 0 })]);
+    var s2 = FM._fbLast && FM._fbLast.s;
+    if (!s1 || !s2) throw new Error('FM._fbLast was never published — the fill path did not run');
+    if (Math.abs(s2 / s1 - 2) > 0.02) throw new Error('Zoom 2 scaled the fill by ' + (s2 / s1).toFixed(3) + 'x instead of 2x');
+
+    // Dim darkens the FILL and must leave the subject alone — the one thing that makes the subject
+    // still read as the subject.
+    var d0 = fbPix([fbLayer('_fbT5', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 })]);
+    var d50 = fbPix([fbLayer('_fbT5', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 50 })]);
+    var f0 = fbAt(d0, 20, 120)[1], f50 = fbAt(d50, 20, 120)[1];
+    if (!(f0 > 150)) throw new Error('the undimmed fill measured ' + f0 + ' green, expected the layer’s own ~192');
+    if (Math.abs(f50 / f0 - 0.5) > 0.08) throw new Error('Dim 50% left the fill at ' + (f50 / f0 * 100).toFixed(0) + '% of its brightness (' + f50 + ' vs ' + f0 + ')');
+    var s0 = fbAt(d0, 140, 120), s5 = fbAt(d50, 140, 120);
+    if (s0.join() !== s5.join()) throw new Error('Dim changed the SUBJECT too: rgb(' + s0.slice(0, 3) + ') became rgb(' + s5.slice(0, 3) + ')');
+  });
+
   /* ---------------- safe-area insets under viewport-fit=cover (queue 46) ----------------
    * v5.49 added viewport-fit=cover, so every position:fixed overlay now starts at the PHYSICAL top
    * of the screen and has to pay for the status bar itself. #topbar-m, .hm-top, .set-head and .te-bar

@@ -377,6 +377,11 @@ window.FM = window.FM || {};
     // Light Wrap reads the layers UNDERNEATH, so like Copy Background its tile needs a plain shape
     // over something worth wrapping.
     copybg: 'backdrop', lightwrap: 'backdrop', magnifybg: 'backdrop',
+    // Fill Behind is the exact opposite requirement to those three: it paints the space the layer is
+    // NOT filling, so its tile needs a subject that stops short of the edges. The card does that —
+    // and 'other' resolves the card's art to the photo, which is the one that reads as a blurred
+    // wash rather than as an abstract pattern.
+    fillbehind: 'card',
     // Whole-frame framing: these draw ON the comp edge, so the subject must reach it.
     letterbox: 'full', border: 'full', vignette: 'full', tiltshift: 'full',
     // Halation blooms OUT of the blown highlight, so the halo needs somewhere to land.
@@ -460,6 +465,9 @@ window.FM = window.FM || {};
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit
     // radius 80) — every probe/strip frame showed empty background, so both cached as static no-ops.
     // Scale the motion to the thumb: a visible drift / a tight on-screen orbit.
+    // Same 1080p-vs-96px problem as drift/orbit below: a 60px blur on a 96px comp smears the fill
+    // into one flat colour, so the tile would show a grey border, not a blurred copy of the picture.
+    fillbehind: function (layers, hero) { hero.effects[0].params.blur = 9; hero.effects[0].params.zoom = 1.3; },
     drift: function (layers, hero) { hero.effects[0].params.x = 26; hero.effects[0].params.y = 14; },
     orbit: function (layers, hero) { hero.effects[0].params.radius = 14; hero.effects[0].params.speed = 0.7; },
     // Same 1080p-vs-96px problem, same fix: shake's 120px throw hurls the subject clean out of the
