@@ -10803,6 +10803,61 @@
     }
   });
 
+  /* ---- playback must not follow you out of the editor ------------------------------------------
+   *
+   * BUG-HUNT, medium but loud: FM.requestPlay awaits the frame-cache decode — SECONDS for a reversed
+   * or frame-blend clip — then calls FM.play() unconditionally. Every navigation path only calls
+   * FM.pause(), which sets FM.playing = false; nothing cancelled the in-flight request, so the
+   * awaited continuation woke up and started playback for a screen that was no longer on.
+   *
+   * Verified in the original report by driving the real requestPlay: at t=800ms Home is open and
+   * playing is false; at t=3400ms, decode done, playing is TRUE with Home still open, FM.time
+   * advancing, the play button showing PAUSE, the clip's audio coming out of the project browser
+   * with no transport in sight, and the rAF tick + full render loop running behind the overlay. With
+   * loop on it never stopped by itself.
+   *
+   * The test stubs only the DECODE — ensureReverseCache — and drives the real requestPlay/pause, so
+   * what it exercises is the generation token and nothing else. */
+  test('playback: leaving the editor cancels a play that is still waiting on a decode', { item: 'play-gen-token' }, function () {
+    if (!FM.requestPlay || !FM.pause) throw new Error('need FM.requestPlay and FM.pause');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var realEnsure = FM.ensureReverseCache, realPlay = FM.play, wasPlaying = FM.playing;
+    var played = 0;
+    return (async function () {
+      try {
+        var L = FM.makeLayer('video', { name: 'rev', x: 100, y: 100 });
+        L.reversed = true;
+        FM.scene.layers.length = 0; FM.scene.layers.push(L);
+        FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 320, height: 240, duration: 5 });
+        // A decode that takes a beat, exactly as a real reverse cache does.
+        FM.ensureReverseCache = function () { return new Promise(function (r) { setTimeout(r, 120); }); };
+        FM.play = function () { played++; };
+        FM.playing = false;
+
+        var p = FM.requestPlay();                       // starts, then awaits the "decode"
+        await new Promise(function (r) { setTimeout(r, 20); });
+        FM.pause();                                     // the user taps Back / opens another project
+        await p;
+        await new Promise(function (r) { setTimeout(r, 200); });
+
+        if (played !== 0) {
+          throw new Error('FM.play() ran ' + played + ' time(s) AFTER the user had already left — audio and the rAF loop ' +
+            'start under the Home screen with no transport on screen to stop them');
+        }
+        // …and a request that is NOT interrupted must still play, or this "fix" is just a mute button.
+        played = 0; FM.playing = false;
+        await FM.requestPlay();
+        if (played !== 1) throw new Error('an uninterrupted requestPlay did not reach FM.play() (' + played + ') — the token is cancelling everything');
+      } finally {
+        FM.ensureReverseCache = realEnsure; FM.play = realPlay; FM.playing = wasPlaying;
+        FM.media.remove && FM.scene.layers.forEach(function (l) { try { FM.media.remove(l.id); } catch (e) {} });
+        FM.scene.layers.length = 0;
+        layers0.forEach(function (l) { FM.scene.layers.push(l); });
+        FM.selectLayer(sel0);
+      }
+    })();
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

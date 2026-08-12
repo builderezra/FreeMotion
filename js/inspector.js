@@ -3330,6 +3330,10 @@ window.FM = window.FM || {};
           layer.reversed = v; FM.timeline.rebuild();
           if (v) await FM.ensureReverseCache(layer); else if (FM.maybeClearCache) FM.maybeClearCache(layer);
           FM.requestRender(); FM.seekVideosToTime();
+          // Flipping this MID-PLAYBACK changes which audio path owns the clip, and nothing here used
+          // to say so — the element kept emitting forward audio under a backwards picture, or the
+          // synthesized reverse buffer played on over a resumed element. (BUG-HUNT)
+          if (FM.reconcileAudio) FM.reconcileAudio();
         }));
       }
     } else if (key === 'blend') {

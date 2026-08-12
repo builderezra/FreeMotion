@@ -12,6 +12,16 @@ window.FM = window.FM || {};
   let renderQueued = false;
   let layerDragIdx = null;
   let rafId = null;
+  /* Every FM.pause() bumps this, and requestPlay captures it before it awaits. A reversed or
+   * frame-blend clip's decode takes SECONDS, and every navigation path (home.js, storage.js) only
+   * calls FM.pause() — nothing cancelled the in-flight request, so the awaited continuation woke up
+   * and called FM.play() for a screen that was no longer on. Verified live: at t=800ms Home is open
+   * and playing is false; at t=3400ms, decode done, playing is true with Home still open, FM.time
+   * advancing, #btn-play showing PAUSE, the clip's audio coming out of the project browser with no
+   * transport in sight, and the rAF tick + full render loop running behind the overlay. With loop on
+   * it never stopped by itself. Opening a DIFFERENT project was worse: the continuation started that
+   * one playing on its own, and FM.media.get() on the dropped recs can throw on the way. */
+  let _playGen = 0;
   let _lastDrawnFrame = -1;   // the project frame the canvas currently shows (see tick's frame-drop)
 
   /* ---------- rendering ---------- */
@@ -1028,6 +1038,14 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return;
       if (layer.reversed) {
+        /* Silence the element HERE, every tick, instead of trusting that it was never started. That
+         * invariant is set at FM.play() time and neither reverse toggle re-established it, so ticking
+         * "Reverse" mid-playback left the element emitting the clip's FORWARD audio at full level
+         * over a backwards picture — and because this branch also skips the volume/fade/solo
+         * reconcile below, that stray audio then ignored every later volume, fade or mute change
+         * until you paused and played again. Enforcing it where it is READ costs one check a tick
+         * and cannot be forgotten by a future caller. */
+        try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {}
         if (!m.frameCache) {
           const local = FM.layerLocalTime(layer, FM.time);
           if (local != null) { try { m.el.currentTime = local; } catch (e) {} }
@@ -1141,18 +1159,24 @@ window.FM = window.FM || {};
 
   // Ensure reversed + frame-blend clips are decoded before playback starts, then play.
   FM.requestPlay = async function () {
+    const gen = ++_playGen;   // any pause (i.e. any navigation) invalidates this request — see _playGen
     const needCache = FM.scene.layers.filter(l => l.type === 'video' && FM.media.get(l.id) &&
       (l.reversed || (l.frameBlend && (FM.isAnimated(l.speed) || (l.speed || 1) < 1))));   // animated speed is an OBJECT — (obj||1)<1 is NaN<1=false, so a ramped frame-blend clip was never cached
     for (const l of needCache) {
       const m = FM.media.get(l.id);
+      if (!m) continue;                                             // a project switch dropped the recs mid-await
       if (!m.frameCache) await FM.ensureReverseCache(l);            // frames for video
+      if (gen !== _playGen) return;                                 // …checked after EVERY await, not just the last
       if (l.reversed && m.audioBuffer === undefined && m.file) m.audioBuffer = await FM.decodeAudio(m.file); // audio for reverse
+      if (gen !== _playGen) return;
     }
+    if (gen !== _playGen) return;
     FM.play();
   };
 
   FM.pause = function () {
     FM.playing = false;
+    _playGen++;                 // cancels any requestPlay still waiting on a decode (see _playGen)
     CLK.on = false;                                             // the transport clock stops with the transport
     if (rafId) cancelAnimationFrame(rafId);
     FM.time = FM.snapFrame ? FM.snapFrame(FM.time) : FM.time;   // land ON a frame, never between two
@@ -1197,7 +1221,10 @@ window.FM = window.FM || {};
     // exists — so it runs ahead of both guards below. It self-skips layers with no audio effects.
     if (FM.audioFxLive) FM.audioFxLive.syncAll();
     if (!FM.playing || !FM.audioPlay) return;
-    if (!FM.scene.layers.some(l => l.type === 'video' && l.reversed)) return;
+    // No reversed clips left → STOP, don't just return. Un-reversing the last one used to leave its
+    // AudioBufferSourceNode running to the end of the buffer, so the backwards audio played on top of
+    // the element's forward audio that tick had meanwhile resumed.
+    if (!FM.scene.layers.some(l => l.type === 'video' && l.reversed)) { FM.audioPlay.stop(); return; }
     FM.audioPlay.start();
   };
 
@@ -2193,7 +2220,9 @@ window.FM = window.FM || {};
       items.push({ label: layer.reversed ? 'Un-reverse' : 'Reverse', action: async () => {
         layer.reversed = !layer.reversed;
         if (layer.reversed) { if (FM.ensureReverseCache) await FM.ensureReverseCache(layer); } else if (FM.maybeClearCache) FM.maybeClearCache(layer);
-        FM.timeline.rebuild(); FM.requestRender(); FM.seekVideosToTime(); if (FM.history) FM.history.commit();
+        FM.timeline.rebuild(); FM.requestRender(); FM.seekVideosToTime();
+        if (FM.reconcileAudio) FM.reconcileAudio();   // same reason as the Speed panel's checkbox — see there
+        if (FM.history) FM.history.commit();
       } });
       if (FM.isAnimated(layer.speed) || Math.abs((layer.speed || 1) - 1) > 1e-3) {   // ramped speed is an object — offer reset for it too
         items.push({ label: 'Reset speed (1×)', action: () => {
