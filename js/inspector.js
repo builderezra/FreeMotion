@@ -1176,6 +1176,13 @@ window.FM = window.FM || {};
     { key: 'blend',     label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
     { key: 'transform', label: 'Move & Transform',   icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
     { key: 'text',      label: 'Text',               textOnly: true },
+    /* Ezra: "this section when pasting a style probably needs other options because there's 9
+       categories now not 6." Correct — the inspector grew Speed, Volume, Element and Presets after
+       this table was written. Three of those four are real style aspects and are added here.
+       PRESETS deliberately is NOT: it is a browser of saved looks, not a property the layer carries,
+       so there is nothing on the source layer to copy. A toggle for it would be a dead switch. */
+    { key: 'speed',     label: 'Speed',              icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },
+    { key: 'volume',    label: 'Volume',             icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },
     { key: 'effects',   label: 'Effects',            icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
   ];
 
@@ -1213,6 +1220,20 @@ window.FM = window.FM || {};
       ['fontFamily', 'fontSize', 'bold', 'italic', 'align', 'letterSpacing', 'lineHeight', 'textCurve'].forEach(k => { if (k in src) target[k] = src[k]; });
       if ('textAnim' in src) target.textAnim = clone(src.textAnim);
       if (src.color != null) target.color = clone(src.color);   // may be a keyframe object
+    }
+    if (cats.speed) {
+      // The Speed card's own properties. `speed` may be a KEYFRAME OBJECT (a ramp), so it is cloned
+      // and re-anchored like every other animated value rather than assigned by reference.
+      if ('speed' in src) target.speed = clone(src.speed);
+      if ('frameBlend' in src) target.frameBlend = src.frameBlend;
+    }
+    if (cats.volume) {
+      // Volume is keyframable too; the fades are plain seconds. `muted` travels with it because a
+      // pasted level of 1 onto a muted layer would otherwise read as "the paste did nothing".
+      if ('volume' in src) target.volume = clone(src.volume);
+      if ('muted' in src) target.muted = src.muted;
+      if ('fadeIn' in src) target.fadeIn = src.fadeIn;
+      if ('fadeOut' in src) target.fadeOut = src.fadeOut;
     }
     if (cats.effects) {
       const fx = clone(src.effects) || [];
