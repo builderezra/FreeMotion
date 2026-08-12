@@ -182,8 +182,20 @@ Numbered with Ezra's own queue numbers where he gave them.
       · **Reverb Size / Decay — correctly left out.** Rebuilding the room takes **12.5ms** at the
         longest decay, which is 75% of a whole frame's budget for one effect, and swapping the room
         mid-tail would click even if it were free.
-      · **Distortion Drive, Bit Crush Bits, Lo-Fi Amount — genuinely could be done.** Their rebuild is
-        a waveshaper curve at **0.24ms**, which is affordable per frame. These are real candidates.
+      · **Distortion Drive, Bit Crush Bits, Lo-Fi Amount — I WAS TOO OPTIMISTIC HERE, correcting it.**
+        The rebuild is cheap (a waveshaper curve at **0.24ms**), so I said they were real candidates.
+        Cheap to compute is not the same as clean to hear, and I have now measured the second thing:
+        rendering a swept curve through an OfflineAudioContext and looking for sample-level jumps,
+        which is what a click IS. Automating Bit Crush across its full range gives a jump **6.8x** the
+        static worst case — an audible click. And it is not about how FAR you sweep: 12 → 8 bits is
+        clean, but **6 → 5 bits, a single step, is 1.7x and audible**, because at low bit counts the
+        quantisation levels are coarse so a small change moves every output sample a lot.
+        So the honest answer is narrower than "these three can be done": **Bit Crush can be keyframed
+        in its upper range and clicks in the low range** — which is exactly where you'd want to
+        automate it, since that's where the effect is dramatic. Distortion and Lo-Fi use SMOOTH curves
+        rather than quantised ones and may well be clean; I have not measured those two, and I am not
+        going to claim it. Still worth building if you want it — but now you know which part will
+        misbehave, rather than finding out by ear afterwards.
       · Pitch Shift Semitones — not measured yet.
       **Held pending your call**, for the same reason as 72: making those three animate means audio
       automation I cannot HEAR, and a slider that clicks or zips every frame is worse than one that
