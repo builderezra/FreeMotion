@@ -131,7 +131,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.23</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.24</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -233,6 +233,19 @@
             <button id="vb-faster" class="vb-z" title="Faster playback" aria-label="Faster playback">+</button>
           </div>
           <button id="vb-loop" class="vb-btn" title="Loop playback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+          <!-- Onion skin · Snapping · Guides (v6.24). These three are the answer to Ezra asking where
+               they went: they DID move into the settings panel as agreed, and then two later changes
+               buried them — v6.13 pointed the cog at Canvas settings to match the phone, and v6.14
+               deleted the ⋯ that had been the other door. Three taps deep for a toggle you flick on
+               and off while working is the same as gone.
+               This bar is their real home. Its own note says every control here "is about HOW you're
+               watching rather than what the project contains", and that is exactly what these are —
+               they change nothing in the project and nothing in the export. Loop already lives here;
+               these three belong beside it. They stay in the settings panel too: that panel is where
+               you go to READ the state of things, this bar is where you flick it. -->
+          <button id="vb-onion" class="vb-btn" title="Onion skin — ghost the layer just before and just after now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4.2" opacity=".45"/><circle cx="16" cy="12" r="4.2" opacity=".45"/><circle cx="12" cy="12" r="5.4"/></svg></button>
+          <button id="vb-snap" class="vb-btn" title="Snapping (magnet) — clips and keyframes stick to edges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 9h4M14 9h4"/></svg></button>
+          <button id="vb-guides" class="vb-btn" title="Guides — safe margins and rule-of-thirds (never exported)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18" opacity=".55"/></svg></button>
           <!-- The three export-mark buttons share a backing so they read as ONE control rather than
                three unrelated icons in a column. Ezra: "add a dark layer behind these three buttons to
                signify theyre grouped." -->
@@ -646,7 +659,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=47"></script>
-  <script src="js/app.js?v=225"></script>
+  <script src="js/app.js?v=226"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=4"></script>
   <script src="js/mobile.js?v=31"></script>

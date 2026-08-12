@@ -2791,6 +2791,12 @@ window.FM = window.FM || {};
     const syncViewBar = () => {
       if (vbRateLbl) vbRateLbl.textContent = (FM.previewRate || 1) + '×';
       const lb = document.getElementById('vb-loop'); if (lb) lb.classList.toggle('on', !!FM.loop);
+      // Read back from where each one really lives — never from a copy. A second copy of "is snapping
+      // on" is exactly how the old ⋯ menu used to show the wrong tick.
+      const ob = document.getElementById('vb-onion'); if (ob) ob.classList.toggle('on', !!FM.onionSkin);
+      const sb = document.getElementById('vb-snap');
+      if (sb) sb.classList.toggle('on', !!(FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()));
+      const gb = document.getElementById('vb-guides'); if (gb) gb.classList.toggle('on', !!FM.showGuides);
       const P = FM.scene && FM.scene.project;
       const marked = !!(P && (P.loopIn != null || P.loopOut != null));
       const mc = document.getElementById('vb-markclear'); if (mc) mc.classList.toggle('dim', !marked);
@@ -2803,6 +2809,12 @@ window.FM = window.FM || {};
     bindVb('vb-slower', () => stepViewRate(-1));
     bindVb('vb-faster', () => stepViewRate(1));
     bindVb('vb-loop', () => { FM.loop = !FM.loop; if (typeof syncLoopUI === 'function') syncLoopUI(); });
+    // Each one presses the control that OWNS the toggle rather than flipping a flag here — the same
+    // contract the settings panel uses. One writer, so the bar and the panel can never disagree.
+    const pressHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
+    bindVb('vb-onion', () => pressHidden('btn-onion'));
+    bindVb('vb-snap', () => pressHidden('btn-snap'));
+    bindVb('vb-guides', () => pressHidden('btn-guides'));
     bindVb('vb-markin', markRegionIn);
     bindVb('vb-markout', markRegionOut);
     bindVb('vb-markclear', clearRegion);

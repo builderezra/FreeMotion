@@ -95,6 +95,8 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **Onion skin, Snapping and Guides are one tap away again,** on the ⛶ view bar. They had moved
+      into Settings as agreed, then two of my own later changes buried them three taps deep — v6.24
 - [x] **76 — Subtle moving static over every project card,** like the reference photo — v6.23
 - [x] **71 — Multi-select bar: group and delete moved to the right.** The bin is deliberately not
       flush in the corner — that is where Export lives, and a reflex aimed at Export must not delete
