@@ -4034,3 +4034,167 @@ body.fm-pushing #toast { z-index: 213; }
 #add-fab > svg, #hm-new > svg { width: 26px; height: 26px; }
 #btn-export:hover, .m-export:hover { background-color: rgba(90, 199, 237, .28); filter: none; }
 #btn-export:active, .m-export:active, #add-fab:active, #hm-new:active { transform: translateY(1px); }
+/* ===== Voice recorder (Add ▸ Audio ▸ Record voice…) ==============================================
+ * js/voice-rec.js. A modal card over a scrim, in the same glass language as the rest of the app.
+ *
+ * IT IS A REAL FULL-SCREEN `position: fixed; inset: 0` SURFACE, and that is load-bearing rather than
+ * decorative. FM.overlayOwnsScreen() (js/app.js) answers "is something covering the editor?" by
+ * MEASURING the fixed elements under the middle of the viewport — so being genuinely full-screen is
+ * what spares this panel from the document-capture tap-to-deselect handler and from every bare-key
+ * editor shortcut, with no id added to any hardcoded list. The suite's `every full-screen rule in the
+ * stylesheet is covered by the overlay key guard` test finds this rule on its own and asserts exactly
+ * that. Do not turn it into a bottom sheet without reading that test first.
+ *
+ * z-index 190: above every piece of editor chrome (#add-sheet 63, #export-overlay 100, #fx-browser
+ * 160, #draw-bar 170) and below the things that must stay on top (#home-screen 200, .set-scrim 220,
+ * #shortcuts-overlay 230, #ctx-menu 300).
+ *
+ * The glass numbers are v5.81/v5.86's, copied deliberately rather than inherited: these classes are
+ * NOT in theme-glass.css, so the panel looks the same in classic and glass and nothing loading after
+ * styles.css can quietly repaint it (that file has eaten five fixes by winning the cascade). */
+#vr-overlay {
+  position: fixed; inset: 0; z-index: 190;
+  display: flex; align-items: center; justify-content: center;
+  padding: 18px;
+  background: rgba(4, 8, 12, .66);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+#vr-overlay.hidden { display: none; }
+.vr-card {
+  width: min(360px, calc(100vw - 28px));
+  max-height: min(88vh, 88dvh);
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: 11px;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 24px 70px rgba(0, 0, 0, .6);
+}
+.vr-top { display: flex; align-items: center; gap: 10px; }
+.vr-title { flex: 1; font-size: 16px; font-weight: 700; color: var(--text); }
+/* ≥44px on a touch viewport — see the media query at the bottom of this block. */
+.vr-close {
+  flex: none; width: 32px; height: 32px; border-radius: 9px; cursor: pointer;
+  display: grid; place-items: center; font-size: 13px; line-height: 1;
+  color: var(--text-dim);
+  background: linear-gradient(180deg, rgba(188, 230, 239, .14), rgba(188, 230, 239, .045));
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .20), 0 2px 10px rgba(90, 199, 237, .10);
+}
+.vr-close:hover { color: var(--text); }
+.vr-privacy { font-size: 11px; line-height: 1.45; color: var(--text-faint); }
+.vr-msg {
+  font-size: 12px; line-height: 1.45; color: var(--text-dim);
+  background: rgba(255, 255, 255, .05); border: 1px solid var(--line-soft);
+  border-radius: 9px; padding: 8px 10px;
+}
+.vr-msg--bad { color: #ffb3ba; border-color: rgba(255, 107, 107, .45); background: rgba(255, 107, 107, .10); }
+
+/* The level meter. It exists so you can SEE the mic is hearing you before you trust a take to it —
+   an AnalyserNode on the same stream, drawn as one bar rather than a spectrum, because the only
+   question it answers is "is there signal". */
+.vr-meter {
+  height: 10px; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.vr-meter-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), #FBC2E7 78%, #E8438F);
+  transition: width .06s linear;
+}
+.vr-quiet { font-size: 11.5px; line-height: 1.4; color: #ffcf8a; }
+
+.vr-timerow { display: flex; align-items: baseline; justify-content: center; gap: 7px; }
+.vr-time { font-size: 30px; font-weight: 700; letter-spacing: .5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.vr-time.warn { color: #ff8f6b; }
+.vr-cap { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.vr-status { text-align: center; font-size: 12px; color: var(--text-dim); min-height: 16px; }
+
+.vr-recwrap { display: flex; justify-content: center; padding: 2px 0 4px; }
+/* THE PRIMARY ACTION, and unmistakably armed while it runs: 76px, filled, its own red. */
+.vr-rec {
+  width: 76px; height: 76px; border-radius: 50%; cursor: pointer; padding: 0;
+  display: grid; place-items: center;
+  background: linear-gradient(180deg, rgba(188, 230, 239, .14), rgba(188, 230, 239, .045));
+  border: 2px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .20), 0 2px 10px rgba(90, 199, 237, .10);
+  transition: transform .14s cubic-bezier(.3, .8, .3, 1), box-shadow .18s ease, border-color .18s ease;
+}
+.vr-rec:active { transform: scale(.955); }
+.vr-rec:disabled { opacity: .45; cursor: default; }
+.vr-rec-mark {
+  display: block; width: 34px; height: 34px; border-radius: 50%;
+  background: #ff4d5e; box-shadow: 0 0 12px rgba(255, 77, 94, .5);
+  transition: border-radius .18s ease, width .18s ease, height .18s ease;
+}
+.vr-rec.rec { border-color: #ff4d5e; box-shadow: 0 0 0 4px rgba(255, 77, 94, .18), 0 0 26px rgba(255, 77, 94, .35); animation: vr-armed 1.5s ease-in-out infinite; }
+.vr-rec.rec .vr-rec-mark { width: 26px; height: 26px; border-radius: 6px; }   /* ● → ■ */
+@keyframes vr-armed {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(255, 77, 94, .16), 0 0 22px rgba(255, 77, 94, .28); }
+  50%      { box-shadow: 0 0 0 9px rgba(255, 77, 94, .07), 0 0 34px rgba(255, 77, 94, .46); }
+}
+@media (prefers-reduced-motion: reduce) { .vr-rec.rec { animation: none; } }
+
+/* PLAYBACK, in the panel's own language. The native <audio controls> bar is a white pill — measured
+   at 390x844 it was the one element on this card that did not look like FreeMotion — and it renders
+   differently again on iOS. The element stays, hidden, as the engine. */
+.vr-audio { display: none; }
+.vr-playrow { display: flex; align-items: center; gap: 10px; }
+.vr-playbtn {
+  flex: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; padding: 0;
+  display: grid; place-items: center; color: var(--text);
+  background: linear-gradient(180deg, rgba(188, 230, 239, .14), rgba(188, 230, 239, .045));
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .20), 0 2px 10px rgba(90, 199, 237, .10);
+}
+.vr-playbtn svg { width: 20px; height: 20px; display: block; }
+.vr-playbtn:active { transform: scale(.955); }
+/* The BAR is 44px tall and invisible; the TRACK inside it is the 8px line you see. A scrub target
+   the height of its own artwork is an 8px control, which fails the 44px touch floor and is
+   genuinely hard to hit — and because the row is centre-aligned around a 44/48px play button, the
+   taller hit area costs no layout height at all (measured: row height unchanged). */
+.vr-playbar {
+  position: relative; flex: 1; min-width: 0; height: 44px; cursor: pointer;
+  touch-action: none;   /* scrubbing is a drag on a phone; the page must not scroll under it */
+}
+.vr-playbar::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  height: 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, .07);
+  box-shadow: inset 0 0 0 1px var(--line-soft), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.vr-playfill {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  height: 8px; width: 0%; border-radius: 999px; background: var(--accent);
+}
+.vr-playtime { flex: none; font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* Where the layer lands, said BEFORE you commit — the placement rule is the one that has confused
+   Ezra before, and stating it is cheaper than inventing a second rule for one media type. */
+.vr-lands { font-size: 11.5px; line-height: 1.4; color: var(--text-dim); text-align: center; }
+
+/* Two rows. "Add to timeline" wrapped to two lines in a 3-up row at 390px (measured: 100px columns),
+   and the primary action read as one of three equals. It gets the full width; the pair sits under it. */
+.vr-actions { display: flex; gap: 8px; }
+.vr-actions--primary .vr-btn { flex: 1; }
+.vr-btn {
+  flex: 1; min-height: 40px; padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  background: linear-gradient(180deg, rgba(188, 230, 239, .14), rgba(188, 230, 239, .045));
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .20), 0 2px 10px rgba(90, 199, 237, .10);
+}
+.vr-btn:active { transform: translateY(1px); }
+.vr-btn--add { background: linear-gradient(180deg, #7ad6f2, var(--accent)); border-color: transparent; color: #05141b; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 3px 12px rgba(90, 199, 237, .26); }
+.vr-btn:disabled { opacity: .5; cursor: default; }
+
+/* Touch: every control clears 44px. `hover: none` is the honest test for a finger — a narrow desktop
+   window is still a mouse and does not need the bigger targets. */
+@media (hover: none) {
+  .vr-close { width: 44px; height: 44px; }
+  .vr-btn { min-height: 46px; }
+  .vr-playbtn { width: 48px; height: 48px; }
+  .vr-playbar { height: 48px; }   /* the target grows with the finger; the 8px track does not */
+}

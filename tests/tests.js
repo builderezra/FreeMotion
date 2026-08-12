@@ -8953,6 +8953,349 @@
     if (many - few > 6) throw new Error('a rebuild read clientWidth ' + few + ' times with 4 clips and ' + many + ' times with 28 — it is measuring the lane once per clip again, and each read forces a synchronous layout mid-DOM-build');
   });
 
+  /* ---- voice recorder (Add ▸ Audio ▸ Record voice…) — js/voice-rec.js ---------------------------
+   *
+   * These tests NEVER ask for the real microphone. They replace one seam — FM.voiceRec._openMic —
+   * with an AudioContext.createMediaStreamDestination() stream, which is a REAL MediaStream carrying
+   * a REAL MediaStreamTrack: MediaRecorder, createMediaStreamSource, track.stop() and readyState are
+   * all the browser's own, and the only thing avoided is the permission prompt. So opening
+   * tests/run.html can never pop a mic dialog at Ezra, and the release being asserted is a real
+   * MediaStreamTrack going to readyState 'ended', not a mock remembering that it was asked to.
+   * (The real getUserMedia path is covered separately by a headless run with
+   * --use-fake-device-for-media-stream; that cannot live in this file without prompting.) */
+  function vrFakeMic() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw new Error('no AudioContext — this browser cannot run the voice-recorder tests at all');
+    var ctx = new AC();
+    var osc = ctx.createOscillator(); osc.frequency.value = 220;
+    var gain = ctx.createGain(); gain.gain.value = 0.4;
+    var dest = ctx.createMediaStreamDestination();
+    osc.connect(gain); gain.connect(dest); osc.start();
+    /* Hand the stream over only once the tone is REALLY flowing. A context that is still 'suspended'
+       (autoplay policy) or has not run its first quantum produces a track that is live and carries
+       nothing, so MediaRecorder writes an empty blob and the recorder's own too-short branch fires —
+       which turns every test below into a coin toss. Measured: that is exactly what made the first
+       run of this suite flake. If the clock never starts, say so in words rather than time out. */
+    var ready = Promise.resolve(ctx.resume ? ctx.resume() : null).catch(function () {}).then(function () {
+      return new Promise(function (res, rej) {
+        var t0 = Date.now();
+        (function poll() {
+          if (ctx.state === 'running' && ctx.currentTime > 0.02) return res();
+          if (Date.now() - t0 > 4000) return rej(new Error('the test tone never started (AudioContext state "' + ctx.state + '", currentTime ' + ctx.currentTime + ') — this browser will not run an AudioContext until the page has been clicked; click anywhere in the runner and re-run'));
+          setTimeout(poll, 20);
+        })();
+      });
+    });
+    return {
+      stream: dest.stream,
+      ready: ready,
+      dispose: function () {
+        try { osc.stop(); } catch (e) {}
+        try { dest.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        if (ctx.close) { try { ctx.close(); } catch (e) {} }   // iOS caps live contexts at about four
+      },
+    };
+  }
+  // Install the seam, run body(), and put everything back however body() ends.
+  async function withFakeMic(body) {
+    if (!FM.voiceRec) throw new Error('FM.voiceRec missing — js/voice-rec.js is not loaded');
+    var real = FM.voiceRec._openMic, mics = [];
+    FM.voiceRec._openMic = function () {
+      var m = vrFakeMic(); mics.push(m);
+      return m.ready.then(function () { return m.stream; });
+    };
+    try { return await body(); }
+    finally {
+      try { FM.voiceRec.close(); } catch (e) {}
+      FM.voiceRec._openMic = real;
+      mics.forEach(function (m) { m.dispose(); });
+    }
+  }
+  function vrWait(cond, ms, what) {
+    var t0 = Date.now();
+    return new Promise(function (res, rej) {
+      (function poll() {
+        if (cond()) return res();
+        if (Date.now() - t0 > (ms || 6000)) return rej(new Error('timed out waiting for ' + what));
+        setTimeout(poll, 30);
+      })();
+    });
+  }
+  function vrEl(sel) { var e = document.querySelector(sel); if (!e) throw new Error('the recorder panel has no ' + sel); return e; }
+  function vrStates() { return FM.voiceRec._tracks().map(function (t) { return t.readyState; }); }
+  function vrLive() { return vrStates().filter(function (s) { return s !== 'ended'; }); }
+
+  test('voice: the microphone is handed back on EVERY exit path', { item: 'voice-rec' }, async function () {
+    await withFakeMic(async function () {
+      var seen = [];
+      /* The app boots INTO the home browser, which legitimately covers the screen — so the coverage
+         check below needs the same rig the other overlay tests use: home/settings stubbed shut and
+         anything already screen-sized parked. Without it the check would report "covered" before the
+         recorder was even shown. */
+      var rig = overlayKeyRig();
+      try {
+        if (FM.overlayOwnsScreen()) throw new Error('something still covers the screen with the rig up — the coverage check below would pass for the wrong reason');
+        FM.voiceRec.open();
+        await vrWait(function () { return vrStates().length > 0; }, 6000, 'the mic to be acquired');
+        if (vrStates().join() !== 'live') throw new Error('the fake mic never went live (' + vrStates().join() + ') — every assertion below would pass for the wrong reason');
+        /* The panel is spared the document-CAPTURE tap-to-deselect handler and every bare-key editor
+           shortcut by BEING a full-screen fixed surface, not by being named in a list — see the CSS
+           note on #vr-overlay. Assert the property the guard actually measures, so turning the panel
+           into a bottom sheet cannot silently reintroduce "tapping the recorder deselected my layer". */
+        if (!FM.overlayOwnsScreen()) throw new Error('the open recorder is NOT seen as covering the screen — a tap inside it would deselect the layer behind it, and Backspace would still reach the project');
+      } finally { rig.restore(); }
+
+      // 1 — panel closed while idle
+      FM.voiceRec.close();
+      seen.push(['closed while idle', vrStates().join()]);
+      if (vrLive().length) throw new Error('closing the panel left ' + vrLive().length + ' track(s) live');
+
+      // 2 — recorded, then stopped normally ("finished")
+      FM.voiceRec.open();
+      await vrWait(function () { return vrStates().join() === 'live'; }, 6000, 'the mic (take 2)');
+      vrEl('.vr-rec').click();
+      await vrWait(function () { return FM.voiceRec._state() === 'recording'; }, 3000, 'recording to start');
+      if (vrLive().length !== 1) throw new Error('the mic is not live while recording — the take would be silent');
+      await new Promise(function (r) { setTimeout(r, 500); });
+      vrEl('.vr-rec').click();
+      await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 8000, 'the take to finish');
+      // Non-vacuity: a 500ms take must have produced bytes and landed in review. If it fell into the
+      // too-short branch instead, the recorder legitimately re-arms and "no live track" would be
+      // asserting the wrong state entirely.
+      if (FM.voiceRec._state() !== 'review')
+        throw new Error('a 500ms take came out empty (state "' + FM.voiceRec._state() + '") — MediaRecorder captured nothing from the test stream, so the release-after-a-real-take path is not being exercised');
+      seen.push(['finished', vrStates().join()]);
+      if (vrLive().length) throw new Error('the mic was still live after the take finished — the recording indicator stays lit while you listen back');
+      FM.voiceRec.close();
+
+      // 3 — cancelled mid-record
+      FM.voiceRec.open();
+      await vrWait(function () { return vrStates().join() === 'live'; }, 6000, 'the mic (take 3)');
+      vrEl('.vr-rec').click();
+      await vrWait(function () { return FM.voiceRec._state() === 'recording'; }, 3000, 'recording to start');
+      await new Promise(function (r) { setTimeout(r, 200); });
+      FM.voiceRec.close();                       // exactly what Discard / ✕ / the backdrop call
+      seen.push(['cancelled mid-record', vrStates().join()]);
+      if (vrLive().length) throw new Error('cancelling mid-record left the mic live');
+
+      // 4 — the page hidden mid-record (backgrounded / screen locked), with a take worth keeping
+      FM.voiceRec.open();
+      await vrWait(function () { return vrStates().join() === 'live'; }, 6000, 'the mic (take 4)');
+      vrEl('.vr-rec').click();
+      await vrWait(function () { return FM.voiceRec._state() === 'recording'; }, 3000, 'recording to start');
+      await new Promise(function (r) { setTimeout(r, 450); });
+      FM.voiceRec._hidden();                     // the module's own visibilitychange handler
+      await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 8000, 'the backgrounded take to stop');
+      seen.push(['page hidden', vrStates().join()]);
+      if (vrLive().length) throw new Error('the app was backgrounded mid-take and the mic stayed live — a recording indicator burning while the app is not even on screen');
+      FM.voiceRec.close();
+
+      /* 4b — the same, but the take is too short to keep. This is a DIFFERENT code path: the
+         too-short branch re-arms the mic so the next tap works, and doing that with the app off
+         screen re-opens the microphone while nobody is looking at it. Measured: before the guard,
+         this left one live track. document.hidden is shadowed for the duration and deleted after. */
+      Object.defineProperty(document, 'hidden', { configurable: true, get: function () { return true; } });
+      try {
+        FM.voiceRec.open();
+        await vrWait(function () { return vrStates().join() === 'live'; }, 6000, 'the mic (take 4b)');
+        var b4 = vrEl('.vr-rec'); b4.click(); b4.click();
+        await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 8000, 'the empty backgrounded take to settle');
+        await new Promise(function (r) { setTimeout(r, 250); });   // give a stray re-arm time to land
+        seen.push(['page hidden, empty take', vrStates().join()]);
+        if (vrLive().length) throw new Error('a too-short take while the app was backgrounded re-opened the microphone — the mic came back up with the app off screen');
+      } finally { delete document.hidden; FM.voiceRec.close(); }
+
+      // 5 — the permission was refused: nothing to release, and nothing left behind
+      var real = FM.voiceRec._openMic;
+      FM.voiceRec._openMic = function () { var e = new Error('no'); e.name = 'NotAllowedError'; return Promise.reject(e); };
+      try {
+        FM.voiceRec.open();
+        await vrWait(function () { return FM.voiceRec._state() === 'error'; }, 6000, 'the denial to be reported');
+        seen.push(['denied', vrStates().join()]);
+        if (vrLive().length) throw new Error('a denied request left a live track');
+        var msg = vrEl('.vr-msg');
+        if (msg.classList.contains('hidden') || !msg.textContent.trim()) throw new Error('the mic was refused and the panel said nothing — a button that silently does nothing');
+      } finally { FM.voiceRec._openMic = real; FM.voiceRec.close(); }
+
+      if (seen.length !== 6) throw new Error('only ' + seen.length + ' exit paths were exercised: ' + JSON.stringify(seen));
+    });
+  });
+
+  test('voice: a take of no length never becomes a layer', { item: 'voice-rec' }, async function () {
+    var savedScene = FM.scene, savedTime = FM.time;
+    await withFakeMic(async function () {
+      try {
+        FM.scene = scene([]);
+        FM.voiceRec.open();
+        await vrWait(function () { return vrStates().join() === 'live'; }, 6000, 'the mic');
+        var b = vrEl('.vr-rec');
+        b.click(); b.click();                    // record and stop in the same tick
+        await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 8000, 'the empty take to settle');
+        if (FM.scene.layers.length !== 0) throw new Error('a ' + FM.scene.layers.length + '-layer scene came out of a take with no length — an empty audio clip on the timeline');
+        if (FM.voiceRec._state() !== 'idle') throw new Error('after a too-short take the panel is in state "' + FM.voiceRec._state() + '"; it must return to idle so the next tap works');
+        var msg = vrEl('.vr-msg');
+        if (msg.classList.contains('hidden') || msg.textContent.indexOf('Too short') < 0)
+          throw new Error('nothing was recorded and the panel did not say so (message: "' + msg.textContent + '") — it just looks broken');
+        if (vrEl('.vr-time').textContent !== '0:00') throw new Error('the clock kept a length for a take that produced nothing');
+      } finally { FM.scene = savedScene; FM.time = savedTime; }
+    });
+  });
+
+  test('voice: a recording becomes an ordinary audio layer, on the import path', { item: 'voice-rec' }, async function () {
+    // The whole point of the feature: the recording is not special. It goes through
+    // FM.loadVideoFile → FM.addMediaLayer, the same two calls js/app.js:2008 makes for an imported
+    // song, so it gets the audio lane, the mix, the library tile and the export for free.
+    var savedScene = FM.scene, savedTime = FM.time, savedHist = FM.history;
+    var savedSave = FM.storage.save, savedLib = null;
+    try { savedLib = localStorage.getItem('fm.medialib'); } catch (e) {}
+    await withFakeMic(async function () {
+      try {
+        // Keep the run out of Ezra's real project, undo stack and media library.
+        FM.scene = scene([FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120 })]);
+        FM.history = { commit: function () {}, undo: function () {}, redo: function () {} };
+        FM.storage.save = function () { return Promise.resolve(); };
+
+        // The playhead is set AFTER open(), not before: open() pauses playback, and pause() can move
+        // FM.time (it snaps to a frame, and restores the review origin if a review play is live).
+        // Setting it first meant the test could land at 0 and blame the recorder for it.
+        FM.voiceRec.open();
+        FM.time = 1.25;
+        await vrWait(function () { return vrStates().join() === 'live'; }, 8000, 'the mic');
+        vrEl('.vr-rec').click();
+        await vrWait(function () { return FM.voiceRec._state() === 'recording'; }, 3000, 'recording to start');
+        await new Promise(function (r) { setTimeout(r, 700); });
+        vrEl('.vr-rec').click();
+        await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 9000, 'the take to settle');
+        if (FM.voiceRec._state() !== 'review')
+          throw new Error('a 700ms take came out empty (state "' + FM.voiceRec._state() + '") — nothing below is being exercised');
+        if (Math.abs(FM.time - 1.25) > 1e-6)
+          throw new Error('the playhead moved to ' + FM.time + ' during the take; the landing assertion below would be measuring something else');
+
+        // The panel says where it will land BEFORE you commit — that sentence is the fix for the
+        // placement rule, not a decoration.
+        var lands = vrEl('.vr-lands').textContent;
+        if (lands.indexOf('0:01.3') < 0 || lands.indexOf('playhead') < 0)
+          throw new Error('the panel does not state where the take will land ("' + lands + '") — the placement rule is the one that has confused Ezra before, and a whole-second clock would print a 1.25s playhead as "0:01"');
+
+        vrEl('.vr-btn--add').click();
+        await vrWait(function () { return FM.scene.layers.length === 2; }, 15000, 'the recording to become a layer');
+
+        var L = FM.scene.layers[0], m = FM.media.get(L.id);
+        if (L.type !== 'video') throw new Error('the recording became a "' + L.type + '" layer; audio rides the pictureless-video path, so it must be "video"');
+        if (!m || !m.file) throw new Error('no media record with a File — the layer cannot be saved to IndexedDB or exported');
+        if (!/^Voice /.test(m.file.name)) throw new Error('the file was named "' + m.file.name + '"');
+        if (!m.file.size) throw new Error('the recording produced a zero-byte file');
+        if (m.width || m.height) throw new Error('the recording claims a ' + m.width + '×' + m.height + ' picture — the media library files songs by having none');
+        if (!(m.duration > 0.2)) throw new Error('the layer got duration ' + m.duration + ' — a MediaRecorder file reports 0/Infinity until scanned, and the measured length must be used instead of the 5s default');
+        if (Math.abs(L.start - 1.25) > 0.001) throw new Error('the layer landed at ' + L.start + ', not at the playhead (1.25) — imports after the first land at the playhead and a recording must not invent a second rule');
+        if (!FM.mediaKind(m.file)) throw new Error('the importer cannot classify the file it just wrote (name "' + m.file.name + '", type "' + m.file.type + '")');
+        if (FM.mediaKind(m.file) !== 'audio') throw new Error('the recording classifies as "' + FM.mediaKind(m.file) + '", not audio');
+
+        // …and it is filed under the Audio tab, not among the video thumbnails.
+        var top = FM.mediaLib.list()[0];
+        if (!top || top.name !== m.file.name) throw new Error('the recording did not reach the media library');
+        if (!FM.mediaLib.isAudio(top)) throw new Error('the library filed the recording as a clip, so it would appear in Media instead of Audio');
+
+        /* THE LENGTH FALLBACK, tested where it can actually be reached. A MediaRecorder file reports
+           duration 0 or Infinity until the whole thing has been scanned; FM.loadVideoFile forces that
+           with a seek, but gives up after 1.5s and resolves with duration 0 — which a ten-minute take
+           can easily hit. FM.addMediaLayer would then hand the layer the 5s default from Settings and
+           the take would be silently truncated. Chrome resolves the duration inside the budget for a
+           short take, so the ONLY way to exercise the fallback is to make the file refuse to say. */
+        var realLoad = FM.loadVideoFile;
+        try {
+          FM.loadVideoFile = function (f) {
+            return realLoad(f).then(function (r) { r.duration = 0; return r; });   // the file will not say
+          };
+          FM.time = 0.5;
+          await FM.voiceRec.addFile(m.file, 3.75);
+          var L2 = FM.scene.layers[0];
+          if (Math.abs(L2.duration - 3.75) > 0.01)
+            throw new Error('a file that reports no duration produced a ' + L2.duration + 's layer — the MEASURED take length must be used, not Settings’ ' + FM.defaultLayerDuration() + 's default');
+        } finally { FM.loadVideoFile = realLoad; }
+      } finally {
+        // Hand back everything the run touched: the layer's media record (a <video> and an object
+        // URL that would otherwise be pinned for the session), the scene, the undo stack, the
+        // autosave and the library index.
+        try { (FM.scene.layers || []).forEach(function (l) { if (FM.media.get(l.id)) FM.media.remove(l.id); }); } catch (e) {}
+        FM.scene = savedScene; FM.time = savedTime; FM.history = savedHist;
+        FM.storage.save = savedSave;
+        try { if (savedLib == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', savedLib); } catch (e) {}
+        if (FM.refreshAll) { try { FM.refreshAll(); } catch (e) {} }
+      }
+    });
+  });
+
+  test('voice: a long take stops itself at the cap, and keeps what it got', { item: 'voice-rec' }, async function () {
+    /* The cap is not a nicety. Decoded PCM costs rate × channels × 4 bytes/sec and is set by DURATION
+       alone (js/media.js decodeAudio) — the same cost that made long video imports fail before v5.59 —
+       so an unbounded take is a tab the exporter can kill. Ten minutes of real time is not a test, so
+       the cap is shortened for the run and put back afterwards. */
+    var was = null;
+    await withFakeMic(async function () {
+      try {
+        was = FM.voiceRec._setMax(0.9);
+        FM.voiceRec.open();
+        await vrWait(function () { return vrStates().join() === 'live'; }, 8000, 'the mic');
+        vrEl('.vr-rec').click();
+        await vrWait(function () { return FM.voiceRec._state() === 'recording'; }, 3000, 'recording to start');
+        var t0 = Date.now();
+        // NOBODY TAPS STOP: the recorder has to end this on its own.
+        await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 6000, 'the cap to stop the take');
+        var took = (Date.now() - t0) / 1000;
+        if (took > 2.2) throw new Error('the take ran ' + took.toFixed(2) + 's against a 0.9s cap — the limit is not enforced');
+        if (FM.voiceRec._state() !== 'review') throw new Error('the capped take ended in state "' + FM.voiceRec._state() + '" — everything recorded up to the limit must be KEPT, not thrown away');
+        if (vrLive().length) throw new Error('the cap stopped the take but left the mic live');
+        var msg = vrEl('.vr-msg').textContent;
+        if (msg.indexOf('limit') < 0) throw new Error('the take stopped by itself and the panel did not say why (message: "' + msg + '")');
+        if (msg.indexOf('10 minute') >= 0) throw new Error('the message names a cap the code is not using — the wording must be derived from MAX_SECONDS, not typed beside it');
+      } finally { if (was != null) FM.voiceRec._setMax(was); }
+    });
+  });
+
+  test('voice: the recording container is chosen, never assumed', { item: 'voice-rec' }, function () {
+    // Chrome hands back audio/webm;codecs=opus and iOS Safari hands back audio/mp4. Asking for the
+    // wrong one throws NotSupportedError, so this must be a probe, not a constant.
+    var pick = FM.voiceRec._pickMime;
+    var only = function (set) { return function (m) { return set.indexOf(m) >= 0; }; };
+
+    var chrome = pick(only(['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4']));
+    if (chrome !== 'audio/webm;codecs=opus') throw new Error('a browser that supports both containers picked "' + chrome + '" — Opus in WebM is the smaller file and must win');
+
+    var ios = pick(only(['audio/mp4']));
+    if (ios !== 'audio/mp4') throw new Error('an iOS-shaped browser (audio/mp4 only) picked "' + ios + '" — that is the one container Safari can record, and asking for webm throws');
+
+    var iosAac = pick(only(['audio/mp4;codecs=mp4a.40.2', 'audio/mp4']));
+    if (iosAac !== 'audio/mp4;codecs=mp4a.40.2') throw new Error('picked "' + iosAac + '" where the explicit AAC profile was available');
+
+    // Nothing supported, and no isTypeSupported at all, both mean "use the browser's own default" —
+    // '' is a VALID mimeType option, and is what keeps a recorder we cannot interrogate working.
+    if (pick(function () { return false; }) !== '') throw new Error('a browser that supports none of the candidates must fall back to the default ("")');
+    if (pick(null) !== '') throw new Error('a MediaRecorder with no isTypeSupported must fall back to the default ("")');
+    if (pick(function () { throw new Error('boom'); }) !== '') throw new Error('an isTypeSupported that throws must fall back to the default, not take the panel down');
+
+    // The list has to contain the one container iOS can do, or Ezra's phone silently gets '' forever.
+    if (FM.voiceRec._mimeCandidates.filter(function (m) { return /^audio\/mp4/.test(m); }).length === 0)
+      throw new Error('no audio/mp4 candidate — iOS Safari would never get a named container');
+
+    // And in THIS browser the choice must actually be recordable.
+    if (typeof MediaRecorder === 'function' && MediaRecorder.isTypeSupported) {
+      var here = pick(MediaRecorder.isTypeSupported.bind(MediaRecorder));
+      if (here !== '' && !MediaRecorder.isTypeSupported(here)) throw new Error('picked "' + here + '", which this browser cannot record');
+    }
+
+    // The name carries the container: FM.addMediaLayer takes the layer name from it, and
+    // js/app.js mediaKind() classifies by EXTENSION whenever a File's type comes back empty.
+    var ext = FM.voiceRec._extFor;
+    [['audio/webm;codecs=opus', '.webm'], ['audio/mp4', '.m4a'], ['audio/ogg;codecs=opus', '.ogg'], ['', '.webm']].forEach(function (p) {
+      if (ext(p[0]) !== p[1]) throw new Error('"' + p[0] + '" got extension ' + ext(p[0]) + ', expected ' + p[1]);
+    });
+    // iOS is the case that matters here: .m4a is in the importer's audio extension list, so even a
+    // File that has lost its type still classifies as audio rather than being dropped on the floor.
+    if (FM.mediaKind({ name: 'Voice 12-00-00.m4a', type: '' }) !== 'audio')
+      throw new Error('a typeless .m4a recording is not classified as audio by the importer');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -246,8 +246,23 @@ window.FM = window.FM || {};
       // timeline — exactly how the Media tab has always treated clips and photos (Ezra: "when you add
       // a song like adding media it stays in the audios section"). They used to land in Media, mixed
       // in among the video thumbnails with no artwork to tell them apart.
-      return [{ label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport }]
-        .concat(libEntries(true));
+      return [
+        { label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport },
+        /* Record voice… sits BESIDE Import rather than replacing it, and second rather than first:
+           importing is still the commoner move, and the tile you have always tapped should not
+           change position under your finger.
+           The mark is a MICROPHONE in the Audio tab's own pink ramp (#FBC2E7 → #E8438F, lit from the
+           top-right exactly like fm-ic-au above), so the new entry reads as belonging to this tab
+           rather than as a stray. The gradient id is namespaced — a duplicate id silently steals the
+           fill from whichever element asked for it second. */
+        { label: 'Record voice…', icon: icoMulti(
+          '<defs><linearGradient id="fm-ic-mic" x1="20" y1="4" x2="6" y2="20" gradientUnits="userSpaceOnUse">'
+          + '<stop offset="0" stop-color="#FBC2E7"/><stop offset="1" stop-color="#E8438F"/></linearGradient></defs>'
+          + '<rect x="9" y="2.6" width="6" height="11" rx="3" stroke="url(#fm-ic-mic)"/>'
+          + '<path d="M5.8 11.2v.6a6.2 6.2 0 0 0 12.4 0v-.6" stroke="url(#fm-ic-mic)"/>'
+          + '<path d="M12 18v3.2M8.6 21.2h6.8" stroke="url(#fm-ic-mic)"/>'),
+          add: function () { if (FM.voiceRec) FM.voiceRec.open(); else if (FM.toast) FM.toast('Voice recording isn’t available'); } },
+      ].concat(libEntries(true));
     } },
     // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
     // section on Home, so the tab is named after them rather than after the odds and ends beside them.

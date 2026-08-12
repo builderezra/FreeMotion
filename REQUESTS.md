@@ -88,8 +88,6 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **31b — Transform blur can't smear effect- or camera-driven motion.**
 
 ### Work that exists but isn't landed
-- [ ] **Land the recovered voice-recorder diff.** 1301 lines, recovered from an in-repo worktree after
-      a reboot wiped /tmp. Cut against v5.87, so it needs a `--3way` merge.
 - [ ] **Land the recovered Squish diff.** Same story, 3509 lines, cut against v5.89.
 - [ ] **Rebuild the two lost audio diffs** (reverse + misc). These were verified but staged in /tmp and
       the reboot destroyed them. No worktree has them — they are genuinely gone and must be rebuilt.
@@ -110,6 +108,9 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **Voice recorder landed.** Add menu → Audio → "Record voice…". Built weeks ago, lost to the
+      reboot before it was ever committed, recovered from a worktree and rebased 40 releases forward —
+      v6.34
 - [x] **59 — One effect clipboard.** There were two that could not see each other, so copying one
       effect from a row's ⋯ left the panel's Paste greyed out — v6.32
 - [x] **Presets preview the selected layer** with the preset applied, instead of a generic sample.
