@@ -35,8 +35,12 @@ Numbered with Ezra's own queue numbers where he gave them.
       Channel Remap overflows by 434px, HSL Bands 169, Text Transform 106, Mirror 97, Thermal 71,
       Match Grade 25. Pre-existing. The fix is a taste call — equal-width-with-ellipsis vs wrapping to
       two rows vs horizontal scroll — so it is yours to pick.
-- [ ] **Landscape phone (844x390) text editing is cramped** — 56x99 preview, because the app reserves
-      the timeline row above 700px. The card no longer covers it, but the row reservation is untouched.
+- [x] **Landscape phone (844x390) text editing is cramped.** **DONE v6.41.** A landscape phone is
+      over 700px wide, so it gets the desktop layout — which gave the bottom row a flat 232px no
+      matter how short the screen was, i.e. 60% of it. Worse, if you'd ever dragged the timeline
+      taller on a big screen, that height was remembered and followed you: a stored 270px left the
+      canvas 120px. Both now shrink only on short screens. Measured: canvas 145x145 → 194x194, and a
+      desktop keeps exactly the height you dragged.
 - [ ] **Playhead missing when a project opens.** Needs an app restart to come back.
       *Status (v6.31):* the known cause IS fixed and now tested on BOTH paths — a recompute landing
       mid-animation no longer stores the translated edge, on the project-open push and on the

@@ -2472,7 +2472,21 @@ window.FM = window.FM || {};
     if (!rez) return;
     const root = document.documentElement;
     const isPhone = () => window.matchMedia('(max-width: 700px)').matches;
-    const clampH = (h) => Math.max(160, Math.min(Math.round(window.innerHeight * 0.72), h));
+    /* The ceiling used to be a flat 72% of the viewport height, which is reasonable on a desktop and
+     * ruinous on a phone held sideways. 844x390 is over 700px wide so it takes the Studio layout, and
+     * a height you once dragged on a big screen is REMEMBERED — measured, a stored 270px band left a
+     * 390px-tall viewport a 120px stage, worse than the default it replaced. So on a short viewport
+     * the ceiling becomes the same responsive band the stylesheet falls back to (46vh). At 504px tall
+     * and above this is exactly the old ceiling, so every desktop and tablet — and any height dragged
+     * on one — is untouched; it only bites where 72% of the screen was never a sane timeline.
+     * The window `resize` handler below re-clamps, so this also fixes the case that actually happens:
+     * turning the phone sideways with a height stored from somewhere roomier. */
+    const clampH = (h) => {
+      const vh = window.innerHeight;
+      const ceil = vh >= 504 ? Math.round(vh * 0.72) : Math.max(150, Math.round(vh * 0.46));
+      return Math.max(150, Math.min(ceil, h));
+    };
+    FM.clampTimelineH = clampH;   // exposed so the suite tests the clamp that actually runs, not a copy of it
     let saved = 0;
     try { saved = parseInt(localStorage.getItem('fm_tl_h') || '', 10) || 0; } catch (_) {}
     if (saved && !isPhone()) root.style.setProperty('--tl-h', clampH(saved) + 'px');

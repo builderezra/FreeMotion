@@ -10060,6 +10060,49 @@
     }
   });
 
+  /* ---- a phone held sideways must not give most of the screen to the timeline -------------------
+   *
+   * 844x390 is a landscape phone, and it is over 700px WIDE, so it takes the desktop Studio layout.
+   * That layout gave the bottom band a flat 232px whatever the viewport height — 60% of a 390px
+   * screen — leaving the stage 158px and the canvas 145x145, which is the "landscape text editing is
+   * cramped" report.
+   *
+   * There were TWO ceilings and only fixing one would have looked fixed while staying broken. The
+   * stylesheet default is one; the other is clampH in the timeline resizer, which allowed 72% of the
+   * viewport height and PERSISTS what you dragged. Measured, a 270px band stored from a desktop
+   * followed the app into a 390px-tall viewport and left a 120px stage — worse than the default it
+   * replaced. So this asserts the clamp directly, at both ends of the boundary.
+   *
+   * The desktop half is the point of the test as much as the phone half: 504px is where 46vh reaches
+   * 232px, so anything at or above it must come back EXACTLY as before, including a height the user
+   * deliberately dragged. A "responsive" fix that quietly shortens everyone's timeline would be a
+   * regression wearing a fix's clothes. */
+  test('layout: a short viewport caps the timeline band, and a tall one is untouched', { item: 'landscape-band' }, function () {
+    if (!FM.clampTimelineH) throw new Error('FM.clampTimelineH is not exposed — the clamp cannot be tested where it actually lives');
+    var realH = window.innerHeight;
+    var at = function (h, want) {
+      try { Object.defineProperty(window, 'innerHeight', { value: h, configurable: true }); } catch (e) { return; }
+      var got = FM.clampTimelineH(want);
+      return got;
+    };
+    try {
+      // DESKTOP / TABLET — unchanged, including a big height the user dragged on purpose.
+      [[900, 270, 270], [900, 600, 600], [900, 700, 648], [768, 232, 232], [504, 300, 300]].forEach(function (c) {
+        var got = at(c[0], c[1]);
+        if (got !== c[2]) throw new Error('at ' + c[0] + 'px tall a stored ' + c[1] + 'px band came back ' + got + 'px, expected ' + c[2] + ' — desktop behaviour must not change');
+      });
+      // LANDSCAPE PHONE — the stored height is capped so the stage keeps most of the screen.
+      var g390 = at(390, 270);
+      if (g390 !== 179) throw new Error('at 390px tall a stored 270px band came back ' + g390 + 'px, expected 179 — a height dragged on a desktop still swallows a phone held sideways');
+      if (390 - g390 < 200) throw new Error('at 390px tall the stage is left ' + (390 - g390) + 'px — the canvas is still the smaller half of the screen');
+      var g320 = at(320, 400);
+      if (g320 > 160) throw new Error('at 320px tall the band is ' + g320 + 'px, over half the screen');
+      if (g320 < 150) throw new Error('at 320px tall the band collapsed to ' + g320 + 'px — the timeline still has to be usable');
+    } finally {
+      try { Object.defineProperty(window, 'innerHeight', { value: realH, configurable: true }); } catch (e) {}
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

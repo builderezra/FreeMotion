@@ -3266,7 +3266,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   }
   body.layout-studio #app {
     grid-template-columns: var(--rail-w) var(--insp-w) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) var(--tl-h, 232px);
+    /* The bottom band was a flat 232px at every viewport HEIGHT, which is fine on a desktop and
+       absurd on a phone held sideways: 844x390 is over 700px wide, so it takes this layout, and
+       232 of its 390px went to the band — 60% of the screen — leaving the stage 158px and the
+       canvas 145x145. Now it shrinks only where there is nothing to spare. `min(232px, 46vh)` is
+       exactly 232px at any height at or above 504px, so every desktop and tablet is byte-identical;
+       the 150px floor stops it collapsing past a usable timeline on something very short. */
+    grid-template-rows: minmax(0, 1fr) var(--tl-h, max(150px, min(232px, 46vh)));
   }
   body.layout-studio #topbar          { grid-area: 1 / 1 / 2 / 2; }   /* rail: canvas row only, never the band */
   body.layout-studio #main            { grid-area: 1 / 2 / 2 / 4; }   /* stage takes the full width right of it */
