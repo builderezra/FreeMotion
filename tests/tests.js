@@ -10921,6 +10921,52 @@
     }
   });
 
+  /* ---- the AI panel's two repeat-click buttons must respect the cap and the real key ------------
+   *
+   * BUG-HUNT, two findings in one file, both about the done screen — the Refine box and the ↻
+   * re-roll buttons, i.e. the two things a person clicks over and over.
+   *
+   * 1. NEITHER CHECKED THE SPEND CAP. generateScene gates both of its expensive stages on it; these
+   *    did not. Each click fires a full Opus VISION request — the capability digest as the system
+   *    prompt plus a base64 PNG of the rendered frame — on the user's OWN key. Past the cap the
+   *    budget ring saturates at 1, so it stops conveying how much is going out. This is real money.
+   *
+   * 2. BOTH DERIVED "dry run" FROM A STICKY FLAG. Watching the no-key demo set _lastBuild.dry = true
+   *    and nothing ever cleared it, so with a real key saved, every later Refine silently ran the
+   *    MOCK: the instruction was thrown away (the mock keyword-matches only gold/red/blue/green/big/
+   *    small/bold/glow), a hardcoded fallback op was applied and committed to history, and the panel
+   *    reported "Refined your scene · 1 op · Critic · Opus" for a call that never happened.
+   *
+   * Asserted against the SHIPPED SOURCE, like the ai-ops solo test and for the same reason: the AI
+   * panel is not wired in this harness, so anything that drives FM.ai would take an early return and
+   * pass while the defect sat there. Both of these are "this code must be present / must not be" —
+   * exactly what a source assertion is good for. */
+  test('AI: Refine and re-roll check the spend cap and the live key', { item: 'ai-cap-and-key' }, function () {
+    return fetch('../js/ai.js').then(function (r) {
+      if (!r.ok) throw new Error('could not read js/ai.js (' + r.status + ') — this test cannot verify anything');
+      return r.text();
+    }).then(function (src) {
+      var bodyOf = function (name, startRe) {
+        var m = src.match(startRe);
+        if (!m) throw new Error('could not find ' + name + ' in js/ai.js — the file has moved and this test is guarding nothing');
+        return src.slice(m.index, m.index + 1400);
+      };
+      [['rerollTask', /async function rerollTask\s*\(/],
+       ['refine', /async function refine\s*\(/]].forEach(function (pair) {
+        var body = bodyOf(pair[0], pair[1]);
+        if (!/spentCents\(\)\s*>=\s*FM\.aiBudget\.capCents/.test(body)) {
+          throw new Error(pair[0] + '() does not check the spend cap — every click fires a full Opus vision request ' +
+            'on the user\'s own key with nothing stopping it, and the budget ring saturates so it stops showing the damage');
+        }
+        if (!/!FM\.aiKey\.has\(\)/.test(body)) {
+          throw new Error(pair[0] + '() still derives its dry-run flag from the sticky _lastBuild instead of the live key — ' +
+            'after the no-key demo it silently runs the MOCK with a real key saved, throwing the instruction away and ' +
+            'crediting the canned result to an Opus call that never happened');
+        }
+      });
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

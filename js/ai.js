@@ -237,7 +237,16 @@ window.FM = window.FM || {};
     if (!lb || state.running) return;
     var task = (lb.tasks || []).filter(Boolean).find(function (t) { return t.id === taskId; });
     if (!task) return;
-    state.running = true; state.dry = lb.dry; state.abort = false;   // reset the sticky abort (a prior Cancel otherwise disabled retries for every later reroll)
+    /* The SPEND CAP, and the same gate generateScene already puts in front of its two expensive
+     * stages. Neither entry point on the done screen had it, and both fire a full Opus VISION request
+     * — the capability digest as the system prompt plus a base64 PNG of the rendered frame — on the
+     * user's own key. Past the cap the budget ring saturates at 1, so it stops conveying how much is
+     * being spent, and these are precisely the two buttons someone clicks over and over. */
+    if (FM.aiBudget && FM.aiBudget.spentCents() >= FM.aiBudget.capCents) { if (FM.toast) FM.toast('Budget cap reached'); return; }
+    /* dry comes from the LIVE key, not from the sticky _lastBuild flag. Watching the no-key demo set
+     * lb.dry = true and nothing ever cleared it, so every later re-roll silently ran the mock — no
+     * network, no model — while the panel still credited the result to Opus. */
+    state.running = true; state.dry = !!FM.ai.DRY_RUN || !FM.aiKey.has(); state.abort = false;   // reset the sticky abort (a prior Cancel otherwise disabled retries for every later reroll)
     var P = panel(), M = FM.aiManifest;
     // SNAPSHOT before removing the task's layers — if the model call fails OR returns no ops, the old
     // content must come back (it used to be deleted first, then permanently lost while the UI lied "kept").
@@ -271,7 +280,14 @@ window.FM = window.FM || {};
   async function refine(instruction) {
     if (state.running || !instruction || !instruction.trim()) return;
     var lb = FM.ai._lastBuild;
-    var dry = !!(FM.ai.DRY_RUN || (lb && lb.dry));
+    if (FM.aiBudget && FM.aiBudget.spentCents() >= FM.aiBudget.capCents) { if (FM.toast) FM.toast('Budget cap reached'); return; }   // see rerollTask
+    /* Live key, not the sticky build flag. With a real key saved, watching the demo left lb.dry true
+     * forever, so typing "make the background dark navy" into Refine went to the mock — which keyword
+     * matches only gold/red/blue/green/big/small/bold/glow, fell through to its hardcoded fallback,
+     * added a drop shadow instead, committed it to history, and reported "Refined your scene · 1 op ·
+     * Critic · Opus" for a call that never happened. The demo's layers are real layers with real ids,
+     * so a genuine critic call resolves them fine. */
+    var dry = !!FM.ai.DRY_RUN || !FM.aiKey.has();
     var P = panel();
     if (!dry && !FM.aiKey.has()) { if (FM.toast) FM.toast('Add an API key to refine a scene'); return; }   // toast, not P.error — P.error wiped the whole done bar down to a lone Back button
     if (!FM.scene.layers.length) return;
