@@ -145,12 +145,23 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; display: flex; align-items: baseline; gap: 7px; flex: 0 0 auto; white-space: nowrap; }
-/* Back to projects (v6.13) — the desktop half of the phone's ‹ arrow. A chevron AND the word, because
-   the complaint was that the control did not READ as back; an unlabelled arrow in a bar full of
-   unlabelled arrows is the thing being fixed. */
-.tb-back { display: inline-flex; align-items: center; gap: 5px; width: auto; flex: 0 0 auto; padding: 0 11px 0 7px; }
-.tb-back .tb-back-txt { font-size: 12.5px; font-weight: 650; letter-spacing: .2px; }
-.tb-back .ico { flex: none; }
+/* Back to projects — the desktop half of the phone's ‹ arrow (v6.13, unlabelled since v6.18).
+   Ezra: "just make the arrow look nice." So the chevron carries it alone, and what makes a bare
+   chevron read as a control rather than as decoration is size, weight and a target you can see:
+   a 34px round button, a 2.4 stroke on a 20px glyph, and a hairline that only appears under the
+   pointer. The chevron is nudged 1px RIGHT because a left-pointing V has its visual mass at the
+   point, so geometric centring looks a pixel too far left — the same optical correction a play
+   triangle needs in the other direction. */
+.tb-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 34px; height: 34px; padding: 0;
+  border-radius: 50%; border: 1px solid transparent; background: none;
+  color: var(--text); cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, color .14s ease;
+}
+.tb-back .ico { flex: none; width: 20px; height: 20px; transform: translateX(1px); }
+.tb-back:hover { background: rgba(255, 255, 255, .07); border-color: var(--line); color: #fff; }
+.tb-back:active { transform: translateY(1px); }
 @media (max-width: 700px) { .tb-back { display: none; } }   /* the phone bar has #m-back */
 .brand .ver { color: var(--text-dim); font-weight: 600; font-size: 10px; white-space: nowrap; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; transition: color .12s, border-color .12s, background .12s; }
 .brand .ver::before { content: '↻ '; opacity: .8; }
@@ -3114,11 +3125,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   body.layout-studio .brand .ver { font-size: 8.5px; padding: 1px 5px; }
   /* Back stacks its chevron over a small label — 60px is enough for "Back" at 8.5px, and the label is
      what makes it obvious. Full width so the whole tile is the target, not just the glyph. */
-  body.layout-studio .tb-back { flex-direction: column; gap: 3px; width: 46px; height: auto; padding: 7px 0 5px; }
-  /* "Projects" doesn't fit 46px, so the rail says "Back" instead — font-size:0 hides the real word
-     without removing it, so the button keeps its accessible name from the markup. */
-  body.layout-studio .tb-back .tb-back-txt { font-size: 0; font-weight: 700; letter-spacing: .3px; }
-  body.layout-studio .tb-back .tb-back-txt::before { content: "Back"; font-size: 8.5px; }
+  /* The rail is 60px wide, so the button can be its full size here — it is the widest thing in the
+     column after Export and it sits at the very top, which is where back belongs. */
+  body.layout-studio .tb-back { width: 38px; height: 38px; }
+  body.layout-studio .tb-back .ico { width: 22px; height: 22px; }
   body.layout-studio .top-actions { flex-direction: column; align-items: center; gap: 9px; width: 100%; }
   body.layout-studio .top-actions .spacer { display: none; }
   /* Export keeps its accent and icon but loses the label — it is still the only green thing here.
