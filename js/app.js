@@ -662,6 +662,7 @@ window.FM = window.FM || {};
     const blank = FM.newScene();
     FM.scene.project = blank.project;
     FM.scene.layers = blank.layers;
+    exitDeadGroupContext();   // same gap as deleteSelected had: wiping every layer must also leave the group view
     FM.scene.selectedId = null;
     FM.scene.selectedIds = [];
     FM.time = 0;
@@ -1208,6 +1209,26 @@ window.FM = window.FM || {};
     const v = FM.settings ? +FM.settings.get('layerDuration') : 5;
     return (isFinite(v) && v > 0) ? Math.min(60, v) : 5;
   };
+  /* THE single place a new layer enters the scene. It exists because eight creators each did
+   * `FM.scene.layers.unshift(layer)` by hand and only two of them — addEmptyGroup and groupSelection
+   * — remembered to nest into the open group. Everything else (text, shapes, paths, camera, null,
+   * adjustment, captions, imported media) landed with parent null, and the timeline's Edit Group view
+   * filters on `inSubtree(layer, gctx)`, so a parentless layer is in NO subtree and never got a row.
+   *
+   * Measured in the running app: layers went 3 → 4 → 5 while the timeline stayed at 2 rows, with no
+   * empty-state message either. The layer was selected and visibly drawn on the canvas but had no
+   * clip — it could not be trimmed, moved in time, split, reordered or keyframed from the timeline,
+   * and it was not really in the group, so animating the group afterwards left it behind. On a phone
+   * the timeline IS the layer list, so it was unreachable until you happened to back out.
+   *
+   * A helper rather than eight more copies of the line, precisely so the ninth creator cannot forget
+   * it. `!layer.parent` is deliberate: a caller that has already chosen a parent keeps it. */
+  FM.insertLayer = function (layer) {
+    if (FM.groupContext && !layer.parent) layer.parent = FM.groupContext;
+    FM.scene.layers.unshift(layer);   // the ONE unshift — every creator routes through here
+    return layer;
+  };
+
   FM.addMediaLayer = function (rec) {
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
@@ -1275,7 +1296,7 @@ window.FM = window.FM || {};
   FM.addTextLayer = function () {
     const P = FM.scene.project;
     const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), start: FM.time, duration: FM.defaultLayerDuration() });
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1290,7 +1311,7 @@ window.FM = window.FM || {};
   FM.addNullLayer = function () {
     const P = FM.scene.project;
     const layer = FM.makeLayer('null', { name: 'Null', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });   // empty project (dur 0) → a usable 5s so the layer actually renders
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1338,7 +1359,7 @@ window.FM = window.FM || {};
       start: FM.time, duration: FM.defaultLayerDuration(),   // add AT THE PLAYHEAD (was start 0); a fixed 5s clip that extends the comp
       extra: opts.extra,
     });
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1374,7 +1395,7 @@ window.FM = window.FM || {};
       layer.fill = opt.color || '#ffffff';   // open path is stroked with fill-as-colour (matches 'line')
       layer.stroke = { enabled: true, width: opt.stroke || 6, color: opt.color || '#ffffff' };
     }
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1421,7 +1442,7 @@ window.FM = window.FM || {};
     const P = FM.scene.project;
     if (FM.scene.layers.some(l => l.type === 'camera')) { if (FM.toast) FM.toast('Scene already has a camera'); return; }
     const layer = FM.makeLayer('camera', { name: 'Camera', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1433,7 +1454,7 @@ window.FM = window.FM || {};
     const P = FM.scene.project;
     const layer = FM.makeLayer('adjustment', { name: 'Adjustment', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });
     layer.effects = [{ type: 'brightness', enabled: true, params: { amount: 1.15 } }, { type: 'saturate', enabled: true, params: { amount: 1.35 } }];
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1449,7 +1470,7 @@ window.FM = window.FM || {};
     if (dur > seg + 0.3) layer.captions.push({ start: seg, end: Math.min(dur, seg * 2), text: 'Second caption' });   // only if there's room (no zero-length segment on tiny projects)
     layer.text = '';
     layer.captionBg = true;
-    FM.scene.layers.unshift(layer);
+    FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -1520,6 +1541,14 @@ window.FM = window.FM || {};
   };
 
   // Delete every layer in the selection set (one history step).
+  // Leave the Edit Group view if the group it is scoped to no longer exists. Shared by deleteSelected
+  // and resetProject; deleteLayer and history.restore already had their own equivalent.
+  function exitDeadGroupContext() {
+    if (!FM.groupContext) return;
+    if (FM.scene.layers.some(l => l.id === FM.groupContext)) return;
+    if (FM.exitGroup) FM.exitGroup(true); else FM.groupContext = null;
+  }
+
   FM.deleteSelected = function () {
     const sel = FM.selectionIds(); if (!sel.length) return;
     // Tear down any open overlay tool first (deleteLayer already does) — Delete during crop/point-edit
@@ -1538,6 +1567,14 @@ window.FM = window.FM || {};
     // blank clip + lost footage (same fix as deleteLayer). Orphans are reaped by the boot sweep.
     set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.clearClipStrip) FM.clearClipStrip(m); if (FM.audioFxLive) FM.audioFxLive.release(id); } });
     FM.scene.layers = FM.scene.layers.filter(l => !set.has(l.id));
+    /* …and if the group you were INSIDE was in that set, leave it. deleteLayer already validates this
+     * and so does history.restore on undo; deleteSelected did not, and Select All inside a group
+     * routinely includes the group itself (FM.selectAll takes every layer in the project, not just
+     * the ones in scope). Left dangling, FM.groupContext still named the dead group: the crumb stayed
+     * on screen with its name, body.group-editing stayed set, the timeline rendered ZERO rows with no
+     * empty state, and any group created afterwards was written with `parent` pointing at a deleted
+     * id — then autosaved. */
+    exitDeadGroupContext();
     FM.scene.selectedId = FM.scene.layers[0] ? FM.scene.layers[0].id : null;
     FM.scene.selectedIds = FM.scene.selectedId ? [FM.scene.selectedId] : [];
     // Keyboard Delete/Backspace routes here; mirror deleteLayer's reversed-audio rebuild so a deleted

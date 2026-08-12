@@ -10721,6 +10721,88 @@
     if (String(FM.inspector.refresh).length < 10) throw new Error('FM.inspector is not live');
   });
 
+  /* ---- two group-context bugs that make the app look broken ------------------------------------
+   *
+   * BUG-HUNT, both reachable, both "the timeline is just blank and I don't know why".
+   *
+   * 1. A layer added while inside Edit Group got NO TIMELINE ROW. addEmptyGroup and groupSelection
+   *    nested into the open group; the other eight creators did a bare unshift with parent null. The
+   *    timeline's group view filters on inSubtree(layer, gctx), and a parentless layer is in no
+   *    subtree, so no row was ever built. Measured: layers went 3 → 4 → 5 while the timeline stayed
+   *    at 2 rows, with no empty state either. The layer was selected and drawn on the canvas but had
+   *    no clip — un-trimmable, un-movable, un-keyframable — and it was not really in the group, so
+   *    animating the group left it behind. On a phone the timeline IS the layer list, so it was
+   *    unreachable until you happened to back out.
+   *
+   * 2. deleteSelected left FM.groupContext pointing at a group it had just deleted. Select All
+   *    inside a group includes the group itself (selectAll takes every layer in the project, not
+   *    just the ones in scope), so this is one keystroke away. The crumb stayed on screen naming a
+   *    dead group, body.group-editing stayed set, the timeline rendered zero rows, and any group
+   *    made afterwards was written with `parent` pointing at the deleted id — then autosaved.
+   *
+   * Both are asserted on the DATA (parent id, groupContext), because that is what the timeline and
+   * the autosave read. */
+  test('groups: a layer added inside Edit Group joins that group', { item: 'group-context' }, function () {
+    if (!FM.insertLayer) throw new Error('FM.insertLayer is missing — the eight creators are each doing their own unshift again, which is how this bug happened');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, gc0 = FM.groupContext;
+    try {
+      var A = FM.makeLayer('shape', { shape: 'rect', name: 'a', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#4af' });
+      var B = FM.makeLayer('shape', { shape: 'rect', name: 'b', x: 150, y: 100, shapeW: 60, shapeH: 60, fill: '#fa4' });
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B);
+      FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id, B.id];
+      FM.groupSelection();
+      var g = FM.scene.layers.filter(function (l) { return l.type === 'group'; })[0];
+      if (!g) throw new Error('groupSelection made no group');
+      FM.groupContext = g.id;                       // as "Edit group" does
+      var added = FM.makeLayer('shape', { shape: 'rect', name: 'inside', x: 120, y: 120, shapeW: 40, shapeH: 40, fill: '#0f0' });
+      FM.insertLayer(added);
+      if (added.parent !== g.id) {
+        throw new Error('a layer added while inside a group has parent ' + JSON.stringify(added.parent) +
+          ', not the group ' + g.id + ' — the timeline filters on inSubtree, so it gets no row at all and cannot be trimmed, moved or keyframed');
+      }
+      // …and a caller that already chose a parent keeps it.
+      var pinned = FM.makeLayer('shape', { shape: 'rect', name: 'pinned', x: 0, y: 0, shapeW: 10, shapeH: 10, fill: '#00f' });
+      pinned.parent = 'somewhere-else';
+      FM.insertLayer(pinned);
+      if (pinned.parent !== 'somewhere-else') throw new Error('insertLayer overwrote a parent the caller had already set');
+    } finally {
+      FM.groupContext = gc0;
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+    }
+  });
+
+  test('groups: deleting the group you are inside leaves the group view', { item: 'group-context' }, function () {
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, gc0 = FM.groupContext;
+    try {
+      var A = FM.makeLayer('shape', { shape: 'rect', name: 'a', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#4af' });
+      var B = FM.makeLayer('shape', { shape: 'rect', name: 'b', x: 150, y: 100, shapeW: 60, shapeH: 60, fill: '#fa4' });
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B);
+      FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id, B.id];
+      FM.groupSelection();
+      var g = FM.scene.layers.filter(function (l) { return l.type === 'group'; })[0];
+      FM.groupContext = g.id;
+      // Select All inside the group takes the group too — that is the reported one-keystroke path.
+      FM.scene.selectedIds = FM.scene.layers.map(function (l) { return l.id; });
+      FM.scene.selectedId = g.id;
+      FM.deleteSelected();
+      if (FM.groupContext && !FM.scene.layers.some(function (l) { return l.id === FM.groupContext; })) {
+        throw new Error('after deleting the group you were inside, FM.groupContext still names it (' + FM.groupContext +
+          ') — the crumb keeps showing a dead group, the timeline renders zero rows with no empty state, and any group made next is autosaved with a dangling parent');
+      }
+      if (document.body.classList.contains('group-editing') && !FM.groupContext) {
+        throw new Error('body.group-editing is still set with no group context — the chrome and the state disagree');
+      }
+    } finally {
+      FM.groupContext = gc0;
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
