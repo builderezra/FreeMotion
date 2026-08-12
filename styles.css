@@ -1187,19 +1187,31 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
 .fxb-dot.on { background: var(--accent); }
 .fxb-cats { display: flex; flex-direction: column; gap: 9px; }
 .fxb-banner { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px; border: 1px solid var(--line); border-radius: 12px; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; background: linear-gradient(120deg, var(--panel-3), var(--panel-2)); }
-.fxb-banner[data-cat="color"] { background: linear-gradient(120deg, rgba(255,106,106,.32), rgba(255,210,74,.18)); }
-.fxb-banner[data-cat="blur"] { background: linear-gradient(120deg, rgba(106,141,255,.32), rgba(177,140,255,.18)); }
-.fxb-banner[data-cat="distort"] { background: linear-gradient(120deg, rgba(0,210,255,.3), rgba(41,217,187,.18)); }
-.fxb-banner[data-cat="proc"] { background: linear-gradient(120deg, rgba(255,140,240,.3), rgba(140,106,255,.2)); }
-.fxb-banner[data-cat="matte"] { background: linear-gradient(120deg, rgba(41,217,187,.3), rgba(26,143,110,.2)); }
-.fxb-banner[data-cat="stylize"] { background: linear-gradient(120deg, rgba(255,94,158,.3), rgba(255,148,94,.18)); }
-.fxb-banner[data-cat="drawing"] { background: linear-gradient(120deg, rgba(255,214,102,.3), rgba(255,132,66,.18)); }
-.fxb-banner[data-cat="move"] { background: linear-gradient(120deg, rgba(102,255,178,.28), rgba(56,182,255,.18)); }
-.fxb-banner[data-cat="repeat"] { background: linear-gradient(120deg, rgba(196,113,255,.3), rgba(255,113,206,.18)); }
-.fxb-banner[data-cat="opacity"] { background: linear-gradient(120deg, rgba(148,163,255,.3), rgba(94,234,212,.16)); }
-.fxb-banner[data-cat="text"] { background: linear-gradient(120deg, rgba(255,255,255,.18), rgba(148,163,184,.14)); }
-.fxb-banner[data-cat="threed"] { background: linear-gradient(120deg, rgba(126,231,255,.3), rgba(94,106,255,.22)); }
-.fxb-banner[data-cat="other"] { background: linear-gradient(120deg, rgba(170,180,200,.24), rgba(110,120,140,.16)); }
+/* Category colours (v6.13). Ezra: "make the colours for all of the effects brighter and more pretty."
+   The hues were never the problem — the ALPHA was. Every banner was rgba at .16–.32 over a near-black
+   panel (#10141d), and translucent paint on black is just a dark version of itself: Drawing & Edge's
+   rgba(255,214,102,.30) composites to rgb(88,78,45), which is olive, and Stylize's coral landed on
+   rgb(88,52,63), a dull maroon. Doing the arithmetic is what the eye was already reporting.
+   So the alphas roughly double, to ~.62 and ~.40, which brings the same hues up to where they were
+   actually chosen: that gold now composites to rgb(164,141,69) and the coral to rgb(164,80,101).
+   White 700-weight 15px stays comfortably readable on all of them — these are mid-tones, not tints.
+   The hues themselves are lifted a little too (a touch more light in each), and the second stop keeps
+   enough alpha to stay a real gradient rather than a fade to background. */
+.fxb-banner[data-cat="color"] { background: linear-gradient(120deg, rgba(255,122,122,.62), rgba(255,214,92,.40)); }
+.fxb-banner[data-cat="blur"] { background: linear-gradient(120deg, rgba(122,158,255,.62), rgba(190,150,255,.40)); }
+.fxb-banner[data-cat="distort"] { background: linear-gradient(120deg, rgba(56,220,255,.60), rgba(60,230,200,.40)); }
+.fxb-banner[data-cat="proc"] { background: linear-gradient(120deg, rgba(255,150,245,.60), rgba(152,120,255,.44)); }
+.fxb-banner[data-cat="matte"] { background: linear-gradient(120deg, rgba(58,232,200,.58), rgba(40,172,255,.38)); }
+.fxb-banner[data-cat="stylize"] { background: linear-gradient(120deg, rgba(255,110,175,.62), rgba(255,166,110,.40)); }
+.fxb-banner[data-cat="drawing"] { background: linear-gradient(120deg, rgba(255,220,112,.62), rgba(255,146,80,.42)); }
+.fxb-banner[data-cat="move"] { background: linear-gradient(120deg, rgba(112,255,190,.58), rgba(70,196,255,.40)); }
+.fxb-banner[data-cat="repeat"] { background: linear-gradient(120deg, rgba(206,130,255,.60), rgba(255,130,215,.42)); }
+.fxb-banner[data-cat="opacity"] { background: linear-gradient(120deg, rgba(162,176,255,.58), rgba(106,240,220,.38)); }
+/* Text stays the neutral one on purpose — it is the only category with no colour of its own, and a
+   hue here would be an invented meaning. Brightened as far as neutral goes, not tinted. */
+.fxb-banner[data-cat="text"] { background: linear-gradient(120deg, rgba(238,243,255,.34), rgba(168,182,205,.26)); }
+.fxb-banner[data-cat="threed"] { background: linear-gradient(120deg, rgba(136,236,255,.60), rgba(112,122,255,.46)); }
+.fxb-banner[data-cat="other"] { background: linear-gradient(120deg, rgba(196,206,226,.40), rgba(134,146,170,.30)); }
 .fxb-banner-count { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.7); }
 .fxb-catview { position: absolute; inset: 0; z-index: 5; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 /* The drilled-in category view is a SECOND full-cover header stacked over the first, with the same
@@ -2902,17 +2914,20 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 #afx-browser { position: fixed; inset: 0; z-index: 160; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 #afx-browser.hidden { display: none; }
 /* No canvas here — the swatch is a flat category tint carrying one stroke glyph. */
-.afxb-thumb { background: linear-gradient(135deg, rgba(148,163,184,.28), rgba(100,116,139,.18)); color: rgba(255,255,255,.94); }
-.afxb-thumb[data-cat="eq"] { background: linear-gradient(135deg, rgba(106,141,255,.42), rgba(177,140,255,.24)); }
-.afxb-thumb[data-cat="space"] { background: linear-gradient(135deg, rgba(0,210,255,.4), rgba(41,217,187,.24)); }
-.afxb-thumb[data-cat="dyn"] { background: linear-gradient(135deg, rgba(255,206,74,.4), rgba(255,132,66,.24)); }
-.afxb-thumb[data-cat="char"] { background: linear-gradient(135deg, rgba(255,94,158,.4), rgba(196,113,255,.24)); }
+/* Audio effect tiles — same brightening as the visual categories above, same reason. These carry a
+   white line-art glyph rather than a rendered thumbnail, so they need MORE colour than the visual
+   tiles, not less: the glyph is the only other thing on them. */
+.afxb-thumb { background: linear-gradient(135deg, rgba(176,190,214,.40), rgba(120,136,162,.28)); color: rgba(255,255,255,.94); }
+.afxb-thumb[data-cat="eq"] { background: linear-gradient(135deg, rgba(122,158,255,.66), rgba(190,150,255,.42)); }
+.afxb-thumb[data-cat="space"] { background: linear-gradient(135deg, rgba(56,220,255,.64), rgba(60,230,200,.42)); }
+.afxb-thumb[data-cat="dyn"] { background: linear-gradient(135deg, rgba(255,212,96,.64), rgba(255,146,80,.44)); }
+.afxb-thumb[data-cat="char"] { background: linear-gradient(135deg, rgba(255,110,175,.64), rgba(206,130,255,.44)); }
 .afxb-glyph { width: 30px; height: 30px; }
 .fxb-card .afxb-glyph { width: 42px; height: 42px; }
-.afxb-banner[data-cat="eq"] { background: linear-gradient(120deg, rgba(106,141,255,.32), rgba(177,140,255,.18)); }
-.afxb-banner[data-cat="space"] { background: linear-gradient(120deg, rgba(0,210,255,.3), rgba(41,217,187,.18)); }
-.afxb-banner[data-cat="dyn"] { background: linear-gradient(120deg, rgba(255,206,74,.3), rgba(255,132,66,.18)); }
-.afxb-banner[data-cat="char"] { background: linear-gradient(120deg, rgba(255,94,158,.3), rgba(196,113,255,.2)); }
+.afxb-banner[data-cat="eq"] { background: linear-gradient(120deg, rgba(122,158,255,.62), rgba(190,150,255,.40)); }
+.afxb-banner[data-cat="space"] { background: linear-gradient(120deg, rgba(56,220,255,.60), rgba(60,230,200,.40)); }
+.afxb-banner[data-cat="dyn"] { background: linear-gradient(120deg, rgba(255,212,96,.62), rgba(255,146,80,.42)); }
+.afxb-banner[data-cat="char"] { background: linear-gradient(120deg, rgba(255,110,175,.62), rgba(206,130,255,.42)); }
 /* The prev/next category bar is the LAST child of a fixed inset:0 overlay, so it is pinned to the
    physical bottom of the screen. Measured at 440x956 with a 34px bottom inset: both buttons ended at
    y=946, i.e. 24px inside the home-indicator band. Same idiom, bottom edge. */
@@ -3116,6 +3131,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      flex-start the icon was shoved against the left edge and the dead text took the rest. Measured:
      icon centre x=16 inside a button whose centre is x=29.5, so it sat 13.5px off inside its own
      button. Ezra: "on PC at the moment, the export button isn't centered. It looks really bad." */
+  /* Export sits ABOVE the cog (v6.13, Ezra). Done with `order`, not by moving the node: the markup
+     order is the CLASSIC layout's left-to-right reading order, where Export is rightmost because it is
+     the last thing you do, and re-ordering the DOM would have quietly changed that too. Only the two
+     app-level buttons are ordered; the layer buttons (parent, delete) keep the default 0 and so stay
+     above both — they belong to the selection, not to the app. */
+  body.layout-studio #btn-export { order: 1; }
+  body.layout-studio #btn-settings { order: 2; }
   body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; justify-content: center; }
   body.layout-studio #btn-export::before { width: 30px; height: 30px; }
   /* the icon is centred here rather than pinned to a padding edge, so the shine has to follow it */

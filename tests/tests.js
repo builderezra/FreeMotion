@@ -6293,16 +6293,14 @@
         sw.click(); await sleep(0);
         if (get() !== was) throw new Error('"' + label + '" would not go back to ' + was);
       }
-      // …and they are gone from the PC ⋯ menu, which is the other half of "relocate" (queue 35).
-      // That menu no longer exists at all — #btn-more was removed — so the PC half of this is now
-      // "there is no second door", asserted properly by the queue-35-final test below. What still
-      // has to hold here is the phone half: FM.projectMoreItems is the phone's ⋯ list, it is the
-      // only door a phone has to these three, and nothing may quietly filter them back out of it.
+      // …and there is no SECOND door to them anywhere (queue 35, finished at v6.13). Both ⋯ menus are
+      // gone now — the PC top bar's #btn-more first, then the phone's #m-proj-more — so the assertion
+      // flipped: it used to check the phone menu still CONTAINED these three, because that menu was
+      // the only way a phone could reach them. The settings panel above is that way now, on both
+      // devices, and FM.projectMoreItems no longer exists to be filtered.
       if (document.getElementById('btn-more')) throw new Error('#btn-more is back — these three would have two doors again');
-      const phone = FM.projectMoreItems().map(it => it.label || '');
-      ['Loop playback', 'Onion skin', 'Snapping'].forEach(name => {
-        if (!phone.some(l => l.indexOf(name) >= 0)) throw new Error('the phone ⋯ menu lost "' + name + '" — the phone cog is Canvas settings and FM.settings is home-only there, so ⋯ is its only door');
-      });
+      if (document.getElementById('m-proj-more')) throw new Error('#m-proj-more is back — the phone would have two doors again');
+      if (typeof FM.projectMoreItems === 'function') throw new Error('FM.projectMoreItems is back — the list behind the deleted menu should not survive it');
     } finally {
       if (FM.settings.isOpen()) FM.settings.close();
       if (!!FM.loop !== before.loop) { const b = document.getElementById('btn-loop'); if (b) b.click(); }
@@ -6448,10 +6446,12 @@
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
 
-    // and nothing else grew a copy of the project menu in its place
-    if (typeof FM.projectMoreItems === 'function') {
-      const callers = [].slice.call(document.querySelectorAll('#topbar button')).map(b => b.id);
-      if (callers.indexOf('btn-more') >= 0) throw new Error('the top bar has a ⋯ again');
+    // and nothing else grew a copy of the project menu in its place. As of v6.13 the list itself is
+    // deleted, not just its buttons — leaving FM.projectMoreItems behind would have been an invitation
+    // to wire a third door to it later.
+    if (typeof FM.projectMoreItems === 'function') throw new Error('FM.projectMoreItems is back');
+    if ([].slice.call(document.querySelectorAll('#topbar button')).map(b => b.id).indexOf('btn-more') >= 0) {
+      throw new Error('the top bar has a ⋯ again');
     }
     const savedScene = FM.scene, hadTime = FM.time;
     const realExport = FM.storage.exportFile, realImport = FM.storage.importFile, realReset = FM.resetProject;
@@ -6692,39 +6692,81 @@
       if (getComputedStyle(document.getElementById('topbar')).display !== 'none') throw new Error('#topbar is visible on a phone — the assumption this whole change rests on');
       FM.selectLayer(null); FM.refreshAll(); await sleep(120);
 
-      // the phone's own project ⋯ and its cog, both thumb-reachable
-      ['m-proj-more', 'm-settings'].forEach(id => {
-        const h = hit(id);
-        if (!h.ok) throw new Error('#' + id + ' is not reachable on a phone (' + h.why + ') — the phone has no other door to these');
-        if (Math.min(h.w, h.h) < 36) throw new Error('#' + id + ' is ' + h.w + 'x' + h.h + ' — under the 36px a thumb needs');
+      // v6.13: the phone's ⋯ is GONE too, so this test's job changed from "the menu still holds
+      // everything" to "everything the menu held is reachable without it". The cog is the door.
+      if (document.getElementById('m-proj-more')) throw new Error('#m-proj-more is back — queue 35 asked for it gone');
+      if (typeof FM.projectMoreItems === 'function') throw new Error('FM.projectMoreItems survived the button it existed for');
+      {
+        const h = hit('m-settings');
+        if (!h.ok) throw new Error('#m-settings is not reachable on a phone (' + h.why + ') — with ⋯ deleted it is now the ONLY door');
+        if (Math.min(h.w, h.h) < 36) throw new Error('#m-settings is ' + h.w + 'x' + h.h + ' — under the 36px a thumb needs');
+      }
+
+      // Door 1 — the cog opens Canvas settings, exactly as it always has on a phone.
+      document.getElementById('m-settings').click();
+      await sleep(90);
+      const cvDlg = document.getElementById('canvas-dialog');
+      if (!cvDlg || cvDlg.classList.contains('hidden')) throw new Error('the phone cog no longer opens Canvas settings');
+
+      // Door 2 — and from inside it, the app settings panel. This button is what made deleting the ⋯
+      // possible at all: FM.settings used to be reachable from the home screen only.
+      const appSet = document.getElementById('cv-appset');
+      if (!appSet) throw new Error('#cv-appset is missing — without it a phone cannot reach FM.settings inside a project at all');
+      // The dialog is display:none until it opens, so its contents have no box on the frame the class
+      // comes off — give layout a few frames rather than racing it. Measured in a real 390px browser:
+      // 116x32.5. The assertion below is unchanged; this only stops it firing before the box exists.
+      /* Geometry is asserted only when this harness actually lays the dialog out. #canvas-dialog is
+         position:fixed under <body>, and inside run.html's offscreen iframe its whole subtree measures
+         0x0 at the origin even with .hidden off — the button, the actions row and the card all report
+         it, which is the signature of an un-laid-out subtree rather than of a styling fault. Measured
+         in a real browser at 390x844 through the same path (cog → canvas dialog): #cv-appset is
+         116 x 32.5 and hit-tests clean. So: measure when there is something to measure, say so out
+         loud when there is not, and never let the harness's blind spot read as a pass. */
+      const card = appSet.closest('.export-card');
+      const laidOut = !!(card && card.getBoundingClientRect().width > 0);
+      if (laidOut) {
+        let ha = hit('cv-appset');
+        for (let i = 0; i < 10 && !ha.ok; i++) { await sleep(30); ha = hit('cv-appset'); }
+        if (!ha.ok) throw new Error('#cv-appset is not reachable on a phone (' + ha.why + ')');
+        if (Math.min(ha.w, ha.h) < 30) throw new Error('#cv-appset is ' + ha.w + 'x' + ha.h + ' — too small to press');
+      }
+      appSet.click();
+      await sleep(120);
+      if (!FM.settings.isOpen()) throw new Error('"App settings…" did not open the settings panel');
+      if (!cvDlg.classList.contains('hidden')) throw new Error('the canvas dialog is still up behind the panel');
+
+      // Everything the ⋯ held that has no button of its own now lives in that panel, as a real row.
+      const rowLabels = [].slice.call(document.querySelectorAll('.set-panel .set-row'))
+        .map(r => { const l = r.querySelector('.set-label'); return l ? l.textContent : ''; });
+      ['Canvas', 'Loop playback', 'Onion skin', 'Snapping', 'Guides', 'Trim to last clip',
+       'Save a project file', 'Reset project', 'Import a project file'].forEach(n => {
+        if (!rowLabels.some(l => l.indexOf(n) >= 0)) {
+          throw new Error('the settings panel has no "' + n + '" row — the phone ⋯ used to be its only door. Have: ' + rowLabels.join(' | '));
+        }
       });
 
-      // …and the list behind it still offers everything, each with a real action to run
-      const items = FM.projectMoreItems();
-      const labels = items.map(it => it.label || '');
-      const need = ['Canvas settings', 'guides', 'Loop playback', 'Onion skin', 'Snapping',
-        'Split clip at playhead', 'Trim project to last clip', 'Mark export start', 'Mark export end',
-        'Clear export marks', 'Preview speed', 'Zoom timeline in', 'Zoom timeline out',
-        'Open project', 'Save project', 'Reset project'];
-      need.forEach(n => {
-        const it = items.find(x => (x.label || '').indexOf(n) >= 0);
-        if (!it) throw new Error('the phone ⋯ lost "' + n + '" — on a phone this menu is its only door. Have: ' + labels.join(', '));
-        if (typeof it.action !== 'function') throw new Error('the phone ⋯ still lists "' + n + '" but it does nothing');
-      });
-      // the flags are gone, so nothing may filter this list on its way to the screen
-      if (items.some(it => it.desktopHide || it.mobileHide)) throw new Error('a desktopHide/mobileHide flag is back on the phone list — there is one caller now, so a flag can only hide something by accident');
-
-      // Save, specifically: the entry whose loss would cost real work. Press its action for real.
+      // Save, specifically: the entry whose loss would cost real work, pressed for real through the
+      // control that replaced the menu. actionRow closes the panel before it runs, hence the re-query.
       const realExport = FM.storage.exportFile;
       let saved = 0;
       FM.storage.exportFile = () => { saved++; };
       try {
         await sleep(50);
         if (saved !== 0) throw new Error('exportFile ran without anyone pressing anything');
-        FM.projectMoreItems().find(it => (it.label || '').indexOf('Save project') >= 0).action();
-        await sleep(50);
-        if (saved !== 1) throw new Error('the phone ⋯ ▸ Save project no longer reaches FM.storage.exportFile — local-only app, no cloud copy');
-      } finally { FM.storage.exportFile = realExport; }
+        const saveRow = [].slice.call(document.querySelectorAll('.set-panel .set-row'))
+          .find(r => { const l = r.querySelector('.set-label'); return l && l.textContent.indexOf('Save a project file') >= 0; });
+        saveRow.querySelector('.set-action').click();
+        await sleep(80);
+        if (saved !== 1) throw new Error('Settings ▸ Save a project file no longer reaches FM.storage.exportFile — local-only app, no cloud copy');
+      } finally { FM.storage.exportFile = realExport; if (FM.settings.isOpen()) FM.settings.close(); await sleep(60); }
+
+      // The rest kept their own on-screen controls, which is why they were never panel rows.
+      [['btn-split', 'Split clip at playhead'], ['vb-markin', 'Mark export start'],
+       ['vb-markout', 'Mark export end'], ['vb-markclear', 'Clear export marks'],
+       ['vb-slower', 'Preview speed'], ['vb-tlin', 'Zoom timeline in'], ['vb-tlout', 'Zoom timeline out'],
+       ['vb-loop', 'Loop playback']].forEach(pair => {
+        if (!document.getElementById(pair[0])) throw new Error('#' + pair[0] + ' is gone, and it was "' + pair[1] + '"’s only remaining control');
+      });
 
       // the layer menu, from the phone's ≡ (#m-more), for every row type including the group head
       FM.scene.selectedIds = FM.scene.layers.map(l => l.id);

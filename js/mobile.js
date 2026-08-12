@@ -196,18 +196,10 @@ window.FM = window.FM || {};
       if (ids.length > 1 && FM.deleteSelected) { FM.deleteSelected(); return; }   // select-mode: delete the whole set
       var L = curLayer(); if (L && FM.deleteLayer) FM.deleteLayer(L.id);
     });
-    // ⋯ Project More — canvas, guides, loop/onion/snapping, split, trim, export marks, preview speed,
-    // timeline zoom, open/save/reset project. Now the ONLY caller of FM.projectMoreItems: the PC top
-    // bar's ⋯ is gone (its entries either already had an on-screen control or moved into the settings
-    // cog), and on a phone this menu is genuinely the only door to most of these — the cog here opens
-    // Canvas settings, FM.settings is home-screen-only, and the view bar's lower half is under the
-    // timeline. No mobileHide filter any more: with one caller there is nothing left to hide from.
-    var mProjMore = document.getElementById('m-proj-more');
-    if (mProjMore) mProjMore.addEventListener('click', function () {
-      if (!FM.contextMenu || !FM.projectMoreItems) return;
-      var r = mProjMore.getBoundingClientRect();
-      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.projectMoreItems());
-    });
+    // The project ⋯ handler lived here. Removed with the button (v6.13) — see index.html for where each
+    // of its entries went. What made it removable was the canvas dialog's new "App settings…" button:
+    // FM.settings used to be reachable from the home screen only, so on a phone this menu really was
+    // the one door to snapping, onion skin, guides and save/reset. It is two taps from the cog now.
     // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
     var mGroup = document.getElementById('m-group');
     if (mGroup) mGroup.addEventListener('click', function () {

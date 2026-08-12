@@ -2627,42 +2627,13 @@ window.FM = window.FM || {};
       items.push({ swatchLabel: 'Layer colour tag', swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff', '#9b5cff'], onPick: (hex) => FM.setLayerLabel(sel, hex) });
       return items;
     };
-    // The PHONE's project ⋯ list (#m-proj-more in js/mobile.js) — and, since the PC top bar's ⋯ was
-    // removed, its only caller. It stays because on a phone this really IS the only door: the phone's
-    // cog is Canvas settings (AM), FM.settings is reachable from the home screen only, and the lower
-    // half of the phone view bar is covered by the timeline, so the ⛶ controls PC leans on are not
-    // hit-testable there. Nothing here carries desktopHide/mobileHide any more — with one caller
-    // there is nothing to filter, and a flag no reader honours is how a menu quietly goes wrong.
-    FM.projectMoreItems = function () {
-      const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
-      const rates = [0.25, 0.5, 1, 2, 4], cur = FM.previewRate || 1;
-      const nextRate = rates[(rates.indexOf(cur) + 1) % rates.length];
-      return [
-        { label: 'Canvas settings…', action: () => clickHidden('btn-canvas') },   // size + aspect + frame rate + background
-        { label: FM.showGuides ? 'Hide guides' : 'Show guides', action: () => clickHidden('btn-guides') },
-        // 'Save frame (PNG)' moved to Export ▸ Format ▸ "This frame (PNG)" — first of the ⋯ menu's
-        // entries to find a real home. Ezra is emptying this menu one item at a time.
-        { sep: true },
-        { label: (FM.loop ? '✓ ' : '') + 'Loop playback', action: () => clickHidden('btn-loop') },
-        // Both of these are toggles whose EFFECT is invisible until you go and try the thing they
-        // change, so the labels say what they do rather than just naming themselves (Ezra: "what does
-        // the snapping magnet and onion skin things in the three dot menu even do???").
-        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin — ghost the layer before/after now', action: () => clickHidden('btn-onion') },
-        { label: ((FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()) ? '✓ ' : '') + 'Snapping (magnet) — clips stick to edges', action: () => clickHidden('btn-snap') },
-        { label: 'Split clip at playhead', action: () => clickHidden('btn-split') },
-        { label: 'Trim project to last clip', action: () => clickHidden('btn-fit') },
-        { label: 'Mark export start', action: markRegionIn },
-        { label: 'Mark export end', action: markRegionOut },
-        { label: 'Clear export marks', action: clearRegion },
-        { label: 'Preview speed: ' + cur + '× → ' + nextRate + '×', action: () => { FM.setPreviewRate(nextRate); const pr = document.getElementById('preview-rate'); if (pr) pr.value = String(nextRate); } },
-        { label: 'Zoom timeline in', action: () => clickHidden('btn-zoomin') },
-        { label: 'Zoom timeline out', action: () => clickHidden('btn-zoomout') },
-        { sep: true },
-        { label: 'Open project…', action: () => clickHidden('btn-open-proj') },
-        { label: 'Save project', action: () => clickHidden('btn-save-proj') },
-        { label: 'Reset project…', danger: true, action: () => { if (confirm('Reset the project? This clears all layers and cannot be undone.')) FM.resetProject(); } },
-      ];
-    };
+    // FM.projectMoreItems lived here — the list behind the phone's project ⋯. Both the button and
+    // this function are gone as of v6.13, which finishes queue 35: the PC top bar's ⋯ went first, and
+    // the phone's followed once the canvas dialog gained an "App settings…" button, because that was
+    // the thing standing in the way — FM.settings was reachable from the home screen only, so on a
+    // phone the menu really had been the single door to snapping, onion skin, guides, trim and
+    // save/reset. index.html records where every entry went.
+
     // The desktop cog (v6.13). It used to open FM.settings — the APP preferences panel — while the
     // phone's identical gear (#m-settings) opened Canvas settings. Ezra, twice: "settings cog on pc in
     // projects STILL opens up wrong settings menu." It wasn't that the panel was empty of project rows

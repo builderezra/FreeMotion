@@ -239,6 +239,11 @@ window.FM = window.FM || {};
           () => FM.onionSkin, () => press('btn-onion')),
         switchRow('Snapping (magnet)', 'Clips and keyframes stick to the playhead and to each other’s edges while you drag them.',
           () => FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping(), () => press('btn-snap')),
+        // The last thing the phone's project ⋯ held that had nowhere else to be (v6.13). It sits with
+        // the other three view toggles because that is what it is — none of them change the project,
+        // they change what you can SEE while you work on it. Read through FM.showGuides, never copied.
+        switchRow('Guides', 'Draws safe margins and a rule-of-thirds grid over the canvas. They are for lining things up — they never appear in an export.',
+          () => FM.showGuides, () => press('btn-guides')),
       ));
       // ---- and the three project ACTIONS the PC ⋯ menu was the only door to -------------------
       // Removing #btn-more finished queue 35. Most of what it held was a second copy of a control
