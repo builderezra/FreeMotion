@@ -60,6 +60,73 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [ ] **97 — Freehand drawing is STILL broken (4th report), with a phone screenshot at v6.60.** His words:
+      *"Freehand drawing is still broken."* The screenshot is the useful part: the drawing surface is a
+      SEPARATE black rectangle that does not line up with the comp preview above it — the comp is a
+      partial strip at the top, and the draw area is a second, differently-placed black box below it. So
+      whatever you draw cannot land where you aimed. Previous attempts (#27 "should fill the screen",
+      #60 "fix the bugs and the look") both shipped and both missed, which says the earlier fixes were
+      verified synthetically and not against the real phone layout. DO NOT fix this one blind again —
+      reproduce the misalignment at phone size first and prove the draw surface and the comp share one
+      coordinate space.
+- [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
+      better."* From the screenshot: (a) TWO separate confirm buttons on screen at once — the blue ✓ in
+      the top bar and another ✓ in the bar above the keyboard; (b) that second bar also carries ^ and v
+      arrows and eats a row of space on an already-cramped phone; (c) the size says 225 pt but the
+      rendered "Text" is tiny in the frame, so either the pt value is not what is being drawn or the
+      readout is lying — measure which before changing anything; (d) the text box and its handles are
+      small and fiddly at that size. Not a crash, a quality pass — but it is the screen people meet
+      first when they add text.
+
+- [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
+      words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
+      it's the only thing in the timeline."* "Only thing in the timeline" rules out mixing, layer count,
+      render load and effect cost — this is the audio path failing on its own. "Sometimes" means a RACE,
+      not a broken code path: most likely the decode/AudioBuffer not being ready when play() is called,
+      or a play generation token cancelling the start. Together with 95 (voice memo stutters) and 72
+      (import loses parts of the file) this is now THREE separate audio reports, and it is the most
+      broken thing in the app — treat the audio cluster as top priority over polish work.
+
+- [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
+      His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just
+      tested adding a voice memo."* This is a REAL-DEVICE report, and that matters: the two measured
+      causes behind the earlier lag item were fixed at v6.33 and the desktop numbers came back fine, so
+      whatever is left does not reproduce on this machine. Do not "fix" it against desktop timings again.
+      Overlaps 69 (audio must never lag — make the audio clock the master) and the standing PERF item;
+      the voice-memo detail is the useful lead, because a recorded memo is a fresh decode with no cached
+      frames or waveform, unlike an imported song. Needs profiling on HIS phone, or a throttled-CPU
+      profile as the nearest stand-in, before touching anything.
+
+- [ ] **94 — Film grain in the menu is too jumpy and too obvious.** His words: *"The film grain in the
+      menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
+      separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame
+      to frame). "Jumpy" is the second one — a grain that re-randomises every frame strobes; real film
+      grain drifts. Likely this is the moving static over the home project cards from #76, so check that
+      first, and confirm with him which screen he means if there is more than one grain in the menus.
+
+- [ ] **93 — Wiggle should see OTHER effects' motion, and behave in corners.** His words: *"I want the
+      wiggle effect to also work when you have other effects that make it move, and also it should work
+      in corners better."* Two parts. (a) Wiggle currently jitters the layer's own transform, so a layer
+      being moved by something else — Drift, Orbit, Spin, a camera, a parent group — doesn't get wiggled
+      along that motion. (b) Corners: needs measuring before I guess, but the likely cause is that the
+      wiggle displaces without expanding the plate, so at a frame edge the offset content is clipped
+      instead of moving. RELATED to 31b (transform blur can't smear effect- or camera-driven motion) —
+      same underlying gap, that effect-driven motion isn't visible to the things that should react to it.
+      Worth checking whether one fix serves both.
+
+- [ ] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** His words:
+      *"With the faves section I want it to be really easy to open, remove the feature of swiping right
+      to see ur faves, just make it if you swipe down on recents it does a clean little animation and
+      opens up the faves menu you have just built."* So: the "Recents & favourites" block is currently
+      a sideways PAGER — Recents is page 1 and your favourites are pages 2, 3… behind a swipe right,
+      with page dots. That paging goes. The block becomes just Recents, and a pull-down on it opens the
+      full-screen Favourites browser from #74 with an animation. The ▲ "All favourites" strip below it
+      stays a tap target, because a gesture nobody told you about is how Group ended up unreachable on
+      PC (#53) — but it stops being the only way in.
+      NOTE: `js/audio-fx-browser.js` has the same sideways pager for AUDIO effects. Left alone for now
+      — he asked about the effects browser, and the audio one has no full-screen favourites view to
+      open. Say the word and it gets the same treatment.
+
 
 ### Bugs
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and

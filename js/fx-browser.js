@@ -1,5 +1,5 @@
 /* FreeMotion — full-screen Add-Effect browser (Alight Motion style): search · auto-scrolling featured
- * carousel · paged Recents/Favourites grid with page dots + star-to-favourite · category banners that open
+ * carousel · Recents grid that PULLS DOWN to the favourites browser + star-to-favourite · category banners that open
  * a per-category effect list. Adds exactly ONE effect per tap (the single add path). Reads FM.fxRegistry. */
 window.FM = window.FM || {};
 (function (FM) {
@@ -7,7 +7,7 @@ window.FM = window.FM || {};
 
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
-  const RECENTS_KEY = 'fm.fx.recents', FAV_KEY = 'fm.fx.fav', RECENTS_CAP = 8, PAGE_SIZE = 8;
+  const RECENTS_KEY = 'fm.fx.recents', FAV_KEY = 'fm.fx.fav', RECENTS_CAP = 8;   // PAGE_SIZE went with the sideways pager (queue 92); js/audio-fx-browser.js keeps its own
   // Two entries in this browser are NOT registry effects — Mask and Motion Blur (Object) are
   // pseudo-tiles that drive layer state directly. They still look like effects and sit in the same
   // grid, so they are favouritable like everything else; readList has to stop filtering them out.
@@ -413,63 +413,176 @@ window.FM = window.FM || {};
     return { sec: sec, row: row };
   }
 
-  // Section B — paged Recents (page 1) + Favourites (rest), 8 tiles per page, with page dots.
+  /* Section B — RECENTS, and the door to the Favourites browser (queue 92).
+   *
+   * This used to be a sideways PAGER: Recents was page 1 and your favourites were pages 2, 3… behind
+   * a swipe right, with page dots. Ezra: "remove the feature of swiping right to see ur faves, just
+   * make it if you swipe down on recents it does a clean little animation and opens up the faves
+   * menu you have just built." He is right that it was the wrong door — three grey dots are not an
+   * affordance, and the favourites you had starred were invisible until you swiped at something that
+   * did not look swipeable.
+   *
+   * So the section is now exactly what its title says, and favourites live in ONE place: the
+   * full-screen browser from queue 74, reachable two ways — pull the block down, or tap the strip.
+   * The strip stays because a gesture nobody told you about is how Group ended up unreachable on the
+   * PC (queue 53); the gesture is the fast path, not the only path.
+   *
+   * NOTE the sideways pager still exists in js/audio-fx-browser.js for AUDIO effects, and it still
+   * uses .fxb-pager/.fxb-page/.fxb-dots — which is why those CSS rules are scoped to #afx-browser
+   * now rather than deleted. */
   function buildPaged(rerender) {
-    const sec = el('div', 'fxb-section');
-    sec.appendChild(el('div', 'fxb-sec-title', 'Recents & favourites'));
-    // Held as IDs, not registry entries, so a favourited pseudo-entry survives to the grid. (#62)
+    const sec = el('div', 'fxb-section fxb-recents');   // .fxb-recents is rerenderPaged's anchor — it used to key off .fxb-pager, which no longer exists
+    sec.appendChild(el('div', 'fxb-sec-title', 'Recents'));
     const recents = readList(RECENTS_KEY);
-    const favs = readList(FAV_KEY);
-    // pages: [recents], then favourites chunked
-    const pages = [];
-    pages.push({ label: 'Recents', items: recents });
-    for (let i = 0; i < favs.length; i += PAGE_SIZE) pages.push({ label: 'Favourites', items: favs.slice(i, i + PAGE_SIZE) });
-    if (favs.length === 0) pages.push({ label: 'Favourites', items: [] });
+    const favs = readList(FAV_KEY);          // only for the strip's count now, not for paging
 
-    const pager = el('div', 'fxb-pager');
-    pages.forEach(pg => {
-      const page = el('div', 'fxb-page');
-      if (!pg.items.length) {
-        page.appendChild(el('div', 'fxb-empty', pg.label === 'Recents' ? 'No recent effects yet' : 'Tap ★ on any effect to favourite it'));
-      } else {
-        const grid = el('div', 'fxb-grid');
-        pg.items.forEach(id => { const t = tileForId(id, rerender); if (t) grid.appendChild(t); });
-        page.appendChild(grid);
-      }
-      pager.appendChild(page);
-    });
-    sec.appendChild(pager);
+    /* The hint that is revealed in the gap the block leaves as you pull it down. It sits BEHIND the
+     * block (negative margin, so it takes no layout space) and is uncovered rather than animated in,
+     * which is what makes the gesture read as pulling a drawer open instead of nudging a box. */
+    const hint = el('div', 'fxb-pullhint');
+    hint.innerHTML = '<span class="fxb-pullhint-ico">★</span><span class="fxb-pullhint-txt">Favourites</span>';
+    sec.appendChild(hint);
 
-    const dots = el('div', 'fxb-dots');
-    pages.forEach((_, i) => { const d = el('span', 'fxb-dot' + (i === 0 ? ' on' : '')); dots.appendChild(d); });
-    pager.addEventListener('scroll', () => {
-      const i = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
-      [].forEach.call(dots.children, (d, k) => d.classList.toggle('on', k === i));
-    });
-    sec.appendChild(dots);
+    const body = el('div', 'fxb-recents-body');   // the part that MOVES; the hint must stay put
+    if (!recents.length) body.appendChild(el('div', 'fxb-empty', 'No recent effects yet'));
+    else {
+      const grid = el('div', 'fxb-grid');
+      recents.forEach(id => { const t = tileForId(id, rerender); if (t) grid.appendChild(t); });
+      body.appendChild(grid);
+    }
 
-    /* The way into the full-screen Favourites browser (queue 74). Swipe it up, or just tap it.
-     * It is a strip of its own rather than a swipe-up on the whole block for a plain reason: this
-     * browser scrolls vertically, so a swipe-up over the block IS the scroll gesture, and claiming
-     * it would make the page unscrollable exactly where you need to scroll. Confining it to the
-     * strip leaves the scroll alone, and the strip is a button too, so the feature is not reachable
-     * only by a gesture nobody told you about. */
     const grab = el('button', 'fxb-favmore');
     grab.type = 'button';
     grab.innerHTML = '<span class="fxb-favmore-bar"></span><span class="fxb-favmore-txt">All favourites' +
-      (favs.length ? ' · ' + favs.length : '') + ' ▲</span>';
-    grab.title = 'Swipe up (or tap) for all your favourites, with sorting';
-    grab.addEventListener('click', openFavourites);
-    let gy = null;
-    grab.addEventListener('pointerdown', e => { gy = e.clientY; });
-    grab.addEventListener('pointermove', e => {
-      if (gy == null) return;
-      if (gy - e.clientY > 24) { gy = null; openFavourites(); }   // decisive upward drag — the click handler covers the tap
-    });
-    grab.addEventListener('pointerup', () => { gy = null; });
-    grab.addEventListener('pointercancel', () => { gy = null; });
-    sec.appendChild(grab);
+      (favs.length ? ' \u00b7 ' + favs.length : '') + ' \u25be</span>';
+    grab.title = 'Pull down (or tap) for all your favourites, with sorting';
+    grab.addEventListener('click', () => openFavourites());   // a drag that ended here never reaches this: attachFavPull swallows that click in the capture phase
+    body.appendChild(grab);
+    sec.appendChild(body);
+
+    attachFavPull(sec, body, hint);
     return sec;
+  }
+
+  /* ---- the pull-down itself --------------------------------------------------------------------
+   * Mechanics are the house ones rather than new inventions: the claim rules come from makeSwipeDown
+   * (js/mobile.js:80) — 6px with axis dominance, bail on any upward move, setPointerCapture once
+   * claimed, listeners on window, pointercancel NEVER commits — and the damping curve comes from the
+   * home overpull (js/home.js:386), Math.pow(dy, 0.78) capped, because a pull that follows the finger
+   * 1:1 feels like the section has come loose.
+   *
+   * IT IS GATED ON scrollTop <= 0, and that is the whole reason this can be a bare gesture on the
+   * block at all. The old swipe-UP had to live on its own narrow strip because up IS the scroll
+   * direction here, so claiming it would have made the browser unscrollable exactly where you need to
+   * scroll. Down at the top of a scroller is different: there is nothing left to scroll to, so the
+   * gesture is free. It is the pull-to-refresh bargain, and it costs the user nothing — the Recents
+   * block sits 244px down a 753px viewport, fully on screen the moment the browser opens.
+   *
+   * Under prefers-reduced-motion the gesture is not armed at all, the same call home.js makes for the
+   * overpull: better that the feature simply is not there than that it fires a silent version of
+   * itself. The strip is still a button, so nothing becomes unreachable. */
+  /* BOTH NUMBERS ARE IN DAMPED PIXELS, NOT FINGER PIXELS, which is the trap this constant fell into
+   * first time: Math.pow(dy, 0.78) turns a 150px drag into 49.8, so a commit point of 62 needed about
+   * 210px of travel on a 259px-tall section — unreachable in practice, and the harness caught it as
+   * "the armed state never lights". 34 is ~92px of finger travel (92^0.78), which is a deliberate pull
+   * on a phone but nowhere near a whole screen. PULL_MAX 88 caps the stretch at ~310px. */
+  let _unbindPull = null;
+  const PULL_MAX = 88, PULL_COMMIT = 34;
+  const FLICK_VY = 0.5, FLICK_MIN = PULL_COMMIT * 0.45;
+  function reducedMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function attachFavPull(sec, body, hint) {
+    if (reducedMotion()) return;
+    let sy = 0, sx = 0, lastY = 0, lastT = 0, vy = 0, id = null, live = false, claimed = false, px = 0;
+    const scroller = () => sec.closest('.fxb-scroll');
+    const set = (v, ease) => {
+      body.style.transition = ease || '';
+      body.style.transform = v ? 'translate3d(0,' + v.toFixed(1) + 'px,0)' : '';
+      // The hint brightens with the pull and goes accent once you are past the commit point, so the
+      // finger knows it has done enough BEFORE it lifts — the one thing a pull gesture must tell you.
+      hint.style.opacity = v ? Math.min(1, v / (PULL_COMMIT * 0.75)).toFixed(2) : '';   // fully lit just before it arms, so the accent flip is the last thing that happens
+      hint.classList.toggle('armed', v >= PULL_COMMIT);
+    };
+    let eating = null;
+    const disarmEat = () => { if (eating) { sec.removeEventListener('click', eating, true); eating = null; } };
+    const armEat = () => {
+      disarmEat();
+      eating = ev => { ev.stopPropagation(); ev.preventDefault(); disarmEat(); };
+      sec.addEventListener('click', eating, true);
+    };
+    const down = e => {
+      disarmEat();                                             // a new touch always clears a stale trap
+      if (live || e.pointerType === 'mouse' && e.button !== 0) return;
+      const sc = scroller();
+      if (!sc || sc.scrollTop > 0) return;                       // only from a browser already at the top
+      if (e.target.closest('input, textarea, select')) return;
+      live = true; claimed = false; px = 0; id = e.pointerId;
+      sy = lastY = e.clientY; sx = e.clientX; lastT = e.timeStamp; vy = 0;
+    };
+    const move = e => {
+      if (!live || e.pointerId !== id) return;
+      const dy = e.clientY - sy, dx = e.clientX - sx;
+      if (!claimed) {
+        if (dy < -4) { live = false; return; }                   // upward → this is a scroll, let it go
+        if (dy > 6 && dy > Math.abs(dx)) { claimed = true; try { body.setPointerCapture(id); } catch (_) {} }
+        else return;
+      }
+      const sc = scroller();
+      if (!sc || sc.scrollTop > 0) { set(0); live = false; return; }   // scrolled away mid-pull
+      if (e.cancelable) e.preventDefault();
+      const now = e.timeStamp, dt = now - lastT;
+      if (dt > 0) vy = (e.clientY - lastY) / dt;
+      lastY = e.clientY; lastT = now;
+      px = Math.min(PULL_MAX, Math.pow(Math.max(0, dy), 0.78));
+      set(px);
+    };
+    const settle = (e, aborted) => {
+      if (!live || (e && e.pointerId !== id)) return;
+      const was = claimed, amt = px;
+      live = false; claimed = false; px = 0;
+      if (_unbindPull) _unbindPull();
+      try { body.releasePointerCapture(id); } catch (_) {}
+      if (!was) return;
+      /* A claimed drag must not also count as a tap on whatever it started on: the effect TILES are
+       * plain buttons (built by tileForId, shared with search and the category views), so a drag that
+       * began on a tile would otherwise ADD that effect on release. Swallow exactly one click in the
+       * capture phase, so it never reaches the tile or the strip.
+       * NO TIMER DISARMS IT. The first cut cleared the trap on setTimeout(0), which the harness caught
+       * failing: background the tab mid-drag — switching apps on a phone is exactly that — and the
+       * timer is throttled for minutes, leaving the strip and every tile dead to the touch with no way
+       * to tell why. The trap now clears on whichever comes first, the click it was set for or the
+       * next pointerdown, so it can never outlive the gesture that set it. */
+      armEat();
+      /* A flick still opens it, but only with a floor under it — the same velocity-AND-distance pair
+       * the effect-row swipe uses (js/inspector.js:816). Velocity alone let a 28px nudge open the
+       * whole favourites screen, which is exactly the kind of thing you hit by accident while
+       * scrolling and cannot explain afterwards. */
+      if (!aborted && (amt >= PULL_COMMIT || (vy > FLICK_VY && amt > FLICK_MIN))) {
+        if (navigator.vibrate) { try { navigator.vibrate(9); } catch (_) {} }
+        set(0, 'transform 190ms cubic-bezier(0,0,.2,1)');
+        openFavourites(true);
+      } else {
+        set(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');      // abandoned → glide back, the home-overpull return
+      }
+      setTimeout(() => { if (body) body.style.transition = ''; }, 260);
+    };
+    /* The window listeners are bound only WHILE a drag is live, not for the life of the section.
+     * rerenderPaged() replaces this whole section on every ★ toggle, so the permanent version leaked a
+     * fresh move/up/cancel trio each time — and worse, the old closures kept firing against a detached
+     * body forever. Binding on pointerdown and unbinding in settle() means at most one trio exists, and
+     * it dies with the gesture.
+     * lostpointercapture is in there because setPointerCapture on an element that then gets replaced
+     * mid-drag delivers neither pointerup nor pointercancel; without it `live` would stay true and the
+     * gesture would refuse to start ever again. */
+    const bind = on => {
+      const f = on ? window.addEventListener : window.removeEventListener;
+      f.call(window, 'pointermove', move, { passive: false });
+      f.call(window, 'pointerup', settle);
+      f.call(window, 'pointercancel', cancel);
+      f.call(window, 'lostpointercapture', cancel);
+    };
+    const cancel = e => settle(e, true);        // the OS (or a rebuild) stole it → snap back, never open
+    body.addEventListener('pointerdown', e => { down(e); if (live) bind(true); });
+    _unbindPull = () => bind(false);
   }
 
   /* ---- Section B½ — the full-screen FAVOURITES browser (queue 74) ------------------------------
@@ -526,8 +639,13 @@ window.FM = window.FM || {};
     return out;
   }
 
-  function openFavourites() {
-    const view = el('div', 'fxb-catview fxb-favview');
+  /* fromPull: the view is being opened by the pull-down gesture rather than a tap, so it enters as a
+   * continuation of that drag — sliding down from above, the direction the finger was already going.
+   * A tap gets the same entrance minus the travel. This is the first panel in the browser with an
+   * entrance at all (catview and the browser itself just appear), which is the point: the gesture
+   * needs somewhere to land or the pull feels like it did nothing and the screen merely changed. */
+  function openFavourites(fromPull) {
+    const view = el('div', 'fxb-catview fxb-favview' + (reducedMotion() ? ' fxb-favview-fade' : (fromPull ? ' fxb-favview-pull' : ' fxb-favview-in')));
     _catDepth++; stopAuto();
     const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
     tapOutToClose(view, closeView);
@@ -708,17 +826,16 @@ window.FM = window.FM || {};
     _featRow = feat.row;
     if (!_catDepth) startAuto(feat.row);
   }
-  // Toggling a ★ only needs the Recents/Favourites section rebuilt — a full rebuild() reset the pager
-  // to page 1 AND restarted the featured carousel from the left. Replace just that section, keep the page.
+  /* Toggling a ★ only needs the Recents section rebuilt — a full rebuild() also restarts the featured
+   * carousel from the left, which is the v3.23 fix and must not be undone.
+   * THE ANCHOR IS .fxb-recents. It used to be .fxb-pager, and when the pager was deleted for queue 92
+   * that selector would have quietly returned null on every star toggle, falling through to the full
+   * rebuild() below — no error, no failing test, just the carousel jumping back to the left each time
+   * you favourited something. Anchoring on a class the section will always have is the fix. */
   function rerenderPaged() {
-    const oldPager = scrollEl.querySelector('.fxb-pager');
-    const oldSec = oldPager && oldPager.closest('.fxb-section');
+    const oldSec = scrollEl.querySelector('.fxb-recents');
     if (!oldSec) { rebuild(); return; }
-    const pageIdx = Math.round(oldPager.scrollLeft / Math.max(1, oldPager.clientWidth));
-    const fresh = buildPaged(rerenderPaged);
-    oldSec.replaceWith(fresh);
-    const np = fresh.querySelector('.fxb-pager');
-    if (np && pageIdx > 0) np.scrollLeft = pageIdx * np.clientWidth;
+    oldSec.replaceWith(buildPaged(rerenderPaged));
   }
 
   // tiny monotonic clock (Date.now is fine in app runtime, just not in workflow sandbox)
