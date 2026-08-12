@@ -131,7 +131,25 @@ Numbered with Ezra's own queue numbers where he gave them.
       which looks odd next to the "Colouring" rename you asked for in 83. Say the word and I'll
       change it — it's your app's voice, not mine to decide.
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
-      exist fully"*.
+      exist fully"*. **Measured, and it is more finished than that** — here is exactly where it stands,
+      because "doesn't exist fully" needed a number rather than another guess.
+      **Visual effects: 499 of 499 sliders are keyframable.** Verified end to end, not just counted:
+      the ◆ and the easing button render on every slider row, keyframing Gaussian Blur's radius at 0s
+      and 4s interpolates 6 → 23 → 40 through the middle, and tapping the parameter's NAME scopes the
+      timeline to that parameter's diamonds. So for visual effects this is done.
+      **Audio effects: 54 of 60.** The six without are Reverb Size, Reverb Decay, Distortion Drive,
+      Bit Crush Bits, Lo-Fi Amount and Pitch Shift Semitones — and they are not an oversight. Every
+      one rebuilds a BUFFER or a CURVE instead of driving a normal audio parameter, so animating them
+      means rebuilding that thing on every frame. I measured the cost:
+      · **Reverb Size / Decay — correctly left out.** Rebuilding the room takes **12.5ms** at the
+        longest decay, which is 75% of a whole frame's budget for one effect, and swapping the room
+        mid-tail would click even if it were free.
+      · **Distortion Drive, Bit Crush Bits, Lo-Fi Amount — genuinely could be done.** Their rebuild is
+        a waveshaper curve at **0.24ms**, which is affordable per frame. These are real candidates.
+      · Pitch Shift Semitones — not measured yet.
+      **Held pending your call**, for the same reason as 72: making those three animate means audio
+      automation I cannot HEAR, and a slider that clicks or zips every frame is worse than one that
+      doesn't animate. Say the word and I'll build the three cheap ones and you can listen.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
 - [ ] **48 — Squish:** a new effect where the layer deforms against the canvas edges. Part of the
