@@ -3611,6 +3611,12 @@ body.fm-pushing #toast { z-index: 213; }
 }
 .set-action:hover { border-color: var(--accent); color: var(--text); }
 .set-action:active { transform: translateY(1px); }
+/* Destructive (Reset project — the ⋯ menu's `danger` flag, kept when the row moved in here). Same
+   red the context menu and the home screen already use for "this deletes things", so it warns in the
+   place a column of identical grey buttons would not. The hover rule above is overridden, not just
+   restated: without it, pointing at Reset turns it accent-blue like a safe one. */
+.set-action.danger { color: #ff8a8a; border-color: rgba(224, 49, 49, .40); background: rgba(224, 49, 49, .10); }
+.set-action.danger:hover { color: #ff6b6b; border-color: rgba(224, 49, 49, .70); background: rgba(224, 49, 49, .18); }
 
 /* ===== Selected parameter row — the tapped-name half of the v5.42 focus rule ====================
  * Ezra, from Alight Motion: "to tell what slider you have selected — hence forth what key frames ur

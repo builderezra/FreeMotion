@@ -196,14 +196,17 @@ window.FM = window.FM || {};
       if (ids.length > 1 && FM.deleteSelected) { FM.deleteSelected(); return; }   // select-mode: delete the whole set
       var L = curLayer(); if (L && FM.deleteLayer) FM.deleteLayer(L.id);
     });
-    // ⋯ Project More — the SAME menu desktop's top-bar ⋯ shows with nothing selected (save frame,
-    // guides, loop/onion/snapping, export marks, preview speed, open/save/reset project). Items a
-    // phone can't use (keyboard shortcuts) carry mobileHide and are filtered out.
+    // ⋯ Project More — canvas, guides, loop/onion/snapping, split, trim, export marks, preview speed,
+    // timeline zoom, open/save/reset project. Now the ONLY caller of FM.projectMoreItems: the PC top
+    // bar's ⋯ is gone (its entries either already had an on-screen control or moved into the settings
+    // cog), and on a phone this menu is genuinely the only door to most of these — the cog here opens
+    // Canvas settings, FM.settings is home-screen-only, and the view bar's lower half is under the
+    // timeline. No mobileHide filter any more: with one caller there is nothing left to hide from.
     var mProjMore = document.getElementById('m-proj-more');
     if (mProjMore) mProjMore.addEventListener('click', function () {
       if (!FM.contextMenu || !FM.projectMoreItems) return;
       var r = mProjMore.getBoundingClientRect();
-      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.projectMoreItems().filter(function (it) { return !it.mobileHide; }));
+      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.projectMoreItems());
     });
     // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
     var mGroup = document.getElementById('m-group');

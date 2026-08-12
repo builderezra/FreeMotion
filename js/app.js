@@ -2580,22 +2580,22 @@ window.FM = window.FM || {};
     if (saveProjBtn) saveProjBtn.addEventListener('click', () => { if (FM.storage && FM.storage.exportFile) FM.storage.exportFile(); });
     const openProjBtn = document.getElementById('btn-open-proj');
     if (openProjBtn) openProjBtn.addEventListener('click', () => { if (FM.storage && FM.storage.importFile) FM.storage.importFile(); });
-    // ⋯ More menu — the decluttered home for canvas/guides/save-frame/open/save/shortcuts (AM keeps the top minimal)
     const parentBtn = document.getElementById('btn-parent');
     if (parentBtn) parentBtn.addEventListener('click', () => {
       const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null; if (!sel) return;
       const r = parentBtn.getBoundingClientRect();
       FM.openParentPicker(sel, Math.max(8, r.right - 220), r.bottom + 4);
     });
-    // Mark / clear the export-loop region at the playhead — shared by the [ ] \ keys and the
-    // ⋯ menu (mobile has no bracket keys, so the menu is the touch path).
+    // Mark / clear the export-loop region at the playhead — shared by the [ ] \ keys, the ⛶ view
+    // bar's vb-markin/out/clear, and the phone's ⋯ (no bracket keys there, and the phone view bar's
+    // lower half sits under the timeline, so the menu is its only touch path).
     const markRegionIn = () => { const P = FM.scene.project; P.loopIn = FM.time; if (P.loopOut != null && P.loopOut <= P.loopIn) P.loopOut = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
     const markRegionOut = () => { const P = FM.scene.project; P.loopOut = FM.time; if (P.loopIn != null && P.loopIn >= P.loopOut) P.loopIn = null; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
     const clearRegion = () => { FM.scene.project.loopIn = null; FM.scene.project.loopOut = null; FM.timeline.rebuild(); };
     // ---- SHARED menu builders (Ezra: mobile and PC must show the SAME menus in the same places).
-    // One source of truth each: the layer extras feed FM.layerMenuItems (so right-click, desktop ⋯
-    // and the mobile ≡ are all identical), and the project menu feeds desktop ⋯ AND the mobile
-    // top-bar ⋯. Items a phone can't use carry mobileHide.
+    // One source of truth: the layer extras feed FM.layerMenuItems, so right-clicking a clip, right-
+    // clicking its row head and the phone's ≡ are all identical lists. (The project menu below now
+    // has a single caller — the phone's ⋯ — because the PC top bar's ⋯ is gone.)
     FM.layerMoreItems = function (sel) {
       const items = [];
       items.push({ label: (sel.flipH ? '✓ ' : '') + 'Flip Horizontally', action: () => FM.flipLayer(sel, 'h') });
@@ -2612,6 +2612,12 @@ window.FM = window.FM || {};
       items.push({ swatchLabel: 'Layer colour tag', swatches: ['#ff2d1e', '#e0245e', '#ff8b3d', '#ffd93d', '#2bd9c7', '#3d7bff', '#9b5cff'], onPick: (hex) => FM.setLayerLabel(sel, hex) });
       return items;
     };
+    // The PHONE's project ⋯ list (#m-proj-more in js/mobile.js) — and, since the PC top bar's ⋯ was
+    // removed, its only caller. It stays because on a phone this really IS the only door: the phone's
+    // cog is Canvas settings (AM), FM.settings is reachable from the home screen only, and the lower
+    // half of the phone view bar is covered by the timeline, so the ⛶ controls PC leans on are not
+    // hit-testable there. Nothing here carries desktopHide/mobileHide any more — with one caller
+    // there is nothing to filter, and a flag no reader honours is how a menu quietly goes wrong.
     FM.projectMoreItems = function () {
       const clickHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
       const rates = [0.25, 0.5, 1, 2, 4], cur = FM.previewRate || 1;
@@ -2622,17 +2628,12 @@ window.FM = window.FM || {};
         // 'Save frame (PNG)' moved to Export ▸ Format ▸ "This frame (PNG)" — first of the ⋯ menu's
         // entries to find a real home. Ezra is emptying this menu one item at a time.
         { sep: true },
-        // Timeline controls that AM keeps off the play row — relocated here so they stay reachable.
-        // queue 35: on PC these three are SETTINGS and now live in the settings cog (js/settings.js),
-        // so `desktopHide` drops them from this menu — one door, not two. The phone keeps them: its
-        // cog is Canvas settings (AM), and FM.settings is only reachable from the home screen there,
-        // so ⋯ is the only door a phone has. Same items, one surface each.
-        { label: (FM.loop ? '✓ ' : '') + 'Loop playback', desktopHide: true, action: () => clickHidden('btn-loop') },
+        { label: (FM.loop ? '✓ ' : '') + 'Loop playback', action: () => clickHidden('btn-loop') },
         // Both of these are toggles whose EFFECT is invisible until you go and try the thing they
         // change, so the labels say what they do rather than just naming themselves (Ezra: "what does
         // the snapping magnet and onion skin things in the three dot menu even do???").
-        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin — ghost the layer before/after now', desktopHide: true, action: () => clickHidden('btn-onion') },
-        { label: ((FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()) ? '✓ ' : '') + 'Snapping (magnet) — clips stick to edges', desktopHide: true, action: () => clickHidden('btn-snap') },
+        { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin — ghost the layer before/after now', action: () => clickHidden('btn-onion') },
+        { label: ((FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()) ? '✓ ' : '') + 'Snapping (magnet) — clips stick to edges', action: () => clickHidden('btn-snap') },
         { label: 'Split clip at playhead', action: () => clickHidden('btn-split') },
         { label: 'Trim project to last clip', action: () => clickHidden('btn-fit') },
         { label: 'Mark export start', action: markRegionIn },
@@ -2645,8 +2646,6 @@ window.FM = window.FM || {};
         { label: 'Open project…', action: () => clickHidden('btn-open-proj') },
         { label: 'Save project', action: () => clickHidden('btn-save-proj') },
         { label: 'Reset project…', danger: true, action: () => { if (confirm('Reset the project? This clears all layers and cannot be undone.')) FM.resetProject(); } },
-        { sep: true, mobileHide: true },
-        { label: 'Keyboard shortcuts', mobileHide: true, action: () => clickHidden('btn-help') },
       ];
     };
     const setBtn = document.getElementById('btn-settings');
@@ -2654,21 +2653,12 @@ window.FM = window.FM || {};
       if (FM.settings && FM.settings.open) FM.settings.open();
       else if (FM.toast) FM.toast('Settings unavailable');
     });
-    const moreBtn = document.getElementById('btn-more');
-    if (moreBtn) moreBtn.addEventListener('click', () => {
-      const r = moreBtn.getBoundingClientRect();
-      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-      if (sel) {
-        // a clip is selected → the SAME menu as right-clicking the clip / the mobile ≡, plus the
-        // door back to the project options
-        const items = FM.layerMenuItems(sel).concat([{ sep: true }, { label: 'Project options…', action: () => { FM.selectLayer(null); setTimeout(() => moreBtn.click(), 0); } }]);
-        if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 4, items);
-        return;
-      }
-      // desktopHide = "this lives in the settings cog on PC" (queue 35). The phone's own ⋯ filters
-      // mobileHide instead, so each platform's menu shows exactly what that platform can't reach elsewhere.
-      if (FM.contextMenu) FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, FM.projectMoreItems().filter(it => !it.desktopHide));
-    });
+    // The PC top bar's ⋯ (#btn-more) used to live here, opening FM.projectMoreItems with nothing
+    // selected and FM.layerMenuItems with a clip selected. Both halves were duplicates by the end:
+    // the layer half is exactly what right-clicking the clip or its row head already shows, and the
+    // project half's last three homeless entries (Trim to last clip / Save a project file / Reset
+    // project) are now rows in the settings cog next to Canvas. Removed rather than moved — queue 35
+    // is about there being ONE door, so a relocated second copy would have missed the point.
     const prateEl = document.getElementById('preview-rate');
     if (prateEl) prateEl.addEventListener('change', () => FM.setPreviewRate(parseFloat(prateEl.value) || 1));
     const guidesBtn = document.getElementById('btn-guides');

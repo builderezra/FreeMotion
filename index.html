@@ -14,7 +14,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=316">
+<link rel="stylesheet" href="styles.css?v=317">
 <link rel="stylesheet" href="theme-glass.css?v=20">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -119,7 +119,7 @@
   </script>
   <div id="app">
     <header id="topbar">
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.06</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.07</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -128,7 +128,9 @@
         <input id="proj-name" class="proj-name" type="text" value="Untitled" title="Project name" spellcheck="false">
         <span class="spacer"></span>
         <!-- These live here (so app.js keeps their handlers wired) but are hidden from the bar — AM keeps
-             the top minimal. They're reached from the ⋯ More menu (btn-more). -->
+             the top minimal. Each one is PRESSED by the control that really owns it now: the settings
+             cog (btn-canvas, btn-save-proj, btn-fit, btn-help), the ⛶ view bar (guides), or the Export
+             dialog (btn-snapshot). Nothing opens them here. -->
         <div id="topbar-extra" style="display:none">
           <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
           <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
@@ -147,7 +149,12 @@
              toggle itself, which you had to leave your project to get at. Same cog mark the home
              screen uses, so it reads as the same door. -->
         <button id="btn-settings" class="icon-btn" title="Settings — appearance, layout, defaults" aria-label="Settings"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-        <button id="btn-more" class="icon-btn" title="More — canvas settings, guides, save frame, open/save project, shortcuts"><svg viewBox="0 0 24 24" class="ico" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+        <!-- The ⋯ More menu used to sit here. Removed (queue 35): every entry it held either
+             already had a control on screen — guides, the export marks, preview speed and timeline
+             zoom on the ⛶ view bar, split on S or the clip’s own trim handles, canvas + import +
+             shortcuts in the cog, the layer half on right-click — or has now MOVED into the cog
+             beside them (Trim to last clip, Save a project file, Reset project). A second door to a
+             cupboard that already has one is the thing being removed. -->
         <button id="btn-export" class="btn btn-accent"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Export</button>
       </div>
     </header>
@@ -556,7 +563,7 @@
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/settings.js?v=8"></script>
+  <script src="js/settings.js?v=9"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=91"></script>
   <script src="js/eases.js?v=3"></script>
@@ -603,10 +610,10 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=47"></script>
-  <script src="js/app.js?v=222"></script>
+  <script src="js/app.js?v=223"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/audio-react.js?v=4"></script>
-  <script src="js/mobile.js?v=29"></script>
+  <script src="js/mobile.js?v=30"></script>
   <script src="js/ai-manifest.js?v=5"></script>
   <script src="js/ai-ops.js?v=8"></script>
   <script src="js/ai-key.js?v=1"></script>

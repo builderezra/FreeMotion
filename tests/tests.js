@@ -2258,8 +2258,10 @@
     //                                 inside ensure(), so the first trigger was never recorded)
     //   · menu already closed       → tapping the last trigger OPENS, never toggles a stale opener
     if (!FM.contextMenu || !FM.contextMenu.isOpen) throw new Error('FM.contextMenu.isOpen is missing');
-    const a = document.getElementById('btn-more'), b = document.getElementById('btn-parent');
-    if (!a || !b) throw new Error('need two real menu triggers (#btn-more, #btn-parent)');
+    // (#btn-more was one of these two until it was removed; #btn-layermenu is the other menu trigger
+    // that is up on PC with a layer selected, so the four cases below still run against real ones.)
+    const a = document.getElementById('btn-layermenu'), b = document.getElementById('btn-parent');
+    if (!a || !b) throw new Error('need two real menu triggers (#btn-layermenu, #btn-parent)');
     const tap = el => {
       const r = el.getBoundingClientRect();
       const o = { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 1, isPrimary: true };
@@ -6290,11 +6292,13 @@
         if (get() !== was) throw new Error('"' + label + '" would not go back to ' + was);
       }
       // …and they are gone from the PC ⋯ menu, which is the other half of "relocate" (queue 35).
-      const items = FM.projectMoreItems();
-      const pc = items.filter(it => !it.desktopHide).map(it => it.label || '');
-      const phone = items.filter(it => !it.mobileHide).map(it => it.label || '');
+      // That menu no longer exists at all — #btn-more was removed — so the PC half of this is now
+      // "there is no second door", asserted properly by the queue-35-final test below. What still
+      // has to hold here is the phone half: FM.projectMoreItems is the phone's ⋯ list, it is the
+      // only door a phone has to these three, and nothing may quietly filter them back out of it.
+      if (document.getElementById('btn-more')) throw new Error('#btn-more is back — these three would have two doors again');
+      const phone = FM.projectMoreItems().map(it => it.label || '');
       ['Loop playback', 'Onion skin', 'Snapping'].forEach(name => {
-        if (pc.some(l => l.indexOf(name) >= 0)) throw new Error('the PC ⋯ menu still offers "' + name + '" — it lives in the cog now, and two doors to one cupboard is what queue 35 is removing');
         if (!phone.some(l => l.indexOf(name) >= 0)) throw new Error('the phone ⋯ menu lost "' + name + '" — the phone cog is Canvas settings and FM.settings is home-only there, so ⋯ is its only door');
       });
     } finally {
@@ -6387,6 +6391,367 @@
       try { FM.syncSelectionChrome(); } catch (e) {}
       await sleep(60);
       try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+  /* ================= queue 35, finished: the project ⋯ button is gone =============================
+   * Ezra sent a screenshot with a red arrow on the top bar's ⋯ and said "Remove this specific three
+   * dot menu." These three tests are the safety net for that removal, and they are deliberately
+   * written as CAPABILITY tests: not "some button exists" but "press the real control and the thing
+   * the menu used to do still happens". The dangerous failure here is silent — this app is local-only
+   * with no cloud copy, so an entry that quietly loses its last door (Save, above all) is not
+   * discovered until someone needs it and it is not there.
+   *
+   * Shared helper: find a settings-cog row by label, scroll it into view, and confirm a finger at the
+   * centre of its button actually lands ON that button (the panel scrolls — several of these rows are
+   * below the fold, and a row you cannot reach is not a door). */
+  /* The menu FM.layerMenuItems asked for, as comparable text. The colour-tag entry is dropped: it
+     renders as .ctx-swatch-label + .ctx-swatches (buttons, not rows), so it has no .ctx-item to
+     line up against and would make every comparison below fail for the wrong reason. */
+  function menuWant(layer) {
+    return FM.layerMenuItems(layer).filter(it => it.sep || it.label)
+      .map(it => (it.sep ? '—' : it.label)).join('|');
+  }
+  function menuGot() {
+    const menu = document.getElementById('ctx-menu');
+    if (!menu || menu.classList.contains('hidden')) return null;
+    return [].slice.call(menu.querySelectorAll('.ctx-item, .ctx-sep'))
+      .map(n => n.classList.contains('ctx-sep') ? '—' : (n.textContent || '').trim()).join('|');
+  }
+
+  function cogRow(label) {
+    const rows = [].slice.call(document.querySelectorAll('.set-panel .set-row'));
+    const row = rows.find(r => ((r.querySelector('.set-label') || {}).textContent || '') === label);
+    if (!row) throw new Error('the settings cog has no "' + label + '" row — its only remaining door is gone');
+    row.scrollIntoView({ block: 'center' });
+    const b = row.querySelector('.set-action');
+    if (!b) throw new Error('"' + label + '" is in the cog but has no button to press');
+    const q = b.getBoundingClientRect();
+    if (!(q.width > 0 && q.height > 0)) throw new Error('"' + label + '" has a 0x0 button — not hit-testable');
+    const t = document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2));
+    if (!(t && (t === b || b.contains(t)))) {
+      throw new Error('"' + label + '" is covered — a press at its centre hits ' + (t ? (t.id || t.className) : 'nothing'));
+    }
+    return b;
+  }
+
+  test('the project ⋯ is gone from the top bar, and every action it held still works', { item: 'queue-35-final' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (document.getElementById('btn-more')) throw new Error('#btn-more still exists — the button Ezra pointed at is the whole ask');
+    // These assert on the IN-PROJECT surface, so make sure we are on it. The home screen is an
+    // overlay: with it up, the settings cog has no "This project" group at all and the phone's ⋯ sits
+    // under hm-select-btn. Left implicit, this test would pass only because an earlier one in the
+    // suite happened to close home — measured: it fails on its own without this.
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+
+    // and nothing else grew a copy of the project menu in its place
+    if (typeof FM.projectMoreItems === 'function') {
+      const callers = [].slice.call(document.querySelectorAll('#topbar button')).map(b => b.id);
+      if (callers.indexOf('btn-more') >= 0) throw new Error('the top bar has a ⋯ again');
+    }
+    const savedScene = FM.scene, hadTime = FM.time;
+    const realExport = FM.storage.exportFile, realImport = FM.storage.importFile, realReset = FM.resetProject;
+    const realConfirm = window.confirm;
+    const spy = { save: 0, open: 0, reset: 0, confirms: [] };
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
+        FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 2 }),
+      ]);
+      FM.scene.project.duration = 9;
+      FM.storage.exportFile = () => { spy.save++; };
+      FM.storage.importFile = () => { spy.open++; };
+      FM.resetProject = () => { spy.reset++; };
+      window.confirm = (m) => { spy.confirms.push(m); return true; };
+      FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+
+      // ---- 1. the three that had NO other door on PC, now rows in the cog -----------------------
+      // Trim: the project must actually shorten to the last clip. (Mutation-checked: the same wait
+      // with no press leaves it at 9, so a green here cannot come from the number drifting.)
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      const idleFrom = FM.scene.project.duration;
+      await sleep(60);
+      if (FM.scene.project.duration !== idleFrom) throw new Error('project duration moves on its own — the Trim assertion below would prove nothing');
+      cogRow('Trim to last clip').click(); await sleep(60);
+      if (Math.abs(FM.scene.project.duration - 2) > 1e-6) {
+        throw new Error('cog ▸ Trim to last clip left the project at ' + FM.scene.project.duration + 's, not 2s — FM.fitToContent has no other call site, so this is its last door');
+      }
+      // Save: the ONE that loses real work if it goes. It must reach FM.storage.exportFile.
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      cogRow('Save a project file').click(); await sleep(60);
+      if (spy.save !== 1) throw new Error('cog ▸ Save a project file did not reach FM.storage.exportFile — on a local-only app that is the only backup there is');
+      // Reset: gated by its confirm, and it must be the destructive-looking one.
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      const resetBtn = cogRow('Reset project');
+      if (!resetBtn.classList.contains('danger')) throw new Error('the Reset button is styled like the safe ones next to it');
+      resetBtn.click(); await sleep(60);
+      if (!spy.confirms.length) throw new Error('cog ▸ Reset project ran without asking — it clears every layer and cannot be undone');
+      if (spy.reset !== 1) throw new Error('cog ▸ Reset project confirmed but never called FM.resetProject');
+      window.confirm = () => false;
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      cogRow('Reset project').click(); await sleep(60);
+      if (spy.reset !== 1) throw new Error('answering "no" to the reset confirm reset the project anyway');
+      window.confirm = (m) => { spy.confirms.push(m); return true; };
+
+      // ---- 2. the ones the cog ALREADY had — deleted from the menu, not moved twice -------------
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      cogRow('Import a project file').click(); await sleep(60);
+      if (spy.open !== 1) throw new Error('cog ▸ Import a project file no longer reaches FM.storage.importFile — that is where "Open project…" went');
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      cogRow('Canvas').click(); await sleep(80);
+      const dlg = document.getElementById('canvas-dialog');
+      if (!(dlg && getComputedStyle(dlg).display !== 'none')) throw new Error('cog ▸ Canvas ▸ Open… did not open the canvas dialog');
+      if (dlg) dlg.style.display = 'none';
+      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
+      cogRow('Keyboard shortcuts').click(); await sleep(80);
+      const sc = document.getElementById('shortcuts-overlay');
+      if (!(sc && !sc.classList.contains('hidden'))) throw new Error('cog ▸ Keyboard shortcuts ▸ Show did not open the shortcuts overlay');
+      if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
+      if (FM.settings.isOpen()) FM.settings.close();
+      await sleep(60);
+
+      // ---- 3. the ⛶ view bar, which is where the rest of the menu already lived -----------------
+      const amfit = document.getElementById('btn-amfit');
+      if (!amfit) throw new Error('#btn-amfit is gone — it is the door to the view bar that now owns guides / marks / speed / timeline zoom');
+      const vb = document.getElementById('view-bar');
+      if (vb.classList.contains('hidden')) { amfit.click(); await sleep(80); }
+      if (vb.classList.contains('hidden')) throw new Error('⛶ did not open the view bar');
+      // The rail is a SCROLLER (v5.29: "needs to not be crammed in and be slide-able up and down"),
+      // so on a short window its last controls sit below its own viewport — measured 566px of content
+      // in a 464px rail at 900x760. Scroll each one in the way a finger would before hit-testing it;
+      // without this the test reports the timeline-zoom buttons as "covered by the timeline" and the
+      // fix would be to break a deliberate design.
+      const vhit = (id) => {
+        const e = document.getElementById(id);
+        if (!e) throw new Error('#' + id + ' is missing from the view bar');
+        e.scrollIntoView({ block: 'center' });
+        const q = e.getBoundingClientRect();
+        if (!(q.width > 0 && q.height > 0)) throw new Error('#' + id + ' is 0x0 — not a control anyone can press');
+        const t = document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2));
+        if (!(t && (t === e || e.contains(t)))) throw new Error('#' + id + ' is covered — a press at its centre hits ' + (t ? (t.id || t.className) : 'nothing'));
+        return e;
+      };
+      // guides
+      const g0 = !!FM.showGuides;
+      await sleep(50);
+      if (!!FM.showGuides !== g0) throw new Error('FM.showGuides flips on its own — the guides assertion would prove nothing');
+      vhit('vb-grid').click(); await sleep(30);
+      if (!!FM.showGuides === g0) throw new Error('⛶ ▸ vb-grid no longer toggles the guides — that is where "Show/Hide guides" went');
+      vhit('vb-grid').click(); await sleep(30);
+      // preview speed
+      const r0 = FM.previewRate || 1;
+      vhit('vb-faster').click(); await sleep(30);
+      if ((FM.previewRate || 1) === r0) throw new Error('⛶ ▸ vb-faster no longer changes the preview speed');
+      vhit('vb-slower').click(); await sleep(30);
+      // export marks
+      const P = FM.scene.project;
+      P.loopIn = null; P.loopOut = null;
+      FM.setTime(0.5);
+      vhit('vb-markin').click(); await sleep(30);
+      if (P.loopIn == null) throw new Error('⛶ ▸ vb-markin no longer marks the export start');
+      FM.setTime(1.5);
+      vhit('vb-markout').click(); await sleep(30);
+      if (P.loopOut == null) throw new Error('⛶ ▸ vb-markout no longer marks the export end');
+      vhit('vb-markclear').click(); await sleep(30);
+      if (!(P.loopIn == null && P.loopOut == null)) throw new Error('⛶ ▸ vb-markclear no longer clears the export marks');
+      // timeline zoom
+      const z = () => (FM.timeline.getZoom ? FM.timeline.getZoom() : FM.tlZoom);
+      const z0 = z();
+      vhit('vb-tlin').click(); await sleep(40);
+      if (z() === z0) throw new Error('⛶ ▸ vb-tlin no longer zooms the timeline');
+      vhit('vb-tlout').click(); await sleep(40);
+      if (!vb.classList.contains('hidden')) { amfit.click(); await sleep(60); }
+
+      // ---- 4. split, from the clip's own quick row (not the menu, and not a keyboard) -----------
+      FM.selectLayer(FM.scene.layers[0].id); FM.setTime(1); FM.refreshAll(); await sleep(120);
+      const splitBtn = [].slice.call(document.querySelectorAll('#inspector .qr-btn'))
+        .find(b => /split at playhead/i.test(b.title || ''));
+      if (!splitBtn) throw new Error('the selected clip offers no Split control — "Split clip at playhead" left the menu with nowhere to go');
+      const n0 = FM.scene.layers.length;
+      await sleep(60);
+      if (FM.scene.layers.length !== n0) throw new Error('the layer count moves on its own — the split assertion would prove nothing');
+      splitBtn.click(); await sleep(80);
+      if (FM.scene.layers.length !== n0 + 1) throw new Error('the clip Split button did not split (' + n0 + ' → ' + FM.scene.layers.length + ')');
+    } finally {
+      FM.storage.exportFile = realExport; FM.storage.importFile = realImport; FM.resetProject = realReset;
+      window.confirm = realConfirm;
+      if (FM.settings.isOpen()) FM.settings.close();
+      if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
+      const d = document.getElementById('canvas-dialog'); if (d) d.style.display = 'none';
+      const vb = document.getElementById('view-bar'); if (vb && !vb.classList.contains('hidden')) vb.classList.add('hidden');
+      FM.scene = savedScene; FM.setTime(hadTime);
+      FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+
+    }
+  });
+
+  test('the layer half of the removed ⋯ is still one right-click away, for every row type', { item: 'queue-35-final' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // The audit that preceded the removal corrected the brief on this: the per-row ≡ is `.row-drag`
+    // ("Drag to reorder"), NOT a menu. So on PC the layer menu's remaining doors are the clip and its
+    // row head, both by contextmenu — and if either stopped matching FM.layerMenuItems, removing
+    // #btn-more would have taken the layer menu with it for that row type.
+    const savedScene = FM.scene;
+    // These assert on the IN-PROJECT surface, so make sure we are on it. The home screen is an
+    // overlay: with it up, the settings cog has no "This project" group at all and the phone's ⋯ sits
+    // under hm-select-btn. Left implicit, this test would pass only because an earlier one in the
+    // suite happened to close home — measured: it fails on its own without this.
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
+        FM.makeLayer('text', { name: 'T', text: 'hi', x: 90, y: 90, start: 0, duration: 2 }),
+      ]);
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+      FM.scene.selectedId = FM.scene.layers[0].id;
+      if (FM.groupSelection) FM.groupSelection();
+      await sleep(120);
+      FM.selectLayer(null); FM.refreshAll(); await sleep(150);
+      // Walk the rows the timeline actually BUILT (a collapsed group hides its members), and require
+      // the group head to be one of them — the row type whose menu differs most.
+      const clips = [].slice.call(document.querySelectorAll('#tl-tracks .clip[data-id]'));
+      if (!clips.length) throw new Error('the timeline built no clips to right-click');
+      const seen = [];
+      for (const clip of clips) {
+        const layer = FM.layerById(FM.scene, clip.dataset.id);
+        if (!layer) continue;
+        seen.push(layer.type);
+        const head = clip.closest('.track-row') && clip.closest('.track-row').querySelector('.track-head');
+        if (!head) throw new Error('a ' + layer.type + ' row has no .track-head to right-click');
+        for (const [where, node] of [['clip', clip], ['row head', head]]) {
+          FM.contextMenu.hide();
+          await sleep(20);
+          const q = node.getBoundingClientRect();
+          node.dispatchEvent(new MouseEvent('contextmenu', {
+            bubbles: true, cancelable: true,
+            clientX: Math.round(q.left + q.width / 2), clientY: Math.round(q.top + q.height / 2),
+          }));
+          await sleep(40);
+          // read the expectation AFTER the right-click: it selects the row it opened on, and the
+          // list depends on the selection, so comparing against a pre-click snapshot is a race
+          const want = menuWant(layer), got = menuGot();
+          if (got == null) throw new Error('right-clicking the ' + where + ' of a ' + layer.type + ' row opened no menu — with #btn-more gone that row type would have no layer menu at all');
+          if (got !== want) throw new Error('the ' + where + ' menu for a ' + layer.type + ' row is not FM.layerMenuItems any more:\n  want ' + want + '\n  got  ' + got);
+          FM.contextMenu.hide();
+        }
+      }
+      if (seen.indexOf('group') < 0) throw new Error('no group row was right-clicked (saw ' + seen.join(', ') + ') — the group head is the row type whose menu differs most');
+    } finally {
+      FM.contextMenu.hide();
+      FM.scene = savedScene;
+      FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('phone 390x844: the ⋯ removal costs the phone nothing — every action still has a control', { item: 'queue-35-final' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test needs to own its viewport width and has no frameElement');
+    // #topbar is display:none below 701px, so #btn-more never existed for a phone in the first place
+    // — the phone's ⋯ is #m-proj-more, a different button calling the same list. What this test
+    // guards is that the removal did not reach through and gut that list, and that every control it
+    // names is one a THUMB can actually land on at 390x844 (the phone view bar's lower half is
+    // covered by the timeline, which is exactly why the phone still needs its menu).
+    const savedScene = FM.scene, hadW = frame.style.width, hadH = frame.style.height;
+    // These assert on the IN-PROJECT surface, so make sure we are on it. The home screen is an
+    // overlay: with it up, the settings cog has no "This project" group at all and the phone's ⋯ sits
+    // under hm-select-btn. Left implicit, this test would pass only because an earlier one in the
+    // suite happened to close home — measured: it fails on its own without this.
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const hit = (id) => {
+      const e = document.getElementById(id);
+      if (!e) return { id: id, ok: false, why: 'missing' };
+      const q = e.getBoundingClientRect();
+      if (!(q.width > 0 && q.height > 0)) return { id: id, ok: false, why: '0x0' };
+      const cx = Math.round(q.left + q.width / 2), cy = Math.round(q.top + q.height / 2);
+      if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return { id: id, ok: false, why: 'off-screen' };
+      const t = document.elementFromPoint(cx, cy);
+      const ok = !!(t && (t === e || e.contains(t)));
+      return { id: id, ok: ok, why: ok ? '' : 'covered by ' + (t ? (t.id || t.className) : 'nothing'), cx: cx, cy: cy, w: Math.round(q.width), h: Math.round(q.height) };
+    };
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
+        FM.makeLayer('text', { name: 'T', text: 'hi', x: 90, y: 90, start: 0, duration: 2 }),
+      ]);
+      frame.style.width = '390px'; frame.style.height = '844px';
+      await sleep(80);
+      if (!matchMedia('(max-width: 700px)').matches) throw new Error('the frame did not become a phone (innerWidth ' + innerWidth + ')');
+      if (getComputedStyle(document.getElementById('topbar')).display !== 'none') throw new Error('#topbar is visible on a phone — the assumption this whole change rests on');
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+
+      // the phone's own project ⋯ and its cog, both thumb-reachable
+      ['m-proj-more', 'm-settings'].forEach(id => {
+        const h = hit(id);
+        if (!h.ok) throw new Error('#' + id + ' is not reachable on a phone (' + h.why + ') — the phone has no other door to these');
+        if (Math.min(h.w, h.h) < 36) throw new Error('#' + id + ' is ' + h.w + 'x' + h.h + ' — under the 36px a thumb needs');
+      });
+
+      // …and the list behind it still offers everything, each with a real action to run
+      const items = FM.projectMoreItems();
+      const labels = items.map(it => it.label || '');
+      const need = ['Canvas settings', 'guides', 'Loop playback', 'Onion skin', 'Snapping',
+        'Split clip at playhead', 'Trim project to last clip', 'Mark export start', 'Mark export end',
+        'Clear export marks', 'Preview speed', 'Zoom timeline in', 'Zoom timeline out',
+        'Open project', 'Save project', 'Reset project'];
+      need.forEach(n => {
+        const it = items.find(x => (x.label || '').indexOf(n) >= 0);
+        if (!it) throw new Error('the phone ⋯ lost "' + n + '" — on a phone this menu is its only door. Have: ' + labels.join(', '));
+        if (typeof it.action !== 'function') throw new Error('the phone ⋯ still lists "' + n + '" but it does nothing');
+      });
+      // the flags are gone, so nothing may filter this list on its way to the screen
+      if (items.some(it => it.desktopHide || it.mobileHide)) throw new Error('a desktopHide/mobileHide flag is back on the phone list — there is one caller now, so a flag can only hide something by accident');
+
+      // Save, specifically: the entry whose loss would cost real work. Press its action for real.
+      const realExport = FM.storage.exportFile;
+      let saved = 0;
+      FM.storage.exportFile = () => { saved++; };
+      try {
+        await sleep(50);
+        if (saved !== 0) throw new Error('exportFile ran without anyone pressing anything');
+        FM.projectMoreItems().find(it => (it.label || '').indexOf('Save project') >= 0).action();
+        await sleep(50);
+        if (saved !== 1) throw new Error('the phone ⋯ ▸ Save project no longer reaches FM.storage.exportFile — local-only app, no cloud copy');
+      } finally { FM.storage.exportFile = realExport; }
+
+      // the layer menu, from the phone's ≡ (#m-more), for every row type including the group head
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+      FM.scene.selectedId = FM.scene.layers[0].id;
+      if (FM.groupSelection) FM.groupSelection();
+      await sleep(150);
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+      if (FM.scene.layers.map(l => l.type).indexOf('group') < 0) throw new Error('the fixture never built a group row');
+      for (const layer of FM.scene.layers.slice()) {
+        FM.selectLayer(layer.id); FM.refreshAll(); await sleep(140);
+        const h = hit('m-more');
+        if (!h.ok) throw new Error('with a ' + layer.type + ' row selected, the phone ≡ (#m-more) is not reachable (' + h.why + ')');
+        FM.contextMenu.hide();
+        document.getElementById('m-more').click();
+        await sleep(60);
+        const want = menuWant(layer), got = menuGot();
+        if (got == null) throw new Error('the phone ≡ opened no menu for a ' + layer.type + ' row');
+        if (got !== want) throw new Error('the phone ≡ menu for a ' + layer.type + ' row is not FM.layerMenuItems:\n  want ' + want + '\n  got  ' + got);
+        FM.contextMenu.hide();
+      }
+    } finally {
+      FM.contextMenu.hide();
+      frame.style.width = hadW; frame.style.height = hadH;
+      FM.scene = savedScene;
+      FM.selectLayer(null);
+      try { FM.syncSelectionChrome(); } catch (e) {}
+      await sleep(80);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 

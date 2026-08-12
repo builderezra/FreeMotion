@@ -131,12 +131,14 @@ window.FM = window.FM || {};
   // the home screen's ⋯ menu could be emptied into here (Ezra: "Put the options that show up in the
   // three dots that are in the home menu specifically inside the menus settings cog menu") — a
   // two-item overflow menu next to a settings cog was two front doors to the same cupboard.
-  function actionRow(label, hint, btnLabel, fn) {
+  // `tone` marks a destructive one red (Reset project) so it never reads as one more neutral button
+  // in a column of them — the same warning the ⋯ menu's `danger` flag used to carry.
+  function actionRow(label, hint, btnLabel, fn, tone) {
     const row = el('div', 'set-row');
     const txt = el('div', 'set-rowtext');
     txt.appendChild(el('div', 'set-label', label));
     if (hint) txt.appendChild(el('div', 'set-hint', hint));
-    const b = el('button', 'set-action', btnLabel);
+    const b = el('button', 'set-action' + (tone ? ' ' + tone : ''), btnLabel);
     b.type = 'button';
     b.addEventListener('click', () => { FM.settings.close(); fn(); });
     row.appendChild(txt); row.appendChild(b);
@@ -202,6 +204,24 @@ window.FM = window.FM || {};
           () => FM.onionSkin, () => press('btn-onion')),
         switchRow('Snapping (magnet)', 'Clips and keyframes stick to the playhead and to each other’s edges while you drag them.',
           () => FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping(), () => press('btn-snap')),
+      ));
+      // ---- and the three project ACTIONS the PC ⋯ menu was the only door to -------------------
+      // Removing #btn-more finished queue 35. Most of what it held was a second copy of a control
+      // already on screen (guides / export marks / preview speed / timeline zoom on the ⛶ view bar,
+      // split on S and the clip's own trim handles, canvas + import + shortcuts right here) and was
+      // simply deleted. These three had nowhere else on a desktop: Trim and Reset had no other call
+      // site at all, and Save meant leaving the project for the home screen — on an app with no cloud
+      // copy, where a .fmotion.json IS the backup. They are ACTIONS, not preferences, so they get
+      // their own group rather than sitting among the switches. actionRow shuts the panel before it
+      // runs the action, so each one's result (a re-drawn timeline, the browser's save sheet, the
+      // reset confirm) lands on the project rather than behind this scrim.
+      body.appendChild(group(
+        actionRow('Trim to last clip', 'Ends the project exactly where the last clip does, instead of running on into empty time.', 'Trim',
+          () => press('btn-fit')),
+        actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',
+          () => press('btn-save-proj')),
+        actionRow('Reset project', 'Deletes every layer in this project and leaves it blank. Cannot be undone.', 'Reset…',
+          () => { if (confirm('Reset the project? This clears all layers and cannot be undone.') && FM.resetProject) FM.resetProject(); }, 'danger'),
       ));
     }
 
