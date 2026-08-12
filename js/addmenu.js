@@ -116,7 +116,16 @@ window.FM = window.FM || {};
      * means the Layers panel), a 2x2-plus grid (already the Custom elements card INSIDE this tab) and
      * a dashed frame (already the Null / Empty group language). Three straight strokes meeting in the
      * middle survive 1x rendering, and no neighbour in the row shares the silhouette. */
-    { key: 'object', label: 'Elements', icon: ico('<path d="M12 2.6l8.2 4.7v9.4L12 21.4l-8.2-4.7V7.3z"/><path d="M3.8 7.3L12 12l8.2-4.7M12 12v9.4"/>'), options: function () {
+    { key: 'object', label: 'Elements', icon: icoMulti(
+      /* A gradient, not a flat hue (Ezra: "give it a gradient that looks nice and smooth and subtle").
+         Two stops only and both inside the same violet family — a wide gradient on a 22px line reads as
+         a colour ERROR rather than as depth. Lit at the top-left corner, which is where the cube's own
+         top face is, so the shading agrees with the geometry. The id is namespaced because several of
+         these icons live in the same document and a duplicate gradient id silently steals the fill. */
+      '<defs><linearGradient id="fm-ic-el" x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#C9B8FF"/><stop offset="1" stop-color="#7C5CE0"/></linearGradient></defs>'
+      + '<path d="M12 2.6l8.2 4.7v9.4L12 21.4l-8.2-4.7V7.3z" stroke="url(#fm-ic-el)"/>'
+      + '<path d="M3.8 7.3L12 12l8.2-4.7M12 12v9.4" stroke="url(#fm-ic-el)"/>'), options: function () {
       var base = INSTANT.concat([
         { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
         { label: 'Null', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'), add: function () { FM.addNullLayer && FM.addNullLayer(); } },
@@ -144,7 +153,12 @@ window.FM = window.FM || {};
       });
       return base;
     } },
-    { key: 'shape', label: 'Shape', icon: ico('<rect x="4" y="4" width="9" height="9" rx="1.5"/><circle cx="16" cy="16" r="5"/>'), options: [
+    { key: 'shape', label: 'Shape', icon: icoMulti(
+      /* "with the shapes one, you can make the circle shape and the square two different colours."
+         Blue square, teal circle — adjacent on the wheel so the pair still reads as one icon rather
+         than two stickers, but far enough apart to be obviously two colours at 22px. */
+      '<rect x="4" y="4" width="9" height="9" rx="1.5" stroke="#60A5FA"/>'
+      + '<circle cx="16" cy="16" r="5" stroke="#2DD4BF"/>'), options: [
       // The pair Ezra asked for, first and side by side: the same square, sharp corners vs Apple's.
       // Both spawn a TRUE square (aspect forced 1:1) so the only difference you see is the corner.
       { label: 'Square', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'), add: shp('rect', { name: 'Square', aspect: [1, 1] }) },
@@ -189,7 +203,12 @@ window.FM = window.FM || {};
            against the outline version and a hills-only version at 3x before choosing. */
       '<path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" fill="#2E6E9E" stroke="none"/>'
       + '<circle cx="8.4" cy="10.2" r="2.1" fill="#FBBF24" stroke="none"/>'
-      + '<path d="M3.2 18.4l5.8-5.8 4 3 3-2 5 5v.4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="#4ADE80" stroke="none"/>'
+      + /* Peaks brought DOWN ~2px — Ezra: "the green goes up slightly to high". They were topping out at
+         y=12.6 in a 5..19 frame, i.e. level with the sun, which made the hills fight the sky for the
+         picture instead of sitting under it. Highest point is y=14.8 now, comfortably below the sun at
+         10.2, and the silhouette is traced explicitly and closed through both bottom corner arcs so the
+         ground still reaches the ground. */
+      '<path d="M3 17L3 18.6L8.6 14.8L12.4 17.2L15.4 15.6L21 18.6L21 17A2 2 0 0 1 19 19L5 19A2 2 0 0 1 3 17Z" fill="#4ADE80" stroke="none"/>'
       + '<path d="M3 17V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10" stroke="#7CC9EA"/>'
       + '<path d="M3 17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2" stroke="#4ADE80"/>'), options: function () {
       var base = [
@@ -203,7 +222,14 @@ window.FM = window.FM || {};
       libEntries(false).forEach(function (o) { base.push(o); });   // songs are filed under Audio, not here
       return base;
     } },
-    { key: 'audio', label: 'Audio', icon: ico('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), options: function () {
+    { key: 'audio', label: 'Audio', icon: icoMulti(
+      /* Same restraint as the cube: two stops, one family, lit from the top-right where the note's
+         beam is highest, so the lighter end is the part that sits up. */
+      '<defs><linearGradient id="fm-ic-au" x1="20" y1="4" x2="6" y2="20" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#FBC2E7"/><stop offset="1" stop-color="#E8438F"/></linearGradient></defs>'
+      + '<path d="M9 18V6l10-2v12" stroke="url(#fm-ic-au)"/>'
+      + '<circle cx="6.5" cy="18" r="2.5" stroke="url(#fm-ic-au)"/>'
+      + '<circle cx="16.5" cy="16" r="2.5" stroke="url(#fm-ic-au)"/>'), options: function () {
       // Songs you've already imported live HERE, newest first, one tap to drop another copy on the
       // timeline — exactly how the Media tab has always treated clips and photos (Ezra: "when you add
       // a song like adding media it stays in the audios section"). They used to land in Media, mixed
@@ -213,7 +239,12 @@ window.FM = window.FM || {};
     } },
     // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
     // section on Home, so the tab is named after them rather than after the odds and ends beside them.
-    { key: 'template', label: 'Template', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'), options: function () {
+    { key: 'template', label: 'Template', icon: icoMulti(
+      /* "give the two lines in the middle different colours from the lines on the outside." The frame
+         stays orange and the two dividers go amber — the lighter of the pair inside, so the icon reads
+         frame-first and the layout it is describing sits within it. */
+      '<rect x="4" y="4" width="16" height="16" rx="2" stroke="#FB923C"/>'
+      + '<path d="M4 10h16M10 10v10" stroke="#FCD34D"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         return { label: t.name, icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie

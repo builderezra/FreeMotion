@@ -791,10 +791,9 @@ body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
    now, chosen to stay legible on the dark glass and to be distinguishable from each OTHER at 22px
    (violet / blue / multi / pink / orange are far apart in hue AND in the greyscale they collapse to).
    Media is the exception and carries its colours in its own markup — see icoMulti in js/addmenu.js. */
-.addmenu-tab[data-key="object"]   .addmenu-ic { color: #A78BFA; }   /* Elements — violet */
-.addmenu-tab[data-key="shape"]    .addmenu-ic { color: #60A5FA; }   /* Shape — blue */
-.addmenu-tab[data-key="audio"]    .addmenu-ic { color: #F472B6; }   /* Audio — pink */
-.addmenu-tab[data-key="template"] .addmenu-ic { color: #FB923C; }   /* Template — orange */
+/* The hues moved INTO the markup at v5.85, because gradients and per-shape colours cannot be
+   expressed as a single `color`. Each icon now carries its own strokes; nothing here overrides them,
+   and .addmenu-ic's color: var(--accent) above is what the remaining single-colour icons still use. */
 .addmenu-ic svg { width: 22px; height: 22px; }
 .add-emoji { font-size: 22px; line-height: 1; }
 .addmenu-lbl { font-size: 10.5px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
