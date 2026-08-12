@@ -67,7 +67,12 @@ Numbered with Ezra's own queue numbers where he gave them.
       format. Synthetic WAV is clean through every path, so whatever this is lives in a real encoder's
       output — a VBR mp3 or an m4a whose duration the browser reports wrong is the obvious suspect and
       I can't conjure one that misbehaves. Related to 69 (audio clock) but not the same bug.
-- [ ] **58 — The red delete bar flashes during fast scroll** in the effects list.
+- [x] **58 — The red delete bar flashes during fast scroll** in the effects list. **DONE v6.37.**
+      The red panel was painted behind EVERY row all the time, hidden only by an opaque wrapper that
+      had `will-change: transform` on it permanently — which makes every row its own compositor
+      layer, and lets a fast scroll show the parent (red) before the rows repaint. The gesture code
+      was never the problem. Now the panel is hidden outright until a swipe actually starts, so
+      there is nothing to flash. Checked in the real app on your phone width, not just in the tests.
 - [x] **89 — Letterbox and Border Frame paint over the layers below them.** **DONE v6.35**, on the
       fourth attempt. Both effects drew their frame against the effect PLATE's edges, and that plate
       is the size of the project, not of the layer — so a Letterbox on a small layer barred the whole

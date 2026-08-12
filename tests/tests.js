@@ -9728,6 +9728,84 @@
     }
   });
 
+  /* ---- the red DELETE panel must not exist on screen unless you are swiping --------------------
+   *
+   * Ezra, queue 58: "the red delete bar flashes during fast scroll" in the effects list. The panel
+   * was in the DOM and PAINTED behind every row at all times, covered only by an opaque wrapper that
+   * carried a permanent `will-change: transform`. That promotes every row to its own compositor
+   * layer, and during a fast scroll the browser is free to present the scrolled parent before those
+   * layers have re-rastered — at which point what is on screen where the row should be is the red.
+   *
+   * The fix is not a longer gesture threshold or a scroll guard; the gesture code was already
+   * correct and never entered swipe mode on a vertical drag. The fix is that there is now nothing
+   * red to reveal: visibility:hidden until a swipe is genuinely under way, and the layer promotion
+   * scoped to the same window.
+   *
+   * This asserts the RESTING state — which is the state a fast scroll happens in — and then that a
+   * real swipe still reveals the panel, because "never flashes" is trivially passable by an effect
+   * row that has lost its swipe-to-delete entirely. */
+  test('effects list: the red delete panel is invisible until a swipe starts', { item: 'fx-swipe-flash' }, function () {
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    return (async function () {
+      try {
+        var L = FM.makeLayer('shape', { shape: 'rect', name: 'swipe', x: 160, y: 120, shapeW: 120, shapeH: 120, fill: '#4af' });
+        L.effects = [];
+        ['blur', 'glow', 'vignette'].forEach(function (t) { var fx = FM.fxRegistry.makeInstance(t); if (fx) L.effects.push(fx); });
+        if (L.effects.length < 2) throw new Error('needed at least 2 effects, built ' + L.effects.length);
+        FM.scene.layers.length = 0; FM.scene.layers.push(L);
+        FM.selectLayer(L.id);
+        FM.inspector.openCategory('effects');
+        FM.inspector.refresh();
+        await sleep(60);
+        var rows = Array.prototype.slice.call(document.querySelectorAll('.fx-row'));
+        if (rows.length < 2) throw new Error('expected the effect rows to render, found ' + rows.length);
+
+        // 1. AT REST — every row, no exceptions. One visible red panel is one that can flash.
+        rows.forEach(function (r, i) {
+          var bg = r.querySelector('.fx-del-bg');
+          if (!bg) throw new Error('row ' + i + ' has no .fx-del-bg — swipe-to-delete is gone, not fixed');
+          var vis = getComputedStyle(bg).visibility;
+          if (vis !== 'hidden') {
+            throw new Error('at rest, row ' + i + '\'s red DELETE panel is ' + vis + ' — it is painted behind the row, so a fast scroll can present it before the row re-rasters');
+          }
+          var wrap = r.querySelector('.fx-swipe-wrap');
+          var wc = wrap ? getComputedStyle(wrap).willChange : 'auto';
+          if (wc && wc !== 'auto') {
+            throw new Error('at rest, row ' + i + '\'s .fx-swipe-wrap still declares will-change: ' + wc + ' — that promotes every row to its own compositor layer for the whole life of the list, which is what lets the red show through mid-scroll');
+          }
+        });
+
+        // 2. A REAL SWIPE still reveals it. Without this, deleting the panel outright would pass.
+        var row = rows[0], head = row.querySelector('.fx-head');
+        if (!head) throw new Error('row 0 has no .fx-head to swipe');
+        var rc = head.getBoundingClientRect();
+        var x0 = rc.left + rc.width * 0.6, y0 = rc.top + rc.height / 2;
+        var ev = function (type, x, buttons) {
+          return head.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true,
+            pointerId: 11, isPrimary: true, pointerType: 'touch', clientX: x, clientY: y0,
+            buttons: buttons == null ? 1 : buttons }));
+        };
+        ev('pointerdown', x0);
+        for (var i = 1; i <= 5; i++) { ev('pointermove', x0 - 10 * i); await sleep(16); }
+        var bg0 = row.querySelector('.fx-del-bg');
+        var mid = getComputedStyle(bg0).visibility;
+        // release BEFORE asserting, so a failure can't leave the suite mid-gesture
+        ev('pointerup', x0 - 50, 0);
+        await sleep(60);
+        if (mid !== 'visible') {
+          throw new Error('mid-swipe the red DELETE panel is ' + mid + ' — swiping a row left now reveals nothing, which is worse than the flash it replaced');
+        }
+      } finally {
+        FM.scene.layers.length = 0;
+        layers0.forEach(function (l) { FM.scene.layers.push(l); });
+        FM.selectLayer(sel0);
+        FM.inspector.openCategory('home');
+        FM.inspector.refresh();
+      }
+    })();
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

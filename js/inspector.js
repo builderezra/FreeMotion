@@ -832,7 +832,11 @@ window.FM = window.FM || {};
         wrap.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';   // spring back
         wrap.style.transform = 'translateX(0px)';
         row.classList.remove('fx-swipe-armed'); wasArmed = false;
-        setTimeout(() => { wrap.style.transition = ''; row._g.moved = false; }, 300);
+        // `fx-swiping` comes off only after the spring-back has finished — pulling it at once would
+        // hide the red panel mid-flight, so a swipe you changed your mind about would snap back over
+        // nothing. On the COMMIT branch above it deliberately stays on: the row is animating out and
+        // the red is what it animates out over.
+        setTimeout(() => { wrap.style.transition = ''; row._g.moved = false; row.classList.remove('fx-swiping'); }, 300);
       }
     }
     head.addEventListener('pointerdown', e => {
@@ -855,7 +859,10 @@ window.FM = window.FM || {};
       if (!down) return;   // a mouse fires pointermove on plain HOVER (no button) — ignore it, else the row swipes itself away as the cursor passes over
       if (mode === null) {
         const dx = e.clientX - sx, dy = e.clientY - sy;
-        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) + 2) { mode = 'swipe'; row._g.moved = true; clearHold(); }
+        // `fx-swiping` is what makes the red DELETE panel visible and promotes the wrapper — see the
+        // note in styles.css. It goes on HERE, once the gesture is definitely a horizontal swipe, and
+        // never during a scroll, which is the whole point (#58).
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) + 2) { mode = 'swipe'; row._g.moved = true; clearHold(); row.classList.add('fx-swiping'); }
         else if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { clearHold(); return; }   // moved before the hold fired → it's a scroll; let the sheet pan, don't reorder (#18)
         else return;
       }

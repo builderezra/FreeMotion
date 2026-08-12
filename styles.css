@@ -1092,12 +1092,21 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fx-row.fx-dragging { z-index: 6; box-shadow: 0 10px 24px rgba(0,0,0,.45); border-color: var(--accent); opacity: .97; }
 .fx-row.fx-dragging .fx-grip { cursor: grabbing; color: var(--accent); }
 .fx-row.fx-swipe-armed { border-color: #e5484d; }
-/* iOS-style swipe-to-delete: an opaque wrapper slides left over a red DELETE panel */
-.fx-del-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 20px; background: linear-gradient(90deg, #a52428, #e5484d); color: #fff; border-radius: 10px; }
+/* iOS-style swipe-to-delete: an opaque wrapper slides left over a red DELETE panel.
+   The red panel is HIDDEN until a swipe is actually under way, and the wrapper is promoted to its
+   own compositor layer only for as long as that lasts. Both halves are the fix for Ezra's "the red
+   delete bar flashes during fast scroll" (#58). It was in the DOM and painted behind EVERY row at
+   all times, covered only by an opaque wrapper carrying a permanent `will-change: transform` — so
+   every row was its own layer, and during a fast scroll the browser can present the scrolled parent
+   before those layers have re-rastered. What is behind them is red. visibility:hidden means there is
+   nothing to reveal in that window, rather than something merely covered up. */
+.fx-del-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 20px; background: linear-gradient(90deg, #a52428, #e5484d); color: #fff; border-radius: 10px; visibility: hidden; }
+.fx-row.fx-swiping .fx-del-bg { visibility: visible; }
 .fx-del-ico { display: flex; transition: transform .13s cubic-bezier(.34,1.56,.64,1); }
 .fx-del-ico svg { width: 21px; height: 21px; }
 .fx-row.fx-swipe-armed .fx-del-ico { transform: scale(1.3); }
-.fx-swipe-wrap { position: relative; z-index: 1; background: var(--panel-2); will-change: transform; }
+.fx-swipe-wrap { position: relative; z-index: 1; background: var(--panel-2); }
+.fx-row.fx-swiping .fx-swipe-wrap { will-change: transform; }
 .fx-row.fx-off .fx-swipe-wrap { background: var(--panel-2); }
 /* The open/close chevron. Was an 11px text triangle in a 20px box, which is neither big enough to
    see nor obviously a control. Now a stroked chevron in a 30px target that ROTATES 90deg when the
