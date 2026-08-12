@@ -1,18 +1,41 @@
 /* FreeMotion — Add-Effect browser thumbnails, LIVE-rendered (no image assets).
  * Each tile's canvas gets the REAL effect applied to a tiny module-private sample scene via
  * FM.renderScene (the compositor is scene-agnostic — same trick as the test harness). Static
- * effects cache one 96² frame; effects that move (shake, wipes, glowscan…) are auto-detected
+ * effects cache one frame; effects that move (shake, wipes, glowscan…) are auto-detected
  * by diffing two probe frames and cache a 10-frame strip looped by ONE shared ticker.
  * Every effect names the SUBJECT that demonstrates it (see SUBJECT_OF) rather than sharing one
  * generic sample — a single subject cannot show 177 different things.
  * Contract with fx-browser.js: FM.fxThumbs.mount(canvasEl, effectType) + FM.fxThumbs.stopAll().
- * Cache is kept for the whole session (~8-15MB at 96² for ~160 statics + ~30 strips — fine). */
+ * The SCENE is 96 units; the RASTER is 2x that since v6.16 (see R) because the tiles are displayed
+ * at up to 154 CSS px on a DPR-2 screen. Cache is lazy and kept for the whole session — about 23MB
+ * after a realistic browse of ~60 effects, ~72MB if you open every one of the 195. */
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
   const SIZE = 96, FRAMES = 10, TICK_MS = 90;   // 10 frames @ ~11fps ≈ 0.9s loop
   const PROJ = { width: SIZE, height: SIZE, fps: 30, duration: 2, background: '#151a24' };
+  /* RENDER SCALE (v6.16). Ezra: "the quality of the effect previews need to be better, rn it looks
+   * shitty." They were being drawn at 96² and then blown up — measured live: a tile's thumb box is
+   * 77 CSS px on a 375px phone and 154 on PC, a featured card's is 148, so on a DPR-2 screen a 96px
+   * bitmap was upscaled between 1.6x and 3.2x.
+   *
+   * SIZE is the SCENE — 96 project units — and it must NOT change. Every demo-only value in OVERRIDES
+   * below is a length measured against a 96-unit frame, so moving SIZE would silently re-tune all 195
+   * thumbnails at once. R is how many DEVICE pixels each of those units gets. The scene is identical
+   * at any R; only the raster is finer. Nothing has to be passed anywhere: renderScene derives the
+   * scale itself from canvas.width / project.width and stamps it as __fmRS.
+   *
+   * R = 2 and not 3: at 288² the all-effects worst case is ~163MB of cached canvas, which is not a
+   * thing to do to a phone. At 2 it is ~72MB for all 195 and ~23MB for a realistic browse, against
+   * ~6MB before — and the cache is lazy, so nothing is paid for an effect you never scroll past.
+   * Cost measured over 40 effects x 3 renders: 1.72 → 1.78 ms/effect, about 3%. The per-pixel kernels
+   * still run on plate-sized buffers (plateScale stays capped at 1), which is why it is nearly free.
+   *
+   * This only became possible once compositor.js grew renderScale(): with the old code every
+   * ctx.filter length was divided by __fmRS, so simply enlarging the canvas made blur 38% weaker and
+   * glow 33% weaker than the effect really is. */
+  const R = 2, PX = SIZE * R;
 
   /* ---- Ezra's photographs --------------------------------------------------------------------
    * Fourteen of his own shots (fx-art/*.jpg, 320² each — tiles are 96 and cards 150, so 2x on both).
@@ -65,11 +88,11 @@ window.FM = window.FM || {};
 
   // ---- render surface (one shared offscreen canvas) ----
   const work = document.createElement('canvas');
-  work.width = SIZE; work.height = SIZE;
+  work.width = PX; work.height = PX;   // the RASTER is R x the scene — see R above
   const wctx = work.getContext('2d', { willReadFrequently: true });
   function renderFrame(scene, t) { wctx.setTransform(1, 0, 0, 1, 0, 0); FM.renderScene(wctx, scene, t); }
   function snap() {   // copy the work canvas into a fresh cacheable frame
-    const c = document.createElement('canvas'); c.width = SIZE; c.height = SIZE;
+    const c = document.createElement('canvas'); c.width = PX; c.height = PX;
     c.getContext('2d').drawImage(work, 0, 0);
     return c;
   }
@@ -391,8 +414,13 @@ window.FM = window.FM || {};
   // only live objects (nothing enumerates it, nothing serializes it), so these '_fxthumb*' entries
   // sit alongside real media without ever reaching storage or export.
   function mkArt(id, painter, S, x, y) {
-    const c = document.createElement('canvas'); c.width = S; c.height = S;
-    painter(c.getContext('2d'), S);
+    /* The bitmap is R x the art's PROJECT size, but the media entry keeps declaring S — the
+     * compositor lays this out from m.width/m.height and never looks at el.width, so it is still an
+     * S x S layer in the scene. Without this the art would be a 96px picture stretched over a 192px
+     * frame and the extra raster would buy nothing. Every painter here is parametric in S (u = S/96)
+     * and the photographs are 320² sources, so both get genuinely sharper rather than interpolated. */
+    const c = document.createElement('canvas'); c.width = S * R; c.height = S * R;
+    painter(c.getContext('2d'), S * R);
     FM.media.set(id, { kind: 'image', el: c, width: S, height: S, duration: 0 });
     const l = FM.makeLayer('image', { x: x, y: y, start: 0, duration: 2 });
     l.id = id;
@@ -712,7 +740,28 @@ window.FM = window.FM || {};
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the
     // default look) but pull it in close and hard so it reads as an offset edge.
     dropshadow: function (l, h) { const p = h.effects[0].params; p.distance = 26; p.softness = 10; },
-    noise: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 2; p.color = 45; },
+    /* ---- the CELL-SIZED effects (v6.16) ---------------------------------------------------------
+     * These are the only effects the 2x raster made WORSE, and it is worth writing down why, because
+     * the reason is not obvious and the same trap is waiting for the next pattern effect.
+     * plateScale is still capped at 1, so a per-pixel kernel runs on a 96-unit plate and that plate
+     * is then scaled up to the 192px canvas. A one-pixel dither cell therefore gets bilinearly
+     * stretched into a soft two-pixel blob, and when the tile is finally drawn at its display size the
+     * pattern averages back towards flat. Measured: dither -56%, noise -20%, halftone -16% against
+     * the same tile at 96. Everything else was untouched (blur, glow, scanlines, pixelate all 0%),
+     * because they either go through ctx.filter — which renderScale now sizes correctly — or already
+     * work in plate units.
+     * The fix is to make the cell two plate-pixels instead of one, so it survives the up-then-down
+     * trip. These are demo-only values, which is exactly what this table is for; the effect's real
+     * defaults are untouched.
+     * Halftone is deliberately NOT in this list. Bigger dots read as LESS effect, not more — measured
+     * 16px at -46% against the old tile where the untouched 8px default is -16% — because a coarser
+     * screen puts fewer, flatter dots on the same frame. Its own default is the best it gets, and a
+     * 16% softening is not worth making the tile lie about what the effect looks like.
+     * Dither takes scale 2 rather than 4 or 6, which measure stronger still (-27%, -23%): past two
+     * plate-pixels the cell stops reading as error diffusion and starts reading as mosaic, and a
+     * thumbnail that overstates the effect is the same failure as one that understates it. */
+    dither: function (l, h) { h.effects[0].params.scale = 2; },
+    noise: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 4; p.color = 45; },
     posterize: function (l, h) { h.effects[0].params.levels = 3; },
     // Vibrance protects already-saturated pixels, so at its default it moved this photo by ~6%.
     // Top of its range is all the headroom there is (Protect-highlights measured WORSE, 12.98 vs
@@ -744,16 +793,18 @@ window.FM = window.FM || {};
 
   function probeDiffers(scene, base, t) {
     renderFrame(scene, t);
-    const d = wctx.getImageData(0, 0, SIZE, SIZE).data;
-    for (let i = 0; i < base.length; i += 16) { if (Math.abs(base[i] - d[i]) > 3) return true; }
+    const d = wctx.getImageData(0, 0, PX, PX).data;
+    // stride scales with the raster so the probe still reads the same NUMBER of samples as it did
+    // at 96² — a fixed stride over 4x the pixels would make the still/animated test 4x dearer.
+    for (let i = 0; i < base.length; i += 16 * R * R) { if (Math.abs(base[i] - d[i]) > 3) return true; }
     return false;
   }
   function fallback() {
     if (!fallbackEntry) {
       try { renderFrame({ project: PROJ, layers: samples.ball.layers }, 0.2); fallbackEntry = { kind: 'static', frame: snap() }; }
       catch (e) {
-        const c = document.createElement('canvas'); c.width = SIZE; c.height = SIZE;
-        const x = c.getContext('2d'); x.fillStyle = PROJ.background; x.fillRect(0, 0, SIZE, SIZE);
+        const c = document.createElement('canvas'); c.width = PX; c.height = PX;
+        const x = c.getContext('2d'); x.fillStyle = PROJ.background; x.fillRect(0, 0, PX, PX);
         fallbackEntry = { kind: 'static', frame: c };
       }
     }
@@ -765,7 +816,7 @@ window.FM = window.FM || {};
       // Animated auto-detect: probe frames in ASCENDING t (temporal effects keep state). Two probes
       // 0.5s apart PLUS one 1s apart, so 1Hz/2Hz periodic effects (blink, pulse) can't alias to "static".
       renderFrame(scene, 0.2);
-      const d0 = wctx.getImageData(0, 0, SIZE, SIZE).data;
+      const d0 = wctx.getImageData(0, 0, PX, PX).data;
       const still = snap();
       if (!probeDiffers(scene, d0, 0.7) && !probeDiffers(scene, d0, 1.2)) return { kind: 'static', frame: still };
       renderFrame(scene, 0);   // warm-up so temporal effects (motionflow) enter the strip with state
@@ -856,8 +907,8 @@ window.FM = window.FM || {};
     }
     preloadArt();          // kick every JPEG off on the first tile, not one at a time as tiles build
     ensureSamples();
-    if (cv.width !== SIZE) cv.width = SIZE;
-    if (cv.height !== SIZE) cv.height = SIZE;
+    if (cv.width !== PX) cv.width = PX;
+    if (cv.height !== PX) cv.height = PX;
     cv._fxType = key;
     const hit = cache.get(key);
     if (hit) { paint(cv, hit); return; }

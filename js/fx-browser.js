@@ -174,8 +174,11 @@ window.FM = window.FM || {};
   function maskTile(onStarChange) {
     const wrap = el('button', 'fxb-tile'); wrap.title = 'Mask — draw a shape that reveals part of this layer';
     const t = el('div', 'fxb-thumb'); t.dataset.cat = 'matte';
-    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 96; cv.height = 96;
-    const g = cv.getContext('2d');
+    /* 2x raster, 96-unit drawing (v6.16). These two tiles are hand-drawn rather than rendered by
+       fx-thumbs, so they need the same resolution bump by hand — otherwise they are the only soft
+       thumbnails in a grid of sharp ones. g.scale keeps every coordinate below in 96-space. */
+    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 192; cv.height = 192;
+    const g = cv.getContext('2d'); g.scale(2, 2);
     g.fillStyle = '#1c2536'; g.fillRect(0, 0, 96, 96);
     g.fillStyle = '#2fd0b5';
     g.beginPath(); g.rect(12, 20, 72, 56); g.arc(48, 48, 20, 0, Math.PI * 2, true); g.fill('evenodd');
@@ -214,8 +217,11 @@ window.FM = window.FM || {};
     const wrap = el('button', 'fxb-tile');
     wrap.title = 'Motion Blur (Object) — smears the layer’s OWN movement (position, scale, rotation)';
     const t = el('div', 'fxb-thumb'); t.dataset.cat = 'blur';
-    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 96; cv.height = 96;
-    const g = cv.getContext('2d');
+    /* 2x raster, 96-unit drawing (v6.16). These two tiles are hand-drawn rather than rendered by
+       fx-thumbs, so they need the same resolution bump by hand — otherwise they are the only soft
+       thumbnails in a grid of sharp ones. g.scale keeps every coordinate below in 96-space. */
+    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 192; cv.height = 192;
+    const g = cv.getContext('2d'); g.scale(2, 2);
     g.fillStyle = '#1c2536'; g.fillRect(0, 0, 96, 96);
     // a square trailing its own ghosts — the thing the effect actually does
     for (let i = 6; i >= 0; i--) {

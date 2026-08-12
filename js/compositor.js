@@ -1582,6 +1582,25 @@ window.FM = window.FM || {};
    * quality tier already makes and it never reaches the export. */
   function plateScale(ctx) { return Math.min(1, ctx.canvas.__fmRS || 1); }
 
+  /* The UNCAPPED companion, for the handful of lengths that are not plate dimensions (v6.16).
+   *
+   * The cap above is right for a PLATE — a supersampled plate is a memory and CPU multiplier for
+   * detail nobody sees, which is the whole argument in the block above this. It is WRONG for a length
+   * written into `ctx.filter` or `ctx.shadow*`. Those are DEVICE pixels on the TARGET canvas: the
+   * current transform does not touch them (that is what the spec says, and it is what Chrome does),
+   * so the number needed to express "8 project pixels" is 8 x the target's REAL scale, capped at
+   * nothing. Where __fmRS exceeded 1 the two disagreed and the filter came out 1/__fmRS too small.
+   *
+   * Measured on a 2x target before the fix: blur 38% weaker and glow 33% weaker than the same frame
+   * rendered at 1:1. That is a preview/export mismatch on a zoomed-in canvas — you were being shown
+   * less blur than you would get — and it is also what stopped the effect thumbnails from simply
+   * being rendered at a higher resolution.
+   *
+   * Nothing that renders at 1:1 can change: every export canvas is exactly project-sized, so
+   * __fmRS === 1 and this returns exactly what plateScale returns. Do NOT reach for this anywhere
+   * a PLATE is being sized — see the 48-effect wreckage measured when the cap was lifted globally. */
+  function renderScale(ctx) { const s = ctx.canvas.__fmRS; return (s > 0 && isFinite(s)) ? s : 1; }
+
   /* The anchor is deliberately read as a RAW NUMBER everywhere in the compositor — never through
      FM.evalProp — and the inspector withholds the ◆ button for it because of exactly that. Nothing
      enforced the contract, though: the AI op path advertised anchorX/anchorY as keyframeable and
@@ -6501,7 +6520,7 @@ window.FM = window.FM || {};
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    applyShadow(ctx, layer, t, plateScale(ctx));
+    applyShadow(ctx, layer, t, renderScale(ctx));   // device-space offsets/blur — see renderScale
     applyLayerTransform(ctx, layer, t, scene);
     if (!feathered) applyMaskClip(ctx, layer);   // feathered mask already baked into the content plate
     ctx.scale(1 / nscale, 1 / nscale);
@@ -7087,7 +7106,7 @@ window.FM = window.FM || {};
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
-    ctx.filter = effectFilter(layer, t, plateScale(ctx));   // reset automatically by ctx.restore()
+    ctx.filter = effectFilter(layer, t, renderScale(ctx));   // reset automatically by ctx.restore()
     // FOCUS BLUR (Camera Options). Appended to the layer's own filter string rather than run as a
     // pixel pass: this is the one hook every layer type already goes through, and a GPU-side blur
     // costs no buffer. The radius is set BEFORE applyLayerTransform, so it lives in pre-transform
@@ -7103,10 +7122,10 @@ window.FM = window.FM || {};
       // one, so anything behind the focus plane was erased into a smear while anything in front of it
       // was never really blurred at all.
       const px = _dfc * _camLens.focus.s * 22;
-      const pxs = px * plateScale(ctx);   // device-space like every other filter length — see effectFilter
+      const pxs = px * renderScale(ctx);   // device-space like every other filter length — see effectFilter
       if (pxs > 0.3) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + pxs.toFixed(2) + 'px)';
     }
-    applyShadow(ctx, layer, t, plateScale(ctx));
+    applyShadow(ctx, layer, t, renderScale(ctx));   // device-space offsets/blur — see renderScale
     applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
     applyMaskClip(ctx, layer);   // clip to the layer's vector mask (in this local, transformed space)
 
@@ -7494,7 +7513,7 @@ window.FM = window.FM || {};
     }
   }
   function applyAdjustment(ctx, layer, t, scene) {
-    const filter = effectFilter(layer, t, plateScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
+    const filter = effectFilter(layer, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
     const ppfx = (layer.effects || []).filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
     const pixFx = (layer.effects || []).find(e => e.type === 'pixelate' && e.enabled !== false);
     if (!hasCss && !ppfx.length && !pixFx) return;
