@@ -57,6 +57,39 @@
     if (maxX < 0) return 0;
     return (maxX - minX + 1) / rs;      // PROJECT px, so the three scales are comparable
   }
+  /* PATTERN-SIZE effects measure differently from warps: the thing that must hold steady is the
+     pattern PERIOD, so count sign changes along the centre row and convert to project px. A warp's
+     extent tells you nothing about a checkerboard. */
+  function period(fx, rs) {
+    var c = document.createElement('canvas');
+    c.width = Math.round(W * rs); c.height = Math.round(H * rs);
+    c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    /* WHITE, not grey: the first cut filled #808080 and thresholded at >128, so every sample read
+       false and all four patterns — including the control — measured 0. The control is what caught it. */
+    var L = FM.makeLayer('shape', { shape: 'rect', name: 'sq', x: 160, y: 120, shapeW: 300, shapeH: 200, fill: '#ffffff' });
+    L.effects = [fx];
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: [L] }, 0);
+    var d = g.getImageData(0, 0, c.width, c.height).data;
+    var y = c.height >> 1, runs = [], run = 0, prev = null;
+    for (var x = 0; x < c.width; x++) {
+      var i = (y * c.width + x) * 4;
+      if (d[i + 3] < 8) { prev = null; continue; }
+      var lum = d[i] > 128;
+      if (prev === null) { prev = lum; run = 1; continue; }
+      if (lum === prev) run++; else { runs.push(run); run = 1; prev = lum; }
+    }
+    if (runs.length < 3) return 0;
+    runs.sort(function (a, b) { return a - b; });
+    return runs[runs.length >> 1] / rs;          // median half-period, in PROJECT px
+  }
+  var PATTERNS = [
+    ['checker(24)',    { type: 'checker', enabled: true, params: { size: 24, color: '#000000' } }],
+    ['stripes(16)',    { type: 'stripes', enabled: true, params: { size: 16, color: '#000000' } }],
+    ['crosshatch(10)', { type: 'crosshatch', enabled: true, params: { spacing: 10, color: '#000000' } }],
+    ['halftone (control — already took ps)', { type: 'halftone', enabled: true, params: { size: 10 } }],
+  ];
+
   var CASES = [
     ['wave',        { type: 'wave', enabled: true, params: { amount: 30 } }],
     ['ripple',      { type: 'ripple', enabled: true, params: { amount: 30 } }],
@@ -78,7 +111,17 @@
       + '   ' + spread.toFixed(1) + '%');
   });
   lines.push('');
-  lines.push('worst spread: ' + worst.toFixed(1) + '% (' + worstName + ')');
+  lines.push('median half-period of a PATTERN, in PROJECT px — flat = the preview matches the export');
+  lines.push('');
+  lines.push('effect                              rs=1.00   rs=0.50   rs=0.28    spread');
+  PATTERNS.forEach(function (c) {
+    var v = SCALES.map(function (rs) { return period(c[1], rs); });
+    var mn = Math.min.apply(null, v), mx = Math.max.apply(null, v);
+    var sp = mn > 0 ? (mx / mn - 1) * 100 : 999;
+    lines.push(c[0].padEnd(34) + v.map(function (x) { return x.toFixed(1).padStart(8); }).join('  ') + '   ' + sp.toFixed(1) + '%');
+  });
+  lines.push('');
+  lines.push('worst WARP spread: ' + worst.toFixed(1) + '% (' + worstName + ')');
   document.getElementById('out').textContent = lines.join('\n');
   window.__done = true;
 })();
