@@ -8250,6 +8250,29 @@ window.FM = window.FM || {};
       }
       try { ctx.drawImage(src, 0, 0); } catch (e) {}
     } else if (layer.type === 'text') {
+      /* HONOUR THE ANCHOR. Every other layer type offsets its content by it — shapes use
+       * `-sw * anchorX(tr)`, media `-w * anchorX(tr)` — but text drew at x=0 governed by textAlign
+       * and at `i*lh - total/2` vertically, i.e. permanently pinned to 0.5/0.5.
+       *
+       * That mattered because the rest of the app already believes the anchor works here. The
+       * inspector compensates x/y on every anchor write so the layer stays visually still, and
+       * canvas-edit hit-tests against `-w*ax .. w*(1-ax)`. With the compositor ignoring it, the
+       * compensation had nothing to cancel: confirmed by render, "HELLO" at fontSize 40 occupied
+       * canvas x 97..224 at anchor 0.5, and 31..158 after an anchor-0 write — a 66px SLIDE, which is
+       * the exact opposite of what the anchor placer promises ("Keep it visually still"). The pivot
+       * did not move either, so scaling and rotating still happened about the centre, and the
+       * selection box drifted off the glyphs so the text could no longer be tapped to select.
+       *
+       * Text is laid out centred, so its box spans -w/2..w/2; translating by (0.5 - ax) * w maps that
+       * onto -w*ax .. w*(1-ax), which is exactly what the shape branch produces and what the
+       * inspector and hit-test already assume. At the default 0.5 the translate is ZERO, so every
+       * layer that never touched its anchor renders byte-identically.
+       *
+       * NOTE for anyone diffing old projects: a text layer that DOES carry a non-default anchor will
+       * now render in a different place — the place it was always meant to be. There is no way to fix
+       * this that leaves those layers untouched, because being untouched is the bug. */
+      const _taSz = FM.layerSize ? FM.layerSize(layer) : null;
+      if (_taSz) ctx.translate((0.5 - anchorX(tr)) * (_taSz.w || 0), (0.5 - anchorY(tr)) * (_taSz.h || 0));
       ctx.fillStyle = FM.evalProp(layer.color, t) || '#fff';   // keyframable text colour
       ctx.textAlign = layer.align || 'center';
       ctx.textBaseline = 'middle';

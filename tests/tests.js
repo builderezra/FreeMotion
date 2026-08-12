@@ -11012,6 +11012,61 @@
     });
   });
 
+  /* ---- moving a text layer's anchor must keep the text still ----------------------------------
+   *
+   * BUG-HUNT. Every other layer type offsets its content by the anchor; the text branch drew at x=0
+   * governed by textAlign and at `i*lh - total/2` vertically, i.e. permanently pinned to 0.5/0.5.
+   * The rest of the app already believed otherwise — the inspector compensates x/y on every anchor
+   * write so the layer stays visually still, and canvas-edit hit-tests against -w*ax .. w*(1-ax).
+   * With the compositor ignoring the anchor, that compensation had nothing to cancel, so the text
+   * SLID: measured in the report, "HELLO" at fontSize 40 went from canvas x 97..224 to 31..158 after
+   * an anchor-0 write, a 66px jump — the exact opposite of what the anchor placer promises.
+   *
+   * The test replays what the INSPECTOR does (set the anchor AND compensate x by the same span), and
+   * asserts the drawn pixels do not move. Asserting on the anchor value alone would prove nothing;
+   * the whole complaint is about where the glyphs land.
+   *
+   * It also pins the compatibility half: at the default 0.5 anchor the translate is exactly zero, so
+   * a layer that never touched its anchor renders byte-identically. */
+  test('text: moving the anchor keeps the text visually still', { item: 'text-anchor' }, function () {
+    var W = 320, H = 240;
+    var bboxOf = function (mut) {
+      var c = offscreen(W, H);
+      var g = c.getContext('2d', { willReadFrequently: true });
+      var L = FM.makeLayer('text', { name: 'anc', text: 'HELLO', x: 160, y: 120, fontSize: 40, color: '#ffffff' });
+      if (mut) mut(L);
+      FM.renderScene(g, scene([L], { project: { width: W, height: H, fps: 30, duration: 5, background: null } }), 0);
+      var d = g.getImageData(0, 0, W, H).data;
+      var minX = W, maxX = -1, minY = H, maxY = -1;
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        if (d[(y * W + x) * 4 + 3] > 8) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      }
+      return maxX < 0 ? null : { x0: minX, x1: maxX, y0: minY, y1: maxY, w: maxX - minX + 1 };
+    };
+    var base = bboxOf(null);
+    if (!base) throw new Error('the text drew nothing — the probe is broken, not the anchor');
+
+    // What the inspector actually writes when you drag Anchor X to 0: the anchor AND the x
+    // compensation, together, so the layer is meant to stay put.
+    var moved = bboxOf(function (L) {
+      var sz = FM.layerSize(L);
+      L.transform.anchorX = 0;
+      L.transform.x = 160 + (0 - 0.5) * (sz.w || 0);
+    });
+    if (!moved) throw new Error('the text vanished after an anchor write');
+    var slid = Math.abs(moved.x0 - base.x0);
+    if (slid > 3) {
+      throw new Error('moving the anchor slid the text ' + slid + 'px (x0 ' + base.x0 + ' → ' + moved.x0 +
+        ') — the anchor placer promises to keep it visually still, and the compositor is ignoring the anchor ' +
+        'while the inspector compensates for it');
+    }
+    // …and the default anchor must be untouched, or every existing project shifts.
+    var same = bboxOf(function (L) { L.transform.anchorX = 0.5; L.transform.anchorY = 0.5; });
+    if (!same || same.x0 !== base.x0 || same.y0 !== base.y0 || same.x1 !== base.x1) {
+      throw new Error('an explicit 0.5/0.5 anchor renders differently from no anchor at all — the default path must be a no-op');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
