@@ -166,12 +166,12 @@ html[data-theme="glass"] .hm-search-btn.on {
    see-through, and backdrop-filter blurred the page behind an already-opaque render. What's left is
    motion and the light it throws: the artwork is the material. */
 html[data-theme="glass"] #hm-new {
-  background: url('fab-plus.png?v=2') center / contain no-repeat;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  /* v6.09: the artwork is gone and the backdrop-filter is BACK ON — this rule used to switch it off
+     because a PNG render has nothing to refract. A real glass pane does. */
   border: none;
-  /* the only shadow left is the colour it throws — outer-only, so it can't reach the + cut-out */
-  box-shadow: 0 0 22px rgba(90, 199, 237, .32);
+  /* v6.09: rim + lift from the shared material, plus the colour it throws. There is no + CUT-OUT
+     any more — the glyph is a stroked SVG on top — so an inset rim is now correct here. */
+  box-shadow: var(--lg-rim), var(--lg-lift), 0 0 20px rgba(90, 199, 237, .30);
   transition: transform .18s cubic-bezier(.3, .8, .3, 1), filter .18s ease, box-shadow .18s ease;
 }
 html[data-theme="glass"] #hm-new:hover {
@@ -225,7 +225,6 @@ html[data-theme="glass"] #hm-new:active {
  * cannot paint outside the button whether or not anything clips it. The orb keeps its copy: there
  * the clip is a useful fallback if masking ever fails, and its own drop-shadows are sub-2px, so
  * clipping them at the rim is invisible. */
-html[data-theme="glass"] #hm-new { overflow: hidden; }
 html[data-theme="glass"] #hm-new::after,
 html[data-theme="glass"] #add-fab::after {
   content: '';
@@ -250,28 +249,13 @@ html[data-theme="glass"] #add-fab::after {
    it showed as the grey panel Ezra photographed: "There's a box around the logo I sent you, looks
    shit." Chrome masked it correctly the whole time, which is exactly why it only turned up on his
    phone. */
-html[data-theme="glass"] #hm-new::after {
-  -webkit-mask-image: url('fab-plus.png?v=2'); mask-image: url('fab-plus.png?v=2');
-  -webkit-mask-position: center; mask-position: center;
-  -webkit-mask-size: contain; mask-size: contain;
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-}
-html[data-theme="glass"] #add-fab::after {
-  -webkit-mask-image: url('fab-cross.png?v=2'); mask-image: url('fab-cross.png?v=2');
-  -webkit-mask-position: center; mask-position: center;
-  -webkit-mask-size: contain; mask-size: contain;
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  /* The guarantee, independent of masks entirely. clip-path has no such shorthand trap and is
-     supported everywhere this app runs, so even if the mask silently fails again the worst case is a
-     plus-shaped highlight instead of a rectangle. Traced from the artwork's own alpha and dilated
-     ~2.7% — verified to contain 100% of the render (0 pixels outside) while covering 53% of the box,
-     so it can never clip the real masked result and can never be mistaken for a square. The skew is
-     the render's own: it sits in slight perspective, so the vertical arm drifts ~18px right from top
-     to bottom and the horizontal arm ~37px down from left to right. */
-  clip-path: polygon(34.18% 2.73%, 66.02% 2.73%, 66.02% 30.86%, 95.90% 30.86%,
-                     95.90% 68.55%, 66.02% 68.55%, 66.02% 97.07%, 34.18% 97.07%,
-                     34.18% 68.55%, 3.91% 68.55%, 3.91% 30.86%, 34.18% 30.86%);
-}
+/* v6.09: both buttons are round GLASS PANES now, not crystal artwork, so the sheen is clipped by
+   the button's own shape rather than by a PNG's alpha. border-radius:50% + overflow:hidden is the
+   whole mask — which also retires the WebKit mask-shorthand trap this block was written to survive
+   (the sheen once painted as a grey rectangle on his phone because the shorthand silently failed).
+   No mask, nothing to fail. */
+html[data-theme="glass"] #hm-new::after,
+html[data-theme="glass"] #add-fab::after { border-radius: 50%; }
 /* It rests for most of the loop and then crosses, rather than sweeping continuously — a light that
    never stops moving reads as a loading spinner. Both ends put the band fully clear of the orb, so
    nothing is cut off when the loop restarts. */
@@ -289,14 +273,16 @@ html[data-theme="glass"] #add-fab::after {
    the glass. box-shadow is explicitly none because it follows the border box, which for a cross is a
    square — the glow is a drop-shadow instead, so it hugs the arms. */
 html[data-theme="glass"] #add-fab {
-  background: url('fab-cross.png?v=2') center / contain no-repeat;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
-  filter: var(--glass-edge)
-          drop-shadow(0 0 18px rgba(90, 199, 237, .44))
-          drop-shadow(0 3px 5px rgba(3, 16, 22, .6))
-          drop-shadow(0 14px 26px rgba(0, 0, 0, .55));
+  /* v6.09: artwork out, refraction back on. box-shadow is no longer forced to none — the cross is a
+     glyph inside a round button now, so the border box IS the silhouette and a box-shadow hugs it
+     correctly. The coloured glow stays, because Ezra asked for it twice. */
+  box-shadow: var(--lg-rim), var(--lg-lift);
+  /* The coloured glow stays a drop-shadow, not a box-shadow. There is no overflow clip on this
+     button any more, so nothing slices it — and the suite guards this specifically, because a
+     box-shadow follows the border BOX and a filter follows the painted shape. Ezra asked for the
+     glow twice; it is not going quietly. */
+  filter: drop-shadow(0 0 18px rgba(90, 199, 237, .44))
+          drop-shadow(0 3px 5px rgba(3, 16, 22, .6));
 }
 
 /* Accent-filled controls pick up the same crown highlight, so they read as one family. */
@@ -314,19 +300,22 @@ html[data-theme="glass"] .set-switch.on {
    dark one so the artwork inside it can be seen. */
 /* The glow lives here TOO, deliberately. This file loads after styles.css and its `box-shadow: none`
    is what would silently delete the export glow — the same way it has eaten four earlier fixes. */
-html[data-theme="glass"] .m-export { background: url('export-btn.png?v=1') center / contain no-repeat;
-  border-radius: 30%; box-shadow: 0 0 7px rgba(140, 222, 255, .50), 0 0 15px rgba(96, 196, 246, .24); }
+html[data-theme="glass"] .m-export {
+  /* v6.09: the render is gone; the glow it earned is not. */
+  border-radius: 12px;
+  box-shadow: var(--lg-rim), var(--lg-lift), 0 0 12px rgba(140, 222, 255, .34);
+}
 /* v5.63. This file loads AFTER styles.css, so it held its own copy of the mint ring and kept
    repainting it after styles.css dropped it — the THIRD fix this file has silently eaten. Ezra saw
    the outline still there after it had been removed. Neutral now, matching styles.css, and the glass
    theme contributes only what is actually glassy: the inner top light and a soft ambient drop. */
 html[data-theme="glass"] #btn-export {
-  background: rgba(255, 255, 255, .05);
-  border: 1px solid var(--line);
-  color: var(--text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 3px 12px rgba(0, 0, 0, .28);
+  /* v6.09: the shared --lg-* material owns this now; this file only adds the accent glow. */
+  border: none;
+  color: #eef8ff;
+  box-shadow: var(--lg-rim), var(--lg-lift), 0 0 14px rgba(96, 196, 246, .30);
 }
-html[data-theme="glass"] #btn-export .ico { display: none; }
+html[data-theme="glass"] #btn-export .ico { display: inline-block; }
 
 /* Thumbnails and media get a hairline rim so they sit IN the glass rather than on it. */
 html[data-theme="glass"] .hm-thumb,

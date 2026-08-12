@@ -41,6 +41,32 @@
    * under"). So the ambient glow is NOT in here: it's an outer box-shadow on the round buttons, which
    * paints outside the border box only and can never reach a cut-out. What's left is 0.5px of
    * specular hairline and a 1.8px close bloom — enough to rim the plus without closing it. */
+  /* ---- Liquid Glass CONTROLS (v6.09) --------------------------------------------------------
+   * Ezra: "implementing it all into the ui is tacky … go back to old buttons to add things, give
+   * them a Liquid Glass look but not the full logo design. The text FreeMotion can stay."
+   *
+   * So the four controls that were wearing the logo's crystal renders — export (desktop pill and
+   * phone square), the editor's + FAB and the home + — go back to their OWN stroked glyph. Those
+   * glyphs were never deleted; the PNGs were painted over the top of them, which is why this is a
+   * CSS change and not another artwork round.
+   *
+   * What replaces the render is a real glass MATERIAL rather than a photograph of one:
+   *   · backdrop-filter — actual refraction of whatever sits behind, which a flat PNG cannot do
+   *   · a rim that is bright along the top-left and dark along the bottom-right, so the pane has a
+   *     light DIRECTION instead of a uniform outline
+   *   · ONE small off-centre specular catch, for the reason the v5.58 export shine documents: a
+   *     glint smeared across the whole face is an exposure lift, not a highlight
+   *   · a tight contact shadow plus a wide ambient, which is what stops it reading as stuck on
+   * The wordmark keeps its render — that is the logo, not a button. */
+  --lg-fill:
+    linear-gradient(158deg, rgba(226, 246, 255, .20) 0%, rgba(150, 200, 225, .10) 46%, rgba(40, 78, 104, .13) 100%);
+  --lg-catch:
+    radial-gradient(42% 34% at 22% 16%, rgba(255, 255, 255, .60) 0%, rgba(255, 255, 255, .15) 46%, rgba(255, 255, 255, 0) 100%);
+  --lg-rim:
+    inset 0 1px 0 rgba(255, 255, 255, .52), inset 1px 0 0 rgba(255, 255, 255, .20),
+    inset 0 -1px 0 rgba(4, 16, 24, .42), inset -1px 0 0 rgba(4, 16, 24, .22);
+  --lg-lift: 0 1px 2px rgba(3, 14, 20, .55), 0 8px 20px rgba(0, 0, 0, .42);
+
   --glass-edge:
     drop-shadow(0 0 0.5px rgba(226, 247, 255, .85))
     drop-shadow(0 0 1.8px rgba(150, 225, 255, .45));
@@ -152,7 +178,6 @@ body {
 /* Desktop Export keeps its WORD — the label earns its place on a pointer device where there is room,
    and an unlabelled square would be a downgrade — but the flat stroked arrow is replaced by the glass
    render, so the same object reads across phone and desktop. */
-#btn-export .ico { display: none; }
 #btn-export {
   /* A DARK body, not the mint fill it had. The artwork is a pale faceted crystal; on mint it turned
      into a muddy smudge that read as a sticker stuck on a button — the "simply plastered on" look
@@ -176,13 +201,9 @@ body {
   position: relative;
   isolation: isolate;
 }
-#btn-export .ico { display: none; }   /* the crystal artwork already IS the arrow — see the note above */
+#btn-export .ico { display: inline-block; }   /* the glyph is back — the crystal render is gone (v6.09) */
 #btn-export:hover { background: rgba(255, 255, 255, .08); border-color: var(--line-soft); filter: none; }
-#btn-export::before {
-  content: ""; flex: 0 0 auto; width: 24px; height: 24px;
-  background: url('export-btn.png?v=1') center / contain no-repeat;
-  filter: var(--export-edge);
-}
+/* #btn-export::before held the crystal render. Removed in v6.09 — the .ico glyph draws it now. */
 
 /* ---------- Export shine (v5.58) ----------
  * Ezra: "make the export button actually have some shine to it and make it look better."
@@ -210,30 +231,10 @@ body {
  * Percentages, not pixels, so one rule serves 24px (desktop), 30px (Studio rail) and 38px (phone).
  * The y figures are box-relative: the artwork is 972x910, so `contain` in a square box leaves it
  * spanning 3.2%-96.8% vertically — the facet at 12.5% of the ARTWORK is 15% of the box. */
-#btn-export::after,
-.m-export::after {
-  content: ""; position: absolute; pointer-events: none;
-  background:
-    /* the catch: a tight core, plus the short flat ray a real specular throws along the surface */
-    radial-gradient(8% 10% at 17.5% 15%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, .55) 42%, rgba(255, 255, 255, 0) 100%),
-    radial-gradient(16% 3.5% at 17.5% 15%, rgba(255, 255, 255, .48) 0%, rgba(255, 255, 255, 0) 100%),
-    /* the rake: origin off the top-left corner, ending below neutral so the far side falls away.
-       Nothing in here is pure white — under `overlay` a white source clamps to 1.0 over anything
-       brighter than mid grey, which turns a rake into a blown-out quadrant. Measured: the first cut
-       of this gradient took the crystal's >=0.80 share from 1.6% to 12.8% and read as an exposure
-       lift, not as a light source. Only the CATCH above is allowed to be white. */
-    radial-gradient(128% 128% at 6% -6%,
-      rgba(236, 250, 255, .40) 0%, rgba(206, 236, 252, .30) 30%,
-      rgba(120, 168, 200, .26) 62%, rgba(30, 62, 90, .34) 100%);
-  -webkit-mask-image: url('export-btn.png?v=1');
-          mask-image: url('export-btn.png?v=1');
-  -webkit-mask-size: contain;      mask-size: contain;
-  -webkit-mask-position: center;   mask-position: center;
-  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
-  mix-blend-mode: overlay;
-}
-/* Desktop pins the shine to the ::before icon's box: 13px padding + 1px border in from the left. */
-#btn-export::after { left: 14px; top: 50%; width: 24px; height: 24px; transform: translateY(-50%); }
+/* The v5.58 crystal shine lived here — a specular catch and a rake, both MASKED by the
+   artwork's own alpha. With the artwork gone there is no silhouette to mask against, so it
+   is removed rather than left painting a rectangle. The light it provided now comes from
+   --lg-catch and --lg-rim, which work on the button box itself. (v6.09) */
 
 /* ---------- main (stage wrapper) ----------
    Holds only #stage now — the inspector moved out to #app so the grid can place it either right of the
@@ -2180,7 +2181,6 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .m-export {
     flex: 0 0 auto; display: block;
     width: 38px; height: 38px; border: 0; padding: 0; border-radius: 0; cursor: pointer;
-    background: url('export-btn.png?v=1') center / contain no-repeat;
     -webkit-tap-highlight-color: transparent;
     /* v5.58: the rim is --export-edge now and the ambient drop comes in from 3px to 2px, because the
        shine lives inside the silhouette (see the ::after block up by #btn-export) and a hot rim over
@@ -2189,7 +2189,8 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     filter: var(--export-edge) drop-shadow(0 1px 2px rgba(0,0,0,.55));
     position: relative; isolation: isolate;
   }
-  .m-export .m-ico { display: none; }
+  .m-export { display: flex; align-items: center; justify-content: center; }
+  .m-export .m-ico { display: block; width: 20px; height: 20px; }
   /* v5.76. Ezra, twice: "I find it crazy you still haven't added glow or anything to the export button."
      He is right, and the reason it never had one is written two rules up: --export-edge is a 0.5px +
      1.3px rim, kept deliberately microscopic because drop-shadow cannot tell the arrow CUT-OUT from an
@@ -2221,7 +2222,6 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     border-radius: 30%;
     box-shadow: 0 0 7px rgba(140, 222, 255, .50), 0 0 15px rgba(96, 196, 246, .24);
   }
-  .m-export::after { inset: 0; }
   .m-export:active { transform: translateY(1px); filter: var(--export-edge) brightness(1.08); }
 
   /* The + FAB (add) — bottom-right, above the timeline.
@@ -2250,7 +2250,6 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
        enforces that order; Chrome does not, so the damage is invisible on desktop. Declared
        explicitly rather than just left unset so a later rule can't quietly bring it back. */
     overflow: visible;
-    background: url('fab-cross.png?v=2') center / contain no-repeat;
     /* Order is not arbitrary. --glass-edge has to come FIRST so its hairline is computed from the
        artwork's crisp alpha — put a soft pass before it and the "rim" is derived from a blurred
        silhouette and reads as a smudge. Then the light it throws, then the two shadows that seat it:
@@ -2264,7 +2263,8 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     box-shadow: none;
     -webkit-tap-highlight-color: transparent;
   }
-  #add-fab svg { display: none; }
+  /* v6.09: the + glyph is the button again — the crystal cross that replaced it is gone. */
+  #add-fab { display: flex; align-items: center; justify-content: center; }
   /* the edge has to be repeated here — `filter` is one property, so a bare brightness() would drop it */
   /* pressed: the shadows pull IN and the glow dims — it moves toward the surface rather than just
      getting darker, which is the same read as a physical button being pushed down */
@@ -2508,8 +2508,8 @@ body.hm-selecting .hm-card { touch-action: none; }
    is cut through to transparent so the backdrop shows in it, which means the button can carry no fill
    of its own; border-radius:50% keeps the sheen (theme-glass.css) clipped to the rim instead of a
    square; and the SVG glyph is hidden, not removed, so the accessible name survives. */
-#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; background: url('fab-plus.png?v=2') center / contain no-repeat; color: transparent; cursor: pointer; filter: var(--glass-edge) drop-shadow(0 10px 24px rgba(0, 0, 0, .5)); box-shadow: 0 0 22px rgba(90, 199, 237, .32); -webkit-tap-highlight-color: transparent; }   /* centred like AM's +; the ambient glow is a box-shadow so it can't reach the + cut-out */
-#hm-new svg { display: none; }
+#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; color: #eef8ff; cursor: pointer; -webkit-tap-highlight-color: transparent; }   /* centred like AM's +; the ambient glow is a box-shadow so it can't reach the + cut-out */
+/* v6.09: the + glyph is the button again. */
 #hm-dialog { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
 #hm-dialog.hidden { display: none; }
 /* the card is a column so the options scroll while the title + Create row stay put on a phone */
@@ -3651,3 +3651,42 @@ body.fm-pushing #toast { z-index: 213; }
    It applies selected or not, so selecting never shifts the row. min-width (72px, inherited) keeps a
    short name like "Angle" a comfortable target rather than a nub. */
 .fx-scrub-row > .fx-scrub-label.kf-selectable { flex: 0 1 auto; margin-right: auto; align-self: center; }
+
+
+/* ---- Liquid Glass controls — the shared material (v6.09) --------------------------------------
+   One rule for the four controls that used to wear the logo's crystal renders. See the --lg-* token
+   block at the top for why each layer is here. Appended at the end of the file so it lands after the
+   per-button blocks it replaces, rather than depending on their order. theme-glass.css loads AFTER
+   this file and used to repaint the PNGs — that file has been changed too, because patching only
+   this one would have left the shipped default theme unchanged. That mistake has been made five
+   times in this project already. */
+#btn-export,
+.m-export,
+#add-fab,
+#hm-new {
+  background-image: var(--lg-catch), var(--lg-fill);
+  background-repeat: no-repeat;
+  background-color: rgba(122, 182, 212, .10);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+          backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow: var(--lg-rim), var(--lg-lift);
+  border: none;
+  color: #eef8ff;
+}
+/* Export is the app's one primary action, so its glass is tinted rather than neutral — it has to
+   read as the button you press, which is the job the mint pill used to do and the crystal took over. */
+#btn-export,
+.m-export {
+  background-color: rgba(90, 199, 237, .20);
+  box-shadow: var(--lg-rim), var(--lg-lift), 0 0 14px rgba(96, 196, 246, .30);
+}
+/* PAINT ONLY below this line. `display` must never be set here: this block sits outside every media
+   query, so a `display: flex` would override the desktop rule that hides #topbar-m and #add-fab
+   (styles.css "#topbar-m, #add-fab, #add-sheet { display: none }") and put a 64px FAB back on screen.
+   The suite caught exactly that as 38px of horizontal overflow during the home push. Centring lives
+   in each button's own block, inside the media query that owns it. */
+.m-export { border-radius: 12px; }
+#add-fab, #hm-new { border-radius: 50%; }
+#add-fab > svg, #hm-new > svg { width: 26px; height: 26px; }
+#btn-export:hover, .m-export:hover { background-color: rgba(90, 199, 237, .28); filter: none; }
+#btn-export:active, .m-export:active, #add-fab:active, #hm-new:active { transform: translateY(1px); }
