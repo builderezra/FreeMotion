@@ -182,20 +182,25 @@ Numbered with Ezra's own queue numbers where he gave them.
       · **Reverb Size / Decay — correctly left out.** Rebuilding the room takes **12.5ms** at the
         longest decay, which is 75% of a whole frame's budget for one effect, and swapping the room
         mid-tail would click even if it were free.
-      · **Distortion Drive, Bit Crush Bits, Lo-Fi Amount — I WAS TOO OPTIMISTIC HERE, correcting it.**
-        The rebuild is cheap (a waveshaper curve at **0.24ms**), so I said they were real candidates.
-        Cheap to compute is not the same as clean to hear, and I have now measured the second thing:
-        rendering a swept curve through an OfflineAudioContext and looking for sample-level jumps,
-        which is what a click IS. Automating Bit Crush across its full range gives a jump **6.8x** the
-        static worst case — an audible click. And it is not about how FAR you sweep: 12 → 8 bits is
-        clean, but **6 → 5 bits, a single step, is 1.7x and audible**, because at low bit counts the
-        quantisation levels are coarse so a small change moves every output sample a lot.
-        So the honest answer is narrower than "these three can be done": **Bit Crush can be keyframed
-        in its upper range and clicks in the low range** — which is exactly where you'd want to
-        automate it, since that's where the effect is dramatic. Distortion and Lo-Fi use SMOOTH curves
-        rather than quantised ones and may well be clean; I have not measured those two, and I am not
-        going to claim it. Still worth building if you want it — but now you know which part will
-        misbehave, rather than finding out by ear afterwards.
+      · **Distortion Drive, Bit Crush Bits, Lo-Fi Amount — I WAS WRONG ABOUT THESE. Measured now.**
+        I said they were real candidates because the rebuild is cheap (0.24ms). Cheap to compute is
+        not the same as clean to hear, and I can measure the second thing after all: a click is a
+        sample-level jump, so rendering a swept curve through an OfflineAudioContext shows it.
+        **All three click.** Worst sample-to-sample jump against each effect's own static control:
+        Bit Crush **6.8x**, Distortion **2.8x**, Lo-Fi **1.7x**. Not one is clean.
+        Two things I got wrong inside that, both worth knowing:
+        - It is **not** about how far the slider travels. Bit Crush 12 → 8 bits is clean; **6 → 5, one
+          single step, clicks.** At low bit counts the levels are coarse, so a small change moves every
+          output sample.
+        - It is **not** about the curve being smooth. I assumed Distortion would be fine because it is
+          a tanh at 4x oversampling. It is the worst of the three after Bit Crush.
+        **The real reason, which points at the actual fix:** every one of these is implemented as
+        "rebuild the transfer curve". Swapping a curve is a STEP CHANGE — the same input sample maps
+        to a different output the instant it happens — so smoothness *in x* cannot help; what is
+        missing is continuity *in time*. Making these animate properly means crossfading between two
+        shaper nodes, or driving the parameter through a real AudioParam instead of a curve rebuild.
+        That is a bigger job than flipping a `keyframable` flag, and now you know that before asking
+        for it rather than after hearing it.
       · Pitch Shift Semitones — not measured yet.
       **Held pending your call**, for the same reason as 72: making those three animate means audio
       automation I cannot HEAR, and a slider that clicks or zips every frame is worse than one that
