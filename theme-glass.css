@@ -79,9 +79,15 @@ html[data-theme="glass"] .hm-card,
 html[data-theme="glass"] .set-group,
 html[data-theme="glass"] .addmenu-card,
 html[data-theme="glass"] .addmenu-tab {
-  background: linear-gradient(180deg, rgba(188, 230, 239, .05), rgba(188, 230, 239, .015));
+  background: linear-gradient(180deg, rgba(188, 230, 239, .085), rgba(188, 230, 239, .03));
   border: 1px solid var(--line-soft);
   box-shadow: inset 0 1px 0 var(--glass-rim-soft);
+}
+/* The project rows carry the bloom too — "adding a glow and more brightness to each project as well".
+   Kept to .07 (the idle buttons are .10, the selected tab .26) because a full-width row at button
+   strength stops reading as a list and starts reading as a stack of lit panels. */
+html[data-theme="glass"] .hm-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 2px 12px rgba(90, 199, 237, .07);
 }
 html[data-theme="glass"] .hm-card:active,
 html[data-theme="glass"] .addmenu-card:active {
@@ -120,20 +126,29 @@ html[data-theme="glass"] .hm-top {
 }
 
 /* Pills, switches, round buttons — glass beads. */
+/* v5.81. Ezra: "can you make all the buttons have a more shiny and glass look… like how when you
+   have a row selected… it would be cool if you could make all the buttons kinda have that glow to it
+   by default, becuase it feels kinda off having the plus button look so good but not the rest…
+   I don't want a massive change, right now is very close."
+   So this is a LIFT, not a redesign: the idle fill comes up from .09/.02 to .14/.045, the top rim
+   brightens, and each button gets the same soft cyan bloom the ACTIVE tab already had — at about half
+   its strength, so the selected tab still reads as selected. The numbers below are the whole change. */
 html[data-theme="glass"] .hm-tab,
 html[data-theme="glass"] .hm-more,
 html[data-theme="glass"] .hm-search-btn,
 html[data-theme="glass"] .hm-select-btn,
 html[data-theme="glass"] .set-close {
-  background: linear-gradient(180deg, rgba(188, 230, 239, .09), rgba(188, 230, 239, .02));
+  background: linear-gradient(180deg, rgba(188, 230, 239, .14), rgba(188, 230, 239, .045));
   border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .20), 0 2px 10px rgba(90, 199, 237, .10);
   box-shadow: inset 0 1px 0 var(--glass-rim-soft);
 }
 html[data-theme="glass"] .hm-tab.active {
   background: linear-gradient(180deg, rgba(122, 214, 242, .26), rgba(47, 157, 198, .14));
   border-color: rgba(122, 214, 242, .42);
   color: #d7f2fd;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38), 0 2px 12px rgba(90, 199, 237, .14);
+  /* Raised in step with the idle buttons above (.10 bloom), so "selected" is still unmistakable. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .44), 0 2px 14px rgba(90, 199, 237, .26);
 }
 html[data-theme="glass"] .hm-search-btn.on {
   background: linear-gradient(180deg, #7ad6f2, var(--accent));
