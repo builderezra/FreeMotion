@@ -8106,6 +8106,55 @@
     }
   });
 
+  /* Queue 73 (v6.21). Ezra: "currently the names of layers follow and stay on screen, I want them to
+   * just stay at the start of the layer and not move along with you." The label used to track the
+   * clip's VISIBLE left edge, so it slid along the bar as you scrolled and never left the screen.
+   * There is a real argument for that behaviour, which is why it was built — so this test exists to
+   * stop someone rebuilding it. The label's `left` must not change with scroll. */
+  test('timeline: a clip name stays at the clip start and scrolls away with it', { item: 'clip-label-pinned' }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var sc = document.getElementById('timeline');
+    if (!sc || !FM.timeline) throw new Error('#timeline / FM.timeline missing');
+    var saved = FM.scene, hadZoom = FM.timeline.getZoom ? FM.timeline.getZoom() : null, hadScroll = sc.scrollLeft;
+    try {
+      var L = FM.makeLayer('shape', { name: 'ZZ a very long clip name', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#0f0', start: 0, duration: 60 });
+      FM.scene = scene([L], { project: { width: 320, height: 240, fps: 30, duration: 90, background: '#000' } });
+      FM.timeline.setZoom(4, 0); FM.timeline.rebuild(); await sleep(200);
+      var clip = document.querySelector('.clip[data-id="' + L.id + '"]');
+      if (!clip) throw new Error('the probe clip is not in the timeline');
+      var label = clip.querySelector('.clip-label');
+      if (!label) throw new Error('the clip has no .clip-label — nothing to pin');
+      var read = async function (sl) {
+        sc.scrollLeft = sl; sc.dispatchEvent(new Event('scroll'));
+        FM.timeline.updatePlayhead(); await sleep(120);
+        return { left: label.style.left, x: label.getBoundingClientRect().left };
+      };
+      var a = await read(0), b = await read(600);
+      if (a.left !== b.left) {
+        throw new Error('the label moved along the clip as the timeline scrolled (left ' + a.left + ' → ' + b.left
+          + ') — it is meant to sit at the clip START and scroll away with it');
+      }
+      /* …and where the harness actually lays the timeline out, prove the probe can SEE movement — the
+         assertion above is only meaningful if the label's screen position really does travel with the
+         clip. Inside run.html's offscreen iframe the clip subtree has no box at all (every rect comes
+         back 0), which is a property of the harness, not of the app: driven in a real browser at
+         1280x860 the same label goes 213 → -387 → -1187 across scrolls of 0 / 600 / 1400. So measure
+         when there is something to measure, and say so out loud when there is not, rather than
+         letting a blind spot read as a pass. */
+      var laidOut = clip.getBoundingClientRect().width > 0;
+      if (laidOut && !(b.x < a.x - 100)) {
+        throw new Error('the label barely moved on screen (' + Math.round(a.x) + ' → ' + Math.round(b.x)
+          + ') after a 600px scroll — it is not travelling with the clip');
+      }
+    } finally {
+      FM.scene = saved;
+      if (hadZoom != null && FM.timeline.setZoom) FM.timeline.setZoom(hadZoom, 0);
+      try { FM.timeline.rebuild(); } catch (e) {}
+      sc.scrollLeft = hadScroll;
+      await sleep(80);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

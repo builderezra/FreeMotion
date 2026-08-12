@@ -2107,15 +2107,23 @@ window.FM = window.FM || {};
           const liveI = FM.captions.indexAt(l, t);
           clipEl.querySelectorAll('.cap-cue').forEach(ch => ch.classList.toggle('live', +ch.dataset.ci === liveI));
         }
-        // AM: keep the clip NAME pinned to the clip's VISIBLE left edge as the timeline scrolls, so the
-        // name stays readable even when the clip's start has scrolled off-screen. Pure math (no reflow).
+        /* The clip NAME stays at the clip's START (v6.21). It used to track the clip's VISIBLE left
+         * edge as you scrolled, so the name slid along the bar and stayed on screen even once the
+         * clip's beginning had gone past the left edge. Ezra: "currently the names of layers follow
+         * and stay on screen, I want them to just stay at the start of the layer and not move along
+         * with you." He is right about what it cost: a name that moves is a name you cannot use as a
+         * landmark — you lose the one fixed mark that tells you where a clip actually begins, and on a
+         * timeline of several long clips every label ends up crowded against the same left edge,
+         * which is where they all look identical.
+         * The RIGHT-hand cap below stays. That half fixed a different, real defect (IMG_2445): the
+         * label box is sized off the CLIP, so on a clip wider than the screen a long name had the
+         * whole clip to run in, never reached its own ellipsis, and ran out past the ≡ reorder handle
+         * off the edge of the view. It still needs a viewport-relative edge to bite on. */
         const label = clipEl.querySelector('.clip-label');
         if (label) {
           const base = clipEl.classList.contains('sel') ? 17 : 9;
           const clipLeft = parseFloat(clipEl.style.left) || 0;
-          const off = sL - clipLeft;                                      // >0 → clip start is left of view
-          const maxLeft = Math.max(base, (parseFloat(clipEl.style.width) || 0) - 34);
-          const lLeft = Math.min(Math.max(base, off + base), maxLeft);
+          const lLeft = base;
           label.style.left = lLeft + 'px';
           // …and the mirror of that on the RIGHT. The label box is sized off the CLIP (left:9/right:9),
           // so on a clip wider than the screen a long layer name had the whole clip to run in: it
