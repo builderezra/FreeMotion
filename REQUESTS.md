@@ -59,7 +59,6 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **69 — Audio must never lag.** Make the audio clock the master.
 - [ ] **70 — Extracted audio should look like an audio track.** *"it doesn't show it like an audio
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
-- [ ] **71 — Multi-select bar: move the group and delete buttons to the right.**
 - [ ] **74 — Swipe up for a full-screen Favourites browser.** Replacing the swipe-right between
       Recent and Faves. Sorting by recency, effect type and A–Z, each with an inverted order.
 - [ ] **76 — Subtle moving static over each project card on home.** Like the reference image he sent.
@@ -97,6 +96,9 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **71 — Multi-select bar: group and delete moved to the right.** The bin is deliberately not
+      flush in the corner — that is where Export lives, and a reflex aimed at Export must not delete
+      your selection. Group takes the outer slot instead — v6.22
 - [x] **73 — Clip names stay at the clip's start,** not following the scroll — v6.21
 - [x] **67 + 31 — Every numeric inspector control is a real slider,** not a browser range input.
       One fix in `rangeRow` covered all 37 of them — v6.20

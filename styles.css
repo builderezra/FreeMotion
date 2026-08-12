@@ -2075,9 +2075,26 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   body.sel-mode #m-group, body.sel-mode #m-del { display: flex; }
   body.sel-mode #m-group { visibility: hidden; }    /* slot held open at 1 selected… */
   body.sel-multi #m-group { visibility: visible; }  /* …and filled at 2+, without moving the bin */
-  body.sel-mode #m-back  { order: -3; }
-  body.sel-mode #m-group { order: -2; }
-  body.sel-mode #m-del   { order: -1; }
+  /* Group and the bin sit on the RIGHT (v6.22, queue 71 — Ezra circled them on a screenshot and drew
+     an arrow across the bar). They used to be anchored LEFT, tucked against the back arrow, which put
+     the most destructive button in the app about 90px from the control that means "leave". Two taps
+     that mean opposite things, side by side, on a bar you are using while dragging a selection.
+     On the right they are where every other confirm-ish action in this app already lives — Export sat
+     in that corner a moment ago, and the count grows into the space they left. #m-selcount is already
+     `flex: 1`, so it does the pushing; only the orders change. */
+  body.sel-mode #m-back     { order: -3; }
+  body.sel-mode #m-selcount { order: -2; }
+  body.sel-mode #m-del      { order: 1; margin-right: 52px; }
+  body.sel-mode #m-group    { order: 2; }
+  /* That 52px gap is the safety, not a spacing accident, and it is why the bin is NOT flush right.
+     Measured at 390px, project mode packs the right-hand side solid: the cog holds 298..340 and
+     Export 344..382. A thumb learns those two positions and goes there without looking. Dropping the
+     bin anywhere in that band means a reflex aimed at Export deletes the selection instead — the
+     hazard the phone-bar test has guarded since v5.71, and it caught this exact change when both
+     buttons were simply packed to the edge (bin 330..372 over Export's 334..372).
+     So Group — which is harmless — takes the outer slot at 340..382, and the margin pushes the bin
+     back to 242..284, clear of both. Ezra's ask was "move them to the right", and they are: they are
+     the rightmost controls on the bar. The bin just isn't in the corner that means Export. */
   #m-del:active .m-ico { color: #ff6b6b; }
 }
 
