@@ -4130,6 +4130,60 @@
     }
     return n ? s / n : 0;
   }
+  // …the same thing but as a MAXIMUM, over a window: a seam is one big step, not raised average detail.
+  function fbMaxStep(im, y, x0, x1) {
+    var m = 0, at = -1;
+    for (var x = x0; x < x1 - 1; x++) {
+      var i = (y * im.width + x) * 4, j = i + 4;
+      var d = Math.abs(im.data[i] - im.data[j]) + Math.abs(im.data[i + 1] - im.data[j + 1]) + Math.abs(im.data[i + 2] - im.data[j + 2]) + Math.abs(im.data[i + 3] - im.data[j + 3]);
+      if (d > m) { m = d; at = x; }
+    }
+    return { max: m, at: at };
+  }
+  // render a REAL project of any size (fbPix always renders the 320x240 one)
+  function fbPixAt(layers, PW, PH) {
+    var c = offscreen(PW, PH), g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 5, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }, 0);
+    return g.getImageData(0, 0, PW, PH);
+  }
+  /* THE RECOGNISABLE FEATURE the blur/zoom tests below measure. Green | blue | green gives the fill
+   * TWO step edges, and a symmetric blur leaves a step edge's 50% crossing exactly where it was (it
+   * adds variance, it does not move the mean). So the crossings' SEPARATION is the fill's size and
+   * their MIDPOINT is its position, both readable no matter how soft the picture has been made —
+   * which is the only way to compare geometry across a blur sweep. */
+  function fbThirds(g, w, h) {
+    g.fillStyle = '#00c000'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#0000c0'; g.fillRect(Math.round(w * 0.3), 0, Math.round(w * 0.4), h);
+  }
+  function fbSplit(frac) {
+    return function (g, w, h) {
+      g.fillStyle = '#00c000'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#0000c0'; g.fillRect(Math.round(w * frac), 0, w, h);
+    };
+  }
+  /* The 10%-to-90% width of the fill's green→blue edge on row y, converted to PROJECT units — i.e.
+   * a ruler laid on the blur itself. It is proportional to the blur's sigma, so it is the direct way
+   * to check a radius that is supposed to be a length. */
+  function fbBlurWidth(im, y, PW) {
+    var w = im.width, f = [], x;
+    for (x = 0; x < w; x++) { var i = (y * w + x) * 4; f.push(im.data[i + 1] - im.data[i + 2]); }
+    var hi = Math.max.apply(null, f), lo = Math.min.apply(null, f);
+    function crossAt(v) {
+      for (var j = 0; j < w - 1; j++) if ((f[j] - v) * (f[j + 1] - v) <= 0 && f[j] !== f[j + 1]) return j + (f[j] - v) / (f[j] - f[j + 1]);
+      return null;
+    }
+    var a = crossAt(hi * 0.8), b = crossAt(lo * 0.8);
+    return (a == null || b == null) ? null : (b - a) * PW / w;
+  }
+  // sub-pixel x of every green→blue (or blue→green) crossing on row y, ignoring the outer `pad` px
+  function fbCross(im, y, pad) {
+    var w = im.width, f = [], xs = [], x;
+    for (x = 0; x < w; x++) { var i = (y * w + x) * 4; f.push(im.data[i + 1] - im.data[i + 2]); }
+    for (x = pad || 0; x < w - 1 - (pad || 0); x++) {
+      if ((f[x] > 0 && f[x + 1] <= 0) || (f[x] < 0 && f[x + 1] >= 0)) xs.push(x + f[x] / (f[x] - f[x + 1]));
+    }
+    return xs;
+  }
 
   test('effects: Fill Behind fills the empty frame with a blown-up copy of the layer', { item: 'fill-behind' }, function () {
     if (!FM.fxRegistry.get('fillbehind')) throw new Error('fillbehind is not in the effect registry');
@@ -4228,6 +4282,22 @@
     var eHalf = fbEdgeEnergy(half, 5, 0, 160);
     var eRef = fbEdgeEnergy(shrunk.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 160, 120), 5, 0, 160);
     if (!(eHalf > eRef * 0.5 && eHalf < eRef * 2)) throw new Error('the reduced preview measured ' + eHalf.toFixed(3) + ' of detail where the 1:1 render measured ' + eRef.toFixed(3) + ' — the blur radius is not being multiplied by plateScale, so the preview no longer matches the export');
+
+    /* c) …and the SAME claim measured with a ruler instead of a detail score, because (b) has only
+     * about a 2x margin and stopped catching the bug once the fix below made the fill less zoomed:
+     * deleting the `* ps` left (b) at 0.55 of eRef, inside its own 0.5..2 band. A blur radius is a
+     * length, so measure a LENGTH — the 10%-to-90% width of the fill's green→blue edge, converted
+     * back to project units. It is sigma times a constant, so it must not care what the preview is
+     * scaled to. Measured with the multiply: 46.8 project px at 1:1 vs 51.8 at 0.5x (ratio 1.11) for
+     * Blur 20, and 100.2 vs 93.6 (0.93) for Blur 40. Without it: 2.00 and 1.89 — the preview is blurred
+     * exactly twice as hard as the export, which is the whole bug in one number. */
+    [20, 40].forEach(function (b) {
+      var w1 = fbBlurWidth(fbPix([fbLayer('_fbT2b', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })], 320, 240), 10, 320);
+      var w2 = fbBlurWidth(fbPix([fbLayer('_fbT2b', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })], 160, 120), 5, 320);
+      if (w1 == null || w2 == null) throw new Error('at Blur ' + b + ' the fill’s colour edge could not be measured (1:1 ' + w1 + ', 0.5x ' + w2 + ')');
+      var r = w2 / w1;
+      if (!(r > 0.7 && r < 1.4)) throw new Error('at Blur ' + b + ' the fill’s edge is ' + w2.toFixed(1) + ' project px wide in a 0.5x preview but ' + w1.toFixed(1) + ' at 1:1 (' + r.toFixed(2) + 'x) — ctx.filter works in DEVICE pixels, so the radius must be multiplied by plateScale or the preview and the export disagree');
+    });
   });
 
   test('effects: Fill Behind costs nothing when the layer already covers the canvas', { item: 'fill-behind' }, function () {
@@ -4306,6 +4376,129 @@
     if (Math.abs(f50 / f0 - 0.5) > 0.08) throw new Error('Dim 50% left the fill at ' + (f50 / f0 * 100).toFixed(0) + '% of its brightness (' + f50 + ' vs ' + f0 + ')');
     var s0 = fbAt(d0, 140, 120), s5 = fbAt(d50, 140, 120);
     if (s0.join() !== s5.join()) throw new Error('Dim changed the SUBJECT too: rgb(' + s0.slice(0, 3) + ') became rgb(' + s5.slice(0, 3) + ')');
+  });
+
+  /* Ezra, on the Fill Behind that shipped in v5.88: "The blur slider on fill behind doesn't blur it
+   * just zooms." He was right, and the cause was one line: the cover scale was computed to contain
+   * the frame PLUS an overscan margin sized at 3x the blur radius —
+   *     const m = blurDev * 3;
+   *     const s = Math.max((W + 2 * m) / sw, (H + 2 * m) / sh) * zoom;
+   * — so Blur and Zoom were literally multiplying the same number. Measured at Zoom 1 in this comp,
+   * the cover scale ran 2.96 at Blur 0, 4.35 at 25, 8.52 at 100 and 14.07 at 200: the Blur slider
+   * alone zoomed the fill 4.75x, and the feature separation below went 118.6px -> 229.5px by Blur 50
+   * before the picture ran off the frame entirely. On a real 1080x1920 comp it was 2.11x.
+   * The margin itself is NOT the bug and must not be deleted — see the next test. */
+  test('effects: Fill Behind’s Blur softens the fill without zooming it', { item: 'fill-behind' }, function () {
+    // 1. the scale itself, straight from the renderer, across the whole slider at a fixed Zoom.
+    var S = {}, blurs = [0, 5, 10, 12, 25, 50, 100, 150, 200];
+    blurs.forEach(function (b) {
+      fbPix([fbLayer('_fbB1', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })]);
+      if (!FM._fbLast) throw new Error('FM._fbLast was never published — the fill path did not run');
+      S[b] = FM._fbLast.s;
+    });
+    blurs.forEach(function (b) {
+      if (Math.abs(S[b] / S[0] - 1) > 0.005) throw new Error('with Zoom pinned at 1, moving Blur from 0 to ' + b + ' changed the fill’s cover scale ' + S[0].toFixed(3) + ' -> ' + S[b].toFixed(3) + ' (' + (S[b] / S[0]).toFixed(2) + 'x). Blur and Zoom are wired to the same number again — the cover scale must contain the FRAME and nothing else, and the blur’s overscan must be paid for with surface (the MK margin + edge clamp), not with scale');
+    });
+
+    /* 2. …and in the PIXELS, because a scale the renderer publishes is only half a claim. Row 10 of
+     * a 320x240 comp is above the subject, so it is pure fill; the green|blue|green source puts two
+     * step edges on it whose 50% crossings a symmetric blur cannot move. Their separation is the
+     * fill's size and their midpoint is its position. Measured after the fix: separation 133.2 /
+     * 133.3 / 133.6 / 133.8 / 133.5 and midpoint 159.6 / 159.6 / 159.7 / 159.6 / 159.8 across
+     * Blur 0 / 5 / 12 / 25 / 50. Before it: 118.6 / 129.7 / 145.5 / 174.0 / 229.5. */
+    var f0 = null;
+    [0, 5, 12, 25, 50].forEach(function (b) {
+      var im = fbPix([fbLayer('_fbB2', 100, 180, fbThirds, { blur: b, zoom: 1, dim: 0 })]);
+      var xs = fbCross(im, 10, 2);
+      if (xs.length !== 2) throw new Error('at Blur ' + b + ' the fill no longer shows its two colour edges on row 10 (found ' + xs.length + ': ' + xs.map(function (v) { return v.toFixed(1); }) + ') — with the scale pinned they should all stay on the frame; if the fill is being blown up they walk off it');
+      var f = { sep: xs[1] - xs[0], mid: (xs[0] + xs[1]) / 2 };
+      if (!f0) { f0 = f; return; }
+      if (Math.abs(f.sep / f0.sep - 1) > 0.02) throw new Error('Blur ' + b + ' scaled the fill: the two colour edges are ' + f.sep.toFixed(1) + 'px apart where at Blur 0 they were ' + f0.sep.toFixed(1) + 'px (' + (f.sep / f0.sep).toFixed(2) + 'x). A blur cannot move a step edge’s 50% crossing, so this is geometry, not softness');
+      if (Math.abs(f.mid - f0.mid) > 1.5) throw new Error('Blur ' + b + ' moved the fill: the midpoint between its two colour edges is at x=' + f.mid.toFixed(1) + ' where at Blur 0 it was x=' + f0.mid.toFixed(1));
+    });
+
+    // 3. the softness DOES rise — otherwise "does not zoom" could be satisfied by ignoring the slider.
+    var E = {};
+    [0, 40, 200].forEach(function (b) { E[b] = fbEdgeEnergy(fbPix([fbLayer('_fbB3', 100, 180, fbStripes, { blur: b, zoom: 1, dim: 0 })]), 10, 0, 108); });
+    if (!(E[0] > 20)) throw new Error('at Blur 0 the fill should be a sharp copy of the stripes, but the left margin measured ' + E[0].toFixed(2) + ' of detail');
+    if (!(E[40] < E[0] / 10)) throw new Error('Blur 40 left ' + E[40].toFixed(2) + ' of high-frequency detail against ' + E[0].toFixed(2) + ' at Blur 0 — the slider is not blurring');
+    if (!(E[200] < E[0] / 20)) throw new Error('Blur 200 left ' + E[200].toFixed(2) + ' of high-frequency detail against ' + E[0].toFixed(2) + ' at Blur 0');
+
+    // 4. …and with Blur pinned, ZOOM still zooms — in the pixels, not just in FM._fbLast.
+    var z0 = null;
+    [1, 1.5, 2].forEach(function (z) {
+      var xs = fbCross(fbPix([fbLayer('_fbB2', 100, 180, fbThirds, { blur: 40, zoom: z, dim: 0 })]), 10, 2);
+      if (xs.length !== 2) throw new Error('at Zoom ' + z + ' the fill’s two colour edges are no longer both on the frame (found ' + xs.length + ')');
+      var sep = xs[1] - xs[0];
+      if (!z0) { z0 = sep; return; }
+      if (Math.abs(sep / z0 / z - 1) > 0.03) throw new Error('Zoom ' + z + ' scaled the fill by ' + (sep / z0).toFixed(3) + 'x (edges ' + sep.toFixed(1) + 'px apart against ' + z0.toFixed(1) + 'px at Zoom 1) — fixing the blur-zooms bug has broken the control that is SUPPOSED to zoom');
+    });
+  });
+
+  /* The other half of the fix, and the reason the overscan cannot simply be deleted: `blur(Npx)` is
+   * a Gaussian of standard deviation N and it samples from OUTSIDE the rect being drawn, where there
+   * is nothing. Cover the frame exactly and every edge of the comp fades into transparency — the fill
+   * reads as a vignette, which is the bug you get for free if you fix the zoom the lazy way.
+   * So the margin is paid for with SURFACE: the working plate is built MK bigger than the frame on
+   * every side (MK = 3 * blur / k) and the copy's outermost row and column are clamped outward to
+   * fill it, so the blur has opaque neighbours to sample. Clamp rather than mirror because it is
+   * continuous by construction — the extension repeats the boundary value, so the gradient across the
+   * join is zero and there is no seam.
+   * This also fixed a second, older leak the old overscan had been hiding: alphaBBoxFast reports a
+   * box padded up to 20 device px past the content, and cover-scaling that padding put a ring of
+   * transparency INSIDE the frame. At Blur 0, where there was no overscan to hide it, the frame edge
+   * of a green/blue layer measured rgb(0,96,96) — the mean-colour floor, not the layer. The source
+   * rect now comes from the scan's fully-OPAQUE cells instead. */
+  test('effects: Fill Behind reaches the frame edge at every blur, with no vignette and no seam', { item: 'fill-behind' }, function () {
+    [0, 5, 60, 200].forEach(function (b) {
+      // a) alpha. Transparent comp, so this is the fill's own coverage and not a composite over black.
+      var clear = fbPix([fbLayer('_fbC1', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })], 320, 240, null);
+      [[0, 0], [319, 0], [0, 239], [319, 239], [1, 120], [318, 120], [160, 1], [160, 238], [80, 0], [240, 239]].forEach(function (p) {
+        var a = fbAt(clear, p[0], p[1])[3];
+        if (a < 248) throw new Error('at Blur ' + b + ', ' + p + ' the fill is only ' + a + '/255 opaque — it fades out before the comp edge, which reads as a dark border. The MK overscan and the edge clamp that fills it are what stop that');
+      });
+      // b) …and it is the LAYER's colour there, not the mean-colour floor showing through a hole.
+      //    Only up to Blur 60: at 150+ a sigma that wide genuinely mixes the two halves of a 320px
+      //    frame together, and that is the blur doing its job.
+      if (b <= 60) {
+        var im = fbPix([fbLayer('_fbC1', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })]);
+        var L = fbAt(im, 1, 120), R = fbAt(im, 318, 120);
+        if (!(L[1] >= 185 && L[2] <= 6)) throw new Error('at Blur ' + b + ' the left frame edge is rgb(' + L.slice(0, 3) + ') where the layer’s own green is rgb(0,192,0) — the copy stops short of the frame and the mean-colour floor is showing. Check the source rect is still coming from the scan’s OPAQUE cells (core), not the padded loose box');
+        if (!(R[2] >= 185 && R[1] <= 6)) throw new Error('at Blur ' + b + ' the right frame edge is rgb(' + R.slice(0, 3) + ') where the layer’s own blue is rgb(0,0,192) — same cause as the left edge');
+      }
+      // c) no seam. The clamp meets the real content at the frame edge, so a discontinuity there
+      //    shows up as one big step in the outer band of a row of pure fill. The layer's own
+      //    green→blue edge lives near the middle, so the outer 90px on each side sees only fill.
+      if (b > 0) {
+        var im2 = fbPix([fbLayer('_fbC1', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })], 320, 240, null);
+        var sl = fbMaxStep(im2, 10, 0, 90), sr = fbMaxStep(im2, 10, 230, 320);
+        var worst = sl.max > sr.max ? sl : sr;
+        if (worst.max > 12) throw new Error('at Blur ' + b + ' a row of pure fill steps by ' + worst.max + ' (summed over RGBA) between x=' + worst.at + ' and x=' + (worst.at + 1) + ' — that is a seam where the clamped margin meets the real content. Clamping must repeat the boundary pixel exactly (imageSmoothingEnabled off for the strip blits), and the strip must be taken from a WHOLE covered pixel, not the half-covered one at a fractional edge');
+      }
+    });
+  });
+
+  /* The quieter half of the same bug. The fill is built on a 1/k plate (k = 4 / 2 / 1, chosen BY THE
+   * BLUR), and that plate is ceil(W/k) wide — so when the frame is not a multiple of k, blitting the
+   * WHOLE plate onto W shrinks the fill by (k*ceil(W/k) - W) / (k*ceil(W/k)). Small — 0.93% on a
+   * 321px frame, 0.17% on a 1170px iPhone one — but it is a second way for the Blur slider to change
+   * the scale, and it moves the picture by ~2.3px at the right of a 321px frame purely by crossing
+   * the Blur 12 threshold where k goes 1 -> 4. Taking the exact W/k x H/k rect out of the plate makes
+   * the mapping k-independent. 321x241 is deliberate: 321 = 4*81 - 3, the worst case for k=4. */
+  test('effects: Fill Behind’s 1/k working plate does not move the fill', { item: 'fill-behind' }, function () {
+    var seen = {};
+    [5, 10, 12, 60].forEach(function (b) {   // k = 1, 2, 4, 4
+      var l = fbLayer('_fbK1', 100, 180, fbSplit(0.8), { blur: b, zoom: 1, dim: 0 });
+      l.transform.x = 160.5; l.transform.y = 120.5;
+      var im = fbPixAt([l], 321, 241);
+      var xs = fbCross(im, 10, 8);
+      if (!xs.length) throw new Error('at Blur ' + b + ' the fill’s colour edge is not on row 10 of the 321x241 frame at all');
+      seen[b] = { k: FM._fbLast.k, x: xs[0] };
+    });
+    if (!(seen[5].k === 1 && seen[12].k === 4)) throw new Error('this test needs the k thresholds it was written against: Blur 5 gave k=' + seen[5].k + ' and Blur 12 gave k=' + seen[12].k + ', expected 1 and 4');
+    Object.keys(seen).forEach(function (b) {
+      if (Math.abs(seen[b].x - seen[5].x) > 1) throw new Error('the fill’s colour edge sits at x=' + seen[b].x.toFixed(2) + ' on a 1/' + seen[b].k + ' plate (Blur ' + b + ') but at x=' + seen[5].x.toFixed(2) + ' on the 1/1 one (Blur 5) — the working plate’s ceil(W/k) width is leaking into the fill’s scale. The final blit must take the exact W/k x H/k rect out of the plate, not the whole thing');
+    });
   });
 
   /* ---------------- safe-area insets under viewport-fit=cover (queue 46) ----------------

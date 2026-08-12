@@ -3198,14 +3198,52 @@ window.FM = window.FM || {};
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
   // interest (≤4px) — effects use it as a pivot/ROI, where that slack is invisible.
   let _bbScan = null;
-  function alphaBBoxFast(srcCanvas, W, H) {
+  /* Optional 4th argument `core`: an out-object that ALSO receives the largest box of scan cells that
+   * came back FULLY OPAQUE, in device pixels ({ok,x,y,w,h}). Computed from the same scan, so it costs
+   * one extra stride-1 pass over an array that is already in memory and nothing at all for the three
+   * callers that don't ask for it.
+   * Why it is exact rather than lucky: the downsample is a normalised, non-negative resampling, so a
+   * cell's alpha is a weighted mean of the device pixels feeding it, and a weighted mean of values
+   * ≤255 equals 255 only when every contributing pixel is 255. An "opaque cell" is therefore opaque
+   * for real, under any filter the browser might use — mixing in transparency can only ever LOWER it.
+   * That is the opposite guarantee to the padded loose box above, and Fill Behind needs it: the loose
+   * box carries up to 20 device px of transparent border (alphaBBox samples every 2nd cell and pads 2,
+   * this pads another 1), and cover-scaling that border up puts a ring of transparency INSIDE the
+   * frame — which is the vignette the effect exists to avoid. Measured on a 100×180 layer in a
+   * 320×240 comp: true content 110..210, loose box 100..224, opaque box 112..208. */
+  function alphaBBoxFast(srcCanvas, W, H, core) {
     const S = 4, w = Math.max(1, Math.ceil(W / S)), h = Math.max(1, Math.ceil(H / S));
     if (!_bbScan) _bbScan = document.createElement('canvas');
     if (_bbScan.width !== w || _bbScan.height !== h) { _bbScan.width = w; _bbScan.height = h; }
     const g = _bbScan.getContext('2d', { willReadFrequently: true });
     baseT(g); g.clearRect(0, 0, w, h);
     g.drawImage(srcCanvas, 0, 0, w, h);
-    const bb = alphaBBox(g.getImageData(0, 0, w, h).data, w, h);
+    const data = g.getImageData(0, 0, w, h).data;
+    if (core) {
+      let ax = w, ay = h, bx = -1, by = -1;
+      for (let y = 0; y < h; y++) {
+        const row = y * w * 4;
+        for (let x = 0; x < w; x++) if (data[row + x * 4 + 3] >= 254) {
+          if (x < ax) ax = x; if (x > bx) bx = x;
+          if (y < ay) ay = y; if (y > by) by = y;
+        }
+      }
+      /* Cell -> device with the scan's REAL scale, W/w, not S. w is ceil(W/S), so on a frame that is
+       * not a multiple of 4 the two differ: at W=321 the scan is 81 cells of 3.963 device px, and
+       * multiplying by 4 puts the last cell's right edge at 212 when the content ends at 211 — which
+       * hands the caller a "guaranteed opaque" rect whose outermost column is empty. Measured: that
+       * is exactly what made the edge clamp below extend TRANSPARENCY into the margin on a 321px
+       * frame and let the colour floor back in at the right edge. ceil/floor so the rect can only ever
+       * land strictly inside the opaque cells, never a fraction of a pixel outside them. */
+      core.ok = false; core.x = core.y = core.w = core.h = 0;
+      if (bx >= ax && by >= ay) {
+        const fx = W / w, fy = H / h;
+        const x1 = Math.ceil(ax * fx), y1 = Math.ceil(ay * fy);
+        const x2 = Math.min(W, Math.floor((bx + 1) * fx)), y2 = Math.min(H, Math.floor((by + 1) * fy));
+        if (x2 > x1 && y2 > y1) { core.ok = true; core.x = x1; core.y = y1; core.w = x2 - x1; core.h = y2 - y1; }
+      }
+    }
+    const bb = alphaBBox(data, w, h);
     if (!bb) return null;
     const x = Math.max(0, bb.x * S - S), y = Math.max(0, bb.y * S - S);
     const x2 = Math.min(W, (bb.x + bb.w) * S + S), y2 = Math.min(H, (bb.y + bb.h) * S + S);
@@ -6435,8 +6473,9 @@ window.FM = window.FM || {};
     const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _fbDepth++;
     try {
-      if (!_fbPool[d]) _fbPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-      const pA = _fbPool[d].A, pB = _fbPool[d].B;
+      if (!_fbPool[d]) _fbPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), C: document.createElement('canvas') };
+      if (!_fbPool[d].C) _fbPool[d].C = document.createElement('canvas');
+      const pA = _fbPool[d].A, pB = _fbPool[d].B, pC = _fbPool[d].C;
       if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }   // resize only on change — see drawPixelEffect
       pA.__fmRS = ps; pA.__fmOX = 0; pA.__fmOY = 0;
       const actx = pA.getContext('2d');
@@ -6447,7 +6486,8 @@ window.FM = window.FM || {};
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
       FM._fbPlates++;   // the whole cost of this effect is here; the tests assert the cheap path never reaches it
-      let bb = null; try { bb = alphaBBoxFast(pA, W, H); } catch (e) { bb = null; }   // tainted-canvas guard
+      const core = { ok: false, x: 0, y: 0, w: 0, h: 0 };
+      let bb = null; try { bb = alphaBBoxFast(pA, W, H, core); } catch (e) { bb = null; core.ok = false; }   // tainted-canvas guard
       if (!bb || bb.w < 2 || bb.h < 2) return false;                                  // nothing drew
       // The layer really does reach every edge (a rotated/odd-shaped one the cheap test above
       // declined to judge). Same answer, same reason: fall through, don't blit.
@@ -6467,28 +6507,97 @@ window.FM = window.FM || {};
       let sx = bb.x, sy = bb.y, sw = bb.w, sh = bb.h;
       if (sw > 4 * SLACK) { sx += SLACK; sw -= 2 * SLACK; }
       if (sh > 4 * SLACK) { sy += SLACK; sh -= 2 * SLACK; }
+      /* …and when the scan found a genuinely OPAQUE core, use that instead: it is exact where the
+       * inset above is a guess. Measured on the 100x180 test layer (true content 110..210): the loose
+       * box is 100..224, minus SLACK it is 108..216 — still 2 transparent px on the left and 6 on the
+       * right, which the cover scale below multiplies into a 6px / 18px band of nothing at the frame
+       * edge. The opaque box is 112..208: inside the content by ≤4px (one scan cell) on every side and
+       * opaque by construction, so cover-scaling it puts real, solid pixels on all four frame edges.
+       * Two guards keep it from ever making the framing worse than the inset rect:
+       *   • at least 8 device px each way, so a tiny subject never scales absurdly;
+       *   • at least half the inset rect each way — a layer that is soft EVERYWHERE (a radial fade,
+       *     fine text) has no core worth covering the frame with, and there is nothing any source rect
+       *     could do about its edges, so it keeps today's behaviour and leans on the colour floor. */
+      let solidSrc = false;
+      if (core.ok && core.w >= 8 && core.h >= 8 && core.w * 2 >= sw && core.h * 2 >= sh) {
+        sx = core.x; sy = core.y; sw = core.w; sh = core.h; solidSrc = true;
+      }
       /* The fill, built at 1/k resolution. A full-frame blur is the whole cost of this effect, and
        * the output is a heavy blur either way, so dropping the working surface to a quarter on each
        * axis is invisible and ~16x cheaper. k is chosen off the PROJECT-space blur, never off the
        * device-space one, so the preview and the export pick the same k. */
       const blurDev = blur * ps;   // a blur radius is a LENGTH: device pixels, like every filter in this file
       const k = blur >= 12 ? 4 : (blur >= 6 ? 2 : 1);
-      const CW = Math.max(1, Math.ceil(W / k)), CH = Math.max(1, Math.ceil(H / k));
+      const fw = W / k, fh = H / k;   // the frame in working units — EXACT, deliberately not rounded (see the composite at the end)
+      const CW = Math.max(1, Math.ceil(fw)), CH = Math.max(1, Math.ceil(fh));
       if (pB.width !== CW || pB.height !== CH) { pB.width = CW; pB.height = CH; }
       const bctx = pB.getContext('2d');
       bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, CW, CH);   // device pixels throughout — pB is deliberately an identity surface
       bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over';
-      bctx.filter = blurDev > 0.3 ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
-      /* COVER, not fit: scale the layer's own alpha bounds up until they contain the frame,
-       * preserving aspect and letting the long axis overflow. The extra `m` margin is not styling —
-       * a blur samples transparency from OUTSIDE the drawn rect, so without it the comp's own edges
-       * fade out and the fill reads as a vignette. `blur(Npx)` is a Gaussian of standard deviation
-       * N, so 3x the radius is the point past which it has nothing left to contribute. */
-      const m = blurDev * 3;
-      const s = Math.max((W + 2 * m) / sw, (H + 2 * m) / sh) * zoom;
+      const doBlur = blurDev > 0.3;
+      /* COVER THE FRAME, and nothing more: scale the layer's own bounds up until they contain the
+       * frame, preserving aspect and letting the long axis overflow. Zoom is the ONLY other term.
+       *
+       * v5.88 shipped this as `max((W + 2m) / sw, (H + 2m) / sh) * zoom` with `m = blurDev * 3`, which
+       * is Ezra's bug — "the blur slider on fill behind doesn't blur it just zooms." Blur and Zoom
+       * were wired to the same number: at zoom 1 in a 320x240 comp the cover scale ran 2.96 at blur 0,
+       * 4.35 at 25, 8.52 at 100 and 14.07 at 200, i.e. the Blur slider alone zoomed the fill 4.75x.
+       * (It also made the scale depend on ps, so a 0.5x preview and the export disagreed by 3.9%.)
+       *
+       * The margin the old term paid for is REAL — a blur samples transparency from outside the drawn
+       * rect, so with none of it the comp's own edges fade out and the fill reads as a vignette. But
+       * it must be paid for with SURFACE, not with scale: MK below extends the working plate past the
+       * frame on every side and the outermost pixels are clamped outward into it, so the blur has
+       * opaque neighbours to sample instead of empty space. `blur(N)` is a Gaussian of standard
+       * deviation N, so 3N is the point past which it has nothing left to contribute. */
+      const s = Math.max(W / sw, H / sh) * zoom;
       const dw = sw * s, dh = sh * s;
-      FM._fbLast = { W: W, H: H, ps: ps, bb: bb, src: { x: sx, y: sy, w: sw, h: sh }, k: k, blurDev: blurDev, m: m, s: s, dw: dw, dh: dh };   // exposed for the tests, like FM._layerCTM
-      try { bctx.drawImage(pA, sx, sy, sw, sh, (W - dw) / 2 / k, (H - dh) / 2 / k, dw / k, dh / k); } catch (e) {}
+      const MK = doBlur ? Math.ceil(blurDev * 3 / k) : 0;   // the blur's reach past the frame edge, in working units
+      const ox = MK + (W - dw) / 2 / k, oy = MK + (H - dh) / 2 / k;   // the copy's origin on the extended plate
+      FM._fbLast = { W: W, H: H, ps: ps, bb: bb, core: { ok: core.ok, x: core.x, y: core.y, w: core.w, h: core.h }, solidSrc: solidSrc, src: { x: sx, y: sy, w: sw, h: sh }, k: k, blurDev: blurDev, mk: MK, m: MK * k, s: s, dw: dw, dh: dh };   // exposed for the tests, like FM._layerCTM
+      if (MK > 0) {
+        /* EDGE-CLAMP INTO THE MARGIN. Build the copy on a plate that is MK bigger than the frame on
+         * every side, then extend its outermost row and column outward to fill that margin, and blur
+         * THAT. Clamp rather than mirror because it is continuous by construction — the extension
+         * repeats the boundary value exactly, so the gradient across the join is zero and there is no
+         * seam a mirror's reflected detail could give away.
+         * Horizontal strips first over the copy's own rows, then vertical strips over the FULL width,
+         * which is what carries the already-extended rows into the four corners. */
+        const EW = CW + 2 * MK, EH = CH + 2 * MK;
+        if (pC.width !== EW || pC.height !== EH) { pC.width = EW; pC.height = EH; }
+        const cctx = pC.getContext('2d');
+        cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.clearRect(0, 0, EW, EH);
+        cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over'; cctx.filter = 'none';
+        cctx.imageSmoothingEnabled = true;
+        try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        // ceil/floor, not round: these are the first and last WHOLE pixels the copy covers, so the
+        // partly-covered pixel at each end (fractional origin ⇒ a half-alpha edge row) is overwritten
+        // by the clamp rather than being clamped FROM. Correct by construction rather than by
+        // measurement — swapping both for Math.round leaves every test in this file green, because at
+        // the positions they exercise the copy lands on whole pixels and a 1px difference is inside a
+        // blur anyway. It matters when it does not.
+        const L = Math.max(0, Math.min(EW, Math.ceil(ox))), R = Math.max(0, Math.min(EW, Math.floor(ox + dw / k)));
+        const T = Math.max(0, Math.min(EH, Math.ceil(oy))), B = Math.max(0, Math.min(EH, Math.floor(oy + dh / k)));
+        if (R - L >= 1 && B - T >= 1) {
+          // Smoothing off so a 1px strip stretched across the margin REPEATS rather than being
+          // interpolated. Belt-and-braces, measured as such: Chrome clamps a 1px-wide source to its
+          // edge anyway, and turning smoothing back on leaves every test in this file green. It stays
+          // because "repeat this column" is what the code means and no engine is obliged to agree.
+          cctx.imageSmoothingEnabled = false;
+          if (L > 0) cctx.drawImage(pC, L, T, 1, B - T, 0, T, L, B - T);
+          if (R < EW) cctx.drawImage(pC, R - 1, T, 1, B - T, R, T, EW - R, B - T);
+          if (T > 0) cctx.drawImage(pC, 0, T, EW, 1, 0, 0, EW, T);
+          if (B < EH) cctx.drawImage(pC, 0, B - 1, EW, 1, 0, B, EW, EH - B);
+          cctx.imageSmoothingEnabled = true;
+        }
+        // …and blur the extended plate down onto the frame-sized one. The offset is a whole number of
+        // working pixels, so this is a straight 1:1 translate — no second resample.
+        bctx.filter = 'blur(' + (blurDev / k).toFixed(3) + 'px)';
+        try { bctx.drawImage(pC, -MK, -MK); } catch (e) {}
+      } else {
+        bctx.filter = doBlur ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
+        try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+      }
       /* FLOOR THE FILL IN THE LAYER'S OWN AVERAGE COLOUR. Cover scaling a RECTANGLE guarantees the
        * frame is covered; cover scaling an alpha BOUNDING BOX does not, because a layer that is not
        * a rectangle leaves transparent corners inside that box and the scale carries them along in
@@ -6530,7 +6639,13 @@ window.FM = window.FM || {};
       actx.setTransform(1, 0, 0, 1, 0, 0);
       actx.globalAlpha = 1; actx.filter = 'none';
       actx.globalCompositeOperation = 'destination-over';
-      try { actx.drawImage(pB, 0, 0, W, H); } catch (e) {}
+      /* Source rect fw x fh, not the whole CW x CH plate: CW is ceil(W/k), so when the frame is not a
+       * multiple of k the plate carries a sliver of extra column and stretching the WHOLE plate onto
+       * W shrinks the fill by (k*CW - W) / (k*CW). That is small — 0.17% on a 1170px iPhone frame —
+       * but k is chosen BY THE BLUR (4 / 2 / 1), so it is a second, quieter way for the Blur slider to
+       * change the scale. Taking the exact frame rect out of the plate makes the mapping k-independent.
+       * When W is a multiple of k (or k is 1) fw === CW and this is the old blit exactly. */
+      try { actx.drawImage(pB, 0, 0, fw, fh, 0, 0, W, H); } catch (e) {}
       actx.globalCompositeOperation = 'source-over';
       ctx.save();
       baseT(ctx);
