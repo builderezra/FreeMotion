@@ -98,7 +98,8 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
-- [x] **Easter egg: pull the home list past the top and it slams back and shakes the screen** — v6.25
+- [x] **Easter egg: pull the home list past the top and it slams back and shakes the screen** — v6.25,
+      and on PC by *scrolling* past the top with a wheel or trackpad — v6.26
 - [x] **Onion skin, Snapping and Guides are one tap away again,** on the ⛶ view bar. They had moved
       into Settings as agreed, then two of my own later changes buried them three taps deep — v6.24
 - [x] **76 — Subtle moving static over every project card,** like the reference photo — v6.23

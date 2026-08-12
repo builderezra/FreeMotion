@@ -356,6 +356,41 @@ window.FM = window.FM || {};
     sc.addEventListener('pointerup', release);
     sc.addEventListener('pointercancel', release);
     sc.addEventListener('pointerleave', release);
+
+    /* …and the same thing on a WHEEL (v6.26). Ezra: "for the easter egg to work you should make it on
+     * pc when scrolling and you reach the top you can keep scrolling." He is right that the drag
+     * version above simply does not exist on a desktop — nobody scrolls a list by dragging it with a
+     * mouse, so on PC the egg was unreachable.
+     *
+     * A wheel has no release event, so the burst has to be timed out: 130ms of silence ends the
+     * gesture. That is long enough to bridge the gaps inside one trackpad flick and short enough that
+     * two deliberate pushes are two attempts, not one.
+     *
+     * deltaY < 0 is scrolling UP — the wheel equivalent of pulling the list down — and it only counts
+     * while the list is already at the top. preventDefault (hence passive:false) stops the browser
+     * running its own overscroll bounce or, on some setups, a back-navigation gesture underneath ours.
+     * The accumulator is in the same units as the drag, so the two paths reach the threshold at the
+     * same felt effort and share one PULL_MIN. */
+    let wheelAcc = 0, wheelTimer = 0;
+    sc.addEventListener('wheel', (e) => {
+      if (selectMode || reduced()) return;
+      if (sc.scrollTop > 0 || e.deltaY >= 0) {      // scrolled away from the top, or scrolling down
+        if (wheelAcc) { wheelAcc = 0; setPull(0, 'transform 200ms cubic-bezier(.22,.8,.3,1)'); }
+        clearTimeout(wheelTimer); wheelTimer = 0;
+        return;
+      }
+      e.preventDefault();
+      wheelAcc += -e.deltaY;
+      setPull(Math.min(PULL_MAX, Math.pow(wheelAcc, 0.78)));
+      clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(() => {
+        wheelTimer = 0;
+        const px = Math.min(PULL_MAX, Math.pow(wheelAcc, 0.78));
+        wheelAcc = 0;
+        if (px >= PULL_MIN) slam();
+        else if (px) setPull(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');
+      }, 130);
+    }, { passive: false });
   }
 
   function el(tag, cls, text) {
