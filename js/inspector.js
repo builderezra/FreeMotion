@@ -1118,13 +1118,16 @@ window.FM = window.FM || {};
    * top, the way a redline is printed on a real instrument, and the needle is swung up into that red
    * so the icon reads as "fast" rather than as "a dial". Geometry is explicit: centre (12, 18.4),
    * radius 8.4, ticks at 180/135/90/45/0 degrees drawn inward. */
-  const ICO_SPEED = lg('fm-ci-spd', 3.6, 18.4, 20.4, 8, [
-      ['0', '#5BE7B8'], ['.42', '#FFD166'], ['.74', '#FF7A45'], ['1', '#E01B2E']]) +
-    '<path d="M3.6 18.4a8.4 8.4 0 1 1 16.8 0" stroke="url(#fm-ci-spd)" stroke-width="2.2"/>' +
-    '<path d="M4.4 18.4h1.6M6.9 12.9l1.2 1.1M12 10.4v1.7M17.1 12.9l-1.2 1.1M19.6 18.4H18" ' +
-      'stroke="url(#fm-ci-spd)" stroke-width="1.5" opacity=".9"/>' +
-    '<path d="M12 18.4 16.5 14.2" stroke="#FF3B30" stroke-width="2.2"/>' +
-    '<circle cx="12" cy="18.4" r="1.7" fill="#E01B2E"/>';
+  const ICO_SPEED = lg('fm-ci-spd', 3.6, 18.4, 20.4, 9, [
+      ['0', '#5BE7B8'], ['.45', '#FFD166'], ['1', '#FF8A3D']]) +
+    // the dial, then the REDLINE painted over its top-right third — a real instrument prints the red
+    // as its own band, and at 22px a gradient that merely ends in red is not readable as one
+    '<path d="M3.6 18.4a8.4 8.4 0 0 1 16.8 0" stroke="url(#fm-ci-spd)" stroke-width="2.6"/>' +
+    '<path d="M15.9 9.6a8.4 8.4 0 0 1 4.5 8.8" stroke="#FF2D2D" stroke-width="2.6"/>' +
+    '<path d="M6.6 12.6l1.3 1.2M12 9.9v1.8M17.4 12.6l-1.3 1.2" stroke="#cfe6f2" stroke-width="1.4" opacity=".75"/>' +
+    // needle swung up into the red
+    '<path d="M12 18.4 17.1 13.3" stroke="#FF2D2D" stroke-width="2.4"/>' +
+    '<circle cx="12" cy="18.4" r="2" fill="#FF2D2D"/>';
 
   /* BLENDING & OPACITY — Ezra: "make it look like one of the little circles was one colour and the
    * other was another colour and where they meet is like them overlaying to a new colour." So the
@@ -1154,7 +1157,8 @@ window.FM = window.FM || {};
 
   const ICO_BORDER = lg('fm-ci-bor', 4, 4, 20, 20, [
       ['0', '#6FE3FF'], ['.55', '#4F9DFF'], ['1', '#7C6BFF']]) +
-    '<rect x="8.4" y="8.4" width="11.4" height="11.4" rx="2.4" fill="#0d1a24" fill-opacity=".55"/>' +
+    // the cast shadow has to be VISIBLE against a dark card, so it is a tinted slab, not near-black
+    '<rect x="8.4" y="8.4" width="11.4" height="11.4" rx="2.4" fill="#3a6b8f" fill-opacity=".55"/>' +
     '<rect x="4.6" y="4.6" width="11.4" height="11.4" rx="2.4" stroke="url(#fm-ci-bor)" stroke-width="2"/>';
 
   const ICO_TRANSFORM = lg('fm-ci-tr', 3, 21, 21, 3, [
@@ -1204,7 +1208,10 @@ window.FM = window.FM || {};
     if (key === 'presets') return ICO_PRESETS;
     if (key === 'effects') return ICO_EFFECTS;
     if (key === 'volume') {
-      const silent = !layer || layer.muted === true ||
+      // A layer that cannot carry audio at all is silent by nature, not merely muted — showing it
+      // three sound waves is a promise the layer type can never keep.
+      const canHaveAudio = !!layer && layer.type === 'video';
+      const silent = !canHaveAudio || layer.muted === true ||
         (layer.volume != null && typeof layer.volume === 'number' && layer.volume <= 0);
       return silent ? ICO_VOLUME_OFF : ICO_VOLUME;
     }
