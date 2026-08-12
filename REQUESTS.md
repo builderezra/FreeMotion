@@ -117,8 +117,19 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **69 — Audio must never lag.** Make the audio clock the master.
 - [ ] **70 — Extracted audio should look like an audio track.** *"it doesn't show it like an audio
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
-- [ ] **74 — Swipe up for a full-screen Favourites browser.** Replacing the swipe-right between
-      Recent and Faves. Sorting by recency, effect type and A–Z, each with an inverted order.
+- [x] **74 — Swipe up for a full-screen Favourites browser.** **DONE v6.40.** All three sorts, each
+      invertible (press the active sort again to flip it) — Recent, Type (grouped under category
+      headings) and A–Z. Your choice is remembered. **One decision I made and one I left to you:**
+      the swipe lives on its own strip under the page dots rather than on the whole block, because
+      the browser scrolls vertically and a swipe-up over the block IS the scroll gesture — claiming
+      it would make the page unscrollable right where you need to scroll. The strip is also a button,
+      so it can just be tapped. And I did **not** remove the left-right pager between Recents and
+      Faves: *"replacing the swipe-right between Recent and Faves"* reads two ways (drop the first
+      swipe, or drop the endless swiping through fave pages) and I won't delete a working gesture on
+      a coin flip. Tell me which and it's a one-line change.
+- [ ] **Tiny: "Color & Light" is spelled the American way** in the effects browser's categories,
+      which looks odd next to the "Colouring" rename you asked for in 83. Say the word and I'll
+      change it — it's your app's voice, not mine to decide.
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
       exist fully"*.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.

@@ -9971,6 +9971,95 @@
     }
   });
 
+  /* ---- the full-screen Favourites browser, and its six orders (queue 74) -----------------------
+   *
+   * Ezra: "swipe up for a full-screen Favourites browser… sorting by recency, effect type and A–Z,
+   * each with an inverted order."
+   *
+   * The SORT is what this asserts, because that is the part with an answer that can be wrong. The
+   * gesture is exercised through the handle's click, not by synthesising a drag: the handle is a real
+   * button precisely so the feature is not gesture-only, and a test that only proved a swipe worked
+   * would be testing the half that cannot silently break.
+   *
+   * Recency is derived from storage ORDER — toggleFav appends, so the array is the record of when
+   * things were starred and newest-first is that reversed. Nothing new is persisted, so nobody's
+   * existing favourites need migrating. The flip side is that a sort must never write back through
+   * that array, or the recency record is destroyed by the act of looking at it in another order.
+   * That is the assertion at the end, and it is the one that would cost real data. */
+  test('effects: the Favourites browser sorts by recency, type and A–Z, each invertible', { item: 'fav-browser' }, function () {
+    if (!FM._fxOpenFavourites) throw new Error('FM._fxOpenFavourites is missing — there is no full-screen Favourites browser');
+    var FAV_KEY = 'fm.fx.fav', SORT_KEY = 'fm.fx.favSort';
+    var fav0 = localStorage.getItem(FAV_KEY), sort0 = localStorage.getItem(SORT_KEY);
+    var view = null;
+    try {
+      // Three real effects from DIFFERENT categories, starred in a known order.
+      var all = FM.fxRegistry.all();
+      var pick = [];
+      ['blur', 'colour', 'stylise', 'distort', 'light'].forEach(function (cat) {
+        var r = all.filter(function (x) { return x.category === cat; })[0];
+        if (r && pick.length < 3) pick.push(r);
+      });
+      if (pick.length < 3) pick = all.slice(0, 3);           // whatever the registry has, still 3 distinct ids
+      var ids = pick.map(function (r) { return r.type; });
+      localStorage.setItem(FAV_KEY, JSON.stringify(ids));    // ids[0] starred first, ids[2] most recently
+      localStorage.setItem(SORT_KEY, JSON.stringify({ key: 'recent', inv: false }));
+
+      var names = function (v) {
+        return [].slice.call(v.querySelectorAll('.fxb-catview-scroll .fxb-tile-name, .fxb-catview-scroll .fxb-name'))
+          .map(function (e) { return (e.textContent || '').trim(); }).filter(Boolean);
+      };
+      var labels = pick.map(function (r) { return r.label; });
+
+      view = FM._fxOpenFavourites();
+      if (!view) throw new Error('openFavourites returned nothing');
+      var btns = [].slice.call(view.querySelectorAll('.fxb-sortbtn'));
+      if (btns.length !== 3) throw new Error('expected 3 sort buttons (Recent / Type / A–Z), found ' + btns.length);
+
+      var shown = names(view);
+      if (shown.length !== 3) throw new Error('the browser listed ' + shown.length + ' favourites, expected 3 — got: ' + shown.join(', '));
+      // RECENT = newest first = the stored array reversed.
+      var wantRecent = labels.slice().reverse();
+      if (shown.join('|') !== wantRecent.join('|')) {
+        throw new Error('Recent order is ' + shown.join(', ') + ' — expected ' + wantRecent.join(', ') + ' (most recently starred first)');
+      }
+      // …and pressing the ACTIVE sort inverts it.
+      btns[0].click();
+      var inv = names(view);
+      if (inv.join('|') !== labels.join('|')) {
+        throw new Error('pressing the active sort again gave ' + inv.join(', ') + ' — expected the reverse, ' + labels.join(', '));
+      }
+
+      // A–Z, and its inverse.
+      var az = [].slice.call(view.querySelectorAll('.fxb-sortbtn'))[2];
+      az.click();
+      var got = names(view);
+      var wantAz = labels.slice().sort(function (a, b) { return a.localeCompare(b); });
+      if (got.join('|') !== wantAz.join('|')) throw new Error('A–Z order is ' + got.join(', ') + ' — expected ' + wantAz.join(', '));
+      [].slice.call(view.querySelectorAll('.fxb-sortbtn'))[2].click();
+      var gotInv = names(view);
+      if (gotInv.join('|') !== wantAz.slice().reverse().join('|')) {
+        throw new Error('inverted A–Z is ' + gotInv.join(', ') + ' — expected ' + wantAz.slice().reverse().join(', '));
+      }
+
+      // TYPE groups under category headings rather than producing one flat sorted run.
+      [].slice.call(view.querySelectorAll('.fxb-sortbtn'))[1].click();
+      var heads = [].slice.call(view.querySelectorAll('.fxb-catview-scroll .fxb-sec-title'));
+      if (!heads.length) throw new Error('sorting by type produced no category headings — "by type" that reads as one flat list is not what the word means');
+      if (names(view).length !== 3) throw new Error('sorting by type dropped favourites: ' + names(view).join(', '));
+
+      // THE ONE THAT COSTS DATA: sorting must never write back through the stored array, because
+      // that array IS the recency record. Re-sorting is looking, not editing.
+      var stored = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      if (stored.join('|') !== ids.join('|')) {
+        throw new Error('the stored favourites order changed from [' + ids.join(', ') + '] to [' + stored.join(', ') + '] just by SORTING — that destroys the recency record, and every future "Recent" is wrong');
+      }
+    } finally {
+      if (view && view.remove) view.remove();
+      if (fav0 == null) localStorage.removeItem(FAV_KEY); else localStorage.setItem(FAV_KEY, fav0);
+      if (sort0 == null) localStorage.removeItem(SORT_KEY); else localStorage.setItem(SORT_KEY, sort0);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

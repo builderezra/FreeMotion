@@ -447,8 +447,154 @@ window.FM = window.FM || {};
       [].forEach.call(dots.children, (d, k) => d.classList.toggle('on', k === i));
     });
     sec.appendChild(dots);
+
+    /* The way into the full-screen Favourites browser (queue 74). Swipe it up, or just tap it.
+     * It is a strip of its own rather than a swipe-up on the whole block for a plain reason: this
+     * browser scrolls vertically, so a swipe-up over the block IS the scroll gesture, and claiming
+     * it would make the page unscrollable exactly where you need to scroll. Confining it to the
+     * strip leaves the scroll alone, and the strip is a button too, so the feature is not reachable
+     * only by a gesture nobody told you about. */
+    const grab = el('button', 'fxb-favmore');
+    grab.type = 'button';
+    grab.innerHTML = '<span class="fxb-favmore-bar"></span><span class="fxb-favmore-txt">All favourites' +
+      (favs.length ? ' · ' + favs.length : '') + ' ▲</span>';
+    grab.title = 'Swipe up (or tap) for all your favourites, with sorting';
+    grab.addEventListener('click', openFavourites);
+    let gy = null;
+    grab.addEventListener('pointerdown', e => { gy = e.clientY; });
+    grab.addEventListener('pointermove', e => {
+      if (gy == null) return;
+      if (gy - e.clientY > 24) { gy = null; openFavourites(); }   // decisive upward drag — the click handler covers the tap
+    });
+    grab.addEventListener('pointerup', () => { gy = null; });
+    grab.addEventListener('pointercancel', () => { gy = null; });
+    sec.appendChild(grab);
     return sec;
   }
+
+  /* ---- Section B½ — the full-screen FAVOURITES browser (queue 74) ------------------------------
+   * Ezra: "swipe up for a full-screen Favourites browser… sorting by recency, effect type and A–Z,
+   * each with an inverted order."
+   *
+   * WHY IT IS A HANDLE AND NOT A BARE SWIPE-UP ON THE SECTION. This browser is itself a vertical
+   * scroller, so "swipe up anywhere on the Recents & favourites block" is the same gesture as
+   * "scroll down past it" — wiring that would make the page unscrollable at exactly the point you
+   * need to scroll through it. The swipe lives on its own strip instead, which also means it can be
+   * TAPPED. A gesture with no visible affordance is how Group ended up unreachable on the PC (queue
+   * 53): the action existed, and nobody could find the door.
+   *
+   * The three orders are the three questions actually being asked — "what did I just star", "show me
+   * all my blurs together", "where is the one called Chromatic something". Each inverts, so that is
+   * six. The choice is remembered, because a sort you have to re-pick every time is a sort you stop
+   * using.
+   *
+   * Recency is derived, not stored: toggleFav APPENDS, so array order IS the order things were
+   * starred, and newest-first is simply that reversed. No new persisted field, and no migration for
+   * anyone's existing favourites. */
+  const FAVSORT_KEY = 'fm.fx.favSort';
+  const FAV_SORTS = [
+    { key: 'recent', label: 'Recent' },
+    { key: 'type',   label: 'Type' },
+    { key: 'az',     label: 'A–Z' },
+  ];
+  function favSortRead() {
+    try { const o = JSON.parse(localStorage.getItem(FAVSORT_KEY) || '{}');
+      return { key: FAV_SORTS.some(s => s.key === o.key) ? o.key : 'recent', inv: !!o.inv }; }
+    catch (e) { return { key: 'recent', inv: false }; }
+  }
+  function favSortWrite(o) { try { localStorage.setItem(FAVSORT_KEY, JSON.stringify(o)); } catch (e) {} }
+  function favLabel(id) { const r = FM.fxRegistry.get(id); return PSEUDO[id] || (r && r.label) || id; }
+  function favCatKey(id) {
+    if (id === '_mask') return 'matte';          // the pseudo-entries sort into the categories they lead
+    if (id === '_objblur') return 'blur';
+    const r = FM.fxRegistry.get(id); return (r && r.category) || '';
+  }
+  function favCatLabel(key) {
+    const c = (FM.fxRegistry.categories() || []).find(x => x.key === key);
+    return c ? c.label : 'Other';
+  }
+  // Sorted COPY — never the stored array, because the stored order is the recency record.
+  function favSorted(ids, sort) {
+    const out = ids.slice();
+    if (sort.key === 'recent') out.reverse();                       // stored oldest→newest, so newest first
+    else if (sort.key === 'az') out.sort((a, b) => favLabel(a).localeCompare(favLabel(b)));
+    else if (sort.key === 'type') out.sort((a, b) => {
+      const ca = favCatLabel(favCatKey(a)), cb = favCatLabel(favCatKey(b));
+      return ca === cb ? favLabel(a).localeCompare(favLabel(b)) : ca.localeCompare(cb);
+    });
+    if (sort.inv) out.reverse();
+    return out;
+  }
+
+  function openFavourites() {
+    const view = el('div', 'fxb-catview fxb-favview');
+    _catDepth++; stopAuto();
+    const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    tapOutToClose(view, closeView);
+
+    const top = el('div', 'fxb-catview-top');
+    const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
+    top.appendChild(back);
+    const title = el('div', 'fxb-catview-title', 'Favourites');
+    top.appendChild(title);
+    view.appendChild(top);
+
+    const bar = el('div', 'fxb-favsort');
+    const scroller = el('div', 'fxb-catview-scroll');
+    view.appendChild(bar);
+    view.appendChild(scroller);
+
+    function paint() {
+      const sort = favSortRead();
+      const ids = readList(FAV_KEY);
+      title.textContent = 'Favourites' + (ids.length ? ' · ' + ids.length : '');
+      bar.innerHTML = '';
+      FAV_SORTS.forEach(s => {
+        const b = el('button', 'fxb-sortbtn' + (s.key === sort.key ? ' on' : ''), s.label);
+        b.type = 'button';
+        b.title = 'Sort by ' + s.label.toLowerCase();
+        b.addEventListener('click', () => {
+          // Tapping the ACTIVE sort flips it. One control, two jobs — and it means the invert is
+          // discoverable by pressing the thing you already pressed, rather than hidden behind a
+          // second icon you have to know about.
+          const cur = favSortRead();
+          favSortWrite(s.key === cur.key ? { key: cur.key, inv: !cur.inv } : { key: s.key, inv: false });
+          paint();
+        });
+        if (s.key === sort.key) b.appendChild(el('span', 'fxb-sortdir', sort.inv ? ' ↑' : ' ↓'));
+        bar.appendChild(b);
+      });
+
+      scroller.innerHTML = '';
+      if (!ids.length) {
+        scroller.appendChild(el('div', 'fxb-empty', 'Tap ★ on any effect to favourite it'));
+        return;
+      }
+      const sorted = favSorted(ids, sort);
+      if (sort.key === 'type') {
+        // Grouped, with a heading per category — "sort by type" that produced one flat run would be
+        // sorted and unreadable, which is not what the word means to anyone looking for their blurs.
+        let cur = null, grid = null;
+        sorted.forEach(id => {
+          const ck = favCatLabel(favCatKey(id));
+          if (ck !== cur) {
+            cur = ck;
+            scroller.appendChild(el('div', 'fxb-sec-title', ck));
+            grid = el('div', 'fxb-grid'); scroller.appendChild(grid);
+          }
+          const t = tileForId(id, paint); if (t && grid) grid.appendChild(t);
+        });
+      } else {
+        const grid = el('div', 'fxb-grid');
+        sorted.forEach(id => { const t = tileForId(id, paint); if (t) grid.appendChild(t); });
+        scroller.appendChild(grid);
+      }
+    }
+    paint();
+    root.appendChild(view);
+    return view;
+  }
+  FM._fxOpenFavourites = openFavourites;   // so the suite can open it without synthesising the gesture
 
   // Section C — category banners → per-category effect list (slide-in sub-screen).
   function buildCategories() {
