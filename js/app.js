@@ -1017,7 +1017,7 @@ window.FM = window.FM || {};
     if (rec.kind === 'video') {
       // Always re-render when a seek completes — including during playback, so reversed
       // clips (which we drive by seeking each frame) actually update while playing.
-      rec.el.addEventListener('seeked', () => render());
+      rec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });   // never repaint the PREVIEW mid-export: the exporter seeks every video every frame (#47)
       FM.wireVideoRepaint(rec);   // …and when the FIRST FRAME finally decodes, which no seek announces
     }
     // The playhead follows a clamped import, so you are looking AT the clip you just added rather
@@ -1491,7 +1491,7 @@ window.FM = window.FM || {};
     try { nrec = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file); } catch (e) { nrec = null; }
     if (nrec && nrec !== rec) {
       FM.media.set(dstId, nrec);
-      if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
+      if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });
     }
   }
 
@@ -1645,7 +1645,7 @@ window.FM = window.FM || {};
         } catch (e) { nrec = null; }
         if (nrec) {
           FM.media.set(copy.id, nrec);
-          if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); });
+          if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });
         }
       }
       // Single-camera invariant. FM.duplicateLayer enforces it; paste did not, so Cmd-C then Cmd-V
@@ -1676,7 +1676,7 @@ window.FM = window.FM || {};
     dropAudioGraph(old);   // the new rec brings a new element, so the old source node has nothing left to feed
     FM.media.set(id, nrec);
     layer.type = nrec.kind;                          // video ↔ image as needed
-    if (nrec.kind === 'video' && nrec.el) { nrec.el.addEventListener('seeked', () => { if (!FM.playing) render(); }); FM.wireVideoRepaint(nrec); }
+    if (nrec.kind === 'video' && nrec.el) { nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); }); FM.wireVideoRepaint(nrec); }
     // Re-clamp timing to the NEW source so a long clip doesn't freeze on the last frame (and audio
     // length doesn't diverge from the visible duration). Keeps transform/keyframes/effects/masks.
     if (nrec.kind === 'video' && nrec.duration) {

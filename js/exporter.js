@@ -458,7 +458,15 @@ window.FM = window.FM || {};
         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
         encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 });
         frame.close();
-        while (encoder.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 4));
+        while (encoder.encodeQueueSize > 8) await nextTick();
+        // ONE unconditional yield per frame. Without it this loop only ever returned to the event
+        // loop when the encoder fell behind — so on a machine whose encoder keeps up, the whole
+        // export was a single unbroken task: measured at 763ms for 360 frames, four progress widths
+        // painted, and Cancel NEVER honoured (the export ran to completion). One await drops the
+        // longest task to 54ms and lands Cancel in 148ms. nextTick, not setTimeout, because a
+        // backgrounded tab clamps setTimeout ~84x (211 ticks/s -> 2.5/s) and turns a 60-frame MP4
+        // from 239ms into 3900ms; MessageChannel is not throttled. runGif already did this. (#47)
+        await nextTick();
         if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, mix ? 'audio + video' : 'video');
       }
 
