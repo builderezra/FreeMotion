@@ -2104,6 +2104,13 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
        seam rather than removing it — this is the editor half of Ezra's "cut off at the very top".
        Global border-box, so the height grows by the inset and the padding keeps 52px of content. */
     display: flex; align-items: center; gap: 4px;
+    /* Positioned so the bar paints ABOVE #stage. #stage is position:relative with an opaque background
+       and comes after this element, so anything the bar draws outside its own box — specifically the
+       export button's halo — was painted and then covered: measured a column through the button at
+       (51,76,91) at y=50 and (4,9,12) at y=52, byte-identical to an unlit control column. 30 clears
+       #view-bar (20) and #stage (auto) while staying far below the sheets and overlays (55+), which
+       must still cover this bar. */
+    position: relative; z-index: 30;
     height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0 2px;
     background: linear-gradient(180deg, #161a21, #12151b); border-bottom: 1px solid var(--line);
   }
@@ -2150,6 +2157,24 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     position: relative; isolation: isolate;
   }
   .m-export .m-ico { display: none; }
+  /* v5.76. Ezra, twice: "I find it crazy you still haven't added glow or anything to the export button."
+     He is right, and the reason it never had one is written two rules up: --export-edge is a 0.5px +
+     1.3px rim, kept deliberately microscopic because drop-shadow cannot tell the arrow CUT-OUT from an
+     outer edge, so any wide FILTER glow bleeds up through the arrow and flattens it.
+     That constraint only ever applied to `filter`. A halo painted as its own layer, transparent through
+     the middle where the arrow is and coloured only in a ring outside the silhouette, cannot reach the
+     cut-out at all — which is why this is a gradient rather than a drop-shadow.
+     The + orb has glowed since it shipped (#add-fab: drop-shadow(0 0 9px rgba(90,199,237,.3))) while the
+     export tile had nothing, and that inconsistency is what he photographed. Same hue on purpose, so the
+     two crystal objects read as one family. */
+  .m-export::before {
+    content: ""; position: absolute; inset: -10px; pointer-events: none; z-index: 0;
+    background: radial-gradient(closest-side,
+      rgba(122, 214, 255, 0) 58%,
+      rgba(122, 214, 255, .34) 74%,
+      rgba(96, 196, 246, .16) 86%,
+      rgba(96, 196, 246, 0) 100%);
+  }
   .m-export::after { inset: 0; }
   .m-export:active { transform: translateY(1px); filter: var(--export-edge) brightness(1.08); }
 
