@@ -2595,6 +2595,27 @@ body.hm-selecting .hm-card { touch-action: none; }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
    the other sense. And reduced motion gets the texture without the flicker. */
 @media (prefers-reduced-motion: reduce) { .hm-card::after { animation: none; } }
+
+/* The overpull slam (v6.25). Ezra: pull the home list down past the top and keep pulling, and "the
+   project will just slam back up really hard and shake the screen". home.js animates the list itself;
+   this is the SCREEN taking the hit, which is what makes it read as an impact rather than as a scroll
+   easing back. Decaying amplitude with a rotation on the big beats — a pure vertical shake reads as a
+   glitch, a slight twist reads as force. 420ms, because a joke that outstays its welcome is a bug.
+   translate3d keeps it on the compositor; nothing here reflows.
+   Not gated on prefers-reduced-motion here — home.js refuses to arm the gesture at all in that case,
+   which is the right place for it: the whole Easter egg simply does not exist rather than firing a
+   silent version of itself. */
+#home-screen.hm-slam { animation: hm-slam 420ms cubic-bezier(.25,.6,.3,1) both; }
+@keyframes hm-slam {
+  0%   { transform: translate3d(0, 13px, 0) rotate(0deg); }
+  12%  { transform: translate3d(0, -11px, 0) rotate(-.34deg); }
+  26%  { transform: translate3d(3px, 8px, 0) rotate(.26deg); }
+  40%  { transform: translate3d(-3px, -6px, 0) rotate(-.19deg); }
+  55%  { transform: translate3d(2px, 4px, 0) rotate(.12deg); }
+  70%  { transform: translate3d(-1px, -2.5px, 0) rotate(-.07deg); }
+  85%  { transform: translate3d(0, 1px, 0) rotate(0deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
 .hm-thumb { position: relative; flex: 0 0 86px; width: 86px; height: 86px; border-radius: 11px; background: #05070b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .hm-thumb-empty { font-size: 26px; opacity: .25; }

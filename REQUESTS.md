@@ -53,6 +53,9 @@ Numbered with Ezra's own queue numbers where he gave them.
 - [ ] **53 — PC is missing the Group and Mask options.**
 
 ### Features and changes
+- [ ] **The Presets menu should preview what the LAYER will look like** with the preset applied —
+      not a generic sample. Ezra: *"the presets menu should show a preview of what the layer will look
+      like when you add the effects"*. This is the concrete version of queue 37 below.
 - [ ] **68 — Speed should retime keyframes.** *"if you add a bunch of effects with key frames you may
       want to make it go faster or slower, changing all the key frames automatically to slow or speed
       with the layer instead of manually doing it"*. Also has to work on every layer type.
@@ -95,6 +98,7 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **Easter egg: pull the home list past the top and it slams back and shakes the screen** — v6.25
 - [x] **Onion skin, Snapping and Guides are one tap away again,** on the ⛶ view bar. They had moved
       into Settings as agreed, then two of my own later changes buried them three taps deep — v6.24
 - [x] **76 — Subtle moving static over every project card,** like the reference photo — v6.23

@@ -289,6 +289,75 @@ window.FM = window.FM || {};
     return staticURL;
   }
 
+  /* ---- The overpull slam (v6.25) ----------------------------------------------------------------
+   * Ezra: "when you swipe down in the Home Screen and keep swiping down even tho you reached the top,
+   * the project will just slam back up really hard and shake the screen."
+   *
+   * An Easter egg, so it has exactly one job: be fun, and be impossible to trigger by accident. The
+   * whole gesture only exists while the list is ALREADY at the top and you keep pulling — which is a
+   * dead gesture otherwise, so nothing is taken away to pay for it.
+   *
+   * The pull is damped on a curve rather than following the finger 1:1, for the same reason every
+   * rubber-band scroll is: a linear pull feels like the list has come loose. `Math.pow(dy, .78)` gives
+   * ground quickly at first and then resists, so it feels attached to something.
+   *
+   * On release the return is NOT a spring — a spring says "gently corrected". Ezra asked for a slam,
+   * so it is a hard cubic that arrives fast and stops dead, and the SCREEN takes the impact: the shake
+   * is on #home-screen, decaying over 420ms, because a slam that only moved the list would read as a
+   * scroll animation rather than as something hitting a wall.
+   *
+   * Two guards worth naming: nothing fires below PULL_MIN, so a short overscroll during ordinary
+   * scrolling stays silent; and it is skipped entirely under prefers-reduced-motion, where a screen
+   * shake is not a joke but a problem. */
+  const PULL_MAX = 150, PULL_MIN = 64;
+  let pull = null;
+  // `ease` FIRST, then the transform — setting the transition afterwards would apply to the NEXT
+  // change, not this one, and the return would snap with no animation at all.
+  function setPull(px, ease) {
+    if (!grid) return;
+    grid.style.transition = ease || '';
+    grid.style.transform = px ? 'translate3d(0,' + px.toFixed(1) + 'px,0)' : '';
+  }
+  function slam() {
+    if (!grid || !root) return;
+    // The list snaps back over 190ms on a curve that is fast in and flat out — it arrives, it does not
+    // settle. The shake is a separate, longer animation so the impact outlasts the movement.
+    setPull(0, 'transform 190ms cubic-bezier(.7,0,.2,1)');
+    root.classList.remove('hm-slam');
+    void root.offsetWidth;                                   // restart the animation if it is already running
+    root.classList.add('hm-slam');
+    if (navigator.vibrate) { try { navigator.vibrate([14, 26, 9]); } catch (e) {} }
+    setTimeout(() => { if (root) root.classList.remove('hm-slam'); if (grid) grid.style.transition = ''; }, 460);
+  }
+  function initOverpull() {
+    const sc = root && root.querySelector('.hm-scroll');
+    if (!sc || sc._overpull) return;
+    sc._overpull = 1;
+    const reduced = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    sc.addEventListener('pointerdown', (e) => {
+      if (selectMode || reduced()) return;                   // a paint-select drag owns the gesture
+      if (sc.scrollTop > 0) return;                          // only from a list already at the top
+      pull = { y: e.clientY, id: e.pointerId, px: 0 };
+    });
+    sc.addEventListener('pointermove', (e) => {
+      if (!pull || e.pointerId !== pull.id) return;
+      const dy = e.clientY - pull.y;
+      // Any upward move, or the list scrolling away from the top, ends it — this is not a scroll.
+      if (dy <= 0 || sc.scrollTop > 0) { if (pull.px) setPull(0); pull = null; return; }
+      pull.px = Math.min(PULL_MAX, Math.pow(dy, 0.78));
+      setPull(pull.px);
+    });
+    const release = () => {
+      if (!pull) return;
+      const px = pull.px; pull = null;
+      if (px >= PULL_MIN) slam();
+      else if (px) setPull(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');   // short pull → just glide back, no joke
+    };
+    sc.addEventListener('pointerup', release);
+    sc.addEventListener('pointercancel', release);
+    sc.addEventListener('pointerleave', release);
+  }
+
   function el(tag, cls, text) {
     const d = document.createElement(tag);
     if (cls) d.className = cls;
@@ -1331,6 +1400,7 @@ window.FM = window.FM || {};
       root = document.getElementById('home-screen');
       if (!root) return;
       grid = root.querySelector('.hm-grid');
+      initOverpull();
       root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => {
         // keep select MODE across tabs, drop the SELECTION — see the note in render()
         if (tab !== b.dataset.tab) selected.clear();
