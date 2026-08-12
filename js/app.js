@@ -1999,7 +1999,21 @@ window.FM = window.FM || {};
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return; }
       FM.replaceMediaWith(id, nrec);
       if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
-      if (FM.storage && FM.storage.removeMedia) await FM.storage.removeMedia(id);   // drop old blob so save() writes the new one
+      /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
+       *
+       * A replace only changes out-of-history state — the media registry and the IDB blob. On an
+       * image→image swap (or a video whose duration clamp is a no-op) NOTHING in the layer's JSON
+       * changed, so history.commit hit its "identical state" guard and added no undo step. The next
+       * Ctrl+Z therefore landed on a previous, unrelated action while the media stayed replaced.
+       * Verified in the report: after one Ctrl+Z an unrelated rectangle was deleted, the replaced
+       * image stayed replaced, and further undos kept unwinding edits the user never meant to touch —
+       * with the original footage already gone from both the registry and IndexedDB, unrecoverable.
+       *
+       * `mediaRev` puts the replace INSIDE the history snapshot, so the commit is a real step. Not
+       * deleting the blob is the half that matters most: an undo step is no use if the file it would
+       * come back to has been erased. Orphans are reaped by the boot sweep, which is the same rule
+       * deleteLayer already follows for exactly this reason. */
+      layer.mediaRev = (layer.mediaRev || 0) + 1;
       refreshAll(); FM.seekVideosToTime();
       if (FM.history) FM.history.commit();
       if (FM.storage && FM.storage.save) FM.storage.save();

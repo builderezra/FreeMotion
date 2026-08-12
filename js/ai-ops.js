@@ -64,7 +64,15 @@ window.FM = window.FM || {};
       case 'italic': { layer.italic = bool(value, !!layer.italic); return true; }
       case 'visible': { layer.visible = bool(value, true); return true; }
       case 'locked': { layer.locked = bool(value, false); return true; }
-      case 'solo': { layer.solo = bool(value, false); return true; }
+      /* 'solo' is DELIBERATELY not settable. It is still a live engine flag — the compositor does
+       * `if (soloActive && !L.solo) continue;`, the exporter mirrors it for audio, and soloSilenced
+       * mutes the rest in preview — but the per-layer toggle that could turn it OFF was removed in
+       * v1.75. This case outlived that UI. An AI op could set it from ordinary editor vocabulary
+       * ("solo the hero title", "just show the title"), every other layer would vanish from the
+       * canvas AND the exported file, non-soloed video would go silent, and because solo lives on the
+       * layer object it was autosaved and survived reload — with no control anywhere in the app to
+       * clear it. The project just looked permanently gutted. It now falls through to the unknown-path
+       * branch and is dropped with a logged reason, like any other path we do not honour. */
       case 'reversed': { if (layer.type === 'video') layer.reversed = bool(value, false); return layer.type === 'video'; }
       case 'frameBlend': { layer.frameBlend = bool(value, false); return true; }
       case 'volume': { var v = clampNum(value, 0, 1); if (v == null) return false; layer.volume = v; return true; }

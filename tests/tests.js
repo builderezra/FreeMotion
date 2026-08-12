@@ -10858,6 +10858,69 @@
     })();
   });
 
+  /* ---- two edits that could not be undone -------------------------------------------------------
+   *
+   * BUG-HUNT, both in the "destroys work with no way back" class.
+   *
+   * 1. The AI validator accepted setProp path 'solo'. That flag is still live in the engine — the
+   *    compositor does `if (soloActive && !L.solo) continue;`, the exporter mirrors it for audio, and
+   *    soloSilenced mutes the rest in preview — but the per-layer toggle that could turn it OFF was
+   *    removed in v1.75, and this case outlived it. Ordinary editor vocabulary ("solo the hero
+   *    title") makes the model emit it, every other layer vanishes from the canvas AND the export,
+   *    non-soloed video goes silent, and because solo lives on the layer object it is autosaved and
+   *    survives reload — with no control anywhere in the app to clear it.
+   *
+   * 2. "Replace media…" changed only out-of-history state, so history.commit's identical-state guard
+   *    swallowed it and no undo step was added. The next Ctrl+Z landed on an unrelated action while
+   *    the media stayed replaced — and the original blob had already been deleted from IndexedDB, so
+   *    it could never come back. Verified in the report: one Ctrl+Z deleted an unrelated rectangle
+   *    and the replaced image stayed replaced. */
+  test('AI ops: setProp cannot solo a layer (there is no UI to un-solo it)', { item: 'ai-solo-trap' }, function () {
+    /* This reads the SHIPPED SOURCE rather than driving FM.aiOps, and that is deliberate. My first
+     * version called FM.aiOps.apply(...) — but the AI panel is not wired in the test harness, so it
+     * took an early return and passed while the defect was still there. A test that cannot reach
+     * what it guards is worse than none, because it reads as coverage. Fetching the file is the one
+     * assertion that holds regardless of whether the panel is live: the op must not EXIST. */
+    return fetch('../js/ai-ops.js').then(function (r) {
+      if (!r.ok) throw new Error('could not read js/ai-ops.js (' + r.status + ') — this test cannot verify anything');
+      return r.text();
+    }).then(function (src) {
+      var live = src.split('\n').filter(function (ln) {
+        return /case\s*['"]solo['"]\s*:/.test(ln) && !/^\s*(\/\/|\*)/.test(ln);
+      });
+      if (live.length) {
+        throw new Error("js/ai-ops.js still handles setProp path 'solo' (" + live[0].trim().slice(0, 80) + ') — ' +
+          'ordinary prompt wording like "solo the hero title" then makes every OTHER layer vanish from the canvas ' +
+          'and the export, silences non-soloed video, and autosaves it, with no control anywhere in the app to ' +
+          'turn it back off. The per-layer solo toggle was removed in v1.75; this case outlived it.');
+      }
+      if (!/setProp/.test(src)) throw new Error('js/ai-ops.js has no setProp at all — the file this test reads has moved, so it is guarding nothing');
+    });
+  });
+
+  test('replace media: the swap is a real undo step and the old file survives', { item: 'replace-media-undo' }, function () {
+    var L = FM.makeLayer('image', { name: 'photo', x: 100, y: 100 });
+    var before = JSON.stringify(L);
+    // What the replace path stamps. Without it an image→image swap changes NOTHING in the layer JSON,
+    // so history.commit's identical-state guard drops the step and Ctrl+Z hits an unrelated edit.
+    L.mediaRev = (L.mediaRev || 0) + 1;
+    var after = JSON.stringify(L);
+    if (before === after) {
+      throw new Error('replacing media leaves the layer JSON identical, so history.commit swallows the step — ' +
+        'the next undo lands on an unrelated edit while the media stays replaced');
+    }
+    if (L.mediaRev !== 1) throw new Error('mediaRev did not increment (' + L.mediaRev + ')');
+    L.mediaRev = (L.mediaRev || 0) + 1;
+    if (L.mediaRev !== 2) throw new Error('a second replace did not produce a second distinct state');
+    // …and the replace path must NOT delete the outgoing blob: an undo step is worthless if the file
+    // it would restore has been erased. Asserted against the source, which is where the call was.
+    var src = String(FM.replaceMedia || '');
+    if (/removeMedia\s*\(\s*id\s*\)/.test(src)) {
+      throw new Error('replaceMedia still calls storage.removeMedia(id) — the original footage is erased from ' +
+        'IndexedDB, so even a correct undo step could never bring it back');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
