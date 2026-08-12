@@ -3173,6 +3173,18 @@ window.FM = window.FM || {};
       // Both key and code are checked — a synthesised event may carry only one of them.
       const isEscape = e.code === 'Escape' || e.key === 'Escape';
       if (!isEscape && FM.overlayOwnsScreen()) return;
+      // The focused text editor is a MODE, and the rule above cannot see it. overlayOwnsScreen() asks
+      // a GEOMETRY question — "is a fixed element covering the middle of the screen?" — and since
+      // v6.17 the desktop editor is a 560x145 card docked at the bottom of the stage, which covers
+      // nothing. `inEdit` above does not cover it either: it only asks where FOCUS is, and the whole
+      // point of the desktop card is that you can click the canvas to look at what you typed, which
+      // takes focus to BODY with the editor still open.
+      // Measured on the shipped build, at 1920x1080: type "MY TITLE", click the canvas, press
+      // Backspace once — FM.deleteSelected() ran and the text layer went with it (2 layers -> 1). 's'
+      // split the clip, Space started playback. A phone cannot reach any of it (no physical Backspace
+      // outside the field), which is why it survived three rounds of "text editing is fixed".
+      // Escape still passes: it is how the editor is closed.
+      if (!isEscape && FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) return;
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();

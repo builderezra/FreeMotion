@@ -26,12 +26,16 @@ version. This file is the *what and whether*; that one is the *how*.
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
-- [ ] **88 — Text adding is broken on PC, and still on mobile.** On PC the editor lays out as a phone
-      bottom-sheet: toolbar stretched across a 2000px window, "Type your text…" stranded a full
-      viewport below it. Workflow running: 3 parallel diagnoses → fix in a worktree → 4 adversarial
-      verifiers. Note this has been "fixed" at v5.41, v5.44 and v5.47 and reported broken each time.
 
 ### Bugs
+- [ ] **Captions never open the text editor.** `FM.addCaptionLayer()` adds the layer but the editor
+      never appears — found while fixing 88, deliberately left alone as a separate bug.
+- [ ] **Six effects' option buttons run off a phone, last options untappable.** Measured at 380px:
+      Channel Remap overflows by 434px, HSL Bands 169, Text Transform 106, Mirror 97, Thermal 71,
+      Match Grade 25. Pre-existing. The fix is a taste call — equal-width-with-ellipsis vs wrapping to
+      two rows vs horizontal scroll — so it is yours to pick.
+- [ ] **Landscape phone (844x390) text editing is cramped** — 56x99 preview, because the app reserves
+      the timeline row above 700px. The card no longer covers it, but the row reservation is untouched.
 - [ ] **Playhead missing when a project opens.** Needs an app restart to come back. Diagnosed once
       (the push makes #app position:fixed and a recompute inside that window stores the translated
       edge) but the fix was never landed — he hit it again after that.
@@ -92,6 +96,8 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **88 — Text adding fixed on PC.** A desktop layout had never been written — the phone
+      bottom-sheet WAS the desktop layout. Also fixed a data-loss bug it exposed — v6.29
 - [x] **63 — Fractal Ridges: colour, overlay/blend, and it actually MOVES.** It was measurably a
       still image before — t=0 vs t=0.5 differed by exactly 0 — v6.28
 - [x] **64 — Iridescence gained Blur and Motion.** It also did not move at all before — v6.28

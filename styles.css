@@ -807,16 +807,55 @@ body.text-editing .sb-wrap { display: none !important; }
 .te-extras-inner .prop-row { margin: 6px 0; }
 .te-extras-empty { color: var(--text-dim); font-size: 13px; padding: 8px; }
 .te-open { width: 100%; margin-bottom: 6px; }
-/* Text-edit is a full-screen takeover (like AM): hide the inspector grid + timeline so nothing pokes
- * through under the editor. The te-bar covers the top bar; the canvas fills the space between. */
+/* The wrapper that holds the bar and the dock. On the PHONE it generates no box at all, so the two
+ * stay exactly what they were — a toolbar fixed to the top edge and a field fixed above the keyboard.
+ * On DESKTOP (below) it becomes the card that contains them both. Having one parent is also what lets
+ * onDocDown ask a single "is this click inside the editor?" question. */
+.te-panel { display: contents; }
 body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the keyboard opens */
-body.text-editing #inspector-panel,
-body.text-editing #timeline-panel { display: none !important; }
-/* Collapse the inspector's side column so the canvas fills the width, and pad the stage so the canvas
- * centres between the top toolbar and the docked text field. The #app ROW collapse is mobile-only
- * (in the max-width:700px block) — applying it on desktop would nuke the top bar + timeline layout. */
-body.text-editing #app { grid-template-columns: minmax(0, 1fr) 0 !important; }
-body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
+
+/* ---------- DESKTOP text editor: ONE card, not a phone sheet stretched across the window ----------
+ * v6.17. Ezra: "text adding is broken on pc". Nothing threw and every control worked — what was broken
+ * was WHERE the parts were. .te-bar (fixed top:0) and .te-dock (fixed bottom:0) had no media query of
+ * any kind, so the phone's bottom-sheet geometry was the geometry at every width: measured on a
+ * 2000x1250 window the toolbar's bottom edge and the field's top edge were 1114.8px apart, and 724.8px
+ * apart at 1280x860 — you typed into a control a whole screen away from the toolbar that owned it.
+ * `.te-font { flex: 1 1 auto }` then stretched "Inter ▾" to 1686px, which is the enormous empty gap in
+ * the middle of his screenshot: not a gap, a button.
+ *
+ * The fix is not a wider phone sheet. On desktop the editor is a floating card docked to the bottom of
+ * the STAGE — the same idiom #draw-bar and #pe-bar already use for a modal canvas tool — with the
+ * toolbar and the field as two rows of one box. JS (text-edit.js layoutDesktop) sets left/width/bottom
+ * from #stage's live rect and pads the stage so the canvas clears the card; everything here is the
+ * card's shape.
+ *
+ * The full-screen TAKEOVER rules moved into the max-width:700px block below, where they always
+ * belonged. They collapsed the app grid to `minmax(0,1fr) 0 !important`, which was written for
+ * classic's two columns (stage | inspector). Studio has three and places #topbar in column 1, so on a
+ * 2000px window the 60px rail swelled to 1596px and the canvas was exiled to a 404px sliver on the
+ * right — the small black rectangle in his screenshot. Drawing mode hit the identical bug and was
+ * patched with a Studio-aware variant (see body.layout-studio.drawing #app); the text editor does not
+ * need one, because on desktop it no longer touches the grid at all. */
+@media (min-width: 701px) {
+  .te-panel {
+    display: flex; flex-direction: column; position: fixed; z-index: 80;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: 0 18px 48px rgba(0,0,0,.55); overflow: hidden;
+  }
+  /* Inside the card these two are ROWS, not screen edges. Their fixed positioning, edge shadows and
+   * safe-area padding are all phone furniture; a card carries its own border and shadow. */
+  .te-bar  { position: static; padding: 8px 10px; background: none; box-shadow: none; }
+  .te-dock { position: static; padding: 8px 10px; background: none; border-top: 0; box-shadow: none; }
+  /* Capped. The font button absorbing every spare pixel is correct on a 380px phone bar, where filling
+   * the row is the design; in a 560px card it just makes one button enormous again. */
+  .te-font { max-width: 220px; }
+  #te-input { min-height: 64px; max-height: 34vh; }
+  /* The card is at the BOTTOM of the stage, so its popovers open UPWARDS — JS sets left/width/bottom
+   * to match the card. The base rule's left:8/right:8 is the phone's full-window inset and would give
+   * a 1984px-wide rail for 76px cards. */
+  .te-pop { right: auto; }
+  body.text-editing #stage { box-sizing: border-box; }
+}
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
 .pe-btn { width: 100%; margin: 8px 0 2px; }
@@ -1955,9 +1994,21 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   #timeline-panel  { grid-area: 3 / 1 / 4 / 2; }
   #inspector-panel { grid-area: auto; }
   #tl-resizer { display: none; }   /* desktop-only: the phone timeline sizing is driven by --stage-h, not a drag handle */
-  /* Text-edit full-screen takeover (mobile): with the inspector grid + timeline hidden, give the whole
-   * height to the stage so the canvas fills the screen. Desktop keeps its 3-row layout. */
-  body.text-editing #app { grid-template-rows: 1fr !important; }
+  /* TEXT-EDIT IS A FULL-SCREEN TAKEOVER — ON THE PHONE ONLY (like AM). The toolbar owns the top edge
+   * and the field is docked above the keyboard, so the inspector grid and the timeline are hidden and
+   * the whole grid becomes one cell for the canvas.
+   *
+   * These four rules used to sit ungated in the base stylesheet, which is what "text adding is broken
+   * on pc" was: the column collapse below is written for classic's TWO columns (stage | inspector), so
+   * in the Studio layout — three columns, #topbar placed in column 1 — it handed the 1fr to the 60px
+   * rail (measured: 1596px on a 2000px window) and squeezed the canvas into a 404px sliver; and the
+   * stage's 56/104 padding cleared a toolbar and a dock that, on desktop, are now rows of one floating
+   * card instead of the two opposite edges of the window. Desktop's editor is in the min-width:701px
+   * block up by the .te-* rules and leaves the app layout alone entirely. */
+  body.text-editing #inspector-panel,
+  body.text-editing #timeline-panel { display: none !important; }
+  body.text-editing #app { grid-template-rows: 1fr !important; grid-template-columns: minmax(0, 1fr) 0 !important; }
+  body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   body.drawing #app { grid-template-rows: 1fr !important; }   /* full-screen canvas while drawing (see body.drawing above) */
   #canvas-wrap { max-width: 98%; max-height: 95%; }   /* contain in the stage with a small float margin (AM) */
   #stage { box-shadow: inset 0 -1px 0 var(--line); }

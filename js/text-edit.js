@@ -11,9 +11,27 @@ window.FM = window.FM || {};
 
   let active = null;                 // { layerId, prevText, cueIndex, createdCue }
   const MIN_PREVIEW = 120;           // px of canvas that must survive the keyboard lift
-  let bar = null, dock = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
+  let bar = null, dock = null, panel = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
   let unwatch = null;                // FM.screen.watch()'s one-call unsubscribe
+  let stageRO = null;                // ResizeObserver on #stage (desktop card anchor)
   let cueNav = null;                 // the ‹ n/N › strip shown on a caption track
+
+  /* ---- which editor am I? --------------------------------------------------
+   * PHONE: a full-screen takeover — toolbar on the top edge, field docked above the keyboard, the
+   * app grid collapsed to one cell. DESKTOP: one floating card at the bottom of the stage, with the
+   * app left exactly as it was.
+   *
+   * This string must stay byte-identical to the @media in styles.css. Until v6.17 there was no branch
+   * here at all — grep of this file for innerWidth|matchMedia returned nothing — so the phone sheet
+   * WAS the desktop layout, and its two halves ended up 1114.8px apart on a 2000x1250 window. A gate
+   * that disagrees with the stylesheet by one pixel is worse than no gate: you get a card positioned
+   * by this code wearing the phone's CSS, or the reverse. */
+  const DESKTOP_MQ = '(min-width: 701px)';
+  function isDesktop() { return window.matchMedia(DESKTOP_MQ).matches; }
+  // The card's width band, and the clearance it keeps from the stage's bottom edge and from the canvas.
+  // Every px of CARD_GAP is a px off the picture you are typing into — the card is docked INSIDE the
+  // stage, so the canvas has to shrink to clear it — hence 12 rather than a roomier-looking 16.
+  const CARD_MIN = 320, CARD_MAX = 560, CARD_GAP = 12;
 
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
 
@@ -107,7 +125,29 @@ window.FM = window.FM || {};
 
   // ---- transient sub-popover (font rail / size slider / colour) ------------
   function closePop() { if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; popBtn = null; popBuild = null; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); }
-  function positionPop() { if (!pop || !bar) return; const r = bar.getBoundingClientRect(); pop.style.top = (r.bottom + 6) + 'px'; }
+  function positionPop() {
+    if (!pop) return;
+    if (isDesktop()) {
+      // The card is docked at the BOTTOM of the stage, so a popover hung UNDER the toolbar the way the
+      // phone hangs it would land on the text field it belongs to. Open upwards instead, width-matched
+      // to the card — .te-pop's base left:8/right:8 is the phone's full-window inset, which on a 2000px
+      // window measured a 1984px-wide rail holding cards that are 76-108px each.
+      if (!panel) return;
+      const r = panel.getBoundingClientRect();
+      pop.style.top = 'auto';
+      pop.style.left = Math.round(r.left) + 'px';
+      pop.style.width = Math.round(r.width) + 'px';
+      pop.style.bottom = Math.round(window.innerHeight - r.top + 8) + 'px';
+      // The "Aa" sheet is the one popover that can be taller than the room above the card. It is the
+      // only one with overflow-y:auto, so it is the only one a max-height can rescue; the others are
+      // 50-89px tall and capping them would clip rather than scroll.
+      if (popKind === 'extras') pop.style.maxHeight = Math.max(140, Math.round(r.top - 2 * CARD_GAP)) + 'px';
+      return;
+    }
+    if (!bar) return;
+    const r = bar.getBoundingClientRect();
+    pop.style.top = (r.bottom + 6) + 'px';
+  }
   function openPop(kind, build, btn) {
     if (popKind === kind) { closePop(); return; }
     closePop();
@@ -195,6 +235,49 @@ window.FM = window.FM || {};
     host.appendChild(inner);
   }
 
+  /* ---- DESKTOP: place the card, then give the canvas room for it -----------
+   * The card is anchored to #stage, not to the window: that is what keeps it off the timeline and off
+   * the inspector in BOTH desktop layouts without this file knowing either layout exists. (The old
+   * code's answer — collapse the app grid so the stage is the whole window — is exactly what broke
+   * Studio, where column 1 is the rail and not the stage.)
+   *
+   * Same invariant the phone path relies on and documents: #stage's height comes from its GRID TRACK,
+   * so writing padding to it never moves the border box `s` this function measured, and the padding
+   * cannot feed back on itself pass after pass. */
+  function layoutDesktop(m) {
+    const stage = document.getElementById('stage');
+    if (!panel || !stage) return;
+    // The phone pins these two with inline top/bottom. Clear them: a window dragged across 700px
+    // mid-edit would otherwise leave a stale offset fighting the card's flex column.
+    if (bar) bar.style.top = '';
+    if (dock) dock.style.bottom = '';
+    const s = stage.getBoundingClientRect();
+    const w = Math.round(Math.min(CARD_MAX, Math.max(CARD_MIN, s.width - 2 * CARD_GAP)));
+    panel.style.width = w + 'px';
+    panel.style.left = Math.round(s.left + (s.width - w) / 2) + 'px';
+    // MEASURE the card's height rather than adding up its parts: it changes with the field's line
+    // count and with the cue strip a caption track adds.
+    const h = Math.round(panel.getBoundingClientRect().height);
+    // Normally the card sits CARD_GAP above the bottom of the STAGE, which is what keeps it off the
+    // timeline and off the inspector in both desktop layouts. But a stage too short to host it — a
+    // phone held sideways is 844x390, i.e. over the 701px gate with a 108px stage, and a very short
+    // desktop window is the same shape — would get a 145px card laid over a 108px canvas. There, drop
+    // to the bottom of the visible WINDOW instead and cover the timeline, which is not the thing you
+    // are looking at while you type.
+    // Never below the top of a software keyboard either (m.bottom), which sideways phones do have.
+    const roomy = s.height >= h + 2 * CARD_GAP + MIN_PREVIEW;
+    const floor = roomy ? Math.min(s.bottom, m.bottom) : m.bottom;
+    const bottom = Math.max(CARD_GAP, Math.round(m.layoutH - floor + CARD_GAP));
+    panel.style.bottom = bottom + 'px';
+    // Give the canvas its own room instead of letting the card sit on the text being typed. The card's
+    // top edge is layoutH - bottom - h; no second measurement, so no chance of chasing our own write.
+    const cardTop = m.layoutH - bottom - h;
+    const want = Math.max(0, Math.round(s.bottom - cardTop + CARD_GAP));
+    stage.style.paddingTop = '';
+    // CLAMPED, same reasoning as the phone path: a picture partly behind the card beats no picture.
+    stage.style.paddingBottom = Math.min(want, Math.max(0, s.height - MIN_PREVIEW)) + 'px';
+  }
+
   // ---- keyboard docking (the one thing crop-tool didn't need) --------------
   function onViewport() {
     // ONE source of truth for "where is the part of the page the user can actually see" —
@@ -204,6 +287,14 @@ window.FM = window.FM || {};
     // where the VISIBLE window currently sits inside that space. On iOS with the keyboard up those
     // are 380 and 844 on a 390x844 phone, not 0 and 844 — see the file header.
     const m = FM.screen.metrics();
+    if (isDesktop()) {
+      layoutDesktop(m);
+      positionPop();
+      // Same reason as the phone path below: a padding change fires no resize, so nothing else would
+      // tell the selection box the canvas just changed shape.
+      if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
+      return;
+    }
     // iOS scrolls the whole page up when the keyboard opens, dragging position:fixed elements with it.
     // Re-pin the top toolbar to the top of the VISIBLE (visual) viewport, and the dock just above the
     // keyboard, so neither gets shoved off-screen.
@@ -279,7 +370,29 @@ window.FM = window.FM || {};
     if (!active) return;
     if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) return;   // the eyedropper owns canvas taps
     const t = e.target;
-    if ((bar && bar.contains(t)) || (dock && dock.contains(t)) || (pop && pop.contains(t))) return;   // tap inside the editor UI
+    if ((panel && panel.contains(t)) || (pop && pop.contains(t))) return;   // tap inside the editor UI
+    if (isDesktop()) {
+      /* DESKTOP: the card is a modeless panel, not a takeover, so a click on the canvas means "look at
+       * my text" / "nudge it", not "I'm finished" — and the event is NOT swallowed, because selecting,
+       * dragging and scrubbing all have to keep working while it is open.
+       *
+       * Committing on it was also a measured data-loss path with no phone equivalent: the editor
+       * closed, focus fell to BODY, the physical keyboard was still live, and app.js's bare-key
+       * shortcuts took over — one Backspace ran FM.deleteSelected() on the layer just typed into
+       * (2 layers -> 1), 's' split it, Space started playback. A phone cannot reach it: there is no
+       * physical Backspace outside the field, which is why three rounds of fixes never saw it.
+       * Staying open is only HALF the fix, and the other half is not in this file: app.js's keydown
+       * guard now skips the bare-key chain while FM.textEdit.isActive(). Do not assume
+       * FM.overlayOwnsScreen() covers this — it asks whether a fixed element COVERS the screen, and
+       * this card is 560x145. Measured: with that guard removed, blurring the field and pressing
+       * Backspace still went 2 layers -> 1 with the editor open.
+       *
+       * The card FOLLOWS THE SELECTION instead: pick a different layer and the session is over.
+       * Checked after the click has been handled, because the selection changes during it. */
+      if (pop) closePop();
+      setTimeout(() => { if (active && FM.scene.selectedId !== active.layerId) commit(); }, 0);
+      return;
+    }
     e.preventDefault(); e.stopPropagation();
     if (pop) { closePop(); return; }   // an open sub-popover closes first…
     commit();                          // …otherwise tapping off the editor commits + returns to the grid
@@ -288,9 +401,10 @@ window.FM = window.FM || {};
   function teardown() {
     active = null;
     closePop();
-    if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
-    if (dock && dock.parentElement) dock.parentElement.removeChild(dock); dock = null;
+    if (panel && panel.parentElement) panel.parentElement.removeChild(panel);
+    panel = null; bar = null; dock = null;
     input = null; cueNav = null;
+    if (stageRO) { stageRO.disconnect(); stageRO = null; }
     // Drop the keyboard-lift — BOTH paddings. Leaving the inline padding-top behind would strand the
     // canvas hundreds of px down the stage for the rest of the session, long after the editor closed.
     const stage = document.getElementById('stage');
@@ -318,6 +432,13 @@ window.FM = window.FM || {};
       active = { layerId: layerId, prevText: l.text, cueIndex: null, createdCue: false };
       bindCue(l);   // caption track → this session edits a CUE, not layer.text
 
+      // ---- the editor's one wrapper ----
+      // On the phone .te-panel is `display: contents`, so bar and dock behave exactly as they did when
+      // both were direct children of <body> — two independent position:fixed elements on the top and
+      // bottom edges. On desktop it is the card that holds them as two rows.
+      panel = elc('div', 'te-panel');
+      document.body.appendChild(panel);
+
       // ---- top toolbar: Align · Font · Size · Colour · Done ----
       bar = elc('div', 'te-bar');
       const alignBtn = elc('button', 'te-btn te-align'); alignBtn.type = 'button'; alignBtn.title = 'Alignment';
@@ -327,7 +448,7 @@ window.FM = window.FM || {};
       const extrasBtn = elc('button', 'te-btn te-extras', 'Aa'); extrasBtn.type = 'button'; extrasBtn.title = 'Text options (style, spacing, animation…)';
       const doneBtn = elc('button', 'te-btn te-done', '✓'); doneBtn.type = 'button'; doneBtn.title = 'Done';
       bar.append(alignBtn, fontBtn, sizeBtn, colorBtn, extrasBtn, doneBtn);
-      document.body.appendChild(bar);
+      panel.appendChild(bar);
       alignBtn.addEventListener('click', () => { closePop(); cycleAlign(); });
       fontBtn.addEventListener('click', () => openPop('font', buildFontRail, fontBtn));
       sizeBtn.addEventListener('click', () => openPop('size', buildSizePop, sizeBtn));
@@ -373,7 +494,7 @@ window.FM = window.FM || {};
       input.id = 'te-input'; input.rows = 2; input.value = boundCue ? (boundCue.text || '') : (l.text || ''); input.spellcheck = false;
       input.setAttribute('placeholder', boundCue ? 'Type this caption…' : 'Type your text…');
       dock.appendChild(input);
-      document.body.appendChild(dock);
+      panel.appendChild(dock);
       input.addEventListener('input', onInput);
       input.addEventListener('keydown', e => {
         e.stopPropagation();
@@ -387,6 +508,24 @@ window.FM = window.FM || {};
       // miss — see FM.screen.watch.
       if (unwatch) unwatch();
       unwatch = FM.screen.watch(onViewport);
+      // The desktop card is anchored to #stage's box, and #stage changes shape without a window
+      // resize — dragging the timeline's height handle is the everyday one, and the inspector opening
+      // is another.
+      // BORDER-box on purpose: this callback writes #stage's PADDING, so observing the content box
+      // would re-fire on our own write, forever.
+      // DESKTOP-ONLY on purpose, checked when it FIRES rather than when it is installed, so a window
+      // dragged across 700px mid-edit still gets it. On the phone #stage sits in an `auto` grid track
+      // during the takeover, so its own padding-top does feed back into its height — one extra
+      // settling pass measurably moved the stage's border box 5px (padTop 5px -> 0px, row 60.56 ->
+      // 65.56) even though the canvas and every control landed in the same place. The phone path
+      // is not asking for another caller.
+      if (window.ResizeObserver) {
+        const st = document.getElementById('stage');
+        if (st) {
+          stageRO = new ResizeObserver(() => { if (active && isDesktop()) onViewport(); });
+          try { stageRO.observe(st, { box: 'border-box' }); } catch (_) { stageRO.observe(st); }
+        }
+      }
       document.addEventListener('pointerdown', onDocDown, true);
 
       updateBarLabels();

@@ -31,6 +31,35 @@
   function offscreen(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function px(ctx, x, y) { return ctx.getImageData(x, y, 1, 1).data; }
 
+  /* Run `fn` with the test frame narrowed to a real phone width, then put it back.
+   *
+   * WHY THIS HAS TO EXIST (v6.17). run.html hosts the app in a 900x760 iframe — a DESKTOP viewport.
+   * That never mattered before, because the text editor had no width branch at all: the phone's
+   * bottom-sheet geometry WAS the geometry at every width, so a test asserting "the toolbar sits on
+   * the visible top edge" passed in a 900px frame and told you nothing about a phone. That is exactly
+   * how text editing was declared fixed three times while Ezra kept reporting it broken on his PC —
+   * the suite could not tell the two layouts apart, because there was only one.
+   * Now there really are two, so a phone assertion has to be made at a phone width and a desktop
+   * assertion at a desktop one. matchMedia inside the frame tracks the frame's own box, and
+   * FM.mobile.isPhone() is a live matchMedia call (js/mobile.js:7), so the app genuinely switches. */
+  async function atPhoneWidth(fn, w) {
+    var fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe (no window.frameElement) to reach a phone width');
+    var w0 = fe.style.width;
+    var settle = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    fe.style.width = (w || 390) + 'px';
+    window.dispatchEvent(new Event('resize'));
+    await settle();
+    if (!matchMedia('(max-width: 700px)').matches) throw new Error('the frame did not narrow to a phone width (innerWidth ' + window.innerWidth + ')');
+    try {
+      return await fn();
+    } finally {
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      await settle();
+    }
+  }
+
   var T = [];
   function test(name, opts, fn) {
     if (typeof opts === 'function') { fn = opts; opts = {}; }
@@ -3062,6 +3091,12 @@
     // the box stayed where the canvas USED to be, parked in a corner of the frame with the text
     // somewhere else entirely.
     if (!FM.textEdit) throw new Error('FM.textEdit is missing');
+    // AT A PHONE WIDTH. Every assertion below is about the phone's docked-above-the-keyboard editor —
+    // a toolbar on the top edge, a field on the keyboard line, #stage padded between them. Since
+    // v6.17 a desktop window gets a single floating card instead, so running this in run.html's 900px
+    // frame would be measuring the wrong editor. It used to "pass" there only because there was no
+    // desktop editor to be measuring instead.
+    return atPhoneWidth(async function () {
     // setTimeout, not rAF: this suite runs inside an offscreen iframe, where rAF is throttled and a
     // promise waiting on it never settles — which hangs the whole run rather than failing a test.
     const frame = () => new Promise(r => setTimeout(r, 60));
@@ -3146,6 +3181,7 @@
       FM.selectLayer(sel0);
       FM.refreshAll();
     }
+    });
   });
 
   test('viewport: FM.screen reports where the VISIBLE window sits, not where the page starts', { item: 'text-edit-device' }, function () {
@@ -3209,6 +3245,10 @@
      * padding-top stayed a CSS constant, so the canvas was centred between a top that never moved and
      * a bottom that tracked the keyboard, and the picture rose by exactly offsetTop / 2. */
     if (!FM.textEdit || !FM.screen) throw new Error('need FM.textEdit and FM.screen');
+    // AT A PHONE WIDTH — see the note on the test above, and on atPhoneWidth. This one measures the
+    // iPhone's slid-down visual viewport; a 900px desktop frame gets the floating card instead, which
+    // does not (and must not) pin itself to the window's top and bottom edges.
+    return atPhoneWidth(async function () {
     const frame = () => new Promise(r => setTimeout(r, 60));
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
     const vv0 = window.visualViewport;
@@ -3271,6 +3311,162 @@
       FM.selectLayer(sel0);
       FM.refreshAll();
     }
+    });
+  });
+
+  /* ---- v6.17: the DESKTOP text editor. Ezra: "text adding is broken on pc, and still mobile unless
+     you did fix it." These three run at run.html's own 900x760 frame width, i.e. on the desktop side
+     of the 701px gate, and every one of them fails on the build that shipped v6.16. ---- */
+
+  // A small scene + editor session, torn down however the test ends. Every test below needs it.
+  function withTextEditor(fn) {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'pc', text: 'HELLO', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12) });
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.refreshAll();
+      FM.textEdit.start(L.id);
+      return fn(L);
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  }
+
+  test('text editor (desktop): the toolbar and the field are ONE control', { item: 'text-edit-desktop' }, function () {
+    /* v6.17. Ezra's screenshot: a full-width toolbar across the top of a ~2000px window with an
+     * enormous empty gap in the middle of it, and the "Type your text…" field pinned at the very
+     * BOTTOM — a whole viewport away from the toolbar that owns it.
+     *
+     * Cause: .te-bar (fixed top:0) and .te-dock (fixed bottom:0) had NO media query of any kind, so
+     * the phone's bottom-sheet geometry was the geometry at every width. Measured on the real app:
+     * toolbar-bottom to field-top was 1114.8px at 2000x1250 and 724.8px at 1280x860, identical in
+     * classic and Studio. The "empty gap" was not empty — .te-font is flex:1 1 auto, so "Inter ▾"
+     * measured 1686px wide.
+     *
+     * Deliberately written without naming .te-panel: what has to be true is that the two halves are
+     * one control, not that a particular class exists. */
+    if (!FM.textEdit) throw new Error('FM.textEdit is missing');
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    withTextEditor(function () {
+      const bar = document.querySelector('.te-bar'), inp = document.getElementById('te-input');
+      if (!bar || !inp) throw new Error('the editor did not open (bar ' + !!bar + ', field ' + !!inp + ')');
+      const br = bar.getBoundingClientRect(), ir = inp.getBoundingClientRect();
+
+      // 1. Together. 8px on the fixed build; 590px in this 760px-tall frame on the broken one.
+      const gap = ir.top - br.bottom;
+      if (gap > 40) throw new Error('the text field starts ' + Math.round(gap) + 'px below the toolbar that owns it — they are two opposite edges of the window, not one control');
+
+      // 2. Not a window-wide bar. The phone sheet spans edge to edge; a desktop control does not.
+      if (br.width > window.innerWidth - 120) throw new Error('the toolbar is ' + Math.round(br.width) + 'px wide in a ' + window.innerWidth + 'px window — it is still the phone sheet stretched across the screen');
+
+      // 3. No single button may swallow the bar. This is the "very large EMPTY horizontal gap".
+      const wide = [].slice.call(bar.children).map(function (c) { return [c.className, Math.round(c.getBoundingClientRect().width)]; })
+        .filter(function (p) { return p[1] > 240; });
+      if (wide.length) throw new Error('a toolbar button is ' + wide[0][1] + 'px wide (' + wide[0][0] + ') — that is the empty-looking gap in the middle of the bar');
+
+      // 4. Same control, so the same column of the screen.
+      const dx = (br.left + br.width / 2) - (ir.left + ir.width / 2);
+      if (Math.abs(dx) > 6) throw new Error('the toolbar and the field are ' + Math.round(dx) + 'px out of line horizontally');
+    });
+  });
+
+  test('text editor (desktop): it does not wreck the app layout it opens over', { item: 'text-edit-desktop' }, function () {
+    /* v6.17, the second half of the same screenshot: the canvas was a small black rectangle jammed to
+     * the middle-right while the Studio rail's duplicate/bin/export/cog buttons floated across the
+     * middle of the screen.
+     *
+     * Cause: `body.text-editing #app { grid-template-columns: minmax(0,1fr) 0 !important }` was written
+     * for CLASSIC's two columns (stage | inspector). Studio has three and puts #topbar — the 60px rail
+     * — in column 1, so the !important handed the 1fr to the RAIL. Measured at 2000x1250 Studio:
+     * "1596.11px 0px 403.891px", rail 1596px wide, canvas a 372px sliver at x=1612. Drawing mode hit
+     * the identical bug and was patched with a Studio-aware variant; the text editor no longer touches
+     * the grid on desktop at all, which is why this test asserts the grid is UNCHANGED. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const rail = document.getElementById('topbar'), stage = document.getElementById('stage'), prev = document.getElementById('preview');
+    if (!rail || !stage || !prev) throw new Error('need #topbar, #stage and #preview');
+    const hadStudio = document.body.classList.contains('layout-studio');
+    try {
+      document.body.classList.add('layout-studio');
+      const railBefore = Math.round(rail.getBoundingClientRect().width);
+      if (railBefore > 120) throw new Error('the Studio rail is already ' + railBefore + 'px wide before the editor opens — this test cannot tell the fix from the bug');
+      withTextEditor(function () {
+        const rr = rail.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+        if (Math.round(rr.width) !== railBefore) throw new Error('opening the editor grew the Studio rail from ' + railBefore + 'px to ' + Math.round(rr.width) + 'px — the column collapse is being applied to a layout whose column 1 is the rail, not the stage');
+        if (sr.width < window.innerWidth - railBefore - 8) throw new Error('the stage is only ' + Math.round(sr.width) + 'px wide beside a ' + Math.round(rr.width) + 'px rail in a ' + window.innerWidth + 'px window — the canvas has been exiled to a sliver');
+
+        // The picture must be BOTH big enough to work in and completely uncovered — a canvas hiding
+        // behind the editor is the same failure as a canvas squeezed out of the layout.
+        const cr = prev.getBoundingClientRect();
+        if (cr.width < 60 || cr.height < 60) throw new Error('the preview is ' + Math.round(cr.width) + 'x' + Math.round(cr.height) + ' while editing');
+        const pts = [[cr.left + cr.width / 2, cr.top + 4], [cr.left + cr.width / 2, cr.top + cr.height / 2], [cr.left + cr.width / 2, cr.bottom - 4]];
+        for (let i = 0; i < pts.length; i++) {
+          const hit = document.elementFromPoint(pts[i][0], pts[i][1]);
+          if (!hit || (hit !== prev && !prev.contains(hit))) {
+            throw new Error('the editor covers the canvas at y ' + Math.round(pts[i][1]) + ' (found ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ') — you cannot see the text you are typing');
+          }
+        }
+      });
+    } finally {
+      document.body.classList.toggle('layout-studio', hadStudio);
+    }
+  });
+
+  test('text editor (desktop): clicking the canvas does not take the layer with it', { item: 'text-edit-desktop' }, function () {
+    /* v6.17, the one that destroyed work. onDocDown committed and closed the editor on ANY pointerdown
+     * outside it. On a PC the natural next move is to click the canvas to look at what you just typed:
+     * the editor closed, focus fell to BODY, and the physical keyboard was still live — so app.js's
+     * bare-key chain took over. Measured at 1920x1080: one Backspace ran FM.deleteSelected() and the
+     * text layer just typed into was gone, 2 layers -> 1. A phone cannot reach this (no physical
+     * Backspace outside the field), which is why three rounds of fixes never saw it.
+     *
+     * Note WHY the app's existing guards did not cover it: overlayOwnsScreen() asks whether a fixed
+     * element COVERS the screen, and the desktop card is 560x145; `inEdit` only asks where focus is. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const prev = document.getElementById('preview');
+    if (!prev) throw new Error('#preview missing');
+    withTextEditor(function (L) {
+      const cr = prev.getBoundingClientRect();
+      // Did the canvas's OWN handlers get the event? onDocDown is a CAPTURE listener on document, so
+      // its stopPropagation() means #preview never hears its own pointerdown at all. Asking
+      // defaultPrevented would prove nothing here: canvas-edit.js preventDefaults every canvas
+      // pointerdown itself, on the broken build and the fixed one alike.
+      let reachedCanvas = 0;
+      const spy = function () { reachedCanvas++; };
+      prev.addEventListener('pointerdown', spy);
+      try {
+        prev.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, clientX: cr.left + cr.width / 2, clientY: cr.top + cr.height / 2 }));
+      } finally { prev.removeEventListener('pointerdown', spy); }
+
+      // 1. The editor survives the look-at-my-text click.
+      if (!FM.textEdit.isActive()) throw new Error('clicking the canvas closed the text editor — on a PC that is the gesture for "let me see what I typed", not "I am finished"');
+      // 2. …and the canvas still works underneath it, or a modeless panel is just a panel in the way.
+      if (!reachedCanvas) throw new Error('the pointerdown was stopped before it reached the canvas, so the layer cannot be selected or dragged while the editor is open');
+
+      // 3. THE DAMAGE. A bare Backspace with focus OFF the field must not delete the layer.
+      //    The blur is the point: any click on app chrome — a rail button, the inspector, the timeline
+      //    ruler — leaves the editor open with focus somewhere else, and that is the state where
+      //    app.js's bare-key chain is reachable. (A canvas click happens not to move focus, because
+      //    canvas-edit.js preventDefaults it; the guard must not depend on that accident.)
+      //    Measured with real input at 1920x1080: pristine v6.16 and a build with the app.js guard
+      //    mutated out both go 2 layers -> 1 here; with the guard, the layer survives.
+      const inp = document.getElementById('te-input');
+      if (inp) inp.blur();
+      if (document.activeElement === inp) throw new Error('could not move focus off the field — this test would be checking nothing');
+      const before = FM.scene.layers.length;
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true, cancelable: true }));
+      if (FM.scene.layers.length !== before || !FM.scene.layers.some(function (l) { return l.id === L.id; })) {
+        throw new Error('one Backspace after clicking the canvas deleted the text layer being edited (' + before + ' layers -> ' + FM.scene.layers.length + ')');
+      }
+      // …and the same for the other bare keys that reach the scene.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }));
+      if (FM.playing) { FM.pause(); throw new Error('Space started playback while the text editor was open'); }
+    });
   });
 
   test('keyframes: inert outlines until you open the editor that owns them', { item: 'kf-idle-live' }, function () {
