@@ -61,7 +61,6 @@ Numbered with Ezra's own queue numbers where he gave them.
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
 - [ ] **74 — Swipe up for a full-screen Favourites browser.** Replacing the swipe-right between
       Recent and Faves. Sorting by recency, effect type and A–Z, each with an inverted order.
-- [ ] **76 — Subtle moving static over each project card on home.** Like the reference image he sent.
 - [ ] **60 — Reverse the open animation when returning to home.**
 - [ ] **59 — Copy/paste button in the effects menu, and paste ONE effect.**
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't
@@ -96,6 +95,7 @@ Numbered with Ezra's own queue numbers where he gave them.
 
 Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) with the detail.
 
+- [x] **76 — Subtle moving static over every project card,** like the reference photo — v6.23
 - [x] **71 — Multi-select bar: group and delete moved to the right.** The bin is deliberately not
       flush in the corner — that is where Export lives, and a reflex aimed at Export must not delete
       your selection. Group takes the outer slot instead — v6.22

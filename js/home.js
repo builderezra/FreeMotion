@@ -258,6 +258,37 @@ window.FM = window.FM || {};
     return true;
   }
 
+  /* The project cards' film-grain static (v6.23, queue 76). Ezra sent a reference photo and asked for
+   * "a static effect to each project that is subtle and moves like how the static looks in this image",
+   * clarifying he meant the CARDS on the home screen, not anything inside a project.
+   *
+   * The tile is GENERATED here rather than shipped as an asset: a 64px noise PNG is a few KB of
+   * base64 that would have to live in the CSS or the repo, and generating it costs about a
+   * millisecond, once, on a canvas we throw away. It is also the only honest way to get real
+   * per-pixel noise — a CSS gradient cannot make one, and feTurbulence costs a filter pass per frame.
+   *
+   * Grey, not colour, and only the alpha varies: coloured noise over a card tints it, and these cards
+   * carry the user's own thumbnails. Cached in a module variable and set as a custom property once,
+   * so all N cards share the single decoded image rather than each holding its own. */
+  let staticURL = null;
+  function ensureStaticTile() {
+    if (staticURL) return staticURL;
+    try {
+      const N = 64, c = document.createElement('canvas');
+      c.width = c.height = N;
+      const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = 255;   // white grain; the ALPHA is what varies
+        d[i + 3] = v;
+      }
+      g.putImageData(img, 0, 0);
+      staticURL = c.toDataURL('image/png');
+      document.documentElement.style.setProperty('--hm-static', 'url("' + staticURL + '")');
+    } catch (e) { staticURL = null; }   // no canvas → the CSS var stays unset and the overlay draws nothing
+    return staticURL;
+  }
+
   function el(tag, cls, text) {
     const d = document.createElement(tag);
     if (cls) d.className = cls;
@@ -1016,6 +1047,7 @@ window.FM = window.FM || {};
   }
   function render() {
     if (!grid) return;
+    ensureStaticTile();   // one-time; the CSS var it sets is what .hm-card::after draws
     // Select works on EVERY tab now (v5.04). What does NOT survive a tab change is the SELECTION —
     // ids are only meaningful within their own list, and carrying three ticked project ids into the
     // Templates tab is how "delete 3" ends up deleting the wrong three things. The tab handler
