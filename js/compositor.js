@@ -6604,15 +6604,31 @@ window.FM = window.FM || {};
   }
 
   // Pixelate / mosaic: render the layer clean, downscale (averaging) then upscale with smoothing off.
-  let _pxA = null, _pxS = null;
+  /* DEPTH-POOLED, not singletons. Two Pixelate effects on one layer means the OUTER call renders the
+   * clean layer into its plate and then re-enters drawLayer, so the INNER call's ctx.canvas IS that
+   * same plate — already holding the clean, un-pixelated layer — and it composited source-over
+   * without clearing. Verified in the app: 240x240 comp, 100x100 shape centred; with one Pixelate the
+   * pixel at (70,70) is fully transparent (mosaic cell rounding removed the corner), with two stacked
+   * it is fully opaque (200,60,30,255) — the sharp original bleeding through everywhere the mosaic had
+   * made the plate transparent, 784 pixels different, max alpha delta 255.
+   *
+   * A `ctx.canvas === _pxA` clearRect guard — which is what every sibling effect uses — is NOT enough
+   * here: the `size <= 1` early return blits _pxA into ctx, so clearing first would erase its own
+   * source on that path. Pooling by depth avoids the aliasing entirely instead of special-casing each
+   * branch, and is the pattern this file already uses for pixel effects (_pfPool) and 3D tilt
+   * (_t3Pool). Same class as the nested-group unit bug recorded in BUG-HUNT.md. */
+  const _pxPool = [];
+  let _pxDepth = 0;
   function drawPixelate(ctx, layer, t, scene, size, fx) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
     size = Math.max(1, Math.round(size));
-    if (!_pxA) _pxA = document.createElement('canvas');
-    if (!_pxS) _pxS = document.createElement('canvas');
+    const _d = _pxDepth++;
+    try {
+    if (!_pxPool[_d]) _pxPool[_d] = { A: document.createElement('canvas'), S: document.createElement('canvas') };
+    const _pxA = _pxPool[_d].A, _pxS = _pxPool[_d].S;
     if (_pxA.width !== W || _pxA.height !== H) { _pxA.width = W; _pxA.height = H; }   // cleared below
     const actx = _pxA.getContext('2d');
     baseT(actx); actx.clearRect(0, 0, W, H);
@@ -6641,6 +6657,7 @@ window.FM = window.FM || {};
     ctx.drawImage(_pxS, 0, 0, sw, sh, 0, 0, W, H);      // upscale → blocky (or soft)
     ctx.imageSmoothingEnabled = true;
     ctx.restore();
+    } finally { _pxDepth--; }
   }
 
   /* Fill POSITION (v5.46 — drag on the canvas while Colour & Fill's Gradient/Media tab is open).
