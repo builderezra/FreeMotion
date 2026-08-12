@@ -10967,6 +10967,51 @@
     });
   });
 
+  /* ---- an export must never be handed the PREVIEW frame cache ----------------------------------
+   *
+   * BUG-HUNT, high. FM.buildFrameCache de-duplicates concurrent builds on the media record alone.
+   * The REUSE check correctly compares fps AND scaled-ness — but the in-flight check handed back any
+   * running build regardless of what it was started with. prepareCaches exists specifically to
+   * guarantee a full-resolution export cache: it force-clears a `scaled` one and calls with no
+   * maxDim. While a PREVIEW build is still running, rec.frameCache is still null (it is only assigned
+   * when the build finishes), so that clear is a no-op and the export got the preview promise.
+   *
+   * Delivered: a reversed or frame-blend clip encoded from 640px (mobile) or 960px (desktop) bitmaps
+   * upscaled to the layer's full frame box — visibly soft and blocky in the MP4 while every other
+   * layer is sharp — and at the preview cache's 24fps cap inside a 30 or 60 fps export. The trigger
+   * is the ordinary flow: open a project with a reversed clip (which fires ensureReverseCache on
+   * load) and press Export while "Preparing frames…" is still up. No warning, and re-exporting a
+   * minute later silently produces a different, sharper file.
+   *
+   * The test drives the REAL FM.buildFrameCache with a stub media record, so it exercises the actual
+   * dedupe rather than a model of it. What it asserts is the property that was violated: a request
+   * for a FULL-RES cache, made while a SCALED one is in flight, must not come back scaled. */
+  test('export: a full-res cache request is not served the in-flight preview build', { item: 'framecache-dedupe' }, function () {
+    if (!FM.buildFrameCache) throw new Error('FM.buildFrameCache is missing');
+    var made = [];
+    // A media record whose element decodes instantly; buildFrameCache does the rest for real.
+    var mk = function () {
+      var cv = document.createElement('canvas'); cv.width = 64; cv.height = 48;
+      return { el: null, duration: 0.4, kind: 'video', _stub: cv };
+    };
+    var rec = mk();
+    // No <video> to seek, so let the real function take its "nothing decodable" path and still
+    // record WHICH shape each call asked for. That is the part under test.
+    var realSeek = FM.buildFrameCache;
+    var p1 = FM.buildFrameCache(rec, 24, null, { maxDim: 640 });     // the PREVIEW build
+    var p2 = FM.buildFrameCache(rec, 30, null, {});                  // the EXPORT build, different shape
+    if (p1 === p2) {
+      throw new Error('a full-res 30fps export request was handed the very promise of the in-flight ' +
+        '640px 24fps PREVIEW build — the exported file is encoded from upscaled preview bitmaps at the ' +
+        'preview fps, soft and blocky against every other layer, with no warning');
+    }
+    return Promise.all([p1.catch(function () {}), p2.catch(function () {})]).then(function () {
+      if (rec.frameCache && rec.frameCache.scaled) {
+        throw new Error('after a full-res request the record still holds a SCALED cache — the export would use it');
+      }
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

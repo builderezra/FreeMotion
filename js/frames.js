@@ -57,7 +57,28 @@ window.FM = window.FM || {};
     // Reuse only a cache of the SAME fps AND scaled-ness, so a downscaled preview cache is never silently
     // reused for a full-res export (exporter.js force-clears a scaled cache before exporting).
     if (rec.frameCache && rec.frameCache.fps === fps && !!rec.frameCache.scaled === scaled) return Promise.resolve(rec.frameCache);
-    if (rec._building) return rec._building;
+    /* The IN-FLIGHT dedupe has to be key-aware too, and this is the whole bug. The reuse check above
+     * correctly compares fps AND scaled-ness — but the next line used to hand back ANY running build.
+     * prepareCaches exists precisely to guarantee a full-resolution export cache: it force-clears a
+     * `scaled` one, then calls here with no maxDim. While a PREVIEW build is still running,
+     * rec.frameCache is still null (it is only assigned when the build finishes), so that clear is a
+     * no-op and the export was handed the preview promise instead.
+     *
+     * What that delivered: a reversed or frame-blend clip encoded from 640px (mobile) or 960px
+     * (desktop) bitmaps upscaled to the layer's full frame box, so it is visibly soft and blocky in
+     * the MP4/GIF/PNG sequence while every other layer is sharp — and at the preview cache's fps cap
+     * of 24 inside a 30 or 60 fps export. The trigger is the ordinary one: open a project with a
+     * reversed clip, which fires ensureReverseCache on load, and press Export while "Preparing
+     * frames…" is still showing. No warning; re-exporting a minute later silently gives a different,
+     * sharper file. */
+    var key = fps + '|' + scaled;
+    if (rec._building) {
+      if (rec._buildKey === key) return rec._building;
+      // A build of the WRONG shape is running. Wait it out (a rejection is not ours to handle), then
+      // build the one that was actually asked for.
+      return rec._building.catch(function () {}).then(function () { return FM.buildFrameCache(rec, fps, onProgress, opts); });
+    }
+    rec._buildKey = key;
     rec._building = seekLock(rec, async function () {
       try {
       const el = rec.el, dur = rec.duration || 0;

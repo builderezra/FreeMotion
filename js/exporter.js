@@ -346,6 +346,10 @@ window.FM = window.FM || {};
       if (!m || !m.el) continue;
       // Export must be pixel-exact: discard a downscaled PREVIEW cache (scaled) and rebuild at full res.
       if (m.frameCache && (m.frameCache.fps !== fps || m.frameCache.scaled)) FM.clearFrameCache(m);
+      // …and again AFTER any in-flight build settles. Belt and braces to the key-aware dedupe in
+      // frames.js: this clear is a no-op while a preview build is still running, because frameCache
+      // is only assigned when that build finishes. (See the note at buildFrameCache.)
+      if (m._building) { try { await m._building; } catch (e) {} if (m.frameCache && (m.frameCache.fps !== fps || m.frameCache.scaled)) FM.clearFrameCache(m); }
       // maxBytes ceiling: a monolithic full-res cache (up to 900 × ~8MB = several GB for a long 1080p/4K
       // reverse clip) OOM-killed mobile Safari. Cap total bytes → long clips lose temporal resolution
       // (frames spread across the clip via effFps) instead of crashing; resolution stays full. (#13)
