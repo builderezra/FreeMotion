@@ -221,6 +221,39 @@ better still, keep working inside the turn rather than parking work for a later 
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [ ] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (14 Aug,
+      screenshot of home with a black band across the very bottom.) His words: *"When leaving a project
+      for a split second there's a black bar at the bottom then it fixes itself."*
+      **Same family as the v6.85 bar, and READ THAT ENTRY FIRST — it cost six attempts.** The lesson
+      from it: a strip DARKER than the app means something behind everything is a different colour, not
+      that an element is too small. The document canvas is already `#060c0f` (v6.85), so this is
+      something else that is briefly uncovered or briefly painted black.
+      What is different this time, and is the whole clue: it is **transient and tied to the leave-project
+      transition**, so it is a state that exists only DURING the reverse push and is corrected on the
+      frame after. Prime suspects, in order: the home screen's own background not yet painted on the
+      first frame of its entrance; `#app` still occupying the strip while sliding out; or an element
+      with an explicit `#000` (the stage/canvas is painted black by design) showing through for a frame.
+      **Measure it as a sequence, not a still** — sample what occupies the bottom strip on every frame
+      of the transition and find the frame where it is black. A single screenshot cannot see a
+      one-frame fault, which is exactly why the last one took six goes.
+      (14 Aug, with an Alight Motion screenshot.) His words: *"When dragging a clip from the edges to
+      extend, in alight motions there's some differences, it tells you all of this information and also
+      shows on little notches, by colouring in the exact notch it will land on, because the notches are
+      frames and the whole thing has to actually line up with the notches."*
+      Two things, and the second is the one with teeth:
+      1. **The readout.** Six values in two rows above the strip, live while you drag:
+         `Start` · `End` · `Duration` on the top row, `In` · `Out` · `Change` on the second — where
+         Change is signed (`+00:02:59` in his shot). Note Start/End are the clip's place on the
+         TIMELINE and In/Out are the trim points within the source, which is why AM shows both.
+      2. **The notch strip, and the reason for it.** A tick strip under the numbers where **the exact
+         notch the edge will land on is filled in**. His reasoning is the important part: *"the notches
+         are frames and the whole thing has to actually line up with the notches."* So a trim is
+         quantised to whole FRAMES and the strip is the readout of which frame you are about to get.
+         His screenshot also has a coloured mark at each end (pink at the in-point, green at the
+         out-point), so the strip shows the whole clip's span, not just the edge being dragged.
+      Worth checking first whether our trim already quantises to frames — if it does not, the strip
+      would be drawing a promise the trim does not keep, and the quantising is the real work.
+
 - [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
       His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,
       could be soemthing way to hard to do and would be better to not add it then add a shit version for

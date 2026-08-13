@@ -382,7 +382,17 @@ window.FM = window.FM || {};
     { type: 'mattefringe', label: 'Matte Fringe', param: 'width', min: 1, max: 12, step: 1, def: 3, unit: 'px', color: true, defColor: '#00e0ff', colorLabel: 'Fringe' },
     // ---- batch 15: Repeat (tiled-coordinate warps) ----
     { type: 'gridrepeat', label: 'Grid Repeat', param: 'count', min: 1, max: 10, step: 1, def: 3 },
-    { type: 'linearrepeat', label: 'Linear Repeat', param: 'count', min: 1, max: 12, step: 1, def: 4 },
+    /* Queue 123. Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
+       horizontally when you do it." It was a one-param pixel warp that crushed the whole picture into
+       each cell; it draws real copies at original size now, so it needs the controls a repeat actually
+       has. `count` keeps its key and its default, so an existing instance keeps the number it was set
+       to and simply stops squishing. */
+    { type: 'linearrepeat', label: 'Linear Repeat', params: [
+      { key: 'count', label: 'Copies', min: 1, max: 12, step: 1, def: 4 },
+      { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge
+      { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
+    ] },
     { type: 'radialrepeat', label: 'Radial Repeat', param: 'count', min: 2, max: 16, step: 1, def: 6 },
     { type: 'mirrortile', label: 'Mirror Tile', param: 'size', min: 20, max: 400, step: 1, def: 140, unit: 'px' },
     // ---- batch 16: Other / Color / Procedural / Drawing ----
@@ -4390,7 +4400,12 @@ window.FM = window.FM || {};
     tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y]; var tnDx=x-cx, tnDy=y-cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y]; var tnInv=(maxR*0.30)*(maxR*0.30)/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA; return [cx+tnDx/tnR*tnRR, cy+tnDy/tnR*tnRR]; },
     // ---- batch 15 (repeat / tiling) ----
     gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10; var grCellW=W/grCount, grCellH=H/grCount; var grGx=(x-Math.floor(x/grCellW)*grCellW)/grCellW; var grGy=(y-Math.floor(y/grCellH)*grCellH)/grCellH; return [grGx*W, grGy*H]; },
-    linearrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var lr_count=Math.round(FM.evalProp(p.count,t)||4); if(lr_count<1)lr_count=1; if(lr_count>12)lr_count=12; var lr_cellW=W/lr_count; var lr_lx=(x-Math.floor(x/lr_cellW)*lr_cellW)/lr_cellW; return [lr_lx*W, y]; },
+    /* linearrepeat's WARP entry is GONE (queue 123). It read:
+         var cellW=W/count; var lx=(x-floor(x/cellW)*cellW)/cellW; return [lx*W, y];
+       i.e. every cell mapped its own 0..1 across the FULL source width, so each copy held the
+       whole picture crushed into 1/count of the frame — Ezra's "it just squishes horizontally".
+       A repeat draws copies at their own size, which a coordinate remap cannot do, so it lives
+       in CANVAS_FX now. */
     radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16; var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy); var rr_seg=Math.PI*2/rr_count; var rr_a=Math.atan2(rr_dy,rr_dx); var rr_a2=rr_a-Math.floor(rr_a/rr_seg)*rr_seg; return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
     mirrortile: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; mt_size*=(ps||1); if(mt_size<1) mt_size=1; var mt_cix=Math.floor(x/mt_size); var mt_lx=x-mt_cix*mt_size; if(mt_cix&1) mt_lx=mt_size-mt_lx; var mt_ciy=Math.floor(y/mt_size); var mt_ly=y-mt_ciy*mt_size; if(mt_ciy&1) mt_ly=mt_size-mt_ly; var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
     // ---- batch 18 (warp) ----
@@ -5912,6 +5927,46 @@ window.FM = window.FM || {};
         B.drawImage(A, dx * off, dy * off);
       }
       B.restore();
+    },
+    /* ---- Linear Repeat (queue 123) ------------------------------------------------------------
+     * Ezra: "Linear repeat effect is shit and needs work, currently it just squishes horizontally
+     * when you do it." He is describing the implementation exactly. It used to be a per-pixel WARP:
+     *     var cellW = W / count;
+     *     var lx = (x - floor(x/cellW)*cellW) / cellW;   // 0..1 inside the cell
+     *     return [lx * W, y];
+     * — every cell mapped its own 0..1 onto the FULL source width, so each copy contained the whole
+     * picture crushed into 1/count of the frame. That is not a repeat, it is N horizontal squishes.
+     * A repeat places copies at their ORIGINAL size, so this is a canvas effect now (like Tiles) and
+     * not a coordinate remap: the layer's own plate is drawn again at an offset, count times. Nothing
+     * is scaled, which is the whole point.
+     * Spacing is a fraction of the CONTENT's extent along the axis (bb, the alpha bbox) rather than of
+     * the frame, so 100% butts copies edge to edge whatever the layer's size — a frame-relative step
+     * would overlap a small layer and leave gaps around a big one.
+     * Steps are rounded to whole pixels for the reason Tiles documents at length: a fractional
+     * destination makes canvas resample the edge column, and that soft column reads as a seam. */
+    linearrepeat: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const n = Math.max(1, Math.min(12, Math.round(fparam(p, 'count', 4, t))));
+      const ang = (fparam(p, 'angle', 0, t) || 0) * Math.PI / 180;    // 0° = to the right
+      const spread = Math.max(0.05, Math.min(3, (fparam(p, 'spacing', 100, t) || 100) / 100));
+      const fade = Math.max(0, Math.min(1, (fparam(p, 'fade', 0, t) || 0) / 100));
+      B.drawImage(A, 0, 0);                                           // the original stays exactly where it is
+      if (n < 2) return;
+      // How far the content reaches along the repeat axis — the honest basis for "one copy over".
+      const along = Math.abs(Math.cos(ang)) * bb.w + Math.abs(Math.sin(ang)) * bb.h;
+      const step = Math.max(1, along * spread);
+      for (let i = 1; i < n; i++) {
+        const dx = Math.round(Math.cos(ang) * step * i);
+        const dy = Math.round(Math.sin(ang) * step * i);
+        // Nothing to see once a copy has walked entirely off the frame; stop rather than pay for it.
+        if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
+        if (fade) {
+          const a = 1 - fade * (i / (n - 1));
+          if (a <= 0.004) break;
+          B.save(); B.globalAlpha = a; B.drawImage(A, dx, dy); B.restore();
+        } else {
+          B.drawImage(A, dx, dy);
+        }
+      }
     },
     tiles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
       const gap = Math.max(0, Math.min(0.4, fparam(p, 'gap', 8, t) / 100));

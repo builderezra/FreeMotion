@@ -11932,6 +11932,53 @@
     }
   });
 
+  /* #123 — Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
+     horizontally when you do it."
+     It was a per-pixel warp mapping each cell's 0..1 across the FULL source width, so every copy held
+     the whole picture crushed into 1/count of the frame. The test that matters is therefore about
+     SIZE, not about copy count: a repeat must leave each copy at its original width. Measuring the
+     drawn ink is the only way to see that — the effect list, the params and the pixels can all look
+     right while the picture is squashed. */
+  test('linear repeat: copies keep their original size instead of being squished', { item: 'linear-repeat' }, function () {
+    const W = 480, H = 300;
+    const mk = (effects) => {
+      const layer = FM.makeLayer('shape', { shape: 'rect', name: 'bar', x: 90, y: H / 2, shapeW: 80, shapeH: 120, fill: '#ffffff', start: 0, duration: 4 });
+      layer.effects = effects;
+      const sc = scene([layer], { project: { width: W, height: H, fps: 30, duration: 4, background: null, markers: [] } });
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      FM.renderScene(cv.getContext('2d'), sc, 0);
+      return cv.getContext('2d').getImageData(0, 0, W, H).data;
+    };
+    // Widest continuous run of ink on the layer's centre row = one copy's width.
+    const widest = (d) => {
+      const y = Math.floor(H / 2); let best = 0, run = 0;
+      for (let x = 0; x < W; x++) {
+        if (d[(y * W + x) * 4 + 3] > 8) { run++; if (run > best) best = run; } else run = 0;
+      }
+      return best;
+    };
+    const blobs = (d) => {
+      const y = Math.floor(H / 2); let n = 0, on = false;
+      for (let x = 0; x < W; x++) { const lit = d[(y * W + x) * 4 + 3] > 8; if (lit && !on) n++; on = lit; }
+      return n;
+    };
+
+    const plain = mk([]);
+    const base = widest(plain);
+    if (base < 20) throw new Error('the un-effected bar measured ' + base + 'px — nothing to compare against');
+
+    const rep = mk([{ type: 'linearrepeat', enabled: true, count: 4, spacing: 130, angle: 0, fade: 0,
+                      params: { count: 4, spacing: 130, angle: 0, fade: 0 } }]);
+    const w2 = widest(rep);
+    // THE BUG: the old warp put `count` copies inside one frame width, so each was ~1/count as wide.
+    if (w2 < base * 0.8) {
+      throw new Error('each copy is ' + w2 + 'px against the original ' + base + 'px — the layer is being squished, not repeated');
+    }
+    // …and it must actually repeat, or "not squished" would pass on an effect that does nothing.
+    const n = blobs(rep);
+    if (n < 2) throw new Error('linear repeat drew ' + n + ' copy — it is not repeating at all');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
