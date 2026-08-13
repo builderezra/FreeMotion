@@ -118,6 +118,16 @@ window.FM = window.FM || {};
    */
   const PLAY_TIERS = [1, 0.8, 0.62, 0.48, 0.36, 0.28];
   let _playTier = 0, _renderAvg = 0, _tierCooldown = 0;
+  /* A read-only window onto the adaptive ladder, for probes and the suite (queue 130). Ezra reports
+   * "it also still doesn't compress the quality in the canvas playback" — a claim about this state
+   * that was, until now, impossible to check from outside without reading the source and guessing.
+   * Snapshot, not live refs: nothing outside may steer the ladder. */
+  FM._perfState = function () {
+    return { tier: _playTier, tiers: PLAY_TIERS.length, factor: PLAY_TIERS[Math.min(PLAY_TIERS.length - 1, _playTier)],
+             renderAvg: _renderAvg, locked: !!_locked, lockAt: _lockAt, dropFrom: _dropFrom,
+             cooldown: _tierCooldown, ctx: _costCtx,
+             canvasPx: (typeof canvas !== 'undefined' && canvas) ? canvas.width * canvas.height : 0 };
+  };
   // A tier drop has to EARN its place — see the payoff test in notePlaybackCost.
   const DROP_PAYOFF = 0.85;   // a drop must cut the average by 15%+ to be worth the softer picture
   const LOCK_ESCAPE = 1.35;   // once locked, only a cost this much higher re-opens the question

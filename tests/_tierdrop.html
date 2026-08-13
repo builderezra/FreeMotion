@@ -1,0 +1,96 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#130 — does the quality tier ever drop, and should it?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.55 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:390px;height:800px;border:0}
+#out{padding:12px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* Ezra (#130): "I have got no other projects, just one; and I managed to add one screen recording
+   that's two seconds long, and the project lags from just that, it also still doesn't compress the
+   quality in the canvas playback, even though just for this one thing it shouldn't need to do that
+   anyway."
+
+   Two claims, and the second is checkable: is the adaptive ladder actually refusing to drop?
+   Run it under CPU throttle (tests/_probe.py --cpu N) so the machine is genuinely too slow, and
+   watch FM._perfState() across a real playback.
+
+   Read the result against the LAST sentence of his own report — "for this one thing it shouldn't need
+   to do that anyway". If the ladder holds at tier 0 because a latch decided resolution is not the
+   bottleneck, that is the app doing exactly what he asked for in queue 54, and "it doesn't drop the
+   quality" is not the bug he thinks it is. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done(){ out.textContent = L.join('\n'); window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 400) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.play || !w.FM._perfState || !w.FM.loadVideoFile) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 500);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, added = null;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      L.push('playbackQuality setting: ' + ((FM.settings && FM.settings.get('playbackQuality')) || 'auto') +
+             '   (a "detail" setting parks the ladder at tier 0 by design)');
+
+      // One clip, like his report. A real decodable file so the decode cost is real.
+      var blob = await fetch('tests/_fixtures/vad/clean.wav').then(function (r) { return r.blob(); });
+      var file = new w.File([blob], 'tierprobe.wav', { type: 'audio/wav' });
+      var rec = await FM.loadVideoFile(file);
+      FM.addMediaLayer(rec);
+      added = FM.scene.layers[0];
+      // …plus enough drawing work that the COMPOSITOR genuinely costs something, which is the half of
+      // the frame the ladder can actually do something about. Without it a slow machine is slow for
+      // reasons no resolution change can touch, and the probe would only prove that.
+      for (var i = 0; i < 8; i++) {
+        FM.scene.layers.push(FM.makeLayer('shape', { name: 'load' + i, shape: 'star',
+          x: 200 + i * 40, y: 300 + i * 60, shapeW: 500, shapeH: 500, fill: '#3ce', start: 0, duration: 8 }));
+      }
+      FM.refreshAll();
+      await new Promise(function (r) { setTimeout(r, 300); });
+
+      var samples = [];
+      FM.time = 0;
+      FM.play();
+      for (var k = 0; k < 40; k++) {
+        await new Promise(function (r) { setTimeout(r, 150); });
+        samples.push(FM._perfState());
+      }
+      FM.pause();
+
+      var tiers = samples.map(function (s) { return s.tier; });
+      var maxTier = Math.max.apply(null, tiers), minTier = Math.min.apply(null, tiers);
+      var last = samples[samples.length - 1];
+      var everLocked = samples.some(function (s) { return s.locked; });
+      var avgs = samples.map(function (s) { return s.renderAvg; }).filter(function (v) { return v > 0; });
+      var avgMed = avgs.sort(function (a, b) { return a - b; })[Math.floor(avgs.length / 2)] || 0;
+
+      L.push('');
+      L.push('over 6s of playback (one clip + 8 shapes), sampled every 150ms:');
+      L.push('  tier reached        ' + minTier + ' -> ' + maxTier + '   of ' + (last.tiers - 1) + '   (0 = full resolution)');
+      L.push('  tier path           ' + tiers.join(''));
+      L.push('  median renderAvg    ' + avgMed.toFixed(1) + ' ms      (the ladder drops above ' + (1000 / 60 * 0.72).toFixed(1) + ' ms)');
+      L.push('  latch ever engaged  ' + everLocked + '   (true = "resolution is not the bottleneck here")');
+      L.push('  final state         ' + JSON.stringify(last));
+      L.push('');
+      L.push('HOW TO READ IT: tier stuck at 0 with renderAvg WELL OVER the drop threshold and the');
+      L.push('latch engaged means the ladder tried, found that shedding pixels did not pay, and put');
+      L.push('the resolution back — which is queue 54 working, not queue 130 broken. Tier stuck at 0');
+      L.push('with the latch NEVER engaging would be a real defect: it never even tried.');
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 5).join('\n'));
+    }
+    try {   // never leave a clip behind in whatever project happened to be open
+      if (added && FM.media && FM.media.del) FM.media.del(added.id);
+      FM.scene.layers = [];
+      if (FM.storage && FM.storage.save) FM.storage.save();
+    } catch (e) {}
+    done();
+  }
+})();
+</script></body></html>

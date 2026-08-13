@@ -125,6 +125,25 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       Two facts in one report, and the second is the useful one: the adaptive quality tier is NOT kicking
       in. If the preview is lagging AND refusing to drop resolution, the tier logic is either not
       measuring the right thing or is gated off. Pair this with 125.
+      **PART-WAY, and there is something here he needs to decide.** Reading the ladder (`notePlaybackCost`
+      in js/app.js) turns up a deliberate LATCH: a tier drop has to *earn its place*, and if shedding
+      pixels does not cut the frame cost by 15% the tier is put straight back and the ladder stops
+      probing. That latch exists because of **his own earlier request, queue 54** — *"its having to lower
+      the quality when i do something as simple as just have one simple video"*. So #54 and #130 ask for
+      **opposite behaviour**, and the code currently implements #54.
+      The measured reason the latch is right: on one plain 2048×2048 clip, **thirteen times fewer pixels
+      bought only 32% less frame time**, because decoding a video frame costs the same whatever canvas
+      it lands in. Dropping the resolution genuinely does not fix his lag — which is also why he is right
+      in the last line of his own report, *"for this one thing it shouldn't need to do that anyway"*.
+      **So "it doesn't compress the quality" is probably not the bug.** The bug is the lag itself, and the
+      quality drop was only ever a way of hiding it. The real work is the VIDEO DECODE path (#125's
+      standing note).
+      Added `FM._perfState()` — a read-only snapshot of tier / renderAvg / latch / canvas pixels — so
+      this claim is checkable from outside instead of by reading the source and guessing.
+      **The first measurement attempt was INVALID and is not being reported as a result**: the synthetic
+      comp only cost 0.08 ms a frame, so the ladder was never under any pressure and "tier stayed at 0"
+      proved nothing. `tests/_tierdrop.html` needs a genuinely expensive comp (a real video clip plus a
+      blur, not shapes) before its output means anything. Next pass starts there.
 - [x] **131 — The overpull Easter egg freezes if you drag really far.** (v6.77) His words: *"there's a glitch now
       when you swipe down really far and then the Easter egg happens where it slams the screen, if you try
       dragging really far down it just freezes, you should still be able to drag it down as freely as you
