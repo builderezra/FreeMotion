@@ -1349,8 +1349,13 @@ window.FM = window.FM || {};
       if (layer && (layer.type === 'text' || layer.type === 'caption')) return ICO_TEXT;
       return (layer && FM.isPointShape && FM.isPointShape(layer)) ? ICO_POINTS : ICO_SHAPE;
     }
+    // 'text' is not an inspector category — text lives under 'element' there. It exists so Paste
+    // Style, whose grid DOES have a standalone Text tile, can ask for the letterform by name instead
+    // of keeping its own copy of the glyph. See STYLE_CATS (queue 127).
+    if (key === 'text') return ICO_TEXT;
     return null;
   }
+  FM._catIco = catIco;   // read by the suite, which compares the Paste Style grid against these
 
   function svgIcon(path) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>';
@@ -1426,21 +1431,30 @@ window.FM = window.FM || {};
   }
 
   // ===== Paste Style (Alight Motion) — copy a layer, then apply chosen style aspects to another. =====
+  /* NO `icon:` field here, deliberately (queue 127). This table used to carry its own single-path
+     glyphs, and when the inspector's cards were regraded to the coloured gradient set in #77 the two
+     drifted — Ezra's screenshot caught both icon sets on screen at once, the old ones in this grid
+     and the current ones on the cards right below it: "Paste style menu needs to reflect the current
+     icons that have since changed."
+     Copying the new paths across would only reset the clock on the same bug. The grid asks catIco()
+     the same question the cards ask instead, so there is no second table left to go stale. Every key
+     below must resolve there — the suite asserts it. */
   const STYLE_CATS = [
-    { key: 'color',     label: 'Colouring',       icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
-    { key: 'border',    label: 'Border & Shadow',    icon: 'M4 4h12v12H4zM9 20h11V9' },
-    { key: 'blend',     label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
-    { key: 'transform', label: 'Move & Transform',   icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
-    { key: 'text',      label: 'Text',               textOnly: true },
+    { key: 'color',     label: 'Colouring' },
+    { key: 'border',    label: 'Border & Shadow' },
+    { key: 'blend',     label: 'Blending & Opacity' },
+    { key: 'transform', label: 'Move & Transform' },
+    { key: 'text',      label: 'Text', textOnly: true },
     /* Ezra: "this section when pasting a style probably needs other options because there's 9
        categories now not 6." Correct — the inspector grew Speed, Volume, Element and Presets after
        this table was written. Three of those four are real style aspects and are added here.
        PRESETS deliberately is NOT: it is a browser of saved looks, not a property the layer carries,
        so there is nothing on the source layer to copy. A toggle for it would be a dead switch. */
-    { key: 'speed',     label: 'Speed',              icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },
-    { key: 'volume',    label: 'Volume',             icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },
-    { key: 'effects',   label: 'Effects',            icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
+    { key: 'speed',     label: 'Speed' },
+    { key: 'volume',    label: 'Volume' },
+    { key: 'effects',   label: 'Effects' },
   ];
+  FM._styleCats = STYLE_CATS;   // read by the suite, which checks every key still resolves to an icon
 
   // Apply the chosen style categories from a copied layer snapshot `src` onto `target`.
   function applyStyle(target, src, cats) {
@@ -1514,7 +1528,9 @@ window.FM = window.FM || {};
       sel[c.key] = !disabled;
       const b = el('button', 'ps-cat' + (disabled ? ' dis' : ' on'));
       b.title = c.label;
-      b.innerHTML = c.key === 'text' ? '<span class="ps-aa">Aa</span>' : svgIcon(c.icon);
+      // Volume is the one glyph that depends on the layer, and the honest layer to ask is the one
+      // being pasted ONTO — the tile describes what this paste will do to the target.
+      b.innerHTML = icoMulti(catIco(c.key, target) || '<circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>');
       if (!disabled) b.addEventListener('click', () => { sel[c.key] = !sel[c.key]; b.classList.toggle('on', sel[c.key]); });
       grid.appendChild(b);
     });

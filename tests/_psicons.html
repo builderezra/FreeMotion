@@ -1,0 +1,43 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#127 Paste Style icons — visual probe</title>
+<style>
+  html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+  iframe{width:380px;height:760px;border:0;display:block}
+  #out{padding:8px;white-space:pre}
+</style></head><body>
+<iframe id="app" src="index.html"></iframe>
+<div id="out">…</div>
+<script>
+/* Opens the Paste Style grid at phone width with a TEXT layer copied, so the text tile is live and
+   all nine categories draw. Leaves it on screen for _shot.sh. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app');
+  function fail(m) { out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 200) return fail('FM never initialised');
+      if (!w.FM || !w.FM.openPasteStyle || !w.FM.makeLayer) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var t = FM.makeLayer('text', { name: 'Src', text: 'Hello', x: 0, y: 0, start: 0, duration: 3 });
+        FM.scene.layers = [t];
+        FM.selectLayer(t.id); FM.refreshAll();
+        FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(t)) }];
+        FM.openPasteStyle(t);
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var tiles = [].slice.call(d.querySelectorAll('.ps-overlay .ps-cat'));
+        // Turn a few off so the on/off readout is visible in the same shot.
+        [1, 4, 6].forEach(function (i) { if (tiles[i]) tiles[i].classList.remove('on'); });
+        var L = ['tiles: ' + tiles.length];
+        L.push('gradients drawn: ' + d.querySelectorAll('.ps-overlay linearGradient').length);
+        L.push('tiles with no <svg>: ' + tiles.filter(function (t) { return !t.querySelector('svg'); }).length);
+        out.textContent = L.join('\n');
+        window.__done = true;
+      }, 500);
+    })();
+  });
+})();
+</script></body></html>

@@ -69,10 +69,18 @@ again next time he speaks rather than used as a reason to stop. Plus a specific 
 hard iteration bound and a dry-round counter, never an open `while` on an agent's own answer.
 
 ### In flight right now
-- [ ] **127 — Paste Style icons are stale.** His words: *"Paste style menu needs to reflect the current
+- [x] **127 — Paste Style icons are stale.** (v6.89) His words: *"Paste style menu needs to reflect the current
       icons that have since changed."* Screenshot at v6.73: the Paste Style grid still uses the OLD
       category glyphs while the inspector below it shows the current ones (the gradient-coloured set from
       #77). Same nine categories, two different icon sets on screen at once.
+      **Shipped v6.89, and the fix was to delete the second table rather than re-copy it.** Paste Style
+      kept its own private list of flat single-path glyphs, which is why it drifted the moment the cards
+      were regraded — copying the new paths across would only have reset the clock on the same bug. The
+      grid asks the same `catIco()` the cards ask now, so there is nothing left that can go stale. The
+      Text tile was a literal "Aa" in text, the one tile that was not an icon at all; it shows the
+      serif-T glyph the Edit Text card shows. Off tiles are desaturated instead of recoloured, since a
+      self-coloured icon cannot show on/off by changing its colour. The suite compares every tile's
+      markup against the inspector's own, so a third table cannot grow back quietly.
 - [ ] **128 — Opening/closing a project feels janky.** His words: *"the animation when opening a project
       feels janky, the fix is make it so the animation of the project layer moving to the left happens
       instantly, so it feels responsive, make sure it's smooth, then smoothly the project should swoop in
@@ -144,6 +152,48 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       grow to fill the whole area instead of sitting as a small row at the top.
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
+
+- [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
+      His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
+      trying to play back stuff, this is related to the long on going lag issues with freemotion."*
+      **Taking his diagnosis seriously — it is the most useful thing in the report.** Scratchy popping on
+      playback is the classic signature of audio BUFFER UNDERRUN: the audio graph is starved because the
+      main thread is busy, so the output drops to silence for a few samples and every gap is a click. That
+      makes it the same illness as #125/#130, heard instead of seen — which is why it belongs with them
+      and not on its own. It is also the loudest possible evidence FOR the lag being real, and unlike a
+      dropped frame it is physically unpleasant.
+      Other candidates to rule out before accepting that, because a pop has more than one cause:
+      **discontinuities at clip/loop boundaries** (starting or stopping a source mid-waveform without a
+      ramp clicks every time — a 5ms fade kills it), **sample-rate mismatch** between the decoded file and
+      the AudioContext, and **clipping** if gain sums past 1.0. Measure which one it is before changing
+      anything: record the output and look for the gaps, rather than guessing from the symptom the way
+      the film-grain fix went wrong four times.
+      Pairs with **69** (audio must never lag — make the audio clock the master), which is probably the
+      real fix if it is starvation.
+
+- [ ] **147 — PC: the text editor covers the text you are editing. Get it off the canvas.** (13 Aug,
+      screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
+      text while you edit it, get it off the canvas, also the text edit stuff on pc for some reason
+      covers up the canvas, making it smaller when you could just put it in the add menu, so it doesnt
+      take up real estate on the screen."*
+      Two faults, and the second one carries his proposed fix:
+      1. **It covers its own subject.** The "Aa" sheet (Spacing / Line height / Curve / Animate / caption
+         controls) and the toolbar + text field below it are painted over the canvas — in the screenshot
+         they cover the frame completely, so you are typing blind at the one moment you most need to see
+         the result. This is the worst version of the bug: a text editor that hides the text.
+      2. **On PC it also shrinks the canvas** to make room, spending screen on a panel that only exists
+         while you type. His fix: *"you could just put it in the add menu"* — i.e. on desktop the whole
+         text-editing UI belongs in the LEFT panel column (where Add / the inspector live), not as a
+         canvas overlay. The canvas then keeps its full size and the text stays visible while you edit.
+      Phone is a different problem and is NOT covered by this — there is no side column there, and the
+      current overlay is the right shape for a phone. Desktop only.
+
+- [ ] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** His words:
+      *"also on pc get rid of the project name editor thats at the top, its already at the bottom."*
+      Screenshot 1 shows both: **IF I HAD ONE** across the top-left, and the same name again on the
+      INSPECTOR header at the bottom-left. Two editors for one field. Keep the bottom one — that is the
+      one beside the layer/selection context — and remove the top. Belongs with #143/#144, which are
+      rebuilding that top strip anyway.
 
 - [ ] **145 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons
       looking goofy.** (13 Aug, two messages.) His words: *"make the background of all the buttons like

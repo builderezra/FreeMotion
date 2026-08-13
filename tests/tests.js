@@ -11497,6 +11497,63 @@
     }
   });
 
+  // #127 — Ezra: "Paste style menu needs to reflect the current icons that have since changed."
+  // The grid kept a private table of flat single-path glyphs, so when the inspector's cards moved to
+  // the coloured set the two drifted and his screenshot caught both on screen at once. The fix was to
+  // delete the second table, not to re-copy it — so what this guards is that no second table has
+  // grown back: every Paste Style tile has to render the SAME markup the inspector card renders.
+  test('paste style: every tile draws the inspector\'s own category icon, not a private copy', { item: 'paste-style-icons' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      const cats = FM._styleCats;
+      if (!Array.isArray(cats) || !cats.length) throw new Error('FM._styleCats is not exposed — this test cannot see what the grid builds');
+      if (!FM._catIco) throw new Error('FM._catIco is not exposed — the grid and the cards could not be compared');
+      // A text layer, so the text-only tile is live rather than disabled.
+      const txt = FM.makeLayer('text', { name: 'Src', text: 'hi', x: 0, y: 0, start: 0, duration: 3 });
+      FM.scene = scene([txt]);
+      FM.selectLayer(txt.id); FM.refreshAll(); await sleep(80);
+
+      // Every key must resolve, or a tile silently falls back to a placeholder circle.
+      const missing = cats.filter(c => !FM._catIco(c.key, txt)).map(c => c.key);
+      if (missing.length) throw new Error('these Paste Style keys have no inspector icon: ' + missing.join(', '));
+
+      // Now the real check, against the DOM the user sees.
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(txt)) }];
+      FM.openPasteStyle(txt);
+      await sleep(60);
+      const tiles = [].slice.call(document.querySelectorAll('.ps-overlay .ps-cat'));
+      try {
+        if (tiles.length !== cats.length) throw new Error('the grid built ' + tiles.length + ' tiles for ' + cats.length + ' categories');
+        tiles.forEach((tile, i) => {
+          const svg = tile.querySelector('svg');
+          if (!svg) throw new Error('the "' + cats[i].label + '" tile has no <svg>');
+          // Parse the reference through the SAME parser before comparing. Reading svg.innerHTML back
+          // gives you the browser's normalisation of the markup (attribute order, self-closing tags),
+          // not the source string, so comparing a live node against a raw string fails on every icon
+          // even when they are identical.
+          const ref = document.createElement('div');
+          ref.innerHTML = '<svg>' + FM._catIco(cats[i].key, txt) + '</svg>';
+          const want = ref.firstChild.innerHTML;
+          if (svg.innerHTML.replace(/\s+/g, '') !== want.replace(/\s+/g, '')) {
+            throw new Error('the "' + cats[i].label + '" tile is not drawing the inspector icon — a second icon table has grown back');
+          }
+        });
+        // A self-coloured glyph cannot show on/off by changing `color`, so the off state has to be
+        // carried some other way or the toggle becomes unreadable.
+        const off = tiles.find(t => !t.classList.contains('on')) || tiles[0];
+        off.classList.remove('on');
+        const filt = getComputedStyle(off.querySelector('svg')).filter;
+        if (!filt || filt === 'none') throw new Error('an un-selected Paste Style tile is drawn identically to a selected one — nothing shows which aspects will paste');
+      } finally {
+        document.querySelectorAll('.ps-overlay').forEach(o => o.remove());
+      }
+    } finally {
+      FM.clipboard = null;
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

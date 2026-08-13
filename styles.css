@@ -574,10 +574,18 @@ body {
 .ps-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; color: var(--text); margin: 2px 4px 14px; }
 .ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .ps-cat { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; color: #8d9bb2; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
-.ps-cat svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+/* No `fill`/`stroke` here any more (queue 127): these tiles draw the inspector's own gradient glyphs
+   now, which paint themselves, and a blanket `stroke: currentColor` on the <svg> was written for the
+   flat single-path icons this grid used to own. */
+.ps-cat svg { width: 30px; height: 30px; }
+/* The toggle used to read as a COLOUR change on a monochrome glyph, which a self-coloured icon
+   cannot do. Off is desaturated and dimmed instead, so which aspects you are about to paste is still
+   legible at a glance — and the colour returning IS the "on". */
+.ps-cat:not(.on) svg { filter: grayscale(1) opacity(.42); }
 .ps-cat.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.12); }
 .ps-cat.dis { opacity: .32; pointer-events: none; }
-.ps-aa { font-size: 23px; font-weight: 700; letter-spacing: -1px; }
+/* (.ps-aa is gone with queue 127 — the Text tile was a literal "Aa" in text, the one tile in the
+   grid that was not an icon at all. It shows the inspector's serif-T glyph now, like the card does.) */
 .ps-foot { display: flex; justify-content: flex-end; align-items: center; gap: 22px; margin-top: 16px; padding: 2px 6px 0; }
 .ps-cancel { background: none; border: none; color: var(--text-dim); font-size: 15px; cursor: pointer; padding: 4px; }
 .ps-cancel:hover { color: var(--text); }
