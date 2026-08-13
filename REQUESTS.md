@@ -60,6 +60,30 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [ ] **113 — A third subsection: FILTERS, alongside Effects and Audio Effects.** *Big one — read this
+      whole entry before starting.* His words: *"now I want a third subsection for filters. It'll work
+      the same as the others, and have a button at the top of the colouring section as a shortcut to it.
+      This will be good because lots of people will not want to spend time making filters themselves."*
+      **THE HARD REQUIREMENT, and the reason this is not just presets:** *"Make sure when you add a
+      filter it doesn't just add a bunch of effects and change their variables for you, even if that's
+      what some of the filters are, I want it to show up in the effects menu and actually be grouped as
+      one thing, so let's say you open up the filter to see a bunch of effects inside the filter, like a
+      drop down menu with the effects, basically effects inside effects (filters) and at the top you
+      will have an opacity slider, so you can turn down the effects strength and it will automatically
+      apply it to every effect under that filter."*
+      So a filter is a CONTAINER in the effect stack — one row, expandable, holding real effects, with a
+      strength slider at the top that scales every child at once. That is a new layer-data shape and a
+      new inspector row type, not a preset that explodes on apply. Existing presets DO explode, which is
+      exactly what he is ruling out.
+      Also: *"Some filters will just be their own thing, and not made with just stuff in here, even if
+      it's rare"* — so the container must also be able to hold a bespoke kernel, not only child effects.
+      And: *"You will make a Bunch of filters and section them, so that people can find stuff organised,
+      like how the effects are organised."* — categories, a browser, thumbnails, the lot.
+      PLAN IT BEFORE BUILDING. The pieces are: (a) the container data shape + save/load, (b) the
+      compositor rendering a container and its strength, (c) the inspector's expandable row, (d) the
+      third browser tab + its categories/thumbnails, (e) the shortcut button on Colouring, (f) the
+      filter library itself. (a)-(c) are the risky ones — everything downstream depends on the shape.
+
 - [x] **111 — Snapping and Onion skin should say on screen what they just did.** **DONE v6.70.** His words: *"Make it so
       when you press the snapping and onion skin buttons it actually tells you on screen what happened."*
       He has picked exactly the right two: guides and loop show their result instantly (lines appear,

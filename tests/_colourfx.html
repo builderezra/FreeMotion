@@ -2,6 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- BASE = the repo root. js/fx-thumbs.js requests its photographs page-relative
+     ('fx-art/'+key+'.jpg'), so from /tests/ every one of the 14 resolved to
+     /tests/fx-art/*.jpg and 404'd — silently, because photoArt() falls back to drawn art on
+     purpose. Every tile then painted the SAME fallback, which is why this probe reported a
+     pile of look-alike pairs that do not exist in the shipping browser. Basing the page at
+     the root makes the probe load what the app loads. -->
+<base href="../">
 <title>Colour &amp; Light — which effects actually do anything</title>
 <style>
   html, body { margin: 0; background: #05070b; color: #cfd6e4;
@@ -20,15 +27,15 @@
 but works on desktop, which is the difference worth chasing.</div>
 <div id="out">measuring…</div>
 
-<script src="../js/settings.js"></script>
-<script src="../js/scene.js"></script>
-<script src="../js/eases.js"></script>
-<script src="../js/masks.js"></script>
-<script src="../js/behaviors.js"></script>
-<script src="../js/media.js"></script>
-<script src="../js/blend-modes.js"></script>
-<script src="../js/compositor.js"></script>
-<script src="../js/fx-registry.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script>
+<script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script>
+<script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
 <script>
 /* ============================================================================================
  * FreeMotion — COLOUR & LIGHT audit.  Dev-only; not shipped, not linked from the app.

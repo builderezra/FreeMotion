@@ -341,16 +341,29 @@ window.FM = window.FM || {};
   /* The remaining nine photographs, wired to the individual effects they demonstrate better than
    * their section's default. Applied ON TOP of SUBJECT_OF so the FORM already reasoned out below is
    * preserved — an effect that needs a card keeps its card, it just gets a photograph on it. (#66) */
+  /* Reassigned across Colour & Light so neighbouring tiles do not share a picture (queue 110). Ezra:
+   * "you can tell the effects don't work because all the images don't show any change in the effects
+   * menu." Most of the section had no photo of its own and fell through to the SAME section default,
+   * so forty tiles were one photograph with a succession of quiet grades on it — which reads exactly
+   * like nothing happening, whatever the compositor is doing underneath.
+   * Each move below is to a picture that gives that specific effect something to bite on, and the
+   * reasoning is recorded next to it because "why this photo" is the part that would otherwise be lost. */
   const PHOTO_OF = {
-    sunpath: ['glow', 'softglow', 'darkglow', 'lightglow', 'edgeglow', 'lensflare', 'rays', 'lightleak', 'halation'],
-    bush:    ['filmgrain', 'noise', 'blocknoise'],
-    shore:   ['saturate', 'vibrance', 'hue', 'grayscale', 'duotone', 'gradientmap', 'tint'],
-    bay:     ['gradientoverlay', 'iridescence'],
-    run:     ['motionblur', 'motionflow'],
+    sunpath: ['glow', 'darkglow', 'edgeglow', 'lensflare', 'rays', 'lightleak'],
+    bush:    ['filmgrain', 'noise', 'blocknoise', 'bumpmap'],           // bumpmap needs real texture to raise
+    shore:   ['saturate', 'hue', 'duotone', 'gradientmap', 'tint',
+              'spotcolor'],                                            // shore is the only photo with a vivid band near hue 0 for Spot Colour to keep
+    bay:     ['gradientoverlay', 'iridescence', 'vibrance'],            // Vibrance peaks on MID-saturation; shore was already too vivid for it to do anything
+    run:     ['motionblur', 'motionflow', 'sepia'],                     // sepia reads best on a picture that started with several hues
     clouds:  ['vignette', 'lightning'],
-    figures: ['threshold', 'posterize'],
-    cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines'],
-    pair:    ['lumamatte', 'matchgrade', 'highlightsshadows'],
+    figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
+    cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
+              'tealorange'],                                            // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+    pair:    ['lumamatte', 'matchgrade', 'levels'],
+    dusk:    ['lightglow'],                                             // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash
+    towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
+    dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
+    ramp:    ['highlightsshadows'],                                     // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
   };
   const PHOTO_SUBJECT = {};
   Object.keys(PHOTO_OF).forEach(k => PHOTO_OF[k].forEach(t => { PHOTO_SUBJECT[t] = k; }));
@@ -486,7 +499,12 @@ window.FM = window.FM || {};
     // Edge/alpha work: the effect happens at the layer's BORDER, so the tile has to show a border
     // and some backdrop outside it. A full-frame subject would push the whole thing off-tile.
     glow: 'card', softglow: 'card', darkglow: 'card', lightglow: 'card',
-    innerglow: 'card', stroke: 'card', dropshadow: 'card', longshadow: 'card', radialshadow: 'card',
+    innerglow: 'card', stroke: 'card', dropshadow: 'card', longshadow: 'card',
+    // Radial Shadow moves OFF the card: the card leaves 12-20px of margin and this effect projects
+    // the silhouette outward, so on a card it could only ever render as a rim — which is what made
+    // it a twin of Long Shadow. The ball has ~50px of open backdrop, so the plume can widen AND
+    // fade inside the tile, which is the effect's actual claim.
+    radialshadow: 'ball',
     // Edge Glow's headline is that it works on SHAPES and text — a tile showing a photograph would
     // say the opposite, because a photograph is the one subject the old luminance-only version
     // already handled. 'ball' is a flat-filled ellipse with clear backdrop all round it: no interior
@@ -742,10 +760,21 @@ window.FM = window.FM || {};
      *     for 0.25, so on this subject they simply never fire.
      * Everything here stays inside the control's own range and stays honest about what the effect
      * does; it is the same picture the effect makes, taken far enough to see at 96 pixels. */
-    halation: function (l, h) { const p = h.effects[0].params; p.threshold = 0.1; p.spread = 20; p.amount = 2; p.tightness = 0; p.knee = 1; },
-    lightglow: function (l, h) { const p = h.effects[0].params; p.radius = 20; p.threshold = 18; p.amount = 1; },
-    softglow: function (l, h) { const p = h.effects[0].params; p.radius = 28; p.threshold = 12; p.amount = 1; },
-    bumpmap: function (l, h) { h.effects[0].params.amount = 3; },
+    // tightness 0 made rCore 30% of rWide, i.e. two radii merged into one ordinary glow — the exact
+    // thing this effect's own comment says it exists NOT to be. 0.9 gives a hot near-sharp core
+    // inside the wide wash, which is what halation actually looks like.
+    halation: function (l, h) { const p = h.effects[0].params; p.threshold = 0.1; p.spread = 20; p.amount = 2; p.tightness = 0.9; p.knee = 1; },
+    // radius here is RAW PLATE PIXELS on the 96px thumbnail plate, so 20 meant a 41px-wide box over
+    // a 96px frame — the keyed light got averaged into a veil. And threshold 18 keyed almost every
+    // pixel of a sunset, so the hard key stopped selecting anything.
+    lightglow: function (l, h) { const p = h.effects[0].params; p.radius = 10; p.threshold = 30; p.amount = 1; },
+    /* radius is a PERCENT, resolved as round(min(W,H)/40 * radius/100). On the 96px thumbnail plate
+     * that is round(2.4 * 0.28) = ONE PIXEL — so this tile had no diffusion in it whatsoever and was
+     * simply an exposure lift, which is why it was indistinguishable from Light Glow. 400 is the
+     * control's own maximum and resolves to a 10px radius here; on a 1080p comp the same formula
+     * gives 27px at 100%, so this is the 96px correction, not a cranked slider. */
+    softglow: function (l, h) { const p = h.effects[0].params; p.radius = 400; p.threshold = 22; p.amount = 1; },
+    bumpmap: function (l, h) { h.effects[0].params.amount = 2.4; },   // amount drives the relief AND a flat multiply, so max washes the tile out
     levels: function (l, h) { const p = h.effects[0].params; p.inblack = 80; p.inwhite = 185; p.gamma = 1.7; },
     hslbands: function (l, h) { const p = h.effects[0].params; p.sat = 100; p.lum = 34; p.range = 3; },
     tealorange: function (l, h) { h.effects[0].params.amount = 1; },
@@ -799,6 +828,12 @@ window.FM = window.FM || {};
     // Top of its range is all the headroom there is (Protect-highlights measured WORSE, 12.98 vs
     // 14.36) — the tile is as strong as the control allows.
     vibrance: function (l, h) { h.effects[0].params.amount = 2; },
+    /* Added for queue 110 — each of these rendered at a strength that showed nothing at 84px. */
+    spotcolor: function (l, h) { h.effects[0].params.tolerance = 0.32; },      // keep-window is tolerance*120 degrees; 0.2 only half-caught shore's band
+    vignette: function (l, h) { const p = h.effects[0].params; p.amount = 1; p.size = 20; },  // size is the UNTOUCHED inner radius: 35 left the darkening in the corners only
+    bleachbypass: function (l, h) { h.effects[0].params.amount = 1; },         // amount is a straight opacity on the whole look; 0.7 was showing a partly-unprocessed photo
+    longshadow: function (l, h) { h.effects[0].params.length = 16; },          // beyond 16 the throw is clipped by the plate, so bigger values paint an identical corner fill
+    radialshadow: function (l, h) { const p = h.effects[0].params; p.reach = 70; p.x = 82; p.y = 88; },   // light OUTSIDE the silhouette, throwing up-left — the default 50/35 sat inside it and could only make a rim
   };
 
   // Fresh scene per type: shallow-clone the layer list (plain objects) and give the TARGET layer
