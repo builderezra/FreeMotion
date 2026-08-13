@@ -60,6 +60,26 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [ ] **100 — Dragging a timeline clip still selects it; I want to drag without selecting.** His words:
+      *"Dragging a clip still selects it, I want to be able to drag layers without selecting them, right
+      now it just selects it but doesn't show the ui."* Note the second half — this is TWO things. The
+      drag is selecting the layer (it shouldn't), AND the selection it makes is a half-selection: the
+      layer becomes selected but the inspector UI does not come up, so you end up in a state that is
+      neither "not selected" nor "properly selected". Fixing only the first half would leave a layer
+      silently selected with no UI, which is the worse bug of the two. Related to #58 (hold a clip to
+      drag it without selecting first, shipped) — so this is a REGRESSION or that fix only covered the
+      hold path and not the plain drag.
+- [ ] **97 update — the freehand "dead band" did NOT reproduce on a clean load, and my first fix was
+      inert.** I found a 303px empty band above the drawing area and shipped a CSS rule to collapse it —
+      then mutation-checked it and the rule changed nothing: with it deleted before entering drawing
+      mode on a fresh load, the grid rows are `52px 792px` and the canvas is 374x666 either way, byte
+      for byte. The band I "reproduced" was my own testing artefact (I had resized the browser from
+      desktop to phone width WITHOUT reloading, and the stale grid survived). Rule reverted rather than
+      shipped. His screenshot still shows a real ~212px band on a real phone at v6.60, so the bug is
+      real and the cause is still unknown. NEXT: the likely difference is the ROUTE — I called
+      FM.startDraw() directly, whereas he goes Add sheet -> Freehand Drawing, and the sheet closing may
+      be what leaves the grid stale. Reproduce via the add sheet, not the API.
+
 - [x] **99 — Rotate dial should snap every 45 degrees.** **DONE v6.63.** His words: *"The spin tool should have snapping
       every 45 degrees."* i.e. the rotation control catches at 0/45/90/135/180/225/270/315. Needs a pull
       threshold so you can still land on an arbitrary angle by dragging past the notch — a hard snap that
