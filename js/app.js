@@ -1342,7 +1342,18 @@ window.FM = window.FM || {};
 
   FM.addTextLayer = function () {
     const P = FM.scene.project;
-    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(P.height / 12), start: FM.time, duration: FM.defaultLayerDuration() });
+    /* Sized off the SHORTER side, not the height (queue 134). Ezra: "Text is broken: 180pt renders
+     * tiny." It was not broken — the size was reaching the renderer correctly, verified by measuring
+     * the drawn ink at 40/160/180/400pt and finding it perfectly linear. The default was just wrong
+     * for his frame: P.height/12 on his 4:3 2160p project gives exactly the 180 in his screenshot,
+     * and 180 on a 2880-wide frame is 11.5% of the width where the same formula on 1080x1920 gives
+     * 30%. Scaling by HEIGHT is only consistent while the height is the short side, i.e. portrait;
+     * on anything landscape or square the word arrives about half the size it should be.
+     * min(w,h)/6.75 is the same ratio expressed against whichever side is shorter — it returns 160 on
+     * 1080x1920 exactly as before, so portrait projects are untouched, and 320 on 2880x2160 instead
+     * of 180. */
+    const shortSide = Math.min(P.width, P.height);
+    const layer = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: Math.round(shortSide / 6.75), start: FM.time, duration: FM.defaultLayerDuration() });
     FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];

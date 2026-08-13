@@ -176,10 +176,14 @@ Numbered with Ezra's own queue numbers where he gave them.
       capturing pointers over the timeline, or the clip is being treated as un-draggable and taking the
       scroll with it. Captions was made real in #43, so this is likely fallout from that.
 
-- [ ] **137 — "Edit Text" has the wrong icon.** His words: *"edit text button should have a diff icon."*
+- [x] **137 — "Edit Text" has the wrong icon.** (v6.86) His words: *"edit text button should have a diff icon."*
       Screenshot: slot 7 "Edit Text" uses a green DIAMOND — which is the keyframe diamond used everywhere
       else in the app for animation. Reads as "add a keyframe", not "edit the text". Needs an icon that
       means text editing and does not collide with an existing meaning.
+      **Fixed v6.86.** Text layers were falling through to ICO_SHAPE, whose path is literally a diamond
+      (`M12 3.6 20.4 12 12 20.4 3.6 12z`) — the same mark the keyframe system uses. Text and caption
+      layers now get their own serif capital-T glyph in the same element-family gradient, branching on
+      exactly the condition elementLabel() already uses so the icon and the wording can never disagree.
 
 - [x] **133 — Film grain: CONSTANT FLOW, no start/stop. Fourth time asking.** (v6.75) His words: *"Film grain
       needs to move faster, I want a constant flow, not a noticeable start and stop. PLEASE JUST MAKE IT
@@ -198,13 +202,23 @@ Numbered with Ezra's own queue numbers where he gave them.
       changed the DURATION, which cannot fix a pause — speeding up a stop-start just stutters more
       often. The stop was in the curve the whole time.
 
-- [ ] **134 — Text is broken: 180pt renders tiny.** Screenshot on v6.74, iPhone: a text layer with the
+- [x] **134 — Text is broken: 180pt renders tiny.** (v6.86) Screenshot on v6.74, iPhone: a text layer with the
       size control reading **180 pt** draws as a ~20px word on the canvas, with the selection box shrunk
       to match. So the point size is not reaching the render — the layer is drawn at something near the
       default regardless of what the control says. Note the control and the box AGREE with each other and
       both disagree with 180, which points at the value never being applied rather than at a stale box.
       This is the fourth text report (#88, #97, #98 lineage) so it needs a real reproduction on a device
       profile, not a desktop glance.
+      **Fixed v6.86 — and the report's diagnosis was wrong, which matters.** fontSize was NOT being
+      ignored: I measured the drawn ink at 40/160/180/400pt and it is perfectly linear, so the value
+      reaches the renderer correctly. The real fault is the DEFAULT. addTextLayer used
+      `Math.round(P.height / 12)`, and his project is 4:3 2160p — 2160/12 = exactly the 180 in his
+      screenshot. Scaling by HEIGHT is only consistent while the height is the short side, i.e.
+      portrait; on his frame 180pt is 11.5% of the width where the same formula gives 30% on 1080x1920.
+      A 1920x1080 project was worse still: a 90pt default, 8.5% of the frame.
+      Now `Math.min(P.width, P.height) / 6.75` — the same ratio against whichever side is shorter.
+      Measured after: portrait 160 → 26.7% (byte-identical, no regression), his 4:3 320 → 20.0%,
+      landscape 160 → 15.0%. Suite 231/231.
 
 - [x] **144 — The slam shake reveals the editor behind home.** (v6.82) His words: *"When the shake happens it
       shows the editing page behind it, looks weird, just make sure you don't see the page behind it,

@@ -1312,6 +1312,13 @@ window.FM = window.FM || {};
     '<rect x="10" y="18.4" width="4" height="4" rx="1" fill="url(#fm-ci-el)"/>' +
     '<rect x="1.6" y="10" width="4" height="4" rx="1" fill="url(#fm-ci-el)"/>';
 
+  /* A serif capital T — a letterform, so it cannot be confused with the keyframe diamond ICO_SHAPE
+     draws. Same EL_GRAD as its siblings so the element family still reads as one set. */
+  const ICO_TEXT = EL_GRAD +
+    '<path d="M4.4 7.2V5h15.2v2.2" stroke="url(#fm-ci-el)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' +
+    '<path d="M12 5v14" stroke="url(#fm-ci-el)" stroke-width="2" stroke-linecap="round"/>' +
+    '<path d="M8.6 19h6.8" stroke="url(#fm-ci-el)" stroke-width="2" stroke-linecap="round"/>';
+
   const ICO_PRESETS = lg('fm-ci-pre', 4, 20, 20, 4, [
       ['0', '#FFB03A'], ['.55', '#FFD84D'], ['1', '#FFF0A6']]) +
     '<path d="M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z" fill="url(#fm-ci-pre)"/>';
@@ -1334,7 +1341,14 @@ window.FM = window.FM || {};
         (layer.volume != null && typeof layer.volume === 'number' && layer.volume <= 0);
       return silent ? ICO_VOLUME_OFF : ICO_VOLUME;
     }
-    if (key === 'element') return (layer && FM.isPointShape && FM.isPointShape(layer)) ? ICO_POINTS : ICO_SHAPE;
+    // Text gets its own glyph (queue 137). Ezra: "edit text button should have a diff icon." It was
+    // falling through to ICO_SHAPE — a DIAMOND — which is the keyframe mark used everywhere else in
+    // the app, so the card read as "add a keyframe" rather than "edit the text". elementLabel()
+    // already branches on exactly this condition, so the icon and the wording cannot disagree.
+    if (key === 'element') {
+      if (layer && (layer.type === 'text' || layer.type === 'caption')) return ICO_TEXT;
+      return (layer && FM.isPointShape && FM.isPointShape(layer)) ? ICO_POINTS : ICO_SHAPE;
+    }
     return null;
   }
 
