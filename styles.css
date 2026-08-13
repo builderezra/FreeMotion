@@ -105,20 +105,6 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-/* The full-height black strip down the RIGHT edge, reported twice with a screenshot (queue 135).
-   Nothing in this app is ever meant to pan sideways, and yet two things park off-screen to the right
-   while home is up: #app at translate3d(100%,0,0) (fm-pop-out, animation-fill-mode:both) and #add-fab
-   at translate3d(100vw,0,0). Both are position:fixed, which normally keeps them out of the scrollable
-   area — but the moment anything lets the page scroll horizontally, panning even a few px reveals the
-   page background beside the app, which is exactly the strip in his screenshot (the fixed top bar
-   stops short of it too, which is why it reads as a bar rather than a mis-sized card).
-   I could NOT reproduce it here: 13 interleaved open/close cycles sampled every frame never once
-   produced a transform-without-fixed state or scrollWidth > clientWidth. So rather than keep guessing
-   which element wins the race on iOS, the sideways scroll itself is removed — that kills the whole
-   class of bug regardless of which one is responsible.
-   `clip` rather than `hidden`, so html does not become a scroll container (that would break scroll
-   anchoring and any position:sticky); plain `hidden` sits in front as the fallback. */
-html, body { overflow-x: hidden; overflow-x: clip; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, sans-serif;
