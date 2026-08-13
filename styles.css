@@ -1915,8 +1915,16 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   border-left: 2px solid #eaf0f8; pointer-events: none;
   box-shadow: 0 0 6px rgba(255,255,255,.45);
 }
+/* -6px, not -5px (queue 102). Ezra: "the playhead is actually off centred to its little triangle at
+   the top, if you just slightly move over the little start triangle bit to the left it should be
+   good." He was right and the arithmetic that says otherwise is the trap here: the line is a 2px LEFT
+   BORDER on a zero-width box, so an absolutely-positioned ::before is offset from the PADDING box,
+   which begins AFTER that border. Measured live — border box starts at 195, padding box at 197, so
+   the old -5px put the triangle's centre on 197 while the line's centre is 196. One pixel right, and
+   at DPR 3 that is three device pixels of visible offset. -6px lands both on 196.
+   The LINE never moves: it is what every time in the app is measured against. */
 #tl-centerline::before {
-  content: ""; position: absolute; top: 0; left: -5px;
+  content: ""; position: absolute; top: 0; left: -6px;
   border-left: 5px solid transparent; border-right: 5px solid transparent;
   border-top: 8px solid #eaf0f8;
 }

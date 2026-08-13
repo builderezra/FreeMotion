@@ -170,12 +170,22 @@ Numbered with Ezra's own queue numbers where he gave them.
       wall. Fix the momentum to end at the boundary rather than letting it run and yanking it back.
       RELATED to 103 — a longer glide will make this worse and more visible, so do them together.
 
-- [ ] **101 — Timeline ruler notches vanish when fully zoomed IN.** His words: *"It appears the little
+- [ ] **101 — Timeline ruler notches vanish when fully zoomed IN.** *NOT REPRODUCED, and my first
+      diagnosis was wrong — recorded so nobody re-walks it.* I found the notch thinner capping on
+      `totalFrames / frameStep > 1500`, i.e. on the WHOLE project rather than the visible window, and
+      built a windowed renderer for it. Then measured, and the cap never binds: at MAX zoom the ruler
+      shows 11 notches at 25px spacing, and that is **identical for a 60s, 300s, 900s, 1800s and 3600s
+      project** — 236 nodes every time. `viewDur()` already bounds what the ruler covers, so project
+      length never reaches the cap. The windowing was reverted (it was a node-count optimisation
+      justified by a wrong cause, 236 -> 27, not a fix for this). STILL UNREPRODUCED: notches are
+      present at max zoom on this machine. Next: get the exact zoom + project length from his device,
+      or have him screenshot the ruler at full zoom — his earlier screenshot DOES show ticks, so the
+      failing state may be a specific zoom step rather than "fully in". His words: *"It appears the little
       notches are missing, there are some if you zoom out but not at fully zoomed in."* Screenshot at
       v6.64 shows the ruler nearly bare. Note this is the opposite of what you'd expect — zooming in
       should give MORE notches (one per frame at full zoom, which v2.53 built deliberately), so
       something is culling them at the densest end rather than failing to draw them at the sparse end.
-- [ ] **102 — The playhead line is off-centre under its triangle.** His words: *"the playhead is
+- [x] **102 — The playhead line is off-centre under its triangle.** **DONE v6.71.** His words: *"the playhead is
       actually off centred to its little triangle at the top, if you just slightly move over the little
       start triangle bit to the left it should be good."* So the TRIANGLE moves left a touch, not the
       line — the line is the accurate one and must not move, since it is what everything is measured
