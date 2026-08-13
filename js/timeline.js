@@ -1308,8 +1308,20 @@ window.FM = window.FM || {};
           // 50ms behind and would otherwise fire mid-cue-drag and grab the clip as well.
           if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }
           try { if (captureEl && pointerId != null) captureEl.setPointerCapture(pointerId); } catch (_) {}
-          cueDrag = { layer: layer, cue: cue, mode: mode, startX: clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
-          FM.selectLayer(layer.id);
+          cueDrag = { layer: layer, cue: cue, ci: ci, mode: mode, startX: clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
+          /* #149 — Ezra: "when dragging the cue length for captions it should show it changing live not
+           * just wait for you to let go then jump."
+           * This line was the cause, and it is not obvious from reading it. selectLayer() rebuilds the
+           * timeline, which THROWS AWAY the chip element captured one line above — so every pointermove
+           * afterwards restyled a node that was no longer in the document. Measured
+           * (tests/_cuelive.html): the cue data moved live, and the chip's rendered width sat at 0.0 for
+           * the whole drag and then stepped to 462.5 the instant the release rebuilt it. That is exactly
+           * the jump he is describing, and it is why "the chip already updates live" was true of the
+           * code and false on screen.
+           * Two halves: don't rebuild when the layer is already selected (the common case — you drag a
+           * cue on the track you are working on), and re-acquire the chip from the live DOM when a
+           * rebuild does happen, so the drag is never left holding a detached node. */
+          if (FM.scene.selectedId !== layer.id) FM.selectLayer(layer.id);
           if (FM.playing) FM.pause();
         };
         const seekToCue = () => {
@@ -1847,6 +1859,15 @@ window.FM = window.FM || {};
             if (isFinite(dur)) en = Math.min(en, dur);
             en = Math.max(en, cueDrag.s0 + MIN);
             cue.end = en;
+          }
+          /* Re-acquire the chip if a rebuild took it (#149). Styling a DETACHED node is silent — it
+           * throws nothing and shows nothing — so the drag looked live in the code and was frozen on
+           * screen until the release rebuilt everything. Anything that rebuilds the timeline mid-drag
+           * orphans it, so this asks the live DOM rather than trusting the reference from pointerdown.
+           * data-ci is stamped on every chip when it is built, which is what makes the lookup exact. */
+          if (!cueDrag.chip || !cueDrag.chip.isConnected) {
+            const liveClip = tracksEl && tracksEl.querySelector('.clip[data-id="' + cueDrag.layer.id + '"]');
+            cueDrag.chip = liveClip ? liveClip.querySelector('.cap-cue[data-ci="' + cueDrag.ci + '"]') : null;
           }
           if (cueDrag.chip) {
             cueDrag.chip.style.left = (cue.start * pps) + 'px';

@@ -245,7 +245,7 @@ better still, keep working inside the turn rather than parking work for a later 
       change — per-cue effect stacks — plus a control in the effects panel to say which you mean, so
       cost it honestly before starting. Sits naturally with #150 and #149 as a captions pass.
 
-- [ ] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** His words:
+- [x] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** (v6.95) His words:
       *"when dragging the cue length for captions it should show it changing live not just wait for you
       to let go then jump."*
       **First look done, and the obvious suspects do NOT explain it — do not start by assuming they do.**
@@ -256,6 +256,26 @@ better still, keep working inside the turn rather than parking work for a later 
       So: **measure which surface actually jumps before touching anything** — sample the chip width,
       the inspector row and the rendered canvas text on each frame of a drag and compare each against
       its value after release. Guessing at one surface is how the black bar cost six attempts.
+      **Measured, and the answer was the surface I had just talked myself out of.** The note above was
+      wrong: the chip only *looked* live in the source. `tests/_cuelive.html` samples all three surfaces
+      through a real drag —
+
+      | surface | during the drag | across the release |
+      |---|---|---|
+      | the cue data (`cue.end`) | live | no change |
+      | **the timeline chip's rendered width** | **flat at 0.0px** | **0.0 → 462.5 — the jump** |
+
+      A rendered width of **zero** is the tell: the chip was DETACHED. `startCue` calls `selectLayer()`,
+      which rebuilds the timeline and throws away the chip element captured one line earlier — so every
+      pointermove afterwards was restyling a node that had left the document. Styling a detached node
+      raises nothing and shows nothing, which is why reading the code said "already live" while the
+      screen said otherwise, and why nothing ever caught it.
+      **Fixed v6.95** in two halves: don't rebuild at all when the layer is already selected (the common
+      case — you drag a cue on the track you are working on), and re-acquire the chip from the live DOM
+      whenever a rebuild does take it, so a drag can never be left holding an orphan. Measured after:
+      the chip tracks the finger for 101.9px and does not move at all on release — what you see while
+      dragging is what you get. Mutation-checked; the test measures the RENDERED width, because the data
+      and the style property were both correct the whole time.
 
 - [ ] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans.** His words:
       *"make the auto detect captions button way easier to access and use. and it should have a choice

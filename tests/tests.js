@@ -11756,6 +11756,58 @@
     }
   });
 
+  /* #149 — Ezra: "when dragging the cue length for captions it should show it changing live not just
+     wait for you to let go then jump."
+     The cause was invisible in the source: startCue called selectLayer(), which rebuilds the timeline
+     and throws away the chip element captured one line earlier, so every pointermove afterwards
+     restyled a node that was no longer in the document. Reading the code, the drag "already updated
+     live"; on screen it was frozen. Styling a detached node throws nothing, which is why nothing ever
+     caught it.
+     So this test measures the RENDERED width, not the data and not the style property — those were
+     both correct the whole time. */
+  test('captions: dragging a cue edge moves the chip during the drag, not on release', { item: 'cue-live-drag' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const mouse = (type, x, y) => new PointerEvent(type, { pointerType: 'mouse', pointerId: 77, clientX: x, clientY: y, bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+    try {
+      const cap = FM.makeLayer('text', { name: 'Caps', text: '', x: 0, y: 0, start: 0, duration: 6 });
+      cap.captions = [{ start: 0.5, end: 2.0, text: 'one' }, { start: 3.0, end: 4.5, text: 'two' }];
+      FM.scene = scene([cap]);
+      FM.selectLayer(cap.id); FM.refreshAll(); await sleep(160);
+
+      const chip = document.querySelector('.cap-cue');
+      if (!chip) throw new Error('the captions clip built no cue chip');
+      const grip = chip.querySelector('.cap-cue-grip.r');
+      if (!grip) throw new Error('the cue chip has no right-edge grip to drag');
+
+      const gb = grip.getBoundingClientRect();
+      const x0 = gb.left + gb.width / 2, y0 = gb.top + gb.height / 2;
+      const widths = [];
+      grip.dispatchEvent(mouse('pointerdown', x0, y0));
+      for (let i = 1; i <= 8; i++) {
+        window.dispatchEvent(mouse('pointermove', x0 + i * 10, y0));
+        await new Promise(r => requestAnimationFrame(r));
+        // Ask the LIVE dom every frame: the whole defect was that the node we started with stopped
+        // being the node on screen.
+        const live = document.querySelector('.cap-cue[data-ci="0"]');
+        widths.push(live ? live.getBoundingClientRect().width : 0);
+      }
+      const beforeUp = widths[widths.length - 1];
+      window.dispatchEvent(mouse('pointerup', x0 + 80, y0));
+      await sleep(180);
+      const liveAfter = document.querySelector('.cap-cue[data-ci="0"]');
+      const afterUp = liveAfter ? liveAfter.getBoundingClientRect().width : 0;
+
+      const span = Math.max.apply(null, widths) - Math.min.apply(null, widths);
+      if (span < 20) throw new Error('the cue chip only moved ' + span.toFixed(1) + 'px across the whole drag — it is not tracking the finger, which is the "wait for you to let go" report');
+      if (widths.some(v => v === 0)) throw new Error('the cue chip measured 0px mid-drag — the drag is restyling a node that is no longer in the document');
+      // …and no step at the end: what you saw while dragging is what you get.
+      if (Math.abs(afterUp - beforeUp) > 6) throw new Error('the chip jumped ' + (afterUp - beforeUp).toFixed(1) + 'px on release (' + beforeUp.toFixed(1) + ' → ' + afterUp.toFixed(1) + ') — the drag preview did not match the result');
+    } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

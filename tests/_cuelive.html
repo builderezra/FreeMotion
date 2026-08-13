@@ -1,0 +1,98 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#149 — which surface jumps when you drag a cue's length?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.55 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
+#out{padding:12px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* Ezra (#149): "when dragging the cue length for captions it should show it changing live not just
+   wait for you to let go then jump."
+   The timeline chip ALREADY sets its own left/width on every pointermove, so if I "fixed" that I
+   would change nothing and claim a win — the same trap #128 nearly was. There are three surfaces that
+   could be the one he is watching, and the honest move is to sample all three during a real drag and
+   see which of them only moves on release:
+     1. the cue DATA          (cue.end)                     — mutated in the move handler
+     2. the timeline CHIP     (its rendered width)          — restyled in the move handler
+     3. the inspector's LIST  (the .cap-time number inputs) — refreshed in the pointerUP handler
+   A surface that is flat during the drag and then steps at the end is the one he means. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done(){ out.textContent = L.join('\n'); window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.makeLayer || !w.FM.captions || !w.FM.inspector) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 400);
+    })();
+  });
+
+  function mouse(w, type, x, y) {
+    return new w.PointerEvent(type, { pointerType: 'mouse', pointerId: 7, clientX: x, clientY: y,
+      bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+  }
+
+  async function go(w) {
+    var FM = w.FM, d = w.document;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      var cap = FM.makeLayer('text', { name: 'Caps', text: '', x: 0, y: 0, start: 0, duration: 6 });
+      cap.captions = [{ start: 0.5, end: 2.0, text: 'one' }, { start: 3.0, end: 4.5, text: 'two' }];
+      FM.scene.layers = [cap];
+      FM.selectLayer(cap.id); FM.refreshAll();
+      await new Promise(function (r) { setTimeout(r, 300); });
+
+      var chip = d.querySelector('.cap-cue');
+      if (!chip) { L.push('no .cap-cue on the timeline'); return done(); }
+      var grip = chip.querySelector('.cap-cue-grip.r');
+      if (!grip) { L.push('no right grip on the cue chip'); return done(); }
+      var capRows = d.querySelectorAll('.cap-row .cap-time');
+      L.push('inspector cue rows found: ' + (capRows.length / 2) + '  (0 = the captions list is not on screen)');
+
+      var cue = cap.captions[0];
+      var readEnd = function () {
+        var rows = d.querySelectorAll('.cap-row');
+        if (!rows.length) return null;
+        var t = rows[0].querySelectorAll('.cap-time');
+        return t.length > 1 ? parseFloat(t[1].value) : null;
+      };
+
+      var gb = grip.getBoundingClientRect();
+      var x0 = gb.left + gb.width / 2, y0 = gb.top + gb.height / 2;
+      var samples = [];
+      grip.dispatchEvent(mouse(w, 'pointerdown', x0, y0));
+      for (var i = 1; i <= 12; i++) {
+        w.dispatchEvent(mouse(w, 'pointermove', x0 + i * 9, y0));
+        await new Promise(function (r) { w.requestAnimationFrame(r); });
+        samples.push({ data: cue.end, chip: chip.getBoundingClientRect().width, list: readEnd() });
+      }
+      var beforeUp = samples[samples.length - 1];
+      w.dispatchEvent(mouse(w, 'pointerup', x0 + 108, y0));
+      await new Promise(function (r) { setTimeout(r, 250); });
+      var after = { data: cap.captions[0].end, chip: (d.querySelector('.cap-cue') || {}).getBoundingClientRect
+                      ? d.querySelector('.cap-cue').getBoundingClientRect().width : null, list: readEnd() };
+
+      function moved(key) {
+        var vals = samples.map(function (s) { return s[key]; }).filter(function (v) { return v != null; });
+        if (!vals.length) return 'not present';
+        var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+        return (hi - lo) > 0.001 ? 'LIVE (moved ' + (hi - lo).toFixed(2) + ' during the drag)' : 'FLAT during the drag';
+      }
+      L.push('');
+      L.push('during a 12-step drag of the cue\'s RIGHT edge:');
+      L.push('  cue data (cue.end)        ' + moved('data'));
+      L.push('  timeline chip width       ' + moved('chip'));
+      L.push('  inspector list value      ' + moved('list'));
+      L.push('');
+      L.push('at the moment before release vs after release:');
+      L.push('  data  ' + beforeUp.data + '  ->  ' + after.data);
+      L.push('  chip  ' + (beforeUp.chip == null ? 'n/a' : beforeUp.chip.toFixed(1)) + '  ->  ' + (after.chip == null ? 'n/a' : after.chip.toFixed(1)));
+      L.push('  list  ' + beforeUp.list + '  ->  ' + after.list + '   <-- a JUMP here is the reported bug');
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 5).join('\n'));
+    }
+    done();
+  }
+})();
+</script></body></html>
