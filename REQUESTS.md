@@ -310,6 +310,30 @@ Numbered with Ezra's own queue numbers where he gave them.
       drag on. Desktop timings are not evidence about his phone. Next pass must be a real profile of the
       timeline scroll path under CPU throttling, looking specifically for forced synchronous layout and
       per-frame innerHTML, and it takes priority over feature work.
+      **First real profiling pass done (v6.78). Findings, including two dead ends — read these before
+      trying anything, so the same ground is not covered a fourth time:**
+      · Desktop, 8 layers, a 90-frame timeline scroll: median frame 16.7ms, p95 18.9ms, ZERO long tasks,
+        renderScene averaging 0.32ms. Smooth. **This is not evidence** — it is the same measurement that
+        made me say "it's fine" three times before, recorded here only to stop it being mistaken for one.
+      · The scroll path itself is cheap and does no per-frame innerHTML: the handler calls FM.scrubTime
+        once per scroll event (34 calls across 90 frames), and the timeline does NOT rebuild — its
+        render() ran 0 times during the whole gesture. So the "per-frame innerHTML" I suspected is not
+        there. That hypothesis is dead.
+      · **The obvious lever is already known to be low-yield.** The preview does render more pixels than
+        the screen shows (PREVIEW_SS = 1.5, so ~2.25x the device-pixel area; measured live at 2.98x the
+        CSS box on a dpr-2 display). But notePlaybackCost's own comment records a measurement: on one
+        plain 2048x2048 clip with no effects, **thirteen times fewer pixels bought only 32% less time**
+        (12.2ms → 8.3ms). Decoding a video frame and handing it to the GPU costs the same whatever size
+        canvas it lands in. So chasing canvas resolution — which is exactly where his "it doesn't
+        compress the quality in the canvas playback" points — cannot be the main win for a video layer.
+      · **Therefore the next pass belongs on the VIDEO path, not the raster path**: how often a frame is
+        pulled off the <video> element while scrubbing, whether seeking is being forced per scroll event,
+        and whether the same decoded frame is re-decoded rather than reused. His case is ONE two-second
+        screen recording, so per-frame decode/seek is the only thing left big enough to explain it.
+      · Still untested and worth doing: the adaptive tier only resizes the canvas when _inMotion FLIPS
+        (app.js:150). If the ladder drops a further rung mid-gesture, nothing appears to call
+        resizeCanvas() again — so the canvas may take one step down and then stop adapting. Verify that
+        before assuming it is a defect.
 - [x] **119 + 120 — The EXPORT frame-rate list is unordered, and should match the canvas one.** (v6.74) His
       words: *"This menu is all over the shop, needs to be ordered"* (screenshot: 30, 24, 25, 60, 50, 12
       — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas
