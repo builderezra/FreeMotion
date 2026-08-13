@@ -96,7 +96,19 @@ Numbered with Ezra's own queue numbers where he gave them.
       not the effects themselves — every preview tile in Colour & Light shows the same unchanged
       picture, so the whole section looks dead from the menu. That fits every measurement: the effects
       DO work when applied (audited on media, image and shape layers). The bug is in the thumbnail
-      generation. Related to #52 / #85 / #144, which have circled this area three times before. His words: *"There's a shit load
+      generation. Related to #52 / #85 / #144, which have circled this area three times before.
+      *MEASURED (`tests/_fxthumbs.html`, through the menu's own FM.fxThumbs.mount):* in Chrome all 42
+      tiles differ from each other — control invert-vs-grayscale 127, median pair distance 40, none
+      blank. Does not reproduce here either. BUT at a PERCEPTUAL threshold 13 pairs are close enough
+      that a person would call them the same tile at 84px: grayscale~spotcolor (5), brightness~bumpmap
+      (6), lightglow~softglow (6), contrast~levels (9), vibrance~tealorange (9), exposure~bumpmap (11),
+      longshadow~radialshadow (11) and six more at 12. THAT is fixable here without his device, and a
+      menu where a dozen tiles look interchangeable reads as "none of these do anything" whatever the
+      compositor is doing. Fix = subjects and params chosen to show what each effect actually does.
+- [ ] **112 — sw.js is an EMPTY FILE.** Found while chasing 110. The app registers a service worker and
+      is installable as a PWA, but sw.js is zero bytes — so there is no offline caching, no precache,
+      nothing. Either it never got written or it was emptied. Worth deciding deliberately: a PWA that
+      cannot open offline is a PWA in name only, and he uses this on a phone. His words: *"There's a shit load
       of effects in the colour & light section that blatantly do nothing and don't work."* Turn this into
       an exact list before touching anything: render a test frame with and without each effect in that
       category and count changed pixels. Must test at a STRONG setting as well as the default, or an
