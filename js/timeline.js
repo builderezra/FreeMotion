@@ -1576,7 +1576,12 @@ window.FM = window.FM || {};
       if (zo) zo.addEventListener('click', () => this.zoomBy(1 / 1.5));
       if (zi) zi.addEventListener('click', () => this.zoomBy(1.5));
       const sn = document.getElementById('btn-snap');
-      if (sn) sn.addEventListener('click', () => { snapping = !snapping; sn.classList.toggle('active', snapping); });
+      // Announce the new state — see the note on btn-onion in js/app.js. Snapping is invisible until
+      // the next drag, so without this the button looks like it did nothing at all. (queue 111)
+      if (sn) sn.addEventListener('click', () => {
+        snapping = !snapping; sn.classList.toggle('active', snapping);
+        if (FM.toast) FM.toast(snapping ? 'Snapping on — clips and keyframes stick to edges' : 'Snapping off — clips move freely', 1500);
+      });
       // Cmd/Ctrl + wheel zooms the timeline
       if (timelineEl) timelineEl.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, timeFromX(e.clientX)); } }, { passive: false });
       // FIXED-CENTRE CONTRACT: whatever sits under the centre line IS the current time. A plain horizontal

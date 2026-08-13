@@ -60,6 +60,13 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [x] **111 — Snapping and Onion skin should say on screen what they just did.** **DONE v6.70.** His words: *"Make it so
+      when you press the snapping and onion skin buttons it actually tells you on screen what happened."*
+      He has picked exactly the right two: guides and loop show their result instantly (lines appear,
+      playback changes), but snapping and onion skin change NOTHING until you next drag a clip or land
+      next to another frame — so the only feedback is a small icon tint you have to go looking for. Use
+      the existing FM.toast, and say the STATE ("Snapping on"), not the action.
+
 - [ ] **110 — A lot of effects in Colour & Light plainly do nothing.** *MEASURED — the code is fine in
       Chrome, so this is a DEVICE problem, and it is almost certainly the same root cause as 107.*
       Audited all 42 (`tests/_colourfx.html`): 41 change pixels, and the one that does not (Match Grade)
@@ -70,8 +77,20 @@ Numbered with Ezra's own queue numbers where he gave them.
       brightness, contrast, saturate, hue, grayscale, sepia, invert, glow — plus the blur behind 107.
       Canvas filters are unsupported on older iOS Safari/WebViews and the assignment fails SILENTLY.
       That single fact would make precisely this set of effects do nothing while every pixel-loop
-      effect kept working. NEEDED FROM EZRA: which device/iOS. If it is under 16.4 the fix is a
-      pixel-loop fallback for those 9; if not, the theory is wrong and I start again. His words: *"There's a shit load
+      effect kept working. **THEORY REFUTED 2026-08-13: he is on an iPhone 16 Pro Max, iOS 26.5.2.**
+      Canvas filters have been supported since iOS 16.4, so ctx.filter is NOT the problem and no
+      fallback is needed. Recorded rather than quietly dropped, because the reasoning was sound and
+      someone will otherwise re-derive it. NEW LEAD: his screenshot was a SHAPE layer (a pink
+      squircle), and shapes get their colour from the FILL system — `fillOwnsColor()` already makes
+      the compositor skip the colour-grade filter for exactly those layers. Test whether colour
+      effects do anything on a shape/text layer as opposed to media.
+      **RESULT — it is TEXT, and it reproduces in Chrome.** Same audit run on three subject types
+      (`tests/_colourfx.html`, top block): on media and on shapes all eight ctx.filter effects work; on
+      TEXT, brightness / contrast / saturate / grayscale / hue change NOTHING, while sepia and invert
+      only alter the glyph pixels and glow works. So a real bug, not a device one — and it is not the
+      whole of his complaint either, since he sees dead effects generally. Investigate the text draw
+      path: it is the one that paints glyphs through the fill system, and something there is dropping
+      the filter for the value-changing functions while letting the palette-changing ones through. His words: *"There's a shit load
       of effects in the colour & light section that blatantly do nothing and don't work."* Turn this into
       an exact list before touching anything: render a test frame with and without each effect in that
       category and count changed pixels. Must test at a STRONG setting as well as the default, or an

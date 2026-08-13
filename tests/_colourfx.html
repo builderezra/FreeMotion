@@ -100,6 +100,42 @@
   var base = render(null);
   var lines = [];
 
+  /* SUBJECT TYPE MATTERS, and that is the point of this block. Ezra's screenshot was a SHAPE — a pink
+     squircle — and shapes do not get their colour the way media does: the compositor has a
+     fillOwnsColor() test that deliberately skips the colour-grade filter for layers whose colour is
+     owned by the FILL system (shapes, text, and media overridden by a solid/gradient fill). So an
+     effect that works perfectly on a video can still look dead on the thing he actually had selected.
+     This runs the identical count on a shape and on text before going near the per-effect list. */
+  function renderOn(kind, fx) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    var L;
+    if (kind === 'shape') L = FM.makeLayer('shape', { shape: 'rect', x: W/2, y: H/2, shapeW: 150, shapeH: 100, fill: '#c84ab0' });
+    else if (kind === 'text') L = FM.makeLayer('text', { x: W/2, y: H/2, text: 'ABC', fontSize: 64, fill: '#c84ab0' });
+    else { L = FM.makeLayer('_flat', { x: 0, y: 0 }); L._canvas = ART; L.transform.anchorX = 0; L.transform.anchorY = 0; }
+    L.start = 0; L.duration = 5;
+    L.effects = fx ? [fx] : [];
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: [L] }, 1.0);
+    return g.getImageData(0, 0, W, H).data;
+  }
+  var SUBJECTS = ['flat', 'shape', 'text'];
+  var probe = ['brightness', 'contrast', 'saturate', 'grayscale', 'sepia', 'invert', 'hue', 'glow'];
+  lines.push('DOES THE SUBJECT TYPE MATTER? (the 8 ctx.filter effects, at full strength)');
+  lines.push('');
+  lines.push('effect        ' + SUBJECTS.map(function (k) { return k.padEnd(12); }).join(''));
+  probe.forEach(function (id) {
+    var row = id.padEnd(14);
+    SUBJECTS.forEach(function (k) {
+      var b = renderOn(k, null);
+      var e = crank(id);
+      if (id === 'hue' && e) e.params.deg = 90;                    // max is 360 = a no-op; use a real angle
+      var n = 0; try { n = diff(b, renderOn(k, e)); } catch (err) { n = -1; }
+      row += (n === 0 ? 'DEAD' : String(n)).padEnd(12);
+    });
+    lines.push(row);
+  });
+  lines.push('');
+
   // ---- controls first: if either fails, nothing below is worth reading ------------------------
   var nullRun = diff(base, render(null));
   var inv = FM.fxRegistry.makeInstance('invert');

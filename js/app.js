@@ -2756,7 +2756,20 @@ window.FM = window.FM || {};
     const fitBtn = document.getElementById('btn-fit');
     if (fitBtn) fitBtn.addEventListener('click', () => FM.fitToContent());
     const onionBtn = document.getElementById('btn-onion');
-    if (onionBtn) onionBtn.addEventListener('click', () => { FM.onionSkin = !FM.onionSkin; onionBtn.classList.toggle('active', FM.onionSkin); render(); });
+    /* SAY WHAT HAPPENED (queue 111). Ezra: "when you press the snapping and onion skin buttons it
+     * actually tells you on screen what happened." He picked exactly the right two toggles: guides and
+     * loop show their result the instant you press them, but onion skin changes NOTHING unless there
+     * is a neighbouring frame to ghost, and snapping changes nothing until you next drag something —
+     * so on a still frame both look like a dead button. The message says the resulting STATE rather
+     * than the action ("Onion skin on", not "Toggled onion skin"), because the question being asked is
+     * "is it on now?".
+     * It lives on the OWNER of the toggle, not on the view-rail button, so every route to it — the
+     * rail, the settings panel, the keyboard — reports identically. Same one-writer rule the rail
+     * itself follows. */
+    if (onionBtn) onionBtn.addEventListener('click', () => {
+      FM.onionSkin = !FM.onionSkin; onionBtn.classList.toggle('active', FM.onionSkin); render();
+      if (FM.toast) FM.toast(FM.onionSkin ? 'Onion skin on — ghosting the frames either side' : 'Onion skin off', 1500);
+    });
     const snapBtn = document.getElementById('btn-snapshot');
     if (snapBtn) snapBtn.addEventListener('click', () => FM.snapshotPNG());
     const saveProjBtn = document.getElementById('btn-save-proj');
