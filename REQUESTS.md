@@ -212,6 +212,29 @@ Numbered with Ezra's own queue numbers where he gave them.
       project panel translates in from the right and home exits left, so a transform that does not fully
       settle — or a will-change/compositor layer left behind — would show as a strip of background down
       one edge. Likely the same root cause as #128's jankiness; fix them together.
+      **Screenshot supplied, and it is the RIGHT edge, not the left.** A black strip runs the full height
+      down the right side, darker than the app's own background, with the fixed top bar stopping short of
+      it too — so a container that should span the full width is ending early and letting the page
+      background show through, OR the page has become horizontally scrollable and is sitting a few px
+      over. The whole-height, whole-page nature of it (header included) rules out a single mis-sized
+      card. Reproduce by opening and closing projects repeatedly and watching documentElement.scrollWidth
+      against clientWidth.
+      **v6.78 — fixed defensively, and I could NOT reproduce it, so this needs your eyes on a phone.**
+      What I found: while home is up, TWO things are parked off-screen to the right — `#app` holds
+      `translate3d(100%,0,0)` (fm-pop-out is animation-fill-mode:both, so it keeps its last frame) and
+      `#add-fab` holds `translate3d(100vw,0,0)`. Both are position:fixed, which normally keeps them out
+      of the scrollable area — but if anything lets the page pan sideways even a few pixels, what you see
+      beside the app is the bare page background. That matches the screenshot exactly, including the
+      fixed top bar stopping short of the strip, which a single mis-sized card could never do.
+      What I could not do is make it happen here: 13 open/close cycles at different interleavings,
+      sampled every frame, never once produced a transform-without-fixed state or scrollWidth >
+      clientWidth. So instead of guessing which element wins the race on iOS, the sideways scroll itself
+      is gone — `overflow-x: clip` on html and body. Nothing in this app is ever meant to pan
+      horizontally, so that removes the whole class of bug whichever element causes it.
+      Verified: forcing `window.scrollTo(600, 0)` now leaves scrollX at 0, and it still does with the
+      editor deliberately parked at translateX(375px) — document stays exactly 375/375. Vertical list
+      scrolling is unaffected. **Tell me if you still see the strip** — if you do, the cause is something
+      that survives an unpannable page and I will need a different angle.
 
 - [x] **132 — The slam Easter egg is GONE.** (v6.77) His words: *"The slam Easter egg is gone."* Reported on
       v6.74, and it supersedes the "it freezes" report in #131 — it is no longer freezing because it is
