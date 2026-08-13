@@ -7084,7 +7084,13 @@
       await sleep(0);
       const rows = [].slice.call(document.querySelectorAll('.set-panel .set-row'));
       const labels = rows.map(r => (r.querySelector('.set-label') || {}).textContent).filter(Boolean);
-      const lead = ['Canvas', 'Loop playback', 'Onion skin', 'Snapping (magnet)'];
+      /* Onion skin is NOT in this list any more (queue 122). Ezra reversed the requirement this test
+         was written to: "shouldn't onion skin not be in the view options and app settings? … it should
+         just be in the three dots when you have a layer selected." He is right — drawOnionSkin()
+         returns immediately with nothing selected, so a switch in a panel you can open with nothing
+         selected could be flicked and do nothing. Its one door is the layer ⋯ menu; that is asserted
+         by 'onion skin has exactly one door'. */
+      const lead = ['Canvas', 'Loop playback', 'Snapping (magnet)', 'Guides'];
       if (labels.slice(0, 4).join('|') !== lead.join('|')) {
         throw new Error('the cog opens a panel that leads with [' + labels.slice(0, 4).join(', ') +
           '] — inside a project it must lead with the project: ' + lead.join(', '));
@@ -7092,7 +7098,6 @@
       // Each switch must READ its owner and WRITE through it — not carry a second copy of the state.
       const cases = [
         ['Loop playback', () => !!FM.loop],
-        ['Onion skin', () => !!FM.onionSkin],
         ['Snapping (magnet)', () => !!(FM.timeline.isSnapping && FM.timeline.isSnapping())],
       ];
       for (const [label, get] of cases) {
@@ -7557,7 +7562,8 @@
       // Everything the ⋯ held that has no button of its own now lives in that panel, as a real row.
       const rowLabels = [].slice.call(document.querySelectorAll('.set-panel .set-row'))
         .map(r => { const l = r.querySelector('.set-label'); return l ? l.textContent : ''; });
-      ['Canvas', 'Loop playback', 'Onion skin', 'Snapping', 'Guides', 'Trim to last clip',
+      // 'Onion skin' deliberately absent — moved to the layer ⋯ menu in queue 122 at Ezra's request.
+      ['Canvas', 'Loop playback', 'Snapping', 'Guides', 'Trim to last clip',
        'Save a project file', 'Reset project', 'Import a project file'].forEach(n => {
         if (!rowLabels.some(l => l.indexOf(n) >= 0)) {
           throw new Error('the settings panel has no "' + n + '" row — the phone ⋯ used to be its only door. Have: ' + rowLabels.join(' | '));
@@ -11873,6 +11879,57 @@
     const reach = (f, v0) => v0 * 16.67 / (1 - f);
     const now = reach(s.friction, s.maxV), before = reach(0.9, 2.5);
     if (!(now > before * 1.8)) throw new Error('a full-speed flick now travels ' + now.toFixed(0) + 'px against ' + before.toFixed(0) + 'px before — not enough of a change to feel');
+  });
+
+  /* #122 — Ezra: "shouldn't onion skin not be in the view options and app settings? Idk why it would
+     be there since it only effects one layer, it should just be in the three dots when you have a
+     layer selected."
+     He is right and the code agrees: drawOnionSkin() returns immediately when nothing is selected, so
+     both global entries were controls that could be toggled while unable to do anything. MOVED, not
+     copied — the point is one door, so the test asserts the old ones are gone as firmly as it asserts
+     the new one exists. */
+  test('onion skin has exactly one door, and it is the layer menu', { item: 'onion-scope' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const was = FM.onionSkin;
+    try {
+      if (document.getElementById('vb-onion')) throw new Error('the view-options bar still has an onion-skin button — it was meant to move, not be copied');
+
+      // The settings panel must not offer it either. Open the real panel and read its rows.
+      FM.settings.open();
+      await sleep(120);
+      const rows = [].slice.call(document.querySelectorAll('.set-panel .set-row'));
+      const inSettings = rows.filter(r => /onion/i.test(r.textContent || ''));
+      FM.settings.close();
+      // WAIT FOR THE SCRIM TO GO, don't just ask for a close. The panel dismisses on a transition, and
+      // a first cut of this test left `.set-scrim` covering the screen for the next test — which then
+      // failed with "the press point is not on a cue chip (got set-scrim open)". A test that opens a
+      // modal owns closing it.
+      for (let i = 0; i < 40 && document.querySelector('.set-scrim'); i++) await sleep(25);
+      if (inSettings.length) throw new Error('App settings still offers Onion skin (' + inSettings.length + ' row) — a global switch for a per-layer tool');
+
+      // …and the layer ⋯ menu must carry it, with its state readable.
+      const layer = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 });
+      FM.scene = scene([layer]);
+      FM.selectLayer(layer.id);
+      const items = FM.layerMenuItems(layer);
+      const entry = items.filter(Boolean).find(i => i && /onion/i.test(i.label || ''));
+      if (!entry) throw new Error('the layer ⋯ menu has no Onion skin entry — it was removed from two places and added to none');
+
+      // Toggling through the menu has to actually flip it, or the move dropped the wiring.
+      const before = !!FM.onionSkin;
+      entry.action();
+      await sleep(40);
+      if (!!FM.onionSkin === before) throw new Error('the menu entry did not toggle onion skin (' + before + ' → ' + FM.onionSkin + ')');
+      // …and the label reports the state, since this menu has no switch to show it.
+      const after = FM.layerMenuItems(layer).filter(Boolean).find(i => i && /onion/i.test(i.label || ''));
+      if (/^✓/.test(entry.label) === /^✓/.test(after.label)) throw new Error('the menu label does not change with the state — there is no other readout in this menu');
+    } finally {
+      if (FM.onionSkin !== was) { const b = document.getElementById('btn-onion'); if (b) b.click(); }
+      try { FM.settings.close(); } catch (e) {}                       // …including on the throwing paths
+      document.querySelectorAll('.set-scrim').forEach(n => n.remove());
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
   });
 
   async function run() {

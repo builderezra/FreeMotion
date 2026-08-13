@@ -861,12 +861,21 @@ better still, keep working inside the turn rather than parking work for a later 
       the cog menu."* So the cog is the SOURCE OF TRUTH and export inherits from it; an export-time
       change is a one-off override for that export and must not write back. That asymmetry is the whole
       requirement — a naive two-way binding is exactly what he is ruling out.
-- [ ] **122 — Onion skin does not belong in View options or App settings.** His words: *"shouldn't onion
+- [x] **122 — Onion skin does not belong in View options or App settings.** (v6.98) His words: *"shouldn't onion
       skin not be in the view options and app settings? Idk why it would be there since it only effects
       one layer, it should just be in the three dots when you have a layer selected."* He is right about
       the scope: onion skin ghosts the SELECTED layer either side of now, so it is a per-layer tool
       sitting in two global menus. Move it to the layer ⋯ menu and take it out of both. Check what
       happens to the setting when nothing is selected before moving it.
+      **Shipped v6.98, and the code backed you up.** `drawOnionSkin()` opens with
+      `const sel = FM.selectedLayer(...); if (!sel) return;` — it ghosts the SELECTED layer and does
+      nothing at all without one. So App settings, which you can open with nothing selected, was
+      offering a switch that could be flicked while unable to do anything. That answers the "check what
+      happens when nothing is selected" note: nothing, which is the argument for moving it.
+      **Moved, not copied** — both global entries are gone and the layer ⋯ menu is the one door, with a
+      ✓ on the label since that menu has no switch to show state.
+      Two existing tests had the old requirement written into them (Settings must lead with Onion skin).
+      Updated, with your reversal quoted in place so nobody later "fixes" them back.
 
 - [x] **118 — Frame-rate list: drop 24, keep 25, add 15 and 120.** (v6.74) His words: *"Why do we have 24 and 25
       fps? Just make 25 only, and also add a 120 option, and a 15 fps option."*

@@ -2330,6 +2330,19 @@ window.FM = window.FM || {};
     }
     items.push(...[
       { label: layer.locked ? 'Unlock' : 'Lock', action: () => { layer.locked = !layer.locked; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } },   // one rebuild — layersPanel.refresh() IS rebuild() (see FM.layersPanel)
+      /* ONION SKIN LIVES HERE NOW (queue 122). Ezra: "shouldn't onion skin not be in the view options
+       * and app settings? Idk why it would be there since it only effects one layer, it should just be
+       * in the three dots when you have a layer selected."
+       * He is right, and the code agrees with him: drawOnionSkin() begins `const sel =
+       * FM.selectedLayer(...); if (!sel) return;` — it ghosts the SELECTED layer and does nothing at
+       * all without one. So it was a per-layer tool sitting in two GLOBAL menus, one of which you can
+       * open with nothing selected and toggle a switch that cannot do anything.
+       * Moved rather than copied: both global entries are gone, so there is exactly one door. The
+       * label carries the state because this menu has no switch furniture. */
+      { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin', action: () => {
+        const b = document.getElementById('btn-onion');
+        if (b) b.click();   // the one implementation, so the toast and the button state stay in step
+      } },
       { label: 'Reset transform', action: () => { const P = FM.scene.project, tr = layer.transform; tr.x = Math.round(P.width / 2); tr.y = Math.round(P.height / 2); tr.scale = 1; tr.rotation = 0; tr.opacity = 1; FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.history) FM.history.commit(); } },
     ]);
     if (layer.type === 'video') {
@@ -3069,7 +3082,6 @@ window.FM = window.FM || {};
       const lb = document.getElementById('vb-loop'); if (lb) lb.classList.toggle('on', !!FM.loop);
       // Read back from where each one really lives — never from a copy. A second copy of "is snapping
       // on" is exactly how the old ⋯ menu used to show the wrong tick.
-      const ob = document.getElementById('vb-onion'); if (ob) ob.classList.toggle('on', !!FM.onionSkin);
       const sb = document.getElementById('vb-snap');
       if (sb) sb.classList.toggle('on', !!(FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()));
       const gb = document.getElementById('vb-guides'); if (gb) gb.classList.toggle('on', !!FM.showGuides);
@@ -3088,7 +3100,8 @@ window.FM = window.FM || {};
     // Each one presses the control that OWNS the toggle rather than flipping a flag here — the same
     // contract the settings panel uses. One writer, so the bar and the panel can never disagree.
     const pressHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
-    bindVb('vb-onion', () => pressHidden('btn-onion'));
+    // (no vb-onion binding — the button is gone from the view bar, queue 122. Onion skin is a
+    //  per-layer tool and its one door is the layer ⋯ menu now.)
     bindVb('vb-snap', () => pressHidden('btn-snap'));
     bindVb('vb-guides', () => pressHidden('btn-guides'));
     bindVb('vb-markin', markRegionIn);

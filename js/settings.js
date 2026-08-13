@@ -289,8 +289,11 @@ window.FM = window.FM || {};
           () => press('btn-canvas')),
         switchRow('Loop playback', 'Playback restarts from the beginning instead of stopping at the end.',
           () => FM.loop, () => press('btn-loop')),
-        switchRow('Onion skin', 'Ghosts the selected layer where it was just before and just after now (past cyan, future red) — for lining up an animation.',
-          () => FM.onionSkin, () => press('btn-onion')),
+        /* (Onion skin is NOT here any more — queue 122. Ezra: "shouldn't onion skin not be in the view
+           options and app settings? … it should just be in the three dots when you have a layer
+           selected." It ghosts the SELECTED layer and drawOnionSkin() returns immediately without one,
+           so a switch in a panel you can open with nothing selected was a control that could not act.
+           Its one door is the layer ⋯ menu now — see FM.layerMenuItems.) */
         switchRow('Snapping (magnet)', 'Clips and keyframes stick to the playhead and to each other’s edges while you drag them.',
           () => FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping(), () => press('btn-snap')),
         // The last thing the phone's project ⋯ held that had nowhere else to be (v6.13). It sits with
