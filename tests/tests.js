@@ -11418,6 +11418,85 @@
     }
   });
 
+  // #136 — Ezra: "I can't do anything like drag the timeline or layer when you have a captions layer
+  // selected." The cause was not a lock: a captions track's cue chips can blanket its whole bar, and
+  // each one seized the pointer on pointerdown, so the clip's own gesture never ran. This drives a
+  // real synthetic touch through the chip and requires BOTH halves to still work — a drag reaches the
+  // clip underneath, and a press-and-hold still grabs the cue.
+  test('timeline: caption cues do not swallow the row — a touch drag over one still scrubs', { item: 'captions-gestures' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const t0 = FM.time;
+    const touch = (type, x, y) => new PointerEvent(type, {
+      pointerType: 'touch', pointerId: 9911, clientX: x, clientY: y,
+      bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1,
+    });
+    try {
+      const cap = FM.makeLayer('text', { name: 'Caps', text: '', x: 0, y: 0, start: 0, duration: 4 });
+      // Two cues, deliberately: together they blanket the bar (which is the bug's precondition), but
+      // neither is the full clip, so cue 1 still has room to be dragged in the second half of the test.
+      cap.captions = [{ start: 0, end: 1.9, text: 'one' }, { start: 2, end: 3.9, text: 'two' }];
+      FM.scene = scene([cap]);
+      FM.selectLayer(cap.id); FM.refreshAll(); await sleep(140);
+
+      const clipOf = () => document.querySelector('#tl-tracks .clip[data-id="' + cap.id + '"]');
+      let clip = clipOf();
+      if (!clip) throw new Error('the captions layer built no clip');
+      let chip = clip.querySelector('.cap-cue');
+      if (!chip) throw new Error('the captions clip built no cue chips — this test would prove nothing');
+
+      // The finger must genuinely land ON a chip, or the bug is simply not being exercised.
+      let cb = chip.getBoundingClientRect();
+      let x = cb.left + cb.width / 2, y = cb.top + cb.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || !hit.closest('.cap-cue')) throw new Error('the press point is not on a cue chip (got ' + (hit && hit.className) + ') — the test is not exercising #136');
+
+      // A drag across the cue must reach the clip underneath and scrub, exactly as on any other row.
+      // Leftward: scrub maps -px to +time, and starting at 0 a rightward drag would clamp and prove
+      // nothing.
+      FM.time = 0;
+      chip.dispatchEvent(touch('pointerdown', x, y));
+      for (let i = 1; i <= 4; i++) window.dispatchEvent(touch('pointermove', x - i * 26, y));
+      const scrubbed = FM.time;
+      window.dispatchEvent(touch('pointerup', x - 104, y));
+      await sleep(40);
+      if (!(scrubbed > 0.02)) throw new Error('dragging across a caption cue did not scrub (time ' + scrubbed.toFixed(3) + ') — the cue chips are still swallowing the whole row');
+
+      // …and the cue is still draggable by press-and-hold, so the fix did not cost the feature.
+      await sleep(60);
+      clip = clipOf(); chip = clip && clip.querySelector('.cap-cue');
+      if (!chip) throw new Error('the cue chips vanished after the scrub');
+      cb = chip.getBoundingClientRect(); x = cb.left + cb.width / 2; y = cb.top + cb.height / 2;
+      const before = FM.captions.cues(cap)[0].start;
+      chip.dispatchEvent(touch('pointerdown', x, y));
+      await sleep(420);                                   // settle past the 300ms cue hold without moving
+      for (let i = 1; i <= 3; i++) window.dispatchEvent(touch('pointermove', x + i * 20, y));
+      const moved = FM.captions.cues(cap)[0].start;
+      window.dispatchEvent(touch('pointerup', x + 60, y));
+      await sleep(60);
+      if (!(moved > before + 0.01)) throw new Error('press-and-hold no longer grabs a caption cue (start ' + before.toFixed(3) + ' → ' + moved.toFixed(3) + ') — the fix cost the feature it was protecting');
+
+      // A MOUSE still grabs the cue on the way down, with no hold. That half was kept deliberately —
+      // a desktop drag on a chip is unambiguous and desktop scrolling is the wheel — so it needs its
+      // own guard, or "make it work on touch" quietly becomes "make it worse on desktop".
+      await sleep(60);
+      clip = clipOf(); chip = clip && clip.querySelector('.cap-cue');
+      if (!chip) throw new Error('the cue chips vanished after the hold-drag');
+      cb = chip.getBoundingClientRect(); x = cb.left + cb.width / 2; y = cb.top + cb.height / 2;
+      const mouse = (type, mx) => new PointerEvent(type, { pointerType: 'mouse', pointerId: 9912, clientX: mx, clientY: y, bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+      const mBefore = FM.captions.cues(cap)[0].start;
+      chip.dispatchEvent(mouse('pointerdown', x));
+      for (let i = 1; i <= 3; i++) window.dispatchEvent(mouse('pointermove', x + i * 14));
+      const mAfter = FM.captions.cues(cap)[0].start;
+      window.dispatchEvent(mouse('pointerup', x + 42));
+      await sleep(40);
+      if (Math.abs(mAfter - mBefore) < 0.005) throw new Error('a mouse drag on a cue no longer moves it immediately (start ' + mBefore.toFixed(3) + ' → ' + mAfter.toFixed(3) + ') — the touch fix leaked onto the desktop path');
+    } finally {
+      FM.time = t0;
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

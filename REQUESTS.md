@@ -115,6 +115,20 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       than showing three permanently-dimmed buttons. Watch the centre cluster staying visually centred
       as the right side changes width, or the play button will drift as you select things.
       Screenshot 1 shows the rail to remove: back arrow, `↻ v6.86`, duplicate, delete, export, settings.
+      **AMENDED minutes later, and this supersedes the left-hand half above.** His words: *"since you
+      will needa spot for the back button, to go to the home screen, put the export button to the very
+      far right just one before the view options button and put the settings cog to its left, change
+      its logo to a normal image and not colourful (pc version only) so it fits in with everything
+      else. Then back button to leave project can be at the far left."* So the row reads:
+      **← back** (far left) · undo · redo · ⏮ · ▶ · ⏭ · duplicate · **delete · bind · group** (only when
+      they apply) · … · **settings cog · export · view options** (far right).
+      The version-refresh chip still has to land somewhere — it was on the rail being deleted and the
+      amendment does not say where it goes. Best read: beside the back button at the far left, which is
+      where it already sits relative to the back arrow today. **Asking him to confirm that, and one
+      other thing:** *"change its logo"* — the cog is already a plain outline icon and the EXPORT
+      button is the colourful glass one from #71, so this almost certainly means give export a plain
+      monochrome icon on PC while the phone keeps the glass artwork. Building it that way; flagging it
+      so he can correct me in one word if I have it backwards.
 
 - [ ] **144 — PC: trim/split move onto the playhead, and the align buttons get the whole panel.** (13 Aug,
       second screenshot, multi-select state.) His words: *"put the delete left side button to the left of
@@ -130,6 +144,26 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       grow to fill the whole area instead of sitting as a small row at the top.
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
+
+- [ ] **145 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons
+      looking goofy.** (13 Aug, two messages.) His words: *"make the background of all the buttons like
+      elements shape etc a different colour to the ones in inside each section, like text etc. so it shows
+      the difference in action, and then you can add colour to all the sub section buttons, while ur at it
+      as well make them look better for the pc version because when theyre big icons it looks really
+      goofy."* Then, immediately after: *"on pc they should be sharp and detailed and have black outlines
+      etc."*
+      Three things:
+      1. **Two visual classes, not one.** A button that CHANGES SECTION (Shape, Media, Audio, Object,
+         Template, Elements, Freehand…) must not look like a button that ADDS A THING (Text, a specific
+         shape, …). Different background colour, so "the difference in action" is visible before you tap.
+      2. **Colour on the sub-section buttons too** — the item buttons get colour rather than staying grey.
+      3. **PC: the big icons look goofy.** At the desktop size the glyphs are simple line drawings scaled
+         up, which is exactly when a 24px icon falls apart. He wants them *"sharp and detailed"* with
+         *"black outlines"* — so a heavier, properly-drawn treatment at the large size, not the same path
+         stretched.
+      Reading "elements shape etc" as the add menu's SECTION tabs and "text etc" as the items inside a
+      section. If he meant the inspector's nine category cards instead, it is a one-word correction —
+      **asking next time he speaks.**
 
 - [ ] **142 — Home settings: a default colour for new shapes.** His words: *"In the home settings menu,
       make a setting to change the default colour of shapes when you import them. Applied to every
@@ -209,12 +243,19 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       want the best match first, and a pinned item outranking a closer one reads as broken search. Say
       if you want it the other way.
 
-- [ ] **136 — A selected Captions layer locks the timeline and the layer.** His words: *"I can't do
+- [x] **136 — A selected Captions layer locks the timeline and the layer.** (v6.88) His words: *"I can't do
       anything like drag the timeline or layer when you have a captions layer selected."* Screenshot on
       v6.74 shows the Captions layer selected with its clip spanning the whole timeline. So selecting a
       captions layer is swallowing the drag gestures — either the caption's own editing surface is
       capturing pointers over the timeline, or the clip is being treated as un-draggable and taking the
       scroll with it. Captions was made real in #43, so this is likely fallout from that.
+      **Shipped v6.88 — and it was the first guess: the cues were eating the surface.** Nothing was
+      locked. A captions track's cue chips can blanket its entire bar, and every chip grabbed the pointer
+      the instant it went down (`stopPropagation` + `preventDefault`), so the clip's own handler never
+      ran — no scrub, no hold-to-move, no scroll, on that one row only. The clip owns the gesture now and
+      a cue has to be press-and-HELD to take it, the same idiom that grabs a clip, at 300ms so it always
+      beats the clip's own 350ms cleanly. A tap on a cue still parks the playhead on it, and a mouse still
+      grabs a cue immediately. Covered by a test that drives a real synthetic touch through a chip.
 
 - [x] **137 — "Edit Text" has the wrong icon.** (v6.86) His words: *"edit text button should have a diff icon."*
       Screenshot: slot 7 "Edit Text" uses a green DIAMOND — which is the keyframe diamond used everywhere

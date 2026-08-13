@@ -1289,15 +1289,71 @@ window.FM = window.FM || {};
         lbl.className = 'cap-cue-lbl';
         lbl.textContent = (cue.text || '').trim() || '…';
         chip.appendChild(lbl);
-        chip.title = (cue.text || '(empty cue)') + '  ' + cue.start.toFixed(2) + '–' + cue.end.toFixed(2) + 's\nDrag to move · edges to trim · double-click to type';
-        const startCue = (e, mode) => {
-          e.stopPropagation(); e.preventDefault();
-          if (e.pointerType === 'mouse' && e.button !== 0) return;
-          if (pinch) return;
-          try { (mode === 'move' ? chip : e.currentTarget).setPointerCapture(e.pointerId); } catch (_) {}
-          cueDrag = { layer: layer, cue: cue, mode: mode, startX: e.clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
+        chip.title = (cue.text || '(empty cue)') + '  ' + cue.start.toFixed(2) + '–' + cue.end.toFixed(2) + 's\nDrag to move (press-and-hold on touch) · edges to trim · double-click to type';
+        /* #136 — TOUCH must not lose the whole row to the cues. Ezra: "I can't do anything like drag
+           the timeline or layer when you have a captions layer selected."
+           A captions track's cues can blanket its entire bar — his screenshot showed exactly that,
+           one clip spanning the timeline — and every chip used to seize the gesture on pointerdown
+           with stopPropagation + preventDefault. That kept the clip's OWN handler from ever running,
+           so on that one row there was no scrub, no hold-to-move, and no scroll: every finger that
+           landed hit a chip. Nothing was locked; the cues had simply eaten the surface.
+           The clip is the default owner now. A finger has to SETTLE on a chip to take it — the same
+           press-and-hold that grabs a clip — and 300ms beats the clip's own 350ms, so which one wins
+           is decided by the clock, not by a race. Move first and the clip scrubs, exactly as it does
+           on every other row. A mouse still grabs a cue immediately: a desktop drag on a chip is
+           unambiguous and desktop scrolling is the wheel, which none of this touches. */
+        const CUE_HOLD = 300;
+        const beginCue = (mode, clientX, pointerId, captureEl) => {
+          // The clip's pending gesture has to be torn down, not left running: its own hold timer is
+          // 50ms behind and would otherwise fire mid-cue-drag and grab the clip as well.
+          if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }
+          try { if (captureEl && pointerId != null) captureEl.setPointerCapture(pointerId); } catch (_) {}
+          cueDrag = { layer: layer, cue: cue, mode: mode, startX: clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
           FM.selectLayer(layer.id);
           if (FM.playing) FM.pause();
+        };
+        const seekToCue = () => {
+          if (FM.scrubTime) FM.scrubTime((layer.start || 0) + cue.start + Math.min(0.05, (cue.end - cue.start) / 2));
+        };
+        const startCue = (e, mode) => {
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          if (pinch) return;
+          const captureEl = mode === 'move' ? chip : e.currentTarget;
+          if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+            const x0 = e.clientX, y0 = e.clientY, pid = e.pointerId;
+            let armed = true, timer = 0;
+            const unwatch = () => {
+              armed = false; clearTimeout(timer);
+              window.removeEventListener('pointermove', watch, true);
+              window.removeEventListener('pointerup', release, true);
+              window.removeEventListener('pointercancel', unwatch, true);
+            };
+            const watch = (ev) => {
+              if (ev.pointerId !== pid) return;
+              if (Math.abs(ev.clientX - x0) > 8 || Math.abs(ev.clientY - y0) > 8) unwatch();   // travelling → it was a scrub/scroll all along
+            };
+            const release = (ev) => {
+              if (ev.pointerId !== pid) return;
+              const clean = armed && Math.abs(ev.clientX - x0) <= 8 && Math.abs(ev.clientY - y0) <= 8;
+              unwatch();
+              // A clean tap on a cue still parks the playhead on it, the way it did before the hold
+              // existed — that readout is how you see which cue you are about to type into.
+              if (clean) seekToCue();
+            };
+            timer = setTimeout(() => {
+              if (!armed) return;
+              unwatch();
+              if (pinch) return;
+              beginCue(mode, x0, pid, captureEl);
+              if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+            }, CUE_HOLD);
+            window.addEventListener('pointermove', watch, true);
+            window.addEventListener('pointerup', release, true);
+            window.addEventListener('pointercancel', unwatch, true);
+            return;   // deliberately NOT stopping propagation: the clip keeps the gesture unless the hold fires
+          }
+          e.stopPropagation(); e.preventDefault();
+          beginCue(mode, e.clientX, e.pointerId, captureEl);
         };
         chip.addEventListener('pointerdown', (e) => startCue(e, 'move'));
         chip.addEventListener('dblclick', (e) => {
