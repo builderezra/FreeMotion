@@ -153,13 +153,25 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
+      *"Also when editing a caption layer you should be able to chose somehow between adding effects to
+      each section or adding effects that effect the whole layer."* So a caption track carries one
+      effect stack today (it is a text layer, so `layer.effects` applies to the whole thing), and he
+      wants the choice: apply this effect to THIS CUE only, or to the track. That is a real data-model
+      change — per-cue effect stacks — plus a control in the effects panel to say which you mean, so
+      cost it honestly before starting. Sits naturally with #150 and #149 as a captions pass.
+
 - [ ] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** His words:
       *"when dragging the cue length for captions it should show it changing live not just wait for you
-      to let go then jump."* Note the timeline chip already moves its own left/width during the drag, so
-      whatever he is looking at is a surface that does NOT — most likely the inspector's captions list
-      (its refresh is on pointerup only) or the canvas text, which needs the cue's new in/out to be
-      applied per move rather than on commit. **Find out which surface he means by making all of them
-      live, rather than guessing at one.**
+      to let go then jump."*
+      **First look done, and the obvious suspects do NOT explain it — do not start by assuming they do.**
+      The timeline chip already sets its own left/width on every pointermove, and the move handler
+      already clamps to the clip duration exactly the way `normalize()` does on release, so neither the
+      chip geometry nor the release-time clamp is an obvious jump. What is definitely NOT live: the
+      inspector's captions list, which is only refreshed in the pointerup branch.
+      So: **measure which surface actually jumps before touching anything** — sample the chip width,
+      the inspector row and the rendered canvas text on each frame of a drag and compare each against
+      its value after release. Guessing at one surface is how the black bar cost six attempts.
 
 - [ ] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans.** His words:
       *"make the auto detect captions button way easier to access and use. and it should have a choice
