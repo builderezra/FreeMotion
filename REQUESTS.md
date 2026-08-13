@@ -88,6 +88,30 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       FIX, not just the symptom: the card's exit should start on the very first frame with no wait, and
       the editor's entrance follows. Likely the two are currently sequenced or both wait on a layout/
       render that stalls the first frame — measure where the first frame goes before retiming anything.
+      **MEASURED (tests/_openjank.html), and half of the prescription is right and half is not.**
+      `openProject()` reads `await FM.projects.open(id)` and only THEN calls `home.close({push})`, so
+      the card provably cannot move until the load resolves — that part is arithmetic. What that costs:
+
+      | | desktop (1x) | 6x CPU throttle ≈ a phone |
+      |---|---|---|
+      | dead wait before the card moves | 28 ms median | **113 ms median** |
+      | worst frame DURING the push | 18 ms | **18 ms** |
+      | frames over 50 ms during the push | 0 | **0** |
+
+      So **the animation itself is not janky** — it is a CSS transform running on the compositor and it
+      stays smooth even at 6x throttle. There is no stutter to fix. What is real is the dead time before
+      anything moves: 113 ms at phone speed on a FOUR-LAYER project, and it grows with project weight,
+      which is exactly "doesn't feel responsive".
+      **Not done unsupervised, deliberately.** The naive fix — start the push before awaiting the load —
+      risks showing the PREVIOUS project sliding in for ~113 ms before the new one swaps in, which is a
+      worse artefact than the one being fixed. The safe design is a two-phase push: the lead card's exit
+      starts on the tap (literally his words), and #app's entrance is armed when the load resolves. That
+      means splitting `startPush`, which is a delicate path — warm/cold lead, the press hand-off, the
+      animationend backstop — that has been iterated several times already, and the payoff is a feel
+      change I cannot judge from here. **Wants his eyes: worth 113 ms?** Asking next time he speaks.
+      Also added: `tests/_probe.py --cpu N` (CDP CPU throttling), because every perf number in this repo
+      is taken on a desktop Mac for an app used on a phone, and this item measured perfectly healthy at
+      1x. #125/#130 should be re-measured with it.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO.** His words: *"Added a screen
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific

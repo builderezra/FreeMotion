@@ -31,6 +31,11 @@ def main():
     ap.add_argument("--timeout", type=int, default=120)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=900)
+    ap.add_argument("--cpu", type=float, default=1.0,
+                    help="CPU throttle multiplier (4 = pretend this machine is 4x slower). "
+                         "Exists because every perf number measured here is taken on a desktop Mac "
+                         "while the app is used on a PHONE — #128 measured perfectly smooth at 1x and "
+                         "the report it was chasing came from a phone. Use 4-6 to approximate one.")
     a = ap.parse_args()
 
     url = "http://localhost:%d/%s" % (a.port, a.page.lstrip("/"))
@@ -42,6 +47,9 @@ def main():
         cdp = CDP(ws_url(dbg))
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
+        # Throttle BEFORE navigating, so the load itself is slow too — a phone pays that cost as well.
+        if a.cpu and a.cpu > 1:
+            cdp.send("Emulation.setCPUThrottlingRate", rate=a.cpu)
         cdp.send("Page.navigate", url=url)
 
         deadline = time.time() + a.timeout
