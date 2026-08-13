@@ -142,7 +142,7 @@ window.FM = window.FM || {};
               var h = o.height != null ? Math.round(clamp(num(o.height, P.height), 16, 7680) / 2) * 2 : P.height;
               if (w !== P.width || h !== P.height) { P.width = w; P.height = h; changed = true; }
             }
-            if (o.fps != null) P.fps = nearest(o.fps, [24, 30, 60]);
+            if (o.fps != null) P.fps = nearest(o.fps, [15, 25, 30, 50, 60, 120]);   // the rates the UI actually offers (queue 118 dropped 24, added 15 and 120) — the AI should not land on one you cannot then re-pick
             if (o.duration != null) P.duration = clamp(num(o.duration, P.duration), 0.1, 600);
             if (o.background != null) { var bg = hex(o.background, null); if (bg) P.background = bg; }
             if (o.name != null) { var pn = str(o.name, 80); if (pn != null) P.name = pn; }

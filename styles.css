@@ -2752,7 +2752,15 @@ body.hm-selecting .hm-card { touch-action: none; }
   content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   border-radius: 16px;   /* the background is clipped to this box, so the corners round on their own */
   background-repeat: repeat;
-  animation-duration: 2.6s;
+  /* 0.5s, not 2.6s (queue 126). Ezra: "you've just turned off the animation … I asked for it to be
+     FASTER and you turned it off." Correct — a 2.6s cross-fade is one change per 1.3 seconds, which is
+     animating on paper and a still photograph to the eye. Chasing "smooth" I dropped the rate through
+     the floor and lost the thing the grain is for.
+     The METHOD stays: cross-fading is what killed the strobe that he objected to twice, and speeding a
+     cross-fade up does not bring the strobe back — there is no instant at which anything snaps. Only
+     the rate changes: ~2 field changes a second, continuously dissolving, which is close to how real
+     film grain reads at 24fps without ever cutting. */
+  animation-duration: .5s;
   animation-timing-function: ease-in-out;   /* the dissolve has no hard edges at either end */
   animation-iteration-count: infinite;
   animation-delay: var(--hm-static-delay, 0s);   /* home.js gives every card its own phase */

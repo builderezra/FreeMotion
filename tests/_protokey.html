@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>prototype-key lookup probe</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:13px ui-monospace,Menlo,monospace}
+#out{padding:10px;white-space:pre}</style></head><body><div id="out">…</div>
+<script src="js/settings.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* Does an effect type that is merely a key on Object.prototype pass every "is this real" test?
+   If it does, a corrupt or hostile project file can reach the inspector and crash the panel — and
+   layer.effects is the one layer sub-structure with no import sanitisation at all. */
+(function(){
+  var L=[], names=['toString','constructor','valueOf','hasOwnProperty','__proto__'];
+  names.forEach(function(n){
+    var got=null, err=null;
+    try { got = FM.fxRegistry.get(n); } catch(e){ err=String(e).slice(0,40); }
+    var supports=null;
+    try { supports = FM.fxRegistry.supportsLayer(n, FM.makeLayer('shape',{})); } catch(e){ supports='THREW'; }
+    var shown = err ? err : (got === null ? 'null' : got === undefined ? 'undefined' : typeof got);   // typeof null is 'object', which read as a leak when it is the correct answer
+    L.push(n.padEnd(16)+' get -> '+shown+
+           '   supportsLayer -> '+supports);
+  });
+  L.push('');
+  L.push('PASS = get -> null AND supportsLayer -> false on every row.');
+  L.push('Before the fix these returned a FUNCTION and true, and the inspector then called');
+  L.push('reg.params.forEach on it — a TypeError that took the whole effects panel down.');
+  document.getElementById('out').textContent=L.join('\n');
+  window.__done=true;
+})();
+</script></body></html>

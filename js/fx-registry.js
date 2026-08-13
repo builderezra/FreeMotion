@@ -436,7 +436,17 @@ window.FM = window.FM || {};
     return cat + '. Controls: ' + ctrl.slice(0, 5).join(', ') + (ctrl.length > 5 ? '\u2026' : '') + '.';
   }
 
-  const REG = {};
+  /* Object.create(null), not {} — a NULL-PROTOTYPE map, because this table is looked up with bare
+   * bracket access from a value that can come out of a saved project file. With a normal object
+   * literal, REG['toString'] resolves up the prototype chain and returns a FUNCTION: verified live,
+   * get('toString') / ('constructor') / ('valueOf') / ('hasOwnProperty') all came back truthy and
+   * supportsLayer() said true for every one of them. The inspector's expanded branch then calls
+   * reg.params.forEach on a function, which is a TypeError that takes the whole effects panel down.
+   * That path is reachable today because layer.effects is the one major layer sub-structure with NO
+   * import sanitisation — sanitizeImportedLayers rebuilds audioFx, behaviors, masks, trimPath,
+   * repeater and camera from their schemas and never touches effects. storage.js has learned this
+   * lesson three times already; this is the same fix. */
+  const REG = Object.create(null);
   (FM.EFFECTS || []).forEach(def => {
     REG[def.type] = {
       id: def.type, type: def.type, label: def.label,
@@ -475,7 +485,11 @@ window.FM = window.FM || {};
       return { type: e.type, enabled: true, params: params };
     },
     supportsLayer: function (id, layer) {
-      const e = REG[id]; if (!e || !layer) return false;
+      const e = REG[id];
+      // typeof check as well as truthiness: a null-prototype REG closes the inherited-key hole, but
+      // this function is called with ids from clipboards, presets and project files, and a registry
+      // entry is always an object — anything else is not an effect this build knows.
+      if (!e || typeof e !== 'object' || !layer) return false;
       if (layer.type === 'camera' || layer.type === 'null') return false;   // rig controls have no pixels to affect (#19)
       if (e.appliesTo === 'media' && !(layer.type === 'video' || layer.type === 'image')) return false;
       if (e.appliesTo === 'text' && layer.type !== 'text') return false;   // text effects need a text layer

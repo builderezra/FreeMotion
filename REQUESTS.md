@@ -60,6 +60,128 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [ ] **127 — Paste Style icons are stale.** His words: *"Paste style menu needs to reflect the current
+      icons that have since changed."* Screenshot at v6.73: the Paste Style grid still uses the OLD
+      category glyphs while the inspector below it shows the current ones (the gradient-coloured set from
+      #77). Same nine categories, two different icon sets on screen at once.
+- [ ] **128 — Opening/closing a project feels janky.** His words: *"the animation when opening a project
+      feels janky, the fix is make it so the animation of the project layer moving to the left happens
+      instantly, so it feels responsive, make sure it's smooth, then smoothly the project should swoop in
+      too. Needs to be smoother and less janky when leaving a project also."* Note he has prescribed the
+      FIX, not just the symptom: the card's exit should start on the very first frame with no wait, and
+      the editor's entrance follows. Likely the two are currently sequenced or both wait on a layout/
+      render that stalls the first frame — measure where the first frame goes before retiming anything.
+- [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO.** His words: *"Added a screen
+      recording from my camera roll that's very short and it still has the issue of being on the timeline
+      but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
+      case worth chasing: HEVC in an mp4/mov container, often with an odd colour range, and iOS screen
+      recordings in particular. The clip EXISTS (it is on the timeline with a duration), so the decode or
+      the draw is failing, not the import.
+- [ ] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop.** His
+      words: *"I have got no other projects, just one; and I managed to add one screen recording that's
+      two seconds long, and the project lags from just that, it also still doesn't compress the quality
+      in the canvas playback, even though just for this one thing it shouldn't need to do that anyway."*
+      Two facts in one report, and the second is the useful one: the adaptive quality tier is NOT kicking
+      in. If the preview is lagging AND refusing to drop resolution, the tier logic is either not
+      measuring the right thing or is gated off. Pair this with 125.
+- [ ] **131 — The overpull Easter egg freezes if you drag really far.** His words: *"there's a glitch now
+      when you swipe down really far and then the Easter egg happens where it slams the screen, if you try
+      dragging really far down it just freezes, you should still be able to drag it down as freely as you
+      want and at any point of letting go after a certain amount it does the slam."* So the pull is being
+      clamped hard (PULL_MAX 150 with a pow(dy,0.78) curve) and reads as a freeze once you pass it. He
+      wants the drag to keep responding at any distance, with the slam on release past the threshold.
+
+- [x] **126 — The grain now reads as switched OFF; it needs to be FASTER, still smooth.** (v6.74) His words:
+      *"you've just turned off the animation of the film grain in the home menu, I asked for it to be
+      faster and you turned it off, wtf."* He is right and this one is on me: v6.68 cross-fades between
+      two noise fields over 2.6 SECONDS, which is roughly one change per 1.3s — technically animating,
+      visually indistinguishable from a still image. Chasing "smooth" I dropped the rate through the
+      floor. The fix is rate, not method: keep the cross-fade (that is what killed the strobing) and run
+      it several times a second so it visibly boils.
+      **Shipped v6.74:** the cross-fade period went 2.6s → 0.5s, so the grain field now turns over about
+      five times a second — visibly boiling, still cross-faded so it never strobes. Method unchanged;
+      only the rate moved, which is what you actually asked for both times.
+
+- [ ] **123 — Linear Repeat is poor: it just squishes horizontally.** His words: *"Linear repeat effect
+      is shit and needs work, currently it just squishes horizontally when you do it."* So the copies are
+      being fitted into the frame width instead of being laid out at size — a repeat should place N
+      copies along an axis at the ORIGINAL scale, with spacing and direction, not compress one copy.
+- [ ] **124 — Faves gesture: threshold + cancel, better animation, and rename to "Faves".** His words:
+      *"you start by swiping up on the recents menu, when your swipe reaches a certain level and you let
+      go it opens the faves menu, since people may start swiping and not want to go in that menu … you
+      can just swipe back up and cancel the swipe to opening the menu, kinda like how swiping an effect
+      deletes it. The animation has to be smooth and obvious and actually look nice and make sense.
+      Don't name it all faves, just faves."*
+      **DIRECTION IS AMBIGUOUS and I am not guessing silently:** he says swipe UP to open, then says
+      swipe back UP to cancel — those cannot both be true. v6.61 built pull-DOWN (from his earlier "if
+      you swipe down on recents"), and "swipe back up to cancel" is self-consistent with a DOWN-opening
+      gesture. Proceeding as DOWN-to-open / reverse-to-cancel and flagging it; one word from him flips it.
+      What is definitely new regardless of direction: reversing mid-swipe must actively CANCEL (today it
+      only cancels by releasing short of the threshold), the animation wants real work, and the strip
+      label becomes "Faves".
+- [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
+      not fixing it.** His words: *"Still getting major lag when scrolling through the timeline; with not
+      many layers added at all. I know I tell you about lag a lot but nothing much ever gets resolved,
+      idk if you're working on it or think it should be fine but just letting you know it's not fine."*
+      **Fair criticism, recorded as such.** The pattern: every time lag comes up I have measured on THIS
+      machine, found acceptable numbers, and moved on — which is exactly the trap that made #41 and #97
+      drag on. Desktop timings are not evidence about his phone. Next pass must be a real profile of the
+      timeline scroll path under CPU throttling, looking specifically for forced synchronous layout and
+      per-frame innerHTML, and it takes priority over feature work.
+- [x] **119 + 120 — The EXPORT frame-rate list is unordered, and should match the canvas one.** (v6.74) His
+      words: *"This menu is all over the shop, needs to be ordered"* (screenshot: 30, 24, 25, 60, 50, 12
+      — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas
+      list. So: same rates as the canvas picker, ascending. Note this drops 12 as well as 24 from export;
+      Custom is not offered on the export dialog, so say so rather than let it go quietly.
+- [ ] **121 — Settings ↔ Export should mirror ONE WAY.** His words: *"the settings menu and export menu
+      should replicate each other, so if I change a setting in the cog it should go to the export section
+      as that"* and then, crucially, *"But if you change a setting in the export menu it shouldn't change
+      the cog menu."* So the cog is the SOURCE OF TRUTH and export inherits from it; an export-time
+      change is a one-off override for that export and must not write back. That asymmetry is the whole
+      requirement — a naive two-way binding is exactly what he is ruling out.
+- [ ] **122 — Onion skin does not belong in View options or App settings.** His words: *"shouldn't onion
+      skin not be in the view options and app settings? Idk why it would be there since it only effects
+      one layer, it should just be in the three dots when you have a layer selected."* He is right about
+      the scope: onion skin ghosts the SELECTED layer either side of now, so it is a per-layer tool
+      sitting in two global menus. Move it to the layer ⋯ menu and take it out of both. Check what
+      happens to the setting when nothing is selected before moving it.
+
+- [x] **118 — Frame-rate list: drop 24, keep 25, add 15 and 120.** (v6.74) His words: *"Why do we have 24 and 25
+      fps? Just make 25 only, and also add a 120 option, and a 15 fps option."*
+      **One concern, raised once and then his call:** 24 and 25 are not redundant — 24 is the worldwide
+      CINEMA standard (every film, and what "cinematic" means to most people), 25 is PAL broadcast
+      (UK/AU/EU television). Dropping 24 means anyone matching film footage has to go through Custom.
+      Cheapest middle ground if he wants a shorter list: keep both but put 25 first. Doing it as asked
+      unless he says otherwise — Custom still reaches 24 either way.
+      **Shipped v6.74:** every frame-rate list is now 15, 25, 30, 50, 60, 120 (Custom still on the two
+      project pickers). 24 is gone from the menus as you asked; if you ever need it for film footage it
+      is one tap away under Custom. The AI's own fps snapping was moved to the same list, so it cannot
+      land the project on a rate the menu can no longer re-pick.
+
+- [ ] **114 — Music note shape: the bottom falls off.** His words: *"Music note shape needs a slight fix,
+      the bottom part is falling off."* Screenshot at v6.73: the note HEAD (the filled ellipse) hangs
+      below and left of the layer's own selection box, so the shape's geometry is drawn outside the box
+      that is supposed to contain it. That means the bounds are wrong, not the drawing — check the path's
+      extents against the box the transform hands it, the same class as the car shape (#63) and the
+      squircle work.
+- [ ] **115 — Dragging a clip to the screen edge should auto-scroll the timeline.** His words: *"When
+      dragging a layer and you get to the end of the screen, make it so the screen moves so you can keep
+      dragging a layer to the left or right without needing to let go and then scroll etc, like how we
+      have the selecting multiple layers tool."* So the edge-scroll behaviour the paint-select drag
+      already has needs to apply to a clip drag too — and he has named the precedent, so copy that one
+      rather than inventing a second feel.
+- [ ] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** His words:
+      *"The sliders we have for everything like effects and what not are too stiff, they need to flow
+      like the timeline does, when you swipe it glides."* #45 "Give every slider the timeline's glide"
+      is ticked as done, so either it never covered the effect-panel sliders or the glide it added is
+      too weak to feel. Do NOT assume the old fix is present and correct — measure what a flick on an
+      effect slider actually does today before changing anything, the way the timeline glide was
+      measured for #103.
+- [ ] **117 — A locked layer should show a red lock on its preview thumbnail.** His words: *"When you
+      lock a layer put a red lock icon on the layer's preview image."* Small and unambiguous: the lock
+      state exists (`layer.locked`, and the timeline already refuses to move a locked clip), it just is
+      not visible where you look for it.
+
 - [ ] **113 — A third subsection: FILTERS, alongside Effects and Audio Effects.** *Big one — read this
       whole entry before starting.* His words: *"now I want a third subsection for filters. It'll work
       the same as the others, and have a button at the top of the colouring section as a shortcut to it.
@@ -83,6 +205,22 @@ Numbered with Ezra's own queue numbers where he gave them.
       compositor rendering a container and its strength, (c) the inspector's expandable row, (d) the
       third browser tab + its categories/thumbnails, (e) the shortcut button on Colouring, (f) the
       filter library itself. (a)-(c) are the risky ones — everything downstream depends on the shape.
+      **Planned — see [FILTERS-DESIGN.md](FILTERS-DESIGN.md).** The shape is decided and written down
+      before any of it gets built, because the effect list is touched by the compositor, inspector,
+      timeline, audio-react, save/load, undo, duplicate, presets and Paste Style, and a wrong shape means
+      redoing all of them. The two decisions worth knowing: a filter is ONE normal effect that renders its
+      children into its own plate (not a nested list that gets flattened — flattening would send 24
+      compositor kernels into infinite recursion and hang the tab), and strength is a CROSS-FADE between
+      the filtered and unfiltered plate, never a scaling of the children's parameters (half a colour
+      string is meaningless, and scaling a keyframed child would rewrite its keyframes destructively).
+      **Step 1 of 6 shipped in v6.74 — registry hardening.** Scouting turned up a live bug worth fixing on
+      its own: the effect tables were plain object literals read with bare bracket lookups, so an effect
+      named `toString` in a project file resolved to a FUNCTION off the prototype chain, passed the
+      "is this a real effect" check, and then took the whole effects panel down with a TypeError. That is
+      reachable today because `layer.effects` is the one major layer sub-structure with no import
+      sanitisation at all. Now null-prototype with own-property guards, verified live: those keys return
+      nothing and a real effect still resolves. Steps 2–6 (the walker, the container, the inspector row,
+      the browser tab, the library) are still to come, and nothing after step 2 is safe to start early.
 
 - [x] **111 — Snapping and Onion skin should say on screen what they just did.** **DONE v6.70.** His words: *"Make it so
       when you press the snapping and onion skin buttons it actually tells you on screen what happened."*

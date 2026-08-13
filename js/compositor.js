@@ -1624,6 +1624,9 @@ window.FM = window.FM || {};
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
+  // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
+  // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
+  Object.setPrototypeOf(POSTFX, null);
   // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
   // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
@@ -3383,6 +3386,7 @@ window.FM = window.FM || {};
     nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*1.3+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*60; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*0.2, gg=L, gb=L*0.2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
     sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice(); function lum(xx,yy){ var j=(yy*W+xx)*4; return s[j]*0.299+s[j+1]*0.587+s[j+2]*0.114; } for(var y=0;y<H;y++){ for(var x=0;x<W;x++){ var i=(y*W+x)*4; if(d[i+3]===0)continue; var xm=x>0?x-1:0, xp=x<W-1?x+1:W-1, ym=y>0?y-1:0, yp=y<H-1?y+1:H-1; var gx=(lum(xp,ym)+2*lum(xp,y)+lum(xp,yp))-(lum(xm,ym)+2*lum(xm,y)+lum(xm,yp)); var gy=(lum(xm,yp)+2*lum(x,yp)+lum(xp,yp))-(lum(xm,ym)+2*lum(x,ym)+lum(xp,ym)); var mag=Math.sqrt(gx*gx+gy*gy)/1442; if(mag>1)mag=1; var v=255-mag*510; if(v<0)v=0; d[i]=d[i]+(v-d[i])*a; d[i+1]=d[i+1]+(v-d[i+1])*a; d[i+2]=d[i+2]+(v-d[i+2])*a; } } },
   };
+  Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
   // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
@@ -4409,6 +4413,7 @@ window.FM = window.FM || {};
     // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
     tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
   };
+  Object.setPrototypeOf(WARP_FX, null);   // own keys only — see POSTFX
 
   // ================== CANVAS_FX: 3D solids + Move/Transform ==================
   // Canvas-composited effects. Like drawPixelEffect the layer is rendered clean to an offscreen,
@@ -6211,6 +6216,7 @@ window.FM = window.FM || {};
       B.restore();
     },
   };
+  Object.setPrototypeOf(CANVAS_FX, null);   // own keys only — see POSTFX
 
   // RGB split / chromatic aberration: render the layer clean to an offscreen, then rebuild it
   // sampling the RED channel shifted +d and the BLUE channel shifted -d → coloured edge fringes.

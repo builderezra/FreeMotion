@@ -14,7 +14,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=343">
+<link rel="stylesheet" href="styles.css?v=344">
 <link rel="stylesheet" href="theme-glass.css?v=21">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12151b">
@@ -131,7 +131,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.73</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.74</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -450,8 +450,10 @@
           <div class="hm-fld hidden" id="hm-new-custom-size"><span>Width × Height</span><span class="hm-num-pair"><input id="hm-new-w" type="number" min="16" max="7680" step="2" value="1080" class="cv-num" aria-label="Canvas width in pixels"><span>×</span><input id="hm-new-h" type="number" min="16" max="7680" step="2" value="1920" class="cv-num" aria-label="Canvas height in pixels"></span></div>
           <label class="hm-fld"><span>Frame rate</span>
             <select id="hm-new-fps">
-              <option value="24">24 fps (film)</option>
-              <option value="25">25 fps (PAL)</option>
+              <!-- 24 removed at Ezra's request (queue 118): "Why do we have 24 and 25 fps? Just make 25
+                   only". Custom… still reaches 24 for anyone matching film footage. -->
+              <option value="15">15 fps</option>
+              <option value="25">25 fps</option>
               <option value="30" selected>30 fps</option>
               <option value="50">50 fps</option>
               <option value="60">60 fps (smooth)</option>
@@ -531,12 +533,15 @@
       </label>
       <label class="field"><span>Frame rate</span>
         <select id="exp-fps">
-          <option value="30">30 fps</option>
-          <option value="24">24 fps (film)</option>
-          <option value="25">25 fps (PAL)</option>
-          <option value="60">60 fps (smooth)</option>
+          <!-- Ordered, and matched to the canvas picker (queue 119/120). Ezra: "This menu is all over
+               the shop, needs to be ordered", then "Yeah match it". Ascending, same rates as Canvas
+               settings — 24 and 12 go with it, and there is no Custom on this dialog. -->
+          <option value="15">15 fps</option>
+          <option value="25">25 fps</option>
+          <option value="30" selected>30 fps</option>
           <option value="50">50 fps</option>
-          <option value="12">12 fps</option>
+          <option value="60">60 fps (smooth)</option>
+          <option value="120">120 fps</option>
         </select>
       </label>
       <label class="field"><span>Quality</span>
@@ -589,11 +594,12 @@
       <div class="field hidden" id="cv-custom-size"><span>Width × Height</span><span style="display:flex;align-items:center;gap:6px"><input id="cv-cw" type="number" min="16" max="7680" step="2" value="1080" class="cv-num"><span>×</span><input id="cv-ch" type="number" min="16" max="7680" step="2" value="1920" class="cv-num"></span></div>
       <label class="field"><span>Frame rate</span>
         <select id="cv-fps">
-          <option value="24">24 fps</option>
+          <option value="15">15 fps</option>
           <option value="25">25 fps</option>
           <option value="30" selected>30 fps</option>
           <option value="50">50 fps</option>
           <option value="60">60 fps</option>
+          <option value="120">120 fps</option>
           <option value="custom">Custom…</option>
         </select>
       </label>
@@ -631,8 +637,8 @@
   <script src="js/behaviors.js?v=3"></script>
   <script src="js/media.js?v=36"></script>
   <script src="js/blend-modes.js?v=1"></script>
-  <script src="js/compositor.js?v=272"></script>
-  <script src="js/fx-registry.js?v=69"></script>
+  <script src="js/compositor.js?v=273"></script>
+  <script src="js/fx-registry.js?v=70"></script>
   <script src="js/fx-presets.js?v=3"></script>
   <script src="js/fx-thumbs.js?v=25"></script>
   <script src="js/timeline.js?v=129"></script>
@@ -660,7 +666,7 @@
   <script src="js/history.js?v=25"></script>
   <script src="js/storage.js?v=92"></script>
   <script src="js/medialib.js?v=4"></script>
-  <script src="js/home.js?v=122"></script>
+  <script src="js/home.js?v=123"></script>
   <script src="js/graph-editor.js?v=14"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -676,7 +682,7 @@
   <script src="js/audio-react.js?v=4"></script>
   <script src="js/mobile.js?v=31"></script>
   <script src="js/ai-manifest.js?v=5"></script>
-  <script src="js/ai-ops.js?v=9"></script>
+  <script src="js/ai-ops.js?v=10"></script>
   <script src="js/ai-key.js?v=1"></script>
   <script src="js/ai-budget.js?v=1"></script>
   <script src="js/ai-mock.js?v=3"></script>
