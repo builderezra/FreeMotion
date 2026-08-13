@@ -7341,9 +7341,14 @@
       const g0 = !!FM.showGuides;
       await sleep(50);
       if (!!FM.showGuides !== g0) throw new Error('FM.showGuides flips on its own — the guides assertion would prove nothing');
-      vhit('vb-grid').click(); await sleep(30);
-      if (!!FM.showGuides === g0) throw new Error('⛶ ▸ vb-grid no longer toggles the guides — that is where "Show/Hide guides" went');
-      vhit('vb-grid').click(); await sleep(30);
+      /* vb-GUIDES, not vb-grid. The rail used to carry TWO buttons for this one state and Ezra spotted
+         it — "you've added the grid button twice in that menu" — so vb-grid was removed at v6.69. This
+         test is about the ACTION surviving the loss of the ⋯ menu, not about which button id provides
+         it, and the action is still one tap away. Pinning it to the id is what made a correct removal
+         look like a regression. */
+      vhit('vb-guides').click(); await sleep(30);
+      if (!!FM.showGuides === g0) throw new Error('⛶ ▸ vb-guides no longer toggles the guides — that is where "Show/Hide guides" went');
+      vhit('vb-guides').click(); await sleep(30);
       // preview speed
       const r0 = FM.previewRate || 1;
       vhit('vb-faster').click(); await sleep(30);

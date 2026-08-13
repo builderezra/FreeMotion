@@ -2921,13 +2921,15 @@ window.FM = window.FM || {};
         const open = viewBar.classList.toggle('hidden') === false;
         amFitBtn.classList.toggle('active', open);
         if (open && FM.syncViewBar) FM.syncViewBar();   // rate / loop / mark state can all change while it's shut
-        const g = document.getElementById('vb-grid'); if (g) g.classList.toggle('on', !!FM.showGuides);   // sync state on open
       });
     }
     const vbFit = document.getElementById('vb-fit');
     if (vbFit) vbFit.addEventListener('click', () => { if (FM.viewport) FM.viewport.reset(); else FM.setCanvasZoom(1); });   // fit = 100% AND re-centred (clears the pan too)
-    const vbGrid = document.getElementById('vb-grid');
-    if (vbGrid) vbGrid.addEventListener('click', () => { FM.showGuides = !FM.showGuides; vbGrid.classList.toggle('on', FM.showGuides); render(); });
+    /* The vb-grid button is gone (Ezra: "you've added the grid button twice in that menu"). It toggled
+       FM.showGuides — the same state vb-guides toggles — so the rail carried two controls for one
+       thing. This one was also the wrong one to keep: it flipped the flag directly, while the contract
+       stated a few lines below is that every rail button PRESSES the control that owns the toggle, so
+       the bar and the settings panel can never disagree. vb-guides obeys that; this did not. */
     const vbLayers = document.getElementById('vb-layers');
     /* ISOLATE (v5.27). Ezra: "make the layers button work, the one that weve had for ages that does
        nothing… if you have one clip selected, the first tap will make it so every other layer but

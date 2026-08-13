@@ -60,6 +60,29 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [ ] **109 — Film Grain needs a ROUND grain option, and the thumbnail should show it.** His words:
+      *"The film grain effect should have a circle option, instead of just squares, and also the preview
+      image should show the circle version."* Today `filmgrain` hashes one value per square CELL
+      (`cell = (y/size)*gw + (x/size)`), which is why the grain reads as blocks at size > 1 — real film
+      grain is round. Two parts: a Shape option (Square / Round) on the effect, and the effect's
+      thumbnail regenerated from the round variant so the browser advertises what he actually wants to
+      see. Note the thumbnail is generated from the effect itself, so it should follow automatically
+      once the default or the pictured params use Round — worth confirming rather than assuming.
+
+- [ ] **107 — Fill Behind's Blur does nothing; it only zooms.** His words: *"The blur on fill behind
+      still does not work, it just zooms in."* "Still" — so a previous pass did not fix it. IMPORTANT:
+      the suite has two tests that measure this blur and both PASS, so whatever is wrong does not
+      reproduce in headless Chrome — same shape as the text-editing bug (#41), where synthetic checks
+      were green on a broken build. Prime suspect is `ctx.filter`, which is what the fill uses for its
+      blur: canvas filter support is missing or partial on older iOS Safari and some WebViews, and an
+      unsupported `ctx.filter = 'blur(…)'` assignment fails SILENTLY — leaving the zoom, which is a
+      separate transform, working perfectly. That would produce exactly "it just zooms in". Verify the
+      support question first; do not tune the blur radius.
+- [ ] **108 — What do the buttons on the canvas view rail do?** Answered in chat (loop / onion skin /
+      snapping / guides / export marks / timeline zoom). Keeping it here because a control that has to
+      be explained is a design note, not just a question — the row is icon-only with no labels, and he
+      has now asked what two of them are.
+
 - [x] **106 — Grain level is right, but it is still too jumpy: make it SMOOTH.** **DONE v6.68.** His words: *"The level
       of film grain is good but again it's too jumpy, just make it smooth."* So .032 opacity stays. The
       remaining problem is that v6.67 swaps tiles with steps(1) — an instant cut between noise fields
