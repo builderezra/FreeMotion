@@ -153,6 +153,25 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [ ] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** His words:
+      *"when dragging the cue length for captions it should show it changing live not just wait for you
+      to let go then jump."* Note the timeline chip already moves its own left/width during the drag, so
+      whatever he is looking at is a surface that does NOT — most likely the inspector's captions list
+      (its refresh is on pointerup only) or the canvas text, which needs the cue's new in/out to be
+      applied per move rather than on commit. **Find out which surface he means by making all of them
+      live, rather than guessing at one.**
+
+- [ ] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans.** His words:
+      *"make the auto detect captions button way easier to access and use. and it should have a choice
+      between only detecting where the captions are added in the project or detecting the whole project
+      or detecting a specific audio later then let you select it."*
+      Two parts:
+      1. **Access.** Today "Detect speech" is buried in the Aa sheet next to a source dropdown (his own
+         screenshot for #147 shows it). It should be reachable without going three levels deep.
+      2. **Scope, three options**: (a) only the span the captions layer covers, (b) the whole project,
+         (c) a specific audio layer — and for (c) a picker to choose which. Today it detects against one
+         implicit source with no say in the matter.
+
 - [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
       His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
       trying to play back stuff, this is related to the long on going lag issues with freemotion."*
