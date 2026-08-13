@@ -11985,6 +11985,41 @@
     if (n < 2) throw new Error('linear repeat drew ' + n + ' copy — it is not repeating at all');
   });
 
+  /* #155 — Ezra: "I want the effect that you have on the open project, like with the shiny line going
+     around it, also on whatever you have selected… the main button that opens the menu."
+     Two things to hold. It must MOVE with the selection — the tabs swap .active in place without
+     rebuilding, so a ring appended once would be stranded on whichever tab opened first. And it must be
+     the SAME light as the open project's card, not a lookalike: #116 is the standing lesson about two
+     surfaces meant to feel identical quietly drifting apart, so the animation is asserted by name. */
+  test('the glint marks the open add-menu tab, and it is the same light as the open project', { item: 'tab-glint' }, async function () {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:600px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const tabs = [].slice.call(host.querySelectorAll('.addmenu-tab'));
+      if (tabs.length < 2) throw new Error('the add menu built ' + tabs.length + ' tab(s) — nothing to move a marker between');
+
+      let rings = host.querySelectorAll('.am-glint');
+      if (rings.length !== 1) throw new Error(rings.length + ' glints on screen — exactly one tab is open at a time');
+      const active = host.querySelector('.addmenu-tab.active');
+      if (!active || !active.querySelector('.am-glint')) throw new Error('the glint is not on the ACTIVE tab');
+
+      // One implementation, not a lookalike: the ring runs the home card's own keyframes.
+      const spin = getComputedStyle(rings[0].querySelector('i')).animationName;
+      if (spin !== 'hm-glint') throw new Error('the tab ring animates with "' + spin + '" instead of the open project\'s own hm-glint — that is a second copy waiting to drift');
+
+      // …and it follows the selection.
+      const other = tabs.find(t => !t.classList.contains('active'));
+      other.click();
+      await sleep(120);
+      rings = host.querySelectorAll('.am-glint');
+      if (rings.length !== 1) throw new Error('after switching tabs there are ' + rings.length + ' glints — the old one was left behind');
+      if (!other.querySelector('.am-glint')) throw new Error('the glint did not follow the selection to the newly opened tab');
+    } finally { host.remove(); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

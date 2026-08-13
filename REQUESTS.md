@@ -198,10 +198,13 @@ better still, keep working inside the turn rather than parking work for a later 
       else. Then back button to leave project can be at the far left."* So the row reads:
       **← back** (far left) · undo · redo · ⏮ · ▶ · ⏭ · duplicate · **delete · bind · group** (only when
       they apply) · … · **settings cog · export · view options** (far right).
-      The version-refresh chip still has to land somewhere — it was on the rail being deleted and the
-      amendment does not say where it goes. Best read: beside the back button at the far left, which is
-      where it already sits relative to the back arrow today. **Asking him to confirm that, and one
-      other thing:** *"change its logo"* — the cog is already a plain outline icon and the EXPORT
+      **ANSWERED 14 Aug, so this is no longer blocked.** His words: *"on the of move the refresh button
+      to re load the page would go on the far right where the export button and settings cog would be,
+      it would come after all of them so on the left of them."* So the chip joins the far-RIGHT cluster
+      and sits to the LEFT of the cog and export. Final order for that end of the row:
+      **`↻ v7.00` · settings cog · export · view options** (view options stays outermost, per the
+      amendment). Nothing goes at the far left except the back button.
+      **One thing still open:** *"change its logo"* — the cog is already a plain outline icon and the EXPORT
       button is the colourful glass one from #71, so this almost certainly means give export a plain
       monochrome icon on PC while the phone keeps the glass artwork. Building it that way; flagging it
       so he can correct me in one word if I have it backwards.
@@ -220,6 +223,16 @@ better still, keep working inside the turn rather than parking work for a later 
       grow to fill the whole area instead of sitting as a small row at the top.
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
+
+- [ ] **155 — Put the open-project glint on the SELECTED add-menu tab.** (14 Aug.) His words: *"I want
+      the effect that you have on the open project, like with the shiny line going around it, also on
+      whatever you have selected, like elements or shapes etc"*, then immediately: *"Not the elements or
+      shapes inside but the main button that opens the menu."*
+      So: the travelling light that runs around the OPEN project's card on home (#135, v6.13) goes on the
+      **active add-menu tab** — Elements / Shape / Media / Audio / Template — not on the item cards
+      inside it. Same meaning in both places: *this is the one that is open*.
+      Build it from the SAME implementation rather than a second copy, or the two will drift the way the
+      slider glide drifted from the timeline's in #116.
 
 - [ ] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (14 Aug,
       screenshot of home with a black band across the very bottom.) His words: *"When leaving a project

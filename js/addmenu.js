@@ -870,6 +870,27 @@ window.FM = window.FM || {};
         }
       }
 
+      /* The travelling glint marks the OPEN tab (queue 155). Ezra: "I want the effect that you have on
+         the open project, like with the shiny line going around it, also on whatever you have
+         selected… the main button that opens the menu." Same light, same CSS as the open project's
+         card — see .hm-glint / .am-glint in styles.css; nothing is duplicated but the corner radius.
+         It has to MOVE with the selection rather than be appended once: clicking a tab swaps the
+         .active class in place without rebuilding the row, so a ring added at build time would be left
+         behind on whichever tab happened to be open first. */
+      function placeGlint() {
+        var all = tabsEl.querySelectorAll('.addmenu-tab');
+        for (var i = 0; i < all.length; i++) {
+          var old = all[i].querySelector('.am-glint');
+          if (old && old.parentNode) old.parentNode.removeChild(old);
+          if (!all[i].classList.contains('active')) continue;
+          var g = document.createElement('span');
+          g.className = 'am-glint';
+          g.setAttribute('aria-hidden', 'true');   // decoration: .active already says this for a reader
+          g.appendChild(document.createElement('i'));
+          all[i].appendChild(g);
+        }
+      }
+
       TABS.forEach(function (t) {
         var tb = document.createElement('button');
         tb.type = 'button'; tb.title = t.label;
@@ -881,10 +902,12 @@ window.FM = window.FM || {};
           var all = tabsEl.querySelectorAll('.addmenu-tab');
           for (var i = 0; i < all.length; i++) all[i].classList.remove('active');
           tb.classList.add('active');
+          placeGlint();
           drawBody();
         });
         tabsEl.appendChild(tb);
       });
+      placeGlint();
       main.appendChild(tabsEl); main.appendChild(bodyEl);
 
       /* The rail is EMPTY of tools now. Text / Captions / Freehand Drawing / Vector Drawing moved into

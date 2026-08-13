@@ -906,7 +906,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   color: var(--text-dim); cursor: pointer; padding: 11px 6px; min-width: 0;
   transition: background .12s, border-color .12s, color .12s, transform .04s;
 }
-.addmenu-tab { flex: 0 0 auto; min-width: 66px; }
+.addmenu-tab { flex: 0 0 auto; min-width: 66px; position: relative; }   /* position: the queue-155 glint is absolute within it */
 /* On the phone sheet the tabs SHARE the row instead of being fixed at 66px each. Five of them plus
    gaps came to 358px in a 354px row, so the row overflowed by 4px and never sat flush — it read as
    loose rather than deliberate, and could be nudged sideways. flex:1 with min-width:0 makes them
@@ -2979,22 +2979,32 @@ body.hm-selecting .hm-pin { display: none; }
    transform: rotate() is used rather than an animated conic `from` angle — that would need @property to
    interpolate, and where it isn't registered the angle jumps at 50% instead of easing, which reads as a
    flicker. A rotating element is universally supported. */
-.hm-glint { display: none; }
+/* ONE implementation, two hosts (queue 155). Ezra: "I want the effect that you have on the open
+   project, like with the shiny line going around it, also on whatever you have selected… the main
+   button that opens the menu." Same sentence in both places — THIS is the one that is open — so it is
+   the same ring, not a second copy of it. #116 is the standing warning about what happens when two
+   surfaces meant to feel identical get their own copies of the code: the timeline's glide was retuned
+   and the sliders' was not, and it took him asking twice to notice. The only thing that differs here is
+   the corner radius, so that is a variable and nothing else is duplicated. */
+.hm-glint, .am-glint { display: none; }
 @supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
-  .hm-glint {
+  .hm-glint, .am-glint {
     /* -1px, not 0: `inset` resolves against the PADDING box, and .hm-card carries a 1px border. At
        inset:0 the ring would sit just inside that border and leave the card's own outline showing
        around it — two concentric edges, which is the "tacked on" look. -1px (radius 16+1) lands the
        ring exactly ON the border it is replacing. */
     display: block; position: absolute; inset: -1px; z-index: 3;
-    border-radius: 17px;
+    border-radius: var(--glint-r, 17px);
     padding: 1.5px; overflow: hidden; pointer-events: none;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
             mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
             mask-composite: exclude;
   }
-  .hm-glint i {
+  /* The add-menu tab is a smaller box with a smaller corner. +1px for the same reason the card uses
+     -1px inset: the ring replaces the element's own 1px border rather than sitting inside it. */
+  .am-glint { --glint-r: calc(var(--radius-sm) + 1px); }
+  .hm-glint i, .am-glint i {
     position: absolute; left: 50%; top: 50%; display: block;
     width: 140%; aspect-ratio: 1 / 1; margin-left: -70%; margin-top: -70%;
     /* One comet, not a spinning barber pole: ~40% of the turn carries any light at all, and the white
@@ -3014,7 +3024,7 @@ body.hm-selecting .hm-pin { display: none; }
 /* Reduced motion still gets the marker, just standing still — the point of the ring is "this is the
    open one", and that fact shouldn't need movement to be legible. */
 @media (prefers-reduced-motion: reduce) {
-  .hm-glint i { animation: none; background: rgba(150, 232, 255, .42); }
+  .hm-glint i, .am-glint i { animation: none; background: rgba(150, 232, 255, .42); }
 }
 .hm-body { flex: 1; min-width: 0; }
 .hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
