@@ -100,6 +100,37 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       clamped hard (PULL_MAX 150 with a pow(dy,0.78) curve) and reads as a freeze once you pass it. He
       wants the drag to keep responding at any distance, with the slam on release past the threshold.
 
+- [ ] **143 — PC: kill the left side rail, move everything into the transport row.** (13 Aug, with two
+      Studio screenshots at v6.86.) His words: *"on pc we can lokey remove the side bar, put export on the
+      far left of the row with the play buttons then to it's right the settings button then the Version
+      refresh, then on the right side of the play button after the copy paste button, put delete and the
+      binding button and the group button, they only show up when they should, not always there."*
+      Reading it as a layout, left to right along the one transport row:
+      **Export · Settings · version-refresh chip** — then the existing centred cluster
+      (undo · redo · ⏮ · ▶ · ⏭ · duplicate) — then, to the RIGHT of duplicate:
+      **Delete · Bind (parenting) · Group**.
+      The last clause is the part to get right: *"they only show up when they should, not always there."*
+      Delete/Bind/Group are selection-dependent — Group wants 2+ layers, Bind wants a selection and a
+      target, Delete wants any selection — so the row must grow and shrink with the selection rather
+      than showing three permanently-dimmed buttons. Watch the centre cluster staying visually centred
+      as the right side changes width, or the play button will drift as you select things.
+      Screenshot 1 shows the rail to remove: back arrow, `↻ v6.86`, duplicate, delete, export, settings.
+
+- [ ] **144 — PC: trim/split move onto the playhead, and the align buttons get the whole panel.** (13 Aug,
+      second screenshot, multi-select state.) His words: *"put the delete left side button to the left of
+      the play head and then same for the right button, and put the split button in the middle on top of
+      the playhead. Then in the left massive area where its currently got the six small buttons, just get
+      rid of the buttons that are near the play head and then with the align buttons just make them big
+      and fill up the whole section."*
+      So: the three trim/split controls (`[|` trim-left, `<|>` split, `|]` trim-right) stop being a row
+      floating above the ruler and become **playhead-anchored** — trim-left sits immediately LEFT of the
+      playhead line, trim-right immediately RIGHT of it, and split sits centred ON the playhead. They
+      travel with the playhead. Then the inspector's "EDIT 2 CLIPS" row is deleted outright (those are
+      the same three buttons), leaving **ALIGN ON TIMELINE** alone in that panel — and its three buttons
+      grow to fill the whole area instead of sitting as a small row at the top.
+      Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
+      single clip too (screenshot 1) — the playhead move applies to both.
+
 - [ ] **142 — Home settings: a default colour for new shapes.** His words: *"In the home settings menu,
       make a setting to change the default colour of shapes when you import them. Applied to every
       shape."* So a colour control in the HOME settings cog (the app-wide one, not a project setting),
