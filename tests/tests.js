@@ -11721,9 +11721,15 @@
       if (tinted.length < 4) throw new Error('only ' + tinted.length + ' non-media cards to check');
       const hues = tinted.slice(0, 8).map(c => getComputedStyle(c.querySelector('.addmenu-ic')).color);
       if (new Set(hues).size < 3) throw new Error('the first ' + hues.length + ' item icons use only ' + new Set(hues).size + ' colour(s) — they are back to being one flat set');
-      // …and the plate behind the icon has to actually paint, or the colour is a one-pixel stroke.
-      const plate = getComputedStyle(tinted[0].querySelector('.addmenu-ic')).backgroundColor;
-      if (!plate || plate === 'rgba(0, 0, 0, 0)' || plate === 'transparent') throw new Error('the item icon plate is transparent — the tint is carrying nothing');
+      /* The colour has to be on the CARD, not on a badge behind the glyph. Ezra corrected the first
+         version on 14 Aug with the whole Text card circled: "I meant the whole shape around it, so you
+         get rid of that little square bubble around then that's colourful". So two assertions: the
+         cards differ from each other, and the icon wrapper paints nothing of its own. */
+      const cardBgs = tinted.slice(0, 8).map(c => getComputedStyle(c).backgroundImage + '|' + getComputedStyle(c).backgroundColor);
+      if (new Set(cardBgs).size < 3) throw new Error('the first ' + cardBgs.length + ' item CARDS share ' + new Set(cardBgs).size + ' background(s) — the colour is not on the card, which is what was asked for');
+      const badge = getComputedStyle(tinted[0].querySelector('.addmenu-ic'));
+      const opaqueBadge = badge.backgroundColor && badge.backgroundColor !== 'rgba(0, 0, 0, 0)' && badge.backgroundColor !== 'transparent';
+      if (opaqueBadge || parseFloat(badge.borderTopWidth) > 0) throw new Error('the icon still sits on its own tinted badge (bg ' + badge.backgroundColor + ', border ' + badge.borderTopWidth + ') — that is the "little square bubble" he asked to be removed');
     } finally { host.remove(); }
   });
 

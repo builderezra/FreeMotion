@@ -129,6 +129,20 @@ html[data-theme="glass"] .addmenu-tab {
   background: linear-gradient(180deg, rgba(3, 9, 13, .40), rgba(3, 9, 13, .16));
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, .35);
 }
+/* …and the CARDS carry their tint in the pour itself (queue 145, corrected). Same specificity trap as
+   the tabs above: the shared `html[data-theme="glass"] .addmenu-card` rule is (0,2,0) and would beat a
+   bare `.addmenu-card` background, so the tint has to be restated here or it simply would not appear
+   under the theme that is actually switched on. --am-tint is set per card by js/addmenu.js. */
+html[data-theme="glass"] .addmenu-card {
+  background: linear-gradient(180deg, rgba(var(--am-tint, 188, 230, 239), .17), rgba(var(--am-tint, 188, 230, 239), .05));
+  border-color: rgba(var(--am-tint, 188, 230, 239), .28);
+}
+html[data-theme="glass"] .addmenu-card:hover {
+  background: linear-gradient(180deg, rgba(var(--am-tint, 188, 230, 239), .27), rgba(var(--am-tint, 188, 230, 239), .09));
+}
+html[data-theme="glass"] .addmenu-card.addmenu-media {
+  background: linear-gradient(180deg, rgba(188, 230, 239, .085), rgba(188, 230, 239, .03));
+}
 html[data-theme="glass"] .addmenu-tab.active {
   background: linear-gradient(180deg, rgba(90, 199, 237, .22), rgba(90, 199, 237, .08));
   border-color: rgba(90, 199, 237, .45);

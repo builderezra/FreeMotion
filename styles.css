@@ -938,16 +938,22 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    solid stroke and the translucent plate. Anything with no tint — a media tile showing the user's own
    frame — falls back to the accent exactly as before. ============ */
 .addmenu-tab { background: rgba(4, 10, 14, .38); }
-.addmenu-card > .addmenu-ic {
-  color: rgb(var(--am-tint, 41, 217, 187));
-  background: rgba(var(--am-tint, 41, 217, 187), .13);
-  border: 1px solid rgba(var(--am-tint, 41, 217, 187), .26);
-  border-radius: 10px; padding: 6px;
+/* THE WHOLE CARD, not a badge behind the glyph — corrected by Ezra on 14 Aug with the Text card
+   circled: "When I said I want the background of these icons to have different colours I meant the
+   whole shape around it, so you get rid of that little square bubble around then that's colourful".
+   The first cut put a tinted plate behind each icon. That is a second box inside a box, it needed its
+   own padding and border (which pushed the glyph off-centre — his other note), and it fought the
+   dense Shape grid for room. Tinting the button itself says the same thing with no extra furniture.
+   He also called the tab half done — "since you made the top icons go dark when not selected you've
+   already done enough" — so the recessed tabs stay exactly as they are and nothing more is added. */
+.addmenu-card > .addmenu-ic { color: rgb(var(--am-tint, 41, 217, 187)); }
+.addmenu-card {
+  background: rgba(var(--am-tint, 41, 217, 187), .10);
+  border-color: rgba(var(--am-tint, 41, 217, 187), .26);
 }
-.addmenu-card { border-color: rgba(var(--am-tint, 41, 217, 187), .20); }
-.addmenu-card:hover > .addmenu-ic { background: rgba(var(--am-tint, 41, 217, 187), .22); border-color: rgba(var(--am-tint, 41, 217, 187), .45); }
-/* A media tile paints the real frame edge to edge; a plate floating on top of a photograph is noise. */
-.addmenu-card.addmenu-media > .addmenu-ic { background: none; border: 0; padding: 0; }
+.addmenu-card:hover { background: rgba(var(--am-tint, 41, 217, 187), .20); border-color: rgba(var(--am-tint, 41, 217, 187), .5); }
+/* A media tile paints the user's own frame edge to edge; a colour wash over a photograph is noise. */
+.addmenu-card.addmenu-media { background: var(--panel-2); }
 
 .addmenu-tab:hover, .addmenu-card:hover { background: var(--panel-3); color: var(--text); border-color: var(--accent); }
 .addmenu-tab:active, .addmenu-card:active { transform: translateY(1px); }
@@ -3182,15 +3188,10 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
 .addmenu-card--ico { padding: 12px 4px; }
 .addmenu-card--ico .addmenu-ic svg, .addmenu-card--ico .addmenu-ic { width: 34px; height: 34px; }
-/* NO PLATE on the shape tiles — they keep the tint on the stroke and nothing else (queue 145).
-   Two goes at giving them one, and the grid simply has not got the room: at 6 across in a 288px panel
-   a tile has ~36px of content box, and a 34px icon plus 10px of plate padding is 46px. Sizing the
-   plate to 34px squeezed the ART to 20px under border-box; letting the wrapper grow instead let the
-   flex item shrink to 22px. Both were caught by the v5.05 regression test that exists for exactly
-   this class of accident, which is the second time it has earned its keep.
-   The colour still lands — .addmenu-card > .addmenu-ic sets `color`, and these glyphs stroke with
-   currentColor — so "colour on all the sub-section buttons" holds here too, without the box. */
-.addmenu-card--ico > .addmenu-ic { background: none; border: 0; padding: 0; }
+/* (The plate that used to need un-doing here is gone from every card — see the queue-145 note by
+   .addmenu-card. Tinting the button itself needs no exception for the dense Shape grid, which is one
+   more reason it was the right shape for this: the first version had to special-case these tiles
+   twice and still squeezed their art from 34px to 22px.) */
 .addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
 .addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
 .addmenu-dot.on { background: var(--accent); }

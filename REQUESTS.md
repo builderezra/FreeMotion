@@ -837,10 +837,22 @@ better still, keep working inside the turn rather than parking work for a later 
       five times a second — visibly boiling, still cross-faded so it never strobes. Method unchanged;
       only the rate moved, which is what you actually asked for both times.
 
-- [ ] **123 — Linear Repeat is poor: it just squishes horizontally.** His words: *"Linear repeat effect
+- [x] **123 — Linear Repeat is poor: it just squishes horizontally.** (v6.99) His words: *"Linear repeat effect
       is shit and needs work, currently it just squishes horizontally when you do it."* So the copies are
       being fitted into the frame width instead of being laid out at size — a repeat should place N
       copies along an axis at the ORIGINAL scale, with spacing and direction, not compress one copy.
+      **Shipped v6.99, and you had diagnosed it exactly.** It was a per-pixel WARP:
+      `cellW = W/count; lx = (x - floor(x/cellW)*cellW)/cellW; return [lx*W, y]` — every cell mapped its
+      own 0..1 across the FULL source width, so each copy held the whole picture crushed into 1/count of
+      the frame. That is not a repeat, it is N horizontal squishes.
+      A repeat draws copies at their own size, which a coordinate remap cannot do, so it is a canvas
+      effect now (the same machinery Tiles uses) and the layer's plate is drawn again at an offset.
+      Nothing is scaled. It gained the controls a repeat actually needs — **Copies, Spacing, Direction
+      and Fade out** — with spacing measured against the CONTENT's own width so 100% butts copies edge
+      to edge whatever size the layer is. `count` keeps its key and default, so an existing instance
+      keeps its number and simply stops squishing.
+      The test measures the drawn ink: it fails if a copy comes out narrower than the original, which is
+      the actual complaint, and separately if it draws only one copy.
 - [ ] **124 — Faves gesture: threshold + cancel, better animation, and rename to "Faves".** His words:
       *"you start by swiping up on the recents menu, when your swipe reaches a certain level and you let
       go it opens the faves menu, since people may start swiping and not want to go in that menu … you
