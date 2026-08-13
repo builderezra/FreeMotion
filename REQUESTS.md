@@ -886,6 +886,23 @@ better still, keep working inside the turn rather than parking work for a later 
       that is supposed to contain it. That means the bounds are wrong, not the drawing — check the path's
       extents against the box the transform hands it, the same class as the car shape (#63) and the
       squircle work.
+      **NOT REPRODUCED, and the hypothesis above is now dead — measured, not assumed.**
+      `tests/_shapebounds.html`: **all 54** data shapes fit inside their unit box, the note's head at
+      y 0.638…0.912. `tests/_noteink.html` then renders a real note layer and finds the painted pixels:
+
+      | condition | bottom overshoot | left overshoot |
+      |---|---|---|
+      | square box, no stroke | **0 px** | 0 px |
+      | the box it actually SPAWNS with (0.9 × 1) | **0 px** | 0 px |
+      | stroke 8 enabled | **0 px** | 0 px |
+      | stroke 24 enabled | **0 px** | 0 px |
+
+      In a 400px box the note's ink runs y 138…465 — 38px of clearance at the top and 35px at the
+      bottom. Nothing escapes, so "fix the bounds" would have been a change that fixed nothing.
+      **So there is a condition in your screenshot I have not got.** Worth one line from you when you
+      see this: was the note **rotated or scaled**, was it in **Edit Points**, or had it been **squished /
+      had an effect on it**? Any of those could push ink past the box in a way a plain layer does not.
+      Staying open until then rather than being closed on a clean measurement of the wrong thing.
 - [ ] **115 — Dragging a clip to the screen edge should auto-scroll the timeline.** His words: *"When
       dragging a layer and you get to the end of the screen, make it so the screen moves so you can keep
       dragging a layer to the left or right without needing to let go and then scroll etc, like how we

@@ -1,0 +1,91 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#114 — where does the music note's ink actually land?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.5 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:900px;height:760px;border:0}
+#out{padding:12px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* Ezra (#114): "Music note shape needs a slight fix, the bottom part is falling off."
+   The polygon DATA is clean — tests/_shapebounds.html shows every one of the 54 shapes inside its
+   unit box, the note's head at y 0.638…0.912. So the recorded hypothesis ("the bounds are wrong") is
+   dead, and the next honest question is where the drawn INK lands versus the box the layer thinks it
+   occupies. Render one on a canvas and find the painted pixels: that includes the stroke, the curve
+   overshoot between control points, and anything else the raw numbers cannot show. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done(){ out.textContent = L.join('\n'); window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.makeLayer || !w.FM.renderScene) return setTimeout(wait, 50);
+      go(w);
+    })();
+  });
+
+  function inkBox(ctx, W, H) {
+    var d = ctx.getImageData(0, 0, W, H).data;
+    var x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      if (d[(y * W + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    return { x0: x0, y0: y0, x1: x1, y1: y1 };
+  }
+
+  function go(w) {
+    var FM = w.FM;
+    try {
+      var W = 600, H = 600;
+      var scene = { layers: [], project: { width: W, height: H, fps: 30, duration: 5, background: null, markers: [] } };
+      // The layer's own box: centred, 400x400 — so the box is x 100..500, y 100..500.
+      var BOX = 400, cx = W / 2, cy = H / 2;
+      // Three conditions, because the first one measured clean and a single clean reading is not an
+      // answer to "it falls off": the plain square box, the REAL spawn box (SHAPE_ASPECT gives the note
+      // 0.9x1, so it is not square as added from the menu), and a stroked one — half a stroke always
+      // paints outside the fill, which is the classic way a shape ends up over its own edge.
+      var cases = [
+        { name: 'square box, no stroke', w: BOX, h: BOX, stroke: null },
+        { name: 'as SPAWNED (0.9 x 1)', w: Math.round(BOX * 0.9), h: BOX, stroke: null },
+        { name: 'stroke 8 enabled', w: BOX, h: BOX, stroke: { enabled: true, width: 8, color: '#ff0000' } },
+        { name: 'stroke 24 enabled', w: BOX, h: BOX, stroke: { enabled: true, width: 24, color: '#ff0000' } },
+      ];
+      cases.forEach(function (c) {
+        var note = FM.makeLayer('shape', { shape: 'note', x: cx, y: cy, shapeW: c.w, shapeH: c.h, fill: '#ffffff', start: 0, duration: 5 });
+        if (c.stroke) note.stroke = c.stroke;
+        scene.layers = [note];
+        var cv2 = w.document.createElement('canvas'); cv2.width = W; cv2.height = H;
+        var c2 = cv2.getContext('2d');
+        FM.renderScene(c2, scene, 0);
+        var k = inkBox(c2, W, H);
+        var kx0 = cx - c.w / 2, ky0 = cy - c.h / 2, kx1 = cx + c.w / 2, ky1 = cy + c.h / 2;
+        L.push(c.name.padEnd(22) + ' box y ' + ky0 + '…' + ky1 + '  ink y ' + k.y0 + '…' + k.y1 +
+               '   BOTTOM overshoot ' + Math.max(0, k.y1 - ky1).toFixed(0) + 'px' +
+               '   left ' + Math.max(0, kx0 - k.x0).toFixed(0) + 'px');
+      });
+      L.push('');
+
+      var note = FM.makeLayer('shape', { shape: 'note', x: cx, y: cy, shapeW: BOX, shapeH: BOX, fill: '#ffffff', start: 0, duration: 5 });
+      scene.layers = [note];
+
+      var cv = w.document.createElement('canvas'); cv.width = W; cv.height = H;
+      var ctx = cv.getContext('2d');
+      FM.renderScene(ctx, scene, 0);
+      var ink = inkBox(ctx, W, H);
+      var bx0 = cx - BOX / 2, by0 = cy - BOX / 2, bx1 = cx + BOX / 2, by1 = cy + BOX / 2;
+      L.push('layer box   x ' + bx0 + ' … ' + bx1 + '   y ' + by0 + ' … ' + by1);
+      L.push('drawn ink   x ' + ink.x0 + ' … ' + ink.x1 + '   y ' + ink.y0 + ' … ' + ink.y1);
+      L.push('');
+      L.push('overshoot beyond the box, in px:');
+      L.push('  left   ' + Math.max(0, bx0 - ink.x0).toFixed(0) + '      right  ' + Math.max(0, ink.x1 - bx1).toFixed(0));
+      L.push('  top    ' + Math.max(0, by0 - ink.y0).toFixed(0) + '      BOTTOM ' + Math.max(0, ink.y1 - by1).toFixed(0) + '   <-- his "the bottom part is falling off"');
+      L.push('');
+      L.push('as a fraction of the 400px box: bottom ' + (Math.max(0, ink.y1 - by1) / BOX * 100).toFixed(1) + '%');
+      L.push('stroke on this layer: ' + JSON.stringify(note.stroke));
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 5).join('\n'));
+    }
+    done();
+  }
+})();
+</script></body></html>
