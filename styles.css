@@ -2727,31 +2727,35 @@ body.hm-selecting .hm-card { touch-action: none; }
    linear background-position drift is one compositor-friendly animation rather than 8 repaints/sec.
    It still costs nothing off this screen — #home-screen is display:none inside a project, and browsers
    do not animate what is not displayed. */
-.hm-card::after {
+/* TWO LAYERS THAT CROSS-FADE — the fourth and, I hope, last shape of this. Ezra: "The level of film
+   grain is good but again it's too jumpy, just make it smooth."
+   The .032 level stays; only the TRANSITION changes. v6.67 cut between six noise tiles with steps(1),
+   which is an instant swap five times a second — no movement, but still a strobe, and a strobe is
+   what "jumpy" has meant every time he has said it. The fix is not to slow the cutting down (that
+   just makes a slower strobe) but to stop cutting: two layers each holding their own noise field,
+   their opacities crossing in antiphase, so what you see is one field continuously dissolving into
+   another. Nothing snaps and nothing translates — which is the pair of constraints the three earlier
+   attempts each satisfied only one half of.
+   ::after holds one field and ::before the other; home.js picks a DIFFERENT PAIR of tiles per card
+   and a different phase, so no two cards dissolve together. With animations off (reduced motion) the
+   two settle at .032 and 0, i.e. a plain static grain — texture without any movement at all, which is
+   the substitute-don't-delete rule the rest of this file follows. */
+.hm-card::before, .hm-card::after {
   content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   border-radius: 16px;   /* the background is clipped to this box, so the corners round on their own */
-  background-image: var(--hm-static); background-repeat: repeat;
-  opacity: .032;
-  animation: hm-static 1.2s steps(1) infinite;
+  background-repeat: repeat;
+  animation-duration: 2.6s;
+  animation-timing-function: ease-in-out;   /* the dissolve has no hard edges at either end */
+  animation-iteration-count: infinite;
   animation-delay: var(--hm-static-delay, 0s);   /* home.js gives every card its own phase */
 }
-/* IN PLACE. background-position is never touched — that was the mistake in both earlier versions, and
-   it is what made the noise read as a sheet sliding behind the card rather than as grain. This swaps
-   the IMAGE instead, six independent noise tiles at five swaps a second, which is the same thing the
-   app's own filmgrain effect does per frame (compositor.js: "re-roll per frame: static grain reads as
-   dirt on the lens"). steps(1) is right here for the same reason it was wrong before: a grain cell
-   should snap to its next value, not slide there — what must not move is the FIELD. */
-@keyframes hm-static {
-  0%     { background-image: var(--hm-static-0); }
-  16.66% { background-image: var(--hm-static-1); }
-  33.33% { background-image: var(--hm-static-2); }
-  50%    { background-image: var(--hm-static-3); }
-  66.66% { background-image: var(--hm-static-4); }
-  83.33% { background-image: var(--hm-static-5); }
-}
+.hm-card::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: .032; animation-name: hm-grain-a; }
+.hm-card::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;    animation-name: hm-grain-b; }
+@keyframes hm-grain-a { 0%, 100% { opacity: .032; } 50% { opacity: 0; } }
+@keyframes hm-grain-b { 0%, 100% { opacity: 0; } 50% { opacity: .032; } }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
-   the other sense. And reduced motion gets the texture without the flicker. */
-@media (prefers-reduced-motion: reduce) { .hm-card::after { animation: none; } }
+   the other sense. And reduced motion gets the texture without the dissolve. */
+@media (prefers-reduced-motion: reduce) { .hm-card::before, .hm-card::after { animation: none; } }
 
 /* The overpull slam (v6.25). Ezra: pull the home list down past the top and keep pulling, and "the
    project will just slam back up really hard and shake the screen". home.js animates the list itself;

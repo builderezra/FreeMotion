@@ -60,6 +60,13 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [x] **106 — Grain level is right, but it is still too jumpy: make it SMOOTH.** **DONE v6.68.** His words: *"The level
+      of film grain is good but again it's too jumpy, just make it smooth."* So .032 opacity stays. The
+      remaining problem is that v6.67 swaps tiles with steps(1) — an instant cut between noise fields
+      five times a second, which is a strobe. Smooth means the change between grain states must be
+      CONTINUOUS, while the field still must not translate (that was 105). Answer: cross-fade between
+      two noise layers instead of cutting between them.
+
 - [x] **105 — The v6.62 film grain is wrong: it slides as one sheet and every card moves together.** **DONE v6.67.**
       His words: *"I don't like what you've done with the film grain in the home menu, it looks like
       it's all moving together, I want it to be each one having its own things and the film grain

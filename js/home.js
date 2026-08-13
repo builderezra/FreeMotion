@@ -685,7 +685,13 @@ window.FM = window.FM || {};
     /* Each card starts at its own point in the grain cycle, so they boil independently instead of
        flickering in unison — "I want it to be each one having its own things" (queue 105). A negative
        delay starts an animation mid-way rather than waiting, so nothing is held back. */
-    card.style.setProperty('--hm-static-delay', (-(Math.random() * 1.2)).toFixed(3) + 's');
+    card.style.setProperty('--hm-static-delay', (-(Math.random() * 2.6)).toFixed(3) + 's');
+    /* …and its own PAIR of noise fields to dissolve between, drawn from the six, so two cards side by
+       side are not showing the same grain even at the same point in the cycle. */
+    const gi = (Math.random() * STATIC_TILES) | 0;
+    let gj = (gi + 1 + ((Math.random() * (STATIC_TILES - 1)) | 0)) % STATIC_TILES;   // never the same tile twice
+    card.style.setProperty('--hm-grain-a', 'var(--hm-static-' + gi + ')');
+    card.style.setProperty('--hm-grain-b', 'var(--hm-static-' + gj + ')');
     card.setAttribute('role', 'button'); card.tabIndex = 0; card.dataset.pid = p.id;
     card.setAttribute('aria-label', (p.name || 'Untitled') + ' — open project');
     const th = el('div', 'hm-thumb');
