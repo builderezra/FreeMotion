@@ -348,8 +348,8 @@ better still, keep working inside the turn rather than parking work for a later 
       one beside the layer/selection context — and remove the top. Belongs with #143/#144, which are
       rebuilding that top strip anyway.
 
-- [ ] **145 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons
-      looking goofy.** (13 Aug, two messages.) His words: *"make the background of all the buttons like
+- [x] **145 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons
+      looking goofy.** (v6.93) (13 Aug, two messages.) His words: *"make the background of all the buttons like
       elements shape etc a different colour to the ones in inside each section, like text etc. so it shows
       the difference in action, and then you can add colour to all the sub section buttons, while ur at it
       as well make them look better for the pc version because when theyre big icons it looks really
@@ -367,6 +367,18 @@ better still, keep working inside the turn rather than parking work for a later 
       Reading "elements shape etc" as the add menu's SECTION tabs and "text etc" as the items inside a
       section. If he meant the inspector's nine category cards instead, it is a one-word correction —
       **asking next time he speaks.**
+      **Shipped v6.93, all three parts.** Tabs and cards really were one shared background rule, so a
+      button that changes section was pixel-identical to one that adds a layer. Tabs are now a recessed
+      well — the light falls *into* them, the way a control strip should read — and each item card
+      carries a tinted plate behind its icon. Colour comes from a curated eight-hue ring walked by
+      position, so every button gets one, neighbours stay far apart, and nothing needs maintaining when
+      an item is added. Media tiles keep their own frame with no plate over it.
+      The PC complaint was a real drawing fault, not taste: the glyphs are drawn at 24px with a 1.8
+      stroke and rendered at 34px, so the figure grows while the line stays put and the whole thing
+      thins out — desktop gets more weight plus the hard black edge you asked for.
+      **One thing to look at when you're back:** the Shape grid is 6 tiles across in a 288px panel and
+      genuinely has no room for a plate, so those tiles take the colour on the stroke only. It reads
+      fine, but it is the one place the two families look less different than elsewhere.
 
 - [x] **142 — Home settings: a default colour for new shapes.** (v6.92) His words: *"In the home settings menu,
       make a setting to change the default colour of shapes when you import them. Applied to every
