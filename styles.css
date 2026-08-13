@@ -105,6 +105,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* The document CANVAS, which covers the whole web view — larger than the layout viewport under
+   viewport-fit=cover on iOS. Anything the page does not cover shows THIS colour, so it has to be the
+   app's ground or every uncovered sliver reads as a bar (queue 135/143). Themed, so classic and glass
+   each paint their own; the inline <style> in the head only has to survive until this loads. */
+html { background: var(--bg); }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, sans-serif;
@@ -1431,7 +1436,11 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    exactly what gave away the square.) */
 #splash {
   position: fixed; inset: 0; z-index: 10000;
-  background: #000;   /* = the video's own edge colour — also the instant first paint */
+  /* The app's ground, not #000 (queue 143). The splash used to be pure black, so during load the
+     uncovered canvas beside it stood out as a bar — that was the very first sighting of this bug. The
+     video's own frame is still black; only the SURROUND matches the app, and #060c0f against a black
+     video edge is imperceptible at this size. */
+  background: var(--bg, #060c0f);
   overflow: hidden;
   opacity: 1; transition: opacity .35s ease;
 }

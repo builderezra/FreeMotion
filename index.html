@@ -13,8 +13,20 @@
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
-<style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=353">
+<!-- THE APP'S GROUND, not #000 (queue 135/143). This one line was the black bar, on both axes.
+     The document CANVAS is painted from <html>, and it covers the whole web view — which on iOS with
+     viewport-fit=cover is LARGER than the layout viewport the page is laid out in. Anything the page
+     does not cover therefore shows this colour. It was pure black while the app's ground is #060c0f,
+     so every uncovered sliver read as a distinct BLACK BAR: down the right edge, along the bottom,
+     over the splash, on home and inside a project alike.
+     That is why five attempts at it failed — an overflow rule, a theme-color change, a fresh install
+     and two reverts all went looking for an element that was too small, and an audit of the whole
+     stylesheet proved no such element exists: nothing constrains the width, nothing overflows, and no
+     commit since v6.73 can narrow the page. There was never a layout bug, only a colour mismatch.
+     Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
+     in styles.css takes over immediately after and lets classic/glass each set their own. -->
+<style>html,body{background:#060c0f}</style>
+<link rel="stylesheet" href="styles.css?v=354">
 <link rel="stylesheet" href="theme-glass.css?v=22">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -136,7 +148,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.84-wdiag</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.85</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -731,65 +743,6 @@
         });
       });
     });
-  </script>
-  <!-- ══ TEMPORARY WIDTH PROBE (queue 135) — REMOVE once the right-edge bar is identified ══
-       Deliberately small this time: a 3px cyan line down the PAGE's right edge plus a corner readout.
-       If the cyan line sits at the inner edge of the black bar, the page is narrower than the screen
-       and the bar is outside it. If the line is at the very screen edge with black beyond, something
-       is covering it. The numbers say which. -->
-  <div id="fm-wprobe"></div>
-  <div id="fm-wread"></div>
-  <script>
-    (function () {
-      var line = document.getElementById('fm-wprobe'), read = document.getElementById('fm-wread');
-      if (!line || !read) return;
-      line.style.cssText = 'position:fixed;top:0;bottom:0;right:0;width:3px;background:#00e5ff;' +
-        'z-index:2147483647;pointer-events:none;';
-      read.style.cssText = 'position:fixed;right:6px;bottom:90px;z-index:2147483647;pointer-events:none;' +
-        'background:rgba(255,0,200,.92);color:#fff;font:700 10px/1.35 -apple-system,sans-serif;' +
-        'padding:6px 8px;border-radius:6px;text-align:right;max-width:70vw;';
-      /* The bar is INTERMITTENT — a healthy reading proves nothing, because by the time a screenshot
-         is taken the app may have recovered. So the probe REMEMBERS the narrowest value it has ever
-         seen, with a timestamp and what triggered the sample. One screenshot then reports the whole
-         session, not the instant it was taken. */
-      var min = null, minAt = '', minWhy = '';
-      function measure() {
-        var t = document.createElement('div');
-        t.style.cssText = 'position:fixed;right:0;width:env(safe-area-inset-right);height:1px;pointer-events:none;';
-        document.body.appendChild(t);
-        var insetR = Math.round(t.getBoundingClientRect().width);
-        t.remove();
-        var de = document.documentElement, vv = window.visualViewport;
-        return {
-          innerW: window.innerWidth, clientW: de.clientWidth,
-          visualW: vv ? Math.round(vv.width) : 0, screenW: screen.width,
-          bodyW: Math.round(document.body.getBoundingClientRect().width),
-          scrollW: de.scrollWidth, safeR: insetR
-        };
-      }
-      function paint(why) {
-        var m = measure();
-        var worst = Math.min(m.innerW, m.clientW, m.visualW || 9999, m.bodyW);
-        if (min === null || worst < min) {
-          min = worst;
-          minAt = new Date().toTimeString().slice(0, 8);
-          minWhy = why || 'load';
-        }
-        read.innerHTML =
-          'NOW  in ' + m.innerW + ' cl ' + m.clientW + ' vis ' + m.visualW + '<br>' +
-          '     body ' + m.bodyW + ' scr ' + m.scrollW + ' safeR ' + m.safeR + '<br>' +
-          'screen ' + m.screenW + '<br>' +
-          '<span style="color:#ff0">NARROWEST EVER ' + min + '</span> @' + minAt + ' (' + minWhy + ')';
-      }
-      paint('load');
-      window.addEventListener('resize', function () { paint('resize'); });
-      if (window.visualViewport) window.visualViewport.addEventListener('resize', function () { paint('vv-resize'); });
-      window.addEventListener('orientationchange', function () { setTimeout(function () { paint('rotate'); }, 300); });
-      document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) { paint('resume'); setTimeout(function () { paint('resume+300'); }, 300); }
-      });
-      setInterval(function () { paint('tick'); }, 2000);   // catches it even with no event
-    })();
   </script>
 </body>
 </html>

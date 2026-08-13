@@ -281,8 +281,24 @@ Numbered with Ezra's own queue numbers where he gave them.
       `apple-mobile-web-app-status-bar-style: black-translucent` (deprecated) and `viewport-fit=cover`
       on iOS 26 — try dropping the legacy meta so the manifest alone drives standalone.
       Probe removed in v6.80; do not ship it again without a reason.
+      **SOLVED in v6.85, and it was never a layout bug at all.** index.html painted the document
+      CANVAS pure black — `<style>html,body{background:#000}</style>` — while the app's ground is
+      #060c0f. The canvas covers the whole WEB VIEW, which under viewport-fit=cover on iOS is larger
+      than the layout viewport the page is laid out in. So every sliver the page did not cover showed
+      as a distinct BLACK bar: right edge, bottom edge, over the splash, on home and in a project.
+      That is why five attempts failed. An overflow-x rule, a theme-color change, a fresh install and
+      two reverts all hunted an element that was too small — and a four-agent audit proved no such
+      element exists: no stylesheet rule constrains the width, env(safe-area-inset-right) is used zero
+      times, nothing overflows horizontally, and no commit since v6.73 can narrow the page. His own
+      probe screenshot agreed: innerW/outerW/screen.w/clientW/visualW/bodyW/scrollW ALL 440.
+      Fix: html now paints the app's ground (inline for the first frame, `html { background: var(--bg) }`
+      in styles.css so each theme drives it), and the splash surround matches too so it cannot show
+      during load. Three colour values; no layout touched.
+      **Lesson for next time, worth more than the fix:** the very first screenshot showed a strip
+      DARKER than the app. I read that as "an element is missing" when it actually said "something
+      behind everything is a different colour". Six rounds could have been one.
 
-- [ ] **135 — REOPENED. Black bar down the right edge; the v6.78 fix did NOT work.** He ticked it off
+- [x] **135 — Black bar down the right edge (and the bottom).** (v6.85 — SIXTH attempt, finally the real cause.) He ticked it off
       (*"just assume it's fixed for now"*) and then immediately: *"Never mind it just came up."*
       **That is a real result, not just a failure.** v6.78 made the page impossible to pan sideways
       (`overflow-x: clip`, verified: forcing a 600px pan leaves scrollX at 0 even with the editor parked
