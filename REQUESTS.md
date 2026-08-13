@@ -484,6 +484,18 @@ better still, keep working inside the turn rather than parking work for a later 
       **One thing to look at when you're back:** the Shape grid is 6 tiles across in a 288px panel and
       genuinely has no room for a plate, so those tiles take the colour on the stroke only. It reads
       fine, but it is the one place the two families look less different than elsewhere.
+      **CORRECTED BY HIM, 14 Aug — I built the wrong thing.** His words, with the whole "Text" CARD
+      circled in his screenshot: *"When I said I want the background of these icons to have different
+      colours I meant the whole shape around it, so you get rid of that little square bubble around then
+      that's colourful, and since you made the top icons go dark when not selected you've already done
+      enough. Also on the of version all the icons with this effect are now off centred."*
+      So three things:
+      1. **Kill the plate.** The little coloured square behind each icon goes entirely.
+      2. **Tint the WHOLE CARD instead** — the background of the button itself is the colour.
+      3. **The tabs are already sorted.** Making them go dark when not selected was enough on its own;
+         nothing more is wanted there.
+      Plus a defect I introduced: **the icons sit off-centre inside the plate** (visible on Text,
+      Captions, Camera in his shot). That should die with the plate, but verify it rather than assume.
 
 - [x] **142 — Home settings: a default colour for new shapes.** (v6.92) His words: *"In the home settings menu,
       make a setting to change the default colour of shapes when you import them. Applied to every
