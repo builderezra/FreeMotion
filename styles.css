@@ -2803,6 +2803,22 @@ body.hm-selecting .hm-card { touch-action: none; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .hm-thumb-empty { font-size: 26px; opacity: .25; }
 .hm-dur { position: absolute; bottom: 5px; left: 5px; font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 2px 6px; }
+/* Pinned indicator (queue 138). Ezra asked for "a little design indicator … you decide".
+   Top-RIGHT because the other two corners are taken: OPEN sits top-left, the duration bottom-left.
+   Same dark plate and radius as .hm-dur so it reads as one family of thumb badges rather than a new
+   badge style, and it lives in furniture the card already has instead of adding a row. Small and
+   quiet on purpose — it marks a card, it should not compete with the thumbnail. */
+.hm-pin {
+  position: absolute; top: 5px; right: 5px; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 11, 17, .78); border-radius: 6px;
+}
+.hm-pin svg { width: 11px; height: 11px; display: block; fill: #7fd8ff; }
+/* In Select mode the selection tick claims that same corner, and two round badges stacked on one
+   another is just a mess. The tick wins while you are selecting — it is the control you are actually
+   using — and the pin comes back the moment you leave. Nothing is lost: the ORDER still shows which
+   cards are pinned, because they are the ones at the top. */
+body.hm-selecting .hm-pin { display: none; }
 /* OPEN badge — real type on real glass (v6.13).
    History: v4.90 replaced the original mint pill with Ezra's crystal PNG, v5.37 had to ink the letters
    into the asset because the luminance key had punched them out into holes, and v4.92 spent a whole

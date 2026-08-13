@@ -91,6 +91,48 @@ Numbered with Ezra's own queue numbers where he gave them.
       clamped hard (PULL_MAX 150 with a pow(dy,0.78) curve) and reads as a freeze once you pass it. He
       wants the drag to keep responding at any distance, with the slam on release past the threshold.
 
+- [ ] **139 — Project notepad + export reminders.** His words: *"In the top menu, put a little note pad
+      icon and make it so you can add notes about the project and reminders, make it so you can tick
+      wether it will remind you to do these things when you press the export button, so anytime you press
+      export it'll give you a pop up first showing the reminder."*
+      So: a notepad icon in the project's TOP BAR; a panel where you write notes about that project;
+      individual items you can **tick as "remind me at export"**; and the export button checks for ticked
+      reminders and shows them in a dialog BEFORE the export dialog. Notes are per-project and save with
+      the project. Design points to settle when building: an item with the reminder tick unset is just a
+      note (never interrupts), the pre-export popup must offer "Export anyway" as well as "Back", and it
+      must not fire when there are no ticked reminders — an empty popup on every export would be worse
+      than no feature. Also decide whether ticking a reminder DONE clears it or just unticks the
+      remind-at-export flag; leaning towards a plain checklist that keeps its items.
+      **And it must reach the PC layout too** — his follow-up: *"Make sure that also comes to the pc
+      beesoon."* So the notepad button needs a home in the Studio top bar as well as the phone one, and
+      the pre-export reminder must fire from BOTH export entry points (the editor button and the home
+      ⋯ → Export video…), not just the mobile one.
+
+- [x] **138 — Pin to top, in every home category.** (v6.76) His words: *"For each category make it so if you
+      press the three dots on a project or even template etc you can press pin and the project will stay
+      at the top, give a little design indicator that they're pinned, you decide, if it looks bad I'll
+      just give an idea. Make sure you can pin as many as you want."*
+      So: a **Pin** entry in each card's ⋯ menu, on EVERY home tab (projects, templates, elements — and
+      any tab added later), pinned items sorted to the top of their own tab, a visual indicator on a
+      pinned card, and **no cap** on how many are pinned. Toggling off unpins. The indicator is my call
+      with his review — keep it small and quiet, in the card's existing furniture rather than a new
+      badge fighting the OPEN glint and the grain. Pinned state is per-item and must survive reload, so
+      it persists like the rest of the home metadata. Ordering WITHIN the pinned block should stay
+      whatever the tab's normal sort is, so pinning never scrambles a list you already know.
+      **Shipped v6.76.** ⋯ → **Pin to top** on projects, templates and elements; the row flips to
+      **Unpin** once it is on. No cap — verified by pinning every project at once. Pinned cards lift to
+      the front as a STABLE partition, so your existing order (recently edited, or A–Z) still holds
+      inside each block. The indicator is a small blue tack on the thumbnail's top-right, on the same
+      dark plate as the OPEN badge and the duration so it reads as one family; it hides while you are in
+      Select mode, because the selection tick wants that same corner and two stacked badges look broken.
+      Pins live in localStorage keyed by tab, NOT on the project record — a pinned project you export
+      and re-import should not arrive pinned on someone else's home. Verified live: pin, reorder, badge,
+      unpin, and survival across a reload. **Works on PC too** — home is one shared screen, so the same
+      ⋯ menu is there in the Studio layout.
+      Deliberate call worth knowing: pins do NOT apply while you are searching. With a query typed you
+      want the best match first, and a pinned item outranking a closer one reads as broken search. Say
+      if you want it the other way.
+
 - [ ] **136 — A selected Captions layer locks the timeline and the layer.** His words: *"I can't do
       anything like drag the timeline or layer when you have a captions layer selected."* Screenshot on
       v6.74 shows the Captions layer selected with its clip spanning the whole timeline. So selecting a
@@ -142,6 +184,22 @@ Numbered with Ezra's own queue numbers where he gave them.
       faves pull claims the pointer first the slam never gets to see it. Fix both together — #131 wants
       the drag to stay responsive at any distance with the slam on release, #132 wants it to fire at all,
       and they are the same gesture. Whatever lands must keep Faves working, since that was also his ask.
+      **That guess above was WRONG, and the truth is worse.** `git log -L 370,470:js/home.js` returns
+      exactly ONE commit — the whole overpull block is byte-identical to the day it shipped in v6.26.
+      Nothing regressed it, and the faves rework never touched home.js at all. **It has been broken on a
+      real phone the entire time**; it only ever worked in my desktop tests.
+      The mechanism, found by reading the guards rather than the history:
+
+          if (dy <= 0 || sc.scrollTop > 0) { if (pull.px) setPull(0); pull = null; return; }
+
+      `pull = null` is PERMANENT — nothing re-arms it until the next pointerdown. On a real touchscreen
+      the first pointermove very often reports the same clientY as the pointerdown, so `dy === 0`, which
+      `dy <= 0` treats as "this is not a pull" and destroys the gesture on frame one. Every synthetic
+      test I ran jumped 20px on the first move and so never produced dy === 0 — which is exactly why
+      this survived being "verified" more than once.
+      Second, separate defect in the same handler: pointercancel is wired to the same release() as
+      pointerup, and iOS fires pointercancel as soon as Safari claims the drag for its own rubber-band.
+      Both need fixing; neither alone is enough.
 
 - [x] **126 — The grain now reads as switched OFF; it needs to be FASTER, still smooth.** (v6.74) His words:
       *"you've just turned off the animation of the film grain in the home menu, I asked for it to be

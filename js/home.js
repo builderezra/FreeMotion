@@ -461,6 +461,75 @@ window.FM = window.FM || {};
     if (text != null) d.textContent = text;
     return d;
   }
+
+  /* ---- Pinned items (queue 138) -----------------------------------------------------------------
+   * Ezra: "if you press the three dots on a project or even template etc you can press pin and the
+   * project will stay at the top … Make sure you can pin as many as you want."
+   *
+   * Kept HERE rather than on the project/template/element records: pinning is a property of how YOUR
+   * home screen is arranged, not of the thing itself. Writing it onto the record would mean a save
+   * through three different stores (and a project save rewrites the whole scene just to set a flag),
+   * and a pinned project exported and re-imported would arrive pinned on someone else's home — which
+   * is plainly wrong.
+   *
+   * Keyed BY TAB, so the same id pinned as a project and as a template stay independent, and a tab
+   * added later gets an empty list for free instead of throwing. No cap anywhere: he asked for as
+   * many as you want, so nothing here slices. */
+  const PIN_KEY = 'fm.home.pins';
+  let pinState = null;
+  function pinsAll() {
+    if (pinState) return pinState;
+    pinState = { projects: [], templates: [], elements: [] };
+    try {
+      const raw = JSON.parse(localStorage.getItem(PIN_KEY) || '{}');
+      // Rebuilt from the schema rather than trusted wholesale — this is user-editable storage, and a
+      // string where an array belongs would take the whole home screen down on the first render.
+      Object.keys(pinState).forEach(k => {
+        if (Array.isArray(raw[k])) pinState[k] = raw[k].filter(v => typeof v === 'string');
+      });
+    } catch (e) {}
+    return pinState;
+  }
+  function pinsFor(t) { const a = pinsAll(); if (!Array.isArray(a[t])) a[t] = []; return a[t]; }
+  function isPinned(t, id) { return pinsFor(t).indexOf(id) !== -1; }
+  function togglePin(t, id) {
+    const a = pinsFor(t), i = a.indexOf(id);
+    if (i === -1) a.push(id); else a.splice(i, 1);
+    try { localStorage.setItem(PIN_KEY, JSON.stringify(pinsAll())); } catch (e) {}
+    return i === -1;
+  }
+  /* A STABLE partition, not a sort key: pinned cards move to the front and everything keeps the order
+   * it already had. So whichever order the tab is in — recently edited, or A–Z from Settings — still
+   * holds inside each block, and pinning never scrambles a list you already know how to read.
+   * Ids of deleted items simply never match anything, so they are inert rather than needing a sweep. */
+  function pinSort(t, list, idOf) {
+    const p = pinsFor(t);
+    if (!p.length) return list;
+    const hit = [], rest = [];
+    list.forEach(x => (p.indexOf(idOf(x)) !== -1 ? hit : rest).push(x));
+    return hit.concat(rest);
+  }
+  // The indicator: a small tack on the thumb's free corner (OPEN owns top-left, the duration owns
+  // bottom-left). Same dark glass plate as those two so it reads as one family rather than a new badge
+  // style, and it sits INSIDE existing furniture instead of adding a row to the card.
+  function pinBadge() {
+    const b = el('span', 'hm-pin');
+    b.setAttribute('aria-label', 'Pinned');
+    b.title = 'Pinned to top';
+    b.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+      + '<path d="M9.6 1.4l5 5-1.9 1.9-1.2-.4-2.7 2.7.5 2.5-1.3 1.3-3.1-3.1-3.3 3.3-.8-.8 3.3-3.3-3.1-3.1 1.3-1.3 2.5.5 2.7-2.7-.4-1.2z"/>'
+      + '</svg>';
+    return b;
+  }
+  // One menu row, built the same way for all three card types so the wording never drifts apart.
+  function pinMenuItem(t, id) {
+    const on = isPinned(t, id);
+    return { label: on ? 'Unpin' : 'Pin to top', action: () => {
+      const nowOn = togglePin(t, id);
+      render();
+      if (FM.toast) FM.toast(nowOn ? 'Pinned to top' : 'Unpinned', 1200);
+    } };
+  }
   // role=button divs don't synthesise a click from Enter/Space like a real <button> — wire it so the
   // cards are keyboard-activatable (they announce as buttons to screen readers but did nothing on Enter).
   // Enter/Space is a tap with no finger, so it gets the same press: without one the card sat at
@@ -700,6 +769,7 @@ window.FM = window.FM || {};
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
     th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
     if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
+    if (isPinned('projects', p.id)) th.appendChild(pinBadge());
     // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
     const name = el('div', 'hm-name', p.name || 'Untitled');
     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
@@ -717,6 +787,7 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Open', action: () => openProject(p.id) },
+        pinMenuItem('projects', p.id),
         { label: 'Rename…', action: () => { const n = prompt('Project name:', p.name); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
         { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); await FM.projects.duplicate(p.id); render(); } },
         // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
@@ -1046,6 +1117,7 @@ window.FM = window.FM || {};
     if (t.thumb) { const img = document.createElement('img'); img.src = t.thumb; img.alt = ''; th.appendChild(img); }
     else th.appendChild(el('span', 'hm-thumb-empty', '❖'));
     th.appendChild(el('span', 'hm-dur', fmtDur(t.duration)));
+    if (isPinned('templates', t.id)) th.appendChild(pinBadge());
     card.appendChild(th);
     const body = el('div', 'hm-body');
     body.appendChild(el('div', 'hm-name', t.name || 'Template'));
@@ -1057,6 +1129,7 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'New project from template', action: use },
+        pinMenuItem('templates', t.id),
         { sep: true },
         { label: 'Delete template…', danger: true, action: async () => { if (!confirm('Delete template "' + t.name + '"?')) return; await FM.templates.remove(t.id); render(); } },
       ]);
@@ -1084,6 +1157,7 @@ window.FM = window.FM || {};
     const th = el('div', 'hm-thumb');
     if (e.thumb) { const img = document.createElement('img'); img.src = e.thumb; img.alt = ''; th.appendChild(img); }
     else th.appendChild(el('span', 'hm-thumb-empty', '✦'));
+    if (isPinned('elements', e.id)) th.appendChild(pinBadge());
     card.appendChild(th);
     const body = el('div', 'hm-body');
     body.appendChild(el('div', 'hm-name', e.name || 'Element'));
@@ -1096,6 +1170,7 @@ window.FM = window.FM || {};
       const r = more.getBoundingClientRect();
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Add to the open project', action: use },
+        pinMenuItem('elements', e.id),
         { sep: true },
         { label: 'Delete element…', danger: true, action: async () => { if (!confirm('Delete element "' + e.name + '"?')) return; await FM.elements.remove(e.id); render(); } },
       ]);
@@ -1244,9 +1319,13 @@ window.FM = window.FM || {};
       // Order follows Settings → Project sorting: most recently EDITED first (so the project you
       // just worked on is the front card), or plain A–Z by name.
       const byName = FM.settings && FM.settings.get('sort') === 'name';
-      const list = FM.projects.list().slice().sort(byName
+      // …then pinned cards are lifted to the front, keeping that order inside each block (queue 138).
+      // Deliberately NOT applied to the search results below: when you have typed a query you want the
+      // best MATCH first, and a pinned project outranking a closer one would read as the search being
+      // broken. Pins are about the resting order of the list, not about relevance.
+      const list = pinSort('projects', FM.projects.list().slice().sort(byName
         ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
-        : (a, b) => (b.modified || 0) - (a.modified || 0));
+        : (a, b) => (b.modified || 0) - (a.modified || 0)), p => p.id);
       if (query) {
         if (!list.length) { grid.appendChild(emptyState('▶', 'No projects yet', 'Tap + to start one.')); renderSelBar(); return; }
         const range = parseDateQuery(query);
@@ -1280,7 +1359,7 @@ window.FM = window.FM || {};
       // reads like a failure is worse than no tab at all.
       grid.appendChild(emptyState('▷', 'Tutorials are coming', 'Short walkthroughs of the editor will live here.'));
     } else if (tab === 'templates') {
-      let list = FM.templates.list();
+      let list = pinSort('templates', FM.templates.list(), t => t.id);
       if (query && list.length) {
         // templates carry no dates — name matching only, same forgiving scorer
         const scored = list.map(t => ({ t: t, score: nameScore(t.name, query) })).sort((a, b) => b.score - a.score);
@@ -1295,7 +1374,7 @@ window.FM = window.FM || {};
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
     } else {
       // ELEMENTS — same shape as the templates branch, including the forgiving name search.
-      let list = FM.elements.list();
+      let list = pinSort('elements', FM.elements.list(), e => e.id);
       if (query && list.length) {
         const scored = list.map(e => ({ e: e, score: nameScore(e.name, query) })).sort((a, b) => b.score - a.score);
         const strong = scored.filter(x => x.score >= 0.45);
