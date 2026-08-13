@@ -1,23 +1,27 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><base href="../"><title>#130 — does the quality tier ever drop, and should it?</title>
+<html><head><meta charset="utf-8"><base href="../"><title>#130 — does the quality tier drop when the comp is genuinely expensive?</title>
 <style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.55 ui-monospace,Menlo,monospace}
-iframe{position:fixed;left:-10000px;top:0;width:390px;height:800px;border:0}
+iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
 #out{padding:12px;white-space:pre}</style></head><body>
 <iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
 <script>
-/* Ezra (#130): "I have got no other projects, just one; and I managed to add one screen recording
-   that's two seconds long, and the project lags from just that, it also still doesn't compress the
-   quality in the canvas playback, even though just for this one thing it shouldn't need to do that
-   anyway."
+/* Ezra (#130): "the project lags from just that, it also still doesn't compress the quality in the
+   canvas playback, even though just for this one thing it shouldn't need to do that anyway."
 
-   Two claims, and the second is checkable: is the adaptive ladder actually refusing to drop?
-   Run it under CPU throttle (tests/_probe.py --cpu N) so the machine is genuinely too slow, and
-   watch FM._perfState() across a real playback.
+   SECOND ATTEMPT. The first version of this probe built a comp out of eight shapes and reported a
+   render cost of 0.08ms a frame — the ladder was never under any pressure at all, so "tier stayed at
+   0" proved exactly nothing. That result was thrown away rather than reported. A probe that cannot
+   make the machine struggle cannot answer a question about what happens when it struggles.
 
-   Read the result against the LAST sentence of his own report — "for this one thing it shouldn't need
-   to do that anyway". If the ladder holds at tier 0 because a latch decided resolution is not the
-   bottleneck, that is the app doing exactly what he asked for in queue 54, and "it doesn't drop the
-   quality" is not the bug he thinks it is. */
+   So this one builds a comp that is actually expensive: a large 1080x1920 project, a real decoded
+   IMAGE (generated here so the probe carries no fixture), and a stack of Gaussian Blurs — a
+   full-canvas convolution per layer per frame, which is the shape of work resolution CAN help with,
+   unlike video decode. Run it under `--cpu 6` so the machine is phone-slow.
+
+   Read the answer against the last line of his own report. If the ladder holds at tier 0 with the
+   frame cost well over budget AND the latch engaged, that is queue 54 working as designed — a drop
+   was tried, did not pay for itself, and was undone — and "it doesn't compress the quality" is not
+   the bug. If it holds at 0 with the latch NEVER engaging, it never even tried, and that is a defect. */
 (function () {
   var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
   function done(){ out.textContent = L.join('\n'); window.__done = true; }
@@ -25,71 +29,83 @@ iframe{position:fixed;left:-10000px;top:0;width:390px;height:800px;border:0}
     var w = fr.contentWindow, tries = 0;
     (function wait() {
       if (++tries > 400) { L.push('FM never initialised'); return done(); }
-      if (!w.FM || !w.FM.play || !w.FM._perfState || !w.FM.loadVideoFile) return setTimeout(wait, 50);
+      if (!w.FM || !w.FM.play || !w.FM._perfState || !w.FM.addMediaLayer) return setTimeout(wait, 50);
       setTimeout(function () { go(w); }, 500);
     })();
   });
 
+  // A real image file, made here: a probe that needs a fixture is a probe that rots.
+  function makeImage(w, W, H) {
+    return new Promise(function (res) {
+      var c = w.document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d');
+      for (var i = 0; i < 240; i++) {
+        g.fillStyle = 'hsl(' + (i * 7 % 360) + ' 80% ' + (35 + (i % 40)) + '%)';
+        g.fillRect((i * 37) % W, (i * 91) % H, 120, 90);
+      }
+      c.toBlob(function (b) { res(new w.File([b], 'tierprobe.png', { type: 'image/png' })); }, 'image/png');
+    });
+  }
+
   async function go(w) {
-    var FM = w.FM, added = null;
+    var FM = w.FM;
     try {
       if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
-      L.push('playbackQuality setting: ' + ((FM.settings && FM.settings.get('playbackQuality')) || 'auto') +
-             '   (a "detail" setting parks the ladder at tier 0 by design)');
+      var q = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
+      L.push('playbackQuality: ' + q + (q === 'detail' ? '   *** "detail" parks the ladder at tier 0 BY DESIGN — nothing below means anything ***' : ''));
 
-      // One clip, like his report. A real decodable file so the decode cost is real.
-      var blob = await fetch('tests/_fixtures/vad/clean.wav').then(function (r) { return r.blob(); });
-      var file = new w.File([blob], 'tierprobe.wav', { type: 'audio/wav' });
-      var rec = await FM.loadVideoFile(file);
+      FM.scene.layers = [];
+      FM.scene.project.width = 1080; FM.scene.project.height = 1920; FM.scene.project.duration = 10;
+      var file = await makeImage(w, 1400, 1400);
+      var rec = await FM.loadImageFile(file);
       FM.addMediaLayer(rec);
-      added = FM.scene.layers[0];
-      // …plus enough drawing work that the COMPOSITOR genuinely costs something, which is the half of
-      // the frame the ladder can actually do something about. Without it a slow machine is slow for
-      // reasons no resolution change can touch, and the probe would only prove that.
-      for (var i = 0; i < 8; i++) {
-        FM.scene.layers.push(FM.makeLayer('shape', { name: 'load' + i, shape: 'star',
-          x: 200 + i * 40, y: 300 + i * 60, shapeW: 500, shapeH: 500, fill: '#3ce', start: 0, duration: 8 }));
+      var base = FM.scene.layers[0];
+      base.duration = 10;
+      /* LEVELS, not blur. Second lesson from building this probe, and it matters beyond the probe:
+         Gaussian Blur compiles to a canvas `filter` string, which is GPU work — eight of them on a
+         1080x1920 comp at 6x CPU throttle moved renderAvg to 1.1ms, i.e. they are very nearly free on
+         the clock the ladder actually measures. Levels is a per-pixel JS loop over the whole frame,
+         so it lands squarely on the main thread, which is the cost the ladder was built to react to. */
+      var lv = function () { return { type: 'levels', enabled: true, gamma: 1.7, inblack: 10, inwhite: 240,
+                                      params: { gamma: 1.7, inblack: 10, inwhite: 240 } }; };
+      base.effects = [lv(), lv()];
+      for (var i = 0; i < 5; i++) {
+        var l = FM.makeLayer('shape', { name: 'load' + i, shape: 'star', x: 300 + i * 90, y: 400 + i * 220,
+          shapeW: 700, shapeH: 700, fill: '#3ce', start: 0, duration: 10 });
+        l.effects = [lv()];
+        FM.scene.layers.push(l);
       }
-      FM.refreshAll();
-      await new Promise(function (r) { setTimeout(r, 300); });
+      FM.selectLayer(null); FM.refreshAll();
+      await new Promise(function (r) { setTimeout(r, 400); });
 
       var samples = [];
       FM.time = 0;
       FM.play();
-      for (var k = 0; k < 40; k++) {
+      for (var k = 0; k < 45; k++) {
         await new Promise(function (r) { setTimeout(r, 150); });
         samples.push(FM._perfState());
       }
       FM.pause();
 
       var tiers = samples.map(function (s) { return s.tier; });
-      var maxTier = Math.max.apply(null, tiers), minTier = Math.min.apply(null, tiers);
       var last = samples[samples.length - 1];
-      var everLocked = samples.some(function (s) { return s.locked; });
-      var avgs = samples.map(function (s) { return s.renderAvg; }).filter(function (v) { return v > 0; });
-      var avgMed = avgs.sort(function (a, b) { return a - b; })[Math.floor(avgs.length / 2)] || 0;
-
+      var avgs = samples.map(function (s) { return s.renderAvg; }).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+      var med = avgs.length ? avgs[Math.floor(avgs.length / 2)] : 0;
+      var budget = 1000 / 60 * 0.72;
       L.push('');
-      L.push('over 6s of playback (one clip + 8 shapes), sampled every 150ms:');
-      L.push('  tier reached        ' + minTier + ' -> ' + maxTier + '   of ' + (last.tiers - 1) + '   (0 = full resolution)');
-      L.push('  tier path           ' + tiers.join(''));
-      L.push('  median renderAvg    ' + avgMed.toFixed(1) + ' ms      (the ladder drops above ' + (1000 / 60 * 0.72).toFixed(1) + ' ms)');
-      L.push('  latch ever engaged  ' + everLocked + '   (true = "resolution is not the bottleneck here")');
-      L.push('  final state         ' + JSON.stringify(last));
-      L.push('');
-      L.push('HOW TO READ IT: tier stuck at 0 with renderAvg WELL OVER the drop threshold and the');
-      L.push('latch engaged means the ladder tried, found that shedding pixels did not pay, and put');
-      L.push('the resolution back — which is queue 54 working, not queue 130 broken. Tier stuck at 0');
-      L.push('with the latch NEVER engaging would be a real defect: it never even tried.');
+      L.push('6.75s of playback, 6 layers, 8 blurs, 1080x1920:');
+      L.push('  median renderAvg    ' + med.toFixed(1) + ' ms      (the ladder drops above ' + budget.toFixed(1) + ' ms)');
+      L.push('  UNDER PRESSURE?     ' + (med > budget ? 'YES — the ladder had a real reason to act' : 'NO — this probe still is not loading the machine, so nothing below means anything'));
+      L.push('  tier path           ' + tiers.join('') + '   (0 = full resolution)');
+      L.push('  tier reached        ' + Math.min.apply(null, tiers) + ' -> ' + Math.max.apply(null, tiers) + '  of ' + (last.tiers - 1));
+      L.push('  latch ever engaged  ' + samples.some(function (s) { return s.locked; }) + '   (true = "shedding pixels did not pay, so it was undone")');
+      L.push('  canvas px first/last ' + samples[0].canvasPx + ' / ' + last.canvasPx);
+      L.push('  final               ' + JSON.stringify(last));
     } catch (e) {
       L.push('THREW: ' + (e && e.message || e));
       L.push((e && e.stack || '').split('\n').slice(0, 5).join('\n'));
     }
-    try {   // never leave a clip behind in whatever project happened to be open
-      if (added && FM.media && FM.media.del) FM.media.del(added.id);
-      FM.scene.layers = [];
-      if (FM.storage && FM.storage.save) FM.storage.save();
-    } catch (e) {}
+    try { FM.scene.layers = []; if (FM.storage && FM.storage.save) FM.storage.save(); } catch (e) {}
     done();
   }
 })();

@@ -143,10 +143,32 @@ better still, keep working inside the turn rather than parking work for a later 
       standing note).
       Added `FM._perfState()` — a read-only snapshot of tier / renderAvg / latch / canvas pixels — so
       this claim is checkable from outside instead of by reading the source and guessing.
-      **The first measurement attempt was INVALID and is not being reported as a result**: the synthetic
-      comp only cost 0.08 ms a frame, so the ladder was never under any pressure and "tier stayed at 0"
-      proved nothing. `tests/_tierdrop.html` needs a genuinely expensive comp (a real video clip plus a
-      blur, not shapes) before its output means anything. Next pass starts there.
+      **MEASURED PROPERLY NOW, and it explains your report exactly — both halves of it at once.**
+      Two earlier attempts at this probe were thrown away rather than reported: shapes cost 0.08 ms a
+      frame, and eight Gaussian Blurs on a 1080×1920 comp at 6× CPU throttle cost **1.1 ms**. Neither
+      put the ladder under any pressure, so neither could say anything about what it does under
+      pressure. The third attempt, with per-pixel (CPU) effects, finally did:
+
+      | load | frame cost the ladder measures | what the ladder did |
+      |---|---|---|
+      | 8 Gaussian Blurs, 1080×1920, 6× throttle | **1.1 ms** | nothing — it had no reason to |
+      | the same comp with per-pixel effects | **16.4 ms** | dropped tier 0→4, canvas 571k→132k px, then latched |
+
+      **So the ladder is not broken. It is BLIND to the costs that actually make your app lag.**
+      It reacts to main-thread render time, and two of the biggest real costs never land there:
+      **Gaussian Blur and friends compile to a canvas `filter`, which is GPU work**, and **video decode
+      happens off the main thread as well**. The app can be visibly stuttering while the number the
+      ladder watches reads perfectly healthy — so it correctly concludes there is nothing to do.
+      That is precisely your sentence: *"the project lags from just that, it also still doesn't compress
+      the quality"*. Both true at the same time, and not a contradiction.
+      It also fits the older measurement in this file: 13× fewer pixels bought only 32% less time on a
+      plain video clip, because decode dominated and decode is invisible here.
+      **The fix direction, for you to okay:** drive the ladder from the frame's REAL cadence — wall-clock
+      frame interval and dropped frames, both of which the app already tracks — instead of from the JS
+      render duration alone. Then a GPU or decode stall counts as "we are behind" like anything else.
+      **Not doing that unsupervised**: it changes playback behaviour globally, and you have asked for
+      opposite things here twice (#54 "stop lowering the quality on one simple video" vs this one), so
+      the threshold is a taste call as much as a technical one.
 - [x] **131 — The overpull Easter egg freezes if you drag really far.** (v6.77) His words: *"there's a glitch now
       when you swipe down really far and then the Easter egg happens where it slams the screen, if you try
       dragging really far down it just freezes, you should still be able to drag it down as freely as you
@@ -791,6 +813,14 @@ better still, keep working inside the turn rather than parking work for a later 
       not fixing it.** His words: *"Still getting major lag when scrolling through the timeline; with not
       many layers added at all. I know I tell you about lag a lot but nothing much ever gets resolved,
       idk if you're working on it or think it should be fine but just letting you know it's not fine."*
+      **NEW, 13 Aug — the biggest lead so far, from #130's measurement. Read that entry.** The adaptive
+      quality ladder only sees MAIN-THREAD render time, and the two costs most likely to be behind your
+      lag — canvas `filter` effects (GPU) and video decode (off-thread) — never land on that clock.
+      Measured: eight Gaussian Blurs on a 1080×1920 comp at 6× CPU throttle registered **1.1 ms** a
+      frame. The app can stutter badly while every number it watches says it is fine. That would explain
+      why years of "measure the render path" have kept coming back clean, including my own passes.
+      Also new: `tests/_probe.py --cpu N` throttles the CPU, so a phone can finally be approximated here
+      instead of every measurement being taken on a fast Mac.
       **Fair criticism, recorded as such.** The pattern: every time lag comes up I have measured on THIS
       machine, found acceptable numbers, and moved on — which is exactly the trap that made #41 and #97
       drag on. Desktop timings are not evidence about his phone. Next pass must be a real profile of the
