@@ -7859,9 +7859,15 @@
   // An element that plays on its OWN clock, like a real <video>: nothing the main thread does slows
   // it down, and a seek costs it a stall (measured: a real element advanced 2.4% of real time
   // between back-to-back seeks; 30 ms here is deliberately kinder than that).
-  function freeRunEl(dur) {
-    var e = { paused: true, muted: false, volume: 1, readyState: 4, duration: dur, seeks: 0,
-              _pos: 0, _at: performance.now(), _rate: 1, _stall: 0 };
+  /* `latency` (seconds, default 0) models the one property a real media element has and a perfect
+     fake does not: currentTime is LATCHED to the last block handed to the audio device, so it reads
+     a constant output latency BEHIND the true position. That constant is not drift, and it is what
+     the sync loop used to fight forever — see the queue-148 note in js/app.js. A fake without it
+     cannot reproduce the bug at all, which is why this harness reported everything healthy while a
+     real browser was rewriting playbackRate 55 times a second. */
+  function freeRunEl(dur, latency) {
+    var e = { paused: true, muted: false, volume: 1, readyState: 4, duration: dur, seeks: 0, rateWrites: 0,
+              _pos: 0, _at: performance.now(), _rate: 1, _stall: 0, _lat: latency || 0 };
     function advance() {
       var now = performance.now();
       if (!e.paused) {
@@ -7871,12 +7877,12 @@
       e._at = now;
     }
     Object.defineProperty(e, 'currentTime', {
-      get: function () { advance(); return e._pos; },
+      get: function () { advance(); return Math.max(0, e._pos - e._lat); },
       set: function (v) { advance(); e._pos = v; e.seeks++; e._stall = performance.now() + 30; }
     });
     Object.defineProperty(e, 'playbackRate', {
       get: function () { return e._rate; },
-      set: function (v) { advance(); e._rate = v; }
+      set: function (v) { advance(); e._rate = v; e.rateWrites++; }
     });
     e.play = function () { advance(); e.paused = false; return Promise.resolve(); };
     e.pause = function () { advance(); e.paused = true; };
@@ -7906,7 +7912,7 @@
       project: { width: 320, height: 240, fps: 30, duration: dur, background: '#000000', markers: [], loopIn: null, loopOut: null }
     });
     FM.time = 0; FM.previewRate = 1; FM.loop = !!opts.loop;
-    var el = freeRunEl(dur);
+    var el = freeRunEl(dur, opts.latency || 0);
     if (!opts.silent) FM.media.set(L.id, { kind: 'video', el: el, width: 320, height: 240, duration: dur });
     // The comp's cost, injected exactly where a real one is paid — inside tick()'s call stack.
     FM.renderScene = function () { var t = performance.now(); while (performance.now() - t < (opts.jankMs || 0)) { /* burn */ } };
@@ -11608,6 +11614,40 @@
       throw new Error('music-only reports clipDbStd ' + (res.stats && res.stats.clipDbStd) +
         ' — the detect-failure message uses < 3 to say "that reads as music", and that no longer holds');
     }
+  });
+
+  /* #148 — Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears
+     when im trying to play back stuff, this is related to the long on going lag issues."
+     Measured in a real browser (tests/_ratechurn.html): four seconds of ONE plain audio clip, no
+     effects, speed 1 — 208 of 240 sync decisions were a rate trim and playbackRate was written 55
+     times a SECOND. `preservesPitch` defaults on, so each write re-primes the browser's WSOLA
+     time-stretcher; nothing is ever dropped, so it left no trace in the seek counter, which is how
+     it survived five separate readings of the file.
+     It never converged because a media element's currentTime lags the true audible position by a
+     constant output latency, and a proportional controller cannot remove a constant — it just leaned
+     on the throttle forever. The fix learns that constant and subtracts it, and rate-limits the
+     writes to something a ±10% correction can actually act on.
+     This drives the exact condition with an element that reports an 80 ms latency. */
+  test('audio: a steady output latency does not turn into permanent playbackRate churn', { item: 'audio-clock' }, async function () {
+    const rig = transportRig({ latency: 0.08 });
+    try {
+      FM.play();
+      await sleep(2000);
+      const writes = rig.el.rateWrites, seeks = rig.el.seeks, stats = JSON.parse(JSON.stringify(FM.playbackStats));
+      FM.pause();
+      // CONTROL: playback has to have actually happened, or every assertion below is vacuous.
+      if (stats.renders < 10) throw new Error('only ' + stats.renders + ' renders in 2 s — playback did not run, so nothing here is under test');
+      // The fix. Pre-fix this element sees a write on very nearly every frame; the gap allows 4/s and
+      // 14 leaves generous headroom for the settling writes at the start.
+      if (writes > 14) throw new Error(rig.el.rateWrites + ' playbackRate writes in 2 s (' + (writes / 2).toFixed(1) +
+        '/s) — the element is being asked to re-prime its time-stretcher continuously, which is the scratchy sound');
+      // …and it must not have "fixed" the churn by seeking instead, which is worse.
+      if (seeks > 1) throw new Error('the element was seeked ' + seeks + ' times (one at play start is expected) — a seek is an audible hole');
+      // …nor by simply never correcting anything: a constant offset must be ABSORBED, not ignored,
+      // so the element still has to end up tracking the playhead.
+      const err = Math.abs((rig.el.currentTime + 0.08) - FM.clockNow());
+      if (err > FM.syncTuning.hard) throw new Error('the element ended ' + err.toFixed(3) + ' s from the playhead — the bias absorbed real drift too');
+    } finally { rig.restore(); }
   });
 
   async function run() {

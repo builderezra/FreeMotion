@@ -991,7 +991,14 @@ window.FM = window.FM || {};
    *     full ±10% trim, so the element is always being pulled the right way.
    * ============================================================================================= */
   const SYNC_DEAD = 0.045, SYNC_TAU = 1.0, SYNC_TRIM = 0.10, SYNC_HARD = 0.35, SEEK_MIN_GAP = 400;
-  FM.syncTuning = { dead: SYNC_DEAD, tau: SYNC_TAU, trim: SYNC_TRIM, hard: SYNC_HARD, seekGapMs: SEEK_MIN_GAP };
+  /* Both added for queue 148 — see the long note at the sync call site for the measurement.
+   * ERR_BIAS_ALPHA 0.01 is ~1.7s at 60fps: long enough that real drift (which accumulates) outruns
+   * it and still gets corrected, short enough to learn a fresh output latency within a couple of
+   * seconds of pressing play.
+   * RATE_WRITE_GAP 250ms: a ±10% trim needs a full second to close 100ms of error, so four
+   * re-decisions per second is already finer than the correction can act on. It was 55. */
+  const ERR_BIAS_ALPHA = 0.01, RATE_WRITE_GAP = 250;
+  FM.syncTuning = { dead: SYNC_DEAD, tau: SYNC_TAU, trim: SYNC_TRIM, hard: SYNC_HARD, seekGapMs: SEEK_MIN_GAP, biasAlpha: ERR_BIAS_ALPHA, rateWriteGapMs: RATE_WRITE_GAP };
   // The whole decision, as a pure function, so it can be tested without a media element:
   //   err        = local - element.currentTime  (positive → the element is BEHIND the playhead)
   //   base       = the rate the clip should play at (speed × previewRate)
@@ -1081,10 +1088,51 @@ window.FM = window.FM || {};
           else {
             // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
             const base = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
-            const plan = FM.mediaSyncPlan(local - (m.el.currentTime || 0), base, m._syncAt == null ? Infinity : now - m._syncAt);
-            if (plan.action === 'seek') { m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++; }
-            else if (plan.action === 'trim') FM.playbackStats.trims++;
-            if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4) m.el.playbackRate = plan.rate;
+            /* ============ THE SCRATCHY-AUDIO FIX (queue 148) ============
+             * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears
+             * when im trying to play back stuff, this is related to the long on going lag issues."
+             * MEASURED in a real browser (tests/_ratechurn.html), four seconds of playing ONE plain
+             * audio clip — no effects, speed 1, nothing else in the project:
+             *     208 of 240 sync decisions were a trim
+             *     playbackRate was rewritten 221 times — FIFTY-FIVE TIMES A SECOND
+             *     the rate wandered across the full ±10% band and sat pinned at the ceiling
+             *     |err| had a median of 60ms and never converged
+             * `preservesPitch` defaults to true, so a media element answers a rate change with a
+             * TIME-STRETCHER, not a resample. Re-priming a WSOLA stretcher 55 times a second is
+             * audible, and what it sounds like is scratchy. No sample is ever dropped, so none of
+             * this showed up in the seek counter or as a hole in the waveform — which is why five
+             * separate readings of this file found nothing.
+             *
+             * WHY IT NEVER CONVERGED, which is the actual defect. `el.currentTime` is not the
+             * instantaneous audible position: it is latched to the last block the element handed the
+             * audio device, so it sits a constant OUTPUT LATENCY behind — tens of ms, more on a busy
+             * machine, which is exactly the link he drew to the lag. That constant is not drift, and
+             * a proportional controller cannot remove a constant: it just leans on the throttle
+             * forever. So the loop asked for +10% permanently and re-decided it every frame.
+             *
+             * Two changes, and neither weakens real drift correction:
+             *   1. Learn the constant and subtract it. A slow EMA (~1.7s) absorbs a fixed offset
+             *      completely, while genuine drift — which accumulates — outruns it and still leaves
+             *      a residual for the trim to work on.
+             *   2. Rate-limit the trim WRITES. Closing a 100ms error at 10% takes a full second, so
+             *      re-deciding it 55 times inside that second buys nothing and costs a stretcher
+             *      re-prime each time. A change in `base` (a speed ramp, a preview-rate change) is
+             *      the user asking for a rate and is still honoured on the very next frame.
+             * ============================================================================ */
+            const rawErr = local - (m.el.currentTime || 0);
+            if (m._errBias == null || !isFinite(m._errBias)) m._errBias = rawErr;
+            else m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
+            const plan = FM.mediaSyncPlan(rawErr - m._errBias, base, m._syncAt == null ? Infinity : now - m._syncAt);
+            if (plan.action === 'seek') {
+              m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
+              m._errBias = null;   // the offset we learned belonged to the old position
+            } else if (plan.action === 'trim') FM.playbackStats.trims++;
+            const baseMoved = Math.abs((m._baseRate == null ? base : m._baseRate) - base) > 1e-4;
+            m._baseRate = base;
+            if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4 &&
+                (baseMoved || plan.action === 'seek' || now - (m._rateAt || 0) >= RATE_WRITE_GAP)) {
+              m.el.playbackRate = plan.rate; m._rateAt = now;
+            }
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
@@ -1161,6 +1209,9 @@ window.FM = window.FM || {};
       // Forward clips play natively; reversed clips are drawn from the frame cache by tick.
       if (!layer.reversed) {
         try { m.el.currentTime = local; m._syncAt = performance.now(); } catch (e) {}
+        // A new pass learns its own output latency from scratch (queue 148) — the offset from the
+        // last one belongs to a different position, and on a phone often to a different device state.
+        m._errBias = null; m._rateAt = 0; m._baseRate = null;
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
         m.el.volume = Math.max(0, Math.min(1, FM.layerVolume(layer, FM.time)));

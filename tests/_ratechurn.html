@@ -1,0 +1,127 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#148 — is playbackRate being churned during ordinary playback?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.5 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:900px;height:760px;border:0}
+#out{padding:12px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* WHAT THIS ANSWERS, and why it is not another read of the code.
+   Five independent readings of the audio path found nothing that survived a skeptic, so the next
+   honest step is to watch the running thing rather than argue about it.
+   The one mechanism none of those readings examined: syncMediaToClock re-decides the element's
+   playbackRate on EVERY tick. `err` is `local - el.currentTime`, and an element's currentTime is
+   quantised, so if err jitters across the 45ms dead band the plan flips hold -> trim -> hold and the
+   rate is rewritten by up to +-10% again and again. Every rewrite re-primes the browser's audio
+   time-stretcher, which is audible as warble/scratch — and unlike a seek it leaves no hole, so it
+   would never show up as a "seek storm" in the existing stats.
+   So: play a REAL audio file for a few seconds and count how often the rate actually changes, and by
+   how much. A handful of trims settling at the start is healthy. Continuous churn is the bug. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done(){ out.textContent = L.join('\n'); window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 240) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.play || !w.FM.loadVideoFile || !w.FM.mediaSyncPlan) return setTimeout(wait, 50);
+      go(w);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+
+      // A real decodable audio file, imported exactly the way Ezra imports one.
+      var blob = await fetch('tests/_fixtures/vad/clean.wav').then(function (r) { return r.blob(); });
+      var file = new w.File([blob], 'clean.wav', { type: 'audio/wav' });
+      var rec = await FM.loadVideoFile(file);
+      FM.addMediaLayer(rec);
+      var layer = FM.scene.layers[0];
+      L.push('imported: kind=' + rec.kind + '  el.duration=' + (rec.el && rec.el.duration) +
+             '  layer.type=' + layer.type + '  speed=' + JSON.stringify(layer.speed));
+
+      /* Count REAL writes to the element, by spying on the setter itself. The first version of this
+         probe counted how often the PLAN's rate changed, which is a different number: the plan can
+         change every frame while the code chooses not to write it. Measuring the plan would have
+         shown almost no improvement from a fix whose whole point is to write less — an instrument
+         that cannot see the change it is being used to judge. */
+      var elWrites = 0;
+      var mediaProto = w.HTMLMediaElement.prototype;
+      var pbd = Object.getOwnPropertyDescriptor(mediaProto, 'playbackRate');
+      Object.defineProperty(mediaProto, 'playbackRate', {
+        configurable: true,
+        get: function () { return pbd.get.call(this); },
+        set: function (v) { elWrites++; pbd.set.call(this, v); },
+      });
+
+      // …and the decision itself — every plan, and every time the planned rate moves.
+      var plans = [], rateWrites = [], lastRate = null;
+      var origPlan = FM.mediaSyncPlan;
+      FM.mediaSyncPlan = function (err, base, sinceSeek) {
+        var p = origPlan(err, base, sinceSeek);
+        plans.push({ err: err, base: base, action: p.action, rate: p.rate });
+        if (lastRate === null || Math.abs(p.rate - lastRate) > 1e-4) { rateWrites.push(p.rate); lastRate = p.rate; }
+        return p;
+      };
+
+      FM.time = 0;
+      FM.play();
+      await new Promise(function (r) { setTimeout(r, 4000); });
+      FM.pause();
+      FM.mediaSyncPlan = origPlan;
+      Object.defineProperty(mediaProto, 'playbackRate', pbd);   // leave the page as found
+
+      var vidLayers = FM.scene.layers.filter(function (l) { return l.type === 'video'; }).length;
+
+      /* Put the layer back. An earlier version of this probe did not, and because addMediaLayer
+         persists, running it three times left three "clean" clips sitting in whatever project the
+         browser profile had open. A dev probe must not litter the app it is measuring. */
+      try {
+        if (FM.media && FM.media.del) FM.media.del(layer.id);
+        FM.scene.layers = FM.scene.layers.filter(function (l) { return l.id !== layer.id; });
+        FM.scene.selectedId = null; FM.scene.selectedIds = [];
+        if (FM.storage && FM.storage.save) FM.storage.save();
+      } catch (e) {}
+
+      var secs = 4;
+      var acts = { hold: 0, trim: 0, seek: 0 };
+      plans.forEach(function (p) { acts[p.action] = (acts[p.action] || 0) + 1; });
+      var errs = plans.map(function (p) { return p.err; });
+      var absErrs = errs.map(Math.abs).sort(function (a, b) { return a - b; });
+      var med = absErrs.length ? absErrs[Math.floor(absErrs.length / 2)] : 0;
+      var mx = absErrs.length ? absErrs[absErrs.length - 1] : 0;
+      // How far the rate travels in total — the number that decides whether this is churn.
+      var travel = 0;
+      for (var i = 1; i < rateWrites.length; i++) travel += Math.abs(rateWrites[i] - rateWrites[i - 1]);
+      var spread = rateWrites.length ? (Math.max.apply(null, rateWrites) - Math.min.apply(null, rateWrites)) : 0;
+
+      L.push('');
+      L.push('over ' + secs + 's of playback of ONE plain audio clip:');
+      L.push('  sync decisions      ' + plans.length + '   (' + (plans.length / secs).toFixed(1) + '/s)');
+      L.push('  hold / trim / seek  ' + acts.hold + ' / ' + acts.trim + ' / ' + acts.seek);
+      L.push('  |err| median        ' + (med * 1000).toFixed(1) + ' ms      max ' + (mx * 1000).toFixed(1) + ' ms   (dead band 45 ms)');
+      L.push('  audio/video layers  ' + vidLayers + '   (a restored project can add more than the one imported here)');
+      L.push('  REAL el.playbackRate writes  ' + elWrites + '   (' + (elWrites / secs).toFixed(1) + '/s)   <-- THE NUMBER THAT MATTERS');
+      L.push('  planned-rate changes ' + rateWrites.length + '   (' + (rateWrites.length / secs).toFixed(1) + '/s)   (what the loop WANTED, before rate-limiting)');
+      L.push('  rate spread         ' + spread.toFixed(4) + '   total travel ' + travel.toFixed(4));
+      L.push('  FM.playbackStats    ' + JSON.stringify(FM.playbackStats));
+      L.push('');
+      L.push('READ IT LIKE THIS: a few trims at the start while the element settles is healthy.');
+      L.push('Many rate WRITES per second, indefinitely, is the browser being asked to re-prime its');
+      L.push('audio time-stretcher over and over — which is scratchy, and leaves no hole to show up');
+      L.push('as a seek. Rate writes near zero after the first second clears this hypothesis.');
+      L.push('');
+      L.push('first 25 decisions (err ms -> action @ rate):');
+      plans.slice(0, 25).forEach(function (p, i) {
+        L.push('   ' + String(i).padStart(2) + '  ' + (p.err * 1000).toFixed(1).padStart(8) + ' ms  ' + p.action.padEnd(5) + ' ' + p.rate.toFixed(4));
+      });
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));
+    }
+    done();
+  }
+})();
+</script></body></html>

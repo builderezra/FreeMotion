@@ -245,6 +245,38 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       the film-grain fix went wrong four times.
       Pairs with **69** (audio must never lag — make the audio clock the master), which is probably the
       real fix if it is starvation.
+      **FOUND AND FIXED, v6.91 — and you were right that it is tied to the lag, though not by the route
+      I expected.** Five independent readings of the audio path found nothing that survived a skeptic
+      (no ScriptProcessor anywhere, so lag cannot starve the audio thread; no double-connect; no
+      unramped clip boundary that could reach a plain imported song). What none of them examined was
+      the drift correction. Measured in a real browser — four seconds of ONE plain audio clip, no
+      effects, speed 1:
+
+      | | before | after |
+      |---|---|---|
+      | real writes to `el.playbackRate` | **85 (21/s headless, 55/s real browser)** | **6 (1.5/s)** |
+      | median sync error | 152.9 ms | **23.4 ms** (inside the 45 ms dead band) |
+      | decisions that were a rate trim | 232 of 240 | 76 of 240 |
+
+      `preservesPitch` defaults to true, so a media element answers a rate change with a **time-stretcher**,
+      not a resample — and re-priming a WSOLA stretcher tens of times a second is exactly a scratchy,
+      warbling noise. Nothing is ever dropped, which is why it left no trace in the seek counter and
+      survived every reading of the file.
+      **Why it never settled** is the actual defect: `el.currentTime` is latched to the last block the
+      element handed the audio device, so it reads a constant OUTPUT LATENCY behind the true audible
+      position. That constant is not drift, and a proportional controller cannot remove a constant — it
+      just leaned on the throttle forever, asking for +10% permanently and re-deciding it every frame.
+      A busier machine means a bigger, noisier latency, which is the real link to the lag.
+      Fix: learn the constant with a slow EMA and subtract it (genuine drift accumulates and outruns
+      the filter, so it is still corrected), and rate-limit the trim writes to 4/s — a ±10% correction
+      needs a full second to close 100 ms, so re-deciding it 55 times inside that second bought nothing
+      and cost a stretcher re-prime each time. A speed ramp or preview-rate change is the user asking
+      for a rate and is still honoured on the very next frame.
+      Covered by a regression test that gives the fake element an 80 ms latency — the harness's element
+      was a *perfect* clock, which is why it reported everything healthy while a real browser churned.
+      Mutation-checked: with the fix disabled it reports 26.5 writes/s and goes red.
+      **Still worth your ears** — this is measured, not heard. If it still sounds scratchy, say so and
+      the next suspect is the decode path, not the sync loop.
 
 - [ ] **147 — PC: the text editor covers the text you are editing. Get it off the canvas.** (13 Aug,
       screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
