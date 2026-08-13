@@ -936,10 +936,21 @@ better still, keep working inside the turn rather than parking work for a later 
       canvas and the selection box on it. That is exactly the shape of the three failures ("the box is
       already 149px off the text", "the editor covers the canvas at y 341"), none of which touch the
       timeline at all.
-      **So the next go is:** re-apply the feature, then confirm the drag's end restores the scroller
-      (`rebuild()` should recompute `innerEl` width — verify it actually does after an auto-scroll), and
-      add the same after-each hygiene check for scroll position and scroller width that now exists for
-      gestures. Backed out rather than shipped red or "fixed" by editing the tests it broke.
+      **That theory is dead too, measured directly.** Grew `innerEl` by 12,000px and set `scrollLeft` to
+      4,000 on the live app: the canvas moved **0px** and resized **0px**, and `rebuild()` restores both
+      to their original values anyway. So neither the scroll position nor the scroller width reaches the
+      canvas, and the three failures are not that.
+      **Two hypotheses killed by measurement, which is progress — it is where the next attempt starts.**
+      What is left that an armed edge-scroll does, and has not been ruled out: it calls
+      `applyClipMoveAt` — and therefore `FM.requestRender()`, `showSnap`/`hideSnap`, and a write to
+      `layer.start` — once per animation frame for the length of the drag. So the suspects now are the
+      SCENE (a dragged clip landing at a different `start`, which persists into whatever test inherits
+      the scene) and the snap guide, not the scroller.
+      **Do this next, instead of a third hypothesis:** re-apply the feature, dump the FULL pass/fail list
+      rather than just the failures, and diff it against a clean run to find the FIRST test that behaves
+      differently. The three reds are almost certainly downstream of something earlier, and guessing at
+      the mechanism has now cost two attempts. Backed out rather than shipped red, or "fixed" by editing
+      the tests it broke.
 - [ ] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** His words:
       *"The sliders we have for everything like effects and what not are too stiff, they need to flow
       like the timeline does, when you swipe it glides."* #45 "Give every slider the timeline's glide"
