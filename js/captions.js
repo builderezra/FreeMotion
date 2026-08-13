@@ -271,7 +271,28 @@ window.FM = window.FM || {};
           const r = await C.detect(layer, src, p => { btn.textContent = 'Listening… ' + Math.round(p * 100) + '%'; });
           btn.textContent = label; btn.disabled = false;
           if (!r.count) {
-            if (FM.toast) FM.toast('No speech found in “' + (src.name || 'that clip') + '”');
+            /* WHY it found nothing, not just that it did (queue 152). Ezra: "im pretty sure the auto
+               detect speaking and auto make the captions doesnt work… would be better to not add it
+               then add a shit version." Measured against real synthesised speech (tests/_vadreal.html,
+               fixtures in tests/_fixtures/vad) the detector is fine — 3/3 utterances on a clean voice
+               within ~100 ms, still 3/3 with a music bed 18 dB down. It collapses once the music comes
+               within 12 dB of the voice: 2/3 at −12 dB, 0/3 at −6 dB. It does NOT invent cues on music
+               with no speech in it, which is the failure that would actually be unforgivable.
+               So the feature works and the report is still true from where he is standing: he points it
+               at a SONG, gets "no speech found", and reads that as broken. The level distribution says
+               exactly which case it is — a voice makes the level swing (clipDbStd 100 on clean speech),
+               a music bed does not (0.18 with no voice, 0.95 at −6 dB, against 4.5 at −18 dB where
+               detection still worked). Under 3 is music with a wide margin either side. */
+            const nm = String(src.name || 'that clip');
+            const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+            const st = r.stats || {};
+            const musicLike = typeof st.clipDbStd === 'number' && st.clipDbStd < 3;
+            if (FM.toast) {
+              FM.toast(musicLike
+                ? 'No speech in “' + shortNm + '” — that reads as music, not talking'
+                : 'No speech found in “' + shortNm + '”', musicLike ? 5000 : 3000);
+            }
+            try { console.info('FreeMotion speech detection found nothing in “' + nm + '”:', st); } catch (e) {}
           } else {
             commitH();
             if (FM.toast) FM.toast(r.count + ' cue' + (r.count === 1 ? '' : 's') + ' from “' + (src.name || 'clip') + '” — tap one to type');

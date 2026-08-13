@@ -11554,6 +11554,62 @@
     }
   });
 
+  /* #152 — Ezra: "im pretty sure the auto detect speaking and auto make the captions doesnt work…
+     would be better to not add it then add a shit version for now."
+     The suite already had a VAD test, and it was too easy: bursts vs a steady tone. It could not have
+     told him whether the thing works on a person talking, which is the only question he asked. This
+     one runs the detector against REAL speech — three sentences from the macOS speech synthesiser,
+     laid out with silences we chose so the ground truth is exact (tests/_fixtures/vad, generated once
+     and committed; there is no `say` binary in CI).
+     Two bars, and they are the two that decide whether the feature ships at all:
+       * a clean voice recording must produce the right number of cues, near the right times;
+       * a music bed with NOBODY talking must produce ZERO cues. Inventing captions over music is the
+         failure that would actually deserve deleting the feature. */
+  test('captions: speech detection finds real spoken sentences, and stays silent on music', { item: 'captions-vad-real' }, async function () {
+    if (!FM.detectSpeech) throw new Error('FM.detectSpeech is missing');
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const load = async (name) => {
+      const [truth, ab] = await Promise.all([
+        fetch('tests/_fixtures/vad/' + name + '.truth.json', { cache: 'no-store' }).then(r => r.json()),
+        fetch('tests/_fixtures/vad/' + name + '.wav', { cache: 'no-store' }).then(r => r.arrayBuffer()),
+      ]);
+      return { truth: truth, buf: await ac.decodeAudioData(ab) };
+    };
+
+    // 1) A clean voice: every sentence found, and each edge close enough that a caption is not
+    //    visibly late. Measured at ±100ms when this landed; 250ms is the bar, so ordinary tuning
+    //    drift does not go red but a real regression does.
+    const clean = await load('clean');
+    const got = (await FM.detectSpeech(clean.buf, {})).segments || [];
+    if (got.length !== clean.truth.length) {
+      throw new Error('clean speech: expected ' + clean.truth.length + ' utterances, detector returned ' + got.length +
+        ' (' + got.map(s => s.start.toFixed(2) + '-' + s.end.toFixed(2)).join(' ') + ')');
+    }
+    clean.truth.forEach((t, i) => {
+      const ds = Math.abs(got[i].start - t[0]) * 1000, de = Math.abs(got[i].end - t[1]) * 1000;
+      if (ds > 250 || de > 250) {
+        throw new Error('clean speech utterance ' + (i + 1) + ' is off by ' + ds.toFixed(0) + 'ms at the start and ' +
+          de.toFixed(0) + 'ms at the end — a caption that far out reads as mistimed');
+      }
+    });
+
+    // 2) Music with nobody talking: not one cue. This is the guard on the worst possible behaviour —
+    //    a grid of empty captions laid over a song.
+    const music = await load('music-only');
+    const res = await FM.detectSpeech(music.buf, {});
+    const bogus = res.segments || [];
+    if (bogus.length) {
+      throw new Error('music with no speech in it produced ' + bogus.length + ' cue(s): ' +
+        bogus.map(s => s.start.toFixed(2) + '-' + s.end.toFixed(2)).join(' ') + ' — captions invented over a song');
+    }
+    // …and the statistic the "that reads as music, not talking" message keys on has to keep meaning
+    // what it means, or that message starts lying in the other direction.
+    if (!(res.stats && res.stats.clipDbStd < 3)) {
+      throw new Error('music-only reports clipDbStd ' + (res.stats && res.stats.clipDbStd) +
+        ' — the detect-failure message uses < 3 to say "that reads as music", and that no longer holds');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

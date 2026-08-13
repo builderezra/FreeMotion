@@ -153,6 +153,44 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
+      His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,
+      could be soemthing way to hard to do and would be better to not add it then add a shit version for
+      now."*
+      **This changes #150's premise and must be settled first** — making a broken feature easier to reach
+      is worse than leaving it buried. What is actually known today: the suite has a green test,
+      *"captions: speech detection finds the bursts and ignores a steady tone"*, so the VAD does separate
+      bursts from a constant tone **on synthetic audio**. That is a very low bar and says nothing about
+      real speech over music, which is his case. It has never been measured on a real recording.
+      **MEASURED, v6.90. Short answer: don't delete it — it works, and your report is still right.**
+      Ran it against real speech (three sentences from the macOS speech synthesiser, laid out with
+      silences of our choosing so the truth is exact — `tests/_vadreal.html`, fixtures committed):
+
+      | what it was given | should find | found | verdict |
+      |---|---|---|---|
+      | a clean voice recording | 3 | **3** | edges within ~100 ms |
+      | voice + music 18 dB down | 3 | **3** | ends up to 290 ms early |
+      | voice + music 12 dB down | 3 | **2** | one missed, one 2.35 s late |
+      | voice + music 6 dB down | 3 | **0** | finds nothing at all |
+      | music, nobody talking | 0 | **0** | correct — invents nothing |
+
+      So it is a genuinely working voice detector that **collapses once music comes within ~12 dB of the
+      voice** — and the case you would actually try it on is an imported SONG, where there is no voice
+      above the music at all. It then said *"No speech found"*, which reads exactly like a broken button.
+      Crucially it does NOT scatter empty captions over a song, which is the failure that would have
+      deserved deleting it.
+      **v6.90 makes it say which it is**: when it finds nothing and the level never varies — a voice
+      swings the level hugely (clipDbStd 100 on clean speech) and a music bed does not (0.18 with no
+      voice, against 4.5 at −18 dB where detection still worked) — the message is now *"that reads as
+      music, not talking"* instead of a flat "no speech found", with the full stats in the console.
+      The suite's old VAD test only asked whether it could tell bursts from a steady tone, which could
+      never have answered your question; there is a real-speech test now that fails if a clean voice
+      stops being found within 250 ms, or if a cue is ever invented over music.
+      **Still your call, and here is the honest trade-off:** the remaining gap is speech buried under
+      loud music, which needs a real speech/music discriminator (spectral flux, not level) — a
+      substantial piece of work. If you only ever caption voice recordings, it already does the job. Say
+      the word and it goes; I am not attached to it.
+
 - [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
       *"Also when editing a caption layer you should be able to chose somehow between adding effects to
       each section or adding effects that effect the whole layer."* So a caption track carries one
@@ -183,6 +221,12 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       2. **Scope, three options**: (a) only the span the captions layer covers, (b) the whole project,
          (c) a specific audio layer — and for (c) a picker to choose which. Today it detects against one
          implicit source with no say in the matter.
+      **UNBLOCKED — #152 is measured and the detector works** (see it for the numbers). And the measurement
+      makes part 2 more important than it looked: it fails specifically when music sits within ~12 dB of
+      the voice, so *"detecting a specific audio layer then let you select it"* is not a convenience, it
+      is **the fix** — pointing it at the voice track instead of the finished mix is the difference
+      between 3 cues and 0. Build the scope picker with that framing, and default to the most voice-like
+      source rather than to whatever clip happens to be first.
 
 - [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
       His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im

@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#152 — does speech detection actually work on REAL speech?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.55 ui-monospace,Menlo,monospace}
+#out{padding:12px;white-space:pre}</style></head><body><div id="out">measuring…</div>
+<script src="js/settings.js"></script>
+<script src="js/captions-vad.js"></script>
+<script>
+/* The suite's existing VAD test asks whether the detector can tell speech BURSTS from a STEADY TONE.
+   That is a very low bar and says nothing about Ezra's case — he says it "doesnt work" on real
+   material, and he is entitled to a real answer before we either polish it (#150) or pull it (#152).
+   So this runs it against ACTUAL SPEECH: three sentences from the macOS speech synthesiser, laid out
+   with silences whose lengths we chose, so the ground truth is exact. Three conditions: clean, and
+   the same speech over a music bed at -18 dB and -12 dB, which is what a caption track sits on in a
+   real edit.
+   Scored the way a person would judge it: did it find the right NUMBER of cues, and how far off are
+   the edges? Boundary error is reported in ms because a caption 300 ms late is visibly late. */
+(function () {
+  var out = document.getElementById('out');
+  // 'music-only' is the one that matters most for Ezra's actual use: he hits Detect on an imported
+  // SONG. There is no speech in it at all, so the honest answer is zero cues — anything it returns
+  // there is a cue laid on nothing.
+  var CASES = ['clean', 'music-18', 'music-12', 'music-6', 'music-only'];
+  var L = [];
+
+  function score(truth, got) {
+    // Greedy 1-1 match on overlap, then report what each side did.
+    var used = {}, pairs = [];
+    truth.forEach(function (t, ti) {
+      var best = -1, bestOv = 0;
+      got.forEach(function (g, gi) {
+        if (used[gi]) return;
+        var ov = Math.min(t[1], g.end) - Math.max(t[0], g.start);
+        if (ov > bestOv) { bestOv = ov; best = gi; }
+      });
+      if (best >= 0) { used[best] = 1; pairs.push({ ti: ti, t: t, g: got[best] }); }
+      else pairs.push({ ti: ti, t: t, g: null });
+    });
+    return { pairs: pairs, spurious: got.filter(function (_, i) { return !used[i]; }) };
+  }
+
+  async function run() {
+    if (!FM.detectSpeech) { out.textContent = 'FM.detectSpeech is missing'; window.__done = true; return; }
+    var ac = new (window.AudioContext || window.webkitAudioContext)();
+    L.push('VAD defaults: ' + JSON.stringify(FM.vadDefaults ? FM.vadDefaults() : {}, null, 0).slice(0, 200));
+    L.push('');
+    for (var i = 0; i < CASES.length; i++) {
+      var name = CASES[i];
+      try {
+        var truth = await fetch('tests/_fixtures/vad/' + name + '.truth.json').then(function (r) { return r.json(); });
+        var ab = await fetch('tests/_fixtures/vad/' + name + '.wav').then(function (r) { return r.arrayBuffer(); });
+        var buf = await ac.decodeAudioData(ab);
+        var t0 = performance.now();
+        var res = await FM.detectSpeech(buf, {});
+        var ms = performance.now() - t0;
+        var segs = res.segments || [];
+        var s = score(truth, segs);
+        L.push('=== ' + name + '  (' + buf.duration.toFixed(2) + 's, detected in ' + ms.toFixed(0) + 'ms) ===');
+        L.push('  truth ' + truth.length + ' utterances, detector found ' + segs.length);
+        s.pairs.forEach(function (p) {
+          if (!p.g) { L.push('  utterance ' + (p.ti + 1) + ' [' + p.t[0].toFixed(2) + '-' + p.t[1].toFixed(2) + ']  MISSED ENTIRELY'); return; }
+          var ds = (p.g.start - p.t[0]) * 1000, de = (p.g.end - p.t[1]) * 1000;
+          L.push('  utterance ' + (p.ti + 1) + ' [' + p.t[0].toFixed(2) + '-' + p.t[1].toFixed(2) + ']  ->  [' +
+            p.g.start.toFixed(2) + '-' + p.g.end.toFixed(2) + ']   start ' + (ds >= 0 ? '+' : '') + ds.toFixed(0) +
+            'ms  end ' + (de >= 0 ? '+' : '') + de.toFixed(0) + 'ms');
+        });
+        if (s.spurious.length) L.push('  ' + s.spurious.length + ' SPURIOUS cue(s) on silence/music: ' +
+          s.spurious.map(function (g) { return '[' + g.start.toFixed(2) + '-' + g.end.toFixed(2) + ']'; }).join(' '));
+        L.push('  stats: ' + JSON.stringify(res.stats || {}).slice(0, 220));
+        L.push('');
+      } catch (e) {
+        L.push('=== ' + name + ' === THREW: ' + (e && e.message || e)); L.push('');
+      }
+    }
+    out.textContent = L.join('\n');
+    window.__done = true;
+  }
+  run();
+})();
+</script></body></html>
