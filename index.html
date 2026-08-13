@@ -136,7 +136,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.83-wdiag</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.84-wdiag</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -748,24 +748,47 @@
       read.style.cssText = 'position:fixed;right:6px;bottom:90px;z-index:2147483647;pointer-events:none;' +
         'background:rgba(255,0,200,.92);color:#fff;font:700 10px/1.35 -apple-system,sans-serif;' +
         'padding:6px 8px;border-radius:6px;text-align:right;max-width:70vw;';
-      function paint() {
+      /* The bar is INTERMITTENT — a healthy reading proves nothing, because by the time a screenshot
+         is taken the app may have recovered. So the probe REMEMBERS the narrowest value it has ever
+         seen, with a timestamp and what triggered the sample. One screenshot then reports the whole
+         session, not the instant it was taken. */
+      var min = null, minAt = '', minWhy = '';
+      function measure() {
         var t = document.createElement('div');
         t.style.cssText = 'position:fixed;right:0;width:env(safe-area-inset-right);height:1px;pointer-events:none;';
         document.body.appendChild(t);
         var insetR = Math.round(t.getBoundingClientRect().width);
         t.remove();
         var de = document.documentElement, vv = window.visualViewport;
-        read.innerHTML =
-          'innerW ' + window.innerWidth + ' · outerW ' + window.outerWidth + '<br>' +
-          'screen.w ' + screen.width + ' · clientW ' + de.clientWidth + '<br>' +
-          'visualW ' + (vv ? Math.round(vv.width) : '?') + ' · safeR ' + insetR + '<br>' +
-          'bodyW ' + Math.round(document.body.getBoundingClientRect().width) +
-          ' · scrollW ' + de.scrollWidth;
+        return {
+          innerW: window.innerWidth, clientW: de.clientWidth,
+          visualW: vv ? Math.round(vv.width) : 0, screenW: screen.width,
+          bodyW: Math.round(document.body.getBoundingClientRect().width),
+          scrollW: de.scrollWidth, safeR: insetR
+        };
       }
-      paint();
-      window.addEventListener('resize', paint);
-      if (window.visualViewport) window.visualViewport.addEventListener('resize', paint);
-      document.addEventListener('visibilitychange', function () { if (!document.hidden) setTimeout(paint, 250); });
+      function paint(why) {
+        var m = measure();
+        var worst = Math.min(m.innerW, m.clientW, m.visualW || 9999, m.bodyW);
+        if (min === null || worst < min) {
+          min = worst;
+          minAt = new Date().toTimeString().slice(0, 8);
+          minWhy = why || 'load';
+        }
+        read.innerHTML =
+          'NOW  in ' + m.innerW + ' cl ' + m.clientW + ' vis ' + m.visualW + '<br>' +
+          '     body ' + m.bodyW + ' scr ' + m.scrollW + ' safeR ' + m.safeR + '<br>' +
+          'screen ' + m.screenW + '<br>' +
+          '<span style="color:#ff0">NARROWEST EVER ' + min + '</span> @' + minAt + ' (' + minWhy + ')';
+      }
+      paint('load');
+      window.addEventListener('resize', function () { paint('resize'); });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', function () { paint('vv-resize'); });
+      window.addEventListener('orientationchange', function () { setTimeout(function () { paint('rotate'); }, 300); });
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { paint('resume'); setTimeout(function () { paint('resume+300'); }, 300); }
+      });
+      setInterval(function () { paint('tick'); }, 2000);   // catches it even with no event
     })();
   </script>
 </body>
