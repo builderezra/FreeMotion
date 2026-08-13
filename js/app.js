@@ -632,6 +632,16 @@ window.FM = window.FM || {};
     const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     const pn = document.getElementById('proj-name');
     if (pn && document.activeElement !== pn) { pn.value = sel ? (sel.name || '') : (FM.scene.project.name || 'Untitled'); pn.title = sel ? 'Layer name' : 'Project name'; }
+    /* Queue 146 — Ezra: "on pc get rid of the project name editor thats at the top, its already at the
+     * bottom." He is right that it is a duplicate, and it is worth being precise about WHEN, because
+     * this field is dual-purpose: with a layer selected it renames THAT LAYER, and only with nothing
+     * selected does it show the project name. So it duplicates #proj-name-s exactly in the
+     * nothing-selected case, and in the other case it is the only rename control in the top strip.
+     * Hiding it outright would have quietly taken away layer renaming from the PC top bar, which he
+     * did not ask for — so it hides only while it would be the second copy of the same project name.
+     * Studio only: the classic layout has no #proj-name-s, so there the field is not duplicating
+     * anything. Flagged in REQUESTS.md in case he did mean "remove it in both states". */
+    if (pn) pn.classList.toggle('is-dupe', !sel);
     // The panel-header copy (v6.13) is ALWAYS the project name. #proj-name above is dual-purpose — it
     // renames the selected layer when there is one — and a second field that silently changed meaning
     // depending on the selection would be a trap, especially where it sits: directly above a panel that

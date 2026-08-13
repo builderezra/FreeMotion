@@ -341,12 +341,24 @@ better still, keep working inside the turn rather than parking work for a later 
       Phone is a different problem and is NOT covered by this — there is no side column there, and the
       current overlay is the right shape for a phone. Desktop only.
 
-- [ ] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** His words:
+- [x] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** (v6.94) His words:
       *"also on pc get rid of the project name editor thats at the top, its already at the bottom."*
       Screenshot 1 shows both: **IF I HAD ONE** across the top-left, and the same name again on the
       INSPECTOR header at the bottom-left. Two editors for one field. Keep the bottom one — that is the
       one beside the layer/selection context — and remove the top. Belongs with #143/#144, which are
       rebuilding that top strip anyway.
+      **Shipped v6.94, with one judgement call you should check.** That top field is **dual-purpose**:
+      with a layer selected it renames THAT LAYER, and only with nothing selected does it show the
+      project name. (That is why your screenshot has *"IF I HAD ONE"* up top and *"If i had one slowed"*
+      in the inspector — they are a layer name and a project name, not two copies of one thing.) So it
+      duplicates the inspector header **exactly when nothing is selected**, and the rest of the time it
+      is the only rename control in the top strip.
+      Deleting it outright would have quietly taken away layer renaming from the PC top bar, which you
+      did not ask for — so it now hides **only** while it would be the second copy of the project name,
+      and comes back as the layer renamer the moment you select something. Studio layout only; the
+      classic layout has no second field to duplicate.
+      **If you did mean "gone in both states", say so and it is one line.** Renaming a layer would then
+      live on the timeline (double-click a track head), which already works.
 
 - [x] **145 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons
       looking goofy.** (v6.93) (13 Aug, two messages.) His words: *"make the background of all the buttons like

@@ -11721,6 +11721,41 @@
     } finally { host.remove(); }
   });
 
+  /* #146 — Ezra: "on pc get rid of the project name editor thats at the top, its already at the
+     bottom." The subtlety worth guarding is that #proj-name is DUAL-PURPOSE — it renames the selected
+     LAYER when there is one, and only shows the project name when there is not. So it duplicates the
+     inspector header exactly in the nothing-selected case, and in the other case it is the only rename
+     control in the top strip. Hiding it outright would have silently removed layer renaming from the
+     PC top bar, which he did not ask for. Both halves are asserted. */
+  test('studio: the top project-name field hides only while it duplicates the inspector header', { item: 'studio-projname' }, async function () {
+    const pn = document.getElementById('proj-name');
+    if (!pn) throw new Error('#proj-name is missing');
+    const hadSel = FM.scene.selectedId, hadIds = (FM.scene.selectedIds || []).slice();
+    const hadLayout = FM.settings.get('layout');
+    try {
+      FM.settings.set('layout', 'studio');
+      await sleep(40);
+      if (!document.body.classList.contains('layout-studio')) throw new Error('the studio layout did not apply, so this test is checking nothing');
+
+      FM.scene = scene([FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 })]);
+      // Nothing selected → it is the second copy of the project name, and must be gone.
+      FM.selectLayer(null); FM.refreshAll(); await sleep(40);
+      if (!pn.classList.contains('is-dupe')) throw new Error('with nothing selected the top field is not marked as a duplicate');
+      if (getComputedStyle(pn).display !== 'none') throw new Error('with nothing selected the top field still shows (display ' + getComputedStyle(pn).display + ') — it is repeating the name already in the inspector header');
+      const pns = document.getElementById('proj-name-s');
+      if (!pns || getComputedStyle(pns).display === 'none') throw new Error('the inspector header field is not showing — hiding the top one would leave NO project-name editor at all');
+
+      // A layer selected → it is the layer renamer, and must stay.
+      FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll(); await sleep(40);
+      if (pn.classList.contains('is-dupe')) throw new Error('with a layer selected the top field is still marked a duplicate — it is the layer renamer now');
+      if (getComputedStyle(pn).display === 'none') throw new Error('with a layer selected the top field is hidden — that is the only rename control in the PC top strip');
+      if (pn.value !== 'Box') throw new Error('the top field shows "' + pn.value + '" instead of the selected layer name');
+    } finally {
+      FM.settings.set('layout', hadLayout);
+      FM.scene.selectedIds = hadIds; FM.selectLayer(hadSel || null);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

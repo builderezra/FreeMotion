@@ -3598,6 +3598,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
     position: fixed; top: 10px; left: calc(var(--rail-w) + 14px);
     width: 220px; z-index: 30;
   }
+  /* …and it goes away entirely while it would only be repeating the name already in the inspector's
+     own header (queue 146). `.is-dupe` is stamped by syncTopBar and means "nothing is selected, so
+     this field is showing the PROJECT name" — see the note there for why it is not just deleted. */
+  body.layout-studio .proj-name.is-dupe { display: none; }
 
   /* the inspector now borders the timeline on its right, and both sit under the stage */
   body.layout-studio #inspector-panel { border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
