@@ -2716,9 +2716,37 @@ window.FM = window.FM || {};
       ring.addEventListener('pointerdown', e => { rd = { a: ang(e), v: mtEval(layer, 'rotation'), acc: 0 }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       // Accumulate the angle incrementally, normalising each step into (-180,180], so dragging the
       // knob past the ±180° seam (9 o'clock) advances smoothly instead of snapping a full turn. (#3)
-      ring.addEventListener('pointermove', e => { if (!rd) return; if (e.pointerType === 'mouse' && e.buttons === 0) { rd = null; commitH(); return; } const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a; mtSet(layer, 'rotation', Math.round(rd.v + rd.acc)); place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); });
-      ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
-      ring.addEventListener('pointercancel', e => { if (!rd) return; rd = null; try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      /* 45° DETENTS (queue 99). Ezra: "the spin tool should have snapping every 45 degrees."
+       *
+       * The snap is on the DIAL ONLY, and that is the point rather than a shortcut: it is the same
+       * split he asked for on the trackpad (queue 15 — "trackpad snaps, canvas drag is free"). A
+       * tolerance snap necessarily makes the angles inside the tolerance unreachable, so 41° cannot be
+       * dragged on this ring — but the Rotation number box beside it is a free scrubber and types
+       * exact values, so nothing becomes impossible, it just moves to the control that is good at it.
+       * The dial is the coarse, fast instrument; the box is the precise one.
+       *
+       * The angle is accumulated RAW and only snapped on the way out, never written back into rd.acc.
+       * Snapping the accumulator would make the drag creep: each move would start from the snapped
+       * value, so eight notches of travel would land you somewhere other than 360°. */
+      const SNAP_DEG = 45, SNAP_TOL = 7;
+      let lastNotch = null;
+      ring.addEventListener('pointermove', e => {
+        if (!rd) return;
+        if (e.pointerType === 'mouse' && e.buttons === 0) { rd = null; commitH(); return; }
+        const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a;
+        const raw = rd.v + rd.acc;
+        const notch = Math.round(raw / SNAP_DEG) * SNAP_DEG;
+        const held = Math.abs(raw - notch) <= SNAP_TOL;
+        if (held && notch !== lastNotch) {   // one tick per notch ENTERED, not per frame while inside it
+          lastNotch = notch;
+          if (navigator.vibrate) { try { navigator.vibrate(9); } catch (_) {} }
+        } else if (!held) lastNotch = null;
+        ring.classList.toggle('snapped', held);
+        mtSet(layer, 'rotation', held ? notch : Math.round(raw));
+        place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update();
+      });
+      ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; lastNotch = null; ring.classList.remove('snapped'); try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      ring.addEventListener('pointercancel', e => { if (!rd) return; rd = null; lastNotch = null; ring.classList.remove('snapped'); try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(dial);
     } else if (mode === 'scale') {
       const sz = FM.layerSize(layer);

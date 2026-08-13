@@ -166,7 +166,12 @@ def main():
         data = json.loads(payload)
         green = "✓" in data["sum"] and "Error" not in data["sum"]
         if a.quiet:
+            # --quiet trims the PASSING noise, never the failures. It used to print the summary alone,
+            # which lost the one thing worth having: on 2026-08-13 a desktop run came back 230/231 and
+            # the name of the failing test went with it, so a real (if rare) flake could not be chased.
             print(data["sum"])
+            for row in data["fails"]:
+                print("   FAIL: " + row.replace("\n", " ")[:300])
         else:
             print(json.dumps({"ok": green, "summary": data["sum"], "failures": data["fails"]},
                              indent=1, ensure_ascii=False))

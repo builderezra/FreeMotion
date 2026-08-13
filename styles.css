@@ -448,6 +448,25 @@ body {
 /* rotation dial */
 .mt-dial { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 124px; }
 .mt-dial-ring { position: relative; width: 140px; height: 140px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); touch-action: none; cursor: pointer; }
+/* The eight detents, drawn as part of the ring rather than as eight elements: a repeating-conic
+   gradient costs one paint and no DOM. They are always visible, because a snap you cannot see coming
+   feels like the control sticking rather than like a designed notch (queue 99). */
+.mt-dial-ring::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: repeating-conic-gradient(from -0.6deg,
+    var(--text-faint) 0deg 1.2deg, transparent 1.2deg 45deg);   /* --line (#1d3742) on the ring's #0f1e26 was invisible — measured, not guessed */
+  /* closest-side is load-bearing. A bare `circle` sizes to FARTHEST-CORNER, so on a 140px box 100% of
+     the gradient is the corner distance (~99px) while the ring itself only reaches 70px — every tick
+     fell inside the transparent 0-84% band and the mask erased the lot. The ticks were invisible for
+     that reason, not because they were too dark; the first fix here recoloured them and changed
+     nothing on screen. closest-side pins 100% to the ring's own edge. */
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 84%, #000 84% 100%);   /* only the outer rim */
+          mask: radial-gradient(circle closest-side, transparent 0 84%, #000 84% 100%);
+  transition: background .12s ease;
+}
+.mt-dial-ring.snapped::before { background: repeating-conic-gradient(from -0.6deg,
+    var(--accent) 0deg 1.2deg, transparent 1.2deg 45deg); }
+.mt-dial-ring.snapped .mt-dial-knob { box-shadow: 0 1px 4px rgba(0,0,0,.55), 0 0 0 3px var(--accent-soft); }
 .mt-dial-knob { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #fff; transform: translate(-50%,-50%); box-shadow: 0 1px 4px rgba(0,0,0,.55); }
 /* Centred on the RING (it is a child of it), by transform — the string grows and shrinks as digits
    and the minus sign come and go, so any fixed offset would drift off centre with the value. */

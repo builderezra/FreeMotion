@@ -115,6 +115,23 @@ Fixing the `plateScale` family first closes the largest block of this list from 
 - **Costs:** Preview still plays Mix 0.9 — the undo is inaudible. Worse, from that point on the inspector edits the NEW object while the chain reads the OLD one, so every further parameter drag on that effect does nothing in preview until the user adds/removes/disables an effect. Export (`exporter.js:174` builds a fresh chain from the live scene) renders the correct value, so preview and export silently disagree.
 - **Fix:** Make the cache key identity-aware, not just structure-aware. In `sync()`, stash the filtered instance list on the rec and compare it element-by-element before the early return:  ```js const list = (layer.audioFx || []).filter(f => f && f.enabled !== false && FM.audioFxRegistry.get(f.type)); const same = m._afxInsts && m._afxInsts.length === list.length && m._afxInsts.every((x, i) => x === list[i]); if (m._afxChain && m._afxSig === sig && same) return; ... m._afxInsts = list;   // set alongside m._afxChain / m._afxSig ```  This also fixes the sibling case of reordering two effects of the same type (identical signature, different order).
 
+### FLAKE: one desktop suite run in ~4 comes back 230/231, and the failing test is not yet identified
+
+`tests/_cdp.py`  · observed 2026-08-13 at v6.62
+
+- **What:** A desktop run (1280x900) reported `Regression 230/231` once; three immediate re-runs and the
+  380px run were all 231/231. The run was made with `--quiet`, which at the time printed only the
+  summary line, so the failing test's name was lost. `--quiet` has since been changed to keep failures.
+- **Trigger:** Unknown — roughly 1 run in 4 at the time of observation. Not correlated with any edit:
+  the working tree was the rotate-dial change, which is inspector CSS/JS only, and the 380px run of the
+  identical tree was green.
+- **Costs:** Worse than the failure itself. A suite that is red 25% of the time for unknown reasons
+  makes every "green, therefore shipped" claim in this repo weaker, and trains whoever is running it to
+  re-run until green — which is exactly how a real regression gets waved through.
+- **Fix:** Not yet diagnosed. Next step is a loop of ~10 desktop runs capturing failures now that
+  `--quiet` keeps them, to name the test; then decide whether the test or the app is at fault. Do NOT
+  simply retry-until-green in the meantime.
+
 ### Dragging an audio-drive source clip recomputes a full loudness envelope every frame and caches every one forever
 `js/audio-react.js:221`  · found by `audio`
 

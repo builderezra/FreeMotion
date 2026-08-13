@@ -2,8 +2,12 @@
 
 Vanilla HTML/CSS/JS, no build step, no framework. Local-only (localStorage + IndexedDB).
 Mobile-first — verify at ~380px. `index.html`'s version label is the source of truth; bump it
-plus the `?v=` cache-busters and add a POLISH-LOG.md entry per release. Commit locally; Ezra
-pushes via GitHub Desktop.
+plus the `?v=` cache-busters and add a POLISH-LOG.md entry per release. Commit locally, then PUSH —
+Ezra authorised this on 2026-08-13 (*"if you can do that then do it every time"*), replacing the old
+GitHub-Desktop-by-hand arrangement. Use `git push ssh main`: the branch's upstream `origin` is the
+HTTPS URL with no stored credentials and fails with "could not read Username", while the `ssh` remote
+points at the same repo and authenticates with his on-disk key. Verify by comparing `git rev-parse HEAD`
+against `git rev-parse ssh/main` — do not trust the push output alone.
 
 ## ⚠️ Every request Ezra makes goes in REQUESTS.md — immediately
 

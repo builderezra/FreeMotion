@@ -60,6 +60,13 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [x] **99 — Rotate dial should snap every 45 degrees.** **DONE v6.63.** His words: *"The spin tool should have snapping
+      every 45 degrees."* i.e. the rotation control catches at 0/45/90/135/180/225/270/315. Needs a pull
+      threshold so you can still land on an arbitrary angle by dragging past the notch — a hard snap that
+      makes 47 degrees unreachable is worse than none. The existing snap idiom in this app is the Move &
+      Transform trackpad (snaps) vs the canvas drag (free), so match that feel, and give it the same
+      haptic tick the other snaps use.
+
 - [ ] **97 — Freehand drawing is STILL broken (4th report), with a phone screenshot at v6.60.** His words:
       *"Freehand drawing is still broken."* The screenshot is the useful part: the drawing surface is a
       SEPARATE black rectangle that does not line up with the comp preview above it — the comp is a
