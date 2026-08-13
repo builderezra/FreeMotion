@@ -136,7 +136,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.82</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.83-wdiag</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -731,6 +731,42 @@
         });
       });
     });
+  </script>
+  <!-- ══ TEMPORARY WIDTH PROBE (queue 135) — REMOVE once the right-edge bar is identified ══
+       Deliberately small this time: a 3px cyan line down the PAGE's right edge plus a corner readout.
+       If the cyan line sits at the inner edge of the black bar, the page is narrower than the screen
+       and the bar is outside it. If the line is at the very screen edge with black beyond, something
+       is covering it. The numbers say which. -->
+  <div id="fm-wprobe"></div>
+  <div id="fm-wread"></div>
+  <script>
+    (function () {
+      var line = document.getElementById('fm-wprobe'), read = document.getElementById('fm-wread');
+      if (!line || !read) return;
+      line.style.cssText = 'position:fixed;top:0;bottom:0;right:0;width:3px;background:#00e5ff;' +
+        'z-index:2147483647;pointer-events:none;';
+      read.style.cssText = 'position:fixed;right:6px;bottom:90px;z-index:2147483647;pointer-events:none;' +
+        'background:rgba(255,0,200,.92);color:#fff;font:700 10px/1.35 -apple-system,sans-serif;' +
+        'padding:6px 8px;border-radius:6px;text-align:right;max-width:70vw;';
+      function paint() {
+        var t = document.createElement('div');
+        t.style.cssText = 'position:fixed;right:0;width:env(safe-area-inset-right);height:1px;pointer-events:none;';
+        document.body.appendChild(t);
+        var insetR = Math.round(t.getBoundingClientRect().width);
+        t.remove();
+        var de = document.documentElement, vv = window.visualViewport;
+        read.innerHTML =
+          'innerW ' + window.innerWidth + ' · outerW ' + window.outerWidth + '<br>' +
+          'screen.w ' + screen.width + ' · clientW ' + de.clientWidth + '<br>' +
+          'visualW ' + (vv ? Math.round(vv.width) : '?') + ' · safeR ' + insetR + '<br>' +
+          'bodyW ' + Math.round(document.body.getBoundingClientRect().width) +
+          ' · scrollW ' + de.scrollWidth;
+      }
+      paint();
+      window.addEventListener('resize', paint);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', paint);
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) setTimeout(paint, 250); });
+    })();
   </script>
 </body>
 </html>
