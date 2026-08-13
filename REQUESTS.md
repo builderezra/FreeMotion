@@ -60,6 +60,24 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [ ] **110 — A lot of effects in Colour & Light plainly do nothing.** *MEASURED — the code is fine in
+      Chrome, so this is a DEVICE problem, and it is almost certainly the same root cause as 107.*
+      Audited all 42 (`tests/_colourfx.html`): 41 change pixels, and the one that does not (Match Grade)
+      needs a reference layer. My first run accused 6 — five of those were artefacts of testing at
+      MAXIMUM only (a hue rotation at max is 360 degrees, i.e. a no-op by definition; vignette at max
+      size covers nothing), which the second sweep caught.
+      THE LINK: exactly 9 effects are drawn with `ctx.filter`, and 8 of them are in this category —
+      brightness, contrast, saturate, hue, grayscale, sepia, invert, glow — plus the blur behind 107.
+      Canvas filters are unsupported on older iOS Safari/WebViews and the assignment fails SILENTLY.
+      That single fact would make precisely this set of effects do nothing while every pixel-loop
+      effect kept working. NEEDED FROM EZRA: which device/iOS. If it is under 16.4 the fix is a
+      pixel-loop fallback for those 9; if not, the theory is wrong and I start again. His words: *"There's a shit load
+      of effects in the colour & light section that blatantly do nothing and don't work."* Turn this into
+      an exact list before touching anything: render a test frame with and without each effect in that
+      category and count changed pixels. Must test at a STRONG setting as well as the default, or an
+      effect whose default is a no-op (amount 0) gets wrongly condemned — and must include a control
+      effect known to work, or a broken harness reads as "everything is broken".
+
 - [ ] **109 — Film Grain needs a ROUND grain option, and the thumbnail should show it.** His words:
       *"The film grain effect should have a circle option, instead of just squares, and also the preview
       image should show the circle version."* Today `filmgrain` hashes one value per square CELL

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colour &amp; Light — which effects actually do anything</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — COLOUR & LIGHT audit.  Dev-only; not shipped, not linked from the app.
+ *
+ * Ezra: "There's a shit load of effects in the colour & light section that blatantly do nothing and
+ * don't work." This turns that into a list of names instead of an impression.
+ *
+ * EVERY EFFECT IS TRIED TWICE, and that is the whole design. Plenty of effects are a deliberate no-op
+ * at their DEFAULT (amount 0, blend 0, a mix slider at zero) and work perfectly once you move the
+ * slider — condemning those would be worse than useless, because it would send someone to "fix" code
+ * that is already right. So each is measured at its default AND with every numeric parameter pushed
+ * to its registered maximum. Only an effect that changes NOTHING at full strength is dead.
+ *
+ * THE SUBJECT MATTERS. A colour effect needs colour to act on: a flat grey card cannot distinguish a
+ * working saturate from a broken one, and a fully-opaque frame hides anything that only touches
+ * alpha. The plate is a six-hue band over a dark-to-light grey ramp, with a transparent margin.
+ *
+ * TWO CONTROLS, both load-bearing:
+ *   • invert at full strength MUST change nearly every pixel. If it does not, the harness is broken
+ *     and every "dead" verdict below it is noise.
+ *   • a NULL run — the same scene with no effect at all, compared against itself — must report zero
+ *     differing pixels, or the comparison is measuring frame-to-frame noise rather than the effect.
+ * ============================================================================================ */
+(function () {
+  var W = 200, H = 140;
+
+  function plate() {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d');
+    var hues = ['#e04040', '#e0a040', '#d8e040', '#40d060', '#4090e0', '#a050e0'];
+    for (var i = 0; i < hues.length; i++) { g.fillStyle = hues[i]; g.fillRect(10 + i * 30, 12, 30, 52); }
+    var lg = g.createLinearGradient(10, 0, 190, 0);
+    lg.addColorStop(0, '#101010'); lg.addColorStop(0.5, '#808080'); lg.addColorStop(1, '#f4f4f4');
+    g.fillStyle = lg; g.fillRect(10, 70, 180, 46);
+    return c;
+  }
+  var ART = plate();
+
+  function render(fx) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    /* '_flat' is the compositor's own proxy layer type — the one buildGroupUnit hands back with a
+       ready-made canvas on it — so it draws straight from ART with no media record, no IndexedDB and
+       no decode. The first cut of this probe used an 'image' layer with the same _canvas field and
+       drew NOTHING, which the invert control caught immediately: an image layer resolves its pixels
+       through the media pipeline and ignores _canvas entirely. */
+    var L = FM.makeLayer('_flat', { x: 0, y: 0, start: 0, duration: 5 });
+    L.id = '_cfxArt';
+    L._canvas = ART;
+    L.transform.anchorX = 0; L.transform.anchorY = 0;
+    L.effects = fx ? [fx] : [];
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null },
+                        layers: [L] }, 1.0);
+    return g.getImageData(0, 0, W, H).data;
+  }
+  function diff(a, b) {
+    var n = 0;
+    for (var i = 0; i < a.length; i += 4) {
+      if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) n++;
+    }
+    return n;
+  }
+  // push every numeric parameter to its registered maximum — "full strength"
+  function crank(id) {
+    var e = FM.fxRegistry.makeInstance(id);
+    if (!e) return null;
+    var reg = FM.fxRegistry.get(id) || {};
+    var defs = reg.params || (reg.param ? [{ key: reg.param, min: reg.min, max: reg.max }] : []);
+    defs.forEach(function (d) {
+      if (!d || !d.key) return;
+      if (typeof d.max === 'number') e.params[d.key] = d.max;
+      else if (d.options) e.params[d.key] = 1;          // a mode toggle: anything other than the default
+    });
+    return e;
+  }
+
+  var base = render(null);
+  var lines = [];
+
+  // ---- controls first: if either fails, nothing below is worth reading ------------------------
+  var nullRun = diff(base, render(null));
+  var inv = FM.fxRegistry.makeInstance('invert');
+  if (inv && inv.params) { var r = FM.fxRegistry.get('invert') || {}; if (typeof r.max === 'number') inv.params[r.param || 'amount'] = r.max; }
+  var invDiff = inv ? diff(base, render(inv)) : -1;
+  var harnessOk = nullRun === 0 && invDiff > W * H * 0.5;
+
+  var ids = (FM.fxRegistry.all ? FM.fxRegistry.all() : []).filter(function (e) { return e.category === 'color'; })
+              .map(function (e) { return e.id; });
+
+  var dead = [], defaultOnly = [], fine = [], threw = [];
+  ids.forEach(function (id) {
+    var atDef = 0, atMax = 0, err = null;
+    try { var d = FM.fxRegistry.makeInstance(id); atDef = d ? diff(base, render(d)) : 0; } catch (e) { err = String(e && e.message || e); }
+    try { var m = crank(id); atMax = m ? diff(base, render(m)) : 0; } catch (e) { err = err || String(e && e.message || e); }
+    if (err) threw.push(id + '  (' + err.slice(0, 60) + ')');
+    else if (atMax === 0) dead.push({ id: id, def: atDef, max: atMax });
+    else if (atDef === 0) defaultOnly.push({ id: id, max: atMax });
+    else fine.push(id);
+  });
+
+  lines.push('Colour & Light: ' + ids.length + ' effects, each rendered over a six-hue + grey-ramp plate.');
+  lines.push('"changed px" counts pixels differing from the same frame with no effect at all.');
+  lines.push('');
+  lines.push('CONTROLS   null run (must be 0): ' + nullRun +
+             '     invert at full strength (must be > ' + Math.round(W * H * 0.5) + '): ' + invDiff);
+  if (!harnessOk) {
+    lines.push('');
+    lines.push('*** THE HARNESS IS BROKEN — every verdict below is meaningless. Fix this first. ***');
+  }
+  lines.push('');
+  lines.push('DEAD — nothing changes even at maximum (' + dead.length + '):');
+  dead.forEach(function (d) { lines.push('   ' + d.id); });
+  if (!dead.length) lines.push('   (none)');
+  lines.push('');
+  lines.push('NO-OP AT DEFAULT ONLY — works once you move the slider (' + defaultOnly.length + '):');
+  defaultOnly.forEach(function (d) { lines.push('   ' + d.id.padEnd(22) + 'changed ' + d.max + ' px at max'); });
+  if (!defaultOnly.length) lines.push('   (none)');
+  if (threw.length) {
+    lines.push('');
+    lines.push('THREW (' + threw.length + '):');
+    threw.forEach(function (t) { lines.push('   ' + t); });
+  }
+  /* SECOND PASS over the accused. Reporting an effect as broken because it did nothing at MAX is
+     unsafe for at least three reasons that have nothing to do with the effect: a hue rotation at its
+     maximum is a full 360 degrees and therefore a no-op BY DEFINITION; an effect whose maximum happens
+     to be its neutral value looks identical; and an effect that needs something this scene lacks (a
+     reference layer, a bright enough source) is correct to do nothing. So every accused effect is
+     re-run across its whole range, one parameter at a time, and only an effect that never moves a
+     pixel at ANY setting is actually dead. */
+  if (dead.length) {
+    lines.push('');
+    lines.push('SECOND PASS — each accused effect swept across its range, one parameter at a time:');
+    var stillDead = [];
+    dead.forEach(function (d) {
+      var reg = FM.fxRegistry.get(d.id) || {};
+      var defs = reg.params || (reg.param ? [{ key: reg.param, min: reg.min, max: reg.max, def: reg.def }] : []);
+      var best = 0, bestAt = '';
+      defs.forEach(function (pd) {
+        if (!pd || !pd.key) return;
+        var lo = typeof pd.min === 'number' ? pd.min : 0;
+        var hi = typeof pd.max === 'number' ? pd.max : 1;
+        for (var f = 0; f <= 1.0001; f += 0.25) {
+          var v = lo + (hi - lo) * f;
+          var e = FM.fxRegistry.makeInstance(d.id);
+          if (!e) return;
+          e.params[pd.key] = v;
+          var n = 0;
+          try { n = diff(base, render(e)); } catch (err) { n = 0; }
+          if (n > best) { best = n; bestAt = pd.key + '=' + (Math.round(v * 100) / 100); }
+        }
+      });
+      if (best === 0) stillDead.push(d.id);
+      lines.push('   ' + d.id.padEnd(20) + (best === 0 ? 'nothing at any setting — DEAD'
+                                                       : 'works: ' + best + ' px at ' + bestAt));
+    });
+    lines.push('');
+    lines.push('ACTUALLY DEAD after the sweep (' + stillDead.length + '): ' + (stillDead.join(', ') || '(none)'));
+  }
+  lines.push('');
+  lines.push('WORKING (' + fine.length + '): ' + fine.join(', '));
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__done = true;
+})();
+</script>
+</body>
+</html>
