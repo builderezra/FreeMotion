@@ -1,0 +1,53 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#142 — default shape colour, at phone width</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{width:380px;height:760px;border:0;display:block}
+#out{padding:8px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* Opens the home Settings sheet at 380px, scrolls the new "Default shape colour" row into view and
+   leaves it on screen for _shot.sh. Also reports its geometry, because a control that renders but is
+   30px wide or hanging off the right edge is not shipped. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app');
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 200) return fail('FM never initialised');
+      if (!w.FM || !w.FM.settings || !w.FM.settings.open) return setTimeout(wait, 50);
+      try {
+        // #pick in the URL shows the OTHER state — a chosen colour — because that is a different CSS
+        // path (the spectrum comes off, the input becomes visible) and shipping one of two states
+        // verified is shipping half of it.
+        var pick = /pick/.test(location.hash);
+        if (pick) w.FM.settings.set('shapeColor', '#ff7a1a');
+        else w.FM.settings.set('shapeColor', 'random');
+        if (w.FM.home && w.FM.home.open) w.FM.home.open();
+        setTimeout(function () {
+          w.FM.settings.open();
+          setTimeout(function () {
+            var rows = [].slice.call(d.querySelectorAll('.set-row'));
+            var row = rows.find(function (r) { return /Default shape colour/.test(r.textContent || ''); });
+            if (!row) return fail('the Default shape colour row was not built');
+            row.scrollIntoView({ block: 'center' });
+            setTimeout(function () {
+              var wrap = row.querySelector('.set-colorwrap'), rnd = row.querySelector('.set-color-rnd');
+              var rb = row.getBoundingClientRect(), wb = wrap.getBoundingClientRect(), nb = rnd.getBoundingClientRect();
+              var panel = d.querySelector('.set-panel').getBoundingClientRect();
+              var L = [];
+              L.push('row      ' + rb.width.toFixed(0) + ' x ' + rb.height.toFixed(0));
+              L.push('swatch   ' + wb.width.toFixed(0) + ' x ' + wb.height.toFixed(0) + '   random-mode: ' + wrap.classList.contains('is-random'));
+              L.push('Random   ' + nb.width.toFixed(0) + ' x ' + nb.height.toFixed(0) + '   on: ' + rnd.classList.contains('on'));
+              L.push('overflow right of panel: ' + Math.max(0, (nb.right - panel.right)).toFixed(1) + 'px   (must be 0)');
+              L.push('hint: ' + (row.querySelector('.set-hint') || {}).textContent);
+              out.textContent = L.join('\n');
+              window.__done = true;
+            }, 250);
+          }, 400);
+        }, 500);
+      } catch (e) { fail(String(e && e.message || e)); }
+    })();
+  });
+})();
+</script></body></html>

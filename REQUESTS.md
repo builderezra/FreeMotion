@@ -365,7 +365,7 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       section. If he meant the inspector's nine category cards instead, it is a one-word correction —
       **asking next time he speaks.**
 
-- [ ] **142 — Home settings: a default colour for new shapes.** His words: *"In the home settings menu,
+- [x] **142 — Home settings: a default colour for new shapes.** (v6.92) His words: *"In the home settings menu,
       make a setting to change the default colour of shapes when you import them. Applied to every
       shape."* So a colour control in the HOME settings cog (the app-wide one, not a project setting),
       and every shape added from then on starts in that colour instead of the current hard-coded default.
@@ -374,6 +374,19 @@ hard iteration bound and a dry-round counter, never an open `while` on an agent'
       freehand/vector paths, which also create fillable layers); and it wants a sane reset-to-default.
       Check whether elements/templates carrying their own colours should be exempt — a saved element
       arriving in your colour instead of the one it was designed in would be wrong.
+      **Shipped v6.92.** Settings → *Default shape colour*, sitting with Default layer duration since both
+      answer "what is a new layer like?". Two states: a colour you pick, or **Random** — the app's
+      long-standing behaviour, a fresh vivid hue per shape — which doubles as the reset. The swatch shows
+      a spectrum when it is on random and the colour itself when it is not.
+      Every point above is covered. It reaches **every** route that spawns a shape, including freehand and
+      vector drawing, because it hooks the ONE line in `makeLayer` that decides a shape's fill. It is
+      creation-time only, so shapes already on a timeline are untouched. And the exemption holds by
+      construction: anything arriving WITH a fill — a saved project, a template, an element, an AI layer,
+      a duplicate — passes it in and is never repainted.
+      The test guards the exemption specifically, since silently recolouring a saved element is the one
+      way this feature could do real harm; it also checks that corrupt storage can never reach a canvas
+      fillStyle. Mutation-checked by removing the exemption, which reddened this test **and five effects
+      tests** — that line is load-bearing well beyond this feature. Verified at 380px in both states.
 
 - [ ] **141 — Export screen: prettier, custom ratios + fps, and our OWN save dialog.** His words: *"idk
       if you remember me saying this but I want the export screen to be prettied up and there's no way to

@@ -185,6 +185,21 @@ window.FM = window.FM || {};
     return '#' + hex(r) + hex(g) + hex(b);
   };
 
+  /* The colour a NEW shape starts in (queue 142). Ezra: "In the home settings menu, make a setting to
+   * change the default colour of shapes when you import them. Applied to every shape."
+   * One function, called from one place — makeLayer's `props.fill || …` — so it reaches every route
+   * that spawns a shape: the add menu, freehand, vector drawing, the ⋯ menus. Anything that arrives
+   * WITH a fill (a saved project, a template, an element, an AI layer, a duplicate) passes it in and
+   * is untouched, which is the exemption the setting needs: your preference must not repaint an
+   * element somebody designed in its own colours.
+   * Validated here as well as on load, because settings live in hand-editable localStorage and this
+   * string goes straight to a canvas fillStyle. */
+  FM.defaultShapeFill = function () {
+    let pref = null;
+    try { pref = FM.settings && FM.settings.get ? FM.settings.get('shapeColor') : null; } catch (e) {}
+    return (typeof pref === 'string' && /^#[0-9a-f]{6}$/i.test(pref)) ? pref.toLowerCase() : FM.randomFill();
+  };
+
   /* Solo suppresses AUDIO, not just picture. compositor.js skips non-soloed layers when drawing, and
    * exporter.js buildAudioMix skips them in the mix — but the preview audio paths gated only on
    * `visible`. So soloing a clip left every other layer audible while editing, then the exported file
@@ -441,10 +456,12 @@ window.FM = window.FM || {};
       base.shape = props.shape || 'rect';      // rect | ellipse | line | polygon
       base.shapeW = props.shapeW || 400;
       base.shapeH = props.shapeH || 300;
-      // No fill given → a random VIVID colour per spawn (random hue, sat/light kept in a range that
-      // never lands on mud or near-black). Only creation-time: saved/imported/template/AI layers all
-      // pass their stored fill and are untouched, and duplicates clone the source layer directly.
-      base.fill = props.fill || FM.randomFill();
+      // No fill given → whatever Settings says new shapes should be: a chosen colour, or (the default,
+      // and what the app has always done) a random VIVID colour per spawn — random hue, sat/light kept
+      // in a range that never lands on mud or near-black. Only creation-time: saved/imported/template/
+      // AI layers all pass their stored fill and are untouched, and duplicates clone the source layer
+      // directly. See FM.defaultShapeFill (queue 142).
+      base.fill = props.fill || FM.defaultShapeFill();
       base.stroke = { enabled: false, width: 8, color: '#ffffff' };
       base.cornerRadius = 0;
       base.sides = 5;

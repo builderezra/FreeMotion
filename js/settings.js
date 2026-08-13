@@ -18,6 +18,14 @@ window.FM = window.FM || {};
     showTouches: false,      // draw a ripple where you tap, so a recording shows what you pressed
     systemFonts: true,       // include the built-in font list in the text font picker
     layerDuration: 5,        // seconds given to a newly added photo / text / shape / drawing
+    /* 'random' (a fresh vivid hue per shape, which is what the app has always done) or a '#rrggbb'
+     * every new shape starts in. Queue 142 — Ezra: "make a setting to change the default colour of
+     * shapes when you import them. Applied to every shape."
+     * Read at CREATION only, by FM.defaultShapeFill(). A shape arriving from a saved project, a
+     * template, an element or an import carries its own fill and is never touched — recolouring
+     * someone's saved element to your preference would be wrong, and is the one exemption this
+     * setting has to make. */
+    shapeColor: 'random',
     playbackQuality: 'auto', // 'auto' adapts to the machine | 'smooth' pins it low | 'detail' never drops
     layout: 'classic',       // 'classic' = inspector down the right | 'studio' = left rail + inspector beside
                              // the timeline. Desktop only: the CSS is gated behind (min-width: 701px), so a
@@ -41,6 +49,10 @@ window.FM = window.FM || {};
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
+      // hand-editable storage, and this string is handed straight to a canvas fillStyle
+      if (saved.shapeColor === 'random' || /^#[0-9a-f]{6}$/i.test(String(saved.shapeColor || ''))) {
+        state.shapeColor = saved.shapeColor === 'random' ? 'random' : String(saved.shapeColor).toLowerCase();
+      }
     }
     return state;
   }
@@ -199,6 +211,48 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* Default shape colour (queue 142). Two states, not one, which is why this is not a plain colour
+   * input: 'random' is a real choice and the app's long-standing behaviour, so it needs somewhere to
+   * live and a way back to it. The swatch shows the current answer — a solid fill, or a spectrum when
+   * it is random — and the Random button doubles as the reset. */
+  function shapeColorRow() {
+    const row = el('div', 'set-row');
+    const txt = el('div', 'set-rowtext');
+    txt.appendChild(el('div', 'set-label', 'Default shape colour'));
+    const hint = el('div', 'set-hint');
+    txt.appendChild(hint);
+
+    const wrap = el('div', 'set-colorwrap');
+    const input = el('input', 'set-color');
+    input.type = 'color';
+    input.setAttribute('aria-label', 'Default shape colour');
+    const rnd = el('button', 'set-segbtn set-color-rnd', 'Random');
+    rnd.type = 'button';
+
+    const sync = () => {
+      const isRnd = state.shapeColor === 'random';
+      // A colour input cannot display "random", so the wrapper paints the spectrum behind it and the
+      // input itself goes transparent — the swatch still opens the picker, which is what you want.
+      wrap.classList.toggle('is-random', isRnd);
+      input.value = isRnd ? '#29d9bb' : state.shapeColor;   // a sensible starting point if they open it
+      rnd.classList.toggle('on', isRnd);
+      rnd.setAttribute('aria-pressed', isRnd ? 'true' : 'false');
+      hint.textContent = isRnd
+        ? 'Every new shape gets its own bright colour. Tap the swatch to pick one instead.'
+        : 'Every new shape starts ' + state.shapeColor + '. Shapes already on a timeline keep their colours, and saved elements and templates keep theirs.';
+    };
+    input.addEventListener('input', () => { state.shapeColor = String(input.value).toLowerCase(); save(); sync(); });
+    rnd.addEventListener('click', () => { state.shapeColor = 'random'; save(); sync(); });
+    sync();
+
+    wrap.appendChild(input);
+    row.appendChild(txt);
+    const ctl = el('div', 'set-colorctl');
+    ctl.appendChild(wrap); ctl.appendChild(rnd);
+    row.appendChild(ctl);
+    return row;
+  }
+
   let panel = null, scrim = null, escBound = null;
 
   function build() {
@@ -274,6 +328,7 @@ window.FM = window.FM || {};
       toggleRow('Show touches', 'Draws a ring where you tap. Screen recordings don’t capture taps on their own.', 'showTouches'),
       toggleRow('Show system fonts', 'Off = the text font picker lists only fonts you imported.', 'systemFonts'),
       selectRow('Default layer duration', 'How long a new photo, text, shape or drawing lasts. Video clips always use their own length.', 'layerDuration', DURATIONS, v => (v < 1 ? v + 's' : v + 's')),
+      shapeColorRow(),   // sits with layer duration: both answer "what is a NEW layer like?"
     ));
 
     // ---- Import history (Ezra: "a setting that lets you clear the songs and media history that shows

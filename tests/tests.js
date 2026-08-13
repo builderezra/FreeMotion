@@ -11650,6 +11650,40 @@
     } finally { rig.restore(); }
   });
 
+  /* #142 — Ezra: "In the home settings menu, make a setting to change the default colour of shapes
+     when you import them. Applied to every shape."
+     The setting itself is the easy half. The half worth guarding is the EXEMPTION: a shape that
+     arrives already carrying a colour — from a saved project, a template, a saved element, a
+     duplicate — must keep it. Repainting somebody's saved element in your preferred colour would be
+     a silent, unfixable edit to their work, and it is the one way this feature could do real harm. */
+  test('shapes: the default colour applies to NEW shapes only, never to one that brought its own', { item: 'shape-default-colour' }, function () {
+    if (!FM.defaultShapeFill) throw new Error('FM.defaultShapeFill is missing — nothing reads the setting');
+    const was = FM.settings.get('shapeColor');
+    try {
+      // 1) A chosen colour reaches every route that spawns a shape without naming one.
+      FM.settings.set('shapeColor', '#123456');
+      if (FM.defaultShapeFill() !== '#123456') throw new Error('defaultShapeFill() returned ' + FM.defaultShapeFill() + ' with the setting at #123456');
+      const plain = FM.makeLayer('shape', { shape: 'rect' });
+      if (plain.fill !== '#123456') throw new Error('a new shape came out ' + plain.fill + ', not the chosen #123456');
+
+      // 2) …and does NOT touch one that arrived with a fill of its own. This is the exemption.
+      const fromTemplate = FM.makeLayer('shape', { shape: 'star', fill: '#ff0000' });
+      if (fromTemplate.fill !== '#ff0000') throw new Error('a shape that carried its own #ff0000 was repainted to ' + fromTemplate.fill + ' — saved elements and templates would be silently recoloured');
+
+      // 3) 'random' restores the original behaviour: different colours, and real ones.
+      FM.settings.set('shapeColor', 'random');
+      const fills = [];
+      for (let i = 0; i < 8; i++) fills.push(FM.makeLayer('shape', { shape: 'rect' }).fill);
+      fills.forEach(f => { if (!/^#[0-9a-f]{6}$/i.test(f)) throw new Error('random gave a fill of "' + f + '", which is not a colour'); });
+      if (new Set(fills).size < 6) throw new Error('random produced only ' + new Set(fills).size + ' distinct colours in 8 shapes — that is not random any more');
+
+      // 4) Junk in storage must not reach a canvas fillStyle. Settings are hand-editable.
+      FM.settings.set('shapeColor', 'red; DROP TABLE');
+      const safe = FM.makeLayer('shape', { shape: 'rect' }).fill;
+      if (!/^#[0-9a-f]{6}$/i.test(safe)) throw new Error('a corrupt shapeColor setting produced the fill "' + safe + '" instead of falling back to a real colour');
+    } finally { FM.settings.set('shapeColor', was); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
