@@ -927,10 +927,19 @@ better still, keep working inside the turn rather than parking work for a later 
          forever while the scroller grows 120px a frame. Fix: cap at the end of the composition (or the
          dragged clip) plus half a screen.
       Neither cap made the three tests green, so something else about an armed edge-scroll disturbs
-      them. **Next go starts by finding which existing test leaves a clip drag un-released** — a drag
-      that outlives its test is leaked state that any feature keyed on `clipMove` will trip over, and
-      that is the thing to fix, not the feature. Backed out rather than shipped red or "fixed" by
-      editing the tests it broke.
+      them. My theory was that an existing test leaves a clip drag un-released. **Checked, and that
+      theory is WRONG** — the suite now asserts after every single test that no timeline gesture is
+      still live, and it is green, so nothing leaks a drag.
+      **That narrows it to the other state the edge-scroll writes, and neither is reset by anything:**
+      `timelineEl.scrollLeft` and `innerEl.style.width`. Growing the scroller can add a horizontal
+      scrollbar and change the timeline's layout height, which moves **#stage** — and therefore the
+      canvas and the selection box on it. That is exactly the shape of the three failures ("the box is
+      already 149px off the text", "the editor covers the canvas at y 341"), none of which touch the
+      timeline at all.
+      **So the next go is:** re-apply the feature, then confirm the drag's end restores the scroller
+      (`rebuild()` should recompute `innerEl` width — verify it actually does after an auto-scroll), and
+      add the same after-each hygiene check for scroll position and scroller width that now exists for
+      gestures. Backed out rather than shipped red or "fixed" by editing the tests it broke.
 - [ ] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** His words:
       *"The sliders we have for everything like effects and what not are too stiff, they need to flow
       like the timeline does, when you swipe it glides."* #45 "Give every slider the timeline's glide"

@@ -11856,6 +11856,19 @@
       var t = T[i], ok = true, err = null;
       try { var r = t.fn(); if (r && typeof r.then === 'function') await r; }
       catch (e) { ok = false; err = String((e && e.message) || e); }
+      /* HYGIENE, charged to the test that caused it. A timeline gesture that outlives the test which
+       * started it is invisible state — nothing on screen says so and the timeline does not complain —
+       * and the next test inherits a drag it never began. It cost a five-step bisect to find when the
+       * #115 edge-scroll tripped over one, because the symptom surfaced in three unrelated tests
+       * measuring canvas geometry, none of which touch the timeline.
+       * Reported against the culprit, then CLEARED, so one test's leak cannot also fail the next. */
+      try {
+        var drag = (FM.timeline && FM.timeline._dragState) ? FM.timeline._dragState() : null;
+        if (drag && drag.any) {
+          if (ok) { ok = false; err = 'left a timeline gesture live after finishing (' + drag.live.join(', ') + ') — leaked state that corrupts whatever runs next'; }
+          if (FM.timeline._abortGestures) FM.timeline._abortGestures();
+        }
+      } catch (e) {}
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err });
     }
     var reg = results.filter(function (r) { return !r.pending; });

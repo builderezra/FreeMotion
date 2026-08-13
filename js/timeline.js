@@ -1648,6 +1648,25 @@ window.FM = window.FM || {};
   }
 
   FM.timeline = {
+    /* Which timeline gesture, if any, is still live. Exposed because a drag that OUTLIVES the thing
+     * that started it is invisible state: nothing on screen says so, the timeline does not complain,
+     * and the next feature to key off `clipMove` inherits a drag it never started. That is not
+     * hypothetical — it is what the #115 edge-scroll tripped over, and it cost a bisect to find
+     * because the symptom appeared in three unrelated tests measuring canvas geometry.
+     * Read-only: a snapshot of booleans, so nothing outside can steer a gesture. */
+    _dragState: function () {
+      const live = [];
+      if (clipMove) live.push('clipMove');
+      if (trimDrag) live.push('trimDrag');
+      if (kfDrag) live.push('kfDrag');
+      if (slipDrag) live.push('slipDrag');
+      if (cueDrag) live.push('cueDrag');
+      if (clipTap) live.push('clipTap');
+      return { any: live.length > 0, live: live };
+    },
+    // …and the way to end one. abortGestures already exists for pinches and rebuilds; the suite needs
+    // it so one test's leaked drag cannot be charged to the next test that runs.
+    _abortGestures: function () { abortGestures(); },
     // exposed so the suite can prove delete-parity with FM.animatedProps without faking a double-click
     deleteKeyframesAt: deleteKeyframesAt,
     // Read-only view of the magnet. The ⋯ menu could not tick 'Snapping' because this was a
