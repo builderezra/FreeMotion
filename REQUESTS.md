@@ -59,6 +59,15 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 
 Numbered with Ezra's own queue numbers where he gave them.
 
+### How he wants this worked (13 Aug 2026, standing)
+
+*"Continue with the list, ticking one thing off at a time… make sure everything is quality tested as
+good as possible, dont stop to ask me questions, ask but keep going and re ask next time i say
+something."* So: **one item at a time, all the way to shipped**, questions written down and asked
+again next time he speaks rather than used as a reason to stop. Plus a specific one worth keeping —
+*"make sure no workflow agents get stuck in a never ending loop like last time"*: any fan-out gets a
+hard iteration bound and a dry-round counter, never an open `while` on an agent's own answer.
+
 ### In flight right now
 - [ ] **127 — Paste Style icons are stale.** His words: *"Paste style menu needs to reflect the current
       icons that have since changed."* Screenshot at v6.73: the Paste Style grid still uses the OLD
@@ -510,10 +519,15 @@ Numbered with Ezra's own queue numbers where he gave them.
       too weak to feel. Do NOT assume the old fix is present and correct — measure what a flick on an
       effect slider actually does today before changing anything, the way the timeline glide was
       measured for #103.
-- [ ] **117 — A locked layer should show a red lock on its preview thumbnail.** His words: *"When you
+- [x] **117 — A locked layer should show a red lock on its preview thumbnail.** (v6.87) His words: *"When you
       lock a layer put a red lock icon on the layer's preview image."* Small and unambiguous: the lock
       state exists (`layer.locked`, and the timeline already refuses to move a locked clip), it just is
       not visible where you look for it.
+      **Shipped v6.87.** Red padlock centred on the preview, and the preview itself dims so the badge
+      reads over a bright frame. Two bugs on the way there, both invisible to the DOM and both caught
+      by photographing it: a blur shadow muddied the red at 13px, and the dimming scrim painted OVER
+      the padlock and turned #ff4d4d into brick — `getComputedStyle` reported the bright red the whole
+      time. Measured after: rgb(255,77,77) exactly. Covered by a new regression test.
 
 - [ ] **113 — A third subsection: FILTERS, alongside Effects and Audio Effects.** *Big one — read this
       whole entry before starting.* His words: *"now I want a third subsection for filters. It'll work

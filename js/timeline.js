@@ -657,9 +657,30 @@ window.FM = window.FM || {};
     eye.title = layer.visible ? 'Hide layer' : 'Show layer';
     eye.addEventListener('click', (e) => { e.stopPropagation(); layer.visible = !layer.visible; FM.requestRender(); FM.timeline.rebuild(); if (FM.reconcileAudio) FM.reconcileAudio(); if (FM.history) FM.history.commit(); });
 
+    // #117 — a locked layer wears a red padlock on its preview. Ezra: "When you lock a layer put a
+    // red lock icon on the layer's preview image." The badge is a DOM overlay inside a wrapper, NOT
+    // painted into the 38x24 bitmap: renderThumb also feeds the parent-picker rows and the ⋯ menus,
+    // and a lock baked into the canvas would leak into every one of them.
+    const thumbWrap = document.createElement('span');
+    thumbWrap.className = 'th-thumb-wrap' + (layer.locked ? ' locked' : '');
     const thumb = document.createElement('canvas');
     thumb.className = 'th-thumb'; thumb.width = 38; thumb.height = 24;
     FM.renderThumb(layer, thumb);
+    thumbWrap.appendChild(thumb);
+    if (layer.locked) {
+      const lock = document.createElement('span');
+      lock.className = 'th-lock';
+      lock.title = 'Layer is locked';
+      // Drawn TWICE: a dark halo underneath, then the red on top. A drop-shadow filter was the first
+      // attempt and it muddied the glyph — at 13px the blur bleeds into a shape only 13px wide, so
+      // #ff4d4d photographed as a dull brick. A hard second copy keeps the red exactly the red.
+      lock.innerHTML = '<svg viewBox="0 0 24 24">' +
+        '<g fill="#080c11" stroke="#080c11" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M7.7 10.6V7.5a4.3 4.3 0 0 1 8.6 0v3.1"/><rect x="3.6" y="10.4" width="16.8" height="10.6" rx="2.8"/></g>' +
+        '<path d="M7.7 10.6V7.5a4.3 4.3 0 0 1 8.6 0v3.1" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round"/>' +
+        '<rect x="3.6" y="10.4" width="16.8" height="10.6" rx="2.8" fill="currentColor"/></svg>';
+      thumbWrap.appendChild(lock);
+    }
 
     const name = document.createElement('span');
     name.className = 'th-name'; name.textContent = layer.name; name.title = layer.name + '  (double-click to rename)';
@@ -688,7 +709,7 @@ window.FM = window.FM || {};
     stripe.className = 'th-stripe';
     stripe.style.background = layer.labelColor || 'transparent';
     stripe.style.opacity = layer.labelColor ? '1' : '0';
-    head.append(stripe, eye, thumb, name);
+    head.append(stripe, eye, thumbWrap, name);
     head.addEventListener('click', (e) => {
       if (Date.now() - lpFiredAt < 800) return;                 // the long-press that just fired isn't a tap (survives the DOM rebuild)
       if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership

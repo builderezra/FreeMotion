@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#117 locked-layer badge — visual probe</title>
+<style>
+  html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+  /* 380px is the phone width every FreeMotion change is judged at; the frame is REAL size so the
+     badge is photographed at the pixel size a thumb actually sees. */
+  iframe{width:380px;height:720px;border:0;display:block}
+  #out{padding:8px;white-space:pre}
+</style></head><body>
+<iframe id="app" src="index.html"></iframe>
+<div id="out">…</div>
+<script>
+/* Boots the real app at phone width, puts two shape layers on the timeline with the SECOND one
+   locked, and leaves the frame sitting on that view so _shot.sh can photograph it. Also prints the
+   measured geometry, so the same page answers "is it there" and "does it look right". */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app');
+  function fail(m) { out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 200) return fail('FM never initialised in the frame');
+      if (!w.FM || !w.FM.makeLayer || !w.FM.timeline) return setTimeout(wait, 50);
+      var FM = w.FM;
+      try {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        var free = FM.makeLayer('shape', { name: 'Free', shape: 'rect', x: 0, y: 0, shapeW: 300, shapeH: 200, fill: '#ff4f8b', start: 0, duration: 4 });
+        var held = FM.makeLayer('shape', { name: 'Held', shape: 'ellipse', x: 0, y: 0, shapeW: 300, shapeH: 200, fill: '#7fd8ff', start: 0, duration: 4 });
+        held.locked = true;                       // makeLayer hard-sets locked:false
+        FM.scene.layers = [free, held];
+        FM.scene.selectedId = null; FM.scene.selectedIds = [];
+        FM.refreshAll();
+      } catch (e) { return fail(String(e && e.message || e)); }
+      setTimeout(function () {
+        var heads = [].slice.call(d.querySelectorAll('#tl-tracks .track-head'));
+        var lock = d.querySelector('.th-lock');
+        var L = ['rows: ' + heads.length, 'lock badges: ' + d.querySelectorAll('.th-lock').length + '  (expect 1)'];
+        if (lock) {
+          var b = lock.getBoundingClientRect(), cs = w.getComputedStyle(lock);
+          var th = lock.parentNode.querySelector('.th-thumb').getBoundingClientRect();
+          L.push('badge  ' + b.width.toFixed(1) + ' x ' + b.height.toFixed(1) + '  colour ' + cs.color);
+          L.push('thumb  ' + th.width.toFixed(1) + ' x ' + th.height.toFixed(1));
+          L.push('badge covers ' + ((b.width * b.height) / (th.width * th.height) * 100).toFixed(0) + '% of the preview');
+        } else { L.push('NO BADGE FOUND'); }
+        out.textContent = L.join('\n');
+        window.__done = true;
+      }, 700);
+    })();
+  });
+})();
+</script></body></html>

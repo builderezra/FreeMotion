@@ -2253,8 +2253,20 @@
 
     // And the condition: a #splash that is present-but-hidden, or already dissolving, must NOT be
     // treated as "a splash is up". This is the exact state a refresh leaves behind.
-    const sp = document.getElementById('splash') || SPLASH_AT_LOAD;
-    if (!sp) throw new Error('#splash element is missing from index.html — armIntro keys off it');
+    // SPLASH_AT_LOAD is captured at parse time, but that is still a race the suite can lose: a video
+    // error dismisses with the QUICK path, which removes the node 320ms after boot, and a cold-cache
+    // load of 2.6MB of scripts can take longer than that to reach this file. It cost one false red at
+    // v6.87 (first run after the repo folder moved, so every asset missed the disk cache). So ask the
+    // SOURCE whether the element still exists, and only use the live node when there is one — the
+    // behaviour checks below work just as well on a stand-in, since _splashIsUp() reads the DOM.
+    let sp = document.getElementById('splash') || SPLASH_AT_LOAD;
+    if (!sp) {
+      // location.href, not a hand-written path: tests.js is injected INTO the app frame, so this is
+      // index.html itself however the server happens to be rooted.
+      const src = await fetch(location.href, { cache: 'no-store' }).then(r => r.text()).catch(() => '');
+      if (!/id="splash"/.test(src)) throw new Error('#splash element is missing from index.html — armIntro keys off it');
+      sp = document.createElement('div'); sp.id = 'splash'; sp.className = 'hidden';   // removed by the boot script mid-run; stand in for it
+    }
     if (!FM.home._splashIsUp) throw new Error('FM.home._splashIsUp is not exposed — this test would only be checking its own copy of the condition');
     // _splashIsUp() asks the live DOM, so if the boot script has already taken the node out, these
     // three checks would all pass on nothing at all. Put it back for the duration — that keeps the
@@ -11332,6 +11344,78 @@
         }
       }
     } finally { FM.time = t0; }
+  });
+
+  // #117 — Ezra: "When you lock a layer put a red lock icon on the layer's preview image."
+  // Three things have to hold and each has failed for a different UI badge before: the badge is
+  // BUILT for a locked layer, it is NOT built for an unlocked one (a badge on every row reads as
+  // decoration), and it is actually VISIBLE — a red glyph that lands 0x0, transparent, or outside
+  // its thumbnail is indistinguishable in the DOM from one that works.
+  test('timeline: a locked layer wears a red lock on its preview, an unlocked one does not', { item: 'lock-badge' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { name: 'Free', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
+        FM.makeLayer('shape', { name: 'Held', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 2 }),
+      ]);
+      FM.scene.layers[1].locked = true;   // makeLayer hard-sets locked:false; it is not a pass-through prop
+      FM.selectLayer(null); FM.refreshAll(); await sleep(120);
+
+      const rowFor = (name) => {
+        const clip = [].slice.call(document.querySelectorAll('#tl-tracks .clip[data-id]'))
+          .find(c => { const l = FM.layerById(FM.scene, c.dataset.id); return l && l.name === name; });
+        if (!clip) throw new Error('the timeline built no clip for the "' + name + '" layer');
+        const head = clip.closest('.track-row') && clip.closest('.track-row').querySelector('.track-head');
+        if (!head) throw new Error('the "' + name + '" row has no .track-head');
+        return head;
+      };
+
+      const free = rowFor('Free'), held = rowFor('Held');
+      if (free.querySelector('.th-lock')) throw new Error('an UNLOCKED layer is showing a lock badge — the badge would read as decoration, not state');
+      const lock = held.querySelector('.th-lock');
+      if (!lock) throw new Error('a locked layer has no .th-lock on its preview thumbnail');
+
+      // Visible, not merely present.
+      const cs = getComputedStyle(lock), box = lock.getBoundingClientRect();
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.9) {
+        throw new Error('the lock badge is in the DOM but not visible (display ' + cs.display + ', visibility ' + cs.visibility + ', opacity ' + cs.opacity + ')');
+      }
+      if (box.width < 8 || box.height < 8) throw new Error('the lock badge measures ' + box.width.toFixed(1) + 'x' + box.height.toFixed(1) + ' — too small to read as a lock');
+      if (!lock.querySelector('svg')) throw new Error('the lock badge has no <svg> — nothing would draw');
+
+      // RED, which is the half of the request that a generic badge would miss. Parse the computed
+      // colour rather than string-matching the hex, so a themed override still has to stay red.
+      const rgb = (cs.color.match(/[\d.]+/g) || []).map(Number);
+      if (rgb.length < 3 || rgb[0] < 180 || rgb[1] > 130 || rgb[2] > 130) throw new Error('the lock badge is ' + cs.color + ', not red');
+      // …and that red has to survive COMPOSITING. The dimming scrim is a ::after on the wrapper,
+      // which the spec paints after every child, so at z-index:auto it sat on top of the padlock and
+      // knocked #ff4d4d down to rgb(151,48,50) — while getComputedStyle went on reporting the bright
+      // red, because it reports the declared colour and knows nothing about what paints over it.
+      // Only a screenshot caught it (tests/_lockshot.html). The invariant that stops the regression
+      // is checkable here: the badge must be explicitly stacked above its own scrim.
+      if (cs.zIndex === 'auto' || !(parseFloat(cs.zIndex) > 0)) {
+        throw new Error('the lock badge has z-index ' + cs.zIndex + ' — the wrapper scrim paints over it and the red goes brick');
+      }
+
+      // On the thumbnail, per his words — not floating somewhere else in the row.
+      const thumb = held.querySelector('.th-thumb');
+      if (!thumb) throw new Error('the locked row lost its .th-thumb preview canvas');
+      const tb = thumb.getBoundingClientRect();
+      const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+      if (cx < tb.left - 1 || cx > tb.right + 1 || cy < tb.top - 1 || cy > tb.bottom + 1) {
+        throw new Error('the lock badge is not over the preview thumbnail (badge centre ' + cx.toFixed(0) + ',' + cy.toFixed(0) + ' vs thumb ' + tb.left.toFixed(0) + '-' + tb.right.toFixed(0) + ', ' + tb.top.toFixed(0) + '-' + tb.bottom.toFixed(0) + ')');
+      }
+
+      // And it must TRACK the state, not just the initial build — unlocking is the path a user takes
+      // straight after locking, and a badge that survives it is worse than no badge.
+      FM.layerById(FM.scene, [].slice.call(document.querySelectorAll('#tl-tracks .clip[data-id]'))
+        .find(c => { const l = FM.layerById(FM.scene, c.dataset.id); return l && l.name === 'Held'; }).dataset.id).locked = false;
+      FM.timeline.rebuild(); await sleep(60);
+      if (rowFor('Held').querySelector('.th-lock')) throw new Error('the lock badge survived unlocking the layer');
+    } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
   });
 
   async function run() {

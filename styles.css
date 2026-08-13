@@ -1786,6 +1786,25 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .th-eye:hover { opacity: 1; }
 .th-eye.off { opacity: .45; }
 .th-thumb { width: 30px; height: 19px; flex: 0 0 auto; border-radius: 4px; background: #000; }
+/* #117 — LOCKED layers. The wrapper exists only to give the padlock something to sit on; it must
+   stay the exact size of the thumbnail (`line-height: 0` kills the inline-box descender gap) so the
+   head's flex row is byte-identical for an unlocked layer. The scrim is what makes the badge legible
+   over a bright thumbnail — a red lock alone disappears on a white frame. */
+.th-thumb-wrap { position: relative; flex: 0 0 auto; display: inline-block; line-height: 0; }
+.th-thumb-wrap.locked .th-thumb { opacity: .62; }
+/* inset 1px, not 0: on phones .th-thumb carries a 1px border that turns accent-coloured when the row
+   is selected, and a scrim over the wrapper's whole padding box would paint that readout out. */
+.th-thumb-wrap.locked::after { content: ''; position: absolute; inset: 1px; border-radius: 4px; background: rgba(6,10,14,.42); pointer-events: none; }
+.th-lock {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 14px; height: 14px; color: #ff4d4d; pointer-events: none; line-height: 0;
+  /* z-index, and it is load-bearing: ::after is generated as the wrapper's LAST child, so with both
+     boxes at z-index:auto the scrim painted straight over the padlock and composited #ff4d4d down to
+     a brick rgb(150,49,49). getComputedStyle still reported the bright red — only a screenshot could
+     see it. */
+  z-index: 1;
+}
+.th-lock svg { width: 100%; height: 100%; display: block; }
 /* (No .th-solo rules: the per-layer Solo 'S' button was removed at Ezra's request in v1.75, 69563ae.
    The dead styling outlived it by a year and repeatedly read as "the button is missing, restore it" —
    it was written up twice as a high-severity regression. Soloing still exists where he wanted it: the
