@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ended-media restart-loop probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+<script>
+/* ============================================================================================
+ * FreeMotion — ENDED-MEDIA RESTART-LOOP probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * The defect is a property of ONE line's interaction with the HTMLMediaElement spec, so this probe
+ * tests that interaction directly rather than booting the whole editor: play() on an element that has
+ * ENDED is specified to seek back to the earliest position before playing. js/app.js's resume branch
+ * fires whenever `m.el.paused`, which an ended element is — so once a clip outlives its source, the
+ * branch rewinds the song to zero, the sync plan's seek gate throws it past the end again ~400ms
+ * later, and the loop repeats for the rest of the clip.
+ *
+ * Both branches below are the REAL source text, pasted, not a paraphrase — if app.js changes shape
+ * this probe should be re-synced, and the header of the report says so. The point is to demonstrate
+ * the element behaviour that makes the old line wrong and the new line right, on a real <audio>
+ * element in a real browser.
+ *
+ * THE CONTROL is a resume from INSIDE the media, which is what the branch actually exists for: the
+ * playhead leaving and re-entering a clip window. A "fix" that simply stopped resuming would break
+ * that, and would look identical to a correct fix if the only case measured were the ended one.
+ * ============================================================================================ */
+(function () {
+  var SR = 8000, LEN = 2;      // a 2-second tone
+
+  function wav(seconds) {
+    var n = SR * seconds, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    function str(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * 440 * i / SR) * 24000), true);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  function el() {
+    var a = document.createElement('audio');
+    a.src = URL.createObjectURL(wav(LEN));
+    a.muted = true;                       // headless autoplay policy; irrelevant to the state machine
+    return a;
+  }
+  function ready(a) { return new Promise(function (r) {
+    if (a.readyState >= 1) return r();
+    a.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 3000); }); }
+  function ended(a) { return new Promise(function (r) {
+    a.addEventListener('ended', r, { once: true }); setTimeout(r, 6000); }); }
+
+  // THE OLD LINE, verbatim from js/app.js's resume branch.
+  function resumeOld(a, local) { if (a.paused) { a.currentTime = local; a.play().catch(function () {}); } }
+  // THE NEW LINE.
+  function resumeNew(a, local) {
+    if (a.paused) {
+      var srcEnd = (isFinite(a.duration) && a.duration > 0) ? a.duration : Infinity;
+      if (local >= srcEnd) { a.muted = true; return; }
+      a.currentTime = local; a.play().catch(function () {});
+    }
+  }
+
+  (async function () {
+    var L = ['A 2s tone. "local" is the clip-local time the transport asks the element to be at.',
+             'A clip that outlives its source asks for a time past the media end.', ''];
+    L.push('case                                              local   currentTime after   verdict');
+
+    // --- the bug: the element has ENDED and the transport asks for a time past the end -----------
+    async function runEnded(resume, label) {
+      var a = el(); await ready(a);
+      var startErr = null;
+      a.currentTime = LEN - 0.05;
+      await a.play().then(function(){}, function (e) { startErr = String(e && e.name || e); });
+      await ended(a);                                   // now: paused === true, currentTime === duration
+      var beforeCt = a.currentTime, wasEnded = a.ended, wasPaused = a.paused;
+      // capture whether the resume's play() is REJECTED — a rejected play cannot rewind anything, and
+      // a probe that cannot tell those apart reports "held" for both a working guard and a dead call
+      var rejected = null;
+      var origPlay = a.play.bind(a);
+      a.play = function () { return origPlay().then(function (v) { rejected = false; return v; },
+                                                    function (e) { rejected = String(e && e.name || e); throw e; }); };
+      resume(a, 3.5);                                   // clip wants 3.5s of a 2s source
+      await new Promise(function (r) { setTimeout(r, 500); });
+      var after = a.currentTime;
+      return { before: beforeCt, after: after, restarted: after < 1.0,
+               endedBefore: wasEnded, pausedBefore: wasPaused, startErr: startErr, rejected: rejected };
+    }
+    var o = await runEnded(resumeOld, 'old');
+    L.push('ENDED media, old resume line'.padEnd(50) + '3.500' + o.after.toFixed(3).padStart(20) + '   ' +
+      (o.restarted ? 'RESTARTED FROM THE START — the loop' : 'held'));
+    L.push('    state before resume: ended=' + o.endedBefore + ' paused=' + o.pausedBefore +
+           '  initial play() error=' + o.startErr + '  resume play() rejected=' + o.rejected);
+    var n = await runEnded(resumeNew, 'new');
+    L.push('ENDED media, new resume line'.padEnd(50) + '3.500' + n.after.toFixed(3).padStart(20) + '   ' +
+      (n.restarted ? 'RESTARTED — the guard did not hold' : 'held silent at the end — correct'));
+    L.push('    state before resume: ended=' + n.endedBefore + ' paused=' + n.pausedBefore +
+           '  resume play() rejected=' + n.rejected + '   (null = the guard returned before calling play)');
+
+    // --- CONTROL: an ordinary resume from INSIDE the media, which is the branch's real job --------
+    async function runInside(resume) {
+      var a = el(); await ready(a);
+      a.pause(); a.currentTime = 0;
+      resume(a, 1.0);
+      await new Promise(function (r) { setTimeout(r, 220); });
+      return { ct: a.currentTime, playing: !a.paused };
+    }
+    var ci = await runInside(resumeNew);
+    L.push('');
+    L.push('CONTROL — resume from INSIDE the media (local 1.0 of a 2s file):');
+    L.push('  new resume line'.padEnd(50) + '1.000' + ci.ct.toFixed(3).padStart(20) + '   ' +
+      (ci.playing && ci.ct >= 0.9 ? 'ok — a normal resume still works'
+                                  : '<<< the guard broke ordinary resuming'));
+
+    L.push('');
+    if (!(ci.playing && ci.ct >= 0.9)) L.push('IGNORE THE ROWS ABOVE — the control failed.');
+    else if (o.restarted && !n.restarted) L.push('CONFIRMED: the old line restarts an ended element; the new one holds.');
+    else if (!o.restarted) L.push('the old line did NOT restart here — this browser may differ; re-check before trusting the fix.');
+    else L.push('the new line still restarts — the guard is wrong.');
+    document.getElementById('out').textContent = L.join('\n');
+    window.__done = true;
+  })().catch(function (e) {
+    document.getElementById('out').textContent = 'THREW: ' + (e && e.stack || e);
+    window.__done = true;
+  });
+})();
+</script>
+</body>
+</html>

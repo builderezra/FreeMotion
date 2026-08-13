@@ -1057,7 +1057,27 @@ window.FM = window.FM || {};
         const local = FM.layerLocalTime(layer, FM.time);
         if (local == null || layer.visible === false) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
         try {
-          if (m.el.paused) { m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {}); }   // re-entered the window → resume
+          if (m.el.paused) {
+            /* PAST THE END OF THE ACTUAL MEDIA = HOLD SILENT, NEVER RESUME.
+             * DEFENSIVE, NOT A VERIFIED FIX FOR A SEEN BUG — stated plainly so nobody inherits a false
+             * claim. The reasoning that stands on its own: if the transport is asking for a time at or
+             * past the end of the source there is nothing left to play, so calling play() here can
+             * only be wrong. The spec also permits play() on an ENDED element to seek back to the
+             * earliest position first, which would restart the song from zero.
+             * WHAT I COULD NOT REPRODUCE: tests/_restartloop.html drives that exact sequence on a real
+             * element and Chrome does NOT rewind — play() resolves (rejected=false) and currentTime
+             * stays at the duration. So the rewind is a real spec allowance and a real risk on other
+             * engines (Ezra is on a phone), but it is NOT the explanation for the restarts observed in
+             * the app. Those logged currentTime landing on 0.055, and assigning a past-the-end `local`
+             * would clamp to the duration, not to 0.055 — so `local` itself was small, which points at
+             * the speed-ramp integral in layerSourceAdvance, not at this line. See BUG-HUNT.
+             * Gated on `paused` and on being genuinely at/past the end, so an ordinary resume — the
+             * playhead re-entering the clip window — is untouched (measured in the same probe), and no
+             * epsilon shaves the real final moments off a clip that simply ends. */
+            const srcEnd = (isFinite(m.el.duration) && m.el.duration > 0) ? m.el.duration : Infinity;
+            if (local >= srcEnd) { try { m.el.muted = true; } catch (e) {} return; }
+            m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {});   // re-entered the window → resume
+          }
           else {
             // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
             const base = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
