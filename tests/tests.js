@@ -11684,6 +11684,43 @@
     } finally { FM.settings.set('shapeColor', was); }
   });
 
+  /* #145 — Ezra: "make the background of all the buttons like elements shape etc a different colour
+     to the ones in inside each section, like text etc. so it shows the difference in action, and then
+     you can add colour to all the sub section buttons".
+     Both families used to share one `.addmenu-tab, .addmenu-card` rule, so a button that CHANGES
+     SECTION was pixel-identical to one that ADDS A THING. The trap this guards is specifically how it
+     broke: a bare `.addmenu-tab` rule is (0,1,0) and the glass theme's is (0,2,0), so the first fix
+     applied in the DOM and changed nothing on screen. Computed style is therefore the only honest
+     check — asking the stylesheet would pass while the app still looked wrong. */
+  test('add menu: a section tab and an item card are visibly different, and items carry colour', { item: 'addmenu-roles' }, async function () {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:320px;height:600px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const tab = host.querySelector('.addmenu-tab:not(.active)');
+      const cards = [].slice.call(host.querySelectorAll('.addmenu-card'));
+      if (!tab) throw new Error('the add menu built no inactive tab to compare');
+      if (!cards.length) throw new Error('the add menu built no item cards');
+
+      // 1) The two roles must not paint the same. Compare what the BROWSER computed, not the rule.
+      const tb = getComputedStyle(tab).backgroundImage + '|' + getComputedStyle(tab).backgroundColor;
+      const cb = getComputedStyle(cards[0]).backgroundImage + '|' + getComputedStyle(cards[0]).backgroundColor;
+      if (tb === cb) throw new Error('a section tab and an item card compute the same background (' + tb + ') — nothing on screen says which one changes section and which one adds a layer');
+
+      // 2) Item icons carry colour, and not all the same colour, which is the "add colour to all the
+      //    sub section buttons" half. A media tile is exempt — it shows the user's own frame.
+      const tinted = cards.filter(c => !c.classList.contains('addmenu-media'));
+      if (tinted.length < 4) throw new Error('only ' + tinted.length + ' non-media cards to check');
+      const hues = tinted.slice(0, 8).map(c => getComputedStyle(c.querySelector('.addmenu-ic')).color);
+      if (new Set(hues).size < 3) throw new Error('the first ' + hues.length + ' item icons use only ' + new Set(hues).size + ' colour(s) — they are back to being one flat set');
+      // …and the plate behind the icon has to actually paint, or the colour is a one-pixel stroke.
+      const plate = getComputedStyle(tinted[0].querySelector('.addmenu-ic')).backgroundColor;
+      if (!plate || plate === 'rgba(0, 0, 0, 0)' || plate === 'transparent') throw new Error('the item icon plate is transparent — the tint is carrying nothing');
+    } finally { host.remove(); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

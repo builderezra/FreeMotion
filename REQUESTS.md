@@ -67,6 +67,9 @@ something."* So: **one item at a time, all the way to shipped**, questions writt
 again next time he speaks rather than used as a reason to stop. Plus a specific one worth keeping —
 *"make sure no workflow agents get stuck in a never ending loop like last time"*: any fan-out gets a
 hard iteration bound and a dry-round counter, never an open `while` on an agent's own answer.
+And on pacing — *"ticks should be sooner, no need to be waiting around doing nothing for a quote on
+quote tick"*: don't idle between turns. 60s is the floor the scheduler allows, so that is the delay;
+better still, keep working inside the turn rather than parking work for a later tick.
 
 ### In flight right now
 - [x] **127 — Paste Style icons are stale.** (v6.89) His words: *"Paste style menu needs to reflect the current

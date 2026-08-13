@@ -558,9 +558,30 @@ window.FM = window.FM || {};
   // preview frame AND the filename (which is often just as revealing).
   function demo() { return !!(FM.settings && FM.settings.get('demoMode')); }
 
-  function card(item, cls, iconOnly) {
+  /* Queue 145 — Ezra: "you can add colour to all the sub section buttons".
+   * A CURATED ring rather than a colour per item, and rather than a hash of the label. Per-item
+   * colours would be forty more decisions to make and to maintain (the Shape tab alone has dozens,
+   * and saved elements are created at runtime and cannot be assigned one at all); a hash gives every
+   * button its own hue but no two of them any relationship, which looks accidental. Walking a chosen
+   * ring gives every button a colour, keeps neighbours far apart in hue, and needs no upkeep when an
+   * item is added.
+   * Stored as an "r, g, b" triple, not a hex, because the CSS needs BOTH the solid colour and a
+   * translucent plate behind it from the same value. */
+  var TINTS = [
+    '156, 124, 255',   // violet
+    '79, 163, 255',    // blue
+    '63, 216, 200',    // teal
+    '106, 224, 128',   // green
+    '255, 208, 77',    // yellow
+    '255, 138, 61',    // orange
+    '255, 99, 158',    // pink
+    '126, 231, 255',   // cyan
+  ];
+
+  function card(item, cls, iconOnly, tint) {
     var b = document.createElement('button');
     b.className = cls; b.type = 'button';
+    if (tint) b.style.setProperty('--am-tint', tint);
     var hidden = item.mid && demo();
     var label = hidden ? (item.kind === 'video' ? 'Video' : item.kind === 'audio' ? 'Audio' : 'Photo') : item.label;
     b.title = label;
@@ -667,8 +688,13 @@ window.FM = window.FM || {};
         var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
         var opts = typeof tab.options === 'function' ? tab.options() : (tab.options || []);   // Elements/Templates lists are live
         var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
-        function makeCard(o) {
-          var c = card(o, 'addmenu-card' + (iconOnly ? ' addmenu-card--ico' : ''), iconOnly);
+        /* The tint follows the item's position in the WHOLE tab, not its position on the page, so a
+           button keeps its colour when the pager moves and two pages never open with the same run of
+           hues. Media/Audio library tiles are skipped — they show the user's own frame, and a colour
+           plate behind a photograph is noise. */
+        function makeCard(o, idx) {
+          var tint = o.mid ? null : TINTS[idx % TINTS.length];
+          var c = card(o, 'addmenu-card' + (iconOnly ? ' addmenu-card--ico' : ''), iconOnly, tint);
           c.addEventListener('click', function () { if (!c._longPressed) { o.add(); after(); } c._longPressed = false; });
           if (o.elementId) c.addEventListener('contextmenu', function (ev) {   // desktop: right-click removes a saved element
             ev.preventDefault();
@@ -731,7 +757,7 @@ window.FM = window.FM || {};
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';
           var grid = document.createElement('div'); grid.className = 'addmenu-grid' + (iconOnly ? ' addmenu-grid--ico' : '');
-          opts.slice(i, i + perPage).forEach(function (o) { grid.appendChild(makeCard(o)); });
+          opts.slice(i, i + perPage).forEach(function (o, j) { grid.appendChild(makeCard(o, i + j)); });
           page.appendChild(grid); pager.appendChild(page);
         }
         bodyEl.appendChild(pager);

@@ -118,6 +118,17 @@ html[data-theme="glass"] .hm-card.is-pinned:active {
     linear-gradient(100deg, rgba(127, 216, 255, .13), rgba(127, 216, 255, 0) 48%),
     linear-gradient(180deg, rgba(188, 230, 239, .10), rgba(188, 230, 239, .03));
 }
+/* QUEUE 145 — tabs are navigation, cards are actions, and they must not wear the same coat.
+   This rule has to live HERE as well as in styles.css: the shared pour above is
+   `html[data-theme="glass"] .addmenu-tab` (0,2,0) and outranks a bare `.addmenu-tab` (0,1,0), so the
+   base treatment never reached the theme that is actually switched on. That is the same specificity
+   trap the pinned-card note above records — third time in this file, hence this comment.
+   The tabs become a RECESSED well: the light falls into them instead of pouring off them, which is
+   how a control strip should read against the lit tiles it sits above. */
+html[data-theme="glass"] .addmenu-tab {
+  background: linear-gradient(180deg, rgba(3, 9, 13, .40), rgba(3, 9, 13, .16));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .35);
+}
 html[data-theme="glass"] .addmenu-tab.active {
   background: linear-gradient(180deg, rgba(90, 199, 237, .22), rgba(90, 199, 237, .08));
   border-color: rgba(90, 199, 237, .45);

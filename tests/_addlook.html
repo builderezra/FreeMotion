@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#145 — the add menu, as it actually looks</title>
+<style>html,body{margin:0;background:#060c0f;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+iframe{border:0;display:block}
+#out{padding:8px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">…</div>
+<script>
+/* Ezra (#145): the section buttons (Elements / Shape / Media…) and the item buttons (Text, Captions,
+   a specific shape) are the same colour, so nothing tells you which one CHANGES SECTION and which one
+   ADDS A THING. Plus: "on pc… when theyre big icons it looks really goofy… they should be sharp and
+   detailed and have black outlines etc."
+   Width comes from ?w= so the same probe shows the phone sheet and the desktop panel. Shoot it before
+   changing anything — designing a colour system against an imagined screen is how you end up fixing
+   the wrong thing. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get('w') || 380;
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  fr.style.width = W + 'px'; fr.style.height = (W > 700 ? 860 : 780) + 'px';
+  function fail(m){ out.textContent = 'FAILED: ' + m; window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, d = w.document, tries = 0;
+    (function wait() {
+      if (++tries > 240) return fail('FM never initialised');
+      if (!w.FM || !w.FM.addMenu || !w.FM.home) return setTimeout(wait, 50);
+      try {
+        if (w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
+        // Nothing selected → the inspector shows the ADD menu, which is the surface in question.
+        w.FM.scene.layers = []; w.FM.scene.selectedId = null; w.FM.scene.selectedIds = [];
+        w.FM.refreshAll();
+        // On a phone the add menu is a SHEET behind the + button, not the inspector panel — without
+        // this the narrow shot photographs an empty timeline and proves nothing about the thing being
+        // changed. (It did exactly that on the first run.)
+        var fab = d.getElementById('add-fab');
+        if (W < 701 && fab) fab.click();
+        setTimeout(function () {
+          var tabs = [].slice.call(d.querySelectorAll('.addmenu-tab'));
+          var cards = [].slice.call(d.querySelectorAll('.addmenu-card'));
+          if (!tabs.length) return fail('no .addmenu-tab on screen — the add menu did not render');
+          var cs = function (e) { var s = w.getComputedStyle(e); return s.backgroundColor + ' / ' + s.borderColor; };
+          var L = ['width ' + W + '  variant ' + (d.querySelector('.addmenu') || {}).className];
+          L.push('tabs  ' + tabs.length + '   first: ' + cs(tabs[0]));
+          L.push('cards ' + cards.length + '   first: ' + (cards[0] ? cs(cards[0]) : 'none'));
+          L.push('SAME BACKGROUND: ' + (cards[0] && cs(tabs[0]).split(' / ')[0] === cs(cards[0]).split(' / ')[0]));
+          if (cards[0]) {
+            var svg = cards[0].querySelector('.addmenu-ic svg');
+            if (svg) { var b = svg.getBoundingClientRect(); L.push('card icon drawn at ' + b.width.toFixed(0) + 'x' + b.height.toFixed(0) + ' px'); }
+          }
+          out.textContent = L.join('\n');
+          window.__done = true;
+        }, 700);
+      } catch (e) { fail(String(e && e.message || e)); }
+    })();
+  });
+})();
+</script></body></html>

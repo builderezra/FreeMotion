@@ -921,6 +921,34 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .addmenu--panel .addmenu-tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
 .addmenu--panel .addmenu-tab { flex: none; min-width: 0; }
 .addmenu--sheet .addmenu-lbl { max-width: 100%; }
+/* ============ QUEUE 145 — a button that CHANGES SECTION must not look like one that ADDS A THING.
+   Ezra: "make the background of all the buttons like elements shape etc a different colour to the
+   ones in inside each section, like text etc. so it shows the difference in action, and then you can
+   add colour to all the sub section buttons".
+   Both were `.addmenu-tab, .addmenu-card` sharing one background rule, so the row of destinations and
+   the grid of actions were the same slate tile with the same rim — nothing on screen said which was
+   which until you pressed one.
+   The split is by ROLE, and it is carried by two different devices so it survives either theme:
+     · TABS are navigation. They stay flat and recessed, like a control strip: no plate, a darker
+       well, and their existing per-tab gradient icon is the only colour they carry.
+     · CARDS are actions. Each gets a tinted PLATE behind its icon plus a matching rim, which is what
+       "add colour to all the sub section buttons" asks for and, in the same stroke, makes the two
+       families unmistakable at a glance.
+   The tint arrives as an "r, g, b" triple on --am-tint (js/addmenu.js), so one value gives both the
+   solid stroke and the translucent plate. Anything with no tint — a media tile showing the user's own
+   frame — falls back to the accent exactly as before. ============ */
+.addmenu-tab { background: rgba(4, 10, 14, .38); }
+.addmenu-card > .addmenu-ic {
+  color: rgb(var(--am-tint, 41, 217, 187));
+  background: rgba(var(--am-tint, 41, 217, 187), .13);
+  border: 1px solid rgba(var(--am-tint, 41, 217, 187), .26);
+  border-radius: 10px; padding: 6px;
+}
+.addmenu-card { border-color: rgba(var(--am-tint, 41, 217, 187), .20); }
+.addmenu-card:hover > .addmenu-ic { background: rgba(var(--am-tint, 41, 217, 187), .22); border-color: rgba(var(--am-tint, 41, 217, 187), .45); }
+/* A media tile paints the real frame edge to edge; a plate floating on top of a photograph is noise. */
+.addmenu-card.addmenu-media > .addmenu-ic { background: none; border: 0; padding: 0; }
+
 .addmenu-tab:hover, .addmenu-card:hover { background: var(--panel-3); color: var(--text); border-color: var(--accent); }
 .addmenu-tab:active, .addmenu-card:active { transform: translateY(1px); }
 .addmenu-tab.active { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
@@ -3127,11 +3155,42 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-card:not(.addmenu-card--ico) .addmenu-lbl {
   white-space: normal; max-width: none; overflow: visible; font-size: 9.8px; line-height: 1.1;
 }
+/* ===== QUEUE 145, the PC half. Ezra: "make them look better for the pc version because when theyre
+   big icons it looks really goofy… on pc they should be sharp and detailed and have black outlines
+   etc."
+   He is describing a real drawing fault, not a preference. These glyphs are authored at 24px with
+   `stroke-width: 1.8`, and the desktop panel renders them at 34px — the stroke scales with the box,
+   so the line stays 1.8 units but the FIGURE gets bigger, and the drawing thins out relative to
+   itself. Blown up, a 1.8 line inside a 34px icon reads as spindly and unfinished, which is exactly
+   what "goofy" is describing.
+   Two fixes, both only where the icon is actually large:
+     · more weight — 2.2 units, so the line grows with the figure instead of being left behind;
+     · the black outline he asked for, as a hard dark shadow with no blur. A blurred drop-shadow
+       muddies a small glyph (measured on the v6.87 padlock, where it turned #ff4d4d to brick), but at
+       34px an offset-zero, radius-zero shadow is a crisp dark edge that lifts the icon off its plate.
+   Scoped to desktop widths because the phone renders these at 19-22px, where the current weight is
+   correct and this treatment would clog the counters. ===== */
+@media (min-width: 701px) {
+  .addmenu-card .addmenu-ic svg { stroke-width: 2.2; }
+  .addmenu-card--ico .addmenu-ic svg { stroke-width: 2.05; }   /* shape art is denser; it needs less */
+  .addmenu-card .addmenu-ic {
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, .85)) drop-shadow(0 1px 0 rgba(0, 0, 0, .6));
+  }
+}
 /* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like AM */
 .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(5, 1fr); }
 .addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
 .addmenu-card--ico { padding: 12px 4px; }
 .addmenu-card--ico .addmenu-ic svg, .addmenu-card--ico .addmenu-ic { width: 34px; height: 34px; }
+/* NO PLATE on the shape tiles — they keep the tint on the stroke and nothing else (queue 145).
+   Two goes at giving them one, and the grid simply has not got the room: at 6 across in a 288px panel
+   a tile has ~36px of content box, and a 34px icon plus 10px of plate padding is 46px. Sizing the
+   plate to 34px squeezed the ART to 20px under border-box; letting the wrapper grow instead let the
+   flex item shrink to 22px. Both were caught by the v5.05 regression test that exists for exactly
+   this class of accident, which is the second time it has earned its keep.
+   The colour still lands — .addmenu-card > .addmenu-ic sets `color`, and these glyphs stroke with
+   currentColor — so "colour on all the sub-section buttons" holds here too, without the box. */
+.addmenu-card--ico > .addmenu-ic { background: none; border: 0; padding: 0; }
 .addmenu-dots { display: flex; justify-content: center; gap: 6px; margin-top: 9px; }
 .addmenu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .15s; }
 .addmenu-dot.on { background: var(--accent); }
