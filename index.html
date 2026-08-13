@@ -14,7 +14,7 @@
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
 <style>html,body{background:#000}</style>
-<link rel="stylesheet" href="styles.css?v=350">
+<link rel="stylesheet" href="styles.css?v=351">
 <link rel="stylesheet" href="theme-glass.css?v=22">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- BLACK, not #12151b (queue 143). On iOS 26 a standalone PWA tints the area around the page with
@@ -137,7 +137,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.80-diag</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v6.80</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -732,38 +732,6 @@
         });
       });
     });
-  </script>
-  <!-- ══ TEMPORARY DIAGNOSTIC (queue 135/143) — REMOVE once the bottom bar is identified ══
-       Paints a magenta band across the last 60px of the PAGE with the live viewport numbers in it.
-       Fixed to the layout viewport, exactly like #splash and #home-screen, so it measures the same
-       box they do. One screenshot tells us whether the bar is inside the page or outside it. -->
-  <div id="fm-probe"></div>
-  <script>
-    (function () {
-      var el = document.getElementById('fm-probe');
-      if (!el) return;
-      function paint() {
-        var vv = window.visualViewport;
-        var cs = getComputedStyle(document.documentElement);
-        var sab = cs.getPropertyValue('--fm-sab') || '';
-        // read the real safe-area inset by measuring a throwaway element
-        var t = document.createElement('div');
-        t.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);width:1px;pointer-events:none;';
-        document.body.appendChild(t);
-        var inset = Math.round(t.getBoundingClientRect().height);
-        t.remove();
-        el.textContent =
-          'PAGE BOTTOM · innerH ' + window.innerHeight +
-          ' · visualH ' + (vv ? Math.round(vv.height) : '?') +
-          ' · safeBottom ' + inset +
-          ' · dpr ' + (window.devicePixelRatio || 1) +
-          ' · standalone ' + (navigator.standalone === true ? 'yes' : 'no');
-      }
-      paint();
-      window.addEventListener('resize', paint);
-      if (window.visualViewport) window.visualViewport.addEventListener('resize', paint);
-      document.addEventListener('visibilitychange', function () { if (!document.hidden) setTimeout(paint, 200); });
-    })();
   </script>
 </body>
 </html>

@@ -120,26 +120,6 @@ html, body { margin: 0; height: 100%; }
    anchoring and any position:sticky); plain `hidden` sits in front as the fallback. */
 html, body { overflow-x: hidden; overflow-x: clip; }
 
-/* ══ TEMPORARY DIAGNOSTIC (queue 135/143) — REMOVE once the bottom bar is identified ══════════════
-   Two wrong guesses so far: an overflow-x fix (v6.78) and a theme-color fix (v6.79), and the bar
-   survived both. The reason is that from a screenshot I cannot tell whether the strip is PAGE
-   CONTENT that is falling short, or iOS CHROME painted outside the page — and those need opposite
-   fixes, so guessing a third time is worse than asking the page.
-   So: paint a magenta band across the last 60px of the PAGE, and a cyan hairline on the page's true
-   bottom edge. One screenshot settles it:
-     · bar turns MAGENTA        → the strip IS the page; something inside is short. Fix in CSS.
-     · magenta sits ABOVE the bar → the page ends early and the bar is iOS chrome below it.
-     · no magenta visible at all → the page's bottom is off-screen entirely (page too TALL).
-   #fm-probe is fixed to the layout viewport, exactly like #splash and #home-screen, so it is
-   measuring the same box they are. */
-#fm-probe {
-  position: fixed; left: 0; right: 0; bottom: 0; height: 60px;
-  z-index: 2147483647; pointer-events: none;
-  background: rgba(255, 0, 200, .85);
-  border-bottom: 3px solid #00e5ff;
-  font: 700 11px/1.25 -apple-system, sans-serif; color: #fff;
-  display: flex; align-items: center; justify-content: center; text-align: center;
-}
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, sans-serif;
   background: var(--bg);

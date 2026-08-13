@@ -229,6 +229,25 @@ Numbered with Ezra's own queue numbers where he gave them.
       Caveat for him: the META takes effect on reload, but iOS may have cached the MANIFEST from
       install, so a full close-and-reopen (or worst case re-adding to the Home Screen) may be needed
       before the manifest half applies.
+      **v6.79 did NOT fix it either** (*"Fully closed and re opened and it's still there"*), so the
+      theme-color theory was wrong too. Two wrong guesses.
+      **v6.80-diag settled it with a measurement instead of a third guess.** A magenta band was painted
+      across the last 60px of the PAGE with a cyan hairline on the page's true bottom edge, and the
+      live numbers printed in it. His screenshot: **innerH 894 · visualH 894 · safeBottom 34 · dpr 3 ·
+      standalone yes**, and the magenta band sits ABOVE a remaining dark strip.
+      **Conclusion, now evidence-backed: the page ENDS EARLY and the bar is OUTSIDE the page.** The page
+      is inset from the bottom by ~34pt — exactly the home-indicator safe area — even though
+      `viewport-fit=cover` is present and `env(safe-area-inset-bottom)` correctly reports 34.
+      **Nothing in CSS can ever paint there.** That is why the overflow fix and the theme-color fix both
+      changed nothing, and it retires every "an element is too short" theory.
+      **Most likely cause: iOS caches the launch configuration at ADD-TO-HOME-SCREEN time.** Closing and
+      reopening does not re-read the viewport meta or manifest for an installed PWA. His icon is still
+      launching with whatever config was current when he first installed it. **Next step is his, not a
+      code change: delete the Home Screen icon and re-add it**, then check. If the bar survives a fresh
+      install, the config itself is wrong and the next suspect is the interaction between
+      `apple-mobile-web-app-status-bar-style: black-translucent` (deprecated) and `viewport-fit=cover`
+      on iOS 26 — try dropping the legacy meta so the manifest alone drives standalone.
+      Probe removed in v6.80; do not ship it again without a reason.
 
 - [ ] **135 — REOPENED. Black bar down the right edge; the v6.78 fix did NOT work.** He ticked it off
       (*"just assume it's fixed for now"*) and then immediately: *"Never mind it just came up."*
