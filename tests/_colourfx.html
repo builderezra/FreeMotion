@@ -6,11 +6,19 @@
 <style>
   html, body { margin: 0; background: #05070b; color: #cfd6e4;
                font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+  /* Readable on a PHONE, because that is where the answer is: this audit passes on desktop and the
+     report is from an iPhone, so the page has to be openable there and legible without pinching. */
+  #out { padding: 10px 12px; white-space: pre; font-size: 11px; overflow-x: auto;
+         -webkit-text-size-adjust: 100%; }
+  h1 { font-size: 15px; margin: 12px 12px 0; color: #7fd7ef; }
+  .hint { margin: 4px 12px 0; font-size: 12px; color: #8b96a8; }
 </style>
 </head>
 <body>
-<div id="out">booting…</div>
+<h1>Colour &amp; Light — what actually works on THIS device</h1>
+<div class="hint">Screenshot the whole thing and send it. Any effect listed as DEAD does nothing here
+but works on desktop, which is the difference worth chasing.</div>
+<div id="out">measuring…</div>
 
 <script src="../js/settings.js"></script>
 <script src="../js/scene.js"></script>
@@ -110,7 +118,16 @@
     var c = document.createElement('canvas'); c.width = W; c.height = H;
     var g = c.getContext('2d', { willReadFrequently: true });
     var L;
-    if (kind === 'shape') L = FM.makeLayer('shape', { shape: 'rect', x: W/2, y: H/2, shapeW: 150, shapeH: 100, fill: '#c84ab0' });
+    if (kind === 'image') {
+      /* A REAL image layer with a media record — the path a camera-roll photo takes, and the one Ezra
+         is actually using. The '_flat' proxy is NOT a substitute for it: it skips the media pipeline
+         entirely, which is exactly why the first cut of this probe drew nothing when it tried to feed
+         a canvas to an 'image' layer directly. */
+      FM.media.set('_cfxImg', { kind: 'image', el: ART, width: W, height: H, duration: 0 });
+      L = FM.makeLayer('image', { x: W/2, y: H/2 });
+      L.id = '_cfxImg';
+    }
+    else if (kind === 'shape') L = FM.makeLayer('shape', { shape: 'rect', x: W/2, y: H/2, shapeW: 150, shapeH: 100, fill: '#c84ab0' });
     else if (kind === 'text') L = FM.makeLayer('text', { x: W/2, y: H/2, text: 'ABC', fontSize: 64, fill: '#c84ab0' });
     else { L = FM.makeLayer('_flat', { x: 0, y: 0 }); L._canvas = ART; L.transform.anchorX = 0; L.transform.anchorY = 0; }
     L.start = 0; L.duration = 5;
@@ -118,11 +135,11 @@
     FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: null }, layers: [L] }, 1.0);
     return g.getImageData(0, 0, W, H).data;
   }
-  var SUBJECTS = ['flat', 'shape', 'text'];
+  var SUBJECTS = ['image', 'flat', 'shape', 'text'];   // 'image' first: it is the real camera-roll path
   var probe = ['brightness', 'contrast', 'saturate', 'grayscale', 'sepia', 'invert', 'hue', 'glow'];
   lines.push('DOES THE SUBJECT TYPE MATTER? (the 8 ctx.filter effects, at full strength)');
   lines.push('');
-  lines.push('effect        ' + SUBJECTS.map(function (k) { return k.padEnd(12); }).join(''));
+  lines.push('effect        ' + SUBJECTS.map(function (k) { return k.padEnd(11); }).join(''));
   probe.forEach(function (id) {
     var row = id.padEnd(14);
     SUBJECTS.forEach(function (k) {
@@ -130,7 +147,7 @@
       var e = crank(id);
       if (id === 'hue' && e) e.params.deg = 90;                    // max is 360 = a no-op; use a real angle
       var n = 0; try { n = diff(b, renderOn(k, e)); } catch (err) { n = -1; }
-      row += (n === 0 ? 'DEAD' : String(n)).padEnd(12);
+      row += (n < 0 ? 'THREW' : n === 0 ? 'DEAD' : String(n)).padEnd(11);
     });
     lines.push(row);
   });
