@@ -308,24 +308,46 @@ window.FM = window.FM || {};
    * per-pixel noise — a CSS gradient cannot make one, and feTurbulence costs a filter pass per frame.
    *
    * Grey, not colour, and only the alpha varies: coloured noise over a card tints it, and these cards
-   * carry the user's own thumbnails. Cached in a module variable and set as a custom property once,
-   * so all N cards share the single decoded image rather than each holding its own. */
+   * carry the user's own thumbnails.
+   *
+   * SIX TILES, RE-ROLLED IN PLACE — third attempt, and the first two failed in opposite directions
+   * (queue 105). v6.23 stepped ONE tile between five offsets: that is a sheet of noise lurching
+   * sideways eight times a second, and Ezra called it "too jumpy". v6.62 made the same offset slide
+   * smoothly instead, which he liked even less — "it looks like it's all moving together", and he is
+   * right, because a translating noise field reads as fabric passing behind a window rather than as
+   * grain. The mistake both times was animating POSITION at all.
+   *
+   * Real grain does not travel; it boils where it sits. The app's own filmgrain effect already does
+   * exactly that (js/compositor.js: `const frame = Math.floor(t * 24)` — "re-roll per frame: static
+   * grain reads as dirt on the lens"), which is what Ezra means by "kinda like the effect we have in
+   * our app". So: several independent tiles, swapped in place, with the background-position never
+   * touched. Six is enough that the cycle does not read as a repeating loop and cheap enough to
+   * generate once (~6 KB of base64 total, about a millisecond each).
+   *
+   * They are shared across cards, but each card is given its own negative animation-delay by
+   * renderCards, so no two cards are showing the same tile at the same moment — "each one having its
+   * own things" without paying for N canvases. */
+  const STATIC_TILES = 6;
   let staticURL = null;
   function ensureStaticTile() {
     if (staticURL) return staticURL;
     try {
-      const N = 64, c = document.createElement('canvas');
-      c.width = c.height = N;
-      const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const v = (Math.random() * 255) | 0;
-        d[i] = d[i + 1] = d[i + 2] = 255;   // white grain; the ALPHA is what varies
-        d[i + 3] = v;
+      const N = 64;
+      for (let k = 0; k < STATIC_TILES; k++) {
+        const c = document.createElement('canvas');
+        c.width = c.height = N;
+        const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const v = (Math.random() * 255) | 0;
+          d[i] = d[i + 1] = d[i + 2] = 255;   // white grain; the ALPHA is what varies
+          d[i + 3] = v;
+        }
+        g.putImageData(img, 0, 0);
+        const url = 'url("' + c.toDataURL('image/png') + '")';
+        document.documentElement.style.setProperty('--hm-static-' + k, url);
+        if (k === 0) { staticURL = url; document.documentElement.style.setProperty('--hm-static', url); }
       }
-      g.putImageData(img, 0, 0);
-      staticURL = c.toDataURL('image/png');
-      document.documentElement.style.setProperty('--hm-static', 'url("' + staticURL + '")');
-    } catch (e) { staticURL = null; }   // no canvas → the CSS var stays unset and the overlay draws nothing
+    } catch (e) { staticURL = null; }   // no canvas → the CSS vars stay unset and the overlay draws nothing
     return staticURL;
   }
 
@@ -660,6 +682,10 @@ window.FM = window.FM || {};
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
     const isOpen = p.id === FM.projects.currentId();
     const card = el('div', 'hm-card' + (isOpen ? ' hm-open' : '') + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
+    /* Each card starts at its own point in the grain cycle, so they boil independently instead of
+       flickering in unison — "I want it to be each one having its own things" (queue 105). A negative
+       delay starts an animation mid-way rather than waiting, so nothing is held back. */
+    card.style.setProperty('--hm-static-delay', (-(Math.random() * 1.2)).toFixed(3) + 's');
     card.setAttribute('role', 'button'); card.tabIndex = 0; card.dataset.pid = p.id;
     card.setAttribute('aria-label', (p.name || 'Untitled') + ' — open project');
     const th = el('div', 'hm-thumb');

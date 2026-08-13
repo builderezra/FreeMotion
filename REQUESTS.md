@@ -60,6 +60,42 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
+- [x] **105 — The v6.62 film grain is wrong: it slides as one sheet and every card moves together.** **DONE v6.67.**
+      His words: *"I don't like what you've done with the film grain in the home menu, it looks like
+      it's all moving together, I want it to be each one having its own things and the film grain
+      shouldn't be moving like that, it should be kinda like the effect we have in our app."*
+      Three separate corrections, and my v6.62 caused two of them: (a) it TRANSLATES, and a sliding
+      noise field reads as a sheet moving past rather than as grain — the old v6.23 comment actually
+      warned about exactly this before I overrode it; (b) every card shares one tile and one animation,
+      so they move in lockstep; (c) the target is the app's OWN grain effect, i.e. grain that boils in
+      place. So: no translation at all, a different tile and phase per card, and an in-place scintillate
+      rather than either a slide (v6.62) or a 5-frame jump (v6.23). Both previous attempts are wrong in
+      different directions — do not simply revert to v6.23.
+
+- [x] **103 — Timeline scroll glide stops too soon.** **DONE v6.67.** His words: *"When scrolling on the timeline the
+      glide ends too quick, it should glide a bit more, just to make it feel smoother and be able to get
+      to the other side a bit quicker."* Two things at once: a LONGER glide (less friction, so a flick
+      carries further) and the practical benefit of covering a long timeline in fewer flicks. Tune the
+      momentum decay, not the initial velocity — throwing it harder would make short flicks
+      overshoot while doing nothing for the tail, which is the part he can feel.
+- [x] **104 — PC: the timeline overshoots the end and snaps back.** **DONE v6.67.** His words: *"on pc when you swipe
+      left and right on the timeline and it hits the end it glitches a little bit, like it keeps going
+      past the wall but then corrects itself and pulls back."* So the momentum keeps integrating past
+      the clamp and the position is corrected afterwards, instead of the glide being STOPPED at the
+      wall. Fix the momentum to end at the boundary rather than letting it run and yanking it back.
+      RELATED to 103 — a longer glide will make this worse and more visible, so do them together.
+
+- [ ] **101 — Timeline ruler notches vanish when fully zoomed IN.** His words: *"It appears the little
+      notches are missing, there are some if you zoom out but not at fully zoomed in."* Screenshot at
+      v6.64 shows the ruler nearly bare. Note this is the opposite of what you'd expect — zooming in
+      should give MORE notches (one per frame at full zoom, which v2.53 built deliberately), so
+      something is culling them at the densest end rather than failing to draw them at the sparse end.
+- [ ] **102 — The playhead line is off-centre under its triangle.** His words: *"the playhead is
+      actually off centred to its little triangle at the top, if you just slightly move over the little
+      start triangle bit to the left it should be good."* So the TRIANGLE moves left a touch, not the
+      line — the line is the accurate one and must not move, since it is what everything is measured
+      against.
+
 - [x] **100 — Dragging a timeline clip still selects it; I want to drag without selecting.** **DONE v6.66.** His words:
       *"Dragging a clip still selects it, I want to be able to drag layers without selecting them, right
       now it just selects it but doesn't show the ui."* Note the second half — this is TWO things. The
@@ -124,7 +160,7 @@ Numbered with Ezra's own queue numbers where he gave them.
       frames or waveform, unlike an imported song. Needs profiling on HIS phone, or a throttled-CPU
       profile as the nearest stand-in, before touching anything.
 
-- [ ] **94 — Film grain in the menu is too jumpy and too obvious.** His words: *"The film grain in the
+- [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame
       to frame). "Jumpy" is the second one — a grain that re-randomises every frame strobes; real film
@@ -141,7 +177,7 @@ Numbered with Ezra's own queue numbers where he gave them.
       same underlying gap, that effect-driven motion isn't visible to the things that should react to it.
       Worth checking whether one fix serves both.
 
-- [ ] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** His words:
+- [x] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** **DONE v6.61.** His words:
       *"With the faves section I want it to be really easy to open, remove the feature of swiping right
       to see ur faves, just make it if you swipe down on recents it does a clean little animation and
       opens up the faves menu you have just built."* So: the "Recents & favourites" block is currently

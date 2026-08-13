@@ -2732,18 +2732,22 @@ body.hm-selecting .hm-card { touch-action: none; }
   border-radius: 16px;   /* the background is clipped to this box, so the corners round on their own */
   background-image: var(--hm-static); background-repeat: repeat;
   opacity: .032;
-  animation: hm-static 19s linear infinite;
+  animation: hm-static 1.2s steps(1) infinite;
+  animation-delay: var(--hm-static-delay, 0s);   /* home.js gives every card its own phase */
 }
-/* One unbroken loop, not five jumps: the offsets are multiples of the 64px tile, so the field arrives
-   back where it started with no seam and nothing to see at the wrap. The path is deliberately not a
-   straight line — a pure diagonal drift reads as a moving texture, whereas wandering through a few
-   directions keeps it feeling like grain that is alive without ever snapping. */
+/* IN PLACE. background-position is never touched — that was the mistake in both earlier versions, and
+   it is what made the noise read as a sheet sliding behind the card rather than as grain. This swaps
+   the IMAGE instead, six independent noise tiles at five swaps a second, which is the same thing the
+   app's own filmgrain effect does per frame (compositor.js: "re-roll per frame: static grain reads as
+   dirt on the lens"). steps(1) is right here for the same reason it was wrong before: a grain cell
+   should snap to its next value, not slide there — what must not move is the FIELD. */
 @keyframes hm-static {
-  0%   { background-position:    0px    0px; }
-  25%  { background-position:  -64px   64px; }
-  50%  { background-position: -128px    0px; }
-  75%  { background-position:  -64px  -64px; }
-  100% { background-position:    0px    0px; }
+  0%     { background-image: var(--hm-static-0); }
+  16.66% { background-image: var(--hm-static-1); }
+  33.33% { background-image: var(--hm-static-2); }
+  50%    { background-image: var(--hm-static-3); }
+  66.66% { background-image: var(--hm-static-4); }
+  83.33% { background-image: var(--hm-static-5); }
 }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
    the other sense. And reduced motion gets the texture without the flicker. */

@@ -1465,16 +1465,25 @@ window.FM = window.FM || {};
     stopMomentum();
     let v = vTimePerMs;
     if (!isFinite(v) || Math.abs(v) < 4e-5) return;     // too gentle to bother → just settle
-    v = Math.max(-0.022, Math.min(0.022, v));           // clamp: a hard flick glides a few seconds, no more
+    /* GLIDE LENGTH (queue 103). Ezra: "the glide ends too quick, it should glide a bit more … and be
+     * able to get to the other side a bit quicker."
+     * The distance a flick covers is v0 * 16.67 / (1 - friction), so FRICTION is the lever, not the
+     * launch speed: throwing it harder would make short flicks overshoot while leaving the long tail —
+     * the part he can actually feel — just as short. At 0.9/frame a full-speed flick travelled ~3.7s
+     * of timeline; 0.947 takes the same flick to ~8.8s. The velocity clamp is raised only modestly,
+     * from 0.022 to 0.028, so a deliberate hard flick crosses more ground without a light one
+     * becoming twitchy. The stop threshold comes down with it, because at the old 5e-4 the tail was
+     * being cut off while still visibly moving — which is itself part of "ends too quick". */
+    v = Math.max(-0.028, Math.min(0.028, v));
     let last = performance.now();
     const step = (now) => {
       const dt = Math.min(48, now - last); last = now;
-      v *= Math.pow(0.9, dt / 16.67);                   // friction ~0.9/frame → glides then eases to a stop
+      v *= Math.pow(0.947, dt / 16.67);                 // friction per frame — see the note above
       let t = FM.time + v * dt;
       const dur = FM.scene.project.duration;
       if (t <= 0) { t = 0; v = 0; } else if (t >= dur) { t = dur; v = 0; }
       FM.scrubTime(t, true);                            // no per-frame snap → smooth glide (coalesced render/seek)
-      if (Math.abs(v) > 5e-4) momentumRAF = requestAnimationFrame(step);   // stop once it's imperceptible
+      if (Math.abs(v) > 2.2e-4) momentumRAF = requestAnimationFrame(step);   // stop once it's imperceptible
       else { momentumRAF = 0; FM.setTime(FM.time); }    // settle onto the exact frame
     };
     momentumRAF = requestAnimationFrame(step);
@@ -1582,7 +1591,24 @@ window.FM = window.FM || {};
         // to the start" and dragged the playhead back to 0. Anything that seeks while the editor is
         // open (walking captions cue by cue, for one) was silently undone a frame later.
         if (!timelineEl.clientWidth) return;
-        const sL = timelineEl.scrollLeft;
+        let sL = timelineEl.scrollLeft;
+        /* STOP AT THE WALL, IN THIS EVENT (queue 104). Ezra, on PC: "when you swipe left and right on
+         * the timeline and it hits the end it glitches a little bit, like it keeps going past the wall
+         * but then corrects itself and pulls back."
+         * The strip can scroll further than the project is long. This handler clamped the TIME to the
+         * duration but left scrollLeft wherever the browser's momentum had carried it, so the view sat
+         * out past the end until the 160ms settle timer below fired updatePlayhead, which writes
+         * scrollLeft back to time * pps. That late correction IS the pull-back he is describing — the
+         * position was always going to be fixed, just visibly and a sixth of a second afterwards.
+         * Clamping here makes the end a wall the scroll stops against, with nothing left to correct.
+         * lastProgScroll is updated too, so our own write is not read back as another user scroll. */
+        const maxSL = Math.max(0, FM.scene.project.duration * pxPerSec());
+        if (sL > maxSL + 0.5) {
+          sL = maxSL;
+          timelineEl.scrollLeft = maxSL;
+          lastProgScroll = maxSL;
+          stopMomentum();                                               // a flick that reached the end is spent
+        }
         if (Math.abs(sL - lastProgScroll) < 1) return;                  // our own playhead-driven write → ignore (no feedback loop)
         lastProgScroll = sL;
         // USER gesture in progress: the finger owns scrollLeft — updatePlayhead must not yank it
