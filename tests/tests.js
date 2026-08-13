@@ -2483,6 +2483,7 @@
     // was gated on `FM.scene.selectedId === layer.id`, which made moving a clip a two-gesture job.
     // The gate is gone, but the thing it was incidentally protecting must still hold: a finger that
     // is still TRAVELLING is a scrub, not a grab, so a quick drag must not drag the clip with it.
+    // v6.66 finished the job: the grab no longer selects either (see the assertion at the end).
     const savedScene = FM.scene, savedTime = FM.time;
     const commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
     FM.history.commit = function () {}; FM.storage.autosave = function () {};
@@ -2526,7 +2527,15 @@
       document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, pointerType: 'touch', isPrimary: true, clientX: x2 + 120, clientY: y2 }));
       await nap(150);
       if (!(B.start > before + 0.1)) throw new Error('holding an unselected clip did not move it (start still ' + B.start + ') — this is the whole ask');
-      if (FM.scene.selectedId !== B.id) throw new Error('the grabbed clip was not selected, so you cannot see what you are dragging');
+      /* DIRECTION REVERSED at v6.66, and this assertion used to say the opposite. v5.23 made the grab
+       * SELECT the clip, reasoning that you must be able to see what you have hold of, and then
+       * suppressed the phone inspector sheet so the panel did not cover the timeline. Ezra, on his
+       * third pass at this: "Dragging a clip still selects it, I want to be able to drag layers
+       * without selecting them, right now it just selects it but doesn't show the ui." That
+       * half-state — selected, but no panel — is what the old compromise produced, and he is the one
+       * living in it. The clip visibly moving under the finger is the feedback; a selection is a mode,
+       * and a drag should not change your mode behind your back. Tapping still selects. */
+      if (FM.scene.selectedId === B.id) throw new Error('dragging the clip SELECTED it — a drag must leave the selection alone (the clip moving is the feedback); only a tap selects');
       if (Math.abs(A.start - 1) > 0.02) throw new Error('the other clip moved too (' + A.start + ')');
     } finally {
       FM.scene = savedScene; FM.time = savedTime;

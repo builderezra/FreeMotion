@@ -60,7 +60,7 @@ silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to
 Numbered with Ezra's own queue numbers where he gave them.
 
 ### In flight right now
-- [ ] **100 — Dragging a timeline clip still selects it; I want to drag without selecting.** His words:
+- [x] **100 — Dragging a timeline clip still selects it; I want to drag without selecting.** **DONE v6.66.** His words:
       *"Dragging a clip still selects it, I want to be able to drag layers without selecting them, right
       now it just selects it but doesn't show the ui."* Note the second half — this is TWO things. The
       drag is selecting the layer (it shouldn't), AND the selection it makes is a half-selection: the

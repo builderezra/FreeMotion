@@ -1158,9 +1158,17 @@ window.FM = window.FM || {};
                    blast radius to the one selection it was meant for, and any other selection clears
                    it on sight. */
                 FM._sheetSuppressFor = layer.id;
-                if (FM.scene.selectedId !== layer.id && !(FM.selectionIds && FM.selectionIds().indexOf(layer.id) >= 0)) {
-                  FM.selectLayer(layer.id);
-                }
+                /* A GRAB NO LONGER SELECTS. Third time on this one, and the earlier compromise is now
+                 * overruled by the person using it — Ezra: "Dragging a clip still selects it, I want to
+                 * be able to drag layers without selecting them, right now it just selects it but
+                 * doesn't show the ui." The old reasoning (kept below in the sheet-suppress note) was
+                 * that you must be able to SEE which clip you grabbed, so it selected and then hid the
+                 * phone sheet. That produced the exact half-state he is describing: the layer IS
+                 * selected, the panel is not up, and nothing on screen tells you which of the two you
+                 * are in. The clip visibly moving under the finger is feedback enough; a selection is
+                 * a mode, and a drag should not silently change your mode. Tapping still selects — see
+                 * the pointerup handler, which is where selection now happens for taps on both phone
+                 * and desktop. */
                 let group = [];
                 const selIds = FM.selectionIds ? FM.selectionIds() : [];
                 if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
@@ -1193,10 +1201,10 @@ window.FM = window.FM || {};
         // dragging part of a multi-selection → keep the set, make this clip primary, move them together
         if (FM.scene.selectedId !== layer.id) { FM.scene.selectedId = layer.id; if (FM.inspector) FM.inspector.refresh(); FM.timeline.rebuild(); }
         group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
-      } else {
-        FM.selectLayer(layer.id);
       }
-      if (layer.locked) return;   // locked: selectable, never movable in time
+      // else: NOT selected here any more. A mouse press that turns into a drag must not change the
+      // selection; a press that turns out to be a plain click selects on release, below.
+      if (layer.locked) { FM.selectLayer(layer.id); return; }   // locked: selectable, never movable — so there is no drag to wait for
       clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
       try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
       if (FM.playing) FM.pause();
@@ -1899,9 +1907,14 @@ window.FM = window.FM || {};
             if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips (grows or shrinks)
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           }
-          // else: a plain click already SELECTED the clip on pointerdown — never seek/scroll the
-          // timeline. Flush any rebuild that was deferred while the (unmoved) grab was active.
-          else if (rebuildPending) FM.timeline.rebuild();
+          /* A grab that never MOVED was a plain click, so it selects here instead of on pointerdown.
+             Doing it on release is what lets a drag leave the selection alone: at press time there is
+             no way to know yet which of the two this is. Never seeks or scrolls the timeline. */
+          else {
+            if (FM.selectMode && FM.toggleSelect) { FM.toggleSelect(cm.layer.id); FM.refreshAll(); }
+            else if (FM.scene.selectedId !== cm.layer.id) FM.selectLayer(cm.layer.id);
+            else if (rebuildPending) FM.timeline.rebuild();   // already selected: just flush the deferred rebuild
+          }
           return;
         }
         if (slipDrag) {
