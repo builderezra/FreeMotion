@@ -108,7 +108,7 @@ window.FM = window.FM || {};
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
   const CATEGORY_LABELS = {
-    color: 'Color & Light',
+    color: 'Colour & Light',
     blur: 'Blur',
     distort: 'Distortion & Warp',
     proc: 'Procedural',
@@ -179,10 +179,10 @@ window.FM = window.FM || {};
     // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
     // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
     if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false });
-    if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Color',   type: 'color', default: def.defColor  || '#ffffff', keyframable: false });
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Color 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: false });
-    if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Color 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: false });
-    if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Color 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: false });
+    if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: false });
+    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: false });
+    if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Colour 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: false });
+    if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Colour 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: false });
     return out;
   }
 
@@ -405,7 +405,7 @@ window.FM = window.FM || {};
     const out = [];
     if (Array.isArray(def.params)) def.params.forEach(function (p) { if (p.label) out.push(String(p.label)); });
     else if (def.label && def.param) out.push(String(def.label));
-    if (def.color) out.push(def.colorLabel || 'Color');
+    if (def.color) out.push(def.colorLabel || 'Colour');
     if (def.layer) out.push(def.layerLabel || 'Source');
     return out;
   }

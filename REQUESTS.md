@@ -390,7 +390,7 @@ Numbered with Ezra's own queue numbers where he gave them.
       Faves: *"replacing the swipe-right between Recent and Faves"* reads two ways (drop the first
       swipe, or drop the endless swiping through fave pages) and I won't delete a working gesture on
       a coin flip. Tell me which and it's a one-line change.
-- [ ] **Tiny: "Color & Light" is spelled the American way** in the effects browser's categories,
+- [x] **Tiny: "Color & Light" is spelled the American way** **DONE v6.72.** in the effects browser's categories,
       which looks odd next to the "Colouring" rename you asked for in 83. Say the word and I'll
       change it — it's your app's voice, not mine to decide.
 - [ ] **Per-effect-slider keyframes.** *"each effect slider having its own key frames still doesn't

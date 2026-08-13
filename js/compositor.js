@@ -97,7 +97,7 @@ window.FM = window.FM || {};
       { key: 'green', label: 'Green', min: 0.3, max: 3, step: 0.02, def: 1 },
       { key: 'blue', label: 'Blue', min: 0.3, max: 3, step: 0.02, def: 1 },
     ] },
-    { type: 'temperature', label: 'Color Temperature', params: [
+    { type: 'temperature', label: 'Colour Temperature', params: [
       { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
       { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, def: 0 },
       { key: 'preserve', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
@@ -121,7 +121,7 @@ window.FM = window.FM || {};
       { key: 'highlights', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'sharpen', label: 'Sharpen', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.5 },
-    { type: 'thermal', label: 'Hot Color', params: [
+    { type: 'thermal', label: 'Hot Colour', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'palette', label: 'Palette', def: 0, options: [[0, 'Iron'], [1, 'White hot'], [2, 'Black hot'], [3, 'Arctic'], [4, 'Magma'], [5, 'Spectrum']] },
       { key: 'low', label: 'Low', min: 0, max: 100, step: 1, def: 0, unit: '%' },
@@ -216,17 +216,17 @@ window.FM = window.FM || {};
       { key: 'midpoint', label: 'Midpoint', min: 5, max: 95, step: 1, def: 50, unit: '%' },
       { key: 'dither', label: 'Dither', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
-    { type: 'colorize', label: 'Colorize', color: true, defColor: '#3aa0ff', colorLabel: 'Color', params: [
+    { type: 'colorize', label: 'Colourize', color: true, defColor: '#3aa0ff', colorLabel: 'Colour', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'lift', label: 'Shadow lift', min: 0, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Tone'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']] },
     ] },
-    { type: 'checker', label: 'Checker', param: 'size', min: 2, max: 120, step: 1, def: 24, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Color' },
-    { type: 'grid', label: 'Grid', param: 'size', min: 4, max: 160, step: 1, def: 32, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Color' },
+    { type: 'checker', label: 'Checker', param: 'size', min: 2, max: 120, step: 1, def: 24, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Colour' },
+    { type: 'grid', label: 'Grid', param: 'size', min: 4, max: 160, step: 1, def: 32, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     // ---- batch 7 ----
     { type: 'mosaic', label: 'Mosaic', param: 'size', min: 2, max: 100, step: 1, def: 16, unit: 'px' },
     { type: 'lensblur', label: 'Lens Blur', param: 'radius', min: 0, max: 30, step: 1, def: 10, unit: 'px' },
-    { type: 'dots', label: 'Dots', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Color' },
+    { type: 'dots', label: 'Dots', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     { type: 'polarcoords', label: 'Polar Coordinates', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Rect → Polar'], [1, 'Polar → Rect']] },
@@ -246,21 +246,21 @@ window.FM = window.FM || {};
       { key: 'scale', label: 'Scale', min: 20, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'drift', label: 'Drift', min: -200, max: 200, step: 5, def: 0, unit: 'px/s' },
     ] },
-    { type: 'rays', label: 'Radial Rays', color: true, defColor: '#ffffff', colorLabel: 'Color', params: [
+    { type: 'rays', label: 'Radial Rays', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'count', label: 'Rays', min: 3, max: 64, step: 1, def: 16 },
       { key: 'x', label: 'Source X', min: -50, max: 150, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Source Y', min: -50, max: 150, step: 1, def: 50, unit: '%' },
       { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: 60, unit: '%' },
       { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
     ] },
-    { type: 'stripes', label: 'Stripes', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Color' },
+    { type: 'stripes', label: 'Stripes', param: 'size', min: 4, max: 80, step: 1, def: 16, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Colour' },
     // ---- batch 9 ----
     { type: 'darkglow', label: 'Dark Glow', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 40, unit: '%' },
     ] },
-    { type: 'stroke', label: 'Stroke Color', param: 'width', min: 1, max: 60, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
+    { type: 'stroke', label: 'Stroke Colour', param: 'width', min: 1, max: 60, step: 1, def: 4, unit: 'px', color: true, defColor: '#ffffff', colorLabel: 'Stroke' },
     { type: 'smoothedges', label: 'Smooth Edges', param: 'radius', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
     { type: 'liquidglass', label: 'Liquid Glass', color: true, defColor: '#ffffff', colorLabel: 'Tint', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -358,7 +358,7 @@ window.FM = window.FM || {};
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
       params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
-    { type: 'colorbalance', label: 'Color Balance', params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }] },
+    { type: 'colorbalance', label: 'Colour Balance', params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }] },
     // ---- batch 12 ----
@@ -390,7 +390,7 @@ window.FM = window.FM || {};
     { type: 'gradientoverlay', label: 'Gradient Overlay', params: [{ key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     { type: 'lensflare', label: 'Lens Flare', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
-    { type: 'hexarray', label: 'Hexagon Array', param: 'size', min: 8, max: 80, step: 1, def: 24, unit: 'px', color: true, defColor: '#19d6c0', colorLabel: 'Color' },
+    { type: 'hexarray', label: 'Hexagon Array', param: 'size', min: 8, max: 80, step: 1, def: 24, unit: 'px', color: true, defColor: '#19d6c0', colorLabel: 'Colour' },
     // ---- batch 17: Drawing / Blur / Procedural ----
     { type: 'electricedges', label: 'Electric Edges', params: [{ key: 'amount', label: 'Glow', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'speed', label: 'Speed', min: 0, max: 10, step: 0.1, def: 4 }], color: true, defColor: '#7df9ff', colorLabel: 'Electric' },
     { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
@@ -539,9 +539,9 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     ] },
-    { type: 'replacecolor', label: 'Replace Color', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25, color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To' },
-    { type: 'spotcolor', label: 'Spot Color', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.2, color: true, defColor: '#e03131', colorLabel: 'Keep' },
-    { type: 'fourcolor', label: 'Four-Color Gradient', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85, color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right' },
+    { type: 'replacecolor', label: 'Replace Colour', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25, color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To' },
+    { type: 'spotcolor', label: 'Spot Colour', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.2, color: true, defColor: '#e03131', colorLabel: 'Keep' },
+    { type: 'fourcolor', label: 'Four-Colour Gradient', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85, color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right' },
     { type: 'spectralmap', label: 'Spectral Map', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'span', label: 'Spectrum span', min: 0, max: 360, step: 1, def: 260, unit: '\u00b0' },
@@ -577,13 +577,13 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 45, unit: '°' },
     ] },
     { type: 'palettemap', label: 'Palette Map', params: [
-      { key: 'count', label: 'Colors', min: 2, max: 8, step: 1, def: 4 },
+      { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4 },
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
     { type: 'lightning', label: 'Lightning', params: [
       { key: 'count', label: 'Bolts', min: 1, max: 8, step: 1, def: 3 },
       { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.02, def: 0.8 },
-    ], color: true, defColor: '#96c8ff', colorLabel: 'Color' },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
