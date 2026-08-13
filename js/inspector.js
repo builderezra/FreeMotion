@@ -379,8 +379,29 @@ window.FM = window.FM || {};
    *                the glide dies at the wall instead of spinning against it.
    *   onSettle()   called once when the whole gesture finishes — one history entry per gesture.
    */
+  /* GLIDE LENGTH (queue 116, and the reason it needed a second pass).
+   * Ezra, twice: "The sliders we have for everything like effects and what not are too stiff, they
+   * need to flow like the timeline does, when you swipe it glides." Queue 45 added this glide and was
+   * correctly ticked — the glide is real and it is attached to every one of these controls. What
+   * happened next is the whole bug: **queue 103 retuned the TIMELINE and not this**. There, on his
+   * "the glide ends too quick", friction went 0.9 → 0.947 and a full-speed flick went from ~3.7s of
+   * timeline to ~8.8s. The line below still said 0.9 under a comment claiming "same friction as the
+   * timeline's momentum" — true the day it was written, false from #103 onward. So the sliders are
+   * not missing a glide, they are wearing the timeline's OLD one, and next to the new one they feel
+   * exactly as he describes: stiff.
+   * Same lever as #103, because friction is what sets the distance (v0·16.67/(1−f)), not launch
+   * speed: throwing harder makes short flicks overshoot while leaving the long tail — the part you
+   * feel — just as short. 0.9 → 0.947 takes a full-speed flick from ~395px of ruler to ~765px. The
+   * clamp is raised only modestly alongside it, exactly as #103 did (0.022 → 0.028 there), so a hard
+   * flick covers more ground without a light one turning twitchy. The stop threshold comes down with
+   * it, or the longer tail gets cut off while still visibly moving — which is itself "ends too quick".
+   * FM.glideTuning + FM.timeline.momentumTuning are exposed so the suite pins the two together; the
+   * defect here was two things meant to feel the same drifting apart in silence. */
   const GLIDE_MIN_FLICK = 0.6;    // px/ms — below this it was a positioning drag, not a flick
-  const GLIDE_MAX_V = 2.5;        // a hard flick travels a long way, not forever
+  const GLIDE_MAX_V = 3.2;        // a hard flick travels a long way, not forever
+  const GLIDE_FRICTION = 0.947;   // per 16.67ms — MUST match the timeline's (see the note above)
+  const GLIDE_STOP = 0.004;       // px/ms below which the tail is imperceptible
+  FM.glideTuning = { friction: GLIDE_FRICTION, maxV: GLIDE_MAX_V, minFlick: GLIDE_MIN_FLICK, stopAt: GLIDE_STOP };
   function attachGlide(node, applyDx, onSettle) {
     let drag = null, raf = 0;
     const stop = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } };
@@ -407,9 +428,9 @@ window.FM = window.FM || {};
         // old layer's property from something nobody can see. Die with the element.
         if (!node.isConnected) { raf = 0; settle(); return; }
         const dt = Math.min(48, now - last); last = now;
-        v *= Math.pow(0.9, dt / 16.67);                          // same friction as the timeline's momentum
+        v *= Math.pow(GLIDE_FRICTION, dt / 16.67);               // the timeline's friction, from the shared constant
         const alive = applyDx(v * dt);
-        if (alive && Math.abs(v) > 0.008) raf = requestAnimationFrame(step);
+        if (alive && Math.abs(v) > GLIDE_STOP) raf = requestAnimationFrame(step);
         else { raf = 0; settle(); }
       };
       raf = requestAnimationFrame(step);

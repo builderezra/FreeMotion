@@ -1548,6 +1548,12 @@ window.FM = window.FM || {};
   }
 
   // ---- inertial scrubbing: a flick keeps gliding after you let go, decelerating to a stop ----
+  /* Named constants rather than literals, and EXPOSED, because of queue 116: the effect sliders were
+   * built to share this feel, queue 103 retuned the number here from 0.9 to 0.947, and the sliders
+   * were left on the old value under a comment saying they matched. Two things meant to feel the same
+   * drifted apart in silence for months. The suite now asserts they are equal, which needs both sides
+   * readable from outside. */
+  const MOM_FRICTION = 0.947, MOM_MAX_V = 0.028, MOM_STOP = 2.2e-4;
   let momentumRAF = 0;
   function stopMomentum() { if (momentumRAF) { cancelAnimationFrame(momentumRAF); momentumRAF = 0; } }
   function startMomentum(vTimePerMs) {   // vTimePerMs = project-seconds per ms at release
@@ -1563,16 +1569,16 @@ window.FM = window.FM || {};
      * from 0.022 to 0.028, so a deliberate hard flick crosses more ground without a light one
      * becoming twitchy. The stop threshold comes down with it, because at the old 5e-4 the tail was
      * being cut off while still visibly moving — which is itself part of "ends too quick". */
-    v = Math.max(-0.028, Math.min(0.028, v));
+    v = Math.max(-MOM_MAX_V, Math.min(MOM_MAX_V, v));
     let last = performance.now();
     const step = (now) => {
       const dt = Math.min(48, now - last); last = now;
-      v *= Math.pow(0.947, dt / 16.67);                 // friction per frame — see the note above
+      v *= Math.pow(MOM_FRICTION, dt / 16.67);          // friction per frame — see the note above
       let t = FM.time + v * dt;
       const dur = FM.scene.project.duration;
       if (t <= 0) { t = 0; v = 0; } else if (t >= dur) { t = dur; v = 0; }
       FM.scrubTime(t, true);                            // no per-frame snap → smooth glide (coalesced render/seek)
-      if (Math.abs(v) > 2.2e-4) momentumRAF = requestAnimationFrame(step);   // stop once it's imperceptible
+      if (Math.abs(v) > MOM_STOP) momentumRAF = requestAnimationFrame(step);   // stop once it is imperceptible
       else { momentumRAF = 0; FM.setTime(FM.time); }    // settle onto the exact frame
     };
     momentumRAF = requestAnimationFrame(step);
@@ -1667,6 +1673,8 @@ window.FM = window.FM || {};
     // …and the way to end one. abortGestures already exists for pinches and rebuilds; the suite needs
     // it so one test's leaked drag cannot be charged to the next test that runs.
     _abortGestures: function () { abortGestures(); },
+    // The scrub glide's tuning, exposed so the suite can pin the effect sliders to it — see queue 116.
+    momentumTuning: { friction: MOM_FRICTION, maxV: MOM_MAX_V, stopAt: MOM_STOP },
     // exposed so the suite can prove delete-parity with FM.animatedProps without faking a double-click
     deleteKeyframesAt: deleteKeyframesAt,
     // Read-only view of the magnet. The ⋯ menu could not tick 'Snapping' because this was a

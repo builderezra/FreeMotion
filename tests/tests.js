@@ -11850,6 +11850,31 @@
     }
   });
 
+  /* #116 — Ezra, for the second time: "The sliders we have for everything like effects and what not
+     are too stiff, they need to flow like the timeline does, when you swipe it glides."
+     Queue 45 added the glide and was correctly ticked. Queue 103 then retuned the TIMELINE's friction
+     from 0.9 to 0.947 on his "the glide ends too quick", and the sliders were left on 0.9 — under a
+     comment that said they matched. Two surfaces built to feel identical drifted apart in silence,
+     and the only symptom was a person saying "stiff" a second time.
+     A comment cannot hold that invariant. This can. */
+  test('glide: the effect sliders and the timeline scrub share one feel', { item: 'glide-parity' }, function () {
+    const s = FM.glideTuning, t = FM.timeline && FM.timeline.momentumTuning;
+    if (!s) throw new Error('FM.glideTuning is not exposed — the slider glide cannot be compared to anything');
+    if (!t) throw new Error('FM.timeline.momentumTuning is not exposed — the timeline glide cannot be compared to anything');
+    if (s.friction !== t.friction) {
+      throw new Error('the sliders decay at ' + s.friction + ' and the timeline at ' + t.friction +
+        ' — whichever was tuned last, the other now feels wrong. This is exactly how #116 happened.');
+    }
+    // …and the friction has to be the LONG one. 0.9 is the pre-#103 value; landing back on it would
+    // silently undo both of his complaints at once.
+    if (!(s.friction > 0.93)) throw new Error('the glide friction is ' + s.friction + ' — back at or below the pre-#103 value, which is the "ends too quick" he already reported');
+    // A flick's travel is v0·16.67/(1−f); assert the ratio against the old tuning so the improvement
+    // is stated as a number rather than a hope.
+    const reach = (f, v0) => v0 * 16.67 / (1 - f);
+    const now = reach(s.friction, s.maxV), before = reach(0.9, 2.5);
+    if (!(now > before * 1.8)) throw new Error('a full-speed flick now travels ' + now.toFixed(0) + 'px against ' + before.toFixed(0) + 'px before — not enough of a change to feel');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

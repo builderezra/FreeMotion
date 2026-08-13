@@ -951,13 +951,28 @@ better still, keep working inside the turn rather than parking work for a later 
       differently. The three reds are almost certainly downstream of something earlier, and guessing at
       the mechanism has now cost two attempts. Backed out rather than shipped red, or "fixed" by editing
       the tests it broke.
-- [ ] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** His words:
+- [x] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** (v6.97) His words:
       *"The sliders we have for everything like effects and what not are too stiff, they need to flow
       like the timeline does, when you swipe it glides."* #45 "Give every slider the timeline's glide"
       is ticked as done, so either it never covered the effect-panel sliders or the glide it added is
       too weak to feel. Do NOT assume the old fix is present and correct — measure what a flick on an
       effect slider actually does today before changing anything, the way the timeline glide was
       measured for #103.
+      **Shipped v6.97, and the cause is worth knowing because it is not what either of us assumed.**
+      The glide was never missing — #45 really did add it, and it is attached to every one of these
+      controls. What happened is that **#103 retuned the TIMELINE and not the sliders.** On your *"the
+      glide ends too quick"*, the timeline's friction went 0.9 → 0.947 and a full-speed flick went from
+      ~3.7s of timeline to ~8.8s. The slider code still read 0.9 — under a comment saying *"same friction
+      as the timeline's momentum"*, which was true the day it was written and false from #103 onward.
+      **So the sliders were not missing a glide; they were wearing the timeline's old one.** Next to the
+      new one, that is exactly "stiff", and you were right both times.
+      Fixed with the same lever #103 used, since friction sets the distance and launch speed does not:
+      a full-speed flick now carries **~979px of ruler against ~395px**, 2.5× further, with the clamp
+      raised only modestly so a light flick does not turn twitchy, and the stop threshold lowered so the
+      longer tail is not cut off while still visibly moving.
+      **The real fix is the test**: both tunings are now exposed and the suite fails if they ever differ
+      again. A comment could not hold that invariant — it silently stopped being true, and the only
+      symptom was you having to ask twice.
 - [x] **117 — A locked layer should show a red lock on its preview thumbnail.** (v6.87) His words: *"When you
       lock a layer put a red lock icon on the layer's preview image."* Small and unambiguous: the lock
       state exists (`layer.locked`, and the timeline already refuses to move a locked clip), it just is
