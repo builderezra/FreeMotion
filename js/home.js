@@ -685,7 +685,7 @@ window.FM = window.FM || {};
     /* Each card starts at its own point in the grain cycle, so they boil independently instead of
        flickering in unison — "I want it to be each one having its own things" (queue 105). A negative
        delay starts an animation mid-way rather than waiting, so nothing is held back. */
-    card.style.setProperty('--hm-static-delay', (-(Math.random() * 0.5)).toFixed(3) + 's');   // spread across the NEW 0.5s period, or every card would sit at the same point in it
+    card.style.setProperty('--hm-static-delay', (-(Math.random() * 0.36)).toFixed(3) + 's');   // spread across the NEW .36s period (queue 133), or every card would sit at the same point in it
     /* …and its own PAIR of noise fields to dissolve between, drawn from the six, so two cards side by
        side are not showing the same grain even at the same point in the cycle. */
     const gi = (Math.random() * STATIC_TILES) | 0;

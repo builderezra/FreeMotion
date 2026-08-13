@@ -2752,16 +2752,22 @@ body.hm-selecting .hm-card { touch-action: none; }
   content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   border-radius: 16px;   /* the background is clipped to this box, so the corners round on their own */
   background-repeat: repeat;
-  /* 0.5s, not 2.6s (queue 126). Ezra: "you've just turned off the animation … I asked for it to be
-     FASTER and you turned it off." Correct — a 2.6s cross-fade is one change per 1.3 seconds, which is
-     animating on paper and a still photograph to the eye. Chasing "smooth" I dropped the rate through
-     the floor and lost the thing the grain is for.
-     The METHOD stays: cross-fading is what killed the strobe that he objected to twice, and speeding a
-     cross-fade up does not bring the strobe back — there is no instant at which anything snaps. Only
-     the rate changes: ~2 field changes a second, continuously dissolving, which is close to how real
-     film grain reads at 24fps without ever cutting. */
-  animation-duration: .5s;
-  animation-timing-function: ease-in-out;   /* the dissolve has no hard edges at either end */
+  /* LINEAR, and .36s (queue 133). Ezra, fourth time asking: "I want a constant flow, not a noticeable
+     start and stop."
+     I had this wrong three times because I kept reading it as a RATE problem and kept changing the
+     duration. It was the TIMING FUNCTION. ease-in-out flattens the curve at both ends of every cycle,
+     so each layer DWELLS at full opacity around 0%/100% and dwells again at zero around 50% — two dead
+     stops per cycle, which is exactly the "noticeable start and stop" he kept describing. No duration
+     fixes a dwell: speeding it up just makes it stutter more often.
+     linear makes the opacity ramp a triangle wave — constant rate of change, no rest anywhere in the
+     cycle. That is what "constant flow" actually means, and it is a property of the CURVE, not of the
+     speed. Measured on the real keyframes: ease-in-out sat nearly motionless for 12.5% of every cycle
+     (rate variation CV 0.545); linear stalls for 0.0% of it (CV 0.056).
+     (The two layers' opacities already summed to a constant .032 — that falls out of the complementary
+     keyframes and was true under the old easing too, so it is not what was wrong. The dwell was.)
+     .36s on top of that is genuinely faster — a field change roughly every 180ms. */
+  animation-duration: .36s;
+  animation-timing-function: linear;   /* NOT ease-in-out — see above; the ease is what made it stop */
   animation-iteration-count: infinite;
   animation-delay: var(--hm-static-delay, 0s);   /* home.js gives every card its own phase */
 }

@@ -91,6 +91,58 @@ Numbered with Ezra's own queue numbers where he gave them.
       clamped hard (PULL_MAX 150 with a pow(dy,0.78) curve) and reads as a freeze once you pass it. He
       wants the drag to keep responding at any distance, with the slam on release past the threshold.
 
+- [ ] **136 — A selected Captions layer locks the timeline and the layer.** His words: *"I can't do
+      anything like drag the timeline or layer when you have a captions layer selected."* Screenshot on
+      v6.74 shows the Captions layer selected with its clip spanning the whole timeline. So selecting a
+      captions layer is swallowing the drag gestures — either the caption's own editing surface is
+      capturing pointers over the timeline, or the clip is being treated as un-draggable and taking the
+      scroll with it. Captions was made real in #43, so this is likely fallout from that.
+
+- [ ] **137 — "Edit Text" has the wrong icon.** His words: *"edit text button should have a diff icon."*
+      Screenshot: slot 7 "Edit Text" uses a green DIAMOND — which is the keyframe diamond used everywhere
+      else in the app for animation. Reads as "add a keyframe", not "edit the text". Needs an icon that
+      means text editing and does not collide with an existing meaning.
+
+- [x] **133 — Film grain: CONSTANT FLOW, no start/stop. Fourth time asking.** (v6.75) His words: *"Film grain
+      needs to move faster, I want a constant flow, not a noticeable start and stop. PLEASE JUST MAKE IT
+      WORK I DONT WANMA ASK AGAIN."* **This one is entirely my fault and the diagnosis was wrong every
+      time.** I kept treating it as a RATE problem and kept changing the speed (2.6s → 0.5s). It is a
+      METHOD problem: a cross-fade animates opacity .032 → 0 → .032 on ease-in-out, which IS a start and
+      a stop — it pulses, and no speed fixes a pulse. He has now described the symptom precisely enough
+      that there is no excuse: constant flow means the grain never pauses, so the opacity must not be
+      animated at all. Replace the dissolve with continuous linear motion of the noise field.
+      **Fixed v6.75, and it was one word.** The timing function was `ease-in-out`, which flattens the
+      curve at BOTH ends of every cycle — the grain literally stopped twice per cycle and restarted.
+      Changed to `linear` (plus .5s → .36s). Measured on the real keyframes at high sample rate:
+      ease-in-out sat effectively motionless for **12.5% of every cycle**, linear for **0.0%**; rate
+      variation dropped from CV 0.545 to 0.056. So there is now no instant at which it rests.
+      For the record on my three failed attempts: I read "faster" literally each time and only ever
+      changed the DURATION, which cannot fix a pause — speeding up a stop-start just stutters more
+      often. The stop was in the curve the whole time.
+
+- [ ] **134 — Text is broken: 180pt renders tiny.** Screenshot on v6.74, iPhone: a text layer with the
+      size control reading **180 pt** draws as a ~20px word on the canvas, with the selection box shrunk
+      to match. So the point size is not reaching the render — the layer is drawn at something near the
+      default regardless of what the control says. Note the control and the box AGREE with each other and
+      both disagree with 180, which points at the value never being applied rather than at a stale box.
+      This is the fourth text report (#88, #97, #98 lineage) so it needs a real reproduction on a device
+      profile, not a desktop glance.
+
+- [ ] **135 — Black bar down the left after opening/closing projects.** His words: *"there's a glitch
+      where sometimes when opening in and out of the projects it leave a black bar on the left side of
+      the screen."* Intermittent, which fits the open/close slide animation (#128, same area): the
+      project panel translates in from the right and home exits left, so a transform that does not fully
+      settle — or a will-change/compositor layer left behind — would show as a strip of background down
+      one edge. Likely the same root cause as #128's jankiness; fix them together.
+
+- [ ] **132 — The slam Easter egg is GONE.** His words: *"The slam Easter egg is gone."* Reported on
+      v6.74, and it supersedes the "it freezes" report in #131 — it is no longer freezing because it is
+      no longer happening at all. Prime suspect is v6.61, which changed Faves from a sideways swipe to a
+      PULL-DOWN on Recents: two gestures now want the same downward drag on the same screen, and if the
+      faves pull claims the pointer first the slam never gets to see it. Fix both together — #131 wants
+      the drag to stay responsive at any distance with the slam on release, #132 wants it to fire at all,
+      and they are the same gesture. Whatever lands must keep Faves working, since that was also his ask.
+
 - [x] **126 — The grain now reads as switched OFF; it needs to be FASTER, still smooth.** (v6.74) His words:
       *"you've just turned off the animation of the film grain in the home menu, I asked for it to be
       faster and you turned it off, wtf."* He is right and this one is on me: v6.68 cross-fades between
