@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#147 — how much of the canvas does the PC text editor cover?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.55 ui-monospace,Menlo,monospace}
+/* On-screen, not parked off the left edge: the numbers below are the point of this probe, but the
+   whole complaint is visual, so it has to be photographable too. */
+iframe{width:1280px;height:860px;border:0;display:block}
+#out{padding:12px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* Ezra (#147): "this pop up menu on pc is so shit, it literally covers up the text while you edit it,
+   get it off the canvas, also the text edit stuff on pc for some reason covers up the canvas, making
+   it smaller when you could just put it in the add menu."
+   Two complaints, and the code says they have different causes:
+     · the CARD reserves canvas room on purpose (layoutDesktop pads #stage) — that is "makes it
+       smaller", and it is deliberate;
+     · the Aa POPOVER opens upward from the card over the stage and nothing compensates for it — that
+       is "covers up the text while you edit it".
+   Which one dominates decides what to fix first, so measure the overlap of each against the CANVAS
+   rather than arguing from the source. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done(){ out.textContent = L.join('\n'); window.__done = true; }
+  function overlap(a, b) {
+    var x = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+    var y = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    return x * y;
+  }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.textEdit || !w.FM.addTextLayer) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 400);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, d = w.document;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.scene.layers = []; FM.refreshAll();
+      FM.addTextLayer();                       // spawns the layer AND opens the editor
+      await new Promise(function (r) { setTimeout(r, 700); });
+
+      var canvas = d.getElementById('preview') || d.querySelector('#stage canvas');
+      var panel = d.querySelector('.te-panel');
+      if (!canvas || !panel) { L.push('canvas ' + !!canvas + '  te-panel ' + !!panel + ' — the editor did not open'); return done(); }
+      var cv = canvas.getBoundingClientRect(), area = cv.width * cv.height;
+      L.push('canvas  ' + cv.width.toFixed(0) + ' x ' + cv.height.toFixed(0) + '  (' + area.toFixed(0) + ' px2)');
+      var pb = panel.getBoundingClientRect();
+      L.push('editor card  ' + pb.width.toFixed(0) + ' x ' + pb.height.toFixed(0) +
+             '   covers ' + (overlap(cv, pb) / area * 100).toFixed(1) + '% of the canvas');
+
+      // …now the Aa popover, which is the thing in his screenshot.
+      var aa = d.querySelector('.te-extras');
+      if (!aa) { L.push('no Aa button found'); return done(); }
+      aa.click();
+      await new Promise(function (r) { setTimeout(r, 500); });
+      var pop = d.querySelector('.te-pop');
+      if (!pop) { L.push('the Aa popover did not open'); return done(); }
+      var qb = pop.getBoundingClientRect();
+      L.push('Aa popover   ' + qb.width.toFixed(0) + ' x ' + qb.height.toFixed(0) +
+             '   covers ' + (overlap(cv, qb) / area * 100).toFixed(1) + '% of the canvas   <-- "covers up the text while you edit it"');
+
+      // And the union, which is what he actually sees.
+      var union = overlap(cv, pb) + overlap(cv, qb) - overlap(overlap(cv, pb) ? cv : cv, { left: Math.max(pb.left, qb.left), right: Math.min(pb.right, qb.right), top: Math.max(pb.top, qb.top), bottom: Math.min(pb.bottom, qb.bottom) });
+      L.push('together      about ' + (Math.min(area, overlap(cv, pb) + overlap(cv, qb)) / area * 100).toFixed(1) + '% of the canvas is behind the editor');
+      L.push('');
+      L.push('stage padding-bottom reserved for the card: ' + (d.getElementById('stage') || {}).style.paddingBottom);
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 5).join('\n'));
+    }
+    done();
+  }
+})();
+</script></body></html>

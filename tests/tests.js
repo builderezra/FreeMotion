@@ -11808,6 +11808,48 @@
     }
   });
 
+  /* #147 — Ezra: "this pop up menu on pc is so shit, it literally covers up the text while you edit
+     it, get it off the canvas… you could just put it in the add menu."
+     Measured before the fix on a 1280x860 window: the editor CARD covered 0.0% of the canvas (the
+     reserved band works), and the Aa popover covered 100.0%. The whole complaint was the popover, so
+     that is what moved — into the side column, where the app already keeps vertical lists of controls.
+     The assertion is geometric overlap with the CANVAS, because "is it in the right parent" would pass
+     on a popover that still happened to sit over the picture. */
+  test('desktop text editor: the Aa options do not cover the canvas you are typing on', { item: 'text-editor-cover' }, async function () {
+    if (window.innerWidth <= 700) throw new Error('this test needs a desktop-width frame; got ' + window.innerWidth);
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      FM.scene = scene([]);
+      FM.addTextLayer();                       // spawns the layer and opens the editor
+      await sleep(400);
+      const panel = document.querySelector('.te-panel');
+      if (!panel) throw new Error('the desktop text editor did not open');
+      const canvas = document.getElementById('preview') || document.querySelector('#stage canvas');
+      if (!canvas) throw new Error('no preview canvas to measure against');
+      const aa = document.querySelector('.te-extras');
+      if (!aa) throw new Error('the Aa button is missing from the editor toolbar');
+      aa.click();
+      await sleep(250);
+      const pop = document.querySelector('.te-pop');
+      if (!pop) throw new Error('the Aa popover did not open');
+
+      const cv = canvas.getBoundingClientRect(), pb = pop.getBoundingClientRect();
+      const ox = Math.max(0, Math.min(cv.right, pb.right) - Math.max(cv.left, pb.left));
+      const oy = Math.max(0, Math.min(cv.bottom, pb.bottom) - Math.max(cv.top, pb.top));
+      const pct = (ox * oy) / Math.max(1, cv.width * cv.height) * 100;
+      if (pct > 1) throw new Error('the Aa options cover ' + pct.toFixed(1) + '% of the canvas — you are typing blind, which is the report');
+      // …and it must still be on screen and usable, not merely moved somewhere harmless.
+      if (pb.width < 160 || pb.height < 80) throw new Error('the Aa popover measures ' + pb.width.toFixed(0) + 'x' + pb.height.toFixed(0) + ' — too small to use');
+      if (pb.right < 0 || pb.left > window.innerWidth || pb.bottom < 0 || pb.top > window.innerHeight) throw new Error('the Aa popover was moved off screen entirely');
+    } finally {
+      if (FM.textEdit && FM.textEdit.cancel) { try { FM.textEdit.cancel(); } catch (e) {} }
+      document.querySelectorAll('.te-pop, .te-panel').forEach(n => n.remove());
+      document.body.classList.remove('text-editing');
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

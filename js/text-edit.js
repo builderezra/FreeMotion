@@ -133,6 +133,31 @@ window.FM = window.FM || {};
       // to the card — .te-pop's base left:8/right:8 is the phone's full-window inset, which on a 2000px
       // window measured a 1984px-wide rail holding cards that are 76-108px each.
       if (!panel) return;
+      /* #147 — Ezra: "this pop up menu on pc is so shit, it literally covers up the text while you
+       * edit it, get it off the canvas… you could just put it in the add menu, so it doesnt take up
+       * real estate on the screen."
+       * MEASURED (tests/_tecover.html) on a 1280x860 window: the editor CARD covers 0.0% of the
+       * canvas — layoutDesktop already reserves a band for it and that works. The Aa popover covers
+       * **100.0%**. It is the whole complaint, and the card is not.
+       * So the popover goes where he said: the side column, which is off the canvas by construction
+       * and is already the app's home for exactly this kind of vertical list of controls. Only the
+       * popover moves — relocating the card as well would be re-architecture for a surface measured
+       * at zero coverage.
+       * Falls back to the old over-the-stage placement when that column is too small to hold it
+       * (a narrow window, or Studio's short inspector band), so this can never make things worse than
+       * they were. */
+      const col = document.getElementById('inspector-panel');
+      const cr = col && col.getBoundingClientRect();
+      if (cr && cr.width >= 200 && cr.height >= 240) {
+        pop.style.bottom = 'auto';
+        pop.style.left = Math.round(cr.left + 8) + 'px';
+        pop.style.width = Math.round(cr.width - 16) + 'px';
+        pop.style.top = Math.round(cr.top + 8) + 'px';
+        // Only the Aa sheet gets a cap — same reasoning as the fallback below: it is the one popover
+        // with overflow-y:auto, so it is the one a max-height can rescue rather than clip.
+        if (popKind === 'extras') pop.style.maxHeight = Math.round(cr.height - 16) + 'px';
+        return;
+      }
       const r = panel.getBoundingClientRect();
       pop.style.top = 'auto';
       pop.style.left = Math.round(r.left) + 'px';

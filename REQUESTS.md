@@ -360,6 +360,24 @@ better still, keep working inside the turn rather than parking work for a later 
          canvas overlay. The canvas then keeps its full size and the text stays visible while you edit.
       Phone is a different problem and is NOT covered by this — there is no side column there, and the
       current overlay is the right shape for a phone. Desktop only.
+      **Half shipped in v6.96 — the half you were actually looking at — and I want to be straight about
+      which half.** Measured on a 1280x860 window (`tests/_tecover.html`):
+
+      | | covers of the canvas |
+      |---|---|
+      | the editor card (toolbar + text field) | **0.0%** |
+      | **the Aa options panel** | **100.0%** |
+
+      So the card was never the thing hiding your text: `layoutDesktop` already reserves a band for it
+      and that works. It was the **Aa panel**, covering the canvas completely — which is exactly your
+      screenshot. It now opens in the side column instead, where the app already keeps vertical lists of
+      controls, i.e. where you said to put it. Measured after: **0.0%**. Falls back to the old placement
+      if that column is too small to hold it, so it can never be worse than it was.
+      **Still outstanding: the second half.** The card reserves **169px** at the bottom of the stage, and
+      that is the *"makes it smaller"* complaint. Removing it means docking the toolbar and field into
+      the side column too — the column is 286px and the card's minimum is 320px, so it needs a real
+      re-layout rather than a reparent, and it lands in the same strip #143/#144 are rebuilding. Left for
+      when those are settled, so it is done once rather than twice.
 
 - [x] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** (v6.94) His words:
       *"also on pc get rid of the project name editor thats at the top, its already at the bottom."*
