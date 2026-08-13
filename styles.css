@@ -2789,6 +2789,16 @@ body.hm-selecting .hm-card { touch-action: none; }
    Not gated on prefers-reduced-motion here — home.js refuses to arm the gesture at all in that case,
    which is the right place for it: the whole Easter egg simply does not exist rather than firing a
    silent version of itself. */
+/* The shake moves #home-screen up to 13px and twists it up to .34deg, and home is position:fixed
+   inset:0 — so for those 420ms the viewport is briefly uncovered at the edges and the EDITOR shows
+   through behind it (queue 144). Ezra: "it shows the editing page behind it, looks weird."
+   Fixed by painting the surround rather than by moving less: a big ring of home's own background,
+   carried by the same element so it travels and rotates with it. Nothing can appear in the gap
+   because the gap is now the same colour as home. Clipped to the viewport by body's overflow, so it
+   costs one solid rect and no layout.
+   Only while .hm-slam is on — an always-on 140px shadow would be paint work for a state that lasts
+   420ms and happens almost never. */
+#home-screen.hm-slam { box-shadow: 0 0 0 140px var(--bg, #0b0e14); }
 #home-screen.hm-slam { animation: hm-slam 420ms cubic-bezier(.25,.6,.3,1) both; }
 @keyframes hm-slam {
   0%   { transform: translate3d(0, 13px, 0) rotate(0deg); }

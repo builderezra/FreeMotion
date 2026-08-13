@@ -206,6 +206,39 @@ Numbered with Ezra's own queue numbers where he gave them.
       This is the fourth text report (#88, #97, #98 lineage) so it needs a real reproduction on a device
       profile, not a desktop glance.
 
+- [x] **144 — The slam shake reveals the editor behind home.** (v6.82) His words: *"When the shake happens it
+      shows the editing page behind it, looks weird, just make sure you don't see the page behind it,
+      either make the page extend so the shake doesn't show anything else or what you think is best.
+      Also idk why you would be able to see that behind it, like are both screens just sitting on top of
+      each other? If so that seems lag a cause of lag."*
+      Two parts, and the second is the better question:
+      (a) **The visual.** #home-screen is position:fixed inset:0 and the slam TRANSLATES it up to ~13px,
+          so for those 420ms there is a strip of un-covered viewport and #app shows through. Fix by
+          painting the surround rather than by moving less — the impact IS the point of the egg.
+      (b) **His architecture question, which is fair:** yes, the editor sits under home rather than being
+          torn down. Whether that costs anything depends entirely on whether it keeps RENDERING while
+          home is up — a covered but idle DOM tree is nearly free, a covered but still-drawing canvas is
+          not. Measure it before claiming either way, and give him the honest answer.
+      **Shipped v6.82 (a), answered (b).**
+      (a) `#home-screen.hm-slam` now carries `box-shadow: 0 0 0 140px var(--bg)` — a ring of home's
+          OWN background, on the same element, so it travels and twists with the shake and the gap is
+          always the same colour as home. Chosen over moving less, because the impact is the whole
+          point of the egg. Verified by painting the editor bright red and freezing home at the shake's
+          worst frame (13px down, .34deg): no red anywhere. Note elementFromPoint CANNOT verify this —
+          it ignores box-shadow and still reports the element underneath; only a screenshot can.
+      (b) **Measured: the editor is NOT costing anything while home is up.** renderScene ran 0 times in
+          1.5s with home open, and 0 times sitting idle in the editor — the canvas only draws on demand
+          (scrub, play, edit), it has no idle loop. So the two screens stacking is not a lag source. The
+          editor's DOM does stay laid out behind home, but that is a one-off layout, not per-frame work.
+          His instinct was a good one; it just does not happen to be true here.
+
+- [ ] **145 — Why does Alight Motion take ages to load and ours doesn't?** His words: *"alight motion
+      always takes ages to load when you open the app but ours doesn't, idk if that's coz ours is shit
+      and has nothing to load or just loads it well."* Not a bug — a question that deserves an honest
+      answer rather than a flattering one. Answer with actual numbers: what we load at boot, what is
+      deferred, and which parts are genuine architecture versus simply having far less to load than a
+      mature native app.
+
 - [x] **143 — A bar at the bottom, on EVERY screen.** (v6.79) Screenshot on v6.78: the splash paints
       pure black with the wordmark and "tap to skip", and the bottom ~40px is a DIFFERENT, slightly
       lighter dark — the app background showing below a splash that does not reach the bottom edge.
