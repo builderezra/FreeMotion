@@ -909,6 +909,28 @@ better still, keep working inside the turn rather than parking work for a later 
       have the selecting multiple layers tool."* So the edge-scroll behaviour the paint-select drag
       already has needs to apply to a clip drag too — and he has named the precedent, so copy that one
       rather than inventing a second feel.
+      **ATTEMPTED AND BACKED OUT — not shipped, and worth reading before the next go.** A horizontal
+      edge-scroll already exists and is wired to TRIM drags only (`trimEdgeScroll`), so the work is to
+      give a clip MOVE the same thing. Built it: the placement maths extracted into `applyClipMoveAt`
+      so the rAF loop can re-run it each frame, plus the accumulated scroll added to the drag delta —
+      without that the clip stops dead at the edge while the timeline slides underneath it, which is
+      worse than having no auto-scroll at all.
+      It made **three unrelated tests go red** — a text-editor geometry check, a text-editor layout
+      check, and an edit-points snap — and bisecting pinned it to the ARMING of the loop, not the maths:
+      with the arming disabled and everything else in place, the suite is 241/241.
+      **Two real defects in my own design surfaced on the way, and both are worth keeping:**
+      1. `v !== 0` only says the finger is inside the edge band. Pinned at scrollLeft 0 a leftward step
+         is a no-op, so the loop re-armed forever, re-placing the clip and re-rendering every frame off
+         a stale pointer position. Fix: compare scrollLeft before and after and stop if nothing moved.
+      2. A trim is bounded by the media's length; a clip move is not. "Grow the scroller, then scroll
+         into the space you just made" is unbounded — one missed pointerup and the timeline scrolls
+         forever while the scroller grows 120px a frame. Fix: cap at the end of the composition (or the
+         dragged clip) plus half a screen.
+      Neither cap made the three tests green, so something else about an armed edge-scroll disturbs
+      them. **Next go starts by finding which existing test leaves a clip drag un-released** — a drag
+      that outlives its test is leaked state that any feature keyed on `clipMove` will trip over, and
+      that is the thing to fix, not the feature. Backed out rather than shipped red or "fixed" by
+      editing the tests it broke.
 - [ ] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** His words:
       *"The sliders we have for everything like effects and what not are too stiff, they need to flow
       like the timeline does, when you swipe it glides."* #45 "Give every slider the timeline's glide"
