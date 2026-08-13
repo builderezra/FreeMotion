@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Effect-browser thumbnails — do they differ?</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 10px 12px; white-space: pre; font-size: 11px; overflow-x: auto; -webkit-text-size-adjust: 100%; }
+  h1 { font-size: 15px; margin: 12px 12px 0; color: #7fd7ef; }
+  .hint { margin: 4px 12px 0; font-size: 12px; color: #8b96a8; }
+  #tiles { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+  #tiles figure { margin: 0; width: 84px; }
+  #tiles canvas { width: 84px; height: 84px; border-radius: 8px; display: block; background: #151a24; }
+  #tiles figcaption { font-size: 9px; color: #8b96a8; text-align: center; margin-top: 2px; }
+</style>
+</head>
+<body>
+<h1>Effect-browser thumbnails — do they actually differ?</h1>
+<div class="hint">Ezra: "you can tell the effects don't work because all the images don't show any change
+in the effects menu." This renders the Colour &amp; Light tiles through the browser's OWN thumbnail
+pipeline and compares them to each other. The tiles are drawn below so you can see them too.</div>
+<div id="out">measuring…</div>
+<div id="tiles"></div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/masks.js"></script>
+<script src="../js/behaviors.js"></script>
+<script src="../js/media.js"></script>
+<script src="../js/blend-modes.js"></script>
+<script src="../js/compositor.js"></script>
+<script src="../js/fx-registry.js"></script>
+<script src="../js/fx-thumbs.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — EFFECT-THUMBNAIL differentiation probe.  Dev-only; not shipped.
+ *
+ * The complaint is about the BROWSER, not the compositor: every tile in Colour & Light shows the
+ * same unchanged picture, so the whole section reads as dead from the menu. That is consistent with
+ * everything else measured — the effects themselves work when applied to media, image and shape
+ * layers (tests/_colourfx.html) — so the thing to measure is the tile, through the exact pipeline the
+ * menu uses (FM.fxThumbs.mount), not a hand-rolled render that might differ from it.
+ *
+ * WHAT IT MEASURES. Each tile is compared against EVERY OTHER tile, not against a no-effect
+ * reference. That is deliberate: effects in this category legitimately use different SUBJECTS
+ * (SUBJECT_OF in fx-thumbs.js gives each effect a sample chosen to show it off), so "differs from a
+ * plain photo" would be true even if two effects were identical to each other. What the user sees as
+ * "no change" is tiles that look the SAME AS EACH OTHER, and that is what is counted here.
+ *
+ * THE CONTROL is invert vs grayscale — two effects nobody could confuse. If those two tiles come back
+ * identical, the harness is not rendering effects at all and every other row is noise.
+ * ============================================================================================ */
+(function () {
+  var IDS = (FM.fxRegistry.all ? FM.fxRegistry.all() : [])
+    .filter(function (e) { return e.category === 'color'; }).map(function (e) { return e.id; });
+
+  function sig(cv) {                       // a coarse fingerprint: mean RGB over a 6x6 grid of cells
+    var g = cv.getContext('2d', { willReadFrequently: true });
+    var w = cv.width, h = cv.height, out = [];
+    try {
+      var d = g.getImageData(0, 0, w, h).data;
+      for (var cy = 0; cy < 6; cy++) for (var cx = 0; cx < 6; cx++) {
+        var r = 0, gg = 0, b = 0, n = 0;
+        for (var y = (cy * h / 6) | 0; y < ((cy + 1) * h / 6) | 0; y += 2)
+          for (var x = (cx * w / 6) | 0; x < ((cx + 1) * w / 6) | 0; x += 2) {
+            var i = (y * w + x) * 4; r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++;
+          }
+        out.push(Math.round(r / n), Math.round(gg / n), Math.round(b / n));
+      }
+    } catch (e) { return null; }
+    return out;
+  }
+  function dist(a, b) {
+    if (!a || !b) return -1;
+    var s = 0;
+    for (var i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
+    return Math.round(s / a.length);        // mean channel difference, 0 = identical
+  }
+
+  var host = document.getElementById('tiles');
+  var cells = IDS.map(function (id) {
+    var fig = document.createElement('figure');
+    var cv = document.createElement('canvas');
+    var cap = document.createElement('figcaption'); cap.textContent = id;
+    fig.appendChild(cv); fig.appendChild(cap); host.appendChild(fig);
+    try { FM.fxThumbs.mount(cv, id); } catch (e) {}
+    return { id: id, cv: cv };
+  });
+
+  setTimeout(function () {
+    var sigs = cells.map(function (c) { return { id: c.id, s: sig(c.cv) }; });
+    var blank = sigs.filter(function (x) { return !x.s; }).map(function (x) { return x.id; });
+
+    // control: two effects that could not possibly look alike
+    var gi = sigs.find(function (x) { return x.id === 'invert'; });
+    var gr = sigs.find(function (x) { return x.id === 'grayscale'; });
+    var ctl = (gi && gr) ? dist(gi.s, gr.s) : -1;
+
+    // every pair, so "all the images look the same" is measured directly
+    var pairs = [], ident = [];
+    for (var i = 0; i < sigs.length; i++) for (var j = i + 1; j < sigs.length; j++) {
+      var d = dist(sigs[i].s, sigs[j].s);
+      pairs.push(d);
+      /* 12, not 2. "Identical to a machine" is the wrong bar — the complaint is that they LOOK the
+         same, and two tiles 8 apart on a mean-channel scale of 255 are indistinguishable at 84px on a
+         phone. The strict threshold found zero pairs and told me nothing. */
+      if (d <= 12) ident.push(String(d).padStart(3) + '  ' + sigs[i].id + '  ~  ' + sigs[j].id);
+    }
+    pairs.sort(function (a, b) { return a - b; });
+    var med = pairs.length ? pairs[pairs.length >> 1] : -1;
+
+    var L = [];
+    L.push(IDS.length + ' Colour & Light tiles, rendered through FM.fxThumbs.mount — the menu\'s own path.');
+    L.push('Numbers are the mean per-channel difference between two tiles. 0 = pixel-identical.');
+    L.push('');
+    L.push('CONTROL  invert vs grayscale (must be well above 2): ' + ctl);
+    if (ctl >= 0 && ctl <= 2) L.push('   *** HARNESS BROKEN — nothing below is meaningful. ***');
+    L.push('');
+    L.push('tiles that rendered BLANK / unreadable: ' + (blank.length ? blank.join(', ') : 'none'));
+    L.push('median difference across all ' + pairs.length + ' pairs: ' + med);
+    L.push('closest pairs: ' + pairs.slice(0, 6).join(', ') + '   furthest: ' + pairs.slice(-3).join(', '));
+    L.push('');
+    L.push('PAIRS A PERSON WOULD CALL THE SAME — mean channel difference <= 12 (' + ident.length + '):');
+    if (!ident.length) L.push('   (none — every tile differs from every other)');
+    else ident.sort().slice(0, 40).forEach(function (t) { L.push('   ' + t); });
+    document.getElementById('out').textContent = L.join('\n');
+    window.__done = true;
+  }, 2500);   // thumbnails are lazy: give the pipeline time to render and cache every tile
+})();
+</script>
+</body>
+</html>

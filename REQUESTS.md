@@ -90,7 +90,13 @@ Numbered with Ezra's own queue numbers where he gave them.
       only alter the glyph pixels and glow works. So a real bug, not a device one — and it is not the
       whole of his complaint either, since he sees dead effects generally. Investigate the text draw
       path: it is the one that paints glyphs through the fill system, and something there is dropping
-      the filter for the value-changing functions while letting the palette-changing ones through. His words: *"There's a shit load
+      the filter for the value-changing functions while letting the palette-changing ones through.
+      **WHAT HE ACTUALLY MEANT, 2026-08-13:** *"You can tell the effects don't work because all the
+      images don't show any change in the effects menu."* So this is the effect BROWSER's thumbnails,
+      not the effects themselves — every preview tile in Colour & Light shows the same unchanged
+      picture, so the whole section looks dead from the menu. That fits every measurement: the effects
+      DO work when applied (audited on media, image and shape layers). The bug is in the thumbnail
+      generation. Related to #52 / #85 / #144, which have circled this area three times before. His words: *"There's a shit load
       of effects in the colour & light section that blatantly do nothing and don't work."* Turn this into
       an exact list before touching anything: render a test frame with and without each effect in that
       category and count changed pixels. Must test at a STRONG setting as well as the default, or an
