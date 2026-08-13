@@ -42,32 +42,64 @@ window.FM = window.FM || {};
         try { URL.revokeObjectURL(url); } catch (e) {}
         reject(new Error('Could not read “' + file.name + '” — the browser never reported its size or length.'));
       }, 20000);
-      const finish = () => {
+      const finish = (override) => {
         if (settled) return;
         settled = true;
         clearTimeout(metaTimer);
+        const own = (isFinite(el.duration) && el.duration > 0) ? el.duration : 0;
         resolve({
           kind: 'video', el, url, file,
           width: el.videoWidth, height: el.videoHeight,
-          duration: (isFinite(el.duration) && el.duration > 0) ? el.duration : 0,
+          duration: Math.max(own, (isFinite(override) && override > 0) ? override : 0),
         });
       };
-      el.addEventListener('loadedmetadata', () => {
-        // MediaRecorder webm files report duration = Infinity until forced to compute it.
-        if (!isFinite(el.duration) || isNaN(el.duration) || el.duration === 0) {
-          const onResolve = () => {
-            if (isFinite(el.duration) && el.duration > 0) { cleanup(); el.currentTime = 0; finish(); }
-          };
+      el.addEventListener('loadedmetadata', async () => {
+        const meta = el.duration;
+        const bogus = !isFinite(meta) || isNaN(meta) || meta === 0;   // MediaRecorder webm: Infinity until forced
+        if (bogus) {
+          let best = 0;
           const cleanup = () => {
             el.removeEventListener('durationchange', onResolve);
             el.removeEventListener('timeupdate', onResolve);
             el.removeEventListener('seeked', onResolve);
           };
+          function onResolve() {
+            if (isFinite(el.duration) && el.duration > best) best = el.duration;
+            if (isFinite(el.duration) && el.duration > 0) {
+              cleanup(); try { el.currentTime = 0; } catch (e) {} finish(best);
+            }
+          }
           el.addEventListener('durationchange', onResolve);
           el.addEventListener('timeupdate', onResolve);
           el.addEventListener('seeked', onResolve);
           try { el.currentTime = 1e7; } catch (e) {}
-          setTimeout(() => { cleanup(); finish(); }, 1500); // never hang
+          setTimeout(() => { cleanup(); try { el.currentTime = 0; } catch (e) {} finish(best); }, 1500);   // never hang
+        } else if (!el.videoWidth) {
+          /* AUDIO-ONLY: TRUST THE DECODE, NOT THE CONTAINER (queue 72). A VBR mp3 whose Xing/VBRI
+           * header is missing or clobbered — a stream rip, a concatenation, a tag editor that ate the
+           * info frame — makes the browser ESTIMATE the length from the first frame's bitrate. That
+           * estimate is finite and positive, so the old guard waved it through, addMediaLayer turned
+           * it into layer.duration (js/app.js:1268), and the clip was born shorter than the song with
+           * the tail simply gone. It is the only one of queue 72's two causes that really loses audio.
+           *
+           * I tried the seek-past-the-end trick here first, because that is what the bogus branch
+           * above already does, and MEASURED it against a fixture that is 26.384s long and claims
+           * 11.210s: the seek recovered only 13.453s and cost 600ms. Decoding at 8kHz returned
+           * 26.384s exactly, in 25ms — right, and 24x cheaper. The decode is not extra work either;
+           * getWaveform performs the same one lazily a moment later and the result is cached on the
+           * record, so this mostly moves it earlier.
+           *
+           * Bounded three ways: only for audio, only under the waveform's own size ceiling, and inside
+           * a try/catch that falls back to the container figure. Whichever is LARGER wins, so a decode
+           * that learns nothing can never SHORTEN a clip. */
+          let dec = 0;
+          if (!(file && file.size > WAVE_MAX_BYTES)) {
+            try {
+              const ab = await FM.decodeAudio(file, { rate: WAVE_RATE });
+              if (ab && isFinite(ab.duration) && ab.duration > 0) dec = ab.duration;
+            } catch (e) {}
+          }
+          finish(dec);
         } else {
           finish();
         }
@@ -239,7 +271,20 @@ window.FM = window.FM || {};
         ? rec.audioBuffer
         : await FM.decodeAudio(rec.file, { rate: WAVE_RATE });
       if (!ab) { rec.waveform = []; rec._wfPending = false; return rec.waveform; }
-      const ch = ab.getChannelData(0);
+      /* EVERY channel, not just the left one. This drew the peak of channel 0 alone while playback and
+       * export mix the lot, so any span where the left is quiet but the right is not — a hard-panned
+       * intro, a one-sided 60s/70s stereo mix, an interview whose single mic was muxed to the right,
+       * a file with a dead left channel — rendered as a flat line under audio you can plainly hear.
+       * That is Ezra's "you can see how it's missing parts" (queue 72), and the file was never damaged:
+       * only the picture of it was. Measured on a 180s stereo file carrying full-scale tone on the
+       * RIGHT throughout with the left zeroed from 60s to 120s: 120 of 360 half-second windows read
+       * silent on channel 0 and ZERO read silent across both channels, drawing a 60-second hairline
+       * through the middle of the clip.
+       * tests/_audiogaps.html could never have caught it — its makeWav() writes `setUint16(22, 1)`,
+       * i.e. MONO, so the probe that "re-verified this from scratch" cannot express the failure. */
+      const chans = [];
+      for (let c = 0; c < ab.numberOfChannels; c++) chans.push(ab.getChannelData(c));
+      const ch = chans[0];
       const len = ch.length;
       const dur = ab.duration || (len / (ab.sampleRate || WAVE_RATE));
       // never more bins than samples — a sub-second clip would otherwise get empty bins between real ones
@@ -252,7 +297,10 @@ window.FM = window.FM || {};
         const s = Math.floor(i * len / N);
         const e = (i === N - 1) ? len : Math.max(s + 1, Math.floor((i + 1) * len / N));
         let max = 0;
-        for (let j = s; j < e; j++) { const v = ch[j] < 0 ? -ch[j] : ch[j]; if (v > max) max = v; }
+        for (let c = 0; c < chans.length; c++) {
+          const d = chans[c];
+          for (let j = s; j < e; j++) { const v = d[j] < 0 ? -d[j] : d[j]; if (v > max) max = v; }
+        }
         peaks[i] = max;
       }
       rec.waveform = peaks;

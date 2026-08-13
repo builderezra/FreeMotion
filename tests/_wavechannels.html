@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Waveform channel-coverage probe</title>
+<style>
+  html, body { margin: 0; background: #05070b; color: #cfd6e4;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #out { padding: 8px 12px; white-space: pre; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="out">booting…</div>
+
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/media.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — WAVEFORM CHANNEL-COVERAGE probe.  Dev-only; not shipped, not linked from the app.
+ *
+ * Queue 72, Ezra: "when it's importing the audio it literally cuts parts of the file out … even on
+ * the timeline you can see how it's missing parts." One of the two causes turned out not to touch the
+ * audio at all: FM.getWaveform read `ab.getChannelData(0)` and nothing else, so every bar on the clip
+ * was the peak of the LEFT channel while playback and export mix every channel. A stretch that is
+ * quiet on the left but loud on the right — a hard-panned section, a one-sided vintage stereo mix, an
+ * interview miked to one side, a file with a dead left channel — drew as a flat line under audio you
+ * can plainly hear.
+ *
+ * WHY THE EXISTING PROBE COULD NOT SEE IT, which is the part worth remembering: tests/_audiogaps.html
+ * builds its fixtures with `v.setUint16(22, 1, true)` — MONO. A mono file cannot express a channel
+ * imbalance, so that probe was structurally incapable of failing on this bug no matter how carefully
+ * it measured. This one builds STEREO buffers directly.
+ *
+ * THE SECOND CASE IS THE CONTROL AND IT IS LOAD-BEARING. "No silent bins" is also what a broken peak
+ * finder that always returns full scale would report. So a genuinely silent span — silent on BOTH
+ * channels — must still read silent. Without that row, a fix that simply hard-coded loudness would
+ * look like a pass.
+ * ============================================================================================ */
+(function () {
+  var RATE = 8000, DUR = 18, SIL_FROM = 6, SIL_TO = 12;   // 18s, the middle third treated specially
+
+  function buildStereo(leftGain, rightGain, gapFrom, gapTo, gapOnLeft, gapOnRight) {
+    var Ctor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    var ctx = new Ctor(2, RATE * DUR, RATE);
+    var buf = ctx.createBuffer(2, RATE * DUR, RATE);
+    for (var c = 0; c < 2; c++) {
+      var d = buf.getChannelData(c);
+      var gain = c === 0 ? leftGain : rightGain;
+      var muteHere = c === 0 ? gapOnLeft : gapOnRight;
+      for (var i = 0; i < d.length; i++) {
+        var t = i / RATE;
+        var inGap = t >= gapFrom && t < gapTo;
+        d[i] = (inGap && muteHere) ? 0 : gain * Math.sin(2 * Math.PI * 440 * t);
+      }
+    }
+    return buf;
+  }
+  async function peaksOf(buf) {
+    var rec = { audioBuffer: buf };            // getWaveform takes rec.audioBuffer directly, no decode
+    var p = await FM.getWaveform(rec);
+    return p || [];
+  }
+  function silentRun(peaks, from, to) {
+    // how many bins inside [from,to) of the file are near-silent, and how many are outside it
+    var n = peaks.length, insideSilent = 0, insideTotal = 0, outsideSilent = 0, outsideTotal = 0;
+    for (var i = 0; i < n; i++) {
+      var t = (i / n) * DUR;
+      var inside = t >= from && t < to;
+      var quiet = peaks[i] < 0.02;
+      if (inside) { insideTotal++; if (quiet) insideSilent++; }
+      else { outsideTotal++; if (quiet) outsideSilent++; }
+    }
+    return { insideSilent: insideSilent, insideTotal: insideTotal,
+             outsideSilent: outsideSilent, outsideTotal: outsideTotal };
+  }
+
+  (async function () {
+    var lines = ['18s stereo, 440Hz tone. Peaks are read at ' + RATE + 'Hz.',
+                 'A bin counts as "silent" below 0.02 of full scale.', ''];
+    lines.push('case                                                       silent in 6-12s   silent elsewhere   verdict');
+
+    // 1. THE BUG: left channel muted 6-12s, right carries the tone the whole way through.
+    var panned = await peaksOf(buildStereo(1, 1, SIL_FROM, SIL_TO, true, false));
+    var a = silentRun(panned, SIL_FROM, SIL_TO);
+    lines.push('left muted 6-12s, right playing throughout'.padEnd(58) +
+      (a.insideSilent + '/' + a.insideTotal).padStart(16) + (a.outsideSilent + '/' + a.outsideTotal).padStart(19) + '   ' +
+      (a.insideSilent === 0 ? 'correct — the right channel is drawn'
+                            : 'HOLE — ' + a.insideSilent + ' flat bins under audible sound'));
+
+    // 2. the mirror image, so the fix cannot just be "read channel 1 instead of channel 0"
+    var panned2 = await peaksOf(buildStereo(1, 1, SIL_FROM, SIL_TO, false, true));
+    var b = silentRun(panned2, SIL_FROM, SIL_TO);
+    lines.push('right muted 6-12s, left playing throughout'.padEnd(58) +
+      (b.insideSilent + '/' + b.insideTotal).padStart(16) + (b.outsideSilent + '/' + b.outsideTotal).padStart(19) + '   ' +
+      (b.insideSilent === 0 ? 'correct' : 'HOLE — ' + b.insideSilent + ' flat bins'));
+
+    // 3. CONTROL: genuinely silent on BOTH channels. This MUST still read silent, or the probe is
+    //    only proving that something returns big numbers.
+    var real = await peaksOf(buildStereo(1, 1, SIL_FROM, SIL_TO, true, true));
+    var c = silentRun(real, SIL_FROM, SIL_TO);
+    var ok = c.insideSilent > c.insideTotal * 0.8 && c.outsideSilent === 0;
+    lines.push('CONTROL — silent on BOTH channels 6-12s'.padEnd(58) +
+      (c.insideSilent + '/' + c.insideTotal).padStart(16) + (c.outsideSilent + '/' + c.outsideTotal).padStart(19) + '   ' +
+      (ok ? 'ok — a real silence still reads as silence'
+          : '<<< THE PROBE IS LYING: a true silence did not draw as one'));
+
+    lines.push('');
+    if (!ok) lines.push('IGNORE EVERY ROW ABOVE — the control failed, so the measurement is meaningless.');
+    else if (a.insideSilent || b.insideSilent) lines.push('WAVEFORM IS SINGLE-CHANNEL — it draws holes where the sound is fine.');
+    else lines.push('waveform covers every channel.');
+    document.getElementById('out').textContent = lines.join('\n');
+    window.__done = true;
+  })().catch(function (e) {
+    document.getElementById('out').textContent = 'THREW: ' + (e && e.stack || e);
+    window.__done = true;
+  });
+})();
+</script>
+</body>
+</html>

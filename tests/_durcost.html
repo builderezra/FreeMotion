@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>decode vs seek-probe</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:13px/1.45 ui-monospace,Menlo,monospace}
+#out{padding:8px 12px;white-space:pre;font-size:12px}</style></head><body>
+<div id="out">booting…</div>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/media.js"></script>
+<script>
+/* Which way of learning an mp3's REAL length is worth paying for: the element seek-probe, or an
+   actual decode? liar.mp3 is 26.384s that the container claims is 11.210s. Cost matters as much as
+   accuracy here — this runs on import, on a phone. */
+(function () {
+  async function blobOf(n){ var r = await fetch(n); return await r.blob(); }
+  async function run(name, trueLen) {
+    var b = await blobOf(name);
+    var f = new File([b], name, {type:'audio/mpeg'});
+    var t0 = performance.now();
+    var ab = await FM.decodeAudio(f, { rate: 8000 });
+    var decMs = Math.round(performance.now() - t0);
+    return { decoded: ab ? ab.duration : -1, decMs: decMs, size: Math.round(b.size/1024) };
+  }
+  (async function () {
+    var L = ['Cost and accuracy of an 8kHz decode, which the waveform ALREADY performs lazily.', ''];
+    L.push('file            KB     decoded len   true      decode ms');
+    var a = await run('_fixtures/liar.mp3', 26.384);
+    L.push('liar.mp3'.padEnd(16) + String(a.size).padStart(6) + a.decoded.toFixed(3).padStart(14) +
+      (26.384).toFixed(3).padStart(10) + String(a.decMs).padStart(11));
+    var c = await run('_fixtures/control.mp3', 26.323);
+    L.push('control.mp3'.padEnd(16) + String(c.size).padStart(6) + c.decoded.toFixed(3).padStart(14) +
+      (26.323).toFixed(3).padStart(10) + String(c.decMs).padStart(11));
+    document.getElementById('out').textContent = L.join('\n');
+    window.__done = true;
+  })().catch(function(e){ document.getElementById('out').textContent='THREW: '+(e&&e.stack||e); window.__done=true; });
+})();
+</script></body></html>

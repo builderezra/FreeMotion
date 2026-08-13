@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Audio duration-probe check</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:13px/1.45 ui-monospace,Menlo,monospace}
+#out{padding:8px 12px;white-space:pre;font-size:12px}</style></head><body>
+<div id="out">booting…</div>
+<script src="../js/settings.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/media.js"></script>
+<script>
+/* ============================================================================================
+ * FreeMotion — AUDIO DURATION-PROBE check.  Dev-only; not shipped, not linked from the app.
+ *
+ * Queue 72, the half that genuinely loses audio. FM.loadVideoFile resolved with the CONTAINER's
+ * metadata duration and never checked it. A VBR mp3 whose Xing/VBRI header is missing or clobbered
+ * makes the browser estimate the length from the first frame's bitrate, and that estimate can be far
+ * short — so the clip was created shorter than the song and the tail was simply gone.
+ *
+ * liar.mp3 is exactly that file: 26.384s of audio that Chrome reports as 11.210s at loadedmetadata.
+ * control.mp3 is the same audio with an intact header, and it is what stops this check being a
+ * one-way ratchet: if the probe simply inflated every duration, the control would drift too.
+ * ============================================================================================ */
+(function () {
+  var TRUE_LEN = 26.384, REPORTED = 11.210;
+  async function load(name) {
+    var r = await fetch(name); var b = await r.blob();
+    var f = new File([b], name, { type: 'audio/mpeg' });
+    var t0 = performance.now();
+    var rec = await FM.loadVideoFile(f);
+    return { dur: rec.duration, ms: Math.round(performance.now() - t0) };
+  }
+  async function bare(name) {   // what the element says WITHOUT the probe, for comparison
+    var r = await fetch(name); var b = await r.blob();
+    var el = document.createElement('video'); el.preload = 'metadata'; el.muted = true;
+    el.src = URL.createObjectURL(b);
+    await new Promise(function (res) { el.addEventListener('loadedmetadata', res, { once: true }); setTimeout(res, 4000); });
+    return el.duration;
+  }
+  (async function () {
+    var L = ['liar.mp3 is 26.384s of audio that the container claims is 11.210s.', ''];
+    L.push('file             metadata says   after import   true      verdict');
+    var lm = await bare('_fixtures/liar.mp3');
+    var li = await load('_fixtures/liar.mp3');
+    L.push('liar.mp3'.padEnd(17) + lm.toFixed(3).padStart(10) + li.dur.toFixed(3).padStart(15) +
+      TRUE_LEN.toFixed(3).padStart(10) + '   ' +
+      (Math.abs(li.dur - TRUE_LEN) < 0.6 ? 'RECOVERED — the tail is no longer cut'
+        : (li.dur > lm + 0.5 ? 'partly recovered' : 'STILL TRUNCATED by ' + (TRUE_LEN - li.dur).toFixed(2) + 's')));
+    var cm = await bare('_fixtures/control.mp3');
+    var ci = await load('_fixtures/control.mp3');
+    L.push('control.mp3'.padEnd(17) + cm.toFixed(3).padStart(10) + ci.dur.toFixed(3).padStart(15) +
+      cm.toFixed(3).padStart(10) + '   ' +
+      (Math.abs(ci.dur - cm) < 0.25 ? 'unchanged — an honest file is left alone'
+        : '<<< the probe MOVED a correct duration by ' + (ci.dur - cm).toFixed(3) + 's'));
+    L.push('');
+    L.push('import cost with the probe: liar ' + li.ms + 'ms, control ' + ci.ms + 'ms');
+    document.getElementById('out').textContent = L.join('\n');
+    window.__done = true;
+  })().catch(function (e) { document.getElementById('out').textContent = 'THREW: ' + (e && e.stack || e); window.__done = true; });
+})();
+</script></body></html>

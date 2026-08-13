@@ -183,7 +183,7 @@ Numbered with Ezra's own queue numbers where he gave them.
       Left open until Ezra confirms it feels better on his own device and projects.
       **Known and NOT fixed:** FM.media never releases a deleted clip's record, so memory grows with
       every import you throw away. That one needs undo-stack surgery and was deliberately deferred.
-- [ ] **72 — Audio import loses parts of the file.** *"when it's importing the audio it literally cuts
+- [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**
       the half you can SEE was fixed back in **v6.08** ("fix the gaps in a long clip's waveform") and
