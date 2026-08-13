@@ -206,7 +206,52 @@ Numbered with Ezra's own queue numbers where he gave them.
       This is the fourth text report (#88, #97, #98 lineage) so it needs a real reproduction on a device
       profile, not a desktop glance.
 
-- [ ] **135 — Black bar down the left after opening/closing projects.** His words: *"there's a glitch
+- [x] **143 — A bar at the bottom, on EVERY screen.** (v6.79) Screenshot on v6.78: the splash paints
+      pure black with the wordmark and "tap to skip", and the bottom ~40px is a DIFFERENT, slightly
+      lighter dark — the app background showing below a splash that does not reach the bottom edge.
+      **Almost certainly the same defect as #135, on the other axis**: #135 is a full-height strip down
+      the RIGHT (element too narrow), this is a strip along the BOTTOM (element too short). Treat them
+      as one bug — "a full-bleed element is not filling the viewport" — rather than two, and fix them
+      together. Two independent sightings on two axes is much better evidence than either alone.
+      **Then he found the decisive fact:** *"it's there when you're in the home menu too… Oh wait it's
+      def a glitch, it's there even when I'm in a project, urgently fix."* Present on the splash, on
+      home AND inside a project — so it is not any one screen's layout, and it cannot be a gap under a
+      z-index-10000 `position:fixed; inset:0` splash either. Nothing in the PAGE could paint it.
+      **Cause: `theme-color`.** It was `#12151b` in both the meta tag and manifest.json. On iOS 26 a
+      standalone PWA tints the area around the page with theme-color, including the home-indicator
+      safe area — so that band sat under every screen, and read as a bar precisely because #12151b is
+      lighter than the app's ground and lighter still than the splash's pure black. The screenshot
+      agrees: the strip is LIGHTER than the black splash, which no missing-element gap would be.
+      Fixed by setting both to #000000, matching the splash and the manifest's existing
+      background_color, so the band is the same colour as what it sits under.
+      **Note it also explains #135's right-hand strip** — same band, the side edge — which is why that
+      one survived the v6.78 overflow fix. If the right strip is gone too, close #135 on this.
+      Caveat for him: the META takes effect on reload, but iOS may have cached the MANIFEST from
+      install, so a full close-and-reopen (or worst case re-adding to the Home Screen) may be needed
+      before the manifest half applies.
+
+- [ ] **135 — REOPENED. Black bar down the right edge; the v6.78 fix did NOT work.** He ticked it off
+      (*"just assume it's fixed for now"*) and then immediately: *"Never mind it just came up."*
+      **That is a real result, not just a failure.** v6.78 made the page impossible to pan sideways
+      (`overflow-x: clip`, verified: forcing a 600px pan leaves scrollX at 0 even with the editor parked
+      off-screen). The strip survived that. So horizontal scrolling is NOT the cause and is now ruled
+      out — which also kills the "#app/#add-fab parked off to the right" theory, since you cannot reach
+      them on an unpannable page.
+      What is left: **a container that is genuinely NARROWER than the screen**, letting the page
+      background show down its right side. That fits the screenshot better anyway — the fixed top bar
+      stopped short of the strip too, which panning would not do (a fixed bar does not move when you
+      pan). Chase inline/px widths pinned from a stale measurement during the open/close animation, and
+      anything resolving against a stale viewport width on iOS.
+      Keep the v6.78 clip anyway: it is correct on its own terms (nothing here should ever pan
+      sideways), it just was not this bug.
+      **THE ACTUAL TRIGGER, from him:** *"Happened when I started texting you then opened the app back
+      up… Yeah it seems to trigger from leaving the app."* So it is NOT the project open/close animation
+      at all — that was my assumption from the first report and it sent me at the wrong thing twice.
+      It is **backgrounding the app and resuming it**. That is a known iOS shape: on resume the visual
+      viewport is re-established, and anything holding a width measured at load — a px width written
+      into an inline style, a CSS var set once from innerWidth, a cached clientWidth — is now stale and
+      too narrow, so the page background shows down the right. Look for a width cached at load with no
+      recompute on `resize` / `pageshow` / `visibilitychange`, and make it re-measure on resume. His words: *"there's a glitch
       where sometimes when opening in and out of the projects it leave a black bar on the left side of
       the screen."* Intermittent, which fits the open/close slide animation (#128, same area): the
       project panel translates in from the right and home exits left, so a transform that does not fully
