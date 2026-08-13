@@ -371,7 +371,19 @@ window.FM = window.FM || {};
    * Two guards worth naming: nothing fires below PULL_MIN, so a short overscroll during ordinary
    * scrolling stays silent; and it is skipped entirely under prefers-reduced-motion, where a screen
    * shake is not a joke but a problem. */
-  const PULL_MAX = 150, PULL_MIN = 64;
+  /* PULL_SOFT is where the pull starts getting heavy — NOT where it stops (queue 131). Ezra: "you
+   * should still be able to drag it down as freely as you want and at any point of letting go after a
+   * certain amount it does the slam." The old code did Math.min(PULL_MAX, …), a hard cut: past it the
+   * list stopped answering the finger entirely, which is exactly what he described as a freeze.
+   * Now everything past PULL_SOFT is compressed to 28% rather than discarded, so it keeps moving at
+   * any distance — heavier and heavier, never stuck. CANCEL_UP is how far you have to move UP before
+   * this counts as "no, I'm scrolling back" — see the pointermove handler for why 0 is not enough. */
+  const PULL_SOFT = 150, PULL_MIN = 64, CANCEL_UP = 12;
+  function damp(dy) {
+    if (dy <= 0) return 0;
+    const raw = Math.pow(dy, 0.78);
+    return raw <= PULL_SOFT ? raw : PULL_SOFT + (raw - PULL_SOFT) * 0.28;
+  }
   let pull = null;
   // `ease` FIRST, then the transform — setting the transition afterwards would apply to the NEXT
   // change, not this one, and the return would snap with no animation at all.
@@ -404,9 +416,20 @@ window.FM = window.FM || {};
     sc.addEventListener('pointermove', (e) => {
       if (!pull || e.pointerId !== pull.id) return;
       const dy = e.clientY - pull.y;
-      // Any upward move, or the list scrolling away from the top, ends it — this is not a scroll.
-      if (dy <= 0 || sc.scrollTop > 0) { if (pull.px) setPull(0); pull = null; return; }
-      pull.px = Math.min(PULL_MAX, Math.pow(dy, 0.78));
+      // The list scrolling away from the top ends it — that genuinely IS a scroll, not a pull.
+      if (sc.scrollTop > 0) { if (pull.px) setPull(0); pull = null; return; }
+      /* THE BUG THAT MADE THIS EGG UNREACHABLE ON A PHONE (queue 132). This used to read
+       *     if (dy <= 0 || sc.scrollTop > 0) { … pull = null; return; }
+       * and `pull = null` is permanent — nothing re-arms it until the next pointerdown. A real finger's
+       * FIRST pointermove very often reports the same clientY as the pointerdown, so dy === 0, and the
+       * whole gesture died on frame one. Every synthetic test jumped 20px on the first move and so
+       * never produced dy === 0, which is why this passed verification more than once while never
+       * working on his phone. Confirmed by git: the block is byte-identical to the day it shipped, so
+       * it never regressed — it was always broken on real touch.
+       * Now only a deliberate UPWARD move cancels; dy of 0, or a pixel of jitter while you hold still,
+       * simply parks the pull at 0 and keeps the gesture alive. */
+      if (dy <= -CANCEL_UP) { if (pull.px) setPull(0); pull = null; return; }
+      pull.px = damp(dy);
       setPull(pull.px);
     });
     const release = () => {
@@ -418,6 +441,18 @@ window.FM = window.FM || {};
     sc.addEventListener('pointerup', release);
     sc.addEventListener('pointercancel', release);
     sc.addEventListener('pointerleave', release);
+    /* The OTHER half of why this never fired on iOS (queue 132). At scrollTop 0 a downward drag is
+     * Safari's own rubber-band gesture, and the moment WebKit latches onto it as a scroll it fires
+     * pointercancel at us — which runs release() with pull.px still tiny, well under PULL_MIN. So even
+     * with the dy===0 bug above fixed, the pull would be taken away mid-gesture.
+     * preventDefault on touchmove while a pull is actually live stops Safari starting that bounce, so
+     * the gesture stays ours. It is scoped hard: only while `pull` exists AND the finger has already
+     * moved down, so ordinary scrolling in every other direction and position is untouched — the
+     * listener bails instantly the rest of the time. passive:false because a passive listener is
+     * forbidden from calling preventDefault at all. */
+    sc.addEventListener('touchmove', (e) => {
+      if (pull && pull.px > 0 && e.cancelable) e.preventDefault();
+    }, { passive: false });
 
     /* …and the same thing on a WHEEL (v6.26). Ezra: "for the easter egg to work you should make it on
      * pc when scrolling and you reach the top you can keep scrolling." He is right that the drag
@@ -443,11 +478,11 @@ window.FM = window.FM || {};
       }
       e.preventDefault();
       wheelAcc += -e.deltaY;
-      setPull(Math.min(PULL_MAX, Math.pow(wheelAcc, 0.78)));
+      setPull(damp(wheelAcc));   // same curve as the drag, so both paths feel identical and share PULL_MIN
       clearTimeout(wheelTimer);
       wheelTimer = setTimeout(() => {
         wheelTimer = 0;
-        const px = Math.min(PULL_MAX, Math.pow(wheelAcc, 0.78));
+        const px = damp(wheelAcc);
         wheelAcc = 0;
         if (px >= PULL_MIN) slam();
         else if (px) setPull(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');
@@ -769,7 +804,7 @@ window.FM = window.FM || {};
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
     th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
     if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
-    if (isPinned('projects', p.id)) th.appendChild(pinBadge());
+    if (isPinned('projects', p.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
     const name = el('div', 'hm-name', p.name || 'Untitled');
     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
@@ -1117,7 +1152,7 @@ window.FM = window.FM || {};
     if (t.thumb) { const img = document.createElement('img'); img.src = t.thumb; img.alt = ''; th.appendChild(img); }
     else th.appendChild(el('span', 'hm-thumb-empty', '❖'));
     th.appendChild(el('span', 'hm-dur', fmtDur(t.duration)));
-    if (isPinned('templates', t.id)) th.appendChild(pinBadge());
+    if (isPinned('templates', t.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     card.appendChild(th);
     const body = el('div', 'hm-body');
     body.appendChild(el('div', 'hm-name', t.name || 'Template'));
@@ -1157,7 +1192,7 @@ window.FM = window.FM || {};
     const th = el('div', 'hm-thumb');
     if (e.thumb) { const img = document.createElement('img'); img.src = e.thumb; img.alt = ''; th.appendChild(img); }
     else th.appendChild(el('span', 'hm-thumb-empty', '✦'));
-    if (isPinned('elements', e.id)) th.appendChild(pinBadge());
+    if (isPinned('elements', e.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     card.appendChild(th);
     const body = el('div', 'hm-body');
     body.appendChild(el('div', 'hm-name', e.name || 'Element'));

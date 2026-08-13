@@ -2819,6 +2819,35 @@ body.hm-selecting .hm-card { touch-action: none; }
    using — and the pin comes back the moment you leave. Nothing is lost: the ORDER still shows which
    cards are pinned, because they are the ones at the top. */
 body.hm-selecting .hm-pin { display: none; }
+/* The pinned card itself (queue 140). Ezra, after #138 shipped with only the tack: "I want a bit more
+   visual flare for pins, I want the layer to be visually different." Fair — a 18px badge on the
+   thumbnail is not something you notice scanning down a list, which is exactly when you want it.
+   Three quiet things that add up to obvious:
+     · a cyan rail down the leading edge — drawn as an INSET SHADOW, not a border-left, because a
+       thicker border would shift the whole row's contents 2px and make pinned cards misalign with
+       the rest of the list;
+     · a wash of the same cyan falling off across the first half of the card, so the accent belongs to
+       the card rather than sitting on it;
+     · a soft throw underneath, which lifts it off the list without touching layout.
+   All in the accent already used by the tack and the OPEN badge — no new colour enters the app. The
+   ::before/::after of .hm-card are BOTH spoken for by the film grain, hence shadows and a background
+   layer rather than the pseudo-element a rail would normally use. */
+.hm-card.is-pinned {
+  border-color: rgba(127, 216, 255, .30);
+  background:
+    linear-gradient(100deg, rgba(127, 216, 255, .10), rgba(127, 216, 255, 0) 46%),
+    var(--panel-2);
+  box-shadow:
+    inset 3px 0 0 rgba(127, 216, 255, .55),
+    0 8px 22px -14px rgba(127, 216, 255, .7);
+}
+.hm-card.is-pinned:active {
+  background:
+    linear-gradient(100deg, rgba(127, 216, 255, .10), rgba(127, 216, 255, 0) 46%),
+    var(--panel-3);
+}
+/* The name gets the accent too — it is the thing you actually read when scanning. */
+.hm-card.is-pinned .hm-name { color: #d6f2ff; }
 /* OPEN badge — real type on real glass (v6.13).
    History: v4.90 replaced the original mint pill with Ezra's crystal PNG, v5.37 had to ink the letters
    into the asset because the luminance key had punched them out into holes, and v4.92 spent a whole

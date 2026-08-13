@@ -84,12 +84,48 @@ Numbered with Ezra's own queue numbers where he gave them.
       Two facts in one report, and the second is the useful one: the adaptive quality tier is NOT kicking
       in. If the preview is lagging AND refusing to drop resolution, the tier logic is either not
       measuring the right thing or is gated off. Pair this with 125.
-- [ ] **131 — The overpull Easter egg freezes if you drag really far.** His words: *"there's a glitch now
+- [x] **131 — The overpull Easter egg freezes if you drag really far.** (v6.77) His words: *"there's a glitch now
       when you swipe down really far and then the Easter egg happens where it slams the screen, if you try
       dragging really far down it just freezes, you should still be able to drag it down as freely as you
       want and at any point of letting go after a certain amount it does the slam."* So the pull is being
       clamped hard (PULL_MAX 150 with a pow(dy,0.78) curve) and reads as a freeze once you pass it. He
       wants the drag to keep responding at any distance, with the slam on release past the threshold.
+
+- [ ] **142 — Home settings: a default colour for new shapes.** His words: *"In the home settings menu,
+      make a setting to change the default colour of shapes when you import them. Applied to every
+      shape."* So a colour control in the HOME settings cog (the app-wide one, not a project setting),
+      and every shape added from then on starts in that colour instead of the current hard-coded default.
+      Points to settle when building: it applies to shapes ADDED AFTER the change, never retroactively
+      recolouring shapes already on a timeline; it should cover every shape the add menu offers (and the
+      freehand/vector paths, which also create fillable layers); and it wants a sane reset-to-default.
+      Check whether elements/templates carrying their own colours should be exempt — a saved element
+      arriving in your colour instead of the one it was designed in would be wrong.
+
+- [ ] **141 — Export screen: prettier, custom ratios + fps, and our OWN save dialog.** His words: *"idk
+      if you remember me saying this but I want the export screen to be prettied up and there's no way to
+      do custom export ratios, or fps. And if you made a custom fps or other things etc there's no way to
+      export at that. Maybe instead of the apple pop up we should have our own pop up so it looks
+      finished and good. As pristine as possible."* Four separate things, and the third is the bug:
+      1. **Custom is missing from export.** The canvas/project pickers offer Custom; the export dialog
+         does not — I flagged exactly this when queue 119 landed the ordering. Needs custom fps AND a
+         custom aspect/resolution.
+      2. **A project already on a custom setting cannot be exported at it.** This is the real defect:
+         you can build at a custom fps or ratio and then have no way to render it out that way. Export
+         should always offer "same as project" and default to it.
+      3. **Prettied up** — the dialog is functional and plain; he wants it to look finished.
+      4. **Our own save popup instead of the OS one.** The native iOS share/save sheet is "the apple pop
+         up". Check what is actually replaceable before promising: the final file hand-off is partly
+         OS-owned, so the honest version may be our own dialog for everything UP TO the save, with the
+         system sheet only at the last step. Say that plainly rather than claiming it can all be ours.
+      Overlaps #121 (settings ↔ export one-way mirror) and #102 (export robustness) — do them as ONE
+      piece of work on the export path rather than three passes over the same dialog.
+
+- [x] **140 — Pinned cards need more visual flare.** (v6.77) His words: *"I want a bit more visual flare for
+      pins, I want the layer to be visually different."* Follow-up to #138, which shipped with only the
+      small tack on the thumbnail — his read is that the CARD itself should look different, not just
+      carry a badge. So the whole row gets treated: an accent edge, a tint, something that says "pinned"
+      at a glance down a long list. Keep it in the app's existing glass/cyan language rather than
+      inventing a new colour, and it still must not shout over the thumbnail or the OPEN glint.
 
 - [ ] **139 — Project notepad + export reminders.** His words: *"In the top menu, put a little note pad
       icon and make it so you can add notes about the project and reminders, make it so you can tick
@@ -177,7 +213,7 @@ Numbered with Ezra's own queue numbers where he gave them.
       settle — or a will-change/compositor layer left behind — would show as a strip of background down
       one edge. Likely the same root cause as #128's jankiness; fix them together.
 
-- [ ] **132 — The slam Easter egg is GONE.** His words: *"The slam Easter egg is gone."* Reported on
+- [x] **132 — The slam Easter egg is GONE.** (v6.77) His words: *"The slam Easter egg is gone."* Reported on
       v6.74, and it supersedes the "it freezes" report in #131 — it is no longer freezing because it is
       no longer happening at all. Prime suspect is v6.61, which changed Faves from a sideways swipe to a
       PULL-DOWN on Recents: two gestures now want the same downward drag on the same screen, and if the
@@ -200,6 +236,19 @@ Numbered with Ezra's own queue numbers where he gave them.
       Second, separate defect in the same handler: pointercancel is wired to the same release() as
       pointerup, and iOS fires pointercancel as soon as Safari claims the drag for its own rubber-band.
       Both need fixing; neither alone is enough.
+      **Both fixed in v6.77, and #131 with them — it is one gesture.**
+      · `dy <= 0` → `dy <= -12`, so a flat first frame or a pixel of jitter while you hold no longer
+        destroys the pull. Only a deliberate upward move cancels now.
+      · A `touchmove` preventDefault, scoped to only fire while a pull is actually live, stops Safari
+        starting its own rubber-band and taking the gesture off us with pointercancel.
+      · The hard `Math.min(150, …)` clamp is gone (that was #131's "freeze"): past 150px the travel is
+        compressed to 28% instead of cut off, so it keeps answering your finger at ANY distance —
+        heavier and heavier, never stuck — and still slams on release.
+      Verified by replaying the gesture frame by frame: real finger with a dy=0 first frame → slams;
+      jittery finger that dips backwards twice → slams; deliberate upward move → correctly does not;
+      dragged 700px → still moving at release, and slams. Then MUTATION-CHECKED: put `dy <= 0` back and
+      the real-finger case produced no travel and no slam — the exact symptom you reported — so the test
+      can genuinely see this bug, which the old synthetic tests could not.
 
 - [x] **126 — The grain now reads as switched OFF; it needs to be FASTER, still smooth.** (v6.74) His words:
       *"you've just turned off the animation of the film grain in the home menu, I asked for it to be
