@@ -1150,10 +1150,29 @@ window.FM = window.FM || {};
     });
   }
 
+  /* How long the transport will wait for sound before giving up and starting anyway (queue 95).
+   * 400ms comfortably covers the ~200ms measured start-up while staying short enough that a silent
+   * or blocked clip does not feel stuck. */
+  const START_WAIT_MS = 400;
+  let _startWait = null;
+
   function tick() {
     if (!FM.playing) return;
     const P = FM.scene.project;
     clockAdopt();                 // free unless a context appeared since the last frame
+    /* Still waiting for the audio to actually begin? Re-anchor to the CURRENT frame each pass, so no
+     * time elapses and the sync controller has nothing to correct — rather than letting the playhead
+     * run ahead of the sound and then dragging the sound up to it by playbackRate. */
+    if (_startWait) {
+      const started = _startWait.els.some(w => (w.el.currentTime || 0) > w.from + 0.008);
+      if (started || performance.now() > _startWait.until) _startWait = null;
+      else {
+        clockAnchor(FM.time);
+        render(); FM.timeline.updatePlayhead(); updateReadout();
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+    }
     let nt = FM.clockNow();       // READ the clock; never accumulate into it
     // loop-region wrap (takes priority over end-of-timeline when looping). Guard the wrap TARGET:
     // a stale loopIn at/after the end would re-fire this branch every frame with no progress (hang).
@@ -1221,6 +1240,32 @@ window.FM = window.FM || {};
         m.el.play().catch(() => {});
       }
     });
+    /* WAIT FOR THE SOUND BEFORE THE CLOCK RUNS (queue 95).
+     * Measured: every press of Play started the transport immediately while the element carrying the
+     * audio took ~200ms to produce any. el.currentTime sat at 0.000 for the first ~120ms and had
+     * reached only 0.028s at t=222ms, with the playhead already at 0.220s — a gap peaking at 183ms.
+     * That is UNDER the hard-seek threshold (350ms), so nothing ever seeked; instead the sync
+     * controller pinned playbackRate at its +10% ceiling for 55 consecutive decisions, which is a
+     * pitched-up catch-up at the start of every single play. That is the "audio does not play
+     * smoothly" in this entry.
+     * So the clock is held at the current frame until an element that is SUPPOSED to make sound
+     * actually advances. The picture holds for those ~200ms instead of the sound being resampled —
+     * the same trade every editor makes, and the one #69 already makes everywhere else.
+     * The deadline is not optional: autoplay can be blocked, a device can be missing, a file can carry
+     * no audio at all. If nothing has advanced by then the transport starts regardless, so this can
+     * never hang playback. */
+    _startWait = null;
+    try {
+      const waiters = [];
+      FM.scene.layers.forEach(l => {
+        const m = FM.media.get(l.id);
+        if (!m || !m.el || m.el.muted) return;
+        if (!FM.isLayerVisibleAt(l, FM.time)) return;
+        if (!(FM.layerVolume(l, FM.time) > 0)) return;
+        waiters.push({ el: m.el, from: m.el.currentTime || 0 });
+      });
+      if (waiters.length) _startWait = { until: performance.now() + START_WAIT_MS, els: waiters };
+    } catch (e) { _startWait = null; }
     // Start the clock here, alongside the audio it has to agree with: audioPlay.start() anchors
     // reversed buffers to audioCtx.currentTime, so both take their origin from the same reading.
     // If that call is what CREATED the context, adopt it immediately after, at the same scene time.
@@ -1249,6 +1294,7 @@ window.FM = window.FM || {};
   };
 
   FM.pause = function () {
+    _startWait = null;            // never let a stale wait outlive the pass that created it
     FM.playing = false;
     _playGen++;                 // cancels any requestPlay still waiting on a decode (see _playGen)
     CLK.on = false;                                             // the transport clock stops with the transport

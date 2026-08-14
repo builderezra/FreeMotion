@@ -1071,8 +1071,19 @@ better still, keep working inside the turn rather than parking work for a later 
       `'raf'` and there is no AudioContext at all. A plain media element never creates one, so in exactly
       the case this entry is about, the transport is on `performance.now()` and the audio-clock adoption
       has nothing to adopt.
-      Fix direction: do not start the clock until the element is actually producing sound — anchor on its
-      first real advance — instead of starting optimistically and correcting by resampling.
+      **FIXED (v7.33).** The transport now holds at the current frame until an element that is SUPPOSED
+      to make sound actually advances, then starts in step with it. The picture waits those ~200ms
+      instead of the sound being resampled — the same trade every editor makes, and the one #69 already
+      makes everywhere else.
+      **The deadline is the important half**, and it is tested as hard as the feature: autoplay can be
+      blocked, a device can be missing, a file can have no audio track. If nothing has advanced within
+      400ms the transport starts regardless, so this can never wedge playback. Both halves
+      mutation-checked — removing the wait puts the playhead 0.107s ahead of silent audio, and removing
+      the deadline freezes the transport at 0.000s indefinitely.
+      **Still open in this entry: the TIMELINE half.** The lag he describes did not reproduce in the
+      agent's measurements, and #202's separate measurement put renderScene at a 4.4ms median against a
+      16.7ms budget. That half needs the numbers from HIS device, which is the "what is slow" readout
+      argued for in #202.
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame

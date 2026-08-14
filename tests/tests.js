@@ -13298,6 +13298,51 @@
     }
   });
 
+  /* #95 — every press of Play used to start the transport immediately while the element carrying the
+     sound took ~200ms to produce any: the gap peaked at 183ms, which is UNDER the hard-seek threshold,
+     so instead of seeking the controller pinned playbackRate at its +10% ceiling for 55 consecutive
+     decisions. A pitched-up catch-up at the start of every play.
+     Two things must hold, and the second matters more than the first: the transport waits for sound,
+     and it can NEVER hang waiting for sound that will not come. */
+  test('play waits for the sound to start, but never waits forever', { item: 'play-start-wait' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene;
+    const id = '_startWaitProbe';
+    try {
+      FM.scene = scene([]);
+      const layer = FM.makeLayer('video', { name: 'Silent', start: 0, duration: 5 });
+      layer.id = id;
+      FM.scene.layers.push(layer);
+      // An element that will NEVER advance — a blocked autoplay, a missing device, a file with no
+      // audio track. This is the case that must not wedge the transport.
+      const stuck = { readyState: 4, currentTime: 0, muted: false, volume: 1, paused: false,
+                      play: () => Promise.resolve(), pause: () => {} };
+      FM.media.set(id, { kind: 'video', el: stuck, width: 64, height: 36, duration: 5 });
+
+      FM.setTime(0);
+      FM.play();
+      await sleep(120);
+      const early = FM.time;
+      if (early > 0.09) throw new Error('the playhead ran ' + early.toFixed(3) + 's ahead while the sound had not started — that gap is what gets corrected by resampling the audio');
+
+      // …and by the deadline it must be running regardless.
+      await sleep(500);
+      const later = FM.time;
+      if (!(later > early + 0.05)) {
+        throw new Error('the transport is still stuck at ' + later.toFixed(3) + 's after 600ms — a clip that never makes sound must not be able to freeze playback');
+      }
+    } finally {
+      FM.pause();
+      if (FM.media.remove) FM.media.remove(id);
+      FM.scene = savedScene;
+      FM.setTime(0);
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
