@@ -323,6 +323,29 @@ better still, keep working inside the turn rather than parking work for a later 
       compare them, the same way #114's bounds were checked across all 54 at once. That also answers
       whether this is one broken path or fifty-four small drift bugs.
 
+- [ ] **163 — Make the pencil and vector drawing icons genuinely good, judged to a high bar.** (14 Aug.)
+      His words: *"Make the logos for the pencil drawing and freehand drawing better, get multiple agents
+      with really high standards to not accept it until it's perfect."*
+      So the two icons v7.04 just changed (#161) are a starting point, not the finish. The verification is
+      part of the request again, and the bar is explicitly higher than "does it read": multiple judges,
+      high standards, iterate until they accept.
+      **Bounded on purpose** — his standing instruction is that no agent loop may run away: a hard cap on
+      rounds and a dry-round counter, never an open loop on a judge's own answer. Each round renders the
+      candidates at 24 / 48 / 96px (24 is the size that actually matters — it is the shape-picker cell)
+      and hands the sheet to judges who score and critique; I revise and re-render.
+
+- [x] **162 — The loading screen is not fully black any more.** (v7.05) His words: *"Loading screen
+      isn't fully black anymore"*, with a screenshot: the splash video's own frame is pure black and the
+      surround around it is the app's dark navy, so the letterbox shows as two bands.
+      It was deliberate, and the reasoning had expired. Queue 143 changed the splash surround from #000
+      to the app ground because a pure-black splash made the UNCOVERED canvas beside it stand out as a
+      bar — that was the first ever sighting of the black-bar bug. The note even claims "#060c0f against
+      a black video edge is imperceptible at this size"; his screenshot is the disproof.
+      **v7.02 removed the reason.** Now that the canvas paints what the page paints, the splash can be
+      pure black again — as long as the CANVAS is black too while it is up, or the bands simply move to
+      the safe area. So the boot script marks the document while the splash shows and both go black
+      together, and the mark is dropped when the splash is removed, restoring the themed light.
+
 - [ ] **157 — TRY moving the film grain off the project cards and onto the background.** (14 Aug.) His
       words: *"I want to try removing the film grain from the projects and instead move it to the
       background, it might be better if the projects are smooth and shiny with a rough textured

@@ -1478,15 +1478,24 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    exactly what gave away the square.) */
 #splash {
   position: fixed; inset: 0; z-index: 10000;
-  /* The app's ground, not #000 (queue 143). The splash used to be pure black, so during load the
-     uncovered canvas beside it stood out as a bar — that was the very first sighting of this bug. The
-     video's own frame is still black; only the SURROUND matches the app, and #060c0f against a black
-     video edge is imperceptible at this size. */
-  background: var(--bg, #060c0f);
+  /* PURE BLACK again (queue 162). Ezra: "Loading screen isn't fully black anymore", with a screenshot
+     of the video's black frame sitting inside a navy surround.
+     Queue 143 had made this the app ground for a real reason: a pure-black splash left the UNCOVERED
+     canvas beside it standing out as a bar — the first ever sighting of that bug — and the note claimed
+     "#060c0f against a black video edge is imperceptible at this size". His screenshot is the disproof
+     of that claim, and v7.02 removed the reason behind it: the canvas paints what the page paints now.
+     So both go black together while the splash is up (see html.splash-on below) and the surround is
+     invisible against the video again. */
+  background: #000;
   overflow: hidden;
   opacity: 1; transition: opacity .35s ease;
 }
 #splash.hidden { display: none; }
+/* The CANVAS matches the splash for as long as it is up. Without this the bands would simply move
+   outward: the splash covers the layout viewport, and under viewport-fit=cover the web view is taller
+   than that, so a black splash on a lit canvas shows the same seam one step further out. The class is
+   dropped when the splash is removed, which puts the theme's light straight back. */
+html.splash-on, html.splash-on body { background: #000; }
 /* keeps swallowing pointer/ghost-click events while fading — pointer-events:none let the post-touch
    synthesized click punch through to editor controls.
    The long curve (v4.92) is the hand-off into the home screen: the fade now STARTS ~0.9s before the
