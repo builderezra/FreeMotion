@@ -821,8 +821,12 @@ better still, keep working inside the turn rather than parking work for a later 
       **v7.45 — the Colouring shortcut**, your *"button at the top of the colouring section as a
       shortcut to it"*. Opens the same picker as the one in Effects, so there is one filter menu in
       the app rather than two that drift apart.
-      **#113 now has exactly ONE piece left: step 5, the real third tab in the effects browser** with
-      thumbnails, alongside Effects and Audio Effects. Everything else you asked for in it is in.
+      **v7.46 — the third subsection is in.** Effects | Filters | Audio, and Filters lists all 16 under
+      their section headings with a sentence each AND what each one is built from (Teal & Orange reads
+      "Contrast · Saturation · Teal & Orange · Vignette"). Tap one and it lands open on your stack.
+      **#113 is now DONE except for picture previews on the filter tiles.** The thumbnail system is
+      built around one effect per tile, so filters need their own path through it — a separate, honest
+      piece of work rather than something to bodge. Logged as #219.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.
@@ -2681,6 +2685,15 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
       hide themselves when it is chosen, rather than sitting there meaning nothing.
+- [ ] **219 — Filter tiles need picture previews.** *(Found by me on 15 Aug finishing #113 step 5.)*
+      The Filters subsection lists each look with words — its name, what it does, and the effects it is
+      made of. What it does NOT have is a little preview picture the way the effects grid does, and for
+      choosing a LOOK a picture is worth more than a sentence.
+      Not done yet because it is not a small job: the thumbnail machinery is built around one effect per
+      tile (it takes an effect NAME, not a list), so filters need their own route through it. Doable —
+      and easier than an effect thumbnail in one way, since a filter's settings are already chosen, so
+      none of the per-effect preview tuning applies. Static tiles, not animated: 16 animated previews on
+      a phone is not worth what it costs.
 - [ ] **217 — Most ways of getting a layer into the app skip the safety checks.** *(Found by me on
       14 Aug while doing #113 step 1 — not something you reported.)* There is a function that rebuilds an
       imported layer's audio effects, masks, behaviours and camera from a known-good schema, so a corrupt

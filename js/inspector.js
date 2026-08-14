@@ -1098,6 +1098,65 @@ window.FM = window.FM || {};
     at(items);
   }
 
+  /* The Filters subsection (queue 113, step 5). His words: "now I want a third subsection for filters.
+   * It'll work the same as the others" and "You will make a Bunch of filters and section them, so that
+   * people can find stuff organised, like how the effects are organised."
+   *
+   * A browse list, sectioned, saying for each look WHAT IS IN IT. That last part is deliberate and is
+   * the thing a thumbnail would not tell you: the whole promise of a filter here is that it is not a
+   * black box — it is a group of ordinary effects you can open and retune — so the list names them
+   * before you commit. Tapping a row adds it and drops you back on the stack with it open.
+   *
+   * NO THUMBNAILS IN THIS VERSION, and that is a real gap rather than a decision: the thumbnail system
+   * is built around ONE effect type per tile (fx-thumbs' mountPreset takes preset.fx, a type STRING),
+   * so filters need their own recipe branch there. That is its own release; a list that says what a
+   * look contains is worth having in the meantime, and is more use than the picker menu it replaces. */
+  function filtersSection(layer) {
+    const s = section('Filters');
+    const h4 = s.querySelector('h4'); if (h4) h4.remove();
+    s.appendChild(el('div', 'insp-hint', 'A filter is a group of effects that act as one, with a single Strength. Add one and you can open it up and change anything inside.'));
+    (FM.filters.sections() || []).forEach(sec => {
+      const list = FM.filters.bySection(sec.key);
+      if (!list.length) return;
+      s.appendChild(el('div', 'insp-sub-label', sec.label));
+      const wrap = el('div', 'flt-list');
+      list.forEach(f => {
+        const row = el('button', 'flt-row');
+        row.appendChild(el('div', 'flt-name', f.name));
+        row.appendChild(el('div', 'flt-desc', f.desc || ''));
+        // What it is made of, in the app's own words for those effects — so the names match what you
+        // will see inside the filter once it is added, not a second vocabulary invented here.
+        const made = (f.effects || []).map(c => {
+          const reg = FM.fxRegistry.get(c.type);
+          return (reg && reg.label) || c.type;
+        }).filter(Boolean);
+        if (made.length) row.appendChild(el('div', 'flt-made', made.join(' · ')));
+        row.addEventListener('click', () => {
+          const box = FM.filters.makeInstance(f.id);
+          if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
+          const fitted = FM.fxRegistry.fitToLayer(box, layer);
+          if (!fitted) { if (FM.toast) FM.toast('Nothing in “' + f.name + '” works on this layer'); return; }
+          if (!layer.effects) layer.effects = [];
+          layer.effects.forEach(e => { e._expanded = false; });
+          fitted._expanded = true;
+          layer.effects.push(fitted);
+          // Back to the stack, with the new filter open — adding a look and then still staring at the
+          // list of looks is the same "did that do anything?" the effect browser had to fix.
+          fxTab = 'visual';
+          afterFx();
+          if (FM.toast) {
+            FM.toast(fitted.effects.length < box.effects.length
+              ? 'Added “' + f.name + '” — ' + (box.effects.length - fitted.effects.length) + ' part(s) didn’t suit this layer'
+              : 'Added “' + f.name + '”');
+          }
+        });
+        wrap.appendChild(row);
+      });
+      s.appendChild(wrap);
+    });
+    return s;
+  }
+
   function effectsSection(layer) {
     const s = section('Effects');
     const list = el('div', 'fx-list');
@@ -1952,14 +2011,24 @@ window.FM = window.FM || {};
   function fxModeToggle(layer, current, onPick) {
     const wrap = el('div', 'fxmode');
     const okAudio = audioSideOk(layer), okVisual = visualSideOk(layer);
-    [['visual', 'Effects', okVisual], ['audio', 'Audio', okAudio]].forEach(([key, label, ok]) => {
+    /* The third subsection (queue 113). His words: "now I want a third subsection for filters. It'll
+       work the same as the others." Its gate is the VISUAL gate — a filter is a group of visual
+       effects, so it needs a picture for the same reason Effects does — plus a library to browse. */
+    const okFilters = okVisual && !!(FM.filters && FM.filters.all().length);
+    [['visual', 'Effects', okVisual], ['filters', 'Filters', okFilters], ['audio', 'Audio', okAudio]].forEach(([key, label, ok]) => {
       const b = el('button', 'fxmode-btn' + (current === key ? ' on' : '') + (ok ? '' : ' off'), label);
-      b.title = ok ? (key === 'audio' ? 'Audio effects for this clip’s sound' : 'Effects for the picture')
-        : (key === 'audio' ? 'This layer has no audio' : 'This is an audio clip — it has no picture');
+      b.title = ok ? (key === 'audio' ? 'Audio effects for this clip’s sound'
+                    : key === 'filters' ? 'Ready-made looks — a group of effects that act as one'
+                    : 'Effects for the picture')
+        : (key === 'audio' ? 'This layer has no audio'
+           : key === 'filters' ? 'This is an audio clip — a filter changes the picture'
+           : 'This is an audio clip — it has no picture');
       b.addEventListener('click', () => {
         if (!ok) {
           if (FM.toast) FM.toast(key === 'audio'
             ? (layer && layer.type === 'video' ? 'This clip has no audio track — there’s nothing for an audio effect to work on' : 'This layer has no audio')
+            : key === 'filters'
+            ? 'This is an audio clip — a filter changes the picture, and there isn’t one'
             : 'This is an audio clip — there’s no picture for a visual effect to change', 1800);
           return;
         }
@@ -1977,7 +2046,11 @@ window.FM = window.FM || {};
   // apply); a layer with no audio can only ever be on the visual side, whatever the tab last was.
   function fxTabFor(layer) {
     if (isAudioOnly(layer)) return 'audio';
-    return (fxTab === 'audio' && audioSideOk(layer)) ? 'audio' : 'visual';
+    if (fxTab === 'audio' && audioSideOk(layer)) return 'audio';
+    // Filters share the visual gate — a filter is a group of visual effects — so an audio-only clip
+    // has already fallen through to 'audio' above, and anything reaching here has a picture.
+    if (fxTab === 'filters' && FM.filters && FM.filters.all().length) return 'filters';
+    return 'visual';
   }
 
   // Is `v` a category this layer can actually show? Guards against unreachable views — e.g. the timeline
@@ -3652,7 +3725,9 @@ window.FM = window.FM || {};
       body.appendChild(fxModeToggle(layer, tab, k => { fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));
       // An unknown audio answer rendered as available; settle it and demote the toggle if it's a no.
       probeAudioSide(layer, id => { const cur = FM.selectedLayer(FM.scene); if (cur && cur.id === id && view === 'effects') FM.inspector.refresh(); });
-      if (tab === 'audio') {
+      if (tab === 'filters') {
+        body.appendChild(filtersSection(layer));
+      } else if (tab === 'audio') {
         const s = audioFxSection(layer);
         const h4 = s.querySelector('h4'); if (h4) h4.remove();
         body.appendChild(s);

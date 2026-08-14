@@ -14181,6 +14181,79 @@
     });
   });
 
+  // The visible toggle's pill by label — see the note in the first filters-tab test about why a bare
+  // document query is wrong here.
+  function visibleFxPill(re) {
+    var w = Array.prototype.slice.call(document.querySelectorAll('.fxmode'))
+      .filter(function (x) { return x.getClientRects().length > 0; })[0];
+    if (!w) throw new Error('no subsection toggle on screen');
+    var b = Array.prototype.slice.call(w.querySelectorAll('.fxmode-btn'))
+      .filter(function (x) { return re.test(x.textContent.trim()); })[0];
+    if (!b) throw new Error('no subsection matching ' + re);
+    return b;
+  }
+
+  /* His words: "now I want a third subsection for filters. It'll work the same as the others." */
+  test('filters tab: a third subsection sits beside Effects and Audio', { item: 'fx-library' }, async function () {
+    await withFilterLayer(async function (L) {
+      /* Scoped to the VISIBLE toggle. A bare document query returned 9 buttons when run inside the
+         suite — three copies of the toggle, because earlier tests leave inspector panels in the DOM.
+         Asserted rather than ignored: exactly one may be on screen, so if that ever becomes a real
+         leak (stale panels accumulating in a long session) this says so instead of hiding it. */
+      var wraps = Array.prototype.slice.call(document.querySelectorAll('.fxmode'))
+        .filter(function (w) { return w.getClientRects().length > 0; });
+      if (wraps.length !== 1) throw new Error(wraps.length + ' subsection toggles are on screen at once — stale inspector panels are piling up');
+      var pills = Array.prototype.slice.call(wraps[0].querySelectorAll('.fxmode-btn')).map(function (b) { return b.textContent.trim(); });
+      if (pills.length !== 3) throw new Error('expected three subsections, found ' + pills.length + ': ' + pills.join(', '));
+      if (pills.indexOf('Filters') < 0) throw new Error('no Filters subsection: ' + pills.join(', '));
+      // Beside them, not instead of them.
+      if (pills.indexOf('Effects') < 0 || pills.indexOf('Audio') < 0) throw new Error('a subsection went missing: ' + pills.join(', '));
+    });
+  });
+
+  test('filters tab: it lists every filter, in its section, saying what each is made of', { item: 'fx-library' }, async function () {
+    await withFilterLayer(async function (L) {
+      visibleFxPill(/^Filters$/).click();
+      await sleep(140);
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-row'));
+      if (rows.length !== FM.filters.all().length) throw new Error('the tab lists ' + rows.length + ' filters, the library has ' + FM.filters.all().length);
+      FM.filters.sections().forEach(function (sec) {
+        var found = Array.prototype.slice.call(document.querySelectorAll('.insp-sub-label'))
+          .some(function (n) { return n.textContent.trim() === sec.label; });
+        if (!found) throw new Error('the ' + sec.label + ' section has no heading — "section them, so that people can find stuff organised"');
+      });
+      // Each row must name what the look is BUILT from, using the app's own effect labels — the whole
+      // promise is that a filter is not a black box, so the list says so before you commit.
+      var def = FM.filters.all()[0];
+      var row = rows.filter(function (r) { return (r.querySelector('.flt-name') || {}).textContent === def.name; })[0];
+      if (!row) throw new Error('could not find the row for ' + def.name);
+      var made = row.querySelector('.flt-made');
+      if (!made) throw new Error(def.name + ' does not say what it contains');
+      var firstLabel = FM.fxRegistry.get(def.effects[0].type).label;
+      if (made.textContent.indexOf(firstLabel) < 0) throw new Error('"' + made.textContent + '" does not name ' + firstLabel + ', the first effect in it');
+    });
+  });
+
+  test('filters tab: tapping a filter adds it and returns you to the stack with it open', { item: 'fx-library' }, async function () {
+    await withFilterLayer(async function (L) {
+      visibleFxPill(/^Filters$/).click();
+      await sleep(140);
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-row'));
+      var wanted = (rows[2].querySelector('.flt-name') || {}).textContent;
+      rows[2].click();
+      await sleep(160);
+      var box = (L.effects || [])[0];
+      if (!box || !FM.isFxContainer(box)) throw new Error('tapping "' + wanted + '" did not add a filter');
+      if (box.name !== wanted) throw new Error('it added "' + box.name + '" instead of "' + wanted + '"');
+      if (!box._expanded) throw new Error('the filter landed closed');
+      // …and the panel came back to the stack, rather than leaving you staring at the list you just
+      // picked from, wondering whether the tap did anything.
+      if (!document.querySelector('.fx-list')) throw new Error('the panel is still showing the filter list after adding one');
+      var open = document.querySelector('.fx-list > .fx-row.fx-open .fx-name');
+      if (!open || open.textContent !== wanted) throw new Error('the new filter is not the row that is open');
+    });
+  });
+
   /* His words: "have a button at the top of the colouring section as a shortcut to it." */
   test('filter library: Colouring has a shortcut to filters, at the top', { item: 'fx-library' }, async function () {
     await withFilterLayer(async function (L) {

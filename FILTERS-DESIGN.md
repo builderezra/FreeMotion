@@ -240,6 +240,16 @@ cancelled tomorrow, which is why they go first.
    the 380px screenshot showed it. Now scoped with `>` and asserted on the computed transform.
 5. **The third browser tab** + `fxModeToggle`'s third entry with its own wording and gate, and its own
    thumbnail path (the per-effect tuners assume `hero.effects[0]` **is** the effect — ~60 callbacks).
+   **SHIPPED v7.46, minus thumbnails.** `fxModeToggle` gained `['filters', 'Filters', okFilters]`, gated
+   on the VISUAL side (a filter is a group of visual effects) plus a non-empty library; `fxTabFor`
+   widened to match. `filtersSection(layer)` is a sectioned browse LIST — name, description, and the
+   registry labels of what the look contains, which is the thing a thumbnail could not tell you and
+   which matters here because the whole promise is that a filter is not a black box.
+   **Thumbnails are NOT done and are REQUESTS #219.** `FM.fxThumbs.mountPreset` cannot be reused:
+   `preset.fx` is a single effect TYPE string (`fx-thumbs.js:908` → `FM.fxRegistry.get(preset.fx)`), so
+   filters need their own recipe branch keyed `f:<filterId>` with `hero.effects = [makeInstance(id)]`.
+   Easier than an effect tile in one respect — the authored params ARE the look, so none of the ~60
+   tuner callbacks apply. Static, not animated.
 6. **The library itself**, authored against the ordering rule in §6.
 
 Nothing in 3–6 is safe to start before 1–2 land.

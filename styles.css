@@ -4863,3 +4863,28 @@ body.fm-pushing #toast { z-index: 213; }
   border-color: color-mix(in srgb, var(--accent, #4d8bf0) 38%, transparent);
   font-weight: 600;
 }
+
+/* ---- the Filters subsection (queue 113, step 5) -----------------------------------------------
+   A browse list, not a grid: each row has to carry a name, a sentence, and the effects the look is
+   made of, and three lines of text do not fit in a thumbnail-sized tile at 380px. When filter
+   thumbnails exist this becomes a tile grid; until then the words are the preview. */
+.flt-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.flt-row {
+  display: block; width: 100%; text-align: left;
+  padding: 11px 13px; border-radius: 12px;
+  background: var(--panel-2, #151d24);
+  border: 1px solid color-mix(in srgb, var(--muted, #8fa3b0) 16%, transparent);
+  color: inherit; font: inherit; cursor: pointer;
+  transition: background .13s ease, border-color .13s ease, transform .09s ease;
+}
+.flt-row:hover { background: color-mix(in srgb, var(--accent, #4d8bf0) 10%, var(--panel-2, #151d24)); border-color: color-mix(in srgb, var(--accent, #4d8bf0) 34%, transparent); }
+.flt-row:active { transform: scale(0.988); }
+.flt-name { font-weight: 650; font-size: 14px; margin-bottom: 3px; }
+.flt-desc { font-size: 12px; line-height: 1.42; color: var(--muted, #8fa3b0); }
+/* What the look is built from. Quieter still, and allowed to wrap — on a phone a five-ingredient
+   filter is two lines, and truncating it would hide the very thing this row exists to show. */
+.flt-made {
+  margin-top: 6px; font-size: 10.5px; line-height: 1.5;
+  color: color-mix(in srgb, var(--muted, #8fa3b0) 78%, transparent);
+  letter-spacing: 0.01em;
+}
