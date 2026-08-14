@@ -2572,6 +2572,19 @@ window.FM = window.FM || {};
     // each standard rung below the native short side (downscale only — no blurry upscales), each
     // labelled with its exact output pixels.
     const P = FM.scene.project, W = P.width, H = P.height, shortSide = Math.min(W, H);
+    /* Queue 141: name the project's OWN frame rate on the "Same as project" option, and make it the
+       selection whenever the project's rate is not one of the fixed rungs — which is the whole defect
+       he reported ("if you made a custom fps or other things etc there's no way to export at that").
+       Built here rather than in the markup for the same reason the resolution list is: it depends on
+       the project. */
+    const fpsSel = document.getElementById('exp-fps');
+    if (fpsSel) {
+      const pf = Math.round((P.fps || 30) * 100) / 100;
+      const same = fpsSel.querySelector('option[value="project"]');
+      if (same) same.textContent = 'Same as project — ' + pf + ' fps';
+      const onLadder = [].slice.call(fpsSel.options).some(o => o.value !== 'project' && Math.abs(parseFloat(o.value) - pf) < 0.001);
+      if (!onLadder) fpsSel.value = 'project';   // a custom rate has nowhere else to land
+    }
     const sel = document.getElementById('exp-res');
     if (sel) {
       const prev = sel.value;
@@ -2636,7 +2649,11 @@ window.FM = window.FM || {};
       return;
     }
     const scale = parseFloat(document.getElementById('exp-res').value) || 1;
-    const fps = parseInt(document.getElementById('exp-fps').value, 10) || 30;
+    // 'project' resolves to the project's own rate, custom values included (queue 141).
+    const fpsRaw = document.getElementById('exp-fps').value;
+    const fps = (fpsRaw === 'project')
+      ? (FM.scene.project.fps || 30)
+      : (parseFloat(fpsRaw) || 30);
     const qEl = document.getElementById('exp-quality');
     const qf = (qEl && parseFloat(qEl.value)) || 0.1;
     const P = FM.scene.project;

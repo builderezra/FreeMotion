@@ -214,6 +214,15 @@ better still, keep working inside the turn rather than parking work for a later 
       2. **A project already on a custom setting cannot be exported at it.** This is the real defect:
          you can build at a custom fps or ratio and then have no way to render it out that way. Export
          should always offer "same as project" and default to it.
+         **PART 2 SHIPPED, v7.08.** The frame-rate list was a fixed ladder whose own comment read "there
+         is no Custom on this dialog", so a project built at 48fps could not be rendered at 48 by any
+         route. It now leads with **"Same as project — N fps"**, labelled with the project's real rate so
+         you can see what you are getting, and it SELECTS itself automatically whenever the project's
+         rate is not one of the fixed rungs — which is precisely your case. A standard 30fps project
+         still lands on its own rung, so nothing changed for the ordinary path.
+         Resolution already had this covered (the list is built per-project and leads with "Full — W×H").
+         Still open in this entry: **1** (a custom ratio/resolution in the export dialog), **3** (prettied
+         up), **4** (our own save popup instead of the OS sheet).
       3. **Prettied up** — the dialog is functional and plain; he wants it to look finished.
       4. **Our own save popup instead of the OS one.** The native iOS share/save sheet is "the apple pop
          up". Check what is actually replaceable before promising: the final file hand-off is partly

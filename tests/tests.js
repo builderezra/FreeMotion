@@ -12215,6 +12215,40 @@
     }
   });
 
+  /* #141 (part 2) — Ezra: "if you made a custom fps or other things etc there's no way to export at
+     that." He was exactly right: the export dialog's frame-rate list was a fixed ladder whose own
+     comment said "there is no Custom on this dialog", so a project built at, say, 48fps could not be
+     rendered out at 48 by any route in the app. The resolution list already had this covered — it
+     builds "Full — W×H" from the project — and the frame rate did not. */
+  test('export: a project on a custom frame rate can actually be exported at it', { item: 'export-fps' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const P = FM.scene.project, wasFps = P.fps;
+    try {
+      const sel = document.getElementById('exp-fps');
+      if (!sel) throw new Error('#exp-fps is missing');
+      if (!sel.querySelector('option[value="project"]')) throw new Error('the frame-rate list has no "Same as project" option — a custom rate has nowhere to land');
+
+      // A rate that is deliberately NOT one of the fixed rungs.
+      P.fps = 48;
+      FM.showExportDialog();
+      await sleep(80);
+      const same = sel.querySelector('option[value="project"]');
+      if (!/48/.test(same.textContent)) throw new Error('the option reads "' + same.textContent + '" — it must name the project\'s own rate so you can see what you are getting');
+      if (sel.value !== 'project') throw new Error('a 48fps project opened the dialog on "' + sel.value + '" — a custom rate must select "Same as project", or the export silently changes it');
+
+      // …and a rate that IS on the ladder must not be hijacked.
+      P.fps = 30;
+      FM.showExportDialog();
+      await sleep(80);
+      if (sel.value === 'project' && !/30/.test(same.textContent)) throw new Error('a standard 30fps project lost its explicit rung');
+    } finally {
+      P.fps = wasFps;
+      document.querySelectorAll('#export-dialog').forEach(d => d.classList.add('hidden'));
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

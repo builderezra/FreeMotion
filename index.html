@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.07</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.08</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -477,7 +477,7 @@
                    only". Custom… still reaches 24 for anyone matching film footage. -->
               <option value="15">15 fps</option>
               <option value="25">25 fps</option>
-              <option value="30" selected>30 fps</option>
+              <option value="30">30 fps</option>
               <option value="50">50 fps</option>
               <option value="60">60 fps (smooth)</option>
               <option value="120">120 fps</option>
@@ -558,7 +558,13 @@
         <select id="exp-fps">
           <!-- Ordered, and matched to the canvas picker (queue 119/120). Ezra: "This menu is all over
                the shop, needs to be ordered", then "Yeah match it". Ascending, same rates as Canvas
-               settings — 24 and 12 go with it, and there is no Custom on this dialog. -->
+               settings — 24 and 12 go with it.
+               "Same as project" is FIRST and is the default (queue 141). Ezra: "if you made a custom fps
+               or other things etc there's no way to export at that." He was right: this list was a fixed
+               set with, in its own former comment, "no Custom on this dialog" — so a project built at a
+               custom frame rate could not be rendered out at it by any route. Its label is filled in
+               per-project by showExportDialog, the same way the resolution list already builds "Full". -->
+          <option value="project" selected>Same as project</option>
           <option value="15">15 fps</option>
           <option value="25">25 fps</option>
           <option value="30" selected>30 fps</option>
@@ -699,7 +705,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=48"></script>
-  <script src="js/app.js?v=245"></script>
+  <script src="js/app.js?v=246"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/voice-rec.js?v=1"></script>
   <script src="js/audio-react.js?v=4"></script>
