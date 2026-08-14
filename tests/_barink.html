@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px">…</pre>
+<iframe id="a" src="../index.html" style="width:380px;height:300px;border:0"></iframe>
+<script>
+/* #188. He says the notes button still has too much air around it after the gaps were evened, so this
+   measures the thing a gap number cannot see: how much of each button's box the GLYPH actually fills.
+   A narrow glyph in a 42px box reads as a wider gap than a fat one, whatever the boxes do. */
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, d = w.document, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.timeline)) { if (n++ > 300) return; return setTimeout(wait, 50); }
+    if (w.FM.home && w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
+    setTimeout(function () {
+      var out = [];
+      ['m-notes', 'm-settings', 'm-export'].forEach(function (id) {
+        var b = d.getElementById(id); if (!b) return out.push(id + ' MISSING');
+        var svg = b.querySelector('svg'); var bb = null;
+        try { bb = svg.getBBox(); } catch (e) {}
+        var r = b.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+        out.push(id + '  box ' + Math.round(r.width) + 'x' + Math.round(r.height) +
+          '  svg ' + Math.round(sr.width) + 'x' + Math.round(sr.height) +
+          (bb ? '  INK in 24-space: x ' + bb.x.toFixed(1) + '..' + (bb.x + bb.width).toFixed(1) +
+                '  y ' + bb.y.toFixed(1) + '..' + (bb.y + bb.height).toFixed(1) +
+                '  (' + bb.width.toFixed(1) + ' x ' + bb.height.toFixed(1) + ')' : ''));
+      });
+      document.getElementById('o').textContent = out.join('\n');
+      window.__done = true;
+    }, 600);
+  })();
+});
+</script></body></html>

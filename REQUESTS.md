@@ -1633,16 +1633,30 @@ better still, keep working inside the turn rather than parking work for a later 
       vector drawings, whose first and last strokes were flattening for exactly the same reason and which
       nobody had connected to this.
 
-- [ ] **159 — Shape icons in the add menu do not match the shapes they add. Make them 1:1.** (14 Aug.)
+- [x] **159 — Shape icons in the add menu do not match the shapes they add. Make them 1:1.** (v7.17)
       His words: *"most shapes icons vary largely to the actual shape, try and make them 1-1."*
       Worth knowing before starting: js/addmenu.js already claims to render each icon **straight from
       the shape's own polygon data** (`FM.SHAPE_POLYS`), with the comment "the menu preview can never
       drift from what actually gets added". So either that path is not being used for the shapes he
       means, or it IS used and the RENDERING differs — stroke vs fill, a different aspect ratio, or the
       icon drawing the unit box where the real shape spawns at its own SHAPE_ASPECT.
-      **Measure which before touching anything**: render each shape's icon and the shape itself and
-      compare them, the same way #114's bounds were checked across all 54 at once. That also answers
-      whether this is one broken path or fifty-four small drift bugs.
+      **Measured first** (tests/_shapedrift.html renders every icon and every real shape, normalises both
+      silhouettes and scores the overlap). It was not fifty-four small bugs — it was **three** shared
+      ones, all in the icon renderer, none in the shape data:
+      1. **The icon forced every shape into a SQUARE box** while the app spawns it at its own
+         SHAPE_ASPECT. A banner was advertised at 1.84:1 and arrived at 4.08:1; an arrow was shown square
+         and arrived nearly 2:1. `SHAPE_ASPECT` is exported now and the menu reads that same table, so
+         the two cannot disagree again. Every proportion now matches within about 2%.
+      2. **Holes filled in solid.** Shapes made of a body plus an anticlockwise hole — clock, gear, sun,
+         wreath, snowflake, laurel — were drawn as one `<polygon>` per subpath, and winding only cancels
+         within a single path. A clock came out a plain disc. One path, one fill, nonzero, as the
+         compositor does it.
+      3. **Curves were drawn as straight lines.** Half these outlines flag points as smooth, and the
+         compositor runs them through `FM.pointCtrl`; the icon walked straight segments, so a wreath was
+         a polygon of itself. It emits the same beziers now, off the same function.
+      **Result across all 54: 2 plainly wrong / 14 drifting / 38 fine → 0 / 6 / 48.** Eye 0.53→0.98,
+      clock 0.41→0.92, flame 0.80→0.97, heart 0.86→0.99. The six still drifting are the very fine ones
+      (snowflake, laurel, sun, wreath, spiral, note) and they sit at 0.81–0.89, which is small stuff.
 
 - [ ] **160 — The two people shapes need arms, and he wants agents to check the result.** (14 Aug.) His
       words: *"The two people shapes are good but need arms, make sure when adding arms you get other
@@ -1904,6 +1918,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       So the next attempt starts by CAPTURING it over several frames rather than screenshotting the end
       state — the previous rounds all measured the finished picture, which is exactly why they kept
       finding a plausible-but-wrong static cause. Related history: #157/#166 and the v6.85 note.
+- [x] **188 — The notes button still does not sit right.** (v7.17) His words, after v7.13 evened the gaps: *"The
+      notes still has two much space from the buttons next to it, make it look good spacing wise."*
+      #185 evened the GEOMETRIC gaps at 24px optical each side, and he is still seeing too much air — so
+      the remaining cause is probably not the gap at all but the GLYPH: the notes page is a narrow
+      upright rectangle while the cog and the export arrow fill their boxes, so the same gap reads wider
+      around it. Measure the three icons' ink boxes before moving anything again.
+      **That is exactly what it was.** Measured in each icon's own 24-unit space: notes **14 × 18**, cog
+      **22 × 22**, export 12 × 16. The page was drawn a third narrower than the cog next to it, so the
+      same gap carried about 4px more visible air on each side. The glyph is drawn to fill its box now
+      (17.1 × 22 — as wide as a portrait page goes without distorting), and the 10px nudge from #185 came
+      back down to 2px, since a wider glyph made that spacing wider still.
 - [ ] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap.** Three parts,
       from one message (AM screenshot attached showing the four buttons above the 1.00x slider):
       1. *"the speed menu needs the crop buttons… let's say your clip is slightly too short for what you

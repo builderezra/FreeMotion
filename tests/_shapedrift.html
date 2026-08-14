@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><base href="../"><title>#159 — how far each shape icon is from the shape it adds</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.5 ui-monospace,monospace}
+  pre{padding:14px;white-space:pre-wrap}
+  .bad{color:#ff8f7a}.mid{color:#ffd166}.ok{color:#7fe3c4}
+</style></head><body>
+<pre id="out">measuring…</pre>
+<script src="js/settings.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script>window.__probe = 1;</script>
+<script>
+/* Ezra (#159): "most shapes icons vary largely to the actual shape, try and make them 1-1."
+ *
+ * js/addmenu.js claims the icon "can never drift from what actually gets added" because it renders
+ * FM.SHAPE_POLYS directly. That claim is about the DATA, and he is complaining about the PICTURE — so
+ * this measures the picture. For every shape:
+ *   · draw what the MENU draws — the polygons mapped into the shape's own SHAPE_ASPECT box, exactly
+ *     what icoPoly() does since queue 159 (it used to force a square, which was the bug);
+ *   · draw what the APP draws — FM.renderScene on a layer created the way FM.addShapeLayer creates it,
+ *     at that shape's own SHAPE_ASPECT;
+ *   · normalise both to their own ink bounding box and compare as silhouettes (IoU).
+ * Normalising first is the point: it removes size and position, so what is left is pure SHAPE
+ * disagreement — which is what "1-1" means. Two numbers come out:
+ *   IoU   — how much the outlines actually agree once both are fitted to the same box
+ *   aspect— the ink aspect of each, so a shape squashed by the icon's square box is visible as such
+ */
+(function () {
+  // app.js exposes FM.SHAPE_ASPECT since queue 159 — the menu reads the same table, so there is no
+  // copy here to drift. This literal is only the fallback for running the probe against an older build.
+  const ASPECT = (window.FM && FM.SHAPE_ASPECT) || {
+    rect: [1.5, 1], line: [1.6, 0.4], arrow: [1.6, 0.8], semicircle: [1.3, 0.65],
+    trapezoid: [1.4, 0.9], parallelogram: [1.5, 0.9],
+    banner: [1.6, 0.7], cloud: [1.4, 0.95], boat: [1.1, 1.1],
+    check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
+    envelope: [1.33, 0.75], key: [0.7, 1.44], car: [1, 1],
+    squircle: [1, 1], crown: [1.3, 0.85], eye: [1.5, 0.9], pin: [0.82, 1.1],
+    lock: [0.88, 1], note: [0.9, 1],
+  };
+  const N = 128;   // raster size for the comparison
+
+  function inkMask(ctx) {
+    const d = ctx.getImageData(0, 0, N, N).data;
+    const m = new Uint8Array(N * N);
+    let x0 = N, y0 = N, x1 = -1, y1 = -1, n = 0;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const a = d[(y * N + x) * 4 + 3];
+      if (a > 40) { m[y * N + x] = 1; n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    return { m: m, n: n, box: [x0, y0, x1, y1] };
+  }
+  // Re-render a mask stretched to fill the whole raster, so position and size cannot affect the score.
+  function normalise(mask) {
+    const [x0, y0, x1, y1] = mask.box;
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w <= 0 || h <= 0) return null;
+    const out = new Uint8Array(N * N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const sx = x0 + Math.floor(x * w / N), sy = y0 + Math.floor(y * h / N);
+      out[y * N + x] = mask.m[sy * N + sx];
+    }
+    return { m: out, aspect: w / h };
+  }
+  function iou(a, b) {
+    let inter = 0, uni = 0;
+    for (let i = 0; i < a.length; i++) { const p = a[i], q = b[i]; if (p | q) uni++; if (p & q) inter++; }
+    return uni ? inter / uni : 0;
+  }
+
+  function drawMenuIcon(kind) {
+    // exactly js/addmenu.js icoPoly(): unit coords → a box of the shape's own aspect, fitted to 18px
+    // on its longer side and centred in the 24 tile, filled polygons
+    //
+    // NOTE the IoU below is computed on masks stretched to fill their own bounds, so it is deliberately
+    // ASPECT-BLIND — fixing the box cannot move it. That separation is the useful part: the aspect
+    // columns show proportion drift, IoU shows outline drift, and they are different bugs.
+    const polys = (FM.SHAPE_POLYS && FM.SHAPE_POLYS[kind]) || [];
+    const cv = document.createElement('canvas'); cv.width = cv.height = N;
+    const ctx = cv.getContext('2d');
+    const s = N / 24;
+    const asp = ASPECT[kind] || [1, 1];
+    const k = 18 / Math.max(asp[0], asp[1]), bw = asp[0] * k, bh = asp[1] * k;
+    const ox = (24 - bw) / 2, oy = (24 - bh) / 2;
+    // ONE path for every subpath, filled once with nonzero — matching icoPoly since queue 159. Filling
+    // each subpath separately (which is what it used to do) fills every hole in solid.
+    // Walks FM.buildSubPath, exactly as icoPoly now does — same tangents, same winding, one fill.
+    const map = p => [(ox + p[0] * bw) * s, (oy + p[1] * bh) * s];
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    polys.forEach(pl => FM.buildSubPath(ctx, pl, true, map));
+    ctx.fill('nonzero');
+    return ctx;
+  }
+  function drawRealShape(kind) {
+    const asp = ASPECT[kind] || [1, 1];
+    const cv = document.createElement('canvas'); cv.width = cv.height = N;
+    const ctx = cv.getContext('2d');
+    const d = N / 2;
+    const layer = FM.makeLayer('shape', {
+      shape: kind, x: N / 2, y: N / 2,
+      shapeW: Math.round(d * asp[0]), shapeH: Math.round(d * asp[1]),
+      fill: '#000', start: 0, duration: 2,
+    });
+    const sc = { layers: [layer], project: { width: N, height: N, fps: 30, duration: 2, background: null, markers: [] } };
+    FM.renderScene(ctx, sc, 0);
+    return ctx;
+  }
+
+  const kinds = Object.keys(FM.SHAPE_POLYS || {}).sort();
+  const rows = [];
+  kinds.forEach(k => {
+    let a, b;
+    try { a = normalise(inkMask(drawMenuIcon(k))); } catch (e) { a = null; }
+    try { b = normalise(inkMask(drawRealShape(k))); } catch (e) { b = null; }
+    if (!a || !b) { rows.push({ k: k, score: -1, ia: a ? a.aspect : 0, ib: b ? b.aspect : 0 }); return; }
+    rows.push({ k: k, score: iou(a.m, b.m), ia: a.aspect, ib: b.aspect });
+  });
+  rows.sort((p, q) => p.score - q.score);
+
+  const pad = (s, n) => (s + '                    ').slice(0, n);
+  let out = 'shape icon vs the shape it adds — silhouettes normalised, so this is pure shape disagreement\n' +
+            '(IoU 1.00 = identical outline; aspect = ink w/h, icon vs real)\n\n';
+  out += pad('shape', 14) + pad('IoU', 8) + pad('icon a/r', 11) + pad('real a/r', 11) + 'verdict\n';
+  rows.forEach(r => {
+    const v = r.score < 0 ? 'DID NOT RENDER' : r.score < 0.75 ? 'WRONG SHAPE' : r.score < 0.9 ? 'drifting' : 'ok';
+    out += pad(r.k, 14) + pad(r.score < 0 ? '—' : r.score.toFixed(3), 8) +
+           pad(r.ia.toFixed(2), 11) + pad(r.ib.toFixed(2), 11) + v + '\n';
+  });
+  const bad = rows.filter(r => r.score >= 0 && r.score < 0.75).length;
+  const drift = rows.filter(r => r.score >= 0.75 && r.score < 0.9).length;
+  out += '\n' + rows.length + ' shapes: ' + bad + ' plainly wrong, ' + drift + ' drifting, ' +
+         (rows.length - bad - drift) + ' fine.\n';
+  document.getElementById('out').textContent = out;
+  window.__done = true;
+})();
+</script></body></html>

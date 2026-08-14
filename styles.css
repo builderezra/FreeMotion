@@ -4543,10 +4543,13 @@ body.fm-pushing #toast { z-index: 213; }
    Measured at 380px: the version pill is a bordered chip whose text runs to its own border, while every
    icon button carries ~10px of padding inside its 42px box. So with one flat 4px gap everywhere, the
    notes ICON sat 14px from the chip and 24px from the cog — geometrically even, visibly shoved left.
-   10px on this one button lands both optical gaps on 24px. It is on the button rather than on .m-ver
-   because the chip is hidden in select mode and a margin there would move the wrong things. The project
-   name pays for it out of its flex, dropping 128px → 118px, which is still a readable field. */
-#m-notes { margin-left: 10px; }
+   10px on this one button landed both optical gaps on 24px — and he came back with "the notes still has
+   two much space from the buttons next to it" (queue 188), which is the more interesting fault. Measured
+   the three glyphs' ink in their own 24-unit space: notes 14x18, cog 22x22, export 12x16. The notes page
+   was drawn a third narrower than the cog beside it, so the SAME gap carried ~4px more visible air on
+   each side of it. The glyph is drawn to fill its box now (index.html), which is the actual fix, and the
+   margin drops to a nudge — the widened page had made the 10px version wider still. */
+#m-notes { margin-left: 2px; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--panel); display: none;

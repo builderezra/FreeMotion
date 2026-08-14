@@ -47,11 +47,52 @@ window.FM = window.FM || {};
   function icoPoly(kind, outline) {
     var polys = (FM.SHAPE_POLYS && FM.SHAPE_POLYS[kind]) || [];
     var open = kind === 'spiral';
-    var body = polys.map(function (pl) {
-      var pts = pl.map(function (p) { return (3 + p[0] * 18).toFixed(1) + ',' + (3 + p[1] * 18).toFixed(1); }).join(' ');
-      return (open || outline) ? '<' + (open ? 'polyline' : 'polygon') + ' points="' + pts + '" fill="none" stroke="currentColor" stroke-width="' + (outline ? 1.8 : 1.4) + '" stroke-linejoin="round"/>'
-                  : '<polygon points="' + pts + '" fill="currentColor" stroke="none"/>';
-    }).join('');
+    /* AT THE SHAPE'S OWN ASPECT (queue 159). Ezra: "most shapes icons vary largely to the actual shape,
+     * try and make them 1-1."
+     * The polygons were right all along — the BOX was wrong. Every shape's unit square was mapped into
+     * an 18×18 square here, while FM.addShapeLayer spawns it into a box of its own SHAPE_ASPECT, so a
+     * banner advertised at 1.84:1 arrived at 4.08:1 and an arrow shown square arrived at nearly 2:1.
+     * That is the "vary largely" he is seeing, and it was never in the shape data.
+     * Fit rather than stretch: scale by the LONGER side so the icon still occupies its 18px cell, and
+     * centre what is left over, so a wide shape sits in the middle of the tile instead of hugging a
+     * corner. Reading FM.SHAPE_ASPECT means there is one table, not a copy that can drift. */
+    var asp = (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT[kind]) || [1, 1];
+    var k = 18 / Math.max(asp[0], asp[1]);
+    var bw = asp[0] * k, bh = asp[1] * k;
+    var ox = (24 - bw) / 2, oy = (24 - bh) / 2;
+    /* ONE path, not one polygon per subpath (queue 159). Several of these shapes are made of a body
+     * plus a HOLE — the compositor's own comment says it: "every body here winds clockwise, so a hole
+     * must wind anticlockwise". Winding only cancels between subpaths of the SAME path, so drawing each
+     * one as its own <polygon> filled every hole in solid. A clock came out a plain disc against a real
+     * ring-with-hands (measured at 0.41 silhouette agreement), and it quietly cost the ring shapes —
+     * wreath, gear, sun, snowflake, laurel — as well.
+     * Default nonzero fill-rule, deliberately, because that is the rule the compositor fills with. */
+    /* …and it walks the SAME CURVE the compositor walks. Half these outlines are smooth: a point
+     * flagged [u,v,1] means the curve flows THROUGH it as a Catmull-Rom bezier, and drawing straight
+     * lineTos between them turns a wreath into a polygon of it. FM.pointCtrl is the single source of
+     * truth for those tangents (compositor, thumbnails and the point editor all read it), so the icon
+     * reads it too rather than owning a second opinion about what the curve is. Mirrors
+     * FM.buildSubPath exactly, emitting SVG C commands where that emits bezierCurveTo. */
+    var M = function (p) { return [(ox + p[0] * bw), (oy + p[1] * bh)]; };
+    var f = function (q) { return q[0].toFixed(2) + ' ' + q[1].toFixed(2); };
+    var sub = function (pl) {
+      var n = pl.length; if (!n) return '';
+      var closed = !open;
+      var out = 'M' + f(M(pl[0]));
+      var segs = closed ? n : n - 1;
+      for (var i = 0; i < segs; i++) {
+        var p1 = pl[i], p2 = closed ? pl[(i + 1) % n] : pl[i + 1];
+        if (p1[2] !== 1 && p2[2] !== 1) { out += ' L' + f(M(p2)); continue; }
+        if (!FM.pointCtrl) { out += ' L' + f(M(p2)); continue; }
+        var c1 = FM.pointCtrl(pl, i, closed).out, c2 = FM.pointCtrl(pl, i + 1, closed).in;
+        out += ' C' + f(M(c1)) + ' ' + f(M(c2)) + ' ' + f(M(p2));
+      }
+      return out + (closed ? ' Z' : '');
+    };
+    var d = polys.map(sub).join(' ');
+    var body = (open || outline)
+      ? '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="' + (outline ? 1.8 : 1.4) + '" stroke-linejoin="round"/>'
+      : '<path d="' + d + '" fill="currentColor" stroke="none"/>';
     return '<svg viewBox="0 0 24 24">' + body + '</svg>';
   }
   // The extra AM shape library (pages 2–4 of AM's shape sheet).

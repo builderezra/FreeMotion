@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#159 — the Shape tab, as it actually looks</title>
+<style>html,body{margin:0;background:#060c0f}iframe{border:0;display:block}</style></head><body>
+<iframe id="app" src="../index.html" style="width:380px;height:820px"></iframe>
+<script>
+/* The measurement in tests/_shapedrift.html says the icons now match what they add. This is the other
+   half of the question: whether an honest icon is a GOOD icon at 24px. Fitting each shape to its real
+   aspect means a banner draws as a 4.18:1 sliver in a square tile — correct, and possibly weak-looking
+   next to the square ones. That is a judgement a number cannot make, so it gets looked at. */
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow, d = w.document;
+  var n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.timeline)) { if (n++ > 300) return; return setTimeout(wait, 50); }
+    if (w.FM.home && w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
+    setTimeout(function () {
+      var fab = d.getElementById('add-fab');   // the phone's + — the real door, rather than guessing an API name
+      if (fab) fab.click(); else if (w.FM.addMenu && w.FM.addMenu.open) w.FM.addMenu.open();
+      setTimeout(function () {
+        var tabs = [].slice.call(d.querySelectorAll('.addmenu-tab, .am-tab, .addmenu-tabs button'));
+        var shape = tabs.find(function (t) { return /Shape/i.test(t.textContent); });
+        if (shape) shape.click();
+        setTimeout(function () { window.__done = true; }, 400);
+      }, 400);
+    }, 500);
+  })();
+});
+</script></body></html>

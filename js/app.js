@@ -1426,7 +1426,13 @@ window.FM = window.FM || {};
   // opts: { name, extra } — extra props (e.g. { sides: 6 } for a hexagon) land on the layer.
   // Natural default aspect (w×h multipliers) per shape kind — a Rectangle spawns landscape, an
   // arrow/line elongated, a semicircle as half a CIRCLE… instead of everything being an identical square.
-  const SHAPE_ASPECT = {
+  /* EXPOSED (queue 159) because the add-menu icon has to draw at the same proportions the shape will
+     actually spawn at. js/addmenu.js used to map every shape's unit box into a SQUARE, so anything with
+     a non-square aspect here — banner, arrow, trapezoid, parallelogram, cloud, crown, eye, envelope,
+     key… — was advertised at proportions the app would never give you. Measured before the fix with
+     tests/_shapedrift.html: banner's icon ink was 1.84:1 against the real 4.08:1.
+     One table, read by both, so the two can no longer disagree. */
+  const SHAPE_ASPECT = FM.SHAPE_ASPECT = {
     rect: [1.5, 1], line: [1.6, 0.4], arrow: [1.6, 0.8], semicircle: [1.3, 0.65],
     trapezoid: [1.4, 0.9], parallelogram: [1.5, 0.9],
     banner: [1.6, 0.7], cloud: [1.4, 0.95], boat: [1.1, 1.1],
