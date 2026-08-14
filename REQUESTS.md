@@ -224,6 +224,15 @@ better still, keep working inside the turn rather than parking work for a later 
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [x] **161 — Make the Freehand Drawing icon a pencil.** (v7.04) His words: *"Make the free hand drawing
+      icon a pencil."* It was a squiggle with a small nib.
+      **Vector Drawing's icon was ALREADY a pencil silhouette**, so doing only what was asked would have
+      left two pencils side by side — the exact fault the Elements cube note in this file records ("at
+      22px the two were nearly the same mark and neither told you what it opened"). So Freehand takes the
+      pencil, properly drawn with a ferrule and a tip, and **Vector becomes what it actually is**: a curve
+      with two anchor squares, which is the universal mark for a vector path. Say the word if you would
+      rather Vector kept its old icon and the pair stayed similar.
+
 - [ ] **160 — The two people shapes need arms, and he wants agents to check the result.** (14 Aug.) His
       words: *"The two people shapes are good but need arms, make sure when adding arms you get other
       agents to verify if it's any good or not."*

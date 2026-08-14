@@ -93,8 +93,18 @@ window.FM = window.FM || {};
   var INSTANT = [
     { label: 'Text', icon: ico('<path d="M6 5h12M12 5v14M9 19h6"/>'), add: function () { FM.addTextLayer && FM.addTextLayer(); } },
     { label: 'Captions', icon: ico('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14.5h6M14 11h3"/>'), add: function () { FM.addCaptionLayer && FM.addCaptionLayer(); } },
-    { label: 'Freehand Drawing', icon: ico('<path d="M3 17.5s3-8 6-8 2 5 5 5 4-9 7-9"/><path d="M14 20l3-1 1-3-8 0z"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
-    { label: 'Vector Drawing', icon: ico('<path d="M5 19l4-1 9-9-3-3-9 9z"/><circle cx="5" cy="19" r="1.6"/><circle cx="18" cy="6" r="1.6"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
+    /* A PENCIL (queue 161). Ezra: "Make the free hand drawing icon a pencil." It was a squiggle with a
+       nib, which reads as "a wavy line" rather than as the tool you draw with. Drawn as body + ferrule
+       band + tip band, because a bare angled rectangle at 22px is a stick — the two cross-strokes are
+       what make it legible as a pencil at this size. */
+    { label: 'Freehand Drawing', icon: ico('<path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/><path d="M14.2 7.3l2.5 2.5"/><path d="M5.1 16.4l2.5 2.5"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
+    /* …and Vector stops being a pencil too, which is not scope creep but the other half of the same
+       change: its old mark was ALSO a pencil silhouette (with two anchor dots), so giving Freehand the
+       pencil would have left two pencils side by side in one list. That is the fault the Elements cube
+       note records — "at 22px the two were nearly the same mark and neither told you what it opened".
+       A curve between two anchor squares is what vector drawing IS, and it shares nothing with a pencil
+       at any size. */
+    { label: 'Vector Drawing', icon: ico('<path d="M4.6 17.6c5.4 0 5.6-11 10.8-11"/><rect x="2.1" y="15.6" width="4" height="4" rx=".7"/><rect x="17.9" y="4.6" width="4" height="4" rx=".7"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
