@@ -7509,11 +7509,26 @@ window.FM = window.FM || {};
   // AUTO Catmull-Rom tangent (p_next − p_prev)/6. Single source of truth for rendering + the editor.
   FM.pointCtrl = function (pts, i, closed) {
     const n = pts.length;
-    const get = k => closed ? pts[((k % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, k))];
+    const at = k => pts[Math.max(0, Math.min(n - 1, k))];          // always a REAL point
+    const get = k => closed ? pts[((k % n) + n) % n] : at(k);
     const p = get(i);
     if (p[2] !== 1) return { out: [p[0], p[1]], in: [p[0], p[1]], corner: true };
     if (p.length >= 5) { const hx = p[3], hy = p[4]; return { out: [p[0] + hx, p[1] + hy], in: [p[0] - hx, p[1] - hy], manual: true }; }
-    const a = get(i - 1), b = get(i + 1);
+    /* THE ENDS OF AN OPEN PATH REFLECT, THEY DO NOT CLAMP (queue 158). Ezra: "Spiral shapes last little
+     * bit is straight instead of round."
+     * The tangent here is the Catmull-Rom (next − prev)/6. On a CLOSED path both neighbours always
+     * exist. On an OPEN one the old code clamped the missing neighbour to the endpoint ITSELF, so at
+     * the last point `next` was p and the tangent collapsed to (p − prev)/6 — half the length it should
+     * be, and aimed down the chord instead of continuing the curve. That flattens the final segment.
+     * On a closed shape it is invisible; on the spiral, whose last segment sweeps a wide arc at maximum
+     * radius, it is a straight tail — exactly what he is looking at.
+     * Reflecting the neighbour across the endpoint (the standard phantom point, 2p − prev) restores the
+     * tangent to (p − prev)/3, which is the magnitude that carries the curve out to its end. This fixes
+     * every open path at once — the spiral, and freehand and vector drawings, whose first and last
+     * strokes were flattening for the same reason. */
+    const refl = (e, q) => [2 * e[0] - q[0], 2 * e[1] - q[1]];
+    const a = (closed || i - 1 >= 0) ? get(i - 1) : refl(pts[0], at(1));
+    const b = (closed || i + 1 <= n - 1) ? get(i + 1) : refl(pts[n - 1], at(n - 2));
     const tx = (b[0] - a[0]) / 6, ty = (b[1] - a[1]) / 6;
     return { out: [p[0] + tx, p[1] + ty], in: [p[0] - tx, p[1] - ty] };
   };

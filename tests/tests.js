@@ -12102,6 +12102,49 @@
     } finally { if (was) root.setAttribute('data-theme', was); else root.removeAttribute('data-theme'); }
   });
 
+  /* #158 — Ezra: "Spiral shapes last little bit is straight instead of round."
+     The tangent at a point is Catmull-Rom (next − prev)/6. On an OPEN path the missing neighbour used
+     to CLAMP to the endpoint itself, so at the last point `next` was p and the tangent collapsed to
+     (p − prev)/6 — half length, aimed down the chord. Invisible on a closed shape; on the spiral's
+     final wide sweep it is a straight tail. Reflecting the neighbour (2p − prev) restores (p − prev)/3.
+     Asserted as geometry rather than by eye: the endpoint's handle must be twice the degenerate length
+     and must point ALONG the curve, and a closed path must be untouched. */
+  test('open paths curve to their ends — the spiral has no straight tail', { item: 'open-path-ends' }, function () {
+    if (!FM.pointCtrl) throw new Error('FM.pointCtrl is missing');
+    // Three points on a quarter circle, open.
+    const pts = [[0, 0, 1], [0.5, 0.15, 1], [1, 0.6, 1]];
+    const last = FM.pointCtrl(pts, 2, false);
+    const prev = pts[1], p = pts[2];
+    const len = Math.hypot(last.in[0] - p[0], last.in[1] - p[1]);
+    const chord = Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+    // Clamped gave chord/6; reflected gives chord/3. Assert it is the longer one.
+    if (len < chord / 4.5) {
+      throw new Error('the end handle is ' + len.toFixed(4) + ' against a chord of ' + chord.toFixed(4) +
+        ' (~chord/' + (chord / len).toFixed(1) + ') — that is the collapsed tangent that flattens the last segment');
+    }
+    // The first point has the same fault mirrored.
+    const first = FM.pointCtrl(pts, 0, false);
+    const flen = Math.hypot(first.out[0] - pts[0][0], first.out[1] - pts[0][1]);
+    const fchord = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+    if (flen < fchord / 4.5) throw new Error('the START handle is collapsed too (' + flen.toFixed(4) + ' against ' + fchord.toFixed(4) + ')');
+
+    // A CLOSED path must be untouched — it always had both neighbours, so nothing here may change it.
+    const sq = [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
+    const c = FM.pointCtrl(sq, 0, true);
+    const want = [(sq[1][0] - sq[3][0]) / 6, (sq[1][1] - sq[3][1]) / 6];
+    if (Math.abs((c.out[0] - sq[0][0]) - want[0]) > 1e-9 || Math.abs((c.out[1] - sq[0][1]) - want[1]) > 1e-9) {
+      throw new Error('a closed path\'s control point moved — this change was meant to touch open ends only');
+    }
+
+    // …and the real spiral: its last segment must bow off the straight chord between its last two points.
+    const sp = (FM.SHAPE_POLYS && FM.SHAPE_POLYS.spiral) ? FM.SHAPE_POLYS.spiral[0] : null;
+    if (!sp || sp.length < 3) throw new Error('the spiral has no polyline to check');
+    const i = sp.length - 1, A = sp[i - 1], B = sp[i];
+    const mid = FM.subPathMidpoint(sp, i - 1, false);
+    const bow = Math.abs((B[0] - A[0]) * (A[1] - mid[1]) - (A[0] - mid[0]) * (B[1] - A[1])) / Math.max(1e-9, Math.hypot(B[0] - A[0], B[1] - A[1]));
+    if (bow < 0.002) throw new Error('the spiral\'s final segment bows only ' + bow.toFixed(5) + ' off its chord — it is drawing straight');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

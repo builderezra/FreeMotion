@@ -224,6 +224,34 @@ better still, keep working inside the turn rather than parking work for a later 
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [ ] **160 — The two people shapes need arms, and he wants agents to check the result.** (14 Aug.) His
+      words: *"The two people shapes are good but need arms, make sure when adding arms you get other
+      agents to verify if it's any good or not."*
+      Two shapes: `person` and `woman`. Both currently read as head + body with no arms.
+      **The verification is part of the request, not an optional extra** — same arrangement as #63, the
+      car, where he asked for "agents holding me accountable". So: draw the arms, render them, and have
+      independent agents judge whether the result actually reads as a person with arms, before it ships.
+      A drawing change is exactly the kind where my own judgement is worth least — I cannot see it the
+      way he can, and the car took several passes.
+
+- [ ] **158 — The spiral's last stretch is straight instead of curved.** (14 Aug, screenshot of a Spiral
+      layer at v7.00.) His words: *"Spiral shapes last little bit is straight instead of round."*
+      Visible in his shot: the outer end of the spiral runs off in a straight tail at the upper-left
+      instead of continuing the curve. The spiral is an OPEN_POLY — it strokes its polyline rather than
+      filling it — so the fault is in the point data or in which points are marked as curve-through
+      points, not in the fill.
+
+- [ ] **159 — Shape icons in the add menu do not match the shapes they add. Make them 1:1.** (14 Aug.)
+      His words: *"most shapes icons vary largely to the actual shape, try and make them 1-1."*
+      Worth knowing before starting: js/addmenu.js already claims to render each icon **straight from
+      the shape's own polygon data** (`FM.SHAPE_POLYS`), with the comment "the menu preview can never
+      drift from what actually gets added". So either that path is not being used for the shapes he
+      means, or it IS used and the RENDERING differs — stroke vs fill, a different aspect ratio, or the
+      icon drawing the unit box where the real shape spawns at its own SHAPE_ASPECT.
+      **Measure which before touching anything**: render each shape's icon and the shape itself and
+      compare them, the same way #114's bounds were checked across all 54 at once. That also answers
+      whether this is one broken path or fifty-four small drift bugs.
+
 - [ ] **157 — TRY moving the film grain off the project cards and onto the background.** (14 Aug.) His
       words: *"I want to try removing the film grain from the projects and instead move it to the
       background, it might be better if the projects are smooth and shiny with a rough textured
