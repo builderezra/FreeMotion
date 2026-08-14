@@ -12864,6 +12864,87 @@
     }
   });
 
+  /* #189 — Ezra, third time of asking: "the distance between the settings cog and the export button
+     needs to be the same for the notepad and refresh button, it just looks wonky still."
+     Both earlier attempts measured TAP BOXES and declared the run even. It was not, because these four
+     controls present different edges: the version chip and Export are painted to their borders, while
+     notes and the cog are bare icons sitting ~11px inside a 42px target. Equal gaps between boxes are
+     therefore unequal gaps between the things you can see. This asserts the VISIBLE edges. */
+  test('the phone bar spaces its right-hand run by what you can actually see', { item: 'bar-spacing' }, async function () {
+    const painted = id => { const el = document.getElementById(id); if (!el) return null; const r = el.getBoundingClientRect(); return { id, left: r.left, right: r.right, w: r.width }; };
+    const inked = id => {
+      const el = document.getElementById(id); if (!el) return null;
+      const svg = el.querySelector('svg'); if (!svg) return painted(id);
+      let bb = null; try { bb = svg.getBBox(); } catch (e) {}
+      const sr = svg.getBoundingClientRect();
+      if (!bb || !bb.width || !sr.width) return painted(id);
+      const k = sr.width / 24;
+      return { id, left: sr.left + bb.x * k, right: sr.left + (bb.x + bb.width) * k, w: sr.width };
+    };
+    /* THE SUITE'S APP FRAME IS 900x760 (tests/run.html), so the phone bar is display:none by default
+       and an early "nothing to measure" return would make this test pass against ANY spacing — which
+       is exactly what the first version did: both mutations survived it. Own the viewport instead, the
+       same way the 390x844 test above does. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test needs to own its viewport width and has no frameElement');
+    const hadW = frame.style.width, hadH = frame.style.height;
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      await sleep(220);   // let the layout settle at the new width before measuring anything
+      const run = [painted('ver-m'), inked('m-notes'), inked('m-settings'), painted('m-export')];
+      if (run.some(x => !x)) throw new Error('the phone bar is missing one of ver-m / m-notes / m-settings / m-export');
+      if (!run.every(x => x.w > 0)) throw new Error('the phone bar did not render at 390px — this test cannot see what it is measuring');
+
+      const gaps = [];
+      for (let i = 1; i < run.length; i++) gaps.push(run[i].left - run[i - 1].right);
+      const spread = Math.max.apply(null, gaps) - Math.min.apply(null, gaps);
+      if (spread > 2) {
+        throw new Error('the visible gaps across refresh · notes · cog · Export are ' +
+          gaps.map(g => g.toFixed(1)).join(' / ') + ' — a ' + spread.toFixed(1) + 'px spread, which is the wonkiness he keeps pointing at');
+      }
+      if (gaps.some(g => g < 8)) throw new Error('one of the gaps collapsed to ' + Math.min.apply(null, gaps).toFixed(1) + 'px — the run is cramped, not even');
+    } finally {
+      frame.style.width = hadW; frame.style.height = hadH;
+      await sleep(160);
+    }
+  });
+
+  /* #190 — "Get rid of the editing group go back button pop up, the top left back button works fine."
+     Removing a door is only safe if the remaining one works, which is the lesson of queue 53. */
+  test('the group crumb is gone and back still leaves the group', { item: 'group-crumb' }, async function () {
+    if (document.getElementById('group-crumb')) throw new Error('the floating "Editing group" pill is back');
+    const savedScene = FM.scene;
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
+        FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 2 }),
+      ]);
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+      FM.groupSelection();
+      const grp = FM.scene.layers.find(l => l.type === 'group');
+      if (!grp) throw new Error('grouping did not make a group, so this test cannot enter one');
+      FM.enterGroup(grp.id);
+      if (FM.groupContext !== grp.id) throw new Error('enterGroup did not put us inside the group');
+      if (!document.body.classList.contains('group-editing')) throw new Error('body.group-editing is gone — the + FAB hides on that class, so it must survive the pill');
+      document.getElementById('btn-back').click();
+      await sleep(60);
+      if (FM.groupContext) throw new Error('the back button no longer leaves the group — with the pill removed there would be no way out but leaving the project');
+      /* …and it must leave the GROUP, not the project. Opening the home screen also clears the group
+         context (js/home.js), so "groupContext is null" alone cannot tell a working back button from
+         one that fell through to Home — the first version of this test asserted exactly that and
+         passed against a mutation which deleted the group branch entirely. */
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) {
+        throw new Error('back left the PROJECT instead of the group — one press should step out of the group and leave you where you were');
+      }
+      if (document.body.classList.contains('group-editing')) throw new Error('body.group-editing stuck on after leaving the group');
+    } finally {
+      if (FM.exitGroup) FM.exitGroup(true);
+      FM.scene = savedScene;
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

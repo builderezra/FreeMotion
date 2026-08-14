@@ -3,9 +3,17 @@
 <pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px">…</pre>
 <iframe id="a" src="../index.html" style="width:380px;height:300px;border:0"></iframe>
 <script>
-/* #188. He says the notes button still has too much air around it after the gaps were evened, so this
-   measures the thing a gap number cannot see: how much of each button's box the GLYPH actually fills.
-   A narrow glyph in a 42px box reads as a wider gap than a fat one, whatever the boxes do. */
+/* #185 / #188 / #189 — the phone bar's right-hand run: refresh chip · notes · cog · Export.
+ * Ezra: "the distance between the settings cog and the export button needs to be the same for the
+ * notepad and refresh button, it just looks wonky still".
+ * The trap is that these four controls do not present the same kind of edge:
+ *   · the version chip is a BORDERED PILL — its visible edge is its border box;
+ *   · notes and the cog are BARE ICONS — their visible edge is the ink, which sits inside a 42px
+ *     tap target with ~10px of padding on each side;
+ *   · Export is a FILLED button — its visible edge is its background box.
+ * So equal `gap` values produce visibly unequal spacing, which is exactly what he keeps seeing. This
+ * measures the VISUAL edges — border box for the chip and Export, real ink for the icons — and reports
+ * the three gaps between them. */
 document.getElementById('a').addEventListener('load', function () {
   var w = document.getElementById('a').contentWindow, d = w.document, n = 0;
   (function wait() {
@@ -13,20 +21,45 @@ document.getElementById('a').addEventListener('load', function () {
     if (w.FM.home && w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
     setTimeout(function () {
       var out = [];
-      ['m-notes', 'm-settings', 'm-export'].forEach(function (id) {
-        var b = d.getElementById(id); if (!b) return out.push(id + ' MISSING');
-        var svg = b.querySelector('svg'); var bb = null;
-        try { bb = svg.getBBox(); } catch (e) {}
-        var r = b.getBoundingClientRect(), sr = svg.getBoundingClientRect();
-        out.push(id + '  box ' + Math.round(r.width) + 'x' + Math.round(r.height) +
-          '  svg ' + Math.round(sr.width) + 'x' + Math.round(sr.height) +
-          (bb ? '  INK in 24-space: x ' + bb.x.toFixed(1) + '..' + (bb.x + bb.width).toFixed(1) +
-                '  y ' + bb.y.toFixed(1) + '..' + (bb.y + bb.height).toFixed(1) +
-                '  (' + bb.width.toFixed(1) + ' x ' + bb.height.toFixed(1) + ')' : ''));
+      function inkEdges(id) {
+        var b = d.getElementById(id); if (!b) return null;
+        var box = b.getBoundingClientRect();
+        var svg = b.querySelector('svg');
+        if (!svg) return { id: id, left: box.left, right: box.right, kind: 'box', box: box };
+        var bb = null; try { bb = svg.getBBox(); } catch (e) {}
+        var sr = svg.getBoundingClientRect();
+        if (!bb || !bb.width) return { id: id, left: sr.left, right: sr.right, kind: 'svg', box: box };
+        // map the 24-unit viewBox onto the rendered svg rect
+        var k = sr.width / 24;
+        return { id: id, left: sr.left + bb.x * k, right: sr.left + (bb.x + bb.width) * k, kind: 'ink', box: box };
+      }
+      // The chip and Export are painted surfaces: their border box IS what the eye sees.
+      function boxEdges(id) {
+        var b = d.getElementById(id); if (!b) return null;
+        var r = b.getBoundingClientRect();
+        return { id: id, left: r.left, right: r.right, kind: 'painted', box: r };
+      }
+      var items = [boxEdges('ver-m'), inkEdges('m-notes'), inkEdges('m-settings'), boxEdges('m-export')].filter(Boolean);
+      items.forEach(function (it) {
+        out.push(it.id.padEnd(12) + it.kind.padEnd(9) +
+          'tap ' + Math.round(it.box.left) + '..' + Math.round(it.box.right) +
+          '   VISUAL ' + it.left.toFixed(1) + '..' + it.right.toFixed(1) +
+          '  (' + (it.right - it.left).toFixed(1) + ' wide)');
       });
+      out.push('');
+      out.push('gaps between visible edges:');
+      var gaps = [];
+      for (var i = 1; i < items.length; i++) {
+        var g = items[i].left - items[i - 1].right;
+        gaps.push(g);
+        out.push('   ' + (items[i - 1].id + ' -> ' + items[i].id).padEnd(30) + g.toFixed(1) + 'px');
+      }
+      var min = Math.min.apply(null, gaps), max = Math.max.apply(null, gaps);
+      out.push('');
+      out.push('spread ' + (max - min).toFixed(1) + 'px   ' + ((max - min) <= 1.5 ? 'EVEN' : 'UNEVEN — this is what he is seeing'));
       document.getElementById('o').textContent = out.join('\n');
       window.__done = true;
-    }, 600);
+    }, 700);
   })();
 });
 </script></body></html>

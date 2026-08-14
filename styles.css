@@ -3142,11 +3142,6 @@ body.sel-mode .track-head.sel { outline: 2px solid var(--accent); outline-offset
 #m-group:active .m-ico { color: var(--accent); }
 
 /* ---- Edit Group breadcrumb (v2.28) ---- */
-#group-crumb { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); z-index: 150; display: flex; align-items: center; gap: 7px; padding: 9px 16px 9px 12px; border-radius: 999px; border: 1px solid var(--accent); background: rgba(10, 14, 20, .92); color: var(--text); font-size: 12.5px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 26px rgba(0,0,0,.5); }
-#group-crumb.hidden { display: none; }
-#group-crumb .gc-arrow { color: var(--accent); font-size: 16px; line-height: 1; }
-#group-crumb .gc-label { color: var(--text-dim); font-weight: 500; }
-#group-crumb .gc-name { color: var(--accent); max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.group-editing #add-fab { display: none; }   /* adding layers happens at project level, not inside the group view */
 
 /* ---- ≡ reorder handle + paint-select (v2.29) ---- */
@@ -4179,7 +4174,7 @@ body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; backgroun
    edge on every frame of the push to keep it swapped.
    IT IS THE ONLY ONE. Walked, rather than assumed: every position:fixed element under <body> that is
    outside #app and #home-screen, in the phone editor at 380x800 — #splash, #toast, #insp-toggle,
-   #add-fab, #add-sheet, #group-crumb, #fx-browser, #afx-browser, #export-overlay, #export-dialog,
+   #add-fab, #add-sheet, #fx-browser, #afx-browser, #export-overlay, #export-dialog,
    #canvas-dialog, #draw-bar, #ai-panel. Every one of them is display:none there except #add-fab
    (300,716 64x64), #add-sheet and #ai-panel — and those two are parked a full screen BELOW the
    viewport (y=800 at height 800) until they are opened, so they have nothing to ride in. #toast can
@@ -4538,18 +4533,25 @@ body.fm-pushing #toast { z-index: 213; }
 
 /* ---------- Project notepad (queue 139) ---------- */
 .tb-notes, #m-notes { position: relative; }
-/* Optical spacing, not geometric (queue 185). Ezra: "the spacing for the notes button in regards to the
-   ones around it is off, it's too far to the left."
-   Measured at 380px: the version pill is a bordered chip whose text runs to its own border, while every
-   icon button carries ~10px of padding inside its 42px box. So with one flat 4px gap everywhere, the
-   notes ICON sat 14px from the chip and 24px from the cog — geometrically even, visibly shoved left.
-   10px on this one button landed both optical gaps on 24px — and he came back with "the notes still has
-   two much space from the buttons next to it" (queue 188), which is the more interesting fault. Measured
-   the three glyphs' ink in their own 24-unit space: notes 14x18, cog 22x22, export 12x16. The notes page
-   was drawn a third narrower than the cog beside it, so the SAME gap carried ~4px more visible air on
-   each side of it. The glyph is drawn to fill its box now (index.html), which is the actual fix, and the
-   margin drops to a nudge — the widened page had made the 10px version wider still. */
-#m-notes { margin-left: 2px; }
+/* THE WHOLE RIGHT-HAND RUN IS SPACED BY ITS VISIBLE EDGES (queue 185 → 188 → 189).
+   Ezra, third time: "the distance between the settings cog and the export button needs to be the same
+   for the notepad and refresh button, it just looks wonky still."
+   He is right and the first two attempts were both aimed at the wrong thing — moving one button around
+   while the run kept alternating wide and narrow. The reason it alternates is that these four controls
+   do not present the same KIND of edge:
+     · the version chip is a bordered pill — its ink runs to its own border;
+     · notes and the cog are bare icons — their ink sits inside a 42px tap target, ~11px in from it;
+     · Export is a filled button — its background is the edge.
+   So one flat `gap` produces three different visible gaps. Measured at 380px before this:
+   19.2px chip→notes, 28.1px notes→cog, 14.9px cog→Export — a 13px spread, which is precisely the
+   wonkiness he keeps pointing at. Icon-to-icon is widest because it pays the padding twice; anything
+   next to a painted edge pays it once.
+   Fixed by spacing on the VISIBLE edges instead: pull the two icons together by exactly the flex gap
+   (never further — a negative margin past −4px would overlap their tap targets, which is a real hazard
+   on a bar that also holds a delete bin), then open the two painted-edge gaps to match. All three land
+   on ~24px. The project name pays for it out of its flex and still has ~104px, which fits "Untitled". */
+#m-notes { margin-left: 6.9px; margin-right: -4px; }
+#m-export { margin-left: 9.2px; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--panel); display: none;

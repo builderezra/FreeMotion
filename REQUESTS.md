@@ -2036,6 +2036,88 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       same gap carried about 4px more visible air on each side. The glyph is drawn to fill its box now
       (17.1 × 22 — as wide as a portrait page goes without distorting), and the 10px nudge from #185 came
       back down to 2px, since a wider glyph made that spacing wider still.
+- [x] **189 — Even the spacing across refresh · notes · cog · Export (mobile).** (v7.23) His words, third
+      time of asking: *"the distance between the settings cog and the export button needs to be the same
+      for the notepad and refresh button, it just looks wonky still, don't make me need to ask again."*
+      He was right and my first two attempts were aimed at the wrong thing — nudging one button while
+      the run kept alternating wide and narrow. **The cause:** those four controls present different
+      kinds of edge. The version chip is a bordered pill (ink runs to its border), notes and the cog are
+      bare icons (ink sits ~11px inside a 42px tap target), and Export is a filled button (its
+      background is the edge). So one flat `gap` yields three different VISIBLE gaps — measured at
+      380px: **19.2px chip→notes, 28.1px notes→cog, 14.9px cog→Export**, a 13px spread. Icon-to-icon is
+      widest because it pays the padding twice.
+      **Fixed by spacing on the visible edges**: pull the two icons together by exactly the flex gap
+      (never more — a negative margin past −4px would overlap their tap targets, which matters on a bar
+      that also holds the delete bin) and open the two painted-edge gaps to match. **All three now
+      24.1px, spread 0.1px.** `tests/_barink.html` measures real ink boxes rather than tap boxes, which
+      is what the first two attempts were missing.
+- [ ] **193 — Nested groups should not be listed on the top-level timeline.** His words: *"groups inside
+      groups should show up on the original timeline, only when you go inside the group."* His screenshot
+      shows the phone timeline with FOUR "Group" rows stacked (teal, orange, red, purple), each indented
+      one step further, and then Squircle and Square un-indented at the bottom — so every level of the
+      hierarchy is being listed at once. What he wants is the ordinary tree behaviour: the top level
+      shows only the outermost group, and you see what is inside it by going in.
+      **Do #191, #192 and #193 together** — they are three views of one thing, how the timeline renders
+      group hierarchy, and the screenshot for #192 is the same picture as this one.
+- [ ] **194 — Make the + create button beautiful: the home background's palette, moving like it does.**
+      His words: *"Make the plus create button look really appealing, give it the colour scheme of the
+      background in the home menu and have it move around like it too, you'll need to design in
+      differently than the background because the colours will need to be closer together and stuff."*
+      He has already answered the hard part himself: a full-screen gradient's stops are spread over
+      ~800px, and the same palette squeezed into a 64px circle turns to mud — so the colours have to sit
+      CLOSER TOGETHER and the motion has to be scaled to the button, not copied from the background.
+      Read the home background's actual gradient and animation first and derive from it rather than
+      eyeballing it, so the two genuinely match. Mind the cost: this is a permanently animated element
+      over a timeline that is already the app's slowest screen (#125/#130), so it wants to be a
+      compositor-only animation (transform/opacity, or an animated background-position on a promoted
+      layer) and it must respect prefers-reduced-motion.
+- [ ] **195 — The volume control should be a scrub field like the effects sliders, not a dot on a line.**
+      His words: *"The volume slider needs to be like the effects slider and not a dot on a line, because
+      I want to be able adjust the volume up to like 1000%."* Two things in one: the CONTROL type (the
+      effect params use a drag-to-scrub number field with no fixed end, which is why he wants it) and the
+      RANGE (a dot on a 0–100 line cannot express 1000%). Pairs with #184's "no speed cap" — same
+      complaint about a slider whose ends are the limit.
+      Before building: gain above 1 clips, so check what the audio path does past unity (a hard clip
+      sounds broken and he will report that next). If it needs a limiter or a soft knee, say so rather
+      than shipping a slider that distorts at 300%.
+- [ ] **196 — A Sound Effects button in the Audio tab, with a library of effects.** His words: *"in the
+      audio tab we will add a button that is sound effects and you will be able to use that to add sound
+      effects to the project, we will have a sound effects menu with a bunch of our own sound effects and
+      some royalty free ones we find online, that we can legally use for free."*
+      The BROWSER is straightforward — a new tile in Audio opening a categorised list, one tap to add,
+      the same shape as the elements browser. Two things to settle before any of that, though:
+      1. **Where the audio actually comes from.** "Royalty free ones we find online" needs sources whose
+         licence is explicit and permissive — CC0 / public domain, not "free to download". I will not
+         pull audio off arbitrary sites, so this wants either a named CC0 source you are happy with, or
+         effects generated in-app (a synthesised whoosh, click, pop, riser is very doable in the Web
+         Audio API and has no licence question at all).
+      2. **Size.** This is a no-build local-only app; a folder of WAVs is megabytes that everyone
+         downloads on first load and the service worker then caches. Synthesised effects weigh nothing.
+      **Worth a decision from you: synthesised set first, or sourced files?** My recommendation is to
+      build the browser plus a synthesised starter set — it ships immediately, is legally clean, and the
+      same menu can take real files later.
+- [ ] **191 — The arrow beside a group's hide button, and the layout it shoves sideways.** His words:
+      *"some weird stuff going on in the grouping menu, like an arrow next to the hide button, idk what
+      that does and it pushes the ui over making it ugly."* Visible in his #190 screenshot: the group's
+      track head carries a small ▾ to the LEFT of the eye, which is presumably the expand/collapse
+      disclosure — and whatever it is, it is unlabelled, unexplained, and it widens the head so every
+      row's contents shift. Two parts: say what it does (or remove it if the row already expands another
+      way), and stop it changing the head's width — a control that only some rows have must not move the
+      ones that do not.
+- [ ] **192 — Grouping should MOVE the layers in, not copy them.** His words: *"when I group stuff I want
+      the layers grouped to move inside the group not be duplicated and left outside the group."*
+      Potentially serious — if grouping really leaves copies behind, every group doubles the scene. Check
+      first whether they are genuine duplicates or the timeline is LISTING each member twice (once inside
+      the expanded group, once at top level), because those are completely different bugs with the same
+      appearance. Count `FM.scene.layers` before and after grouping to tell them apart before touching
+      anything.
+- [x] **190 — Remove the "Editing group ‹ Group" pill.** (v7.23) His words: *"Get rid of the editing group go back
+      button pop up, the top left back button works fine."* Phone screenshot: a bordered pill floating at
+      the bottom of the inspector reading "‹ Editing group  Group" while inside a group. He is right that
+      the top-left back arrow already leaves the group, so it is a second door to the same place taking
+      up the bottom of the panel. Check the back arrow really does exit group context on BOTH phone and
+      desktop before deleting the pill, so this does not repeat queue 53 (Group's action survived and
+      every way to reach it did not).
 - [ ] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap.** Three parts,
       from one message (AM screenshot attached showing the four buttons above the 1.00x slider):
       1. *"the speed menu needs the crop buttons… let's say your clip is slightly too short for what you

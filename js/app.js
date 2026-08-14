@@ -1836,11 +1836,16 @@ window.FM = window.FM || {};
   // ---- Edit Group (AM): open a group in its own timeline view — only its members show, edit them
   // individually, then back out (‹ back / the crumb pill). Purely a view scope; time stays global.
   FM.groupContext = null;
+  /* The floating "‹ Editing group  Group" pill is GONE (queue 190). Ezra: "Get rid of the editing group
+     go back button pop up, the top left back button works fine." He is right — both back buttons already
+     leave the group before they leave the project (#btn-back here, #m-back in js/mobile.js, deliberately
+     the same ladder), so the pill was a second door to the same place parked across the bottom of the
+     inspector. Checked that the remaining door works on BOTH before removing it, which is the lesson of
+     queue 53, where Group's action survived and every way to reach it did not.
+     What SURVIVES is `body.group-editing`: other rules key off it (the + FAB hides inside a group,
+     because adding happens at project level), so this still runs — it just has no pill to update. */
   function updateGroupCrumb() {
-    const c = document.getElementById('group-crumb'); if (!c) return;
-    const g = FM.groupContext ? FM.scene.layers.find(l => l.id === FM.groupContext) : null;
-    if (g) { c.querySelector('.gc-name').textContent = g.name || 'Group'; c.classList.remove('hidden'); document.body.classList.add('group-editing'); }
-    else { c.classList.add('hidden'); document.body.classList.remove('group-editing'); }
+    document.body.classList.toggle('group-editing', !!FM.groupContext);
   }
   FM.enterGroup = function (id) {
     const g = FM.scene.layers.find(l => l.id === id && l.type === 'group');
@@ -2912,8 +2917,7 @@ window.FM = window.FM || {};
       if (FM.mediaLib) { try { FM.mediaLib.backfill(); } catch (e) {} }
     });
     // ‹ crumb pill exits the Edit Group view
-    const gcBack = document.getElementById('group-crumb');
-    if (gcBack) gcBack.addEventListener('click', () => { if (FM.exitGroup) FM.exitGroup(); });
+
     // desktop: clicking the brand goes Home (mobile uses the ‹ back arrow)
     const brandEl = document.querySelector('#topbar .brand');
     if (brandEl) brandEl.addEventListener('click', (e) => { if (e.target.classList.contains('ver')) return; if (FM.home) FM.home.open(); });
