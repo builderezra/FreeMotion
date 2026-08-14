@@ -2063,7 +2063,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       one row at the top level, and you see what is in it by pressing its chevron or going inside. Both
       doors are asserted, because defaulting to closed with no way to open would be a worse bug than the
       one being fixed.
-- [ ] **194 — Make the + create button beautiful: the home background's palette, moving like it does.**
+- [x] **194 — Make the + create button beautiful: the home background's palette, moving like it does.** (v7.26)
       His words: *"Make the plus create button look really appealing, give it the colour scheme of the
       background in the home menu and have it move around like it too, you'll need to design in
       differently than the background because the colours will need to be closer together and stuff."*
@@ -2075,6 +2075,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       over a timeline that is already the app's slowest screen (#125/#130), so it wants to be a
       compositor-only animation (transform/opacity, or an animated background-position on a promoted
       layer) and it must respect prefers-reduced-motion.
+      **Done.** The same three hues as `#home-screen::before`, read from that rule rather than typed
+      again — teal 41,217,187, violet 122,92,255, blue 38,132,255 — with everything else rebuilt for the
+      size exactly as you predicted: alpha up ~4x so a 20px pool survives, radii tightened so they read
+      as three lights rather than one wash, travel ~4x larger in relative terms because 6% of a 64px
+      button is 4px and invisible. Two pools on 13s and 19s, mirroring the background's 12s against 17s,
+      so they keep rearranging instead of sliding as one sheet. Transform-only, so it composites and
+      never repaints — it sits over the timeline, the app's heaviest screen — and it stops under
+      prefers-reduced-motion.
+      The aura is an inner clipped layer rather than the button's own background, because `#add-fab`
+      must never take an overflow clip: the filter is applied before the clip, so that would slice the
+      glow off square — the "box" you reported twice.
+      **Judged by a panel before shipping, per your standing instruction on visual work.** First round
+      came back 6.5/10 with one blocking flaw: the pools travelled far enough that a core left the disc
+      at the ends of the cycle, so the orb dimmed and opened a dark patch instead of staying a constant
+      object. Fixed by halving the travel, pulling the cores to about half the radius, screening the
+      pools so they add light instead of painting over each other, and crossing the falloffs at half
+      strength to kill a seam. That washed the violet out, so it was re-concentrated afterwards — three
+      legible hues at 64px was the hard-won part. The halo is two coloured passes now, teal and
+      violet-blue, so the light thrown on the timeline matches the light the orb contains.
 - [ ] **195 — The volume control should be a scrub field like the effects sliders, not a dot on a line.**
       His words: *"The volume slider needs to be like the effects slider and not a dot on a line, because
       I want to be able adjust the volume up to like 1000%."* Two things in one: the CONTROL type (the

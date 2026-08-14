@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><title>#194 — the + at three moments of its drift</title>
+<style>
+  html,body{margin:0;background:#0b1017;color:#8fa3ad;font:11px ui-monospace,monospace}
+  .row{display:flex;gap:26px;padding:22px}
+  .cell{text-align:center}
+  .holder{width:120px;height:120px;display:grid;place-items:center;background:radial-gradient(60% 60% at 50% 50%, #141c26, #0b1017);border-radius:16px}
+</style></head><body>
+<div class="row" id="r"></div>
+<script src="../js/settings.js"></script>
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../theme-glass.css">
+<script>
+/* Three stills off the SAME animation at 0s, 6.5s and 13s, by starting each copy at a different
+   negative delay — the only way to judge a drift from a screenshot. Rendered on a dark ground like
+   the timeline's, at the real 64px, not blown up: the whole question is whether three hues stay
+   legible at that size. */
+document.documentElement.setAttribute('data-theme', 'glass');
+var r = document.getElementById('r');
+[0, -6.5, -13].forEach(function (d) {
+  var cell = document.createElement('div'); cell.className = 'cell';
+  var h = document.createElement('div'); h.className = 'holder';
+  h.innerHTML = '<button id="add-fab" aria-label="Add" style="position:static">' +
+    '<span class="fab-aura" aria-hidden="true"><i class="fa-pool-a"></i><i class="fa-pool-b"></i></span>' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>';
+  cell.appendChild(h);
+  var cap = document.createElement('div'); cap.textContent = 't = ' + Math.abs(d) + 's';
+  cell.appendChild(cap);
+  r.appendChild(cell);
+  var a = h.querySelector('.fa-pool-a'), b = h.querySelector('.fa-pool-b');
+  a.style.animationDelay = d + 's'; b.style.animationDelay = d + 's';
+});
+setTimeout(function () { window.__done = true; }, 600);
+</script></body></html>

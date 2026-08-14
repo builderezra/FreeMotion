@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>#194 — the + button's aura</title>
+<style>html,body{margin:0;background:#0a0f14}
+.stage{position:relative;width:380px;height:300px;overflow:hidden;border:0}
+iframe{width:380px;height:820px;border:0;position:absolute;left:0;bottom:0}</style></head>
+<body>
+<!-- Bottom-right corner of the phone editor, where the + lives, at three moments of its drift so the
+     motion can be judged from stills. -->
+<div class="stage"><iframe src="../index.html"></iframe></div>
+<script>
+var f = document.querySelector('iframe');
+f.addEventListener('load', function () {
+  var w = f.contentWindow, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.timeline)) { if (n++ > 300) return; return setTimeout(wait, 50); }
+    if (w.FM.home && w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
+    setTimeout(function () { window.__done = true; }, 900);
+  })();
+});
+</script></body></html>

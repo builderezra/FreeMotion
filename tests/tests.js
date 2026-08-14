@@ -13034,6 +13034,65 @@
     }
   });
 
+  /* #194 — "give it the colour scheme of the background in the home menu and have it move around like
+     it too". Two things are worth locking, and neither is "does it look nice":
+       · the aura must be clipped by its OWN layer, never by an overflow clip on #add-fab — per spec
+         the filter runs before the clip, so an overflow:hidden there slices the glow off on a hard
+         line, which is the "box" he reported twice and which the suite already guards elsewhere;
+       · it must be the HOME palette, read from the home rule rather than typed twice, so the two
+         cannot drift apart the way the timeline momentum and the effect sliders once did. */
+  test('the + button wears the home palette without clipping its own glow', { item: 'fab-aura' }, async function () {
+    /* The + is a PHONE control — #add-fab is display:none above 700px and its rules live inside that
+       media query — so measuring it at the suite's default 900px reads unstyled elements and proves
+       nothing. Own the viewport, the same way the bar-spacing test does. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test needs to own its viewport width and has no frameElement');
+    const hadW = frame.style.width, hadH = frame.style.height;
+    frame.style.width = '390px'; frame.style.height = '844px';
+    await sleep(200);
+    try {
+    const fab = document.getElementById('add-fab');
+    if (!fab) throw new Error('#add-fab is gone');
+    const aura = fab.querySelector('.fab-aura');
+    if (!aura) throw new Error('the + has no aura layer');
+    if (getComputedStyle(fab).overflow !== 'visible') {
+      throw new Error('#add-fab has overflow:' + getComputedStyle(fab).overflow + ' — the filter is applied before the clip, so this slices the glow off square');
+    }
+    if (getComputedStyle(aura).overflow === 'visible') throw new Error('the aura is not clipped to the button, so its colour spills past the circle');
+    const pools = aura.querySelectorAll('i');
+    if (pools.length < 2) throw new Error('only ' + pools.length + ' pool(s) — two on mismatched clocks is what stops them sliding as one sheet');
+    const durs = [].map.call(pools, p => getComputedStyle(p).animationDuration);
+    if (new Set(durs).size < 2) throw new Error('both pools run on the same clock (' + durs.join(', ') + ') — they will drift as one flat sheet');
+
+    /* The palette really is the home screen's. Pull the hues out of BOTH rules and compare, so a
+       later change to one is caught rather than quietly diverging. */
+    const hues = css => (css.match(/rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+/g) || []).map(x => x.replace(/rgba?\(\s*/, '').replace(/\s+/g, ''));
+    let homeCss = '', fabCss = '';
+    [].forEach.call(document.styleSheets, sheet => {
+      let rules; try { rules = sheet.cssRules; } catch (e) { return; }
+      const walk = list => [].forEach.call(list, r => {
+        const sel = r.selectorText || '';
+        const txt = (r.style && r.style.cssText) || '';
+        if (/#home-screen::before/.test(sel)) homeCss += txt;
+        if (/\.fa-pool-/.test(sel)) fabCss += txt;
+        if (r.cssRules && r.cssRules.length) walk(r.cssRules);   // NOT `if (r.cssRules)` — every style rule has one since CSS nesting
+      });
+      walk(rules);
+    });
+    if (!homeCss) throw new Error('could not read the home background rule — this test cannot compare palettes');
+    if (!fabCss) throw new Error('could not read the + button pools');
+    const want = hues(homeCss), got = hues(fabCss);
+    const missing = want.filter(h => got.indexOf(h) < 0);
+    if (missing.length) {
+      throw new Error('the + uses ' + got.join(' / ') + ' but the home background is ' + want.join(' / ') +
+        ' — missing ' + missing.join(', ') + ', so the two screens no longer share a palette');
+    }
+    } finally {
+      frame.style.width = hadW; frame.style.height = hadH;
+      await sleep(160);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

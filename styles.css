@@ -2624,12 +2624,85 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
        a tight dark contact right underneath, and a long soft one further down. Ezra: "make sure it
        also has like glow and depth to it so it doesn't look plastered on" — the contact shadow is
        what stops it looking like a sticker, and the wide one is what lifts it off the timeline. */
+    /* The halo is two coloured passes now (queue 194), teal and violet-blue, so the light thrown onto
+       the timeline is the light the orb actually contains. One cyan pass at hue 191 read as a
+       different object's glow once the face carried three hues. */
     filter: var(--glass-edge)
-            drop-shadow(0 0 16px rgba(90, 199, 237, .40))
+            drop-shadow(0 0 13px rgba(41, 217, 187, .30))
+            drop-shadow(0 0 18px rgba(104, 130, 255, .34))
             drop-shadow(0 3px 4px rgba(3, 16, 22, .55))
             drop-shadow(0 12px 22px rgba(0, 0, 0, .5));
     box-shadow: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  /* THE + WEARS THE HOME SCREEN'S LIGHT (queue 194). Ezra: "give it the colour scheme of the
+     background in the home menu and have it move around like it too, you'll need to design in
+     differently than the background because the colours will need to be closer together and stuff."
+     He had already worked out the hard part. The home pools are three radial gradients spread over a
+     whole viewport at .13–.16 alpha (see #home-screen::before): squeeze those numbers into a 64px
+     circle and you get one flat smudge, because at that size the transparent falloffs overlap into
+     mud before any hue is legible. So the same three HUES are kept exactly — teal 41,217,187, violet
+     122,92,255, blue 38,132,255 — and everything else is rebuilt for the size: alpha up roughly 4x so
+     each pool survives being 20px across, radii tightened so they read as three lights rather than one
+     wash, and a dark base under them so the glyph keeps its contrast.
+     MOTION follows the same rule. The background travels ~6–8% of a screen; the same percentage of a
+     64px button is 4px, which is invisible, so the travel is ~4x larger in relative terms while still
+     staying small in absolute pixels. The two pools run on 13s and 19s exactly as the background runs
+     12s against 17s — mismatched on purpose, so they keep rearranging instead of sliding as one sheet.
+     Transform-only, so it composites and never repaints; this sits over the timeline, which is already
+     the app's heaviest screen. */
+  .fab-aura {
+    position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none;
+    background: linear-gradient(158deg, #10222f, #0d1626);
+    /* The pools SCREEN together so they add light where they meet instead of the later one painting
+       over the earlier — that overlap is what makes three lights read as one object rather than three
+       decals. isolate keeps that blending inside the button: without it, screen would reach through to
+       whatever the timeline has behind the FAB. */
+    isolation: isolate;
+  }
+  .fab-aura > i {
+    position: absolute; display: block; border-radius: 50%;
+    /* Oversized and centred so a drifting pool never shows its own edge inside the circle. */
+    width: 150%; height: 150%; left: -25%; top: -25%;
+    mix-blend-mode: screen;
+    will-change: transform;
+  }
+  /* Cores sit at roughly half the radius, not out near the rim, and their falloffs are two-stage so
+     neighbouring skirts cross at about half strength rather than both reaching zero first — which is
+     what left a visible seam between the teal and the violet. */
+  /* The VIOLET is deliberately the tightest and strongest of the three. Screen blending lightens
+     everything it touches, so the first pass at these numbers came out teal-to-blue with the violet
+     washed to a hint — and three legible hues at 64px was the hard-won part. Concentrating it (smaller
+     radius, higher alpha, its core kept out of the teal's path) buys the hue back without giving up
+     the even, hole-free light that the blending is there for. */
+  .fa-pool-a {
+    background:
+      radial-gradient(54% 54% at 33% 40%, rgba(41, 217, 187, .84), rgba(41, 217, 187, .30) 52%, transparent 78%),
+      radial-gradient(44% 44% at 72% 33%, rgba(122, 92, 255, .95), rgba(122, 92, 255, .40) 46%, transparent 72%);
+    animation: fab-pool-a 13s ease-in-out infinite alternate;
+  }
+  .fa-pool-b {
+    background: radial-gradient(52% 52% at 46% 70%, rgba(38, 132, 255, .80), rgba(38, 132, 255, .26) 52%, transparent 78%);
+    animation: fab-pool-b 19s ease-in-out infinite alternate;
+  }
+  /* The + itself must sit above the aura; the glass sheen (::after) still crosses over everything. */
+  #add-fab > svg { position: relative; z-index: 1; }
+  /* SMALL TRAVEL, ON PURPOSE. The first cut moved each pool 9–11% of a 96px layer, which walked a core
+     clear of the 64px disc at the ends of the cycle — so the button visibly dimmed and opened a dark
+     patch as it drifted, rather than staying a constant object whose light rearranges. Halved to ~5%,
+     which is still four times the background's relative travel (the whole reason this is designed
+     separately) but never takes a core outside the circle. The scale swing is trimmed for the same
+     reason: it was doing more to change brightness than to suggest depth. */
+  @keyframes fab-pool-a {
+    from { transform: translate3d(-5%, 3.5%, 0) scale(1); }
+    to   { transform: translate3d(5.5%, -4%, 0) scale(1.07); }
+  }
+  @keyframes fab-pool-b {
+    from { transform: translate3d(4%, -3%, 0) scale(1.05) rotate(0deg); }
+    to   { transform: translate3d(-4.5%, 4%, 0) scale(1) rotate(-8deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fa-pool-a, .fa-pool-b { animation: none; }
   }
   /* v6.09: the + glyph is the button again — the crystal cross that replaced it is gone. */
   #add-fab { display: flex; align-items: center; justify-content: center; }
