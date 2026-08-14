@@ -14181,6 +14181,34 @@
     });
   });
 
+  /* His words: "have a button at the top of the colouring section as a shortcut to it." */
+  test('filter library: Colouring has a shortcut to filters, at the top', { item: 'fx-library' }, async function () {
+    await withFilterLayer(async function (L) {
+      // withFilterLayer has already navigated INTO Effects, so the category cards are off screen.
+      if (FM.inspector.back) FM.inspector.back();
+      await sleep(120);
+      var cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label'))
+        .filter(function (n) { return /^Colouring$/i.test((n.textContent || '').trim()); })[0];
+      if (!cat) throw new Error('no Colouring category to open');
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      var btn = document.querySelector('.insp-filter-shortcut');
+      if (!btn) throw new Error('Colouring has no shortcut to filters');
+      // "at the top" — nothing of the panel's own content may precede it.
+      var prev = btn.previousElementSibling;
+      if (prev) throw new Error('the shortcut is not first in the panel; "' + (prev.textContent || prev.className).slice(0, 40) + '" is above it');
+      btn.click(); await sleep(140);
+      var items = Array.prototype.slice.call(document.querySelectorAll('.ctx-item')).map(function (n) { return n.textContent.trim(); });
+      if (!items.length) throw new Error('the shortcut opened nothing');
+      if (!items.some(function (t) { return /empty filter/i.test(t); })) throw new Error('the menu it opened is not the filter picker: ' + items.join(', '));
+      // …and it is the SAME picker, not a second one that will drift: every section is offered.
+      FM.filters.sections().forEach(function (s) {
+        if (!items.some(function (t) { return t.indexOf(s.label) === 0; })) throw new Error('the shortcut menu is missing the ' + s.label + ' section');
+      });
+      if (FM.contextMenu) FM.contextMenu.hide();
+      await sleep(60);
+    });
+  });
+
   /* ---------------- #113 §8: everything that filters the stack BY REGISTRY TYPE ----------------
    * Four places drop stack entries the registry does not recognise — the effect clipboard, effect
    * presets, layer presets and Paste Style. FILTERS-DESIGN.md predicted a filter would be silently

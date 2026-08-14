@@ -818,6 +818,11 @@ better still, keep working inside the turn rather than parking work for a later 
       **And the honest bit:** I authored those 16 to my taste, not yours. They are quick to change —
       each is a few lines in js/filters.js — so tell me which ones are wrong, which are missing, and
       whether 16 is the right number, and I will rework them rather than adding 30 more of the same.
+      **v7.45 — the Colouring shortcut**, your *"button at the top of the colouring section as a
+      shortcut to it"*. Opens the same picker as the one in Effects, so there is one filter menu in
+      the app rather than two that drift apart.
+      **#113 now has exactly ONE piece left: step 5, the real third tab in the effects browser** with
+      thumbnails, alongside Effects and Audio Effects. Everything else you asked for in it is in.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.

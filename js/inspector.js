@@ -1050,6 +1050,54 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* The filter picker — the one place a filter gets added, wherever you start from.
+   *
+   * Landing a look and landing an empty container are the SAME operation, because a filter from the
+   * library is not a special locked thing: it is exactly what "+ Add Filter → Empty filter" gives you,
+   * so it can be opened, retuned, part-deleted, added to and faded with Strength.
+   *
+   * Module-level rather than a closure inside effectsSection because Ezra asked for a second way in —
+   * "have a button at the top of the colouring section as a shortcut to it" — and two copies of a menu
+   * this fiddly would drift apart within a release. */
+  function openFilterPicker(layer, anchorEl) {
+    const landFilter = (box) => {
+      if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }
+      if (!layer.effects) layer.effects = [];
+      layer.effects.forEach(e => { e._expanded = false; });
+      box._expanded = true;
+      layer.effects.push(box);
+      afterFx();
+    };
+    const empty = () => { const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); if (box) box.effects = []; landFilter(box); };
+    const secs = (FM.filters && FM.filters.sections()) || [];
+    if (!FM.contextMenu || !secs.length) { empty(); return; }   // no library / no menu → an empty one
+    const r = anchorEl.getBoundingClientRect();
+    const at = (items) => FM.contextMenu.show(Math.max(8, r.left), r.bottom + 4, items);
+    // Two shallow levels rather than one long list: 16 looks in a single menu is a scroll on a phone,
+    // and the sections are the thing that makes them findable — his words, "section them, so that
+    // people can find stuff organised, like how the effects are organised".
+    const items = secs.map(s => ({
+      label: s.label + ' ›',
+      action: () => at(FM.filters.bySection(s.key).map(f => ({
+        label: f.name,
+        action: () => {
+          const box = FM.filters.makeInstance(f.id);
+          if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
+          // Drop anything inside it that cannot run on THIS layer, keeping the rest — the same rule
+          // Paste follows. A text-only ingredient on a shape would otherwise sit there doing nothing.
+          const fitted = FM.fxRegistry.fitToLayer(box, layer);
+          if (!fitted) { if (FM.toast) FM.toast('Nothing in “' + f.name + '” works on this layer'); return; }
+          landFilter(fitted);
+          if (FM.toast && fitted.effects.length < box.effects.length) {
+            FM.toast('Added “' + f.name + '” — ' + (box.effects.length - fitted.effects.length) + ' part(s) didn’t suit this layer');
+          }
+        },
+      }))),
+    }));
+    items.push({ label: 'Empty filter', action: empty });
+    at(items);
+  }
+
   function effectsSection(layer) {
     const s = section('Effects');
     const list = el('div', 'fx-list');
@@ -1069,48 +1117,7 @@ window.FM = window.FM || {};
        exactly what you could have built by hand, so you can open it, retune any effect inside, throw
        one out or add your own. That is the point of Ezra's "it should show up in the effects menu and
        actually be grouped as one thing". */
-    const landFilter = (box) => {
-      if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }
-      if (!layer.effects) layer.effects = [];
-      layer.effects.forEach(e => { e._expanded = false; });
-      box._expanded = true;
-      layer.effects.push(box);
-      afterFx();
-    };
-    addF.addEventListener('click', (ev) => {
-      const secs = (FM.filters && FM.filters.sections()) || [];
-      if (!FM.contextMenu || !secs.length) {   // no library / no menu → the old behaviour, an empty one
-        const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); if (box) box.effects = [];
-        landFilter(box); return;
-      }
-      const r = ev.currentTarget.getBoundingClientRect();
-      // Two shallow levels rather than one long list: 16 looks in a single menu is a scroll on a phone,
-      // and the sections are the thing that makes them findable — his words, "section them, so that
-      // people can find stuff organised, like how the effects are organised".
-      const items = secs.map(s => ({
-        label: s.label + ' ›',
-        action: () => {
-          const list = FM.filters.bySection(s.key);
-          FM.contextMenu.show(Math.max(8, r.left), r.bottom + 4, list.map(f => ({
-            label: f.name,
-            action: () => {
-              const box = FM.filters.makeInstance(f.id);
-              if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
-              // Drop anything inside it that cannot run on THIS layer, keeping the rest — the same rule
-              // Paste follows. A text-only ingredient on a shape would otherwise sit there doing nothing.
-              const fitted = FM.fxRegistry.fitToLayer(box, layer);
-              if (!fitted) { if (FM.toast) FM.toast('Nothing in “' + f.name + '” works on this layer'); return; }
-              landFilter(fitted);
-              if (FM.toast && fitted.effects.length < box.effects.length) {
-                FM.toast('Added “' + f.name + '” — ' + (box.effects.length - fitted.effects.length) + ' part(s) didn’t suit this layer');
-              }
-            },
-          })));
-        },
-      }));
-      items.push({ label: 'Empty filter', action: () => { const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); if (box) box.effects = []; landFilter(box); } });
-      FM.contextMenu.show(Math.max(8, r.left), r.bottom + 4, items);
-    });
+    addF.addEventListener('click', (ev) => openFilterPicker(layer, ev.currentTarget));
     s.appendChild(addF);
     // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)
     const tools = el('div', 'fx-stack-tools');
@@ -3662,6 +3669,17 @@ window.FM = window.FM || {};
         if (maskableLayer(layer) && layer.masks && layer.masks.length) body.appendChild(masksBlock(layer));
       }
     } else if (key === 'color') {
+      /* Filters, at the top of Colouring (queue 113). Ezra asked for exactly this: "have a button at
+         the top of the colouring section as a shortcut to it." And it belongs here — a filter IS a
+         colour decision most of the time, and this is the panel you are already in when you decide the
+         clip needs a look rather than a slider. Same picker as "+ Add Effect"'s neighbour, so there is
+         one filter menu in the app rather than two that drift apart. */
+      if (FM.filters && FM.filters.all().length) {
+        const fb = el('button', 'fx-add-btn insp-filter-shortcut', '✦ Add a Filter');
+        fb.title = 'Ready-made looks — Cinematic, Retro, Glow, Stylised';
+        fb.addEventListener('click', (ev) => openFilterPicker(layer, ev.currentTarget));
+        body.appendChild(fb);
+      }
       // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
       // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
       // content as-is. A solid colour fills flat — gradients are their own tab, never an accident.
