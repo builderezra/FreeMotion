@@ -794,6 +794,13 @@ better still, keep working inside the turn rather than parking work for a later 
       Worth a look and a poke — this is the point where you can tell me if it feels right before I
       build the library of ready-made filters on top of it (step 6, the "lots of people won't want to
       make filters themselves" half of what you asked for). Next is step 5, the filters tab.
+      **v7.42 — a follow-up the moment filters became creatable.** The plan said copying a look with a
+      filter in it, or saving it as a preset, would silently delete the filter. I measured it rather
+      than trusting the plan, and it was already fine. What was NOT fine: nothing could ask whether a
+      filter suits the layer you are pasting it onto — so a filter full of text effects landed on a
+      shape as a row that looks like a look and does nothing. Fixed, and pasting now fits the look to
+      the layer: a part that does not suit is dropped from inside the filter, the filter is kept, and
+      it tells you what it left behind.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.

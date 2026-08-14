@@ -1079,9 +1079,19 @@ window.FM = window.FM || {};
       const list = FM.fxClipboard.read();
       if (!list.length) return;
       if (!layer.effects) layer.effects = [];
-      list.forEach(e => { delete e._expanded; layer.effects.push(e); });
+      /* Fit each entry to THIS layer before landing it. A filter built on a text layer can hold text
+         effects, and pasted onto a shape not one of them can run — so the child is dropped from inside
+         the filter and the filter is kept, rather than the whole look being thrown away for one child
+         that does not belong. Says so when it happens: a look that silently arrives different from the
+         one you copied is worse than one that tells you what it left behind. */
+      const fitted = list.map(e => FM.fxRegistry.fitToLayer(e, layer)).filter(Boolean);
+      const dropped = list.length - fitted.length;
+      fitted.forEach(e => { delete e._expanded; layer.effects.push(e); });
       afterFx();
-      if (FM.toast) FM.toast('Pasted ' + list.length + (list.length === 1 ? ' effect' : ' effects'));
+      if (FM.toast) {
+        FM.toast('Pasted ' + fitted.length + (fitted.length === 1 ? ' effect' : ' effects') +
+                 (dropped ? ' — ' + dropped + ' didn\u2019t suit this layer' : ''));
+      }
     });
     const sv = el('button', 'fx-act', 'Save preset…'); sv.disabled = !(layer.effects && layer.effects.length);
     sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); FM.inspector.refresh(); });

@@ -14156,6 +14156,61 @@
     });
   });
 
+  /* ---------------- #113 §8: everything that filters the stack BY REGISTRY TYPE ----------------
+   * Four places drop stack entries the registry does not recognise — the effect clipboard, effect
+   * presets, layer presets and Paste Style. FILTERS-DESIGN.md predicted a filter would be silently
+   * DELETED by all of them. It should not be, because the container is a real registry entry rather
+   * than a special case — but "should not be" is exactly the kind of claim this project has been
+   * wrong about, and filters became creatable in v7.41, so it is a shipped path now. Measured. */
+  function boxWith(types) {
+    return { type: FM.FX_CONTAINER, enabled: true, params: { strength: 0.7 },
+             effects: types.map(function (t) { return FM.fxRegistry.makeInstance(t); }) };
+  }
+
+  test('filter survives: copy the stack and paste it back', { item: 'fx-filter-io' }, function () {
+    var saved = localStorage.getItem('fm.fxclip');
+    try {
+      var stack = [FM.fxRegistry.makeInstance('sepia'), boxWith(['blur', 'vignette'])];
+      if (!FM.fxClipboard.copy(stack)) throw new Error('copy refused a stack containing a filter outright');
+      var back = FM.fxClipboard.read();
+      var box = back.filter(function (e) { return FM.isFxContainer(e); })[0];
+      if (!box) throw new Error('the filter was dropped by the clipboard — copying a look and pasting it loses the filter with no warning');
+      if ((box.effects || []).length !== 2) throw new Error('the filter came back with ' + (box.effects || []).length + ' effects inside instead of 2');
+      if (box.params.strength !== 0.7) throw new Error('Strength was not carried across the clipboard');
+    } finally { if (saved == null) localStorage.removeItem('fm.fxclip'); else localStorage.setItem('fm.fxclip', saved); }
+  });
+
+  test('filter survives: saved as an effect preset and read back', { item: 'fx-filter-io' }, function () {
+    var key = 'fm.fxpresets', saved = localStorage.getItem(key), NAME = '__fmtest filter preset';
+    try {
+      FM.fxPresets.save(NAME, [FM.fxRegistry.makeInstance('sepia'), boxWith(['blur'])]);
+      var p = FM.fxPresets.saved().filter(function (x) { return x.name === NAME; })[0];
+      if (!p) throw new Error('the preset did not save at all');
+      var box = (p.effects || []).filter(function (e) { return FM.isFxContainer(e); })[0];
+      if (!box) throw new Error('the filter was stripped out of the saved preset — the look cannot be reproduced from it');
+      if ((box.effects || []).length !== 1) throw new Error('the preset kept the filter but lost the effects inside it');
+    } finally { if (saved == null) localStorage.removeItem(key); else localStorage.setItem(key, saved); }
+  });
+
+  /* supportsLayer is the gate on all four paths above. For a container the sensible reading is the
+     AND over its children: a filter holding a text-only effect must not be offered on a shape, or
+     pasting a look lands a row that can never do anything. */
+  test('filter: whether it applies to a layer is decided by what is inside it', { item: 'fx-filter-io' }, function () {
+    var shape = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
+    var text = FM.makeLayer('text', { text: 'hi', x: 10, y: 10 });
+    var textOnly = FM.fxRegistry.all().filter(function (e) { return e.appliesTo === 'text'; })[0];
+    if (!textOnly) throw new Error('no text-only effect in the registry to build the case with');
+    var box = boxWith(['blur']);
+    box.effects.push(FM.fxRegistry.makeInstance(textOnly.type));
+    if (!FM.fxRegistry.supportsFilter) throw new Error('there is no way to ask whether a FILTER applies to a layer — every caller falls back to supportsLayer(\'filter\'), which answers yes for anything and lands a filter whose contents cannot run');
+    if (FM.fxRegistry.supportsFilter(box, shape)) throw new Error('a filter holding a text-only effect was accepted on a shape layer');
+    if (!FM.fxRegistry.supportsFilter(box, text)) throw new Error('…and it was refused on a text layer, where it does apply');
+    if (!FM.fxRegistry.supportsFilter(boxWith(['blur']), shape)) throw new Error('a filter holding only ordinary effects was refused on a shape');
+    if (FM.fxRegistry.supportsFilter({ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [] }, shape)) {
+      throw new Error('an EMPTY filter reported as applicable — there is nothing in it that could apply');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

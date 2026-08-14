@@ -491,6 +491,32 @@ window.FM = window.FM || {};
       e.params.forEach(p => { params[p.key] = p.default; });
       return { type: e.type, enabled: true, params: params };
     },
+    /* Does a FILTER apply to this layer? Not answerable by supportsLayer, which is asked about a TYPE:
+     * the container type itself has no restrictions, so supportsLayer('filter', anything) is true and a
+     * filter full of text effects lands happily on a shape, where not one of them can run — a row that
+     * looks like a look and does nothing.
+     * The rule is the existing one applied one level in: a filter applies where its CONTENTS apply, so
+     * this is the AND over its children. An empty filter is false — there is nothing in it that could
+     * apply — which is deliberately NOT the gate on creating one from the Effects panel: you add an
+     * empty filter in order to fill it. This gates the paths that LAND a filter built somewhere else. */
+    supportsFilter: function (fx, layer) {
+      if (!FM.isFxContainer || !FM.isFxContainer(fx) || !layer) return false;
+      const kids = fx.effects || [];
+      if (!kids.length) return false;
+      return kids.every(k => k && typeof k.type === 'string' && this.supportsLayer(k.type, layer));
+    },
+    // Fit a stack entry to a layer: an unsupported child is dropped from INSIDE the filter, keeping the
+    // filter, rather than the whole filter being dropped for one bad child. Returns null when nothing
+    // of it survives. Normal effects pass through unchanged or not at all.
+    fitToLayer: function (fx, layer) {
+      if (!fx || typeof fx.type !== 'string' || !layer) return null;
+      if (FM.isFxContainer && FM.isFxContainer(fx)) {
+        const kept = (fx.effects || []).filter(k => k && typeof k.type === 'string' && this.supportsLayer(k.type, layer));
+        if (!kept.length) return null;
+        return Object.assign({}, fx, { effects: kept });
+      }
+      return this.supportsLayer(fx.type, layer) ? fx : null;
+    },
     supportsLayer: function (id, layer) {
       const e = REG[id];
       // typeof check as well as truthiness: a null-prototype REG closes the inherited-key hole, but
