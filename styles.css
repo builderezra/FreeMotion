@@ -4764,3 +4764,38 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-add { flex: none; padding: 6px 12px; }
 .sfx-actions { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { .sfx-row { transition: none; } }
+
+/* ---------- "still loading" indicator (queue 201) ----------
+   Ezra: "put a nice smooth loading circle that moves in the bottom left corner." Bottom-left because
+   that is the one corner of the editor with nothing in it — the + owns bottom-right, the transport sits
+   above, and the timeline fills the middle.
+   It is a ROTATING ARC, not a pulsing dot: an arc that travels reads as "working" while a fading dot
+   reads as a notification. Transform-only, so it composites and costs nothing while a decode is
+   already occupying the device. */
+#loading-dot {
+  position: fixed; left: 12px; z-index: 62; display: none; align-items: center; gap: 8px;
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px));
+  padding: 7px 12px 7px 8px; border-radius: 999px;
+  background: rgba(10, 16, 22, .82); border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  color: var(--text-dim); font-size: 11.5px; font-weight: 600;
+  pointer-events: none;
+  animation: ld-in 180ms cubic-bezier(0,0,.2,1) both;
+}
+#loading-dot.on { display: flex; }
+#loading-dot svg { width: 18px; height: 18px; flex: none; }
+#loading-dot .ld-track { fill: none; stroke: var(--line); stroke-width: 2.4; }
+#loading-dot .ld-arc {
+  fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round;
+  /* a quarter turn of the circumference (2πr = 56.5 at r=9), so the arc reads as a moving segment */
+  stroke-dasharray: 14 43; transform-origin: 12px 12px;
+  animation: ld-spin 900ms linear infinite;
+}
+@keyframes ld-spin { to { transform: rotate(360deg); } }
+@keyframes ld-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #loading-dot { animation: none; }
+  /* The arc still turns, slowly: this is a progress signal, and a frozen spinner says "stuck" — which
+     is the opposite of what it is for. */
+  #loading-dot .ld-arc { animation-duration: 2.4s; }
+}

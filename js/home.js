@@ -1306,6 +1306,9 @@ window.FM = window.FM || {};
     holdPress();   // this open now owns the press — no release timer, and no other card, may take it
     try {
       if (id !== FM.projects.currentId()) await FM.projects.open(id);
+      // Opening a project restores its media from IndexedDB, so the same not-yet-decoded window applies
+      // — arguably more so, since it is every clip at once rather than one (queue 201).
+      if (FM.loadingDot) FM.loadingDot.check();
       if (!keepOpen) FM.home.close({ push: true, lead: lead });
       return true;   // callers (e.g. Export) need to know the switch actually happened, not got skipped
     } finally {

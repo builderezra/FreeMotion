@@ -13156,6 +13156,70 @@
     if (!wav || wav.type !== 'audio/wav' || wav.size < 512) throw new Error('the WAV encoder produced ' + (wav && wav.size) + ' bytes of ' + (wav && wav.type));
   });
 
+  /* THE VERSION LABEL IS THE SOURCE OF TRUTH for which build you are on — CLAUDE.md says so, and the
+     refresh chip shows it. It silently fell two versions behind: v7.28 and v7.29 both shipped while the
+     header still read v7.27, because the bump is a hand-written find-and-replace and a find that
+     matches nothing fails quietly. That is not a thing to be careful about, it is a thing to assert. */
+  test('the version on screen matches the newest release in POLISH-LOG', { item: 'version-label' }, async function () {
+    const el = document.querySelector('.ver');
+    if (!el) throw new Error('no version label in the header');
+    const shown = (el.textContent || '').trim();
+    let log;
+    try { log = await (await fetch('POLISH-LOG.md', { cache: 'no-store' })).text(); }
+    catch (e) { throw new Error('could not read POLISH-LOG.md to compare against: ' + e.message); }
+    const vs = (log.match(/\bv(\d+)\.(\d+)\b/g) || []);
+    if (!vs.length) throw new Error('POLISH-LOG.md mentions no versions');
+    const rank = v => { const m = v.match(/v(\d+)\.(\d+)/); return +m[1] * 1000 + +m[2]; };
+    const newest = vs.reduce((a, b) => (rank(b) > rank(a) ? b : a));
+    if (shown !== newest) {
+      throw new Error('the app shows ' + shown + ' but the newest entry in POLISH-LOG is ' + newest +
+        ' — a version bump was missed, so nobody can tell which build they are running');
+    }
+  });
+
+  /* #201 — "make the app identify this loading and put a nice smooth loading circle". Measured on a
+     real import (tests/_loaddot.html): the indicator is up from ~100ms to ~400ms after adding a clip
+     and gone by 500ms. Here the not-ready state is FAKED instead, because a suite test should not
+     depend on how fast this machine decodes a video — what matters is that the app asks the right
+     question (readyState) and stops asking the moment it is answered. */
+  test('a clip that cannot draw yet says so, and stops saying it', { item: 'loading-dot' }, async function () {
+    if (!FM.loadingDot) throw new Error('FM.loadingDot is missing');
+    const savedScene = FM.scene;
+    const id = '_loadProbe';
+    try {
+      FM.scene = scene([]);
+      const layer = FM.makeLayer('video', { name: 'Probe', start: 0, duration: 2 });
+      layer.id = id;
+      FM.scene.layers.push(layer);
+      // readyState 1 = HAVE_METADATA: the element knows its size and can draw NOTHING.
+      const fake = { el: { readyState: 1, videoWidth: 1280, videoHeight: 720 } };
+      FM.media.set(id, fake);
+
+      FM.loadingDot.check();
+      await sleep(60);
+      if (FM.loadingDot.pending().length !== 1) throw new Error('a layer whose media has readyState 1 is not counted as loading');
+      const dot = document.getElementById('loading-dot');
+      if (!dot || !dot.classList.contains('on')) throw new Error('the indicator is not showing while a clip cannot draw');
+      const label = dot.querySelector('.ld-label');
+      if (!label || label.textContent.indexOf('Probe') < 0) {
+        throw new Error('the indicator says "' + (label && label.textContent) + '" — it should name the clip, or you cannot tell which one you are waiting for');
+      }
+
+      // …and the moment it CAN draw, it must go. A spinner that stays is worse than none.
+      fake.el.readyState = 2;                       // HAVE_CURRENT_DATA — a frame is guaranteed
+      if (FM.loadingDot.pending().length !== 0) throw new Error('readyState 2 still counts as loading — that is the first state where drawImage works, so the wait is over');
+      for (let i = 0; i < 20 && dot.classList.contains('on'); i++) await sleep(60);
+      if (dot.classList.contains('on')) throw new Error('the indicator never cleared once the media was ready');
+    } finally {
+      if (FM.media.remove) FM.media.remove(id);
+      FM.scene = savedScene;
+      if (FM.loadingDot._stop) FM.loadingDot._stop();
+      FM.loadingDot.check();
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      await sleep(40);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

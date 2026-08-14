@@ -2247,7 +2247,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
         opinion. **Ask him before even doing that** — he said wait, and that includes me being clever.
       · Whatever we change, the ADD-MENU ICON follows automatically now (queue 159 made the icon read
         the same polygons), so the tile and the shape cannot drift apart while we work.
-- [ ] **201 — Show that a layer is LOADING, with a spinner bottom-left.** His words: *"I think the issue
+- [ ] **207 — The four home tabs should stagger their contents in, and the tab itself should react.**
+      His words: *"Make it so when you open up any of the 4 menus like projects elements etc it does
+      something like the animation when opening the app where all of the spawn in loading from top to
+      bottom, i think that would look very clean, also adding a little animation to the button you press
+      to open that menu."*
+      The machinery already exists and is his own from v4.92: home.js stamps `.hm-in` plus a per-element
+      `animation-delay` on each card so they rise on their own beat, top to bottom. This is asking for
+      that same treatment on every TAB SWITCH, not just on first load — plus a small press reaction on
+      the tab button itself. Reuse the existing keyframes rather than writing a second set, or the two
+      will drift; and cap the stagger so a long list does not take a second to finish appearing.
+- [ ] **208 — The add sheet wastes a band at the bottom on the phone.** His words: *"We need to utilise
+      this wasted space on phone, each icon in that section could be longer and more square so then it
+      fits it all nicely"* — with a screenshot of the Elements tab, a red ring drawn round an empty strip
+      below "Adjustment / Empty group / Custom elements".
+      So the twelve cards should grow to fill the sheet rather than leaving a dead band: taller cards,
+      closer to square. Watch two things — the sheet's height varies with the device (and with the
+      safe-area inset), so this wants the cards to FLEX into the available height rather than a taller
+      fixed size that overflows a smaller phone; and the tabs above must not grow with them.
+- [x] **201 — Show that a layer is LOADING, with a spinner bottom-left.** (v7.30) His words: *"I think the issue
       with layers I add being invisible is because they're just loading, so make the app identify this
       loading and put a nice smooth loading circle that moves in the bottom left corner."*
       His diagnosis is worth taking seriously — a just-added video has to decode before it can draw, and
@@ -2255,6 +2273,24 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       that a layer's media is not ready yet (not a timer), a smooth indicator bottom-left, and it must
       disappear the moment the frame is available. Pairs with #202, which is probably the same media not
       being ready.
+      **He diagnosed it correctly, and it is measured** (`tests/_onevideo.html`). Importing a 1280×720
+      clip and sampling the media element every 250ms from the moment the layer is added:
+      `t=0ms readyState 1 → drawImage BLANK`, `t=250ms first pixels`, `t=500ms readyState 4`. So there is
+      a real window where the layer exists, its clip is in the timeline, and the canvas can only draw
+      nothing. Half a second here; far longer on a phone with a real camera-roll clip. Nothing was wrong
+      with the import — **the app just never said it was working.**
+      **Done:** a rotating arc bottom-left (that corner is the only empty one — the + owns bottom-right),
+      naming the clip when there is one and counting them when there are several. Ready means
+      `readyState >= 2` deliberately, not 4: that is the first state where a frame is guaranteed, and
+      waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
+      only while something is pending and stops itself, because an always-on interval on the heaviest
+      screen is exactly the sort of thing this project has had to hunt down before.
+- [ ] **209 — The × and search buttons in the effects header are off-centre and colourless.** His words:
+      *"The search and x buttons in this menu look shit, make them actually centred inside their own
+      circle. Make the x button red and the search one a nice blue."* Screenshot: the Add Effect header,
+      where both glyphs sit visibly high/left inside their round buttons.
+      Likely the same class as #188 — the glyph's ink not being centred in its box, rather than the box
+      being wrong — so measure the ink, not the button. Colours: red for ×, blue for search.
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.** His words:
       *"when I add just one Simple video layer even on smooth settings in FreeMotion the project still
       lags, no effects or anything, really laggy, and also the video is seemingly broken and not loading

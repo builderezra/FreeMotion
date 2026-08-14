@@ -1323,6 +1323,9 @@ window.FM = window.FM || {};
   };
 
   FM.addMediaLayer = function (rec) {
+    // A just-added clip cannot draw until its decoder produces a frame — measured at ~0.5s here and far
+    // longer on a phone — so say so rather than showing an empty canvas (queue 201).
+    setTimeout(function () { if (FM.loadingDot) FM.loadingDot.check(); }, 0);
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
     if (first && rec.width && rec.height) {

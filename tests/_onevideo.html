@@ -1,0 +1,132 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#202 / #201 — one video layer: where does the frame go, and is it even loaded?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.55 ui-monospace,monospace}
+pre{padding:14px;white-space:pre-wrap}iframe{border:0;width:390px;height:844px;position:fixed;right:0;top:0}</style>
+</head><body><pre id="out">…</pre><iframe id="app" src="../index.html"></iframe>
+<script>
+/* Ezra (#202): "when I add just one Simple video layer even on smooth settings in FreeMotion the
+   project still lags, no effects or anything, really laggy, and also the video is seemingly broken and
+   not loading properly." And (#201): "I think the issue with layers I add being invisible is because
+   they're just loading."
+   Both halves get measured in one run, on a REAL decoded video rather than a stand-in: a canvas is
+   recorded with MediaRecorder into a webm, then imported through the app's own FM.loadVideoFile /
+   FM.addMediaLayer path, so nothing about the media pipeline is faked.
+   What is reported:
+     · READINESS over time — readyState, videoWidth, currentTime — from the instant the layer is added,
+       which is the window in which he says it looks broken;
+     · the FRAME BUDGET during playback — how long FM.renderScene actually takes, against the 16.7ms a
+       60fps frame has, plus the quality tier the app chose for itself. */
+var L = [];
+function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+function makeClip(secs) {
+  // A moving, detailed picture: a flat colour would let the encoder produce something unnaturally
+  // cheap to decode, which is the opposite of the case being measured.
+  return new Promise(function (resolve, reject) {
+    var cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720;
+    var g = cv.getContext('2d');
+    var stream = cv.captureStream(30);
+    var chunks = [], mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+      .find(function (m) { return window.MediaRecorder && MediaRecorder.isTypeSupported(m); });
+    if (!mime) return reject(new Error('no MediaRecorder support'));
+    var rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = function () { resolve(new Blob(chunks, { type: mime })); };
+    var t0 = performance.now();
+    (function draw() {
+      var t = (performance.now() - t0) / 1000;
+      g.fillStyle = '#111'; g.fillRect(0, 0, 1280, 720);
+      for (var i = 0; i < 90; i++) {
+        g.fillStyle = 'hsl(' + ((i * 7 + t * 60) % 360) + ',70%,55%)';
+        g.fillRect((i * 53 + t * 220) % 1280, (i * 37 + Math.sin(t + i) * 90 + 300) % 720, 46, 46);
+      }
+      if (t < secs) requestAnimationFrame(draw); else rec.stop();
+    })();
+    rec.start();
+  });
+}
+
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow, d = w.document, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.timeline && w.FM.loadVideoFile)) { if (n++ > 400) return say('app never booted'); return setTimeout(wait, 50); }
+    (async function () {
+      var FM = w.FM;
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(500);
+
+      say('building a real 1280x720 clip to import…');
+      var blob;
+      try { blob = await makeClip(3); } catch (e) { say('could not record a clip: ' + e.message); window.__done = true; return; }
+      say('clip: ' + Math.round(blob.size / 1024) + ' KB, ' + blob.type);
+
+      // Smooth, which is the setting he says he is on.
+      if (FM.settings && FM.settings.set) FM.settings.set('playbackQuality', 'smooth');
+      FM.scene.layers.length = 0; FM.selectLayer(null); FM.timeline.rebuild();
+      await sleep(200);
+
+      var file = new File([blob], 'probe.webm', { type: blob.type });
+      var tAdd = performance.now();
+      var rec = await FM.loadVideoFile(file);
+      var tLoaded = performance.now();
+      FM.addMediaLayer(rec);
+      say('');
+      say('FM.loadVideoFile took ' + Math.round(tLoaded - tAdd) + 'ms');
+      say('record: ' + rec.width + 'x' + rec.height + '  duration ' + (rec.duration || 0).toFixed(2) + 's  kind ' + rec.kind);
+
+      // ---- READINESS: what he calls "broken and not loading properly" -------------------------
+      var layer = FM.scene.layers[0];
+      var m = FM.media.get(layer.id);
+      say('');
+      say('READINESS after adding (0 = nothing, 4 = can play through)');
+      say('   t(ms)   readyState  videoW  currentTime  drawImage');
+      for (var i = 0; i < 12; i++) {
+        var el = m && m.el;
+        var can = 'n/a';
+        if (el) {
+          try {
+            var probe = document.createElement('canvas'); probe.width = probe.height = 8;
+            probe.getContext('2d').drawImage(el, 0, 0, 8, 8);
+            var px = probe.getContext('2d').getImageData(0, 0, 8, 8).data;
+            var lit = 0; for (var k = 0; k < px.length; k += 4) if (px[k] || px[k + 1] || px[k + 2]) lit++;
+            can = lit ? 'YES (' + lit + '/64 lit)' : 'blank';
+          } catch (e) { can = 'THREW ' + e.name; }
+        }
+        say('   ' + String(i * 250).padEnd(8) + String(el ? el.readyState : '—').padEnd(12) +
+            String(el ? el.videoWidth : '—').padEnd(8) + String(el ? (el.currentTime || 0).toFixed(2) : '—').padEnd(13) + can);
+        await sleep(250);
+      }
+
+      // ---- FRAME BUDGET during playback --------------------------------------------------------
+      var samples = [];
+      var real = FM.renderScene;
+      FM.renderScene = function () { var a = performance.now(); var r = real.apply(this, arguments); samples.push(performance.now() - a); return r; };
+      FM.setTime && FM.setTime(0);
+      if (FM.play) FM.play();
+      await sleep(2500);
+      if (FM.pause) FM.pause();
+      FM.renderScene = real;
+
+      samples.sort(function (a, b) { return a - b; });
+      var med = samples.length ? samples[Math.floor(samples.length / 2)] : 0;
+      var p95 = samples.length ? samples[Math.floor(samples.length * 0.95)] : 0;
+      var mean = samples.reduce(function (a, b) { return a + b; }, 0) / (samples.length || 1);
+      say('');
+      say('FRAME BUDGET with ONE video layer, no effects, quality = smooth');
+      say('   renders sampled : ' + samples.length + ' over 2.5s  (' + (samples.length / 2.5).toFixed(1) + '/s)');
+      say('   renderScene     : median ' + med.toFixed(2) + 'ms   mean ' + mean.toFixed(2) + 'ms   p95 ' + p95.toFixed(2) + 'ms');
+      say('   a 60fps frame has 16.7ms, a 30fps frame 33.3ms');
+      if (FM._perfState) {
+        var ps = FM._perfState();
+        say('   app self-report  : tier ' + ps.tier + '/' + ps.tiers + ' (factor ' + ps.factor + ')  renderAvg ' +
+            (+ps.renderAvg).toFixed(2) + 'ms  locked ' + ps.locked + '  canvas ' + ps.canvasPx + 'px');
+      }
+      say('');
+      say(med > 16.7 ? 'OVER BUDGET at 60fps' + (med > 33.3 ? ' AND at 30fps' : '') + ' — with one layer and no effects.'
+                     : 'Within a 60fps budget in THIS browser — so his lag is either device-specific or not in renderScene.');
+      window.__done = true;
+    })();
+  })();
+});
+</script></body></html>

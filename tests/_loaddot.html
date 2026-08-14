@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8"><title>#201 — is the indicator up during the not-ready window?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}
+iframe{border:0;width:390px;height:844px;position:fixed;right:0;top:0}</style></head>
+<body><pre id="out">…</pre><iframe id="a" src="../index.html"></iframe>
+<script>
+/* Asserted on the DOM rather than screenshotted: the not-ready window is ~250-500ms, and tests/_shot.sh
+   runs under a 5s virtual-time budget that cannot cover recording a clip, importing it and catching that
+   window. This samples the indicator's state every 100ms across the whole import. */
+var L=[];function say(s){L.push(s);document.getElementById('out').textContent=L.join('\n');}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function makeClip(secs){return new Promise(function(res,rej){
+  var cv=document.createElement('canvas');cv.width=1280;cv.height=720;var g=cv.getContext('2d');
+  var st=cv.captureStream(30),ch=[],m=['video/webm;codecs=vp9','video/webm'].find(function(x){return window.MediaRecorder&&MediaRecorder.isTypeSupported(x);});
+  if(!m)return rej(new Error('no MediaRecorder'));
+  var r=new MediaRecorder(st,{mimeType:m,videoBitsPerSecond:6000000});
+  r.ondataavailable=function(e){if(e.data&&e.data.size)ch.push(e.data);};
+  r.onstop=function(){res(new Blob(ch,{type:m}));};
+  var t0=performance.now();(function d(){var t=(performance.now()-t0)/1000;
+    g.fillStyle='#111';g.fillRect(0,0,1280,720);
+    for(var i=0;i<90;i++){g.fillStyle='hsl('+((i*7+t*60)%360)+',70%,55%)';g.fillRect((i*53+t*220)%1280,(i*37+300)%720,46,46);}
+    if(t<secs)requestAnimationFrame(d);else r.stop();})();
+  r.start();});}
+document.getElementById('a').addEventListener('load',function(){
+  var w=document.getElementById('a').contentWindow,d=w.document,n=0;
+  (function wait(){
+    if(!(w.FM&&w.FM.scene&&w.FM.loadVideoFile&&w.FM.loadingDot)){if(n++>400)return say('app never booted');return setTimeout(wait,50);}
+    (async function(){
+      var FM=w.FM;
+      if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+      await sleep(500);
+      var blob=await makeClip(3);
+      var rec=await FM.loadVideoFile(new File([blob],'probe.webm',{type:blob.type}));
+      FM.addMediaLayer(rec);
+      say('t(ms)   pending   indicator   label');
+      var everOn=false,everOff=false;
+      for(var i=0;i<16;i++){
+        var dot=d.getElementById('loading-dot');
+        var on=!!(dot&&dot.classList.contains('on'));
+        var pend=FM.loadingDot.pending().length;
+        if(on)everOn=true; if(!on&&i>6)everOff=true;
+        say('  '+String(i*100).padEnd(7)+String(pend).padEnd(10)+String(on?'ON':'off').padEnd(12)+((dot&&dot.querySelector('.ld-label'))?dot.querySelector('.ld-label').textContent:''));
+        await sleep(100);
+      }
+      say('');
+      say(everOn?'PASS  the indicator appeared during the not-ready window':'FAIL  it never appeared — the window it exists for went unmarked');
+      say(everOff?'PASS  and it went away once the media was ready':'FAIL  it never cleared — a spinner that stays is worse than none');
+      window.__done=true;
+    })();
+  })();
+});
+</script></body></html>
