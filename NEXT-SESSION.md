@@ -1,73 +1,99 @@
-# Where things stand — written before a chat compaction (14 Aug 2026)
+# Where things stand — written before a chat compaction (15 Aug 2026)
 
-**Live: v7.37. Working tree clean, HEAD == ssh/main (d931994). Nothing half-finished, suite 279/279.**
+**Live: v7.45. Working tree clean, HEAD == ssh/main. Suite 322/322. Nothing half-finished.**
 
-[REQUESTS.md](REQUESTS.md) is the real list and is fully up to date. This file is the short version
-plus the things that are easy to get wrong.
+[REQUESTS.md](REQUESTS.md) is the real list and is up to date. This file is the short version plus
+the things that are easy to get wrong.
 
 ---
 
 ## The rules that are in force (he has had to repeat these)
 
 1. **OLDEST FIRST.** *"Remember I want the oldest things in the list done first, not what I just told
-   you, make sure you figure out a way to remember if you keep forgetting."* Only an explicit "do this
-   now" or a broken build jumps the queue.
+   you."* Only an explicit "do this now" or a broken build jumps the queue.
 2. **Every request goes into REQUESTS.md immediately**, at the bottom, before starting work on it.
-   Never deleted, never quietly dropped. Anything not being done stays Open with a **Held** note.
-3. **If an old item is blocked on a decision from him, say so and move to the next-oldest.** Blocked
-   is not done.
+   Never deleted. Anything not being done stays Open with a **Held** note.
+3. **If an old item is blocked on a decision from him, say so and move to the next-oldest.**
 4. *"dont stop to ask me questions, ask but keep going and re ask next time i say something."*
 5. *"Slow the fuck down and make sure everything you're doing is good."*
-6. Multi-agent is allowed, **read-only agents for investigation, one writer (me) for edits**, suite
-   green between each. And: never sit waiting on an agent that may never finish — bounded polls only.
+6. **Keep-working loops must be driven by a recurring `CronCreate` job**, never `ScheduleWakeup`
+   alone — a one-shot chain died silently for 1h48m on 14 Aug and he noticed before I did. The cron
+   is session-only and expires after 7 days, so **a fresh session has to re-arm it**.
 7. Not allowed, unchanged: accepting a pasted personal access token or any credential from him.
 
 ---
 
-## Next, in queue order
+## #113 (filters) — six releases in, ONE piece left
 
-1. **#113 — the Filters section.** Big. Already planned in [FILTERS-DESIGN.md](FILTERS-DESIGN.md);
-   read that before touching code. The two decisions already made: a filter is **ONE normal effect
-   that renders its children into its own plate** (not a nested list that gets flattened — flattening
-   sends 24 compositor kernels into infinite recursion and hangs the tab), and strength is a
-   **cross-fade between the filtered and unfiltered plate**, never a scaling of child parameters.
-2. **#114 — music note shape.** *Blocked.* Doesn't reproduce plain; needs one line from him about
-   whether it was rotated, scaled, or had an effect on it.
-3. **#115 — drag a clip to the edge auto-scrolls the timeline.** Backed out once; the diagnosis from
-   that attempt is written into its REQUESTS.md entry.
+Shipped v7.38 → v7.45. The plan and every correction to it are in [FILTERS-DESIGN.md](FILTERS-DESIGN.md).
 
-Then #125/#128/#129/#130 (lag and open-jank, partly blocked), #141 parts 3–4, then #147 onward.
+| ver | what |
+|---|---|
+| v7.38 | ten type-keyed render tables cut off from Object.prototype; `sanitizeEffects` on import **and** the autosave load; keyframe tangents/eases stopped being dropped on reload |
+| v7.39 | `FM.eachFx` — one walker, seven sites routed through it, three address grammars sharing one parser |
+| v7.40 | the container renders; Strength is a true cross-fade (`lighter`, not source-over) with exact ends |
+| v7.41 | the expandable row, children scoped to their own stack descriptor |
+| v7.42 | `supportsFilter` / `fitToLayer` — a filter is judged by what is inside it |
+| v7.43 | "always first" on the nine effects whose position cannot matter |
+| v7.44 | the library: 16 looks in 4 sections, `js/filters.js`, picker on "+ Add Filter" |
+| v7.45 | the Colouring shortcut |
 
-## Waiting on him, so don't re-open them cold
+### What is left: step 5, the Filters TAB
 
-- **#206 shape edit points — HELD.** *"I know if you just go and do that urself ur gonna ruin every
-  shape and make it look shit. So wait for me."* Do not start it.
-- #31b (does he want a camera motion-blur toggle), #93(a) (what he was doing when wiggle "stopped"),
-  #98(a)(b) (needs a photo from his device), #195 (how far the gain stage should go), #114 as above.
+He asked for *"a third subsection for filters. It'll work the same as the others"* — i.e. a third pill
+next to **Effects | Audio**, browsable, with thumbnails. The picker menu shipped in v7.44 is a
+**stopgap**, not that.
 
-## The one I'd jump the queue for if he says go
+**The scouting that matters, so it is not redone:**
 
-**#215 — an export came out with NO AUDIO.** I've told him I rate it the most serious open item and
-offered to take it out of order. He hasn't said yes yet, so it is still sitting at its place in the
-queue with #216 (audio-only export) next to it.
+- The toggle is `fxModeToggle(layer, current, onPick)` at `js/inspector.js:1952`, exported as
+  `FM.fxModeToggle` and built identically by `fx-browser.js` and `audio-fx-browser.js`. A third entry
+  goes in the array literal there — it needs its own `ok` gate and its own disabled wording.
+- **The thumbnails are the expensive half, and `mountPreset` will NOT take a filter.**
+  `FM.fxThumbs.mountPreset(cv, preset, layer)` looks promising but `preset.fx` is a **single effect
+  TYPE string** (`js/fx-thumbs.js:908` does `FM.fxRegistry.get(preset.fx)`), not an effect list. The
+  whole thumbnail system is built around one effect type — which is also why FILTERS-DESIGN.md warned
+  that ~60 per-effect tuner callbacks assume `hero.effects[0]` **is** the effect.
+  So a filter needs its **own** recipe branch in `fx-thumbs.js`: key it `f:<filterId>` and have
+  `generate()` build `hero.effects = [FM.filters.makeInstance(id)]`. No tuners needed — the authored
+  params *are* the look, which is the one way this is easier than an effect thumbnail.
+- A filter thumbnail should be **static**, not animated: none of the 16 is time-varying except the
+  grain/noise ingredients, and paying an animated tile for 16 looks on a phone is not worth it.
+
+**Do it in this order:** the third pill + a list view (name, description, what is inside) FIRST and
+ship it — that is already better than the picker — then thumbnails as a second release.
+
+### Two things he owes an answer on
+
+- **The 16 filters are my taste, not his.** A few lines each in `js/filters.js`. He has been asked
+  twice which are wrong / missing / whether 16 is the right number. Do not add 30 more before he says.
+- Whether **#215 (an export came out with NO AUDIO)** jumps the queue. I rate it the most serious open
+  item and have offered twice; it is still sitting at its queue position.
 
 ---
 
-## Things that cost hours before, so they're written down
+## Things that cost hours, so they are written down
 
-- **The test suite runs on port 8777 and only 8777.** `tests/_cdp.py --port` picks the SERVER, and
-  there is only one. Passing 8779/8781/8783 looks exactly like a hang.
-- **Assert every replacement actually applied.** A silent no-op edit once cost an hour of debugging
-  code that was never in the file.
-- **Mutation-check every test.** Five tests have passed against their own mutations in this project.
-  If breaking the fix doesn't turn the test red, the test is measuring the wrong thing.
-- **Version bumps fail silently** — the label is a find-and-replace. The suite now guards it by
-  comparing `index.html`'s label to POLISH-LOG's newest entry.
-- **Screenshots must be taken below 700px** or the phone rules don't apply.
+- **The suite runs on port 8777 and only 8777.** `tests/_cdp.py --port` picks the SERVER and there is
+  only one. `.claude/launch.json` says 8791 — `preview_start` by name will fail with port-in-use;
+  use `preview_start {url: "http://localhost:8777/index.html"}`.
+- **Mutation-check every fix.** Six tests in this project have passed against their own mutations.
+  Two more were caught this session: a duplicate-remap test that left the referenced layer out of the
+  duplicate (no-op either way), and an ordering test whose subject was a solid rectangle (too uniform
+  to reveal ordering at all — the *control* is what caught it). **Always assert the control first.**
+- **Not every green mutant is a dead test.** Two came back green this session and were *equivalent*
+  mutants — the code was genuinely redundant. Check which it is before "fixing" the test.
+- **Never move code with a script that walks the source to find its own boundaries.** One did that
+  here, matched the wrong block, deleted three lines of row-building and turned five tests red. Revert
+  the file to HEAD and redo it as one targeted edit.
+- **The phone screenshot catches what the DOM cannot.** `.fx-row.fx-open .fx-disc` is a DESCENDANT
+  selector, so every closed effect inside an open filter drew the OPEN chevron. `aria-expanded` was
+  correct, the bodies were absent, every assertion was green. Only the 380px shot showed it.
+- Version bumps are a find-and-replace that fails silently; the suite guards the label against
+  POLISH-LOG's newest entry.
 - Push with `git push ssh main`, then verify `git rev-parse HEAD` == `git rev-parse ssh/main`.
-  The `origin` remote is HTTPS with no stored credentials and fails.
 
 ## Housekeeping
 
-`.claude/worktrees/` still holds ~110 leftover repo copies (~1.1 GB) from old workflow runs. They
-each report a few changed files, so I haven't deleted them unilaterally. Worth clearing when he says.
+`.claude/worktrees/` still holds ~110 leftover repo copies (~1.1 GB) from old workflow runs. They each
+report a few changed files, so I have not deleted them unilaterally. Worth clearing when he says.
