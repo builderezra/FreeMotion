@@ -1228,7 +1228,19 @@ better still, keep working inside the turn rather than parking work for a later 
       and verified weeks ago, never committed, and survived only in a worktree. Proof it works: a ball
       driven past the right wall is clipped to 100x140 without it and squashes to 100x212 with it.
       Nothing else moved — 288 of 288 configurations byte-identical against v6.41.
-- [ ] **37 — Presets rework:** AM's "Preset preview" screen. Supersedes the earlier thumbnail spec.
+- [x] **37 — Presets rework:** AM's "Preset preview" screen. Supersedes the earlier thumbnail spec.
+      **ALREADY DONE — this entry was stale, found while working the list oldest-first (2026-08-14).**
+      It shipped around v6.30 and was never ticked. What exists today, in the effect browser's preset
+      sheet: every row is a LIVE animated thumbnail of **your selected layer with that preset applied**
+      — not a generic sample — with the preset's name, its duration (or "constant"), its description,
+      a delete for your own presets, and a plain "just add the effect" row at the top so the sheet is
+      never a dead end. When the layer has nothing on screen at the playhead it says so and falls back
+      to the sample, rather than showing an empty box.
+      Evidence it works rather than merely exists: five tests in the suite cover it — the tile is a
+      picture of the SELECTED layer, adding the preset changes that picture, editing the layer changes
+      it, a layer with nothing on screen falls back, and rendering a preview never mutates the layer
+      document. All green.
+      Left as a tick rather than deleted, because the history is half the point of this file.
 - [ ] **31b — Transform blur can't smear effect- or camera-driven motion.**
       **MEASURED 2026-08-14 (`tests/_mbsources.html`) — confirmed exactly as written, and the cause is
       structural rather than a bug.** One 40×40 shape, shutter 0.9, 24 samples, one frame:
@@ -2336,6 +2348,15 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
       only while something is pending and stops itself, because an always-on interval on the heaviest
       screen is exactly the sort of thing this project has had to hunt down before.
+- [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
+      *"The images for each layer on the left side are glitched out, you see how they're like stretched
+      and going out too far? Looks shit."* Screenshot: a blue house and an orange umbrella in the track
+      heads, both squashed wide and spilling past their rounded frame.
+      Both are SHAPE layers, and their thumbnails are drawn from the shape itself — so the likely cause
+      is the same one #159 found in the add menu: the art being fitted to the box's aspect rather than
+      its own. Worth checking that first, since the fix there (read `FM.SHAPE_ASPECT`, fit rather than
+      stretch) may apply directly. Check media thumbnails too — if they use the same helper, a video
+      whose aspect differs from the box will be stretched the same way and nobody has mentioned it yet.
 - [ ] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words.**
       *"The shapes colours are fine, but the rest aren't. They're generic and copy paste. They need to
       look quality."* Four screenshots, one per tab. Shape is the one to leave alone — it is the
