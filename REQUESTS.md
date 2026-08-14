@@ -2424,7 +2424,24 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
       only while something is pending and stops itself, because an always-on interval on the heaviest
       screen is exactly the sort of thing this project has had to hunt down before.
-- [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
+- [ ] **212 — A long-exposure camera tool for his phone (Slow Shutter Cam style). NOT DECIDED — he asked
+      whether it was possible, not for it to be built.** His words: *"Would it be possible for you to
+      create me a camera tool for my phone that can do cool long exposure photography? Like this app
+      here, if so make a plan on how ur gonna do this and lmk if it would be better if I switched this
+      project to my laptop for development (Mac)"* — with a screenshot of Slow Shutter Cam: Capture Mode
+      (Motion Blur / Light Trail / Low Light), Light Sensitivity, Shutter Speed, ISO.
+      **Re-logged 14 Aug after a handover.** This was raised in a DIFFERENT session, logged there as
+      #212 along with a plan and a probe page, and then removed again at his request — he found it
+      confusing and did not want anything done inside FreeMotion. So its earlier absence from this file
+      was a revert, not an oversight, and it is recorded here because the rule is that nothing he asks
+      for is lost. **It is not authorised work.** Two things to settle before anything is built:
+      whether it belongs in FreeMotion at all (his instinct was no), and his laptop-versus-phone
+      question.
+      Two facts checked rather than taken on trust: `git diff` between the commit before and the commit
+      after that episode is **empty** — no app file, test or version was touched, and nothing was
+      force-pushed. And a stray remote branch `claude/phone-camera-long-exposure-siapuq` still exists on
+      GitHub holding the reverted content; it is merged into nothing and affects nothing, but **he may
+      want to delete it from GitHub's branches page** — that session was refused permission to.- [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
       *"The images for each layer on the left side are glitched out, you see how they're like stretched
       and going out too far? Looks shit."* Screenshot: a blue house and an orange umbrella in the track
       heads, both squashed wide and spilling past their rounded frame.
