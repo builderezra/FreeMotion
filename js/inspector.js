@@ -920,7 +920,11 @@ window.FM = window.FM || {};
     const disc = el('button', 'fx-disc'); disc.innerHTML = FX_CHEVRON;
     disc.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     disc.title = expanded ? 'Close this effect' : 'Open this effect\u2019s controls';
-    const name = el('span', 'fx-name', reg.label);
+    // A filter from the library carries its own name ("Teal & Orange"); a hand-built one has none and
+    // falls back to the registry label, "Filter". Only containers get this — a normal effect is what
+    // the registry says it is, and letting a saved file rename Gaussian Blur would be a small lie with
+    // no upside.
+    const name = el('span', 'fx-name', (isBox && typeof fx.name === 'string' && fx.name) ? fx.name : reg.label);
     // a tap toggles the editor, but a swipe/reorder gesture must NOT also toggle it.
     // ACCORDION (like Blending & Opacity): opening one effect closes every other, so exactly one
     // editor is ever open — no more scrolling past three expanded stacks to reach the fourth.
@@ -1060,15 +1064,52 @@ window.FM = window.FM || {};
        the button inside it. The ready-made filters people can pick from arrive with the library. */
     const addF = el('button', 'fx-add-btn fx-add-filter', '+ Add Filter');
     addF.title = 'A group of effects that act as one, with a single Strength';
-    addF.addEventListener('click', () => {
-      const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+    /* Land a container — either an empty one to fill yourself, or a ready-made look from the library.
+       Both end up as the SAME object: a filter from the list is not a special locked thing, it is
+       exactly what you could have built by hand, so you can open it, retune any effect inside, throw
+       one out or add your own. That is the point of Ezra's "it should show up in the effects menu and
+       actually be grouped as one thing". */
+    const landFilter = (box) => {
       if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }
-      box.effects = [];
       if (!layer.effects) layer.effects = [];
       layer.effects.forEach(e => { e._expanded = false; });
       box._expanded = true;
       layer.effects.push(box);
       afterFx();
+    };
+    addF.addEventListener('click', (ev) => {
+      const secs = (FM.filters && FM.filters.sections()) || [];
+      if (!FM.contextMenu || !secs.length) {   // no library / no menu → the old behaviour, an empty one
+        const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); if (box) box.effects = [];
+        landFilter(box); return;
+      }
+      const r = ev.currentTarget.getBoundingClientRect();
+      // Two shallow levels rather than one long list: 16 looks in a single menu is a scroll on a phone,
+      // and the sections are the thing that makes them findable — his words, "section them, so that
+      // people can find stuff organised, like how the effects are organised".
+      const items = secs.map(s => ({
+        label: s.label + ' ›',
+        action: () => {
+          const list = FM.filters.bySection(s.key);
+          FM.contextMenu.show(Math.max(8, r.left), r.bottom + 4, list.map(f => ({
+            label: f.name,
+            action: () => {
+              const box = FM.filters.makeInstance(f.id);
+              if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
+              // Drop anything inside it that cannot run on THIS layer, keeping the rest — the same rule
+              // Paste follows. A text-only ingredient on a shape would otherwise sit there doing nothing.
+              const fitted = FM.fxRegistry.fitToLayer(box, layer);
+              if (!fitted) { if (FM.toast) FM.toast('Nothing in “' + f.name + '” works on this layer'); return; }
+              landFilter(fitted);
+              if (FM.toast && fitted.effects.length < box.effects.length) {
+                FM.toast('Added “' + f.name + '” — ' + (box.effects.length - fitted.effects.length) + ' part(s) didn’t suit this layer');
+              }
+            },
+          })));
+        },
+      }));
+      items.push({ label: 'Empty filter', action: () => { const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); if (box) box.effects = []; landFilter(box); } });
+      FM.contextMenu.show(Math.max(8, r.left), r.bottom + 4, items);
     });
     s.appendChild(addF);
     // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)

@@ -14053,8 +14053,11 @@
   test('filter row: Add Filter drops an empty filter into the stack, opened', { item: 'fx-filter-ui' }, async function () {
     await withFilterLayer(async function (L) {
       clickText('.fx-add-btn', /add filter/i);
-      await sleep(60);
-      if (!(L.effects || []).length || !FM.isFxContainer(L.effects[0])) throw new Error('Add Filter did not add a filter to the stack');
+      await sleep(80);
+      // It opens a picker now — the ready-made looks, plus "Empty filter" for building your own.
+      clickText('#context-menu button, .ctx-item, .cm-item', /empty filter/i);
+      await sleep(80);
+      if (!(L.effects || []).length || !FM.isFxContainer(L.effects[0])) throw new Error('Add Filter → Empty filter did not add a filter to the stack');
       if (!L.effects[0]._expanded) throw new Error('the new filter landed closed — you cannot see there is anything to put in it');
       if (!document.querySelector('.fx-kids')) throw new Error('the open filter shows no area for the effects it holds');
       if (!document.querySelector('.fx-add-kid')) throw new Error('there is no way to add an effect INTO the filter');
@@ -14153,6 +14156,28 @@
       if (FM.fxBrowser) FM.fxBrowser.close();
       if (L.effects.length !== 1) throw new Error('the effect landed on the LAYER stack instead of inside the filter (' + L.effects.length + ' entries)');
       if (!box.effects.length) throw new Error('the effect did not land inside the filter at all');
+    });
+  });
+
+  test('filter library: the picker lands a ready-made look as an ordinary, editable filter', { item: 'fx-library' }, async function () {
+    await withFilterLayer(async function (L) {
+      clickText('.fx-add-btn', /add filter/i);
+      await sleep(80);
+      var sec = FM.filters.sections()[0];
+      clickText('#context-menu button, .ctx-item, .cm-item', new RegExp(sec.label.split(' ')[0], 'i'));
+      await sleep(80);
+      var first = FM.filters.bySection(sec.key)[0];
+      clickText('#context-menu button, .ctx-item, .cm-item', new RegExp(first.name.split(' ')[0].replace(/[^\w]/g, ''), 'i'));
+      await sleep(100);
+      var box = (L.effects || [])[0];
+      if (!box || !FM.isFxContainer(box)) throw new Error('picking "' + first.name + '" did not land a filter');
+      if (box.name !== first.name) throw new Error('it landed called "' + box.name + '" instead of "' + first.name + '"');
+      if (!box.effects.length) throw new Error('it landed empty');
+      // Editable, not locked — the whole point of it being an ordinary container.
+      var before = box.effects.length;
+      box.effects.pop();
+      FM.inspector.refresh(); await sleep(60);
+      if (box.effects.length !== before - 1) throw new Error('a library filter refused an edit');
     });
   });
 
@@ -14267,6 +14292,78 @@
       var boxRow = document.querySelector('.fx-list > .fx-row');
       if (ownTag(boxRow)) throw new Error('the FILTER row is tagged as order-independent — its own position in the stack decides where its effects land');
     });
+  });
+
+  /* ---------------- #113 step 6: the filter library ----------------
+   * Hand-authored data. The failure mode is not a crash, it is a filter that quietly renders as
+   * something other than its name because a param key was mistyped and silently dropped — so the
+   * catalogue is checked against the LIVE registry rather than against itself. */
+  test('filter library: every filter is made of effects this build actually has', { item: 'fx-library' }, function () {
+    if (!FM.filters) throw new Error('FM.filters is not loaded');
+    var all = FM.filters.all(), bad = [], seen = {};
+    if (all.length < 12) throw new Error('only ' + all.length + ' filters in the library');
+    all.forEach(function (f) {
+      if (seen[f.id]) bad.push('duplicate id ' + f.id); seen[f.id] = 1;
+      if (!f.name || !f.desc) bad.push(f.id + ' has no name/description');
+      if (!FM.filters.sections().some(function (s) { return s.key === f.section; })) bad.push(f.id + ' is in unknown section "' + f.section + '"');
+      if (!(f.effects || []).length) bad.push(f.id + ' contains no effects');
+      (f.effects || []).forEach(function (c) {
+        var reg = FM.fxRegistry.get(c.type);
+        if (!reg || reg.type !== c.type) { bad.push(f.id + ' uses "' + c.type + '", which is not an effect'); return; }
+        Object.keys(c.params || {}).forEach(function (k) {
+          var pd = (reg.params || []).filter(function (p) { return p.key === k; })[0];
+          if (!pd) { bad.push(f.id + '/' + c.type + ' sets "' + k + '", which is not one of its controls'); return; }
+          var v = c.params[k];
+          if (typeof v === 'number' && ((isFinite(pd.min) && v < pd.min) || (isFinite(pd.max) && v > pd.max))) {
+            bad.push(f.id + '/' + c.type + '.' + k + ' = ' + v + ' is outside ' + pd.min + '..' + pd.max);
+          }
+        });
+      });
+    });
+    if (bad.length) throw new Error(bad.length + ' problems: ' + bad.slice(0, 8).join(' ;; '));
+  });
+
+  /* §6, applied to the authored data rather than to the UI: the nine CSS-filter effects render before
+     everything else whatever order they are written in, so a definition that lists one AFTER a
+     non-CSS effect reads top-to-bottom as something it does not do. */
+  test('filter library: CSS-filter effects are authored first, so the list matches the render order', { item: 'fx-library' }, function () {
+    var bad = [];
+    FM.filters.all().forEach(function (f) {
+      var sawOther = null;
+      (f.effects || []).forEach(function (c) {
+        if (FM.CSS_FX[c.type]) { if (sawOther) bad.push(f.id + ': ' + c.type + ' is listed after ' + sawOther + ' but renders before it'); }
+        else if (!sawOther) sawOther = c.type;
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' ;; '));
+  });
+
+  test('filter library: adding one produces an ordinary filter that renders', { item: 'fx-library' }, function () {
+    var def = FM.filters.all()[0];
+    var box = FM.filters.makeInstance(def.id);
+    if (!box) throw new Error('makeInstance returned nothing for ' + def.id);
+    if (!FM.isFxContainer(box)) throw new Error('what came back is not a filter container');
+    if (box.effects.length !== def.effects.length) throw new Error('expected ' + def.effects.length + ' effects inside, got ' + box.effects.length + ' — a definition lost children to validation');
+    if (box.name !== def.name) throw new Error('the filter did not carry its name');
+    if (FM.filters.makeInstance('no-such-filter-id')) throw new Error('an unknown id produced a filter anyway');
+    // …and it renders as a filter: full strength must differ from no filter at all.
+    var bare = fxRender([]);
+    var withIt = fxRender([box]);
+    if (!pxDiff(bare, withIt).bytes) throw new Error('adding "' + def.name + '" changed nothing on screen');
+    // …and its Strength still works, which is the whole promise of the container.
+    var off = FM.filters.makeInstance(def.id); off.params.strength = 0;
+    if (pxDiff(bare, fxRender([off])).bytes) throw new Error('Strength 0 on a library filter is not a no-op');
+  });
+
+  test('filter library: a filter keeps its name through a save and load', { item: 'fx-library' }, function () {
+    var box = FM.filters.makeInstance('vhs') || FM.filters.makeInstance(FM.filters.all()[0].id);
+    var l = { effects: [box] };
+    FM.storage._sanitizeEffects(l);
+    if (l.effects[0].name !== box.name) throw new Error('the filter came back called "' + l.effects[0].name + '" instead of "' + box.name + '"');
+    // …and a hostile one does not survive
+    var nasty = { effects: [Object.assign({}, box, { name: new Array(400).join('x') })] };
+    FM.storage._sanitizeEffects(nasty);
+    if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
   async function run() {

@@ -806,6 +806,18 @@ better still, keep working inside the turn rather than parking work for a later 
       anything — and that what must NOT ship is a reorderable list that does nothing. Then step 4 gave
       you a second list to drag things around inside. Those rows now say "always first" next to their
       name, so the ones whose order genuinely matters are the ones you can meaningfully move.
+      **v7.44 — the filter library, 16 of them in four sections.** "+ Add Filter" now opens a picker:
+      Cinematic, Retro & Analogue, Light & Glow, Stylised, or Empty filter to build your own. This is
+      the "lots of people will not want to spend time making filters themselves" half of what you
+      asked for. Every one is an ORDINARY filter, not a locked preset — open it up, retune anything
+      inside, delete a part, add your own, or pull Strength down to blend it back toward the original.
+      **What is left on #113:** step 5, the proper third tab in the effects browser with thumbnails,
+      alongside Effects and Audio Effects. The picker is a stopgap so the 16 are usable now; it is not
+      the browsing experience you described. Also still open from your original ask: the shortcut
+      button at the top of the Colouring section.
+      **And the honest bit:** I authored those 16 to my taste, not yours. They are quick to change —
+      each is a few lines in js/filters.js — so tell me which ones are wrong, which are missing, and
+      whether 16 is the right number, and I will rework them rather than adding 30 more of the same.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.

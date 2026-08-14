@@ -600,7 +600,12 @@ window.FM = window.FM || {};
       // Transient UI state (fx._expanded) is dropped by the rebuild, which is what the leading
       // underscore means everywhere else in this file.
       const out = { type: f.type, enabled: f.enabled !== false, params: params };
-      if (container) out.effects = f.effects.slice(0, FX_CHILD_MAX).map(c => sane(c, depth + 1)).filter(Boolean);
+      if (container) {
+        out.effects = f.effects.slice(0, FX_CHILD_MAX).map(c => sane(c, depth + 1)).filter(Boolean);
+        // A library filter's own name. String-only and length-capped — it reaches the inspector row as
+        // textContent so it cannot carry markup, but an unbounded one would still wreck the row.
+        if (typeof f.name === 'string' && f.name && f.name.length <= 64) out.name = f.name;
+      }
       return out;
     };
     l.effects = l.effects.slice(0, FX_MAX).map(f => sane(f, 0)).filter(Boolean);
