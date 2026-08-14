@@ -1034,6 +1034,19 @@ better still, keep working inside the turn rather than parking work for a later 
       (import loses parts of the file) this is now THREE separate audio reports, and it is the most
       broken thing in the app — treat the audio cluster as top priority over polish work.
 
+      **ROOT CAUSE FOUND 14 Aug (parallel read-only agent), confirmed with fixtures in the real app.**
+      Not a race — a **duration disagreement**. `FM.loadVideoFile` deliberately trusts an 8kHz decode
+      over the container header (js/media.js:96-102, from queue 72), so `layer.duration` is the song's
+      TRUE length. But the element the preview plays still believes the container's shorter figure, and
+      `syncMediaToClock` gates every resume on THAT figure (js/app.js:1087-1088). So past `el.duration`
+      the element is held paused and muted for the rest of the clip while the playhead runs on — the
+      song stops and the transport carries on without it.
+      Measured: a file whose header claims 11.21s but which decodes to 26.38s plays only its first 11s.
+      **And it is not limited to broken files** — a well-formed control still disagreed by 60ms
+      (26.383625 against 26.323125), so every song import has a small dead tail. The mechanism is
+      general; only its size varies.
+      Fix direction: gate the resume on the TRUE duration the app already computed, not the element's
+      own claim.
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just
       tested adding a voice memo."* This is a REAL-DEVICE report, and that matters: the two measured
@@ -1044,6 +1057,22 @@ better still, keep working inside the turn rather than parking work for a later 
       frames or waveform, unlike an imported song. Needs profiling on HIS phone, or a throttled-CPU
       profile as the nearest stand-in, before touching anything.
 
+      **INVESTIGATED 14 Aug (parallel read-only agent, measured in the real app at 4x CPU throttle,
+      380x800 mobile emulation). It is TWO unrelated defects and only the audio one reproduced.**
+      **The audio half is real, and is NOT phone-specific.** Every press of Play starts the transport
+      clock immediately (`clockAnchor(FM.time)`, js/app.js:1227) while the element carrying the sound
+      takes ~200ms to actually produce audio. Measured: `el.currentTime` sits at 0.000 for the first
+      ~120ms and has reached only 0.028s at t=222ms, while the playhead is already at 0.220s. The gap
+      peaks at **183ms** — under SYNC_HARD (350ms), so it never seeks. Instead the controller pins
+      `playbackRate` at its +10% ceiling for **55 consecutive decisions**: every play begins with a
+      pitched-up catch-up. Independently confirmed by the existing `tests/_ratechurn.html` (|err| median
+      15.2ms, max 198.1ms).
+      **And a finding that matters for #69:** with one plain audio layer playing, `FM.clockSource()` is
+      `'raf'` and there is no AudioContext at all. A plain media element never creates one, so in exactly
+      the case this entry is about, the transport is on `performance.now()` and the audio-clock adoption
+      has nothing to adopt.
+      Fix direction: do not start the clock until the element is actually producing sound — anchor on its
+      first real advance — instead of starting optimistically and correcting by resampling.
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame
@@ -1107,6 +1136,16 @@ better still, keep working inside the turn rather than parking work for a later 
       Wiggle now sources from a plate that reaches past the frame, but only when the layer's own bounds
       are within the displacement of an edge — an expanded plate costs a second full render of the
       layer, and this is the app's heaviest screen. Mutation-checked: without it, 41.2% eaten.
+      **A better implementation exists and is NOT yet adopted** (parallel agent, high confidence,
+      measured against a ground-truth render): wiggle is a pure TRANSLATION, and a translation never
+      needs more pixels — it needs the same comp-sized plate taken from a window that has MOVED. Setting
+      plate A's origin to −d through the existing `__fmOX/__fmOY` stamp before `drawLayer`, then blitting
+      1:1, is reported **bit-exact** against a genuinely-moved layer (0 pixels differ over 4 positions ×
+      10 frames) where the shipped approach is not — **and cheaper**: 4.12ms → 0.63ms per frame on a
+      1080×1920 comp, because a whole-pixel blit skips the resample a fractional `translate()` forces
+      across the whole frame.
+      **Deliberately not adopted yet:** it replaces shipped, working code on the strength of a probe I
+      have not run myself. Verify against ground truth first, then take it.
 
 - [x] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** **DONE v6.61.** His words:
       *"With the faves section I want it to be really easy to open, remove the feature of swiping right
