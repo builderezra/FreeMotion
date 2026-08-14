@@ -4841,3 +4841,13 @@ body.fm-pushing #toast { z-index: 213; }
    filter's, not the layer's. */
 .fx-add-kid { margin-top: 2px; font-size: 12px; padding: 7px 10px; opacity: 0.9; }
 .fx-add-filter { margin-top: 6px; }
+
+/* "always first" — the nine CSS-filter effects, whose position in the stack cannot change the picture
+   (see FM.CSS_FX). Quiet by design: it is a fact about the effect, not a warning. */
+.fx-first-tag {
+  font-size: 10px; line-height: 1; letter-spacing: 0.02em;
+  padding: 3px 6px; border-radius: 999px; white-space: nowrap;
+  color: var(--muted, #8fa3b0);
+  background: color-mix(in srgb, var(--muted, #8fa3b0) 14%, transparent);
+  margin-left: 6px; flex: 0 0 auto;
+}

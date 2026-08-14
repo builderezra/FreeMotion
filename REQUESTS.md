@@ -801,6 +801,11 @@ better still, keep working inside the turn rather than parking work for a later 
       shape as a row that looks like a look and does nothing. Fixed, and pasting now fits the look to
       the layer: a part that does not suit is dropped from inside the filter, the filter is kept, and
       it tells you what it left behind.
+      **v7.43 — and one I had shipped broken myself.** The plan warned (§6) that nine effects are all
+      applied together before everything else, so dragging them up and down the list has never changed
+      anything — and that what must NOT ship is a reorderable list that does nothing. Then step 4 gave
+      you a second list to drag things around inside. Those rows now say "always first" next to their
+      name, so the ones whose order genuinely matters are the ones you can meaningfully move.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.

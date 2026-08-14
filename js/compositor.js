@@ -1037,6 +1037,17 @@ window.FM = window.FM || {};
    * pixels instead of 26 and the picture looks four times blurrier than the export. Multiplying the
    * radius by ps puts it back in project space. At ps = 1 the arithmetic is a no-op, which is why
    * exports cannot change. Any new length-valued filter added here needs the same treatment. */
+  /* The nine effect types that are collected into ONE ctx.filter string and applied BEFORE the content
+   * is drawn — whatever order they sit in. Their position in the stack therefore cannot change the
+   * picture, and FILTERS-DESIGN.md §6 measured it: [blur, pixelate] and [pixelate, blur] render 0
+   * differing bytes, likewise [brightness, posterize] and [blur, mirror], while the control (adding
+   * blur at all) moved 66,816 bytes.
+   * Exported so the UI can SAY so. A stack that lets you drag these around and quietly ignores where
+   * they land is the thing §6 said must not ship — and it did ship, the moment filters gave people a
+   * second list to drag things around in. */
+  FM.CSS_FX = Object.assign(Object.create(null), {
+    blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
+  });
   function effectFilter(layer, t, ps) {
     const S = ps == null ? 1 : ps;
     const parts = [];

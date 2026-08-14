@@ -939,7 +939,20 @@ window.FM = window.FM || {};
     // buttons (eye / ⋯ / delete) keep their own behaviour; the disc + name + empty space all toggle.
     head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
     if (listOf().length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder) — on OPEN rows too, or the one you are editing looks unmovable
-    head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
+    head.appendChild(disc); head.appendChild(name);
+    /* Say when position does not matter. Nine effect types (FM.CSS_FX) are folded into a single CSS
+       filter applied BEFORE the layer is drawn, so wherever you drag them the picture is the same —
+       measured, not assumed. Letting someone reorder them with no feedback is a control that lies,
+       and filters made it worse by handing people a second list to drag things around in.
+       AFTER the name, deliberately: appended any earlier it lands between the grip and the chevron,
+       so the row reads "⠿ always first › Gaussian Blur" — the tag arriving before the thing it is
+       talking about. A filter row never gets it; where a filter sits decides where its children land. */
+    if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
+      const tag = el('span', 'fx-first-tag', 'always first');
+      tag.title = 'Blur, brightness, contrast, saturation, hue, greyscale, sepia, invert and glow are applied together before everything else — moving them up or down does not change the picture.';
+      head.appendChild(tag);
+    }
+    head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
       const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
       more.addEventListener('click', (ev) => fxMoreMenu(layer, fx, idx, ev.currentTarget));

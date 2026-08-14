@@ -14211,6 +14211,64 @@
     }
   });
 
+  /* ---------------- #113 §6: the nine effects whose ORDER cannot matter ----------------
+   * They are folded into one ctx.filter string applied before the layer is drawn, so wherever they sit
+   * in the stack the picture is the same. §6 said what must not ship is "a reorderable list that does
+   * nothing" — and that is exactly what shipped in v7.41, which gave people a second list to drag
+   * things around in. The fix is to say so; these hold the claim to the actual rendering. */
+  test('stack order: the nine CSS-filter effects render the same whichever way round they go', { item: 'fx-order' }, function () {
+    var keys = Object.keys(FM.CSS_FX || {});
+    if (keys.length !== 9) throw new Error('FM.CSS_FX lists ' + keys.length + ' types, expected 9 — the list has drifted from effectFilter');
+    /* A SOLID RECTANGLE CANNOT SHOW THIS, and the first version of this test used one: pixelate on a
+       flat block gives the same flat block, mirror on a symmetric one is the identity, so every pair
+       compared equal and the control caught it. The subject has to carry structure that is not
+       symmetric — text, drawn off-centre. */
+    var orderRender = function (effects) {
+      var W = 140, H = 100;
+      var L = FM.makeLayer('text', { text: 'Ag7', x: W * 0.38, y: H * 0.44, size: 42, color: '#e8d24a', start: 0, duration: 5 });
+      L.effects = effects;
+      var c = offscreen(W, H);
+      FM.renderScene(c.getContext('2d'), scene([L], { project: { width: W, height: H, fps: 30, duration: 5, background: '#101820' } }), 0.4);
+      return c.getContext('2d').getImageData(0, 0, W, H).data;
+    };
+    // The control FIRST — if the instrument cannot see ordering at all, nothing below means anything.
+    var c1 = orderRender([FM.fxRegistry.makeInstance('pixelate'), FM.fxRegistry.makeInstance('mirror')]);
+    var c2 = orderRender([FM.fxRegistry.makeInstance('mirror'), FM.fxRegistry.makeInstance('pixelate')]);
+    if (!pxDiff(c1, c2).bytes) throw new Error('two ORDER-DEPENDENT effects render identically either way round — this comparison cannot detect ordering at all, so it can prove nothing about the nine');
+    var partner = 'pixelate', bad = [];
+    keys.forEach(function (k) {
+      var a = orderRender([FM.fxRegistry.makeInstance(k), FM.fxRegistry.makeInstance(partner)]);
+      var b = orderRender([FM.fxRegistry.makeInstance(partner), FM.fxRegistry.makeInstance(k)]);
+      if (pxDiff(a, b).bytes) bad.push(k + ' DOES respond to its position');
+    });
+    if (bad.length) throw new Error(bad.join(', ') + ' — these are listed as order-independent and are not, so the tag on their row is a lie');
+  });
+
+  test('stack order: a row whose position cannot matter says so', { item: 'fx-order' }, async function () {
+    await withFilterLayer(async function (L) {
+      L.effects = [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('pixelate')];
+      FM.inspector.refresh(); await sleep(80);
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.fx-list > .fx-row'));
+      if (rows.length !== 2) throw new Error('expected 2 effect rows, found ' + rows.length);
+      var blurRow = rows.filter(function (r) { return /blur/i.test(r.textContent || ''); })[0];
+      var pixRow = rows.filter(function (r) { return /pixel/i.test(r.textContent || ''); })[0];
+      /* :scope > — a descendant query would find a CHILD's tag when the row is a filter, which is the
+         same trap the chevron rule fell into and which fooled a live probe of this very feature. */
+      var ownTag = function (r) { return !!r.querySelector(':scope > .fx-swipe-wrap > .fx-head > .fx-first-tag'); };
+      if (!ownTag(blurRow)) throw new Error('Gaussian Blur can be dragged anywhere and never changes the picture, and its row does not say so');
+      if (ownTag(pixRow)) throw new Error('Pixelate DOES depend on its position but is tagged as if it does not');
+      // The tag has to follow the NAME — before it, the row reads "always first › Gaussian Blur".
+      var head = blurRow.querySelector(':scope > .fx-swipe-wrap > .fx-head');
+      var nm = head.querySelector(':scope > .fx-name'), tg = head.querySelector(':scope > .fx-first-tag');
+      if ((nm.compareDocumentPosition(tg) & Node.DOCUMENT_POSITION_FOLLOWING) === 0) throw new Error('the tag sits before the effect name it describes');
+      // …and a FILTER row must never wear it: where a filter sits in the stack matters very much.
+      var box = { type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [FM.fxRegistry.makeInstance('blur')], _expanded: true };
+      L.effects = [box]; FM.inspector.refresh(); await sleep(80);
+      var boxRow = document.querySelector('.fx-list > .fx-row');
+      if (ownTag(boxRow)) throw new Error('the FILTER row is tagged as order-independent — its own position in the stack decides where its effects land');
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
