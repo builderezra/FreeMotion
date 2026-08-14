@@ -9,6 +9,27 @@ HTTPS URL with no stored credentials and fails with "could not read Username", w
 points at the same repo and authenticates with his on-disk key. Verify by comparing `git rev-parse HEAD`
 against `git rev-parse ssh/main` — do not trust the push output alone.
 
+## ⚠️ WORK THE LIST OLDEST FIRST — not whatever he just said
+
+**The next thing to work on is the LOWEST-NUMBERED open item in [REQUESTS.md](REQUESTS.md), always.**
+New requests get written down at the bottom and then WAIT their turn. His words, after catching me
+doing the opposite: *"Remember I want the oldest things in the list done first, not what I just told
+you, make sure you figure out a way to remember if you keep forgetting."*
+
+This is easy to get wrong, because a request he has just typed feels urgent and an item from three
+weeks ago does not. It is still wrong. The whole point of the list is that nothing rots at the bottom
+while newer, shinier things jump ahead of it — which is exactly what had been happening.
+
+To find the next item, don't eyeball the file — it is not in numeric order:
+
+```bash
+grep -n "^- \[ \] \*\*[0-9]" REQUESTS.md | sed 's/^\([0-9]*\):- \[ \] \*\*\([0-9]*\).*/\2 (line \1)/' | sort -n | head
+```
+
+The only things that jump the queue are what HE explicitly says to do now ("do this asap", "right now
+you need to…"), and a genuine emergency like a broken build. If an old item is blocked on a decision
+from him, say so and move to the next-oldest — do not treat blocked as done.
+
 ## ⚠️ Every request Ezra makes goes in REQUESTS.md — immediately
 
 **[REQUESTS.md](REQUESTS.md) is the running list of everything he has asked for.** Read it at the

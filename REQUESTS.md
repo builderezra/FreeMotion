@@ -1,5 +1,15 @@
 # Ezra's requests — the running list
 
+> ## ⚠️ OLDEST FIRST
+> The next item to work on is the **lowest-numbered open `- [ ]` entry in this file**. New requests are
+> added at the bottom and wait their turn. The file is NOT in numeric order — find the next one with:
+> ```bash
+> grep -n "^- \[ \] \*\*[0-9]" REQUESTS.md | sed 's/^\([0-9]*\):- \[ \] \*\*\([0-9]*\).*/\2 (line \1)/' | sort -n | head
+> ```
+> Only two things jump the queue: he says so explicitly, or the build is broken. Blocked on a decision
+> from him is **not** done — say so, and move to the next-oldest.
+
+
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
 he makes it, however small, in the order he said it. Nothing is judged too minor to write down —
 "make the arrow look nice" is a line in this file the same as "fix the export".
@@ -1983,6 +1993,12 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
 - [x] **61 — Hovering a benchmark turns the highlighted section yellow**
 
 ## Newest requests (2026-08-14)
+
+> **These wait their turn.** The next thing worked on is always the LOWEST-numbered open item in this
+> file, not the newest. Ezra, 14 Aug: *"Remember I want the oldest things in the list done first, not
+> what I just told you."* New requests are written here immediately so nothing is lost — that is not the
+> same as being next.
+
 
 - [x] **171 — Move the notes button, and hide it when a layer is selected.** (v7.12) *He marked this one "do this
       asap", so it jumps the queue.* His words: *"Put the notes button to the left of the settings cog,
