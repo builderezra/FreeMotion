@@ -482,11 +482,15 @@ window.FM = window.FM || {};
     if (!plain) {
       c.clipColor = CLIP_COLORS[_colorIdx++ % CLIP_COLORS.length];
       c.name = (layer.name || 'Layer') + ' copy';
-      ['x', 'y'].forEach(k => {   // nudge so the copy is visible — offset the whole path if animated
-        const v = c.transform[k];
-        if (typeof v === 'number') c.transform[k] = v + 30;
-        else if (v && Array.isArray(v.kf)) v.kf.forEach(kf => { kf.v += 30; });
-      });
+      /* NO POSITIONAL NUDGE (queue 156). Ezra: "Duplicating stuff should duplicate it in its exact
+       * position, not move it slightly."
+       * This used to add +30px to x and y — and to every keyframe of an animated path — "so the copy is
+       * visible". That was a fair default while "Duplicate in place" sat beside it in the layer menu as
+       * the other choice. It stopped being fair in v5.91, when he circled six entries including that
+       * one and said "Remove the circled options in this menu": from then on the nudging version was
+       * the only duplicate in the app, and there was no way to get an exact copy at all.
+       * A duplicate now lands exactly on its original. It is still findable — it is selected on
+       * creation, it takes the next clip colour, and it is named "… copy" on its own timeline row. */
     }
     return c;
   };

@@ -1899,7 +1899,9 @@ window.FM = window.FM || {};
     const src = FM.layerById(FM.scene, id);
     if (!src) return;
     if (src.type === 'camera') { if (FM.toast) FM.toast('Scene already has a camera'); return; }   // single-camera invariant — a 2nd (offset) camera would hijack the view
-    const copy = FM.cloneLayer(src, !!inPlace);   // inPlace → exact copy at same position (no offset/" copy")
+    // inPlace → a plain copy: same position AND no " copy" suffix or new clip colour. Since queue 156
+    // an ordinary duplicate is also positionally exact; inPlace is now purely about the naming/colour.
+    const copy = FM.cloneLayer(src, !!inPlace);
     await reloadMediaTo(id, copy.id);
     const inserts = [copy];
     if (src.type === 'group' && FM.groupDescendants) {
@@ -1992,7 +1994,10 @@ window.FM = window.FM || {};
     if (!FM.clipboard || !FM.clipboard.length) return;
     const idMap = Object.create(null);   // null-proto: a crafted parent/target id of 'constructor' must not "remap" to a prototype function
     const copies = FM.clipboard.map(entry => {
-      const copy = FM.cloneLayer(entry.snapshot);   // fresh id + offset +30 + " copy"
+      // fresh id + " copy". No positional offset any more (queue 156) — a paste lands exactly on the
+      // source's position, which matches the AM behaviour this function already follows for TIME
+      // (it re-times to the playhead just below).
+      const copy = FM.cloneLayer(entry.snapshot);
       idMap[entry.snapshot.id] = copy.id;
       return { copy, entry };
     });

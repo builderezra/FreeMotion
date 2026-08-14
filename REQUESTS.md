@@ -224,6 +224,21 @@ better still, keep working inside the turn rather than parking work for a later 
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [x] **156 — Duplicating should leave the copy exactly where the original is.** (v7.01) (14 Aug.) His words:
+      *"Duplicating stuff should duplicate it in its exact position, not move it slightly."*
+      `FM.cloneLayer` adds **+30px to x and y** on every duplicate (and to every keyframe of an animated
+      path), under the comment "nudge so the copy is visible". That was a reasonable default when
+      "Duplicate in place" existed as a separate menu entry — but that entry was removed in v5.91 when
+      he circled six items and said *"Remove the circled options in this menu"*, so the nudging version
+      is now the ONLY duplicate there is. He wants the other one.
+      **Shipped v7.01.** The nudge is gone — a duplicate lands exactly on its original, and an animated
+      layer's whole keyframe path comes across unmoved (that half hides better than the static one: a
+      path shifted 30px is an entire animation displaced). Paste loses the offset with it, which matches
+      the AM behaviour that function already follows for time.
+      The copy is still tellable apart now that it is underneath the original: it is selected on
+      creation, named "… copy", and takes the next clip colour on its own timeline row — and the test
+      asserts those two, because with the offset gone they are the only things left doing that job.
+
 - [ ] **155 — Put the open-project glint on the SELECTED add-menu tab.** (14 Aug.) His words: *"I want
       the effect that you have on the open project, like with the shiny line going around it, also on
       whatever you have selected, like elements or shapes etc"*, then immediately: *"Not the elements or

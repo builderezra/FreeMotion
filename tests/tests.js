@@ -12020,6 +12020,47 @@
     } finally { host.remove(); }
   });
 
+  /* #156 — Ezra: "Duplicating stuff should duplicate it in its exact position, not move it slightly."
+     cloneLayer used to add +30px to x and y, and to every keyframe of an animated path, "so the copy is
+     visible". That was fair while "Duplicate in place" sat beside it as the other choice; it stopped
+     being fair in v5.91 when he had that entry removed, leaving the nudging version as the only
+     duplicate in the app. The keyframe half matters as much as the static half — a nudged path is a
+     whole animation moved 30px, which is far harder to notice and to undo. */
+  test('duplicate: the copy lands exactly on the original, animated paths included', { item: 'duplicate-exact' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      const a = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 220, y: 140, shapeW: 60, shapeH: 60, fill: '#f00', start: 0, duration: 3 });
+      // …and one with an ANIMATED position, which is the half that hides.
+      const b = FM.makeLayer('shape', { name: 'Path', shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 3 });
+      b.transform.x = { kf: [{ t: 0, v: 100 }, { t: 2, v: 400 }] };
+      FM.scene = scene([a, b]);
+      FM.refreshAll(); await sleep(40);
+
+      await FM.duplicateLayer(a.id);
+      await sleep(60);
+      const copyA = FM.scene.layers.find(l => l.id !== a.id && /copy/i.test(l.name || ''));
+      if (!copyA) throw new Error('duplicating produced no copy');
+      if (copyA.transform.x !== a.transform.x || copyA.transform.y !== a.transform.y) {
+        throw new Error('the copy landed at ' + copyA.transform.x + ',' + copyA.transform.y +
+          ' against the original ' + a.transform.x + ',' + a.transform.y + ' — it was nudged');
+      }
+
+      await FM.duplicateLayer(b.id);
+      await sleep(60);
+      const copyB = FM.scene.layers.find(l => l.id !== b.id && l.id !== a.id && l.id !== copyA.id && FM.isAnimated(l.transform.x));
+      if (!copyB) throw new Error('duplicating the animated layer produced no copy');
+      const src = b.transform.x.kf.map(k => k.v).join(','), got = copyB.transform.x.kf.map(k => k.v).join(',');
+      if (src !== got) throw new Error('the animated copy\'s path is [' + got + '] against the original [' + src + '] — the whole animation was moved');
+
+      // It still has to be TELLABLE from the original, since it is now sitting underneath it.
+      if (copyA.name === a.name) throw new Error('the copy has the same name as the original — with no offset, the name is how you tell them apart');
+      if (copyA.clipColor === a.clipColor) throw new Error('the copy took the same clip colour — with no offset, the timeline colour is the other way you tell them apart');
+    } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
