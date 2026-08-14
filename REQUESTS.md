@@ -2302,6 +2302,21 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       should draw. Measure both together: what the frame budget is spent on with exactly one video layer,
       and what state the media element is in during the period he calls broken. Do NOT tune anything
       before that measurement — this area has already produced three plausible-but-wrong causes.
+      **MEASURED (`tests/_onevideo.html`), and the two halves give different answers.**
+      · **"Not loading properly" is REAL and is now fixed** — see #201. There is a genuine window where
+        the clip cannot draw at all, and the app said nothing about it.
+      · **The LAG did not reproduce here.** Recording a real 1280×720 clip, importing it through the
+        app's own path, quality on *smooth*, one layer, no effects: `renderScene` runs at a **median of
+        4.40ms** (mean 4.62, p95 9.10) against the 16.7ms a 60fps frame has, and the app held itself on
+        **tier 0 of 6** — it never even felt the need to drop quality. Nothing here is over budget.
+      So the lag is **device-specific, or outside renderScene**, and I am not tuning anything on that
+      basis — that is exactly how this area has already produced three plausible-but-wrong causes.
+      **What would settle it:** the same measurement running ON HIS PHONE. `FM._perfState()` and
+      `FM.playbackQualityInfo()` already report the tier, the frame average and the canvas size; the
+      missing piece is a way for him to read them and send them over. That argues for a small "what is
+      slow" readout in Settings rather than more guessing from here.
+      Worth noting the decode window above is a plausible part of what he calls lag: while a clip is
+      still decoding, the app is competing with the decoder for the same device.
 - [x] **196 — A Sound Effects button in the Audio tab, with a library of effects.** (v7.29) His words: *"in the
       audio tab we will add a button that is sound effects and you will be able to use that to add sound
       effects to the project, we will have a sound effects menu with a bunch of our own sound effects and
