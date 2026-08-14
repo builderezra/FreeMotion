@@ -13495,6 +13495,53 @@
     }
   });
 
+  /* #108 — he asked what two of the view-rail buttons do. A control that has to be explained is a
+     design problem, but captions are not the fix: the rail is 46px wide and already scrolls because it
+     is full, and it has been fixed once already for being "crammed in". Holding costs no space and
+     works on a phone, where `title` does nothing. */
+  test('holding a view-rail button names it, and does not press it', { item: 'rail-hints' }, async function () {
+    const rail = document.getElementById('view-bar');
+    if (!rail) throw new Error('no view rail');
+    const hadHidden = rail.classList.contains('hidden');
+    rail.classList.remove('hidden');
+    const btn = document.getElementById('vb-loop');
+    if (!btn) throw new Error('no loop button to hold');
+    const wasLoop = !!FM.loop;
+    try {
+      const send = (type) => {
+        const r = btn.getBoundingClientRect();
+        btn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 31, pointerType: 'touch',
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+      };
+      send('pointerdown');
+      await sleep(520);                                   // past the 380ms hold
+      const chip = document.querySelector('.vb-hint');
+      if (!chip) throw new Error('holding a rail button showed no label — there is still no way to learn what it is on a phone');
+      if (!/loop/i.test(chip.textContent)) throw new Error('the label says "' + chip.textContent + '" rather than naming the control');
+      send('pointerup');
+      btn.click();
+      await sleep(40);
+      if (!!FM.loop !== wasLoop) {
+        throw new Error('holding to see what the button is also toggled it — asking what a control does must not commit to it');
+      }
+      /* …and the two buttons that already OWN the hold gesture must keep it. */
+      const zi = document.getElementById('vb-tlin');
+      if (zi) {
+        document.querySelectorAll('.vb-hint').forEach(n => n.remove());
+        const r = zi.getBoundingClientRect();
+        zi.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 32, pointerType: 'touch', clientX: r.left + 5, clientY: r.top + 5, button: 0 }));
+        await sleep(430);
+        if (document.querySelector('.vb-hint')) throw new Error('the timeline-zoom button showed a hint — it already uses hold for "all the way", and two meanings on one gesture is a fight');
+        zi.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 32, pointerType: 'touch', clientX: r.left + 5, clientY: r.top + 5 }));
+      }
+    } finally {
+      document.querySelectorAll('.vb-hint').forEach(n => n.remove());
+      if (hadHidden) rail.classList.add('hidden');
+      if (!!FM.loop !== wasLoop && FM.toggleLoop) FM.toggleLoop();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

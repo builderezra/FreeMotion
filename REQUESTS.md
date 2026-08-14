@@ -899,11 +899,21 @@ better still, keep working inside the turn rather than parking work for a later 
       that case: the suite caught it immediately.)
       New test renders at 0.28 preview scale with a subject that leaves a real margin; mutation-checked
       against the old test.
-- [ ] **108 — What do the buttons on the canvas view rail do?** Answered in chat (loop / onion skin /
+- [x] **108 — What do the buttons on the canvas view rail do?** (v7.37) Answered in chat (loop / onion skin /
       snapping / guides / export marks / timeline zoom). Keeping it here because a control that has to
       be explained is a design note, not just a question — the row is icon-only with no labels, and he
       has now asked what two of them are.
 
+      **Answered in the app rather than in chat (v7.37): hold any rail button and it names itself.**
+      Captions under the icons were the obvious fix and are the wrong one — the rail is 46px wide and
+      already SCROLLS because it is full, and it has been fixed once before for being "crammed in", so
+      labels would roughly double its height. A hold costs no space, and it works on the one device
+      where `title` does nothing: a phone.
+      Holding also **swallows the press that follows**, so asking what a control is never also toggles
+      it. The two timeline-zoom buttons are skipped because they already own the hold gesture (hold =
+      zoom all the way), and two meanings on one gesture is a fight rather than a feature.
+      Mutation-checked on the part that matters: letting the press through means learning what Loop is
+      turns Loop on.
 - [x] **106 — Grain level is right, but it is still too jumpy: make it SMOOTH.** **DONE v6.68.** His words: *"The level
       of film grain is good but again it's too jumpy, just make it smooth."* So .032 opacity stays. The
       remaining problem is that v6.67 swaps tiles with steps(1) — an instant cut between noise fields

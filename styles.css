@@ -4807,3 +4807,16 @@ body.fm-pushing #toast { z-index: 213; }
      is the opposite of what it is for. */
   #loading-dot .ld-arc { animation-duration: 2.4s; }
 }
+
+/* The view rail's hold-to-learn chip (queue 108). Sits to the LEFT of the rail, which is the only side
+   with room, and is inert — it exists to be read, not tapped. */
+.vb-hint {
+  position: fixed; z-index: 64; pointer-events: none;
+  padding: 6px 10px; border-radius: 8px; white-space: nowrap;
+  background: rgba(10, 16, 22, .94); border: 1px solid var(--line);
+  color: var(--text); font-size: 12px; font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  animation: vb-hint-in 120ms ease-out both;
+}
+@keyframes vb-hint-in { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .vb-hint { animation: none; } }

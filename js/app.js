@@ -3329,6 +3329,50 @@ window.FM = window.FM || {};
      * than hold-to-repeat because the range is 0.02–12 — a repeat fast enough to cross that is too
      * fast to stop on anything useful, and Ezra asked for "max zoom or max zoom out", not "keep
      * going while I hold". */
+    /* HOLD A VIEW-RAIL BUTTON TO SEE WHAT IT IS (queue 108). Ezra asked what two of them do, and the
+     * note in REQUESTS.md is right that a control needing to be explained is a design problem — but the
+     * fix cannot be labels under the icons. He already had this rail fixed once for being "crammed in",
+     * and it is 46px wide and scrolls because it is full; captions would roughly double its height.
+     * A hold costs no space and teaches on the device where `title` does nothing — a phone.
+     * TWO buttons already own the hold gesture (timeline zoom in/out, hold = go all the way), so they
+     * are skipped rather than fighting over it. And a hold that showed a label swallows the click that
+     * follows, so learning what a control is never also toggles it — the whole point is to ask without
+     * committing. */
+    (function viewRailHints() {
+      const rail = document.getElementById('view-bar');
+      if (!rail) return;
+      const OWNS_HOLD = { 'vb-tlin': 1, 'vb-tlout': 1 };
+      let chip = null, timer = 0, shown = false;
+      const hide = () => { if (chip) { chip.remove(); chip = null; } if (timer) { clearTimeout(timer); timer = 0; } };
+      rail.addEventListener('pointerdown', (e) => {
+        const b = e.target.closest ? e.target.closest('.vb-btn, .vb-z') : null;
+        if (!b || OWNS_HOLD[b.id]) return;
+        const label = b.getAttribute('title') || b.getAttribute('aria-label');
+        if (!label) return;
+        shown = false;
+        timer = setTimeout(() => {
+          timer = 0; shown = true;
+          hideChipOnly();
+          chip = document.createElement('div');
+          chip.className = 'vb-hint';
+          chip.textContent = label.split(' — ')[0].split(' · ')[0];   // the name, not the whole explanation
+          document.body.appendChild(chip);
+          const r = b.getBoundingClientRect(), c = chip.getBoundingClientRect();
+          chip.style.top = Math.round(r.top + r.height / 2 - c.height / 2) + 'px';
+          chip.style.left = Math.round(r.left - c.width - 10) + 'px';
+          if (navigator.vibrate) { try { navigator.vibrate(6); } catch (_) {} }
+        }, 380);
+      });
+      function hideChipOnly() { if (chip) { chip.remove(); chip = null; } }
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+        rail.addEventListener(ev, () => { if (timer) { clearTimeout(timer); timer = 0; } setTimeout(hideChipOnly, 900); }));
+      rail.addEventListener('click', (e) => {
+        if (!shown) return;
+        shown = false;
+        e.stopPropagation(); e.preventDefault();   // asked what it is; did not ask to press it
+      }, true);
+    })();
+
     [['vb-tlin', 1], ['vb-tlout', -1]].forEach(([id, dir]) => {
       const b = document.getElementById(id);
       if (!b) return;
