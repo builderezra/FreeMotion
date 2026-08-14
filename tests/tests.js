@@ -12084,7 +12084,9 @@
     const root = document.documentElement;
     const was = root.getAttribute('data-theme');
     try {
-      for (const theme of ['glass', 'classic']) {
+      // Only 'glass' now — queue 178 removed the Classic theme, so a 'classic' document is a state the
+      // app can no longer be in, and testing it would be testing a stylesheet nobody can reach.
+      for (const theme of ['glass']) {
         root.setAttribute('data-theme', theme);
         await sleep(30);
         const h = getComputedStyle(root), b = getComputedStyle(document.body);
@@ -12554,6 +12556,50 @@
       if (keep == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep);
       document.querySelectorAll('#export-dialog').forEach(d => d.classList.add('hidden'));
       if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* #178 — Ezra: "Get rid of the classic theme option."
+     The trap here is that "Classic" names TWO different settings in this app: the Appearance theme and
+     the Classic|Studio LAYOUT. He said theme, so the layout row must survive untouched — a test that
+     only checked for the word would have passed while the wrong control went missing. */
+  test('the Classic theme is gone, and the Classic layout is not', { item: 'no-classic-theme' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const keep = localStorage.getItem('fm.settings');
+    try {
+      // The one way someone could still be looking at it: a value saved before the option was removed.
+      try {
+        const o = JSON.parse(keep || '{}'); o.theme = 'classic';
+        localStorage.setItem('fm.settings', JSON.stringify(o));
+      } catch (e) {}
+      FM.settings.open(); await sleep(340);
+      const labels = [].slice.call(document.querySelectorAll('.set-panel .set-row'))
+        .map(r => ((r.querySelector('.set-label') || {}).textContent || ''));
+      if (labels.some(l => l === 'Appearance')) throw new Error('the settings panel still offers an Appearance theme row');
+      if (!labels.some(l => /Layout/i.test(l))) throw new Error('the LAYOUT row went with it — Classic|Studio is a different setting that just shares the word');
+      const seg = [].slice.call(document.querySelectorAll('.set-panel .set-segbtn'))
+        .map(b => b.textContent.trim());
+      if (seg.indexOf('Liquid') >= 0) throw new Error('the Liquid/Classic appearance switch is still on screen');
+      if (document.documentElement.getAttribute('data-theme') !== 'glass') {
+        throw new Error('the document is on data-theme="' + document.documentElement.getAttribute('data-theme') +
+          '" — theme-glass.css is scoped to [data-theme="glass"], so anything else IS the Classic look');
+      }
+    } finally {
+      if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close();
+      if (keep == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', keep);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  /* #182 — Ezra: "Where it says save as preset, make it say save layers effects as preset." */
+  test('the layer menu names what its preset saves', { item: 'preset-label' }, async function () {
+    if (!FM.scene.layers.length) { FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', start: 0, duration: 2 })); FM.timeline.rebuild(); }
+    const items = FM.layerMenuItems(FM.scene.layers[0]) || [];
+    const labels = items.map(i => i && i.label).filter(Boolean);
+    if (labels.indexOf('Save as preset…') >= 0) throw new Error('the layer ⋯ still says the bare "Save as preset…"');
+    if (labels.indexOf("Save layer's effects as preset…") < 0) {
+      throw new Error('no "Save layer\'s effects as preset…" in the layer ⋯ — have: ' + labels.join(' | '));
     }
   });
 

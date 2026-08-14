@@ -2393,7 +2393,12 @@ window.FM = window.FM || {};
       items.push({ label: 'Group selection', action: () => FM.groupSelection() });
       items.push({ label: 'Masking group', action: () => FM.groupSelection({ mask: true }) });
     }
-    items.push({ label: 'Save as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
+    /* "Save LAYER'S EFFECTS as preset" (queue 182). Ezra: "Where it says save as preset, make it say
+       save layers effects as preset." On its own "Save as preset" did not say what it captured, and
+       there are two of them — this one and an individual effect's own ⋯ → Save as preset. Naming the
+       owner is what tells them apart. (Note it stores more than the effects list: the fill, stroke,
+       shadow, blend mode, colour grade, corner radius and the transform curves come too.) */
+    items.push({ label: "Save layer's effects as preset…", action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
     items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
     // the layer extras (Flip/Fit/Clipping Mask/Outline/Extract Audio/Media Info/colour tag) used to
     // live ONLY in the desktop top-bar ⋯ — merged here so every surface shows one identical menu

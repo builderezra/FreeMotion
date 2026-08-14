@@ -1912,10 +1912,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       that dialog, not App settings. Presumably saves the canvas setup — ratio, resolution, fps,
       background — as a named preset you can start a project from. Ask what it should capture if it is
       not obvious when its turn comes.
-- [ ] **182 — "Save as preset…" should say "Save layer's effects as preset…".** His words: *"Where it
+- [x] **182 — "Save as preset…" should say "Save layer's effects as preset…".** (v7.15) His words: *"Where it
       says save as preset, make it say save layers effects as preset."* It is in the layer ⋯ menu, one
       line above "Save selection as element…", and on its own "Save as preset" does not say what it
-      captures.
+      captures. **Done** — and naming the owner also tells it apart from the other one, an individual
+      effect's own ⋯ → Save as preset, which stays as it is.
+      **One thing to flag, since the new label is narrower than the truth:** a layer preset does not
+      only store the effects list. It also carries the fill, stroke, shadow, blend mode, colour grade,
+      corner radius and the transform curves (rotation/scale/opacity and x-y deltas). So applying one
+      can change a layer's colour, not just its effects. Say the word and it becomes something like
+      "Save layer's look as preset…"; left as you asked it for now.
 - [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
@@ -1927,13 +1933,20 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       enumerate which effects do nothing on a TEXT layer, find out whether it's one shared cause (e.g.
       effects that sample the layer's pixel buffer vs. ones that transform it) or a list of separate
       bugs, and report the measurement before changing anything.
-- [ ] **178 — Get rid of the Classic theme option.** Careful one: "Classic" is a name this app uses for
+- [x] **178 — Get rid of the Classic theme option.** (v7.15) Careful one: "Classic" is a name this app uses for
       TWO different things — the Classic/Studio *layout* toggle and a Classic *theme*. Check which is on
       screen in Settings before deleting anything. **Checked — it is the theme, and he said "theme", so
       there is no ambiguity to resolve:** Settings → Appearance is `Liquid | Classic` (js/settings.js:328)
       and that is the one to lose, leaving Liquid as the only look. The separate `Classic | Studio`
       LAYOUT row (js/settings.js:373) stays exactly as it is. Delete the option, make glass unconditional,
       and remove the CSS only the classic theme used.
+      **Done.** The whole Appearance row went — a segmented control with one segment is not a control.
+      There was no classic-only CSS to delete: "Classic" was simply the app with `theme-glass.css`
+      switched off (that sheet is scoped entirely to `html[data-theme="glass"]`), so the attribute is
+      now set unconditionally. A `theme: 'classic'` saved before this is ignored on load rather than
+      honoured — that stored value was the one way someone could still be looking at a look with no way
+      back to the other one. The test checks the layout row survived, since a check for the word alone
+      would have passed while the wrong control went missing.
 - [x] **181 — Theme the notepad like Apple Notes.** (v7.12) His words: *"I want the notes area to be themed like
       a note pad, similar colours to apples notes app, yellow with white background, I feel this will look
       cool."* So the notes panel stops being another dark app surface and becomes a light paper one —

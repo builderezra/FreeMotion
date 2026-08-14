@@ -13,7 +13,7 @@ window.FM = window.FM || {};
   const KEY = 'fm.settings';
   const DEFAULTS = {
     sort: 'date',            // home list order: 'date' (recently edited) | 'name' (A–Z)
-    theme: 'glass',          // 'glass' = the logo-sampled Liquid Glass look | 'classic' = the original palette
+    theme: 'glass',          // the only look there is now — the Classic option went in queue 178
     demoMode: false,         // hide personal media previews + filenames (for screen recordings)
     showTouches: false,      // draw a ripple where you tap, so a recording shows what you pressed
     systemFonts: true,       // include the built-in font list in the text font picker
@@ -43,7 +43,8 @@ window.FM = window.FM || {};
     if (saved && typeof saved === 'object') {
       // validate every field — this is hand-editable storage, and layerDuration feeds layer maths
       if (saved.sort === 'name' || saved.sort === 'date') state.sort = saved.sort;
-      if (saved.theme === 'glass' || saved.theme === 'classic') state.theme = saved.theme;
+      // A stored 'classic' from before queue 178 is ignored rather than honoured: the option is gone,
+      // and a saved value is the one way someone could still be looking at a look with no way back.
       if (['auto', 'smooth', 'detail'].indexOf(saved.playbackQuality) >= 0) state.playbackQuality = saved.playbackQuality;
       if (saved.layout === 'classic' || saved.layout === 'studio') state.layout = saved.layout;
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
@@ -60,9 +61,10 @@ window.FM = window.FM || {};
 
   // Everything that reacts to a setting reads it through here, so a change is applied in one place.
   function apply() {
-    // theme-glass.css is scoped entirely to html[data-theme="glass"], so removing the attribute
-    // restores the original stylesheet exactly — this is the one-tap undo for the whole look.
-    document.documentElement.setAttribute('data-theme', state.theme === 'classic' ? 'classic' : 'glass');
+    /* theme-glass.css is scoped entirely to html[data-theme="glass"], which is why this attribute has
+       to be SET rather than assumed — with it absent the app falls back to the bare stylesheet, which
+       is exactly the Classic look queue 178 removed. Ezra: "Get rid of the classic theme option." */
+    document.documentElement.setAttribute('data-theme', 'glass');
     document.body.classList.toggle('demo-mode', !!state.demoMode);
     // Studio layout is a pure re-placement of the same four regions (see the block at the end of
     // styles.css). The class goes on unconditionally; the media query decides whether it means anything,
@@ -329,7 +331,10 @@ window.FM = window.FM || {};
     }
 
     body.appendChild(group(
-      segmentRow('Appearance', 'theme', [{ label: 'Liquid', value: 'glass' }, { label: 'Classic', value: 'classic' }]),
+      /* (Appearance is gone — queue 178. It was a two-way Liquid|Classic switch, and with Classic
+         removed a segmented control with one segment is not a control. The layout row below is a
+         DIFFERENT setting that happens to share the word: Classic|Studio is where the inspector sits,
+         and it stays.) */
       segmentRow('Project sorting', 'sort', [{ label: 'Date', value: 'date' }, { label: 'Name', value: 'name' }]),
     ));
     body.appendChild(group(
