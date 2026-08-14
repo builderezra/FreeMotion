@@ -1884,6 +1884,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       It was a plain stroked outline in the bar's own colour like every other icon; now it is a small
       sheet of paper — white page, yellow edge, dark ruled lines — which is the same object the panel it
       opens now is.
+- [ ] **187 — The black bar is STILL there, and it CREEPS in.** His words: *"The black bar that comes in
+      is really peculiar because it will slowly creep in, idk why and it still isn't fixed fyi, not
+      urgent."* Marked not urgent by him, but the new detail is the whole lead and must not be lost:
+      **it animates in.** Every fix so far treated it as a static painted band — v6.85 found the document
+      canvas painted #000, and earlier rounds chased `theme-color` and the safe-area inset. A band that
+      *creeps* is not a painted background at all; something is being TRANSITIONED or is growing over
+      time (a height/transform animation, a lazily-applied inset, a layer resizing after first paint).
+      So the next attempt starts by CAPTURING it over several frames rather than screenshotting the end
+      state — the previous rounds all measured the finished picture, which is exactly why they kept
+      finding a plausible-but-wrong static cause. Related history: #157/#166 and the v6.85 note.
 - [ ] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap.** Three parts,
       from one message (AM screenshot attached showing the four buttons above the 1.00x slider):
       1. *"the speed menu needs the crop buttons… let's say your clip is slightly too short for what you
@@ -1934,11 +1944,14 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       dark boxes. Deliberately single-look — paper does not have a dark mode. The Done button had to stop
       being `btn-accent`: the app's blue outranked the paper styling and came out as a blue button on a
       white sheet.
-- [ ] **177 — Delete "Reset project" entirely.** His words: *"Completely remove the reset project
+- [x] **177 — Delete "Reset project" entirely.** (v7.14) His words: *"Completely remove the reset project
       button, it doesn't need to exist anymore, someone can just delete it and make a new project."*
       It lives in the Settings panel (it moved there in v6.13 when the ⋯ menu was dismantled). Remove
       the button, its handler and its confirm — and check nothing else calls the reset path before
       deleting it, rather than leaving an orphan.
+      **Done.** The Settings row was the only caller of `FM.resetProject`, so the function went with it
+      — 24 lines of teardown that nothing could reach. The test that used to prove the button asked
+      before wiping every layer now proves the door is shut and the function did not survive it.
 - [x] **176 — Tick notes off from the pre-export reminder card.** (v7.12) His words: *"When you press export and
       the notes show up, put an option in that menu to tick off the notes."* At the moment that card is
       read-only — it lists what you ticked and offers Back / Export anyway. He wants to deal with a
@@ -1948,9 +1961,12 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       under your finger at the exact moment you are deciding whether to export, and a wrong tap has to be
       undoable without leaving. Once nothing is outstanding the title becomes "All clear" and the quiet
       "Export anyway" becomes a plain "Export".
-- [ ] **175 — Loop playback does not belong in Settings.** His words: *"Get rid of loop play back out of
+- [x] **175 — Loop playback does not belong in Settings.** (v7.14) His words: *"Get rid of loop play back out of
       the settings menu, it should only be in view options."* Same reasoning as #122 (onion skin): one
-      control, one home.
+      control, one home. **Done** — its one door is the ⛶ view bar's loop button. The test now asserts
+      both halves: the row is gone AND `#vb-loop` still exists, because removing a control is only safe
+      if the remaining door does — that is the mistake queue 53 made with Group, where the action
+      survived and every way to reach it did not.
 
 
 Everything before this is in POLISH-LOG.md from v2.31 onward — roughly 90 more shipped items,

@@ -697,7 +697,7 @@ window.FM = window.FM || {};
   // them still reachable after six forced GCs — retained, not merely awaiting collection. Both
   // caches are ImageBitmaps, i.e. native memory that exerts no GC pressure, and frameCache alone is
   // budgeted at up to 160MB on mobile (FM.frameCacheLimits) precisely because it is expected to be
-  // handed back promptly. FM.resetProject has always done it in this order; this path had drifted.
+  // handed back promptly. FM.resetProject did it in this order before queue 177 removed it; this path had drifted.
   //
   // Split out of projects.open() and exported so the teardown can be regression-tested directly.
   // Driving a real switch from the suite would mean stubbing localStorage and FM.storage.load in

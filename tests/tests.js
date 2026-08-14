@@ -1958,7 +1958,6 @@
       ['FM.deleteLayer', function (c) { FM.deleteLayer(c.id); }],
       ['FM.deleteSelected', function (c) { FM.scene.selectedId = c.id; FM.scene.selectedIds = [c.id]; FM.deleteSelected(); }],
       ['FM.replaceMediaWith', function (c) { FM.replaceMediaWith(c.id, { kind: 'image', el: document.createElement('canvas'), width: 8, height: 8, duration: 1 }); }],
-      ['FM.resetProject', function () { FM.resetProject(); }],
       ['FM.releaseProjectMedia (the FM.projects.open switch teardown)', function () { FM.releaseProjectMedia(FM.scene.layers); }],
     ];
 
@@ -7090,14 +7089,15 @@
          returns immediately with nothing selected, so a switch in a panel you can open with nothing
          selected could be flicked and do nothing. Its one door is the layer ⋯ menu; that is asserted
          by 'onion skin has exactly one door'. */
-      const lead = ['Canvas', 'Loop playback', 'Snapping (magnet)', 'Guides'];
-      if (labels.slice(0, 4).join('|') !== lead.join('|')) {
-        throw new Error('the cog opens a panel that leads with [' + labels.slice(0, 4).join(', ') +
+      // 'Loop playback' is NOT in this list any more (queue 175), for the same reason onion skin left
+      // in queue 122 — Ezra: "it should only be in view options". One control, one home.
+      const lead = ['Canvas', 'Snapping (magnet)', 'Guides'];
+      if (labels.slice(0, 3).join('|') !== lead.join('|')) {
+        throw new Error('the cog opens a panel that leads with [' + labels.slice(0, 3).join(', ') +
           '] — inside a project it must lead with the project: ' + lead.join(', '));
       }
       // Each switch must READ its owner and WRITE through it — not carry a second copy of the state.
       const cases = [
-        ['Loop playback', () => !!FM.loop],
         ['Snapping (magnet)', () => !!(FM.timeline.isSnapping && FM.timeline.isSnapping())],
       ];
       for (const [label, get] of cases) {
@@ -7273,9 +7273,9 @@
       throw new Error('the top bar has a ⋯ again');
     }
     const savedScene = FM.scene, hadTime = FM.time;
-    const realExport = FM.storage.exportFile, realImport = FM.storage.importFile, realReset = FM.resetProject;
+    const realExport = FM.storage.exportFile, realImport = FM.storage.importFile;
     const realConfirm = window.confirm;
-    const spy = { save: 0, open: 0, reset: 0, confirms: [] };
+    const spy = { save: 0, open: 0, confirms: [] };
     try {
       FM.scene = scene([
         FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
@@ -7284,7 +7284,6 @@
       FM.scene.project.duration = 9;
       FM.storage.exportFile = () => { spy.save++; };
       FM.storage.importFile = () => { spy.open++; };
-      FM.resetProject = () => { spy.reset++; };
       window.confirm = (m) => { spy.confirms.push(m); return true; };
       FM.selectLayer(null); FM.refreshAll(); await sleep(60);
 
@@ -7303,18 +7302,26 @@
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Save a project file').click(); await sleep(60);
       if (spy.save !== 1) throw new Error('cog ▸ Save a project file did not reach FM.storage.exportFile — on a local-only app that is the only backup there is');
-      // Reset: gated by its confirm, and it must be the destructive-looking one.
+      /* Reset project is GONE (queue 177) — Ezra: "it doesn't need to exist anymore, someone can just
+         delete it and make a new project." This used to assert that it asked before wiping every layer;
+         now it asserts the door is shut, and that the function behind it went too rather than being
+         left as an orphan a later change could re-wire by accident. */
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
-      const resetBtn = cogRow('Reset project');
-      if (!resetBtn.classList.contains('danger')) throw new Error('the Reset button is styled like the safe ones next to it');
-      resetBtn.click(); await sleep(60);
-      if (!spy.confirms.length) throw new Error('cog ▸ Reset project ran without asking — it clears every layer and cannot be undone');
-      if (spy.reset !== 1) throw new Error('cog ▸ Reset project confirmed but never called FM.resetProject');
-      window.confirm = () => false;
-      FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
-      cogRow('Reset project').click(); await sleep(60);
-      if (spy.reset !== 1) throw new Error('answering "no" to the reset confirm reset the project anyway');
-      window.confirm = (m) => { spy.confirms.push(m); return true; };
+      // cogRow() THROWS when a row is missing, which is right for the rows that must be there and
+      // useless for the two that must not — so absence is checked with a plain lookup.
+      const cogHas = label => [].slice.call(document.querySelectorAll('.set-panel .set-row'))
+        .some(r => ((r.querySelector('.set-label') || {}).textContent || '') === label);
+      if (cogHas('Reset project')) throw new Error('the cog has a Reset project row again');
+      if (FM.resetProject) throw new Error('FM.resetProject is back, with nothing calling it');
+      /* Loop playback left too (queue 175) — "it should only be in view options". Removing a control
+         is only safe if the remaining door exists, so that is asserted in the same breath: this is the
+         mistake queue 53 made with Group, where the action survived and every way to reach it did not. */
+      if (cogHas('Loop playback')) throw new Error('the cog has a Loop playback row again — its one home is the ⛶ view bar');
+      if (!document.getElementById('vb-loop')) throw new Error('loop was taken out of the cog and the view bar has no loop button — it is now unreachable');
+      // The block this replaced ended by PRESSING a row, and actionRow closes the panel on its way out.
+      // Checking for absence presses nothing, so the panel has to be shut by hand or it leaks into the
+      // next test — which is exactly what happened: a caption-cue drag landed on the settings scrim.
+      FM.settings.close(); await sleep(60);
 
       // ---- 2. the ones the cog ALREADY had — deleted from the menu, not moved twice -------------
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
@@ -7401,7 +7408,7 @@
       splitBtn.click(); await sleep(80);
       if (FM.scene.layers.length !== n0 + 1) throw new Error('the clip Split button did not split (' + n0 + ' → ' + FM.scene.layers.length + ')');
     } finally {
-      FM.storage.exportFile = realExport; FM.storage.importFile = realImport; FM.resetProject = realReset;
+      FM.storage.exportFile = realExport; FM.storage.importFile = realImport;
       window.confirm = realConfirm;
       if (FM.settings.isOpen()) FM.settings.close();
       if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
@@ -7563,8 +7570,10 @@
       const rowLabels = [].slice.call(document.querySelectorAll('.set-panel .set-row'))
         .map(r => { const l = r.querySelector('.set-label'); return l ? l.textContent : ''; });
       // 'Onion skin' deliberately absent — moved to the layer ⋯ menu in queue 122 at Ezra's request.
-      ['Canvas', 'Loop playback', 'Snapping', 'Guides', 'Trim to last clip',
-       'Save a project file', 'Reset project', 'Import a project file'].forEach(n => {
+      // 'Loop playback' left in queue 175 (its door is #vb-loop, asserted further down) and
+      // 'Reset project' was deleted outright in queue 177.
+      ['Canvas', 'Snapping', 'Guides', 'Trim to last clip',
+       'Save a project file', 'Import a project file'].forEach(n => {
         if (!rowLabels.some(l => l.indexOf(n) >= 0)) {
           throw new Error('the settings panel has no "' + n + '" row — the phone ⋯ used to be its only door. Have: ' + rowLabels.join(' | '));
         }

@@ -287,8 +287,10 @@ window.FM = window.FM || {};
       body.appendChild(group(
         actionRow('Canvas', 'Size, aspect, frame rate and background — this project only.', 'Open…',
           () => press('btn-canvas')),
-        switchRow('Loop playback', 'Playback restarts from the beginning instead of stopping at the end.',
-          () => FM.loop, () => press('btn-loop')),
+        /* (Loop playback is NOT here any more — queue 175. Ezra: "Get rid of loop play back out of the
+           settings menu, it should only be in view options." Same rule that moved onion skin out in
+           queue 122: one control, one home. Its door is the ⛶ view bar's loop button, #vb-loop, which
+           is where the other watching-rather-than-editing toggles already live.) */
         /* (Onion skin is NOT here any more — queue 122. Ezra: "shouldn't onion skin not be in the view
            options and app settings? … it should just be in the three dots when you have a layer
            selected." It ghosts the SELECTED layer and drawOnionSkin() returns immediately without one,
@@ -319,8 +321,10 @@ window.FM = window.FM || {};
           () => press('btn-fit')),
         actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',
           () => press('btn-save-proj')),
-        actionRow('Reset project', 'Deletes every layer in this project and leaves it blank. Cannot be undone.', 'Reset…',
-          () => { if (confirm('Reset the project? This clears all layers and cannot be undone.') && FM.resetProject) FM.resetProject(); }, 'danger'),
+        /* (Reset project is gone — queue 177. Ezra: "Completely remove the reset project button, it
+           doesn't need to exist anymore, someone can just delete it and make a new project." It was the
+           only caller of FM.resetProject, so that function went with it rather than being left as an
+           orphan nothing can reach.) */
       ));
     }
 

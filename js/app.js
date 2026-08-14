@@ -679,31 +679,6 @@ window.FM = window.FM || {};
 
   // Wipe the project back to a blank composition (drops all layers, media, markers, history).
   // Destructive + not undoable, so call sites confirm first.
-  FM.resetProject = function () {
-    if (FM.pause) FM.pause();
-    const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);   // blobs the Media library holds survive a project reset
-    (FM.scene.layers || []).forEach(l => {
-      const m = FM.media.get(l.id); if (m && FM.clearFrameCache) FM.clearFrameCache(m);
-      if (m && FM.clearClipStrip) FM.clearClipStrip(m);   // filmstrip ImageBitmaps are native memory, not JS heap — nothing else releases them
-      dropAudioGraph(m);
-      if (FM.media.remove) FM.media.remove(l.id);
-      if (FM.storage && FM.storage.removeMedia && !libKeys.has(l.id)) { try { FM.storage.removeMedia(l.id); } catch (e) {} }
-    });
-    const blank = FM.newScene();
-    FM.scene.project = blank.project;
-    FM.scene.layers = blank.layers;
-    exitDeadGroupContext();   // same gap as deleteSelected had: wiping every layer must also leave the group view
-    FM.scene.selectedId = null;
-    FM.scene.selectedIds = [];
-    FM.time = 0;
-    if (FM.history) FM.history.reset();
-    if (FM.resizeCanvas) FM.resizeCanvas();
-    refreshAll();
-    if (FM.setTime) FM.setTime(0);
-    const pnm = document.getElementById('proj-name-m'); if (pnm) pnm.value = FM.scene.project.name;
-    if (FM.storage && FM.storage.save) FM.storage.save();
-    if (FM.toast) FM.toast('Project reset', 1200);
-  };
 
   // ===== Canvas (preview) zoom — view-only, never affects export. FM.viewport (canvas-edit.js) is
   // the single owner of the #canvas-wrap transform (zoom + pan); this is just the stepped-zoom API
@@ -1708,7 +1683,7 @@ window.FM = window.FM || {};
 
   // Delete every layer in the selection set (one history step).
   // Leave the Edit Group view if the group it is scoped to no longer exists. Shared by deleteSelected
-  // and resetProject; deleteLayer and history.restore already had their own equivalent.
+  // (and, until queue 177 removed it, resetProject); deleteLayer and history.restore already had their own equivalent.
   function exitDeadGroupContext() {
     if (!FM.groupContext) return;
     if (FM.scene.layers.some(l => l.id === FM.groupContext)) return;
