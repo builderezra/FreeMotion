@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#110 — do the Colour &amp; Light tiles show anything</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.55 ui-monospace,monospace}
+  pre{padding:12px;white-space:pre-wrap}
+  .grid{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+  .cell{width:96px;text-align:center;font-size:9px;color:#9fb4bd}
+  canvas{width:88px;height:88px;border-radius:8px;background:#111;display:block}
+</style></head><body>
+<pre id="out">painting…</pre>
+<div class="grid" id="g"></div>
+<script src="js/settings.js"></script>
+<script src="js/screen.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script>
+<script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script>
+<script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script src="js/fx-presets.js"></script>
+<script src="js/fx-thumbs.js"></script>
+<script>
+/* #110, second measurement. The batch probe showed the ready-count flat at 6/42 with no exception
+   thrown, which points at pump()'s OTHER failure mode: it only shifts the queue when generate()
+   returns an entry, so a key that never finishes blocks every tile behind it forever.
+   This mounts them ONE AT A TIME, each on a fresh tile with its own deadline, so a slow or broken
+   generator gets named instead of hiding behind whatever was in front of it. */
+(async function () {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const out = [];
+  const say = s => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+  const regs = FM.fxRegistry.byCategory('color').filter(Boolean);
+  const grid = document.getElementById('g');
+  const slow = [], never = [];
+  for (const reg of regs) {
+    const d = document.createElement('div'); d.className = 'cell';
+    const cv = document.createElement('canvas');
+    d.appendChild(cv);
+    const cap = document.createElement('div'); cap.textContent = reg.type; d.appendChild(cap);
+    grid.appendChild(d);
+    const t0 = performance.now();
+    FM.fxThumbs.mount(cv, reg.type);
+    let ms = -1;
+    for (let i = 0; i < 40; i++) {            // 4s each is generous for an 84px tile
+      await sleep(100);
+      if (cv.classList.contains('ready')) { ms = Math.round(performance.now() - t0); break; }
+    }
+    if (ms < 0) never.push(reg.type);
+    else if (ms > 900) slow.push(reg.type + ' ' + ms + 'ms');
+  }
+  say('measured one at a time, 4s deadline each');
+  say('');
+  say('never painted alone  : ' + (never.length ? never.join(', ') : 'none'));
+  say('slower than 900ms    : ' + (slow.length ? slow.join(', ') : 'none'));
+  say('painted fine         : ' + (regs.length - never.length) + ' / ' + regs.length);
+  window.__done = true;
+})();
+</script></body></html>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#110 — do the Colour &amp; Light tiles show anything</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.55 ui-monospace,monospace}
+  pre{padding:12px;white-space:pre-wrap}
+  .grid{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+  .cell{width:96px;text-align:center;font-size:9px;color:#9fb4bd}
+  canvas{width:88px;height:88px;border-radius:8px;background:#111;display:block}
+</style></head><body>
+<pre id="out">painting…</pre>
+<div class="grid" id="g"></div>
+<script src="js/settings.js"></script>
+<script src="js/screen.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script>
+<script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script>
+<script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script src="js/fx-presets.js"></script>
+<script src="js/fx-thumbs.js"></script>
+<script>
+/* Ezra (#110), once the earlier leads were chased down: "You can tell the effects don't work because
+   all the images don't show any change in the effects menu."
+   That claim needs no baseline picture to test. If the tiles in a section are pixel-identical to each
+   other, the section is dead from the menu however well the effects work when applied — and if they
+   differ, they are showing something and the complaint is about something narrower.
+   So: mount every Colour & Light effect on its own tile through the REAL engine
+   (FM.fxThumbs.mount, the same call fx-browser.js makes), wait for each to paint, and hash them. */
+/* pump() in js/fx-thumbs.js re-arms itself with schedule() as its LAST statement, so anything that
+   throws inside it does not skip one tile — it kills the queue for good and every tile behind it stays
+   blank forever. A flat ready-count is the signature of exactly that, so the errors get captured. */
+var ERRORS = [];
+window.addEventListener('error', function (e) {
+  ERRORS.push((e.message || 'error') + '  @' + (e.filename || '').split('/').pop() + ':' + e.lineno);
+});
+window.addEventListener('unhandledrejection', function (e) {
+  ERRORS.push('unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+(async function () {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const out = [];
+  const say = s => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+
+  const regs = FM.fxRegistry.byCategory('color').filter(Boolean);
+  say('Colour & Light: ' + regs.length + ' effects');
+  const grid = document.getElementById('g');
+  const cells = regs.map(reg => {
+    const d = document.createElement('div'); d.className = 'cell';
+    const cv = document.createElement('canvas');
+    d.appendChild(cv);
+    const cap = document.createElement('div'); cap.textContent = reg.label || reg.type;
+    d.appendChild(cap);
+    grid.appendChild(d);
+    FM.fxThumbs.mount(cv, reg.type);
+    return { reg: reg, cv: cv };
+  });
+
+  /* The engine queues work, so "how many are ready" is a CURVE, not a number — and the difference
+     between slow and stuck is the whole diagnosis. Sample it rather than picking one deadline. */
+  /* Is rAF even still firing? pump() re-arms itself with requestAnimationFrame, so a page that stops
+     painting stalls the queue for reasons that have nothing to do with the app. Nearly concluded "the
+     queue wedges under load" on evidence that could not tell those apart. */
+  let rafTicks = 0;
+  (function tick() { rafTicks++; requestAnimationFrame(tick); })();
+  const curve = [];
+  for (let i = 1; i <= 600; i++) {
+    await sleep(100);
+    const n = cells.filter(c => c.cv.classList.contains('ready')).length;
+    if (i % 50 === 0 || n === cells.length) curve.push((i / 10) + 's: ' + n + ' (raf ' + rafTicks + ')');
+    if (n === cells.length) break;
+  }
+  say('ready over time      : ' + curve.join('   '));
+  const notReady = cells.filter(c => !c.cv.classList.contains('ready'));
+
+  function hash(cv) {
+    try {
+      const ctx = cv.getContext('2d');
+      const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let h = 2166136261, ink = 0;
+      for (let i = 0; i < d.length; i += 16) {           // every 4th pixel is plenty to separate tiles
+        h ^= d[i]; h = Math.imul(h, 16777619);
+        h ^= d[i + 1]; h = Math.imul(h, 16777619);
+        h ^= d[i + 2]; h = Math.imul(h, 16777619);
+        if (d[i + 3] > 8) ink++;
+      }
+      return { h: (h >>> 0).toString(16), ink: ink, w: cv.width, h2: cv.height };
+    } catch (e) { return { h: 'ERR', ink: 0, w: cv.width, h2: cv.height }; }
+  }
+
+  const seen = new Map();
+  const blank = [];
+  cells.forEach(c => {
+    const s = hash(c.cv);
+    c.sig = s;
+    if (!s.ink) blank.push(c.reg.type);
+    if (!seen.has(s.h)) seen.set(s.h, []);
+    seen.get(s.h).push(c.reg.type);
+  });
+
+  const dupes = [...seen.entries()].filter(([, list]) => list.length > 1);
+  say('');
+  say('tiles painted        : ' + (cells.length - notReady.length) + ' / ' + cells.length +
+      (notReady.length ? '   NEVER READY: ' + notReady.map(c => c.reg.type).join(', ') : ''));
+  say('canvas backing store : ' + (cells[0] ? cells[0].sig.w + 'x' + cells[0].sig.h2 : '—'));
+  say('completely blank     : ' + (blank.length ? blank.join(', ') : 'none'));
+  say('distinct pictures    : ' + seen.size + ' of ' + cells.length);
+  if (dupes.length) {
+    say('');
+    say('IDENTICAL GROUPS — these tiles are the same picture as each other:');
+    dupes.forEach(([h, list]) => say('   [' + h + ']  ' + list.join(', ')));
+  }
+  say('');
+  say('errors caught       : ' + (ERRORS.length ? '\n   ' + ERRORS.slice(0, 6).join('\n   ') : 'none'));
+  say('');
+  say(seen.size <= 1 ? 'VERDICT  every tile is the same picture — the section is dead from the menu, exactly as he described'
+      : dupes.length ? 'VERDICT  ' + dupes.reduce((n, d) => n + d[1].length, 0) + ' tiles are duplicates of another tile'
+      : 'VERDICT  every tile is a distinct picture');
+  window.__done = true;
+})();
+</script></body></html>

@@ -769,6 +769,29 @@ better still, keep working inside the turn rather than parking work for a later 
       picture, so the whole section looks dead from the menu. That fits every measurement: the effects
       DO work when applied (audited on media, image and shape layers). The bug is in the thumbnail
       generation. Related to #52 / #85 / #144, which have circled this area three times before.
+
+      **FOUND IT, 2026-08-14 — the thumbnail QUEUE DEADLOCKS when a whole category is mounted at once,
+      which is exactly what opening a section does.** Three measurements, each ruling out the obvious
+      wrong answer for the one before it (`tests/_fxtiles.html`, `tests/_fxtiles2.html`):
+      1. Mount all 42 Colour & Light effects the way the browser does — `FM.fxThumbs.mount`, the same
+         call fx-browser.js makes. **Only 5–6 of 42 ever paint.** The other ~36 stay completely blank,
+         and blank tiles are identical to each other, which is precisely "all the images don't show any
+         change".
+      2. Slow or stuck? Sampled the ready-count every 5s for a minute: **flat at 5 from 5s to 60s.**
+         Stuck, not slow.
+      3. Is it an exception? `pump()` re-arms itself with `schedule()` as its LAST statement, so
+         anything that throws inside kills the queue for good — a perfect fit for a flat curve. Caught
+         window errors and unhandled rejections: **none**. And a rAF counter shows the page ticking at
+         ~61fps throughout (3658 ticks in 60s) — the page is painting, pump is being called, the queue
+         simply never advances past its head.
+      4. Is a particular effect broken? Mounted all 42 **one at a time**: **every one paints, none over
+         900ms.** So the generators are healthy; the fault is in the queue under load.
+      **Where to look:** `js/fx-thumbs.js:1204` `pump()` only shifts the queue when `generate()` returns
+      an entry — a head key that never completes blocks everything behind it forever, and there is no
+      timeout, no skip and no error path. The head is not a fixed effect (it moved between runs), so
+      the next question is why `generate()` starts returning falsy once ~6 tiles are live. Whatever the
+      answer, **pump() needs to stop trusting the head**: a key that has been at the front for N slices
+      should be dropped or retried, so one bad entry cannot take a whole section down with it.
       *MEASURED (`tests/_fxthumbs.html`, through the menu's own FM.fxThumbs.mount):* in Chrome all 42
       tiles differ from each other — control invert-vs-grayscale 127, median pair distance 40, none
       blank. Does not reproduce here either. BUT at a PERCEPTUAL threshold 13 pairs are close enough
