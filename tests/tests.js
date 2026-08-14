@@ -12340,6 +12340,43 @@
     }
   });
 
+  /* #121 — Ezra: "the settings menu and export menu should replicate each other, so if I change a
+     setting in the cog it should go to the export section as that… But if you change a setting in the
+     export menu it shouldn't change the cog menu."
+     The asymmetry is the whole requirement. What broke it was subtler than a two-way binding: export
+     REMEMBERED its frame rate and restored it next time, so a choice made once outranked the project
+     forever — set the project to 48 and the dialog still opened on the 60 you picked last week. */
+  test('export inherits from the cog, and never writes back to it', { item: 'export-mirror' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const P = FM.scene.project, wasFps = P.fps, wasW = P.width, wasH = P.height;
+    try {
+      const fpsSel = document.getElementById('exp-fps');
+      // 1) Pick something explicit and "export" it, so any memory is written.
+      P.fps = 30;
+      FM.showExportDialog(); await sleep(70);
+      fpsSel.value = '60';
+      if (FM._expPrefsSave) FM._expPrefsSave();
+
+      // 2) Now the COG changes the project. The dialog must follow the project, not the memory.
+      P.fps = 48;
+      FM.showExportDialog(); await sleep(70);
+      if (fpsSel.value !== 'project') {
+        throw new Error('after the project moved to 48fps the dialog opened on "' + fpsSel.value +
+          '" — a remembered export choice is outranking the cog, which is the exact inversion he ruled out');
+      }
+
+      // 3) …and changing it HERE must not touch the project.
+      fpsSel.value = '60';
+      if (P.fps !== 48) throw new Error('changing the export frame rate rewrote the project to ' + P.fps + ' — export must never write back');
+      if (P.width !== wasW || P.height !== wasH) throw new Error('the export dialog altered the project canvas size');
+    } finally {
+      P.fps = wasFps; P.width = wasW; P.height = wasH;
+      document.querySelectorAll('#export-dialog').forEach(d => d.classList.add('hidden'));
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

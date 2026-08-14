@@ -537,12 +537,20 @@ better still, keep working inside the turn rather than parking work for a later 
       — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas
       list. So: same rates as the canvas picker, ascending. Note this drops 12 as well as 24 from export;
       Custom is not offered on the export dialog, so say so rather than let it go quietly.
-- [ ] **121 — Settings ↔ Export should mirror ONE WAY.** His words: *"the settings menu and export menu
+- [x] **121 — Settings ↔ Export should mirror ONE WAY.** (v7.11) His words: *"the settings menu and export menu
       should replicate each other, so if I change a setting in the cog it should go to the export section
       as that"* and then, crucially, *"But if you change a setting in the export menu it shouldn't change
       the cog menu."* So the cog is the SOURCE OF TRUTH and export inherits from it; an export-time
       change is a one-off override for that export and must not write back. That asymmetry is the whole
       requirement — a naive two-way binding is exactly what he is ruling out.
+      **What was actually wrong was subtler than a two-way binding, and had the same effect.** Nothing
+      wrote back to the cog — but the export dialog REMEMBERED its frame rate and resolution and put
+      them back next time you opened it. So a choice made once outranked the cog forever: set the
+      project to 48fps in Canvas settings and export still opened on the 60 you picked last week. The
+      cog was not the source of truth; the memory was. Fixed by splitting the remembered settings by
+      OWNERSHIP — fps and resolution belong to the cog and are inherited fresh every time (an export
+      change is a one-off), while format and quality belong to nothing else and are still remembered,
+      which keeps the earlier "remember my export settings" request intact.
 - [x] **122 — Onion skin does not belong in View options or App settings.** (v6.98) His words: *"shouldn't onion
       skin not be in the view options and app settings? Idk why it would be there since it only effects
       one layer, it should just be in the three dots when you have a layer selected."* He is right about

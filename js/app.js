@@ -2542,29 +2542,35 @@ window.FM = window.FM || {};
   // would silently mean 540p in a 1080p one. The short side survives the change of comp.
   const EXP_PREFS = 'fm.exportPrefs';
   function expPrefsRead() { try { return JSON.parse(localStorage.getItem(EXP_PREFS)) || {}; } catch (e) { return {}; } }
+  /* WHAT EXPORT REMEMBERS, AND WHAT IT INHERITS (queue 121).
+   * Ezra: "the settings menu and export menu should replicate each other, so if I change a setting in
+   * the cog it should go to the export section as that" — and then the half that decides the design:
+   * "But if you change a setting in the export menu it shouldn't change the cog menu."
+   * So the cog is the SOURCE OF TRUTH and export inherits from it. A naive two-way binding is exactly
+   * what he ruled out — but so is what this used to do, which was subtler and had the same effect:
+   * export REMEMBERED its frame rate and resolution and restored them on the next open, so a choice
+   * made once outranked the cog forever. Set the project to 48fps in Canvas settings and the dialog
+   * still opened on the 60 you picked last week. The cog was not the source of truth; the memory was.
+   * The split is by OWNERSHIP, which also keeps the earlier "remember my export quality" request
+   * intact:
+   *   · fps and resolution are the COG's — they inherit every time, and an export-time change is a
+   *     one-off for that export;
+   *   · format and quality belong to nothing else, so they are remembered as before. */
   function expPrefsSave() {
     const g = id => document.getElementById(id);
-    const res = g('exp-res'), opt = res && res.options[res.selectedIndex];
-    // "1080p — 608×1080" → 1080; "Full — 1080×1920" → 0, meaning native
-    const short = opt ? (parseInt(String(opt.textContent).trim(), 10) || 0) : 0;
     try {
       localStorage.setItem(EXP_PREFS, JSON.stringify({
         format: (g('exp-format') || {}).value || 'mp4',
-        short: short,
-        fps: (g('exp-fps') || {}).value || '30',
         quality: (g('exp-quality') || {}).value || '',
       }));
     } catch (e) {}
   }
+  FM._expPrefsSave = expPrefsSave;   // the suite writes the memory directly, to prove it is not consulted for fps/res
   function expPrefsApply() {
     const p = expPrefsRead(), g = id => document.getElementById(id);
     const set = (id, v) => { const el = g(id); if (el && v != null && v !== '' && [].some.call(el.options, o => o.value === String(v))) el.value = String(v); };
-    set('exp-format', p.format); set('exp-fps', p.fps); set('exp-quality', p.quality);
-    const res = g('exp-res');
-    if (res && p.short) {   // match by short side; a project that can't reach it falls back to Full
-      const hit = [].find.call(res.options, o => parseInt(String(o.textContent).trim(), 10) === p.short);
-      if (hit) res.value = hit.value;
-    }
+    set('exp-format', p.format); set('exp-quality', p.quality);
+    // Deliberately NOT restoring fps or resolution — see above. They come from the project every time.
   }
   /* THE REMINDER GATE (queue 139). Ezra: "so anytime you press export it'll give you a pop up first
    * showing the reminder."
