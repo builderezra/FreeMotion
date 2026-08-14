@@ -12710,6 +12710,52 @@
     }
   });
 
+  /* #110 — Ezra: "You can tell the effects don't work because all the images don't show any change in
+     the effects menu."
+     The mechanism, found the long way round: the fx-art photographs decode ~80ms after the first tile
+     asks for them, and that invalidates every tile (the fallback art was baked into the cached frames).
+     remountLive() handled that by re-mounting whatever `document.querySelectorAll('canvas.fxb-thumb-cv')`
+     could see — but stopAll() wipes the queue first, so any tile that was queued and NOT YET IN THE
+     DOCUMENT was dropped with nothing left to re-queue it. Blank forever, no retry, no error.
+     The browser sits squarely in that window: fx-browser.js's thumb() mounts the canvas while its tile
+     is still detached and hands it back for the caller to append.
+     So this test mounts tiles DETACHED, fires the invalidation while they are still detached, and only
+     then attaches them — the real order, with the race lost on purpose. */
+  test('tiles mounted before they are attached survive the art-decode invalidation', { item: 'fx-thumb-race' }, async function () {
+    if (!FM.fxThumbs || !FM.fxThumbs.queueState) throw new Error('FM.fxThumbs.queueState is missing — this test cannot see what it is testing');
+    const types = FM.fxRegistry.byCategory('color').filter(Boolean).slice(0, 8).map(r => r.type);
+    if (types.length < 4) throw new Error('not enough Colour & Light effects to test with');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:400px';
+    const cvs = types.map(t2 => {
+      const cv = document.createElement('canvas');
+      cv.className = 'fxb-thumb-cv';          // the class the app's tiles carry
+      FM.fxThumbs.mount(cv, t2);              // …mounted while DETACHED, exactly as thumb() does
+      return cv;
+    });
+    try {
+      if (!FM.fxThumbs.queueState().queued) throw new Error('nothing queued after mounting ' + types.length + ' tiles — the test is not exercising the path');
+      // The photographs land. Before this fix, every queued-but-detached tile died here.
+      FM.fxThumbs.remountLive();
+      cvs.forEach(cv => host.appendChild(cv));
+      document.body.appendChild(host);
+
+      let ready = 0;
+      for (let i = 0; i < 80; i++) {
+        await sleep(100);
+        ready = cvs.filter(cv => cv.classList.contains('ready')).length;
+        if (ready === cvs.length) break;
+      }
+      if (ready !== cvs.length) {
+        const q = FM.fxThumbs.queueState();
+        throw new Error(ready + ' of ' + cvs.length + ' tiles ever painted after an invalidation landed while they were detached — queue now ' + JSON.stringify(q) + '. That is a permanently blank section, which is what he sees.');
+      }
+    } finally {
+      host.remove();
+      if (FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

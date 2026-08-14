@@ -739,7 +739,8 @@ better still, keep working inside the turn rather than parking work for a later 
       next to another frame — so the only feedback is a small icon tint you have to go looking for. Use
       the existing FM.toast, and say the STATE ("Snapping on"), not the action.
 
-- [ ] **110 — A lot of effects in Colour & Light plainly do nothing.** *MEASURED — the code is fine in
+- [x] **110 — A lot of effects in Colour & Light plainly do nothing.** (v7.20 — the thumbnails; the
+      TEXT-layer half below is now tracked as #180) *MEASURED — the code is fine in
       Chrome, so this is a DEVICE problem, and it is almost certainly the same root cause as 107.*
       Audited all 42 (`tests/_colourfx.html`): 41 change pixels, and the one that does not (Match Grade)
       needs a reference layer. My first run accused 6 — five of those were artefacts of testing at
@@ -770,36 +771,32 @@ better still, keep working inside the turn rather than parking work for a later 
       DO work when applied (audited on media, image and shape layers). The bug is in the thumbnail
       generation. Related to #52 / #85 / #144, which have circled this area three times before.
 
-      **FOUND IT, 2026-08-14 — the thumbnail QUEUE DEADLOCKS when a whole category is mounted at once,
-      which is exactly what opening a section does.** Three measurements, each ruling out the obvious
-      wrong answer for the one before it (`tests/_fxtiles.html`, `tests/_fxtiles2.html`):
-      1. Mount all 42 Colour & Light effects the way the browser does — `FM.fxThumbs.mount`, the same
-         call fx-browser.js makes. **Only 5–6 of 42 ever paint.** The other ~36 stay completely blank,
-         and blank tiles are identical to each other, which is precisely "all the images don't show any
-         change".
-      2. Slow or stuck? Sampled the ready-count every 5s for a minute: **flat at 5 from 5s to 60s.**
-         Stuck, not slow.
-      3. Is it an exception? `pump()` re-arms itself with `schedule()` as its LAST statement, so
-         anything that throws inside kills the queue for good — a perfect fit for a flat curve. Caught
-         window errors and unhandled rejections: **none**. And a rAF counter shows the page ticking at
-         ~61fps throughout (3658 ticks in 60s) — the page is painting, pump is being called, the queue
-         simply never advances past its head.
-      4. Is a particular effect broken? Mounted all 42 **one at a time**: **every one paints, none over
-         900ms.** So the generators are healthy; the fault is in the queue under load.
-      **Where to look:** `js/fx-thumbs.js:1204` `pump()` only shifts the queue when `generate()` returns
-      an entry — a head key that never completes blocks everything behind it forever, and there is no
-      timeout, no skip and no error path. The head is not a fixed effect (it moved between runs), so
-      the next question is why `generate()` starts returning falsy once ~6 tiles are live. Whatever the
-      answer, **pump() needs to stop trusting the head**: a key that has been at the front for N slices
-      should be dropped or retried, so one bad entry cannot take a whole section down with it.
-      *MEASURED (`tests/_fxthumbs.html`, through the menu's own FM.fxThumbs.mount):* in Chrome all 42
-      tiles differ from each other — control invert-vs-grayscale 127, median pair distance 40, none
-      blank. Does not reproduce here either. BUT at a PERCEPTUAL threshold 13 pairs are close enough
-      that a person would call them the same tile at 84px: grayscale~spotcolor (5), brightness~bumpmap
-      (6), lightglow~softglow (6), contrast~levels (9), vibrance~tealorange (9), exposure~bumpmap (11),
-      longshadow~radialshadow (11) and six more at 12. THAT is fixable here without his device, and a
-      menu where a dozen tiles look interchangeable reads as "none of these do anything" whatever the
-      compositor is doing. Fix = subjects and params chosen to show what each effect actually does.
+      **CAUSE FOUND AND FIXED (v7.20) — and my first write-up of it, one hour earlier, was WRONG.**
+      That earlier note claimed "the thumbnail queue deadlocks when a whole category is mounted at
+      once". It does not. Every one of the 42 Colour & Light tiles paints in under two seconds. The
+      "deadlock" was in my probe: it built tiles with `document.createElement('canvas')` and no class,
+      and the engine's re-mount step looks for `canvas.fxb-thumb-cv`, so it could not see them. My
+      instrument caused the failure I then reported. Left here rather than quietly deleted, because
+      that is the second time this week a measurement has produced a confident wrong answer.
+      **What is actually wrong, and it is real:**
+      · The fx-art photographs decode about 80ms after the first tile asks for them, and a decoded
+        photo makes every tile stale — the fallback art had been baked into the cached frames. So the
+        engine clears everything and re-mounts.
+      · It re-mounted whatever `document.querySelectorAll('canvas.fxb-thumb-cv')` could find. But the
+        clear-down wipes the queue first, so **any tile that was queued and not yet in the document was
+        dropped with nothing left to re-queue it** — blank forever, no retry, no error.
+      · **The browser sits squarely in that window.** `thumb()` in js/fx-browser.js mounts the canvas
+        while its tile is still detached and hands the tile back for the caller to append. Every tile in
+        a section is un-connected for the moment between being mounted and being inserted — and that is
+        the same moment the photographs land. Lose that race and the section stays blank, which is
+        exactly what he described.
+      **Fixed** by capturing the in-flight tiles before the clear-down and re-mounting those too,
+      de-duplicated against the DOM sweep so the normal path is unchanged. The test mounts tiles
+      detached, fires the invalidation while they are still detached, and only then attaches them —
+      the real order with the race lost on purpose. Mutation-checked: without the fix, 2 of 8 paint.
+      `FM.fxThumbs.queueState()` is exposed now for the same reason `stats()` was — working this out
+      took six probes purely because none of it could be read from outside.
+
 - [x] **112 — sw.js is an EMPTY FILE.** (v7.19) Found while chasing 110. The app registers a service worker and
       is installable as a PWA, but sw.js is zero bytes — so there is no offline caching, no precache,
       nothing. Either it never got written or it was emptied. Worth deciding deliberately: a PWA that

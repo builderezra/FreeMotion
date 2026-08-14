@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#110 — do the Colour &amp; Light tiles show anything</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.55 ui-monospace,monospace}
+  pre{padding:12px;white-space:pre-wrap}
+  .grid{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+  .cell{width:96px;text-align:center;font-size:9px;color:#9fb4bd}
+  canvas{width:88px;height:88px;border-radius:8px;background:#111;display:block}
+</style></head><body>
+<pre id="out">painting…</pre>
+<div class="grid" id="g"></div>
+<script src="js/settings.js"></script>
+<script src="js/screen.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script>
+<script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script>
+<script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script src="js/fx-presets.js"></script>
+<script src="js/fx-thumbs.js"></script>
+<script>
+/* #110, fifth measurement — the discriminator. All 42 paint in batches of 6; mounted in one go, 7
+   paint and renderScene freezes while rAF keeps ticking. So: after the stall, mount ONE MORE tile.
+     · if the new tile paints  -> the loop is alive and the other 35 were dropped from the queue
+     · if it never paints      -> the loop itself is dead and nothing will ever revive it
+   Those need completely different fixes, which is why this is worth one more run. */
+(async function () {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const out = [];
+  const say = s => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+  let renders = 0;
+  const realRender = FM.renderScene;
+  FM.renderScene = function () { renders++; return realRender.apply(this, arguments); };
+  const grid = document.getElementById('g');
+  const mk = type => {
+    const d = document.createElement('div'); d.className = 'cell';
+    const cv = document.createElement('canvas'); cv.className = 'fxb-thumb-cv'; d.appendChild(cv);
+    const cap = document.createElement('div'); cap.textContent = type; d.appendChild(cap);
+    grid.appendChild(d);
+    FM.fxThumbs.mount(cv, type);
+    return cv;
+  };
+  const regs = FM.fxRegistry.byCategory('color').filter(Boolean);
+  const cvs = regs.map(r => mk(r.type));
+  for (let i = 0; i < 100; i++) { await sleep(100); }         // 10s: long past the freeze
+  const readyA = cvs.filter(c => c.classList.contains('ready')).length;
+  const rA = renders;
+  say('all ' + regs.length + ' at once -> ready ' + readyA + ', renders ' + rA);
+
+  const late = mk('blur');                                     // a DIFFERENT category, never queued yet
+  for (let i = 0; i < 60; i++) { await sleep(100); if (late.classList.contains('ready')) break; }
+  say('a NEW tile mounted after the stall -> ' + (late.classList.contains('ready') ? 'PAINTED' : 'never painted') +
+      ', renders now ' + renders + ' (+' + (renders - rA) + ')');
+  const readyB = cvs.filter(c => c.classList.contains('ready')).length;
+  say('original tiles ready now: ' + readyB + ' (was ' + readyA + ')');
+  say('');
+  say(late.classList.contains('ready')
+      ? 'VERDICT  the loop is ALIVE — the other tiles were dropped from the queue, not stuck in it'
+      : 'VERDICT  the loop is DEAD — nothing mounted afterwards will ever paint either');
+  window.__done = true;
+})();
+</script></body></html>

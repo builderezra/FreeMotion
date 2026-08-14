@@ -22,39 +22,33 @@
 <script src="js/fx-presets.js"></script>
 <script src="js/fx-thumbs.js"></script>
 <script>
-/* #110, second measurement. The batch probe showed the ready-count flat at 6/42 with no exception
-   thrown, which points at pump()'s OTHER failure mode: it only shifts the queue when generate()
-   returns an entry, so a key that never finishes blocks every tile behind it forever.
-   This mounts them ONE AT A TIME, each on a fresh tile with its own deadline, so a slow or broken
-   generator gets named instead of hiding behind whatever was in front of it. */
+/* #110, sixth measurement — with FM.fxThumbs.queueState() the state is finally readable instead of
+   inferred. Mount the whole category and watch the queue itself. */
 (async function () {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const out = [];
   const say = s => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
-  const regs = FM.fxRegistry.byCategory('color').filter(Boolean);
+  let renders = 0;
+  const realRender = FM.renderScene;
+  FM.renderScene = function () { renders++; return realRender.apply(this, arguments); };
   const grid = document.getElementById('g');
-  const slow = [], never = [];
-  for (const reg of regs) {
+  const regs = FM.fxRegistry.byCategory('color').filter(Boolean);
+  const cvs = regs.map(reg => {
     const d = document.createElement('div'); d.className = 'cell';
-    const cv = document.createElement('canvas'); cv.className = 'fxb-thumb-cv';
-    d.appendChild(cv);
+    const cv = document.createElement('canvas'); cv.className = 'fxb-thumb-cv'; d.appendChild(cv);
     const cap = document.createElement('div'); cap.textContent = reg.type; d.appendChild(cap);
-    grid.appendChild(d);
-    const t0 = performance.now();
-    FM.fxThumbs.mount(cv, reg.type);
-    let ms = -1;
-    for (let i = 0; i < 40; i++) {            // 4s each is generous for an 84px tile
-      await sleep(100);
-      if (cv.classList.contains('ready')) { ms = Math.round(performance.now() - t0); break; }
+    grid.appendChild(d); FM.fxThumbs.mount(cv, reg.type); return cv;
+  });
+  const q0 = FM.fxThumbs.queueState();
+  say('right after mounting ' + regs.length + ': ' + JSON.stringify(q0));
+  for (let i = 1; i <= 40; i++) {
+    await sleep(250);
+    if (i % 8 === 0) {
+      const q = FM.fxThumbs.queueState();
+      say((i / 4) + 's  ready ' + cvs.filter(c => c.classList.contains('ready')).length +
+          '  renders ' + renders + '  ' + JSON.stringify(q));
     }
-    if (ms < 0) never.push(reg.type);
-    else if (ms > 900) slow.push(reg.type + ' ' + ms + 'ms');
   }
-  say('measured one at a time, 4s deadline each');
-  say('');
-  say('never painted alone  : ' + (never.length ? never.join(', ') : 'none'));
-  say('slower than 900ms    : ' + (slow.length ? slow.join(', ') : 'none'));
-  say('painted fine         : ' + (regs.length - never.length) + ' / ' + regs.length);
   window.__done = true;
 })();
 </script></body></html>

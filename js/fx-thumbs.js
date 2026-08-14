@@ -1305,14 +1305,42 @@ window.FM = window.FM || {};
      * back as its preset rather than as the fallback ball. */
     remountLive: function () {
       const els = [].slice.call(document.querySelectorAll('canvas.fxb-thumb-cv')).filter(function (cv) { return cv._fxType && cv.isConnected; });
+      /* IN-FLIGHT TILES ARE CARRIED ACROSS, not just the ones the DOM can see (queue 110).
+       * This used to re-mount purely from that querySelectorAll, and stopAll() below wipes the queue —
+       * so any tile that was queued but NOT YET IN THE DOCUMENT was dropped on the floor with nothing
+       * left to re-queue it. Permanently blank, no retry, no error.
+       * That window is real and the browser sits right in it: fx-browser.js's thumb() mounts the canvas
+       * while its tile is still detached and hands the tile back for the caller to append, so every
+       * tile in a section is un-connected for the moment between being mounted and being inserted. The
+       * photographs decode ~80ms after the first tile asks for them, which is the same moment a
+       * category is being built. Land there and the whole section stays blank — which is exactly what
+       * he reported: "all the images don't show any change in the effects menu".
+       * Waiters are captured BEFORE stopAll() clears them, and de-duplicated against the DOM sweep,
+       * so the normal case behaves exactly as it did. */
+      const inflight = [];
+      pendingQ.forEach(function (cvs) {
+        cvs.forEach(function (cv) { if (cv && cv._fxType) inflight.push(cv); });
+      });
       FM.fxThumbs.stopAll();
       cache.clear(); layerKeys.length = 0; layerBytes = 0;
-      els.forEach(function (cv) { mountKey(cv, cv._fxType, meta.get(cv._fxType) || null); });
-      return els.length;
+      const seen = new Set();
+      els.concat(inflight).forEach(function (cv) {
+        if (seen.has(cv)) return;
+        seen.add(cv);
+        mountKey(cv, cv._fxType, meta.get(cv._fxType) || null);
+      });
+      return seen.size;
     },
     /* What the layer-preview cache is holding. Exposed because "it is capped at 10MB" is a claim,
      * and a claim about memory that nothing can read is a claim nobody will ever check. */
     stats: function () { return { layerEntries: layerKeys.length, layerBytes: layerBytes, cap: LAYER_CACHE_MAX, keys: cache.size }; },
+    /* The GENERATION side of the same argument (queue 110). Mounting a whole category at once left
+       most tiles blank, and working out why took five probes precisely because none of this was
+       readable from outside: whether the queue still held the keys, whether anything was waiting on
+       them, whether the rAF loop was alive. It is readable now. */
+    queueState: function () {
+      return { queued: queue.length, pending: pendingQ.size, cached: cache.size, jobs: jobs.size, rafArmed: !!raf, head: queue[0] || null };
+    },
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
     stopAll: function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }

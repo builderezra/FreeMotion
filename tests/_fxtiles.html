@@ -49,7 +49,7 @@ window.addEventListener('unhandledrejection', function (e) {
   const grid = document.getElementById('g');
   const cells = regs.map(reg => {
     const d = document.createElement('div'); d.className = 'cell';
-    const cv = document.createElement('canvas');
+    const cv = document.createElement('canvas'); cv.className = 'fxb-thumb-cv';
     d.appendChild(cv);
     const cap = document.createElement('div'); cap.textContent = reg.label || reg.type;
     d.appendChild(cap);
@@ -65,11 +65,17 @@ window.addEventListener('unhandledrejection', function (e) {
      queue wedges under load" on evidence that could not tell those apart. */
   let rafTicks = 0;
   (function tick() { rafTicks++; requestAnimationFrame(tick); })();
+  /* generate() cannot actually return falsy — every path ends in a frame, a strip or fallback() — so
+     the "wedged head" story was wrong. Counting renderScene calls says whether generation is still
+     RUNNING (and something downstream is failing to mark tiles ready) or has stopped altogether. */
+  let renders = 0;
+  const realRender = FM.renderScene;
+  FM.renderScene = function () { renders++; return realRender.apply(this, arguments); };
   const curve = [];
   for (let i = 1; i <= 600; i++) {
     await sleep(100);
     const n = cells.filter(c => c.cv.classList.contains('ready')).length;
-    if (i % 50 === 0 || n === cells.length) curve.push((i / 10) + 's: ' + n + ' (raf ' + rafTicks + ')');
+    if (i % 50 === 0 || n === cells.length) curve.push((i / 10) + 's: ready ' + n + ' raf ' + rafTicks + ' renders ' + renders);
     if (n === cells.length) break;
   }
   say('ready over time      : ' + curve.join('   '));

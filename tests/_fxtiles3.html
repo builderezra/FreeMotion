@@ -1,0 +1,67 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#110 — do the Colour &amp; Light tiles show anything</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.55 ui-monospace,monospace}
+  pre{padding:12px;white-space:pre-wrap}
+  .grid{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+  .cell{width:96px;text-align:center;font-size:9px;color:#9fb4bd}
+  canvas{width:88px;height:88px;border-radius:8px;background:#111;display:block}
+</style></head><body>
+<pre id="out">painting…</pre>
+<div class="grid" id="g"></div>
+<script src="js/settings.js"></script>
+<script src="js/screen.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script>
+<script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script>
+<script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script src="js/fx-presets.js"></script>
+<script src="js/fx-thumbs.js"></script>
+<script>
+/* #110, fourth measurement. renderScene calls freeze at 21 (= 7 tiles x 3 probe renders) while rAF
+   keeps ticking, so generation STOPS rather than stalling inside an item — and generate() cannot
+   return falsy, so the earlier "wedged head" reading was wrong.
+   This splits what is left: mount in small BATCHES, waiting for each to finish. If batch 2 also
+   paints, nothing is dead and the limit is how many can be queued at once. If batch 2 never paints,
+   the engine is one-shot and stops for good after the first burst. */
+(async function () {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const out = [];
+  const say = s => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+  let renders = 0;
+  const realRender = FM.renderScene;
+  FM.renderScene = function () { renders++; return realRender.apply(this, arguments); };
+
+  const regs = FM.fxRegistry.byCategory('color').filter(Boolean);
+  const grid = document.getElementById('g');
+  const SIZE = 6;
+  for (let b = 0; b * SIZE < regs.length && b < 7; b++) {
+    const batch = regs.slice(b * SIZE, b * SIZE + SIZE);
+    const cvs = batch.map(reg => {
+      const d = document.createElement('div'); d.className = 'cell';
+      const cv = document.createElement('canvas'); cv.className = 'fxb-thumb-cv'; d.appendChild(cv);
+      const cap = document.createElement('div'); cap.textContent = reg.type; d.appendChild(cap);
+      grid.appendChild(d);
+      FM.fxThumbs.mount(cv, reg.type);
+      return cv;
+    });
+    const r0 = renders;
+    let ready = 0;
+    for (let i = 0; i < 60; i++) {
+      await sleep(100);
+      ready = cvs.filter(c => c.classList.contains('ready')).length;
+      if (ready === cvs.length) break;
+    }
+    say('batch ' + (b + 1) + ' (' + batch.map(r => r.type).join(',') + ')  ready ' + ready + '/' + cvs.length +
+        '   renders +' + (renders - r0));
+    if (!ready) { say('   -> this batch painted NOTHING; the engine has stopped'); break; }
+  }
+  say('');
+  say('total renderScene calls: ' + renders);
+  window.__done = true;
+})();
+</script></body></html>
