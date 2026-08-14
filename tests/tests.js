@@ -14197,9 +14197,14 @@
   test('filters tab: a third subsection sits beside Effects and Audio', { item: 'fx-library' }, async function () {
     await withFilterLayer(async function (L) {
       /* Scoped to the VISIBLE toggle. A bare document query returned 9 buttons when run inside the
-         suite — three copies of the toggle, because earlier tests leave inspector panels in the DOM.
-         Asserted rather than ignored: exactly one may be on screen, so if that ever becomes a real
-         leak (stale panels accumulating in a long session) this says so instead of hiding it. */
+         suite, which looked like stale panels piling up. MEASURED, and it is not: the toggle
+         legitimately exists in THREE places — the inspector, the effects browser and the audio
+         effects browser all build the identical control from FM.fxModeToggle — and a browser that
+         has been opened once leaves its copy in the DOM, hidden, after it closes. Three controls,
+         one visible. (Checked for an actual leak too: 40 inspector refreshes and 15 category
+         round-trips leave the node count byte-identical.)
+         The assertion below still earns its place — exactly one may be on SCREEN, and two visible at
+         once would mean a panel that failed to close. */
       var wraps = Array.prototype.slice.call(document.querySelectorAll('.fxmode'))
         .filter(function (w) { return w.getClientRects().length > 0; });
       if (wraps.length !== 1) throw new Error(wraps.length + ' subsection toggles are on screen at once — stale inspector panels are piling up');
