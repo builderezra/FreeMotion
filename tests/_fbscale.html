@@ -1,0 +1,134 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#107 — is Fill Behind's blur still a blur at phone preview scales?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body><pre id="out">measuring…</pre>
+<script src="js/settings.js"></script><script src="js/screen.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* Ezra (#107): "The blur on fill behind still does not work, it just zooms in." STILL — so the v5.88
+   fix (blur and zoom had been wired to the same number) did not end it, and the suite's two tests for
+   this blur both pass, so whatever he has does not happen in a 1:1 render.
+   The one thing his phone does that those tests do not is render the PREVIEW SMALLER than the project:
+   the quality tier drops the canvas to as little as 0.28x, and every length inside ctx.filter is in
+   DEVICE pixels, so the blur radius is scaled by that factor while the zoom — a plain transform — is
+   not. If the blur thins out as the tier drops while the cover scale holds, that IS "it just zooms".
+   Blur is measured as EDGE ENERGY (mean |Laplacian|) over the fill, sampled at a fixed output size so
+   the numbers are comparable across scales. A blurred backdrop has low edge energy; a merely zoomed
+   one keeps its detail. The blur=0 render at each scale is the control. */
+(function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+  let PW = 640, PH = 360;
+
+  // A subject with hard, high-contrast detail — a blur has something to destroy and a zoom does not.
+  const art = document.createElement('canvas'); art.width = 160; art.height = 120;
+  (function () {
+    const a = art.getContext('2d');
+    for (let y = 0; y < 120; y += 10) for (let x = 0; x < 160; x += 10) {
+      a.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff';
+      a.fillRect(x, y, 10, 10);
+    }
+    a.fillStyle = '#fff'; a.fillRect(0, 55, 160, 10);
+  })();
+
+  function renderAt(scale, blur) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(PW * scale); cv.height = Math.round(PH * scale);
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    FM.media.set('_fbArt', { kind: 'image', el: art, width: 160, height: 120, duration: 0 });
+    const L2 = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 5 });
+    L2.id = '_fbArt';
+    /* THE SUBJECT MUST BE REALISTIC IN EVERY FORMAT, or the comparison is measuring my own choice.
+       Held at a fixed 80x60 across formats, the cover scale ran 9x in a 640x360 frame and 39x in
+       1080x1920 — which says nothing about the effect and everything about leaving a tiny subject in
+       a big frame. This is the case Fill Behind exists for: a landscape clip dropped into a portrait
+       project, full width with empty bars above and below. */
+    L2.transform.scale = (PW * 0.92) / 160;
+    L2.effects = [{ type: 'fillbehind', enabled: true, params: { blur: blur, zoom: 1.15, dim: 0 } }];
+    const before = FM._fbPlates || 0;
+    FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 5, background: null }, layers: [L2] }, 1.0);
+    // Did the effect actually BUILD a fill, or bail out? _fbPlates counts plates; the whole cost of the
+    // effect is behind it, so "no plate" means paintFillBehind decided there was nothing to fill.
+    return { cv: cv, g: g, plates: (FM._fbPlates || 0) - before, last: FM._fbLast ? JSON.parse(JSON.stringify(FM._fbLast)) : null };
+  }
+
+  // Sample the OUTPUT at one fixed size, so edge energy means the same thing at every render scale.
+  const N = 320;
+  const samp = document.createElement('canvas'); samp.width = N; samp.height = Math.round(N * PH / PW);
+  const sctx = samp.getContext('2d', { willReadFrequently: true });
+  function edgeEnergy(cv) {
+    sctx.imageSmoothingEnabled = true;
+    sctx.clearRect(0, 0, samp.width, samp.height);
+    sctx.drawImage(cv, 0, 0, samp.width, samp.height);
+    const d = sctx.getImageData(0, 0, samp.width, samp.height).data;
+    const W = samp.width, H = samp.height;
+    let sum = 0, n = 0;
+    const lum = i => (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+    for (let y = 2; y < H - 2; y++) {
+      for (let x = 2; x < W - 2; x++) {
+        // skip the middle, where the SUBJECT is drawn sharp on top of the fill
+        if (x > W * 0.3 && x < W * 0.7 && y > H * 0.25 && y < H * 0.75) continue;
+        const i = (y * W + x) * 4;
+        const e = Math.abs(4 * lum(i) - lum(i - 4) - lum(i + 4) - lum(i - W * 4) - lum(i + W * 4));
+        sum += e; n++;
+      }
+    }
+    return n ? sum / n : 0;
+  }
+
+  /* Edge energy alone cannot answer this. The fill is cover-scaled ~9x to reach the frame from a
+     small subject, so it is ALREADY smooth before any blur runs — at 1:1 the energy barely moves and
+     that reads as "blur does nothing" when it may simply have nothing left to destroy.
+     What he would actually notice is whether moving the slider CHANGES THE PICTURE, so measure the
+     mean absolute pixel difference between blur 0 and blur 60 as well. */
+  function meanDiff(cvA, cvB) {
+    const grab = cv => {
+      sctx.imageSmoothingEnabled = true;
+      sctx.clearRect(0, 0, samp.width, samp.height);
+      sctx.drawImage(cv, 0, 0, samp.width, samp.height);
+      return sctx.getImageData(0, 0, samp.width, samp.height).data.slice();
+    };
+    const a = grab(cvA), b = grab(cvB);
+    let sum = 0, n = 0;
+    for (let i = 0; i < a.length; i += 4) { sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; }
+    return sum / n;
+  }
+  /* PROJECT SIZE is the other thing the suite never varies, and it matters: Blur is a px-unit
+     parameter, so 60px is 9.4% of a 640-wide frame and only 3.1% of an 1080-wide one — the same
+     slider is a much weaker blur on the format he actually works in (1080x1920). Combined with the
+     cover zoom, that could be the whole of "it just zooms in". */
+  const SCALES = [1, 0.28];
+  const FORMATS = [[640, 360, 'test 640x360'], [1080, 1920, 'HIS 1080x1920 portrait'], [1920, 1080, '1920x1080']];
+  say('Subject: a landscape clip at 92% of frame width — the case the effect is for.');
+  say('Blur is a px param, so its strength RELATIVE to the frame changes with project size.');
+  say('');
+  say('project              scale   canvas      blur0 E   blur60 E   drop     0-vs-60 diff   cover s   blur % of width');
+  FORMATS.forEach(fmt => {
+   PW = fmt[0]; PH = fmt[1];
+   samp.width = N; samp.height = Math.round(N * PH / PW);
+   SCALES.forEach(scale => {
+    const a = renderAt(scale, 0);
+    const e0 = edgeEnergy(a.cv);
+    const b = renderAt(scale, 60);
+    const e60 = edgeEnergy(b.cv);
+    const l = b.last || {};
+    const drop = e0 > 0 ? (100 * (1 - e60 / e0)) : 0;
+    const diff = meanDiff(a.cv, b.cv);
+    say(fmt[2].padEnd(21) + String(scale).padEnd(8) + (a.cv.width + 'x' + a.cv.height).padEnd(12) +
+        e0.toFixed(2).padEnd(10) + e60.toFixed(2).padEnd(11) +
+        (drop.toFixed(1) + '%').padEnd(9) +
+        diff.toFixed(2).padEnd(15) +
+        (l.s != null ? l.s.toFixed(2) : '?').padEnd(10) +
+        (100 * 60 / PW).toFixed(1) + '%'.padEnd(4) + '   plates ' + a.plates + '/' + b.plates);
+   });
+  });
+  say('');
+  say('A blur that survives the quality tier drops the energy by a similar % at every scale.');
+  say('If the drop collapses as the canvas shrinks, the blur is thinning out on a phone while the');
+  say('zoom (cover s) holds — which is exactly "it just zooms in".');
+  window.__done = true;
+})();
+</script></body></html>

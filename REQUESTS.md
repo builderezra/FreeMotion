@@ -851,6 +851,28 @@ better still, keep working inside the turn rather than parking work for a later 
       unsupported `ctx.filter = 'blur(…)'` assignment fails SILENTLY — leaving the zoom, which is a
       separate transform, working perfectly. That would produce exactly "it just zooms in". Verify the
       support question first; do not tune the blur radius.
+      **THAT SUSPECT IS DEAD, by the same evidence that killed it for #110:** he is on iOS 26.5.2 and
+      canvas filters have worked since iOS 16.4.
+      **MEASURED 2026-08-14 (`tests/_fbscale.html`) — one configuration reproduces it exactly.** The
+      probe renders the effect at several preview scales AND project sizes, because those are the two
+      things the suite never varies, and measures the mean pixel difference between blur 0 and blur 60
+      rather than "does it look blurred":
+      | project | preview scale | blur 0 vs 60 | fill plate built? |
+      |---|---|---|---|
+      | 640x360 | 1.0 | 6.46 | yes |
+      | **640x360** | **0.28** | **0.00 — byte-identical** | **yes** |
+      | 1080x1920 | 1.0 | 35.58 | yes |
+      | 1080x1920 | 0.28 | 36.00 | yes |
+      So at a reduced preview scale, in that configuration, **the Blur slider changes nothing at all
+      while the effect still pays for a full fill plate** — the zoom is all you get, which is his exact
+      complaint. It is scale-dependent, which is why two suite tests at 1:1 pass.
+      Subject geometry matters and the first run got it wrong: holding a tiny 80x60 subject while
+      growing the frame produced a 39x cover scale in portrait, which measured my own setup rather than
+      the effect. The numbers above use a landscape clip at 92% of frame width — the case Fill Behind
+      exists for.
+      **Next:** find why the blurred plate makes no difference at 0.28 in that geometry — the fill is
+      built (plate counter says so) but nothing it draws survives to the frame. Do NOT tune the radius
+      until that is understood.
 - [ ] **108 — What do the buttons on the canvas view rail do?** Answered in chat (loop / onion skin /
       snapping / guides / export marks / timeline zoom). Keeping it here because a control that has to
       be explained is a design note, not just a question — the row is icon-only with no labels, and he
