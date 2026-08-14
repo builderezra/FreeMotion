@@ -1214,6 +1214,15 @@ better still, keep working inside the turn rather than parking work for a later 
         playback starts from wherever the playhead already was — mid-song, or past the end.
       Neither is the duration bug and both match "sometimes will not play at all". Worth doing next,
       together, since they share a symptom.
+      **BOTH FIXED (v7.47).** The hold is gone from Play — Play just plays. Removed rather than retuned,
+      because Loop already has the home you chose for it ("it should only be in view options"), and a
+      second invisible door to the same toggle that costs you the press is not worth having. And the
+      first clip now moves the playhead to itself, exactly as every later clip already did; without that,
+      a song added to an empty project could start mid-way for no reason, or past the end, where pressing
+      play really does do nothing.
+      **What is left in this entry:** nothing I can act on. The agent could not reproduce total silence
+      on a well-formed file across 30 add-then-play trials, so if it still happens to you, the useful
+      thing is WHICH file and what you did just before.
       It could NOT reproduce total silence on a well-formed file: 30 add-then-play trials at 1x and 8x
       CPU throttle all played.
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
@@ -1530,6 +1539,13 @@ better still, keep working inside the turn rather than parking work for a later 
       doesn't animate. Say the word and I'll build the three cheap ones and you can listen.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
+      **THIS IS THE NEXT ITEM UP** (15 Aug). It is not blocked on you — it is simply big, and I stopped
+      rather than start it badly at the end of a long session. Two halves, and they are very different
+      sizes: crash-resume (persist rendered chunks so a reload can carry on) is a contained job in
+      `js/exporter.js`; getting the render off the main thread means a worker, which means the whole
+      compositor would have to run on OffscreenCanvas. Do the first half on its own, first.
+      It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on
+      your word to jump the queue.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

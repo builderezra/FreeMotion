@@ -14395,6 +14395,56 @@
     });
   });
 
+  /* ---------------- #96: the two remaining "I pressed play and nothing happened" paths ----------------
+   * His words: "I just tried adding a song and it's really buggy and won't even play at all sometimes,
+   * and it's the only thing in the timeline." The duration disagreement behind it was fixed in v7.34;
+   * these are the other two routes to the same symptom. */
+
+  test('play: holding the Play button plays, it does not silently toggle Loop instead', { item: 'transport' }, async function () {
+    var btn = document.getElementById('btn-play');
+    if (!btn) throw new Error('no play button');
+    var wasLoop = !!FM.loop, wasPlaying = !!FM.playing;
+    try {
+      var send = function (type) {
+        var r = btn.getBoundingClientRect();
+        btn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 44, pointerType: 'touch',
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+      };
+      send('pointerdown');
+      await sleep(750);                                  // comfortably past the old 550ms hold
+      send('pointerup');
+      btn.click();
+      await sleep(60);
+      if (!!FM.loop !== wasLoop) throw new Error('a slow press on Play flipped Loop — a setting the user did not ask for, changed invisibly');
+      if (!!FM.playing === wasPlaying) throw new Error('a slow press on Play did nothing at all — this is "I pressed play and nothing happened"');
+    } finally {
+      if (!!FM.playing !== wasPlaying && FM.togglePlay) FM.togglePlay();
+      FM.loop = wasLoop;
+      await sleep(40);
+    }
+  });
+
+  test('play: the FIRST clip added moves the playhead to it, so play starts at its beginning', { item: 'transport' }, function () {
+    var keepLayers = FM.scene.layers.slice(), keepDur = FM.scene.project.duration, keepTime = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      FM.time = 14;                                     // parked late by whatever was here before
+      // A canvas-backed record is what an element/drawing import produces — no decoding, same path.
+      var cv = offscreen(64, 48); cv.getContext('2d').fillRect(0, 0, 64, 48);
+      FM.addMediaLayer({ kind: 'image', width: 64, height: 48, canvas: cv, el: null });
+      var L = FM.scene.layers[0];
+      if (!L) throw new Error('the clip was not added');
+      if (FM.time !== L.start) {
+        throw new Error('the playhead stayed at ' + FM.time + ' while the only clip runs ' + L.start + '–' + (L.start + L.duration) +
+                        ' — play starts mid-clip, or past the end where nothing happens at all');
+      }
+    } finally {
+      FM.scene.layers = keepLayers; FM.scene.project.duration = keepDur; FM.time = keepTime;
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- #113 step 6: the filter library ----------------
    * Hand-authored data. The failure mode is not a crash, it is a filter that quietly renders as
    * something other than its name because a param key was mistyped and silently dropped — so the

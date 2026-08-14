@@ -1429,10 +1429,18 @@ window.FM = window.FM || {};
       rec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });   // never repaint the PREVIEW mid-export: the exporter seeks every video every frame (#47)
       FM.wireVideoRepaint(rec);   // …and when the FIRST FRAME finally decodes, which no seek announces
     }
-    // The playhead follows a clamped import, so you are looking AT the clip you just added rather
-    // than at the empty time you happened to be parked in. Untouched in the normal case, where the
-    // clip already starts exactly at the playhead.
-    if (!first && start !== FM.time) FM.time = start;
+    /* The playhead follows the import, so you are looking AT the clip you just added rather than at
+     * the empty time you happened to be parked in. Untouched in the normal case, where the clip
+     * already starts exactly at the playhead.
+     *
+     * The FIRST clip used to be excluded from this, and that is half of "I just tried adding a song
+     * and it won't even play at all sometimes, and it's the only thing in the timeline" (queue 96).
+     * The first clip lands at 0 and sets the composition length — but the playhead keeps whatever
+     * value it was left at by whatever was in the project before. Land somewhere inside the song and
+     * it plays from the middle for no visible reason; land PAST the new (possibly short) duration and
+     * pressing play does nothing at all, because there is nothing left to play. Both read as broken.
+     * The first clip in an empty project should start you at its beginning. */
+    if (start !== FM.time) FM.time = start;
     scene.layers.unshift(layer);
     scene.selectedId = layer.id;
     scene.selectedIds = [layer.id];
@@ -3406,23 +3414,17 @@ window.FM = window.FM || {};
       const lb = document.getElementById('btn-loop'); if (lb) lb.classList.toggle('active', !!FM.loop);
       if (playBtn) playBtn.classList.toggle('loop-on', !!FM.loop);
     };
-    let playLp = null, playLpFired = false, playDown = null;
-    playBtn.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      playDown = { x: e.clientX, y: e.clientY }; playLpFired = false;
-      clearTimeout(playLp);
-      playLp = setTimeout(() => {
-        playLp = null; playLpFired = true;
-        FM.loop = !FM.loop; syncLoopUI();
-        if (navigator.vibrate) { try { navigator.vibrate(12); } catch (er) {} }
-        if (FM.toast) FM.toast(FM.loop ? 'Loop ON — playback repeats start-to-end' : 'Loop off', 1500);
-      }, 550);
-    });
-    playBtn.addEventListener('pointermove', (e) => { if (playDown && Math.hypot(e.clientX - playDown.x, e.clientY - playDown.y) > 8) { clearTimeout(playLp); playLp = null; } });
-    const playLpEnd = () => { clearTimeout(playLp); playLp = null; playDown = null; };
-    playBtn.addEventListener('pointerup', playLpEnd);
-    playBtn.addEventListener('pointercancel', playLpEnd);
-    playBtn.addEventListener('click', () => { if (playLpFired) { playLpFired = false; return; } FM.togglePlay(); });
+    /* PLAY PLAYS. It used to also carry a 550ms hold that toggled Loop and SWALLOWED the tap, and that
+     * is the other half of "I just tried adding a song and it won't even play at all sometimes"
+     * (queue 96): hold the button a fraction too long — which on a phone is most presses — and the
+     * transport does not start, while a setting you did not ask for silently flips. A control that
+     * sometimes does nothing and sometimes does something else is worse than one that does less.
+     *
+     * Removed rather than retuned, because Loop already has a home and he chose it: "Get rid of loop
+     * play back out of the settings menu, it should only be in view options." It is the ⟳ on the view
+     * rail, which also names itself on hold (queue 108). A second, invisible door to the same toggle
+     * that costs you the press is not worth having. */
+    playBtn.addEventListener('click', () => FM.togglePlay());
     // Skip ◀ / ▶| step to the PREVIOUS / NEXT snap point (benchmark or selected-clip edge), falling back
     // to the project start / end when there's nothing closer.
     const toStart = document.getElementById('btn-tostart');
