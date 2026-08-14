@@ -284,6 +284,13 @@ window.FM = window.FM || {};
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'size', label: 'Grain size', min: 1, max: 6, step: 0.5, def: 2 },        // real grain clumps — it is not one pixel
+      /* ROUND GRAIN (queue 109). Ezra: "The film grain effect should have a circle option, instead of
+         just squares, and also the preview image should show the circle version."
+         He is right about the physics as well as the look — a grain is a silver halide particle, not a
+         tile. Default 1 so a newly added Film Grain is round and the browser tile shows it; the READ
+         fallback in the shader is 0, so every project saved before this keeps its exact pixels. Same
+         split the `highlights` param below already uses, for the same reason. */
+      { key: 'shape', label: 'Grain shape', def: 1, options: [[0, 'Square'], [1, 'Round']] },
       { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 15, unit: '%' },
       { key: 'shadows', label: 'In shadows', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       // Deliberately def 35, not 0: without it the response curve is zero at pure white, so grain did
@@ -2493,16 +2500,31 @@ window.FM = window.FM || {};
       const frame = Math.floor(t * 24);                             // re-roll per frame: static grain reads as dirt on the lens
       const inv = 1 / size;
       const gw = Math.ceil(W * inv) + 1;
+      /* Round grain weights each pixel by how far it sits from its cell's centre, so a grain reads as
+         a particle rather than a tile. Fallback 0 = square = the original arithmetic, byte for byte.
+         The radius is the INSCRIBED circle (size/2), so the corners of every cell fall away to nothing
+         — which is what stops the field looking like a grid. Amplitude is lifted by 1.35 to pay for
+         the ~21% of each cell that a disc gives up, so switching shape does not read as "quieter". */
+      const round = fparam(p, 'shape', 0, t) >= 0.5 && size > 1.2;
+      const rad = size * 0.5, radInv = 1 / (rad * rad);
       for (let y = 0; y < H; y++) {
         const gy = (y * inv) | 0;
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) << 2;
           if (d[i + 3] === 0) continue;
           // one hash per GRAIN cell, not per pixel — this is what gives it structure at size > 1
-          const cell = ((y * inv) | 0) * gw + ((x * inv) | 0);
+          const cxi = (x * inv) | 0, cyi = (y * inv) | 0;
+          const cell = cyi * gw + cxi;
           let h = (cell * 374761393 + frame * 668265263) | 0;
           h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
-          const n = ((h & 1023) / 1023 - 0.5);                      // -0.5..0.5
+          let n = ((h & 1023) / 1023 - 0.5);                        // -0.5..0.5
+          if (round) {
+            // distance from this pixel to its cell centre, in cell units; outside the disc, no grain
+            const dx = (x + 0.5) - (cxi * size + rad), dy = (y + 0.5) - (cyi * size + rad);
+            const q = 1 - (dx * dx + dy * dy) * radInv;
+            if (q <= 0) continue;
+            n *= q * 1.35;                                          // smooth falloff to the rim
+          }
           // response curve: 4*L*(1-L) peaks at mid-grey and falls to 0 at both ends, then the
           // shadow floor lifts the dark end back up by the user's amount.
           const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;

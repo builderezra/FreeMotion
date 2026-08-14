@@ -833,7 +833,7 @@ better still, keep working inside the turn rather than parking work for a later 
       effect whose default is a no-op (amount 0) gets wrongly condemned — and must include a control
       effect known to work, or a broken harness reads as "everything is broken".
 
-- [ ] **109 — Film Grain needs a ROUND grain option, and the thumbnail should show it.** His words:
+- [x] **109 — Film Grain needs a ROUND grain option, and the thumbnail should show it.** (v7.22) His words:
       *"The film grain effect should have a circle option, instead of just squares, and also the preview
       image should show the circle version."* Today `filmgrain` hashes one value per square CELL
       (`cell = (y/size)*gw + (x/size)`), which is why the grain reads as blocks at size > 1 — real film

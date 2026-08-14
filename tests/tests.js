@@ -12806,6 +12806,64 @@
     }
   });
 
+  /* #109 — Ezra: "The film grain effect should have a circle option, instead of just squares, and also
+     the preview image should show the circle version."
+     Two things worth asserting, because "it looks rounder" is not testable but its consequences are:
+     a round grain leaves the CORNERS of each cell untouched, and an existing project must not change. */
+  test('film grain has a round shape that really rounds, and old projects keep their pixels', { item: 'grain-round' }, async function () {
+    const W = 96, H = 96, SIZE = 6;
+    const run = (params) => {
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      g.fillStyle = '#808080'; g.fillRect(0, 0, W, H);              // mid-grey: where grain is strongest
+      const l = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#808080', start: 0, duration: 2 });
+      l.effects = [{ type: 'filmgrain', enabled: true, params: Object.assign({ amount: 100, size: SIZE, color: 0 }, params) }];
+      const out = document.createElement('canvas'); out.width = W; out.height = H;
+      const og = out.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(og, { project: { width: W, height: H, fps: 30, duration: 2, background: null }, layers: [l] }, 0);
+      return og.getImageData(0, 0, W, H).data;
+    };
+    const plain = (() => {
+      const out = document.createElement('canvas'); out.width = W; out.height = H;
+      const og = out.getContext('2d', { willReadFrequently: true });
+      const l = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#808080', start: 0, duration: 2 });
+      FM.renderScene(og, { project: { width: W, height: H, fps: 30, duration: 2, background: null }, layers: [l] }, 0);
+      return og.getImageData(0, 0, W, H).data;
+    })();
+
+    const square = run({ shape: 0 });
+    const round = run({ shape: 1 });
+
+    // An OLD instance carries no `shape` key at all, and must render exactly as it always did.
+    const old = run({});
+    for (let i = 0; i < square.length; i++) {
+      if (old[i] !== square[i]) throw new Error('an instance with no shape key no longer renders as Square — every saved project just changed');
+    }
+
+    // A grain must actually be there in both shapes.
+    const changed = (a) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== plain[i]) n++; return n; };
+    const cs = changed(square), cr = changed(round);
+    if (cs < W * H * 0.5) throw new Error('square grain barely changed anything (' + cs + ' px) — the test subject is wrong');
+    if (cr < W * H * 0.2) throw new Error('round grain changed only ' + cr + ' px — it is not grain any more');
+
+    /* The shape claim itself: with a round grain the CELL CORNERS are left alone, so far fewer pixels
+       are touched than with square, which covers every pixel of every cell. */
+    if (cr >= cs) throw new Error('round grain touched ' + cr + ' pixels and square touched ' + cs + ' — a disc must leave the cell corners clean, so it has to touch fewer');
+    const ratio = cr / cs;
+    if (ratio > 0.92) throw new Error('round grain touched ' + (ratio * 100).toFixed(0) + '% of what square did — an inscribed disc covers ~79% of its cell, so this is not actually round');
+
+    /* "…and also the preview image should show the circle version." The browser tile is rendered from
+       a default instance, so that is what decides it — with one wrinkle worth pinning: fx-thumbs.js
+       carries a param override for filmgrain (it pushes amount/size/colour/shadows/highlights up so
+       the grain is visible at 84px) and that override must not quietly reset the shape. Asserting the
+       DEFAULT rather than hardcoding round into the tile keeps one source of truth: change the default
+       and the tile follows. */
+    const inst = FM.fxRegistry.makeInstance('filmgrain');
+    if (!inst || Number(inst.params.shape) !== 1) {
+      throw new Error('a new Film Grain defaults to shape ' + (inst && inst.params.shape) + ' — the browser tile renders from this, so it would still advertise square grain');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
