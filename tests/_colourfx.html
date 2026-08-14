@@ -135,7 +135,13 @@ but works on desktop, which is the difference worth chasing.</div>
       L.id = '_cfxImg';
     }
     else if (kind === 'shape') L = FM.makeLayer('shape', { shape: 'rect', x: W/2, y: H/2, shapeW: 150, shapeH: 100, fill: '#c84ab0' });
-    else if (kind === 'text') L = FM.makeLayer('text', { x: W/2, y: H/2, text: 'ABC', fontSize: 64, fill: '#c84ab0' });
+    /* The text subject MUST NOT BE WHITE, and this line is why the "text is broken" reading in
+       REQUESTS.md was wrong. It passed `fill`, which a text layer does not use for its glyph colour,
+       so the glyphs came out the default WHITE — and on pure white brightness / contrast / saturate /
+       grayscale / hue-rotate are all mathematically no-ops, while sepia and invert are not. That is
+       precisely the split the audit reported and called a bug in the text path.
+       A mid-tone colour has room to move in every direction, so a no-op now means a no-op. */
+    else if (kind === 'text') { L = FM.makeLayer('text', { x: W/2, y: H/2, text: 'ABC', fontSize: 64 }); L.color = '#c84ab0'; L.fill = '#c84ab0'; }
     else { L = FM.makeLayer('_flat', { x: 0, y: 0 }); L._canvas = ART; L.transform.anchorX = 0; L.transform.anchorY = 0; }
     L.start = 0; L.duration = 5;
     L.effects = fx ? [fx] : [];

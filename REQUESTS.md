@@ -760,10 +760,14 @@ better still, keep working inside the turn rather than parking work for a later 
       **RESULT — it is TEXT, and it reproduces in Chrome.** Same audit run on three subject types
       (`tests/_colourfx.html`, top block): on media and on shapes all eight ctx.filter effects work; on
       TEXT, brightness / contrast / saturate / grayscale / hue change NOTHING, while sepia and invert
-      only alter the glyph pixels and glow works. So a real bug, not a device one — and it is not the
-      whole of his complaint either, since he sees dead effects generally. Investigate the text draw
-      path: it is the one that paints glyphs through the fill system, and something there is dropping
-      the filter for the value-changing functions while letting the palette-changing ones through.
+      only alter the glyph pixels and glow works. So a real bug, not a device one…
+      **…AND THAT WAS WRONG TOO (2026-08-14). There is no bug in the text draw path.** The probe built
+      its text subject with `fill: '#c84ab0'`, and a text layer does not take its glyph colour from
+      `fill` — so the subject was the DEFAULT, which is pure WHITE. On pure white, brightness, contrast,
+      saturate, grayscale and hue-rotate are all mathematically incapable of changing anything, while
+      sepia and invert are not. That is exactly the split the audit reported and blamed on the renderer.
+      Given a mid-tone colour, **all eight work on text**, changing every glyph pixel (~2800 of them).
+      **What is left is real, and it is not a code bug — see #180.**
       **WHAT HE ACTUALLY MEANT, 2026-08-13:** *"You can tell the effects don't work because all the
       images don't show any change in the effects menu."* So this is the effect BROWSER's thumbnails,
       not the effects themselves — every preview tile in Colour & Light shows the same unchanged
@@ -2006,7 +2010,24 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       drawing the inspector opens in its full-height/editing state instead of the normal docked one, and
       the only way out is a swipe down. Related to #165's "puts the screen to the bottom" complaint about
       freehand drawing — check whether both come from the same place before fixing either.
-- [ ] **180 — Lots of effects don't work on text.** His words exactly. Needs the same treatment #110 got:
+- [ ] **180 — Lots of effects don't work on text.** His words exactly.
+      **MEASURED, 2026-08-14 — he is right about what he sees, and the cause is arithmetic, not a bug.**
+      Text defaults to pure WHITE (`js/scene.js`: `base.color = props.color || '#ffffff'`), and on pure
+      white:
+      | effect | on default white text |
+      |---|---|
+      | Saturate | **cannot ever do anything** — white has no colour to strengthen or drain |
+      | Grayscale | **cannot ever do anything** — white is already grey |
+      | Hue Rotate | **cannot ever do anything** — there is no hue to rotate |
+      | Brightness | only works when LOWERED. Its default is 1.3, i.e. *brighter* — so adding it does nothing at all until you drag left |
+      | Contrast | only works when lowered, same reason |
+      | Sepia / Invert / Glow | work |
+      So five of the eight headline colour effects appear dead on the most ordinary text layer there is,
+      and two of those five do nothing *at their own default value*. Nothing in the app says why.
+      **This needs a decision from him rather than a guess from me**, because every fix is a taste call:
+      leave it and explain; warn in the inspector when an effect cannot affect this layer; or stop
+      defaulting text to white. Worth asking whether his own case was white text — if he saw it on
+      COLOURED text there is still a real bug to find, and this explanation is not it. Needs the same treatment #110 got:
       enumerate which effects do nothing on a TEXT layer, find out whether it's one shared cause (e.g.
       effects that sample the layer's pixel buffer vs. ones that transform it) or a list of separate
       bugs, and report the measurement before changing anything.
