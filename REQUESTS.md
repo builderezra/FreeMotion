@@ -234,12 +234,22 @@ better still, keep working inside the turn rather than parking work for a later 
       A drawing change is exactly the kind where my own judgement is worth least — I cannot see it the
       way he can, and the car took several passes.
 
-- [ ] **158 — The spiral's last stretch is straight instead of curved.** (14 Aug, screenshot of a Spiral
+- [x] **158 — The spiral's last stretch is straight instead of curved.** (v7.03) (14 Aug, screenshot of a Spiral
       layer at v7.00.) His words: *"Spiral shapes last little bit is straight instead of round."*
       Visible in his shot: the outer end of the spiral runs off in a straight tail at the upper-left
       instead of continuing the curve. The spiral is an OPEN_POLY — it strokes its polyline rather than
       filling it — so the fault is in the point data or in which points are marked as curve-through
       points, not in the fill.
+      **Fixed v7.03, and it was never about the spiral's data.** The tangent at each point is the
+      Catmull-Rom (next - prev)/6. On a CLOSED path both neighbours always exist; on an OPEN one the
+      missing neighbour was **clamped to the endpoint itself**, so at the last point "next" WAS the point
+      and the tangent collapsed to (p - prev)/6 — half the length it should be, aimed straight down the
+      chord. Invisible on a closed shape. On the spiral, whose final segment sweeps a wide arc at maximum
+      radius, it is a straight tail.
+      Reflecting the missing neighbour across the endpoint (2p - prev, the standard phantom point)
+      restores it to (p - prev)/3. **This fixes every open path at once** — the spiral, and freehand and
+      vector drawings, whose first and last strokes were flattening for exactly the same reason and which
+      nobody had connected to this.
 
 - [ ] **159 — Shape icons in the add menu do not match the shapes they add. Make them 1:1.** (14 Aug.)
       His words: *"most shapes icons vary largely to the actual shape, try and make them 1-1."*
@@ -321,6 +331,13 @@ better still, keep working inside the turn rather than parking work for a later 
       non-black ground (v6.85), never flat against a lit page (this one), and never doubled — checked in
       **both** themes. Three attempts at this family have now each fixed one property of the canvas; the
       invariant is "html paints what the page paints", and it is pinned.
+      **He then said "This still happens when I edit text fyi", with a phone screenshot.** Timing matters
+      here: his version chip read **v7.00** in the shot just before, so that device had not loaded the
+      v7.02 fix yet — it needs a reload before the report means anything. Flagged rather than assumed
+      either way. If it DOES persist after reloading, the phone's text-editing takeover is a genuinely
+      different path (`body.text-editing #app` collapses the grid to one cell and #stage takes the whole
+      area at `var(--stage)`, which is darker than the home ground by design), so ask him which strip he
+      means before chasing it.
       (14 Aug, with an Alight Motion screenshot.) His words: *"When dragging a clip from the edges to
       extend, in alight motions there's some differences, it tells you all of this information and also
       shows on little notches, by colouring in the exact notch it will land on, because the notches are
