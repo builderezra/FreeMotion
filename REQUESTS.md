@@ -1767,7 +1767,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Good sign in the same message: *"The free hand drawing is usable on mobile now"* — so this is
       polish on something that finally works, not another repair.
 
-- [ ] **166 — You cannot swipe the timeline up and down when clips fill it.** (14 Aug, screenshot at
+- [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
       free hand drawing layers."*
@@ -1779,6 +1779,16 @@ better still, keep working inside the turn rather than parking work for a later 
       timeline with clips and there is nowhere left to start one.
       Fix direction: a vertical-dominant drag that begins on a clip should scroll the track list, which
       has to be done programmatically because touch-action has already opted out of the native scroll.
+      **DONE (v7.16), and it was NOT already fixed** — worth recording, because #167's note claimed this
+      was the same bug. It was not. #167 stopped one drawing from becoming nine layers, which made this
+      much harder to run into; the branch that caused it was untouched. With enough real layers the
+      timeline still could not be swiped, and the code still sent every clip-drag to the scrubber
+      whatever direction it went.
+      The clip path now has the SAME axis lock the empty-lane path already had 90 lines below: commit at
+      5px, vertical needs to beat horizontal by 4 (scrubbing is the primary action, so it wins ties),
+      and a vertical drag pans `#timeline.scrollTop` by hand — by hand because that element carries
+      `touch-action: none`, so the browser will never scroll it natively. Hold-to-move is a different
+      branch and is untouched.
       **Check the empty-lane path still scrolls too**, and that this does not break the hold-to-move
       gesture — a hold is stationary, so it should be unaffected, but measure rather than assume.
 

@@ -12603,6 +12603,68 @@
     }
   });
 
+  /* #166 — Ezra: "For some reason on free hand drawing layers I simply can't swipe up and down on the
+     timeline", then a minute later: "Actually it's any layer not just free hand drawing layers."
+     That second message is the diagnosis. It was never freehand-specific — he had nine rows, so every
+     touch landed on a clip, and a drag that started on a clip went to the scrubber whatever direction
+     it travelled. The empty-lane path had an axis lock; the clip path did not. Queue 167 stopped one
+     drawing from becoming nine layers, which made this much harder to hit and fixed nothing.
+     Driven with real pointer events on a clip, with enough rows to overflow, because the whole bug is
+     in which branch the move handler takes. */
+  test('a vertical swipe that starts ON a clip scrolls the timeline', { item: 'tl-vswipe' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene;
+    try {
+      FM.scene = scene([]);
+      for (let i = 0; i < 12; i++) {   // enough rows that the list must overflow its scroller
+        FM.scene.layers.push(FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 4 }));
+      }
+      FM.selectLayer(null); FM.timeline.rebuild(); await sleep(120);
+      const tl = document.getElementById('timeline');
+      const clip = document.querySelector('#tl-tracks .clip');
+      if (!clip) throw new Error('no clip rendered to start the swipe on');
+      if (tl.scrollHeight <= tl.clientHeight + 4) throw new Error('the track list does not overflow, so there is nothing to scroll and this test proves nothing');
+
+      const r = clip.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+      const send = (type, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 21, pointerType: 'touch', clientX: x, clientY: y, button: 0, buttons: 1,
+      }));
+      tl.scrollTop = 0;
+      const t0 = FM.time;
+      send('pointerdown', y0, clip);
+      for (let d = 6; d <= 70; d += 8) send('pointermove', y0 - d);
+      const moved = tl.scrollTop;
+      send('pointerup', y0 - 70);
+      await sleep(40);
+      if (moved <= 2) throw new Error('a 70px vertical drag from a clip scrolled the list by ' + moved.toFixed(1) + 'px — with a full timeline there is no empty lane left to swipe on');
+      if (Math.abs(FM.time - t0) > 1e-6) throw new Error('the vertical swipe also scrubbed the playhead to ' + FM.time + ' — it took the horizontal branch too');
+
+      /* The primary gesture must survive: horizontal still scrubs and must NOT scroll.
+         Dragging LEFT on purpose. A drag-scrub moves time OPPOSITE the finger (you are sliding the
+         strip, not the playhead), so dragging right from t=0 asks for negative time, gets clamped, and
+         a perfectly working scrub reads as a dead one — which is exactly how this assertion first
+         failed. */
+      tl.scrollTop = 0;
+      const before = FM.time;
+      send('pointerdown', y0, clip);
+      for (let d = 8; d <= 60; d += 8) {
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 21, pointerType: 'touch', clientX: x - d, clientY: y0, buttons: 1 }));
+      }
+      const scrolled = tl.scrollTop;
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 21, pointerType: 'touch', clientX: x - 60, clientY: y0 }));
+      await sleep(40);
+      if (Math.abs(FM.time - before) < 1e-6) throw new Error('a horizontal drag on a clip no longer scrubs — the axis lock ate the primary gesture');
+      if (scrolled > 2) throw new Error('a horizontal drag scrolled the list by ' + scrolled.toFixed(1) + 'px');
+    } finally {
+      FM.scene = savedScene;
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -1142,7 +1142,7 @@ window.FM = window.FM || {};
       if (isTouch) {
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
-        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now() };
+        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now(), startScrollTop: timelineEl ? timelineEl.scrollTop : 0, axis: null };
         // ANY unlocked clip, selected or not. Ezra: "On mobile you can only drag clips on the timeline
         // if you have them selected, you should be able to drag clips by holding down on them without
         // selecting." Requiring a prior selection made moving a clip a two-gesture job — tap it, wait
@@ -1914,6 +1914,20 @@ window.FM = window.FM || {};
           if (!clipTap.moved && !scrubIntent && adx < 8 && ady < 8) return;   // still a potential tap / hold
           clipTap.moved = true;
           if (clipTap.holdTimer) { clearTimeout(clipTap.holdTimer); clipTap.holdTimer = null; }
+          /* A VERTICAL drag that STARTED ON A CLIP scrolls the layer list (queue 166). Ezra: "I simply
+           * can't swipe up and down on the timeline… actually it's any layer not just free hand drawing
+           * layers." Every pixel of movement here used to fall through to the scrub below, whatever
+           * direction it went, so the only place a vertical swipe could begin was empty lane — and once
+           * you have enough layers there is no empty lane left. Queue 167 removed the thing that was
+           * MAKING nine rows out of one drawing, which hid this; it did not fix it.
+           * It has to be done by hand: #timeline carries touch-action:none, so the browser will never
+           * scroll it natively. Same axis lock the empty-lane path uses 90 lines below — commit at 5px,
+           * and horizontal needs only to tie because scrubbing is the primary action here. */
+          if (!clipTap.axis && (adx > 5 || ady > 5)) clipTap.axis = (ady > adx + 4) ? 'y' : 'x';
+          if (clipTap.axis === 'y') {
+            if (timelineEl) timelineEl.scrollTop = clipTap.startScrollTop - dy;
+            return;
+          }
           FM.scrubTime(snapT(clipTap.baseTime - (e.clientX - clipTap.startX) / pxPerSec()));   // relative drag-scrub (scrollLeft-independent)
           return;
         }
