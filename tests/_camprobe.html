@@ -1,0 +1,309 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>#212 — long exposure: what can this phone's camera actually do?</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:13px/1.5 ui-monospace,monospace}
+  .wrap{padding:14px calc(14px + env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom))}
+  h1{font:600 15px/1.3 -apple-system,system-ui,sans-serif;margin:0 0 4px}
+  p.sub{margin:0 0 14px;color:#8ea3ad;font:12px/1.45 -apple-system,system-ui,sans-serif}
+  button{-webkit-appearance:none;appearance:none;border:0;border-radius:12px;background:#2f7cf6;color:#fff;
+    font:600 15px/1 -apple-system,system-ui,sans-serif;padding:15px 20px;width:100%;margin:0 0 14px}
+  button:disabled{background:#2a333a;color:#6b7a83}
+  pre{white-space:pre-wrap;word-break:break-word;margin:0}
+  .ok{color:#5fd28a}.no{color:#ff6b6b}.hm{color:#f2c14e}
+  #shot{width:100%;border-radius:12px;display:none;margin:14px 0 0;background:#000}
+  video{display:none}
+</style></head>
+<body><div class="wrap">
+<h1>Long exposure — device probe</h1>
+<p class="sub">Open this ON YOUR PHONE, on the same https address you use for the app. It asks for the
+camera, measures what the browser will really give us, then shoots a 4-second light-trail exposure so
+you can see the result rather than take my word for it. Nothing is uploaded and nothing is saved.</p>
+<button id="go">Start — allow the camera</button>
+<pre id="out">Waiting.</pre>
+<img id="shot" alt="the long exposure this phone produced">
+<video id="v" playsinline muted autoplay></video>
+</div>
+<script>
+/* WHY THIS FILE EXISTS (queue #212 — Ezra: "a camera tool for my phone that can do cool long exposure
+   photography? Like this app here" — Slow Shutter Cam).
+   The whole plan turns on facts that are device-specific and that I cannot check from a laptop:
+     · does the browser expose REAL exposure control (shutter time / ISO), or must a long exposure be
+       built by accumulating ordinary 1/30s frames? On iOS the answer is expected to be "accumulate" —
+       ImageCapture and the exposureTime constraint are Chrome-side APIs — but expected is not measured.
+     · how many UNIQUE frames per second do we actually receive? Accumulation quality is frames/sec ×
+       seconds, so 30fps and 24fps are different products.
+     · can the phone accumulate a 1080p frame inside a frame budget, or does it fall behind the camera?
+     · is there a float/half-float render target for a precise running AVERAGE (the "Motion Blur" and
+       "Low Light" modes), or are we limited to 8-bit MAX blending (the "Light Trail" mode)?
+   Every number below is measured on the device running the page. The last step is the honest one: a
+   real 4-second exposure, on screen, from his own camera.
+   NOTE this deliberately does not load index.html or touch FM.* — it is a probe of the DEVICE, not of
+   the app, and it must be openable even if the app is broken. */
+'use strict';
+var L = [], out = document.getElementById('out');
+function say(s) { L.push(s == null ? '' : s); out.innerHTML = L.join('\n'); }
+function tag(cls, s) { return '<span class="' + cls + '">' + s + '</span>'; }
+function yes(b, y, n) { return b ? tag('ok', y || 'yes') : tag('no', n || 'no'); }
+function ms(x) { return (Math.round(x * 100) / 100) + 'ms'; }
+function sleep(t) { return new Promise(function (r) { setTimeout(r, t); }); }
+
+/* Median, not mean: one 60ms hitch from an unrelated system task should not decide whether a phone is
+   fast enough. p95 is reported alongside because a long exposure is a sustained run — the occasional
+   slow frame is what drops you from 30 samples/sec to 24. */
+function stats(a) {
+  var s = a.slice().sort(function (x, y) { return x - y; });
+  return { med: s[Math.floor(s.length / 2)], p95: s[Math.min(s.length - 1, Math.floor(s.length * 0.95))] };
+}
+
+var video = document.getElementById('v'), stream = null;
+
+function release() {
+  if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+  video.srcObject = null;
+}
+window.addEventListener('pagehide', release);
+
+/* ---- 1. what exists before we ask for anything ------------------------------------------------- */
+function staticReport() {
+  var sc = window.isSecureContext;
+  say('DEVICE');
+  say('  user agent      ' + navigator.userAgent);
+  say('  secure context  ' + yes(sc, 'yes — camera is allowed to be asked for',
+                                     'NO — getUserMedia is blocked. Use the https address, not a file:// or http:// one.'));
+  say('  installed PWA   ' + (window.matchMedia('(display-mode: standalone)').matches ||
+                              navigator.standalone ? 'yes (home-screen app)' : 'no (browser tab)'));
+  say('  screen          ' + screen.width + '×' + screen.height + ' @' + (window.devicePixelRatio || 1) + 'x');
+  say('  cores / memory  ' + (navigator.hardwareConcurrency || '?') + ' / ' +
+                             (navigator.deviceMemory ? navigator.deviceMemory + 'GB' : 'not reported'));
+  say('');
+  say('CAMERA APIS');
+  var gum = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  say('  getUserMedia    ' + yes(gum));
+  say('  ImageCapture    ' + yes(typeof window.ImageCapture === 'function',
+      'yes — real camera stills / possible exposure control', 'no — must accumulate video frames (expected on iOS)'));
+  say('  rVFC            ' + yes('requestVideoFrameCallback' in HTMLVideoElement.prototype,
+      'yes — we can catch every unique camera frame', 'no — must poll with rAF and will double-count frames'));
+  /* getSupportedConstraints is the browser's own list of knobs it understands. The four that would let
+     us do a TRUE long exposure rather than a simulated one are exposureTime, iso, exposureMode and
+     focusMode; torch matters for a different reason (light painting). */
+  var sup = (navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints)
+    ? navigator.mediaDevices.getSupportedConstraints() : {};
+  ['exposureTime', 'iso', 'exposureMode', 'exposureCompensation', 'focusMode', 'whiteBalanceMode', 'torch', 'zoom']
+    .forEach(function (k) { say('  ' + (k + '                        ').slice(0, 24) + yes(!!sup[k])); });
+  say('');
+  return gum;
+}
+
+/* ---- 2. the accumulation surfaces -------------------------------------------------------------- */
+/* Two very different ceilings, and the difference decides which capture modes are honest:
+     · 2D canvas with globalCompositeOperation:'lighten' — 8-bit MAX. Exact for LIGHT TRAILS, because
+       max() of 8-bit values is still 8-bit; no precision is lost no matter how many frames go in.
+     · a float/half-float target — needed for a running AVERAGE (motion blur, low light). Averaging N
+       frames in 8 bits quantises every sample to 1/255 and the error compounds; that is banding. */
+function glReport() {
+  say('ACCUMULATION SURFACE');
+  var cv = document.createElement('canvas'), gl = null;
+  try { gl = cv.getContext('webgl2', { alpha: false, preserveDrawingBuffer: false }); } catch (e) {}
+  if (!gl) {
+    say('  webgl2          ' + tag('no', 'no — average/low-light modes would have to run in 8 bits (banding)'));
+    say('');
+    return null;
+  }
+  var half = gl.getExtension('EXT_color_buffer_half_float');
+  var full = gl.getExtension('EXT_color_buffer_float');
+  say('  webgl2          ' + tag('ok', 'yes') + ' (max texture ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + 'px)');
+  say('  half-float FBO  ' + yes(!!half, 'yes — precise running average is on', 'no'));
+  say('  float FBO       ' + yes(!!full, 'yes', 'no — half-float is plenty if it is on above'));
+  say('');
+  return gl;
+}
+
+/* ---- 3. the camera itself ---------------------------------------------------------------------- */
+async function openCamera() {
+  say('OPENING THE REAR CAMERA…');
+  /* ideal, not exact: an exact 1920×1080 on a phone that cannot do it throws OverconstrainedError and
+     we would learn nothing. ideal lets the browser pick its nearest and then we REPORT what we got. */
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+    audio: false
+  });
+  video.srcObject = stream;
+  await video.play();
+  var track = stream.getVideoTracks()[0], s = track.getSettings ? track.getSettings() : {};
+  say('  camera          ' + (track.label || '(unnamed)'));
+  say('  asked 1920×1080, got ' + tag(s.width >= 1920 ? 'ok' : 'hm', s.width + '×' + s.height) +
+      ' @' + (s.frameRate ? Math.round(s.frameRate) : '?') + 'fps requested');
+  /* getCapabilities is where a browser admits what it CAN be asked for on this specific camera. Safari
+     has historically not implemented it at all, which is itself the answer we are looking for. */
+  if (track.getCapabilities) {
+    var c = {};
+    try { c = track.getCapabilities() || {}; } catch (e) { c = {}; }
+    var keys = Object.keys(c);
+    say('  capabilities    ' + (keys.length ? keys.join(', ') : tag('hm', 'empty')));
+    if (c.exposureTime) say('  exposureTime    ' + tag('ok', JSON.stringify(c.exposureTime)) + '  ← REAL shutter control exists');
+    if (c.iso) say('  iso             ' + tag('ok', JSON.stringify(c.iso)));
+    if (c.torch) say('  torch           ' + tag('ok', 'yes — the flashlight can be held on for light painting'));
+  } else {
+    say('  capabilities    ' + tag('no', 'getCapabilities not implemented — no exposure control to be had'));
+  }
+  say('');
+  return { track: track, w: s.width || video.videoWidth, h: s.height || video.videoHeight };
+}
+
+/* Unique frames, not animation frames. rAF fires at the DISPLAY's rate (60/120Hz) while the camera
+   delivers 24–30 — counting rAF would triple-count the same picture and flatter the result. */
+function measureFrameRate(seconds) {
+  return new Promise(function (resolve) {
+    var n = 0, gaps = [], last = 0, t0 = performance.now();
+    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return resolve(null);
+    function step(now) {
+      if (last) gaps.push(now - last);
+      last = now; n++;
+      if (now - t0 < seconds * 1000) video.requestVideoFrameCallback(step);
+      else resolve({ fps: n / ((now - t0) / 1000), gaps: gaps });
+    }
+    video.requestVideoFrameCallback(step);
+  });
+}
+
+/* ---- 4. can it keep up? ------------------------------------------------------------------------ */
+async function measureCost(dim, gl) {
+  var W = dim.w, H = dim.h;
+  say('PER-FRAME COST at ' + W + '×' + H);
+
+  var acc = document.createElement('canvas'); acc.width = W; acc.height = H;
+  var g = acc.getContext('2d', { alpha: false, willReadFrequently: false });
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+
+  /* The two halves of one accumulated frame, timed separately, because they fail for different
+     reasons: the draw is a GPU→GPU copy of the camera picture, the composite is the blend. */
+  var draws = [], comps = [];
+  for (var i = 0; i < 40; i++) {
+    var a = performance.now();
+    g.globalCompositeOperation = 'source-over'; g.drawImage(video, 0, 0, W, H);
+    var b = performance.now();
+    g.globalCompositeOperation = 'lighten'; g.drawImage(video, 0, 0, W, H);
+    var c = performance.now();
+    draws.push(b - a); comps.push(c - b);
+    if (i % 8 === 7) await sleep(0);           // let the camera deliver a new frame
+  }
+  var ds = stats(draws), cs = stats(comps), total = ds.med + cs.med;
+  say('  draw camera→canvas   ' + ms(ds.med) + ' (p95 ' + ms(ds.p95) + ')');
+  say('  lighten composite    ' + ms(cs.med) + ' (p95 ' + ms(cs.p95) + ')');
+  say('  one accumulated frame ' + tag(total < 33 ? 'ok' : total < 60 ? 'hm' : 'no', ms(total)) +
+      ' against the ' + ms(1000 / 30) + ' a 30fps camera gives us' +
+      (total < 33 ? ' — keeps up' : ' — WOULD FALL BEHIND at full resolution'));
+
+  if (gl) {
+    /* The same work on the GPU path the real average modes would use: upload the camera frame as a
+       texture, then one full-screen pass. If this is much cheaper than the 2D path it decides the
+       implementation. */
+    try {
+      var t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      var ups = [];
+      for (var j = 0; j < 20; j++) {
+        var u0 = performance.now();
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        gl.finish();
+        ups.push(performance.now() - u0);
+        if (j % 5 === 4) await sleep(0);
+      }
+      var us = stats(ups);
+      say('  webgl frame upload   ' + ms(us.med) + ' (p95 ' + ms(us.p95) + ')');
+    } catch (e) { say('  webgl frame upload   ' + tag('no', String(e && e.message || e))); }
+  }
+  say('');
+  return acc;
+}
+
+/* ---- 5. the actual photograph ------------------------------------------------------------------ */
+/* Light-trail mode: keep the BRIGHTEST value each pixel has shown across the whole exposure. Moving
+   lights write a continuous streak; anything static stays as it is; the dark parts of the scene never
+   get brighter, which is why trails read against a night sky. This is one line of the real feature —
+   included so the probe answers "is this actually cool" and not only "is it possible". */
+async function shoot(seconds, dim, deliveredFps) {
+  var W = dim.w, H = dim.h;
+  say('SHOOTING a ' + seconds + 's light-trail exposure — hold the phone STILL, point it at movement…');
+  var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  var g = cv.getContext('2d', { alpha: false });
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+
+  var frames = 0, t0 = performance.now(), done;
+  var finished = new Promise(function (r) { done = r; });
+  var haveRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+
+  function accumulate() {
+    g.globalCompositeOperation = frames === 0 ? 'source-over' : 'lighten';
+    g.drawImage(video, 0, 0, W, H);
+    frames++;
+    var left = seconds * 1000 - (performance.now() - t0);
+    if (left > 0) { say2(frames, left); next(); } else { done(); }
+  }
+  function next() { haveRVFC ? video.requestVideoFrameCallback(accumulate) : requestAnimationFrame(accumulate); }
+  var tail = L.length;
+  function say2(n, left) { L[tail] = '  ' + n + ' frames in, ' + (left / 1000).toFixed(1) + 's left'; out.innerHTML = L.join('\n'); }
+  L.push('');
+  next();
+  await finished;
+
+  /* THIS is the number that decides whether the phone is fast enough — not the microbenchmark above.
+     A 2D drawImage returns as soon as the command is queued, so timing it can flatter OR libel the
+     GPU; what cannot lie is how many frames the loop actually managed to eat while the camera was
+     handing them over. If this rate is close to the delivery rate, nothing is being dropped. */
+  var got = frames / seconds;
+  say('  captured ' + tag('ok', frames + ' frames') + ' in ' + seconds + 's = ' + got.toFixed(1) + ' frames/sec');
+  if (deliveredFps) {
+    var keep = got / deliveredFps;
+    say('  the camera delivered ' + deliveredFps.toFixed(1) + '/sec, so we accumulated ' +
+        tag(keep > 0.9 ? 'ok' : keep > 0.7 ? 'hm' : 'no', Math.round(keep * 100) + '% of the frames offered') +
+        (keep > 0.9 ? ' — full resolution is affordable' : ' — the capture resolution will need lowering'));
+  }
+  say('  a real camera doing this optically would have its shutter open for ' + seconds + 's.');
+  var img = document.getElementById('shot');
+  img.src = cv.toDataURL('image/jpeg', 0.92);
+  img.style.display = 'block';
+  say('');
+  say('The picture below is a genuine ' + seconds + '-second exposure taken by this phone, in the browser.');
+  say('Long-press it to save it if it came out well.');
+}
+
+/* ---- run --------------------------------------------------------------------------------------- */
+document.getElementById('go').addEventListener('click', async function () {
+  var btn = this; btn.disabled = true; btn.textContent = 'Running…';
+  L = []; say('');
+  try {
+    var gum = staticReport();
+    var gl = glReport();
+    if (!gum) { say(tag('no', 'Stopping: this browser has no getUserMedia, so there is nothing to measure.')); return; }
+    var dim = await openCamera();
+    var fr = await measureFrameRate(2);
+    say('MEASURED FRAME DELIVERY');
+    if (fr) {
+      var gs = stats(fr.gaps);
+      say('  unique frames    ' + tag(fr.fps >= 24 ? 'ok' : 'hm', fr.fps.toFixed(1) + ' per second') +
+          '  (median gap ' + ms(gs.med) + ', p95 ' + ms(gs.p95) + ')');
+      say('  so a 4s exposure accumulates about ' + Math.round(fr.fps * 4) + ' frames.');
+    } else {
+      say('  ' + tag('hm', 'no rVFC — cannot count unique frames honestly on this browser'));
+    }
+    say('');
+    await measureCost(dim, gl);
+    await shoot(4, dim, fr ? fr.fps : 0);
+  } catch (e) {
+    say('');
+    say(tag('no', 'FAILED: ' + (e && e.name ? e.name + ' — ' : '') + (e && e.message || e)));
+    if (e && e.name === 'NotAllowedError') say('That is the permission being refused. Reload and allow the camera.');
+    if (e && e.name === 'NotFoundError') say('No camera was offered to the page at all.');
+  } finally {
+    release();
+    btn.disabled = false; btn.textContent = 'Run again';
+  }
+});
+</script>
+</body></html>
