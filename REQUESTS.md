@@ -777,10 +777,32 @@ better still, keep working inside the turn rather than parking work for a later 
       longshadow~radialshadow (11) and six more at 12. THAT is fixable here without his device, and a
       menu where a dozen tiles look interchangeable reads as "none of these do anything" whatever the
       compositor is doing. Fix = subjects and params chosen to show what each effect actually does.
-- [ ] **112 — sw.js is an EMPTY FILE.** Found while chasing 110. The app registers a service worker and
+- [x] **112 — sw.js is an EMPTY FILE.** (v7.19) Found while chasing 110. The app registers a service worker and
       is installable as a PWA, but sw.js is zero bytes — so there is no offline caching, no precache,
       nothing. Either it never got written or it was emptied. Worth deciding deliberately: a PWA that
-      cannot open offline is a PWA in name only, and he uses this on a phone. His words: *"There's a shit load
+      cannot open offline is a PWA in name only, and he uses this on a phone.
+      **Written and PROVEN offline (v7.19).** The shape of it is dictated by the update mechanism this
+      app already has — the version label, the `?v=` cache-busters and the tap-the-version force-update.
+      A worker that served a stale index.html would strand you on an old build, which is worse than no
+      worker at all. So: navigations are NETWORK-FIRST (index.html is the one file whose bytes change
+      without its URL changing; the cache is only the offline fallback), versioned assets are CACHE-FIRST
+      keyed on the full `?v=` URL (that query is a promise the bytes never change, so a version bump is a
+      new URL, is a miss, is a fetch — the existing mechanism does the invalidation for free), and there
+      is NO precache list, because a hand-kept list of files would be a second copy of what index.html
+      already says and would go stale on the next `?v=` bump.
+      **Verification took three goes and the first two were wrong, which is worth recording:**
+      · Service workers cannot be registered in the in-app browser at all — a one-line control worker
+        fails there identically — so this needed its own headless Chrome, and an HTTP/1.1 server, since
+        `python -m http.server` answers HTTP/1.0. That runner is kept as `tests/_swoffline.py`.
+      · The first offline test went offline after ONE load and "passed". Meaningless twice over: the
+        worker registers on `load`, after every script has already been fetched, so its cache was still
+        EMPTY (0 entries) — and Chrome's own HTTP cache was serving the reload, so it would have passed
+        with no service worker at all.
+      · Done properly — load twice so the cache fills (66 entries), then `Network.setCacheDisabled` AND
+        offline, so only the worker can answer — the app boots: version label reads, scene / timeline /
+        storage / settings / addMenu all present. **The second launch is the offline-capable one**, by
+        design; there is no precache to make the first one work and adding one would cost more than it
+        buys. His words: *"There's a shit load
       of effects in the colour & light section that blatantly do nothing and don't work."* Turn this into
       an exact list before touching anything: render a test frame with and without each effect in that
       category and count changed pixels. Must test at a STRONG setting as well as the default, or an

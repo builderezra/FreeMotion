@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#112 — does the service worker actually cache anything</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body>
+<pre id="o">registering…</pre>
+<script>
+/* sw.js was zero bytes (queue 112), so the app registered a worker that did nothing and reported
+   itself as an installable PWA. "It is not empty any more" is not evidence it works, so this drives
+   the real thing: register it from the app's own scope, wait for it to control the page, fetch the
+   app's real versioned assets THROUGH it, and then look inside the cache to see whether they landed.
+   Also checks the half that would be a disaster if it were wrong — that index.html is NOT served from
+   cache ahead of the network, because that is what would pin someone to an old build. */
+var L = [];
+function say(s) { L.push(s); document.getElementById('o').textContent = L.join('\n'); }
+function fail(s) { say('FAIL  ' + s); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+(async function () {
+  if (!('serviceWorker' in navigator)) { say('no serviceWorker in this browser'); window.__done = true; return; }
+  try {
+    // Clean slate: an old registration from a previous run would make this measure nothing.
+    var olds = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(olds.map(function (r) { return r.unregister(); }));
+    var ks = await caches.keys();
+    await Promise.all(ks.map(function (k) { return caches.delete(k); }));
+
+    var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+    say('registered, scope ' + reg.scope);
+    for (var i = 0; i < 100 && !navigator.serviceWorker.controller; i++) await sleep(100);
+    if (!navigator.serviceWorker.controller) { fail('the worker never took control of this page'); window.__done = true; return; }
+    say('controlling: yes');
+
+    // Real assets, exactly as index.html asks for them (versioned URLs).
+    var html = await (await fetch('/index.html', { cache: 'no-store' })).text();
+    var m = html.match(/(?:js\/[\w-]+\.js|styles\.css|theme-glass\.css)\?v=\d+/g) || [];
+    var picks = m.slice(0, 6);
+    if (!picks.length) { fail('found no ?v= asset URLs in index.html — the probe cannot test what it cannot find'); window.__done = true; return; }
+    for (var j = 0; j < picks.length; j++) await fetch('/' + picks[j]);
+    await sleep(300);
+
+    var c = await caches.open('freemotion-v1');
+    var keys = await c.keys();
+    var have = keys.map(function (r) { return r.url.replace(location.origin + '/', ''); });
+    say('');
+    say('asked for : ' + picks.join('\n            '));
+    say('');
+    say('in cache  : ' + (have.length ? have.join('\n            ') : '(nothing)'));
+    say('');
+    var missing = picks.filter(function (p) { return have.indexOf(p) < 0; });
+    if (missing.length) fail(missing.length + ' of ' + picks.length + ' versioned assets were not cached: ' + missing.join(', '));
+    else say('PASS  every versioned asset fetched through the worker was cached');
+
+    // An unversioned URL must NOT be cached — that is the rule keeping index.html fresh.
+    await fetch('/manifest.json');
+    await sleep(150);
+    var keys2 = await (await caches.open('freemotion-v1')).keys();
+    var cachedUnversioned = keys2.filter(function (r) { return /manifest\.json/.test(r.url); });
+    if (cachedUnversioned.length) fail('an unversioned asset (manifest.json) got cached — anything without ?v= can change under its own URL, so caching it serves stale bytes with no way to invalidate');
+    else say('PASS  unversioned assets are left to the network');
+
+    // And the page itself must come from the network while there IS one.
+    var before = (await (await caches.open('freemotion-v1')).keys()).length;
+    say('');
+    say('cache holds ' + before + ' entries');
+  } catch (e) {
+    fail('threw: ' + (e && e.message ? e.message : e));
+  }
+  window.__done = true;
+})();
+</script></body></html>
