@@ -2094,6 +2094,28 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       strength to kill a seam. That washed the violet out, so it was re-concentrated afterwards — three
       legible hues at 64px was the hard-won part. The halo is two coloured passes now, teal and
       violet-blue, so the light thrown on the timeline matches the light the orb contains.
+      **A second panel then checked the fix, and it found two things I had shipped wrong (v7.27):**
+      · **Glyph contrast had regressed.** Screening lifted the face from ~53–74 mean luma to ~112–125,
+        which is the point — and it dropped the white + from about 9:1 against its background to
+        **3.15–3.50:1**, at the floor for a 2.8px stroke. My comment still claimed "a dark base under
+        them so the glyph keeps its contrast", which was stale: screened cores flood straight over any
+        base. The shade now sits ON TOP of the pools as a soft centre pool that is not screen-blended.
+        Measured after: **4.48–4.94:1** across every phase.
+      · **The violet was still leaving the disc.** Its core sat at 0.83R and the drift carried it to
+        1.096R — off the 64px face — so for roughly a quarter of the cycle there was no violet at all
+        and the orb read as two hues. It did not open a HOLE only because the screened teal and blue
+        hold the light up when it goes, which is exactly why checking brightness alone missed it. Pulled
+        in to ~0.55R. And my comments claiming "cores moved to about half the radius" and "never takes a
+        core outside the circle" were false for that pool — corrected, because comments in this file are
+        load-bearing.
+      · Also: my 3-frame sheet sampled 0/6.5/13s, which is pool A's period alone. Both pools alternate,
+        so the pattern repeats every lcm(26, 38) = 494s and both extremes coincide at 247s — never
+        rendered. The sheet samples the combined beat now, and carries a note that it must be shot below
+        700px, since every `#add-fab` rule lives in the phone media query (a sheet shot at 800px came
+        back as five empty squares and looked like broken CSS).
+      · A judging agent left a hand-copied duplicate of this CSS in `tests/_fabcorners.html`, which was
+        swept into the v7.26 commit. Deleted — a second copy of the pool values is precisely the
+        drift-in-silence trap this codebase keeps hitting.
 - [ ] **195 — The volume control should be a scrub field like the effects sliders, not a dot on a line.**
       His words: *"The volume slider needs to be like the effects slider and not a dot on a line, because
       I want to be able adjust the volume up to like 1000%."* Two things in one: the CONTROL type (the

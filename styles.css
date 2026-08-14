@@ -2667,9 +2667,14 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
     mix-blend-mode: screen;
     will-change: transform;
   }
-  /* Cores sit at roughly half the radius, not out near the rim, and their falloffs are two-stage so
-     neighbouring skirts cross at about half strength rather than both reaching zero first — which is
-     what left a visible seam between the teal and the violet. */
+  /* Cores sit around 0.55–0.6 of the radius rather than out near the rim, and their falloffs are
+     two-stage so neighbouring skirts cross at about half strength instead of both reaching zero first,
+     which is what left a visible seam between the teal and the violet.
+     The violet was the exception and it mattered: measured from this CSS it sat at 0.83R and the drift
+     carried it to 1.096R — clear off the 64px disc — so for roughly a quarter of the cycle there was no
+     violet anywhere on the face and the orb read as two hues. The orb did not open a hole, because the
+     screened teal and blue hold the light up when it goes, which is exactly why looking at brightness
+     alone missed it. Pulled in to ~0.55R so its energy stays where it can be seen. */
   /* The VIOLET is deliberately the tightest and strongest of the three. Screen blending lightens
      everything it touches, so the first pass at these numbers came out teal-to-blue with the violet
      washed to a hint — and three legible hues at 64px was the hard-won part. Concentrating it (smaller
@@ -2678,21 +2683,36 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   .fa-pool-a {
     background:
       radial-gradient(54% 54% at 33% 40%, rgba(41, 217, 187, .84), rgba(41, 217, 187, .30) 52%, transparent 78%),
-      radial-gradient(44% 44% at 72% 33%, rgba(122, 92, 255, .95), rgba(122, 92, 255, .40) 46%, transparent 72%);
+      radial-gradient(46% 46% at 65% 39%, rgba(122, 92, 255, .95), rgba(122, 92, 255, .40) 46%, transparent 74%);
     animation: fab-pool-a 13s ease-in-out infinite alternate;
   }
   .fa-pool-b {
     background: radial-gradient(52% 52% at 46% 70%, rgba(38, 132, 255, .80), rgba(38, 132, 255, .26) 52%, transparent 78%);
     animation: fab-pool-b 19s ease-in-out infinite alternate;
   }
-  /* The + itself must sit above the aura; the glass sheen (::after) still crosses over everything. */
+  /* THE GLYPH'S GROUND, re-established (queue 194 follow-up). Screening the pools lifted the whole
+     face from a mean luma of ~53–74 to ~112–125, which is the point — and it took the white + down
+     from about 9:1 contrast against what is behind it to barely 3:1, with a 2.8px stroke and no
+     thick-glyph leniency. A dark base underneath no longer helps: the screened cores flood straight
+     over it. So the shade goes ON TOP of the pools instead, as a soft centre pool that is NOT
+     screen-blended — only `.fab-aura > i` carries mix-blend-mode, so this pseudo-element composites
+     normally over them. It sits under the glyph and reads as the orb having depth rather than as a
+     patch, because it is centred exactly where the + is. */
+  .fab-aura::after {
+    content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(46% 46% at 50% 50%, rgba(4, 14, 22, .46), rgba(4, 14, 22, .18) 62%, transparent 82%);
+  }
+  /* The + itself must sit above the aura; the glass sheen (#add-fab::after) still crosses everything. */
   #add-fab > svg { position: relative; z-index: 1; }
   /* SMALL TRAVEL, ON PURPOSE. The first cut moved each pool 9–11% of a 96px layer, which walked a core
      clear of the 64px disc at the ends of the cycle — so the button visibly dimmed and opened a dark
-     patch as it drifted, rather than staying a constant object whose light rearranges. Halved to ~5%,
-     which is still four times the background's relative travel (the whole reason this is designed
-     separately) but never takes a core outside the circle. The scale swing is trimmed for the same
-     reason: it was doing more to change brightness than to suggest depth. */
+     patch as it drifted, rather than staying a constant object whose light rearranges. Measured:
+     brightness swung 28% across the cycle before, 9–11% after. Halved to ~5%, which is still four times
+     the background's relative travel (the whole reason this is designed separately). The scale swing is
+     trimmed for the same reason: it was doing more to change brightness than to suggest depth.
+     NOTE the real period is not 13s or 19s but their combined beat — both alternate, so the pattern
+     repeats every lcm(26, 38) = 494s and the two 'to' ends coincide at 247s. Any sheet of stills that
+     samples only one pool's period never renders the worst case; the first one did exactly that. */
   @keyframes fab-pool-a {
     from { transform: translate3d(-5%, 3.5%, 0) scale(1); }
     to   { transform: translate3d(5.5%, -4%, 0) scale(1.07); }
