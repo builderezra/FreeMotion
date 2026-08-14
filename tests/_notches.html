@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#101 — are the ruler notches there at full zoom?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}
+pre{padding:12px;white-space:pre-wrap}iframe{border:0;width:380px;height:700px}</style>
+</head><body><pre id="out">…</pre><iframe id="app" src="../index.html"></iframe>
+<script>
+/* Ezra (#101): "It appears the little notches are missing, there are some if you zoom out but not at
+   fully zoomed in."
+   The previous investigation could not reproduce it and recorded that the notch-thinning cap "never
+   binds". That was measured on a desktop-width window; his screenshot is the PHONE, and the visible
+   window is what decides whether a notch lands on screen at all.
+   The cap in question thins notches off the WHOLE project's frame count, not the visible span:
+     while (totalFrames / frameStep > 1500) frameStep *= 2
+   so on a long project it spaces them further apart — and zooming IN makes each gap wider in pixels,
+   which is the one direction where they can march off the edges of the screen. This counts how many
+   notches actually fall inside the lane at each zoom, for several project lengths. */
+var L = [];
+function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow, d = w.document, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.timeline)) { if (n++ > 300) return; return setTimeout(wait, 50); }
+    (async function () {
+      var FM = w.FM;
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(400);
+      var tl = d.getElementById('timeline');
+      say('lane width ' + (tl ? tl.clientWidth : '?') + 'px  (phone)');
+      say('');
+      say('project   zoom    px/sec    notches in DOM   visible on screen   gap between them');
+      for (const dur of [15, 60, 300, 1800]) {
+        /* A LAYER THAT SPANS THE PROJECT. Without one the timeline has nothing in it and the ruler
+           collapses to a single notch at t=0 whatever the zoom — the first run of this probe reported
+           exactly that for all sixteen cases, which is a measurement of an empty timeline, not of the
+           notch logic. */
+        FM.scene.layers.length = 0;
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#f00', start: 0, duration: dur }));
+        FM.scene.project.duration = dur;
+        FM.selectLayer(null);
+        for (const z of [0.5, 1, 4, 12]) {
+          FM.timeline.setZoom(z);
+          FM.timeline.rebuild();
+          await sleep(60);
+          var all = [].slice.call(d.querySelectorAll('#tl-ruler .notch'));
+          var r = tl.getBoundingClientRect();
+          var seen = all.filter(function (el) {
+            var b = el.getBoundingClientRect();
+            return b.left >= r.left - 1 && b.left <= r.right + 1;
+          });
+          // the real spacing, read off the DOM rather than recomputed
+          var gap = '—';
+          if (all.length > 1) {
+            var a = all[0].getBoundingClientRect().left, b2 = all[1].getBoundingClientRect().left;
+            gap = Math.round(b2 - a) + 'px';
+          }
+          var pps = FM.timeline.getZoom && tl ? (tl.clientWidth / 8) * FM.timeline.getZoom() : 0;
+          say(String(dur + 's').padEnd(10) + String(FM.timeline.getZoom() + '×').padEnd(8) +
+              pps.toFixed(0).padEnd(10) + String(all.length).padEnd(17) +
+              String(seen.length).padEnd(20) + gap +
+              (seen.length <= 1 ? '   <-- BARE RULER' : ''));
+        }
+      }
+      say('');
+      say('A ruler with 0 or 1 notch on screen is what he photographed. If that only happens on long');
+      say('projects at high zoom, the culprit is thinning the notches off the WHOLE project length.');
+      window.__done = true;
+    })();
+  })();
+});
+</script></body></html>

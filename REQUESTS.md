@@ -941,6 +941,29 @@ better still, keep working inside the turn rather than parking work for a later 
       v6.64 shows the ruler nearly bare. Note this is the opposite of what you'd expect — zooming in
       should give MORE notches (one per frame at full zoom, which v2.53 built deliberately), so
       something is culling them at the densest end rather than failing to draw them at the sparse end.
+      **REPRODUCED 2026-08-14 (`tests/_notches.html`), and the earlier "the cap never binds" conclusion
+      was wrong.** It binds hard. Counting the notches that actually land inside a 380px phone lane:
+      | project | 0.5x | 1x | 4x | 12x |
+      |---|---|---|---|---|
+      | 15s | 38 | 19 | 24 | 8 |
+      | 60s | 38 | 19 | 12 | **4** |
+      | 300s | 19 | 10 | 3 | **1** (197px apart) |
+      | 1800s | 5 | 3 | **1** (526px) | **1** (1577px) |
+      So the ruler goes bare on a LONG project at HIGH zoom, and zooming in makes it steadily worse —
+      which is exactly his "there are some if you zoom out but not at fully zoomed in", and exactly the
+      backwards behaviour flagged above.
+      **Cause, confirmed:** `while (totalFrames / frameStep > 1500) frameStep *= 2` thins the notches
+      off the WHOLE PROJECT's frame count, so a long project starts with a coarse frame step — and then
+      zooming in multiplies that step's PIXEL gap without ever adding a notch back.
+      Why the earlier measurement missed it: it was taken at desktop width on a short project, where
+      the cap genuinely does not bind. (It also took two runs here — the first had no layers in the
+      project, so the timeline was empty and reported one notch in all sixteen cases, which measures
+      nothing.)
+      **The fix is the windowed ruler that was built and reverted.** That revert was right at the time —
+      it was justified by a wrong cause — but the cause is now confirmed to be exactly this, and no
+      node budget spread across a whole project can keep notches on screen at 12x. It needs the ruler
+      to render the VISIBLE span only and re-render as the timeline scrolls, so it is deliberately not
+      being rushed in at the end of a session.
 - [x] **102 — The playhead line is off-centre under its triangle.** **DONE v6.71.** His words: *"the playhead is
       actually off centred to its little triangle at the top, if you just slightly move over the little
       start triangle bit to the left it should be good."* So the TRIANGLE moves left a touch, not the
