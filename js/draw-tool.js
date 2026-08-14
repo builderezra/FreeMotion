@@ -281,8 +281,22 @@ window.FM = window.FM || {};
       return;
     }
     if (t.mode === 'vector' && t.points.length >= 3) {
-      FM.addPathLayer(t.points, { closed: true, name: 'Drawing', fill: t.color });
-    } else if (t.mode === 'vector') {
+      /* STOP FIRST, THEN ADD (queue 179). Ezra: "When you finish adding a vector drawing it does this
+       * and you have to swipe down" — a phone shot of the nine-category inspector filling the whole
+       * screen with no canvas and no timeline under it.
+       * The order was the bug. `body.drawing` carries `#inspector-panel { display: none }`, so adding
+       * the layer here selected it and opened the inspector while that panel was still HIDDEN — it
+       * docked and measured itself against a layout that was not on screen, and by the time stop()
+       * took the class off, the geometry it had settled on was full-height with the stage collapsed.
+       * A swipe down was the only way to make it re-measure.
+       * The freehand branch above has always done it this way round, which is exactly why freehand
+       * never showed this. Points are copied out because stop() clears them. */
+      var pts = t.points.slice(), fill = t.color;
+      stop();
+      FM.addPathLayer(pts, { closed: true, name: 'Drawing', fill: fill });
+      return;
+    }
+    if (t.mode === 'vector') {
       if (FM.toast) FM.toast('Tap at least 3 points, then Done');
       return;
     }
@@ -388,6 +402,9 @@ window.FM = window.FM || {};
     pad.addEventListener('pointercancel', endPad);
   }
 
+  // Exposed for the suite (queue 179): the Done BUTTON is the only other door, and driving a click on
+  // a bar that may be mid-layout tests the bar, not the finish path this covers.
+  FM.drawTool.finish = finish;
   FM.startDraw = function (mode) {
     if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
     if (!overlay) FM.drawTools && FM.drawTools.init();

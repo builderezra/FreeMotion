@@ -12665,6 +12665,51 @@
     }
   });
 
+  /* #179 — Ezra: "When you finish adding a vector drawing it does this and you have to swipe down",
+     with a phone shot of the inspector filling the whole screen: no canvas, no timeline.
+     WHAT THIS TEST DOES AND DOES NOT CLAIM. It locks the ORDER that was changed: the drawing session
+     must be torn down BEFORE the new layer is added, because `body.drawing` carries
+     `#inspector-panel { display: none }` and adding the layer selects it — so the old order opened and
+     measured the inspector while it was hidden. The freehand branch has always done it this way round.
+     It does NOT claim to reproduce his screenshot: two earlier versions of this test tried to assert
+     the visible outcome (canvas height, timeline visibility) and passed against BOTH orders in the
+     harness, so the collapsed geometry needs something headless Chrome is not doing. Recorded in
+     REQUESTS.md rather than dressed up as a proof. */
+  test('a vector drawing is added after drawing mode ends, not during it', { item: 'vector-finish' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene, realAdd = FM.addPathLayer;
+    let drawingWhenAdded = null;
+    try {
+      FM.scene = scene([]);
+      FM.addPathLayer = function () {
+        drawingWhenAdded = document.body.classList.contains('drawing');
+        return realAdd.apply(this, arguments);
+      };
+      FM.startDraw('vector');
+      await sleep(80);
+      if (!document.body.classList.contains('drawing')) throw new Error('startDraw did not enter drawing mode, so this test is not exercising the path');
+      FM.drawTool.points = [[0.3, 0.3], [0.7, 0.3], [0.5, 0.7]];   // three is the minimum Done accepts
+      FM.drawTool.finish();
+      await sleep(120);
+
+      if (drawingWhenAdded === null) throw new Error('Done never reached FM.addPathLayer — the drawing was not created at all');
+      if (drawingWhenAdded !== false) {
+        throw new Error('the layer was added while body.drawing was still set — #inspector-panel is display:none then, so selecting it opens and measures a panel that is not on screen');
+      }
+      if (document.body.classList.contains('drawing')) throw new Error('still in drawing mode after Done');
+      if (!FM.scene.layers.length) throw new Error('Done did not create the drawing layer');
+    } finally {
+      FM.addPathLayer = realAdd;
+      if (FM.drawTool && FM.drawTool.active) { try { FM.drawTool.points = []; FM.drawTool.finish(); } catch (e) {} }
+      document.body.classList.remove('drawing', 'draw-vector');
+      FM.scene = savedScene;
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
