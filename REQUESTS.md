@@ -1045,8 +1045,18 @@ better still, keep working inside the turn rather than parking work for a later 
       **And it is not limited to broken files** — a well-formed control still disagreed by 60ms
       (26.383625 against 26.323125), so every song import has a small dead tail. The mechanism is
       general; only its size varies.
-      Fix direction: gate the resume on the TRUE duration the app already computed, not the element's
-      own claim.
+      **FIXED (v7.34):** the gate now takes whichever is longer, the decoded length or the element's
+      claim, so a container that undersold its file can never cut the song short. Mutation-checked —
+      trusting the element again silences a 26s song from 11.2s on.
+      **The agent found TWO MORE "I pressed play and nothing happened" paths, both still open:**
+      · a **700ms press on the Play button toggles Loop and swallows the tap** (js/app.js:3304-3315), so
+        a slow press looks like play simply not working;
+      · **adding a song as the first layer never moves the playhead to the clip** (js/app.js:1369), so
+        playback starts from wherever the playhead already was — mid-song, or past the end.
+      Neither is the duration bug and both match "sometimes will not play at all". Worth doing next,
+      together, since they share a symptom.
+      It could NOT reproduce total silence on a well-formed file: 30 add-then-play trials at 1x and 8x
+      CPU throttle all played.
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just
       tested adding a voice memo."* This is a REAL-DEVICE report, and that matters: the two measured
@@ -1080,6 +1090,20 @@ better still, keep working inside the turn rather than parking work for a later 
       400ms the transport starts regardless, so this can never wedge playback. Both halves
       mutation-checked — removing the wait puts the playhead 0.107s ahead of silent audio, and removing
       the deadline freezes the transport at 0.000s indefinitely.
+      **The TIMELINE half — measured, and it is NOT the render loop.** With one audio layer at 380px,
+      dpr3, 4x CPU throttle: 59.9fps, 0 dropped frames, renderScene 0.16ms, quality tier never dropped,
+      and **zero timeline rebuilds during playback**. So playback is not what he feels. What IS slow is
+      the EDIT path, and it scales two ways that compound:
+      · `rebuild()` is linear in LAYER COUNT — 1.5ms at 1 layer, 5.2 at 13, **18.2ms at 61**;
+      · `rebuild()` is also driven by timeline LENGTH through the ruler — 1.6ms at 10s, 9.5 at 120s,
+        **14.8ms at 300s**, emitting 901 notch + 151 tick divs (js/timeline.js:587, 592). **A voice memo
+        is minutes long, so this is directly on the path he reported.** (And it is the same ruler code
+        as #101.)
+      · `updatePlayhead()` is linear in visible clips — 0.117ms at 1 clip vs **1.42ms at 61** — and runs
+        on EVERY frame during playback and every scrub move.
+      **The insight that explains why earlier fixes "didn't work":** on a phone, selecting a clip builds
+      exactly ONE row, so everything above is cheap. The expensive phone state is **nothing selected** —
+      which is exactly the state you are in when you press play to watch it back.
       **Still open in this entry: the TIMELINE half.** The lag he describes did not reproduce in the
       agent's measurements, and #202's separate measurement put renderScene at a 4.4ms median against a
       16.7ms budget. That half needs the numbers from HIS device, which is the "what is slow" readout
@@ -2474,6 +2498,43 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
       only while something is pending and stops itself, because an always-on interval on the heaviest
       screen is exactly the sort of thing this project has had to hunt down before.
+- [ ] **214 — Notes must belong to ONE project, and travel with the saved file.** His words: *"Currently
+      the notes carry across projects, I want each projects notes only for that project, and when you
+      save the project file as well it should save the notes."*
+      Two halves. The first is a real bug: notes were designed to live on `scene.project.notes` precisely
+      so they belong to the project — so either they are being written somewhere global, or the notes
+      array is surviving a project switch because the scene object is reused. Find out which before
+      changing anything; if it IS on the project, then something is copying it forward. The second half
+      is a gap: the `.fmotion.json` save needs to carry `notes` through export AND import, and an old
+      file without them must still open.
+- [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
+      exported and got no audio even tho the video had audio."*
+      **I rate this the most serious open item.** Everything else is the app being awkward; this is the
+      app's actual OUTPUT being wrong, silently, after a long render — and you only find out afterwards.
+      It is going to the bottom of the queue per the oldest-first rule, but **say the word and it jumps
+      to the front** — I think it should.
+      Where to start: the export mix is built separately from the preview (`buildAudioMix` in
+      js/exporter.js), so this is NOT the same code as #96, though it may be the same CLASS of bug —
+      that one was a duration gate silently muting a clip. Check first whether the track is being muted,
+      mixed at zero, or never decoded at all; and check `layer.muted`, since Extract Audio deliberately
+      mutes the original and a muted ORIGINAL plus a missing twin would produce exactly this. Establish
+      which by exporting a known clip and inspecting the file, not by reading.
+- [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
+      A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
+      decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
+      hide themselves when it is chosen, rather than sitting there meaning nothing.
+- [ ] **213 — The + at the bottom of the home screen needs a bigger HIT BOX, not a bigger button.** His
+      words: *"Make it so the button on the bottom of the screen has a larger hit box, don't make it
+      bigger but larger hit box cos I keep accidentally opening projects."*
+      So a tap NEAR the + is landing on the project card behind or beside it and opening that project —
+      which is the worst possible miss, since it navigates away. The button must look identical and
+      catch more.
+      Ways that keep the look: a transparent `::before` inset by a negative margin (the standard trick,
+      and it costs nothing), or padding plus a background-clip so only the inner disc paints. Mind two
+      things: the expanded box must not swallow taps meant for the card BEHIND it in a way that makes
+      the list feel dead, and it must not overlap the safe-area home indicator. Measure the real hit
+      rect before and after, the same way #189's spacing was measured — a hit box is invisible, so
+      "looks fine" cannot confirm it.
 - [ ] **212 — A long-exposure camera tool for his phone (Slow Shutter Cam style). NOT DECIDED — he asked
       whether it was possible, not for it to be built.** His words: *"Would it be possible for you to
       create me a camera tool for my phone that can do cool long exposure photography? Like this app

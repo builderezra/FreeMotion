@@ -13343,6 +13343,59 @@
     }
   });
 
+  /* #96 — "adding a SONG is really buggy and sometimes will not play at all, as the only clip."
+     Not a race: a duration disagreement. FM.loadVideoFile trusts a DECODE over the container header,
+     because plenty of files lie about their length, so the layer is built from the true length — but
+     the resume gate asked the ELEMENT, which still believes the header. Everything past the element's
+     shorter figure was treated as "off the end of the source": muted, left paused, while the playhead
+     ran on. Measured on a real file claiming 11.21s that actually runs 26.38s: only the first 11s
+     played. A well-formed control still disagreed by 60ms, so every song had a small dead tail. */
+  test('a song whose header undersells its length still plays to the end', { item: 'song-duration' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene;
+    const id = '_songProbe';
+    try {
+      FM.scene = scene([]);
+      const layer = FM.makeLayer('video', { name: 'Song', start: 0, duration: 26 });
+      layer.id = id;
+      FM.scene.layers.push(layer);
+
+      let muted = false, played = 0;
+      // The element lies about its length, exactly as the measured file did; the RECORD carries the
+      // decoded truth, which is what the layer was built from.
+      const el = { readyState: 4, currentTime: 0, duration: 11.21, muted: false, volume: 1, paused: true,
+                   play: () => { played++; el.paused = false; return Promise.resolve(); }, pause: () => { el.paused = true; } };
+      Object.defineProperty(el, 'muted', { get: () => muted, set: (v) => { muted = v; }, configurable: true });
+      FM.media.set(id, { kind: 'video', el: el, width: 0, height: 0, duration: 26.38, file: new Blob(['x']) });
+
+      /* The project has to be long enough to HOLD the playhead there: FM.setTime clamps to
+         project.duration, so without this the playhead lands well before the element's claimed end and
+         the gate is never reached — the first version of this test passed against its own mutation for
+         exactly that reason. */
+      FM.scene.project.duration = 30;
+      el.paused = true;
+      FM.setTime(18);
+      if (FM.time < 17) throw new Error('the playhead clamped to ' + FM.time + 's — this test would not reach the gate it is about');
+      FM.playing = true;
+      if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — this test cannot reach the gate it is about');
+      FM._syncMediaToClock();
+
+      if (muted) {
+        throw new Error('at 18s the element was muted — the gate is still using the header (11.21s) instead of the decoded length (26.38s), so the song goes silent two thirds of the way through');
+      }
+    } finally {
+      FM.playing = false;
+      try { FM.pause(); } catch (e) {}
+      if (FM.media.remove) FM.media.remove(id);
+      FM.scene = savedScene;
+      FM.setTime(0);
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -1038,6 +1038,10 @@ window.FM = window.FM || {};
 
   // Reconcile every media element with the playhead. Runs BEFORE the render in tick, so an
   // overrunning frame delays the picture and never the sound.
+  /* Exposed for the suite (queue 96): the resume gate is the thing under test, and driving it through
+     a real play() would now be defeated by the start-wait added in queue 95 — a fake element that never
+     advances is exactly what that wait is for, so the tick would never reach here. */
+  FM._syncMediaToClock = function () { return syncMediaToClock(); };
   function syncMediaToClock() {
     FM.playbackStats.syncs++;
     const now = performance.now();
@@ -1084,7 +1088,23 @@ window.FM = window.FM || {};
              * Gated on `paused` and on being genuinely at/past the end, so an ordinary resume — the
              * playhead re-entering the clip window — is untouched (measured in the same probe), and no
              * epsilon shaves the real final moments off a clip that simply ends. */
-            const srcEnd = (isFinite(m.el.duration) && m.el.duration > 0) ? m.el.duration : Infinity;
+            /* THE SOURCE'S REAL LENGTH, NOT THE ELEMENT'S CLAIM (queue 96). Ezra: "adding a SONG is
+             * really buggy and sometimes will not play at all, as the only clip."
+             * FM.loadVideoFile deliberately trusts a decode over the container header (js/media.js,
+             * from queue 72), because plenty of files lie about their length — so `m.duration` is the
+             * song's TRUE length and the layer is built from it. But this gate asked the ELEMENT, which
+             * still believes the header. For a file claiming 11.21s that really runs 26.38s, everything
+             * past 11.21s was treated as "off the end of the source": the element was muted and left
+             * paused for the rest of the clip while the playhead ran on. The song stopped and the
+             * transport carried on without it — measured, exactly that file plays only its first 11s.
+             * It is not only broken files, either: a well-formed control still disagreed by 60ms
+             * (26.383625 decoded against 26.323125 claimed), so EVERY song import had a small dead tail
+             * at the end. The mechanism is general; only its size varies.
+             * Take whichever is longer. The element's figure is only trusted when we have nothing
+             * better, and a source is never cut short by a container that undersold it. */
+            const elEnd = (isFinite(m.el.duration) && m.el.duration > 0) ? m.el.duration : 0;
+            const decEnd = (isFinite(m.duration) && m.duration > 0) ? m.duration : 0;
+            const srcEnd = Math.max(elEnd, decEnd) || Infinity;
             if (local >= srcEnd) { try { m.el.muted = true; } catch (e) {} return; }
             m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {});   // re-entered the window → resume
           }
