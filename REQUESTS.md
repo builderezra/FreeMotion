@@ -15,6 +15,10 @@ he makes it, however small, in the order he said it. Nothing is judged too minor
    he actually wants than a tidied-up restatement.
 5. If something is deliberately NOT being done, it stays in Open with a **Held** note saying why.
    Silently dropping a request is the failure this file exists to prevent.
+6. **New requests go at the BOTTOM of Open, not the top**, and the list is worked from the top down.
+   His words, 14 Aug: *"whenever i say something to do you write it down in the list and put it at the
+   bottom then continue working down the list."* I had been prepending them, which put the newest work
+   first and buried the oldest — the opposite of what he asked for.
 
 Detail on how each shipped item was built lives in [POLISH-LOG.md](POLISH-LOG.md), one line per
 version. This file is the *what and whether*; that one is the *how*.
@@ -176,572 +180,6 @@ better still, keep working inside the turn rather than parking work for a later 
       clamped hard (PULL_MAX 150 with a pow(dy,0.78) curve) and reads as a freeze once you pass it. He
       wants the drag to keep responding at any distance, with the slam on release past the threshold.
 
-- [ ] **143 — PC: kill the left side rail, move everything into the transport row.** (13 Aug, with two
-      Studio screenshots at v6.86.) His words: *"on pc we can lokey remove the side bar, put export on the
-      far left of the row with the play buttons then to it's right the settings button then the Version
-      refresh, then on the right side of the play button after the copy paste button, put delete and the
-      binding button and the group button, they only show up when they should, not always there."*
-      Reading it as a layout, left to right along the one transport row:
-      **Export · Settings · version-refresh chip** — then the existing centred cluster
-      (undo · redo · ⏮ · ▶ · ⏭ · duplicate) — then, to the RIGHT of duplicate:
-      **Delete · Bind (parenting) · Group**.
-      The last clause is the part to get right: *"they only show up when they should, not always there."*
-      Delete/Bind/Group are selection-dependent — Group wants 2+ layers, Bind wants a selection and a
-      target, Delete wants any selection — so the row must grow and shrink with the selection rather
-      than showing three permanently-dimmed buttons. Watch the centre cluster staying visually centred
-      as the right side changes width, or the play button will drift as you select things.
-      Screenshot 1 shows the rail to remove: back arrow, `↻ v6.86`, duplicate, delete, export, settings.
-      **AMENDED minutes later, and this supersedes the left-hand half above.** His words: *"since you
-      will needa spot for the back button, to go to the home screen, put the export button to the very
-      far right just one before the view options button and put the settings cog to its left, change
-      its logo to a normal image and not colourful (pc version only) so it fits in with everything
-      else. Then back button to leave project can be at the far left."* So the row reads:
-      **← back** (far left) · undo · redo · ⏮ · ▶ · ⏭ · duplicate · **delete · bind · group** (only when
-      they apply) · … · **settings cog · export · view options** (far right).
-      **ANSWERED 14 Aug, so this is no longer blocked.** His words: *"on the of move the refresh button
-      to re load the page would go on the far right where the export button and settings cog would be,
-      it would come after all of them so on the left of them."* So the chip joins the far-RIGHT cluster
-      and sits to the LEFT of the cog and export. Final order for that end of the row:
-      **`↻ v7.00` · settings cog · export · view options** (view options stays outermost, per the
-      amendment). Nothing goes at the far left except the back button.
-      **One thing still open:** *"change its logo"* — the cog is already a plain outline icon and the EXPORT
-      button is the colourful glass one from #71, so this almost certainly means give export a plain
-      monochrome icon on PC while the phone keeps the glass artwork. Building it that way; flagging it
-      so he can correct me in one word if I have it backwards.
-
-- [ ] **144 — PC: trim/split move onto the playhead, and the align buttons get the whole panel.** (13 Aug,
-      second screenshot, multi-select state.) His words: *"put the delete left side button to the left of
-      the play head and then same for the right button, and put the split button in the middle on top of
-      the playhead. Then in the left massive area where its currently got the six small buttons, just get
-      rid of the buttons that are near the play head and then with the align buttons just make them big
-      and fill up the whole section."*
-      So: the three trim/split controls (`[|` trim-left, `<|>` split, `|]` trim-right) stop being a row
-      floating above the ruler and become **playhead-anchored** — trim-left sits immediately LEFT of the
-      playhead line, trim-right immediately RIGHT of it, and split sits centred ON the playhead. They
-      travel with the playhead. Then the inspector's "EDIT 2 CLIPS" row is deleted outright (those are
-      the same three buttons), leaving **ALIGN ON TIMELINE** alone in that panel — and its three buttons
-      grow to fill the whole area instead of sitting as a small row at the top.
-      Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
-      single clip too (screenshot 1) — the playhead move applies to both.
-
-- [x] **161 — Make the Freehand Drawing icon a pencil.** (v7.04) His words: *"Make the free hand drawing
-      icon a pencil."* It was a squiggle with a small nib.
-      **Vector Drawing's icon was ALREADY a pencil silhouette**, so doing only what was asked would have
-      left two pencils side by side — the exact fault the Elements cube note in this file records ("at
-      22px the two were nearly the same mark and neither told you what it opened"). So Freehand takes the
-      pencil, properly drawn with a ferrule and a tip, and **Vector becomes what it actually is**: a curve
-      with two anchor squares, which is the universal mark for a vector path. Say the word if you would
-      rather Vector kept its old icon and the pair stayed similar.
-
-- [ ] **160 — The two people shapes need arms, and he wants agents to check the result.** (14 Aug.) His
-      words: *"The two people shapes are good but need arms, make sure when adding arms you get other
-      agents to verify if it's any good or not."*
-      Two shapes: `person` and `woman`. Both currently read as head + body with no arms.
-      **The verification is part of the request, not an optional extra** — same arrangement as #63, the
-      car, where he asked for "agents holding me accountable". So: draw the arms, render them, and have
-      independent agents judge whether the result actually reads as a person with arms, before it ships.
-      A drawing change is exactly the kind where my own judgement is worth least — I cannot see it the
-      way he can, and the car took several passes.
-      **First attempt made and reverted — the SUITE rejected it before any agent saw it, which is worth
-      knowing before the next go.** Two existing invariants I had not accounted for:
-      1. **"a torso that only tapers".** There is a test asserting the silhouette never narrows and then
-         widens again between shoulder and crotch — it calls that "the hip nick". My design pinched the
-         waist so the gap between arm and body would open downward; that is exactly the forbidden shape.
-      2. **The sub-paths must wind the same way.** Both figures are filled with nonzero winding, so my
-         left arm and right arm — built by mirrored branches — wound oppositely and CANCELLED where they
-         met the shoulder. The test caught it as "person at 48px has 2 enclosed hole(s)".
-      Also learned, and it constrains the design hard: a separating gap has to be **≥ ~0.03H** or it
-      closes to a smear on the 24px add-menu icon. The file already records the same finding for the neck
-      gap, sized by render rather than by taste.
-      **So the next attempt cannot pinch the waist.** The workable direction is arms OUTBOARD of the
-      torso — the silhouette's widest point, tapering monotonically once the arms end — with both arms
-      generated by one builder and mirrored by coordinate, never by a second code path, so the winding
-      cannot differ. Then render and hand it to the agents, as he asked.
-
-      **SECOND ATTEMPT BUILT, SUITE-GREEN (248/248), AND REJECTED BY ALL THREE AGENTS. Not shipped.**
-      This is the arrangement working exactly as you asked for it: the drawing passed every automated
-      check and was still wrong, and three independent readers said so before it reached you.
-      They converged on the same measurements:
-
-      | | man | woman |
-      |---|---|---|
-      | arm actually separated from the body | ~21% of height | **~3%** |
-      | gap between arm and body | 15px of 501 | 5–10px |
-      | what it reads as | arms, but as *slots cut in a slab* | **cap sleeves / notches** |
-
-      · **The woman is a regression** — all three said so independently, and two said they would take
-        the old armless figure over it. At 96px her gap fills in completely; her bounding box is
-        IDENTICAL before and after, so the arms add nothing but two bites out of her outline that read
-        as damage.
-      · **I made room by eating the man's body.** His torso went from a 148→120px taper to a dead
-        constant 98px and his legs 45→35px. One agent called it a clothespin. The arms should have been
-        hung outside the body, not carved out of it.
-      · **At 24px it costs crispness rather than costing nothing**: solid-black pixels down 21%,
-        mid-greys up 22%. The figure got softer, not more informative.
-      · A real construction defect I introduced: the arm's outer edge sits ~1px proud of the shoulder
-        cap, leaving a visible nick where the cap's radius ends.
-      · And **my own judging sheet was clipped** — it never rendered the 24px woman at all, the very
-        case that fails first. The third agent caught that. Sheet fixed to wrap.
-
-      **THE REAL PROBLEM IS A CONFLICT, AND IT IS YOURS TO SETTLE.** What they want — a proper body, a
-      gap at least as wide as the arm, and arms outside the torso — **cannot fit** inside the existing
-      rule that shoulders stay within 1.7–2.3 head-widths. A 120px body plus a 40px gap already reaches
-      the shoulder limit before the arm has any width at all. Pick one:
-      **(a)** widen the shoulders past the pictogram band (they stop being 1.7–2.3 head-widths);
-      **(b)** keep the narrow body and accept a slabbier figure;
-      **(c)** give the MAN arms and leave the WOMAN as she is — she reads well armless and every agent
-              preferred that to what I built;
-      **(d)** leave both alone.
-      My own read, for what it is worth: **(c)**, because her dress geometrically has nowhere to put an
-      arm that survives 24px, and a mismatched pair is better than a damaged silhouette.
-
-- [x] **158 — The spiral's last stretch is straight instead of curved.** (v7.03) (14 Aug, screenshot of a Spiral
-      layer at v7.00.) His words: *"Spiral shapes last little bit is straight instead of round."*
-      Visible in his shot: the outer end of the spiral runs off in a straight tail at the upper-left
-      instead of continuing the curve. The spiral is an OPEN_POLY — it strokes its polyline rather than
-      filling it — so the fault is in the point data or in which points are marked as curve-through
-      points, not in the fill.
-      **Fixed v7.03, and it was never about the spiral's data.** The tangent at each point is the
-      Catmull-Rom (next - prev)/6. On a CLOSED path both neighbours always exist; on an OPEN one the
-      missing neighbour was **clamped to the endpoint itself**, so at the last point "next" WAS the point
-      and the tangent collapsed to (p - prev)/6 — half the length it should be, aimed straight down the
-      chord. Invisible on a closed shape. On the spiral, whose final segment sweeps a wide arc at maximum
-      radius, it is a straight tail.
-      Reflecting the missing neighbour across the endpoint (2p - prev, the standard phantom point)
-      restores it to (p - prev)/3. **This fixes every open path at once** — the spiral, and freehand and
-      vector drawings, whose first and last strokes were flattening for exactly the same reason and which
-      nobody had connected to this.
-
-- [ ] **159 — Shape icons in the add menu do not match the shapes they add. Make them 1:1.** (14 Aug.)
-      His words: *"most shapes icons vary largely to the actual shape, try and make them 1-1."*
-      Worth knowing before starting: js/addmenu.js already claims to render each icon **straight from
-      the shape's own polygon data** (`FM.SHAPE_POLYS`), with the comment "the menu preview can never
-      drift from what actually gets added". So either that path is not being used for the shapes he
-      means, or it IS used and the RENDERING differs — stroke vs fill, a different aspect ratio, or the
-      icon drawing the unit box where the real shape spawns at its own SHAPE_ASPECT.
-      **Measure which before touching anything**: render each shape's icon and the shape itself and
-      compare them, the same way #114's bounds were checked across all 54 at once. That also answers
-      whether this is one broken path or fifty-four small drift bugs.
-
-- [x] **167 — Freehand made a NEW LAYER for every stroke.** (v7.07) His words: *"For some reason when you
-      draw with free hand drawing it creates multiple layers, it should all be inside the one drawing you
-      just made not keep creating more."* His screenshot: nine `Freehand` rows from one drawing.
-      **This is also the cause of #166** — with a row per stroke there was no empty lane left to start a
-      vertical swipe on, which is why he could not scroll the timeline.
-      `commitStroke()` called `addPathLayer` per stroke, by design ("a stroke is committed and the tool
-      stays armed for the next one"). The renderer never needed that: `layer.subs` has been a
-      multi-subpath field all along and nothing was ever writing more than one into it.
-      **Fixed v7.07.** The first stroke of a session creates the layer; every stroke after it is appended
-      and the layer is re-fitted around the union — the box grows and all strokes are re-normalised into
-      it, since subs are stored in [0,1] of the layer's own box and a stroke drawn outside the old box
-      would otherwise land outside the drawing. The layer keeps its id, stack position and selection.
-      Also reset on `startDraw`, not just `stop()`: without that a second drawing would silently append
-      its strokes to the first drawing's layer, which is a worse bug than the one being fixed.
-
-- [ ] **166 — You cannot swipe the timeline up and down when clips fill it.** (14 Aug, screenshot at
-      v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
-      can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
-      free hand drawing layers."*
-      **That second message confirms the diagnosis** — it is not freehand-specific at all. It is that he
-      had NINE rows, so every touch lands on a clip. `.track-lane` carries `touch-action: none`, so the browser never scrolls it natively, and the
-      clip's own touch handler treats any movement past the threshold as a horizontal SCRUB:
-      `scrubIntent = adx > 6 && adx > ady` is computed but a vertical drag still falls through to
-      `FM.scrubTime(...)`. With few layers you can start a swipe on empty lane and it works; fill the
-      timeline with clips and there is nowhere left to start one.
-      Fix direction: a vertical-dominant drag that begins on a clip should scroll the track list, which
-      has to be done programmatically because touch-action has already opted out of the native scroll.
-      **Check the empty-lane path still scrolls too**, and that this does not break the hold-to-move
-      gesture — a hold is stationary, so it should be unaffected, but measure rather than assume.
-
-- [ ] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo.**
-      (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:
-      1. *"I don't like how it puts the screen to the bottom, needs to be in the middle."* His shot shows
-         the canvas shoved down against the tool bar with a large empty band above it — the drawing
-         surface should be centred in the space it has.
-      2. *"you should add an option to switch from drawing to erasing"* — a draw/erase toggle in the
-         drawing bar. Worth settling: does erase remove whole strokes, or rub out parts of one? Rubbing
-         out part of a stroke means splitting a path, which is real work; removing the stroke you touch
-         is a tenth of the effort and is what most simple editors do.
-      3. *"another option that lets you grab the screen and zoom in or out so you can do more detailed
-         drawing"* — pan and pinch-zoom the drawing surface. Note this collides with the drawing gesture
-         itself, so it needs to be a MODE (a grab/hand toggle) rather than a second meaning for one
-         finger.
-      4. *"instead of an undo button just add the undo and redo icons that we have in the normal menu so
-         you can go back or forwards"* — the bar has a text "Undo" today; it should carry the same two
-         glyphs the transport row uses, and redo must actually work inside drawing mode.
-      Good sign in the same message: *"The free hand drawing is usable on mobile now"* — so this is
-      polish on something that finally works, not another repair.
-
-- [ ] **164 — A freehand stroke gets THICKER the moment you let go.** (14 Aug.) His words: *"When I do
-      freehand drawing and finish a stroke it will for some reason make the stroke thicker when I let go
-      of drawing, stop that from happening."*
-      So the live preview and the committed layer disagree about width — you draw at one weight and get
-      another. Almost certainly a coordinate-space mismatch: the preview strokes in SCREEN px on the
-      overlay while the committed path is a shape layer whose stroke is in PROJECT px and then scaled by
-      the canvas fit, or the committed path picks up a default width instead of the drawing one.
-      **Measure both numbers before changing either** — the width used while drawing and the width stored
-      on the layer — rather than nudging a constant until it looks close.
-
-- [ ] **163 — Make the pencil and vector drawing icons genuinely good, judged to a high bar.** (14 Aug.)
-      His words: *"Make the logos for the pencil drawing and freehand drawing better, get multiple agents
-      with really high standards to not accept it until it's perfect."*
-      So the two icons v7.04 just changed (#161) are a starting point, not the finish. The verification is
-      part of the request again, and the bar is explicitly higher than "does it read": multiple judges,
-      high standards, iterate until they accept.
-      **Bounded on purpose** — his standing instruction is that no agent loop may run away: a hard cap on
-      rounds and a dry-round counter, never an open loop on a judge's own answer. Each round renders the
-      candidates at 24 / 48 / 96px (24 is the size that actually matters — it is the shape-picker cell)
-      and hands the sheet to judges who score and critique; I revise and re-render.
-
-- [x] **162 — The loading screen is not fully black any more.** (v7.05) His words: *"Loading screen
-      isn't fully black anymore"*, with a screenshot: the splash video's own frame is pure black and the
-      surround around it is the app's dark navy, so the letterbox shows as two bands.
-      It was deliberate, and the reasoning had expired. Queue 143 changed the splash surround from #000
-      to the app ground because a pure-black splash made the UNCOVERED canvas beside it stand out as a
-      bar — that was the first ever sighting of the black-bar bug. The note even claims "#060c0f against
-      a black video edge is imperceptible at this size"; his screenshot is the disproof.
-      **v7.02 removed the reason.** Now that the canvas paints what the page paints, the splash can be
-      pure black again — as long as the CANVAS is black too while it is up, or the bands simply move to
-      the safe area. So the boot script marks the document while the splash shows and both go black
-      together, and the mark is dropped when the splash is removed, restoring the themed light.
-
-- [ ] **157 — TRY moving the film grain off the project cards and onto the background.** (14 Aug.) His
-      words: *"I want to try removing the film grain from the projects and instead move it to the
-      background, it might be better if the projects are smooth and shiny with a rough textured
-      background instead of"* (message ends there). So: cards go **smooth and shiny**, the home
-      **background** gets the rough texture.
-      He said *"I want to try"* — this is an experiment, so keep it cheap to reverse and expect a verdict
-      rather than assuming it lands.
-      What is already there to move: the two-layer cross-fading grain on `.hm-card::before/::after`
-      (queue 76 → 94 → 105 → 133, four rounds of tuning), six generated noise tiles, and a per-card
-      phase. The home background's own `::before`/`::after` are BOTH already taken by the drifting light,
-      so the grain needs its own layer rather than a third pseudo-element — and it should reuse the same
-      keyframes rather than gaining a second copy (see #116 and #155 for why).
-
-- [x] **156 — Duplicating should leave the copy exactly where the original is.** (v7.01) (14 Aug.) His words:
-      *"Duplicating stuff should duplicate it in its exact position, not move it slightly."*
-      `FM.cloneLayer` adds **+30px to x and y** on every duplicate (and to every keyframe of an animated
-      path), under the comment "nudge so the copy is visible". That was a reasonable default when
-      "Duplicate in place" existed as a separate menu entry — but that entry was removed in v5.91 when
-      he circled six items and said *"Remove the circled options in this menu"*, so the nudging version
-      is now the ONLY duplicate there is. He wants the other one.
-      **Shipped v7.01.** The nudge is gone — a duplicate lands exactly on its original, and an animated
-      layer's whole keyframe path comes across unmoved (that half hides better than the static one: a
-      path shifted 30px is an entire animation displaced). Paste loses the offset with it, which matches
-      the AM behaviour that function already follows for time.
-      The copy is still tellable apart now that it is underneath the original: it is selected on
-      creation, named "… copy", and takes the next clip colour on its own timeline row — and the test
-      asserts those two, because with the offset gone they are the only things left doing that job.
-
-- [ ] **155 — Put the open-project glint on the SELECTED add-menu tab.** (14 Aug.) His words: *"I want
-      the effect that you have on the open project, like with the shiny line going around it, also on
-      whatever you have selected, like elements or shapes etc"*, then immediately: *"Not the elements or
-      shapes inside but the main button that opens the menu."*
-      So: the travelling light that runs around the OPEN project's card on home (#135, v6.13) goes on the
-      **active add-menu tab** — Elements / Shape / Media / Audio / Template — not on the item cards
-      inside it. Same meaning in both places: *this is the one that is open*.
-      Build it from the SAME implementation rather than a second copy, or the two will drift the way the
-      slider glide drifted from the timeline's in #116.
-
-- [x] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (v7.02) (14 Aug,
-      screenshot of home with a black band across the very bottom.) His words: *"When leaving a project
-      for a split second there's a black bar at the bottom then it fixes itself."*
-      **Same family as the v6.85 bar, and READ THAT ENTRY FIRST — it cost six attempts.** The lesson
-      from it: a strip DARKER than the app means something behind everything is a different colour, not
-      that an element is too small. The document canvas is already `#060c0f` (v6.85), so this is
-      something else that is briefly uncovered or briefly painted black.
-      What is different this time, and is the whole clue: it is **transient and tied to the leave-project
-      transition**, so it is a state that exists only DURING the reverse push and is corrected on the
-      frame after. Prime suspects, in order: the home screen's own background not yet painted on the
-      first frame of its entrance; `#app` still occupying the strip while sliding out; or an element
-      with an explicit `#000` (the stage/canvas is painted black by design) showing through for a frame.
-      **Measure it as a sequence, not a still** — sample what occupies the bottom strip on every frame
-      of the transition and find the frame where it is black. A single screenshot cannot see a
-      one-frame fault, which is exactly why the last one took six goes.
-      **FOUND AND FIXED, v7.02 — and it is the RESIDUAL of the v6.85 fix, not a new bug.** He reported it
-      a second time ("Black bar again", with the band under the + on home), which is what made it worth
-      chasing as a steady state rather than a one-frame flash.
-      Measured on the live app: `<html>` painted a **flat `#060c0f` with `background-image: none`**,
-      while `<body>` carried the glass theme's two radial gradients. Once `<html>` has a background of
-      its own, `<body>`'s no longer propagates to the document CANVAS — and the canvas is what paints
-      the whole web view, which under `viewport-fit=cover` is taller than the layout viewport. So every
-      strip the page did not cover was the ground colour with **none of the theme's light**, while
-      everything just above it was lit. Same colour, different brightness: a flat band along the bottom.
-      **v6.85 matched the canvas COLOUR and stopped there; it never matched the LIGHT.** The gradients
-      live on `<html>` now and `<body>` is transparent, so the two cannot double-paint where they
-      overlap.
-      The test that came out of it is the durable part: it asserts the canvas is never black against a
-      non-black ground (v6.85), never flat against a lit page (this one), and never doubled — checked in
-      **both** themes. Three attempts at this family have now each fixed one property of the canvas; the
-      invariant is "html paints what the page paints", and it is pinned.
-      **He then said "This still happens when I edit text fyi", with a phone screenshot.** Timing matters
-      here: his version chip read **v7.00** in the shot just before, so that device had not loaded the
-      v7.02 fix yet — it needs a reload before the report means anything. Flagged rather than assumed
-      either way. If it DOES persist after reloading, the phone's text-editing takeover is a genuinely
-      different path (`body.text-editing #app` collapses the grid to one cell and #stage takes the whole
-      area at `var(--stage)`, which is darker than the home ground by design), so ask him which strip he
-      means before chasing it.
-      (14 Aug, with an Alight Motion screenshot.) His words: *"When dragging a clip from the edges to
-      extend, in alight motions there's some differences, it tells you all of this information and also
-      shows on little notches, by colouring in the exact notch it will land on, because the notches are
-      frames and the whole thing has to actually line up with the notches."*
-      Two things, and the second is the one with teeth:
-      1. **The readout.** Six values in two rows above the strip, live while you drag:
-         `Start` · `End` · `Duration` on the top row, `In` · `Out` · `Change` on the second — where
-         Change is signed (`+00:02:59` in his shot). Note Start/End are the clip's place on the
-         TIMELINE and In/Out are the trim points within the source, which is why AM shows both.
-      2. **The notch strip, and the reason for it.** A tick strip under the numbers where **the exact
-         notch the edge will land on is filled in**. His reasoning is the important part: *"the notches
-         are frames and the whole thing has to actually line up with the notches."* So a trim is
-         quantised to whole FRAMES and the strip is the readout of which frame you are about to get.
-         His screenshot also has a coloured mark at each end (pink at the in-point, green at the
-         out-point), so the strip shows the whole clip's span, not just the edge being dragged.
-      Worth checking first whether our trim already quantises to frames — if it does not, the strip
-      would be drawing a promise the trim does not keep, and the quantising is the real work.
-
-- [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
-      His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,
-      could be soemthing way to hard to do and would be better to not add it then add a shit version for
-      now."*
-      **This changes #150's premise and must be settled first** — making a broken feature easier to reach
-      is worse than leaving it buried. What is actually known today: the suite has a green test,
-      *"captions: speech detection finds the bursts and ignores a steady tone"*, so the VAD does separate
-      bursts from a constant tone **on synthetic audio**. That is a very low bar and says nothing about
-      real speech over music, which is his case. It has never been measured on a real recording.
-      **MEASURED, v6.90. Short answer: don't delete it — it works, and your report is still right.**
-      Ran it against real speech (three sentences from the macOS speech synthesiser, laid out with
-      silences of our choosing so the truth is exact — `tests/_vadreal.html`, fixtures committed):
-
-      | what it was given | should find | found | verdict |
-      |---|---|---|---|
-      | a clean voice recording | 3 | **3** | edges within ~100 ms |
-      | voice + music 18 dB down | 3 | **3** | ends up to 290 ms early |
-      | voice + music 12 dB down | 3 | **2** | one missed, one 2.35 s late |
-      | voice + music 6 dB down | 3 | **0** | finds nothing at all |
-      | music, nobody talking | 0 | **0** | correct — invents nothing |
-
-      So it is a genuinely working voice detector that **collapses once music comes within ~12 dB of the
-      voice** — and the case you would actually try it on is an imported SONG, where there is no voice
-      above the music at all. It then said *"No speech found"*, which reads exactly like a broken button.
-      Crucially it does NOT scatter empty captions over a song, which is the failure that would have
-      deserved deleting it.
-      **v6.90 makes it say which it is**: when it finds nothing and the level never varies — a voice
-      swings the level hugely (clipDbStd 100 on clean speech) and a music bed does not (0.18 with no
-      voice, against 4.5 at −18 dB where detection still worked) — the message is now *"that reads as
-      music, not talking"* instead of a flat "no speech found", with the full stats in the console.
-      The suite's old VAD test only asked whether it could tell bursts from a steady tone, which could
-      never have answered your question; there is a real-speech test now that fails if a clean voice
-      stops being found within 250 ms, or if a cue is ever invented over music.
-      **Still your call, and here is the honest trade-off:** the remaining gap is speech buried under
-      loud music, which needs a real speech/music discriminator (spectral flux, not level) — a
-      substantial piece of work. If you only ever caption voice recordings, it already does the job. Say
-      the word and it goes; I am not attached to it.
-
-- [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
-      *"Also when editing a caption layer you should be able to chose somehow between adding effects to
-      each section or adding effects that effect the whole layer."* So a caption track carries one
-      effect stack today (it is a text layer, so `layer.effects` applies to the whole thing), and he
-      wants the choice: apply this effect to THIS CUE only, or to the track. That is a real data-model
-      change — per-cue effect stacks — plus a control in the effects panel to say which you mean, so
-      cost it honestly before starting. Sits naturally with #150 and #149 as a captions pass.
-
-- [x] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** (v6.95) His words:
-      *"when dragging the cue length for captions it should show it changing live not just wait for you
-      to let go then jump."*
-      **First look done, and the obvious suspects do NOT explain it — do not start by assuming they do.**
-      The timeline chip already sets its own left/width on every pointermove, and the move handler
-      already clamps to the clip duration exactly the way `normalize()` does on release, so neither the
-      chip geometry nor the release-time clamp is an obvious jump. What is definitely NOT live: the
-      inspector's captions list, which is only refreshed in the pointerup branch.
-      So: **measure which surface actually jumps before touching anything** — sample the chip width,
-      the inspector row and the rendered canvas text on each frame of a drag and compare each against
-      its value after release. Guessing at one surface is how the black bar cost six attempts.
-      **Measured, and the answer was the surface I had just talked myself out of.** The note above was
-      wrong: the chip only *looked* live in the source. `tests/_cuelive.html` samples all three surfaces
-      through a real drag —
-
-      | surface | during the drag | across the release |
-      |---|---|---|
-      | the cue data (`cue.end`) | live | no change |
-      | **the timeline chip's rendered width** | **flat at 0.0px** | **0.0 → 462.5 — the jump** |
-
-      A rendered width of **zero** is the tell: the chip was DETACHED. `startCue` calls `selectLayer()`,
-      which rebuilds the timeline and throws away the chip element captured one line earlier — so every
-      pointermove afterwards was restyling a node that had left the document. Styling a detached node
-      raises nothing and shows nothing, which is why reading the code said "already live" while the
-      screen said otherwise, and why nothing ever caught it.
-      **Fixed v6.95** in two halves: don't rebuild at all when the layer is already selected (the common
-      case — you drag a cue on the track you are working on), and re-acquire the chip from the live DOM
-      whenever a rebuild does take it, so a drag can never be left holding an orphan. Measured after:
-      the chip tracks the finger for 101.9px and does not move at all on release — what you see while
-      dragging is what you get. Mutation-checked; the test measures the RENDERED width, because the data
-      and the style property were both correct the whole time.
-
-- [ ] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans.** His words:
-      *"make the auto detect captions button way easier to access and use. and it should have a choice
-      between only detecting where the captions are added in the project or detecting the whole project
-      or detecting a specific audio later then let you select it."*
-      Two parts:
-      1. **Access.** Today "Detect speech" is buried in the Aa sheet next to a source dropdown (his own
-         screenshot for #147 shows it). It should be reachable without going three levels deep.
-      2. **Scope, three options**: (a) only the span the captions layer covers, (b) the whole project,
-         (c) a specific audio layer — and for (c) a picker to choose which. Today it detects against one
-         implicit source with no say in the matter.
-      **UNBLOCKED — #152 is measured and the detector works** (see it for the numbers). And the measurement
-      makes part 2 more important than it looked: it fails specifically when music sits within ~12 dB of
-      the voice, so *"detecting a specific audio layer then let you select it"* is not a convenience, it
-      is **the fix** — pointing it at the voice track instead of the finished mix is the difference
-      between 3 cues and 0. Build the scope picker with that framing, and default to the most voice-like
-      source rather than to whatever clip happens to be first.
-
-- [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
-      His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
-      trying to play back stuff, this is related to the long on going lag issues with freemotion."*
-      **Taking his diagnosis seriously — it is the most useful thing in the report.** Scratchy popping on
-      playback is the classic signature of audio BUFFER UNDERRUN: the audio graph is starved because the
-      main thread is busy, so the output drops to silence for a few samples and every gap is a click. That
-      makes it the same illness as #125/#130, heard instead of seen — which is why it belongs with them
-      and not on its own. It is also the loudest possible evidence FOR the lag being real, and unlike a
-      dropped frame it is physically unpleasant.
-      Other candidates to rule out before accepting that, because a pop has more than one cause:
-      **discontinuities at clip/loop boundaries** (starting or stopping a source mid-waveform without a
-      ramp clicks every time — a 5ms fade kills it), **sample-rate mismatch** between the decoded file and
-      the AudioContext, and **clipping** if gain sums past 1.0. Measure which one it is before changing
-      anything: record the output and look for the gaps, rather than guessing from the symptom the way
-      the film-grain fix went wrong four times.
-      Pairs with **69** (audio must never lag — make the audio clock the master), which is probably the
-      real fix if it is starvation.
-      **FOUND AND FIXED, v6.91 — and you were right that it is tied to the lag, though not by the route
-      I expected.** Five independent readings of the audio path found nothing that survived a skeptic
-      (no ScriptProcessor anywhere, so lag cannot starve the audio thread; no double-connect; no
-      unramped clip boundary that could reach a plain imported song). What none of them examined was
-      the drift correction. Measured in a real browser — four seconds of ONE plain audio clip, no
-      effects, speed 1:
-
-      | | before | after |
-      |---|---|---|
-      | real writes to `el.playbackRate` | **85 (21/s headless, 55/s real browser)** | **6 (1.5/s)** |
-      | median sync error | 152.9 ms | **23.4 ms** (inside the 45 ms dead band) |
-      | decisions that were a rate trim | 232 of 240 | 76 of 240 |
-
-      `preservesPitch` defaults to true, so a media element answers a rate change with a **time-stretcher**,
-      not a resample — and re-priming a WSOLA stretcher tens of times a second is exactly a scratchy,
-      warbling noise. Nothing is ever dropped, which is why it left no trace in the seek counter and
-      survived every reading of the file.
-      **Why it never settled** is the actual defect: `el.currentTime` is latched to the last block the
-      element handed the audio device, so it reads a constant OUTPUT LATENCY behind the true audible
-      position. That constant is not drift, and a proportional controller cannot remove a constant — it
-      just leaned on the throttle forever, asking for +10% permanently and re-deciding it every frame.
-      A busier machine means a bigger, noisier latency, which is the real link to the lag.
-      Fix: learn the constant with a slow EMA and subtract it (genuine drift accumulates and outruns
-      the filter, so it is still corrected), and rate-limit the trim writes to 4/s — a ±10% correction
-      needs a full second to close 100 ms, so re-deciding it 55 times inside that second bought nothing
-      and cost a stretcher re-prime each time. A speed ramp or preview-rate change is the user asking
-      for a rate and is still honoured on the very next frame.
-      Covered by a regression test that gives the fake element an 80 ms latency — the harness's element
-      was a *perfect* clock, which is why it reported everything healthy while a real browser churned.
-      Mutation-checked: with the fix disabled it reports 26.5 writes/s and goes red.
-      **Still worth your ears** — this is measured, not heard. If it still sounds scratchy, say so and
-      the next suspect is the decode path, not the sync loop.
-
-- [ ] **147 — PC: the text editor covers the text you are editing. Get it off the canvas.** (13 Aug,
-      screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
-      text while you edit it, get it off the canvas, also the text edit stuff on pc for some reason
-      covers up the canvas, making it smaller when you could just put it in the add menu, so it doesnt
-      take up real estate on the screen."*
-      Two faults, and the second one carries his proposed fix:
-      1. **It covers its own subject.** The "Aa" sheet (Spacing / Line height / Curve / Animate / caption
-         controls) and the toolbar + text field below it are painted over the canvas — in the screenshot
-         they cover the frame completely, so you are typing blind at the one moment you most need to see
-         the result. This is the worst version of the bug: a text editor that hides the text.
-      2. **On PC it also shrinks the canvas** to make room, spending screen on a panel that only exists
-         while you type. His fix: *"you could just put it in the add menu"* — i.e. on desktop the whole
-         text-editing UI belongs in the LEFT panel column (where Add / the inspector live), not as a
-         canvas overlay. The canvas then keeps its full size and the text stays visible while you edit.
-      Phone is a different problem and is NOT covered by this — there is no side column there, and the
-      current overlay is the right shape for a phone. Desktop only.
-      **Half shipped in v6.96 — the half you were actually looking at — and I want to be straight about
-      which half.** Measured on a 1280x860 window (`tests/_tecover.html`):
-
-      | | covers of the canvas |
-      |---|---|
-      | the editor card (toolbar + text field) | **0.0%** |
-      | **the Aa options panel** | **100.0%** |
-
-      So the card was never the thing hiding your text: `layoutDesktop` already reserves a band for it
-      and that works. It was the **Aa panel**, covering the canvas completely — which is exactly your
-      screenshot. It now opens in the side column instead, where the app already keeps vertical lists of
-      controls, i.e. where you said to put it. Measured after: **0.0%**. Falls back to the old placement
-      if that column is too small to hold it, so it can never be worse than it was.
-      **Still outstanding: the second half.** The card reserves **169px** at the bottom of the stage, and
-      that is the *"makes it smaller"* complaint. Removing it means docking the toolbar and field into
-      the side column too — the column is 286px and the card's minimum is 320px, so it needs a real
-      re-layout rather than a reparent, and it lands in the same strip #143/#144 are rebuilding. Left for
-      when those are settled, so it is done once rather than twice.
-
-- [x] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** (v6.94) His words:
-      *"also on pc get rid of the project name editor thats at the top, its already at the bottom."*
-      Screenshot 1 shows both: **IF I HAD ONE** across the top-left, and the same name again on the
-      INSPECTOR header at the bottom-left. Two editors for one field. Keep the bottom one — that is the
-      one beside the layer/selection context — and remove the top. Belongs with #143/#144, which are
-      rebuilding that top strip anyway.
-      **Shipped v6.94, with one judgement call you should check.** That top field is **dual-purpose**:
-      with a layer selected it renames THAT LAYER, and only with nothing selected does it show the
-      project name. (That is why your screenshot has *"IF I HAD ONE"* up top and *"If i had one slowed"*
-      in the inspector — they are a layer name and a project name, not two copies of one thing.) So it
-      duplicates the inspector header **exactly when nothing is selected**, and the rest of the time it
-      is the only rename control in the top strip.
-      Deleting it outright would have quietly taken away layer renaming from the PC top bar, which you
-      did not ask for — so it now hides **only** while it would be the second copy of the project name,
-      and comes back as the layer renamer the moment you select something. Studio layout only; the
-      classic layout has no second field to duplicate.
-      **If you did mean "gone in both states", say so and it is one line.** Renaming a layer would then
-      live on the timeline (double-click a track head), which already works.
-
-- [x] **145 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons
-      looking goofy.** (v6.93) (13 Aug, two messages.) His words: *"make the background of all the buttons like
-      elements shape etc a different colour to the ones in inside each section, like text etc. so it shows
-      the difference in action, and then you can add colour to all the sub section buttons, while ur at it
-      as well make them look better for the pc version because when theyre big icons it looks really
-      goofy."* Then, immediately after: *"on pc they should be sharp and detailed and have black outlines
-      etc."*
-      Three things:
-      1. **Two visual classes, not one.** A button that CHANGES SECTION (Shape, Media, Audio, Object,
-         Template, Elements, Freehand…) must not look like a button that ADDS A THING (Text, a specific
-         shape, …). Different background colour, so "the difference in action" is visible before you tap.
-      2. **Colour on the sub-section buttons too** — the item buttons get colour rather than staying grey.
-      3. **PC: the big icons look goofy.** At the desktop size the glyphs are simple line drawings scaled
-         up, which is exactly when a 24px icon falls apart. He wants them *"sharp and detailed"* with
-         *"black outlines"* — so a heavier, properly-drawn treatment at the large size, not the same path
-         stretched.
-      Reading "elements shape etc" as the add menu's SECTION tabs and "text etc" as the items inside a
-      section. If he meant the inspector's nine category cards instead, it is a one-word correction —
-      **asking next time he speaks.**
-      **Shipped v6.93, all three parts.** Tabs and cards really were one shared background rule, so a
-      button that changes section was pixel-identical to one that adds a layer. Tabs are now a recessed
-      well — the light falls *into* them, the way a control strip should read — and each item card
-      carries a tinted plate behind its icon. Colour comes from a curated eight-hue ring walked by
-      position, so every button gets one, neighbours stay far apart, and nothing needs maintaining when
-      an item is added. Media tiles keep their own frame with no plate over it.
-      The PC complaint was a real drawing fault, not taste: the glyphs are drawn at 24px with a 1.8
-      stroke and rendered at 34px, so the figure grows while the line stays put and the whole thing
-      thins out — desktop gets more weight plus the hard black edge you asked for.
-      **One thing to look at when you're back:** the Shape grid is 6 tiles across in a 288px panel and
-      genuinely has no room for a plate, so those tiles take the colour on the stroke only. It reads
-      fine, but it is the one place the two families look less different than elsewhere.
-      **CORRECTED BY HIM, 14 Aug — I built the wrong thing.** His words, with the whole "Text" CARD
-      circled in his screenshot: *"When I said I want the background of these icons to have different
-      colours I meant the whole shape around it, so you get rid of that little square bubble around then
-      that's colourful, and since you made the top icons go dark when not selected you've already done
-      enough. Also on the of version all the icons with this effect are now off centred."*
-      So three things:
-      1. **Kill the plate.** The little coloured square behind each icon goes entirely.
-      2. **Tint the WHOLE CARD instead** — the background of the button itself is the colour.
-      3. **The tabs are already sorted.** Making them go dark when not selected was enough on its own;
-         nothing more is wanted there.
-      Plus a defect I introduced: **the icons sit off-centre inside the plate** (visible on Text,
-      Captions, Camera in his shot). That should die with the plate, but verify it rather than assume.
-
 - [x] **142 — Home settings: a default colour for new shapes.** (v6.92) His words: *"In the home settings menu,
       make a setting to change the default colour of shapes when you import them. Applied to every
       shape."* So a colour control in the HOME settings cog (the app-wide one, not a project setting),
@@ -890,98 +328,6 @@ better still, keep working inside the turn rather than parking work for a later 
       Now `Math.min(P.width, P.height) / 6.75` — the same ratio against whichever side is shorter.
       Measured after: portrait 160 → 26.7% (byte-identical, no regression), his 4:3 320 → 20.0%,
       landscape 160 → 15.0%. Suite 231/231.
-
-- [x] **144 — The slam shake reveals the editor behind home.** (v6.82) His words: *"When the shake happens it
-      shows the editing page behind it, looks weird, just make sure you don't see the page behind it,
-      either make the page extend so the shake doesn't show anything else or what you think is best.
-      Also idk why you would be able to see that behind it, like are both screens just sitting on top of
-      each other? If so that seems lag a cause of lag."*
-      Two parts, and the second is the better question:
-      (a) **The visual.** #home-screen is position:fixed inset:0 and the slam TRANSLATES it up to ~13px,
-          so for those 420ms there is a strip of un-covered viewport and #app shows through. Fix by
-          painting the surround rather than by moving less — the impact IS the point of the egg.
-      (b) **His architecture question, which is fair:** yes, the editor sits under home rather than being
-          torn down. Whether that costs anything depends entirely on whether it keeps RENDERING while
-          home is up — a covered but idle DOM tree is nearly free, a covered but still-drawing canvas is
-          not. Measure it before claiming either way, and give him the honest answer.
-      **Shipped v6.82 (a), answered (b).**
-      (a) `#home-screen.hm-slam` now carries `box-shadow: 0 0 0 140px var(--bg)` — a ring of home's
-          OWN background, on the same element, so it travels and twists with the shake and the gap is
-          always the same colour as home. Chosen over moving less, because the impact is the whole
-          point of the egg. Verified by painting the editor bright red and freezing home at the shake's
-          worst frame (13px down, .34deg): no red anywhere. Note elementFromPoint CANNOT verify this —
-          it ignores box-shadow and still reports the element underneath; only a screenshot can.
-      (b) **Measured: the editor is NOT costing anything while home is up.** renderScene ran 0 times in
-          1.5s with home open, and 0 times sitting idle in the editor — the canvas only draws on demand
-          (scrub, play, edit), it has no idle loop. So the two screens stacking is not a lag source. The
-          editor's DOM does stay laid out behind home, but that is a one-off layout, not per-frame work.
-          His instinct was a good one; it just does not happen to be true here.
-
-- [ ] **145 — Why does Alight Motion take ages to load and ours doesn't?** His words: *"alight motion
-      always takes ages to load when you open the app but ours doesn't, idk if that's coz ours is shit
-      and has nothing to load or just loads it well."* Not a bug — a question that deserves an honest
-      answer rather than a flattering one. Answer with actual numbers: what we load at boot, what is
-      deferred, and which parts are genuine architecture versus simply having far less to load than a
-      mature native app.
-
-- [x] **143 — A bar at the bottom, on EVERY screen.** (v6.79) Screenshot on v6.78: the splash paints
-      pure black with the wordmark and "tap to skip", and the bottom ~40px is a DIFFERENT, slightly
-      lighter dark — the app background showing below a splash that does not reach the bottom edge.
-      **Almost certainly the same defect as #135, on the other axis**: #135 is a full-height strip down
-      the RIGHT (element too narrow), this is a strip along the BOTTOM (element too short). Treat them
-      as one bug — "a full-bleed element is not filling the viewport" — rather than two, and fix them
-      together. Two independent sightings on two axes is much better evidence than either alone.
-      **Then he found the decisive fact:** *"it's there when you're in the home menu too… Oh wait it's
-      def a glitch, it's there even when I'm in a project, urgently fix."* Present on the splash, on
-      home AND inside a project — so it is not any one screen's layout, and it cannot be a gap under a
-      z-index-10000 `position:fixed; inset:0` splash either. Nothing in the PAGE could paint it.
-      **Cause: `theme-color`.** It was `#12151b` in both the meta tag and manifest.json. On iOS 26 a
-      standalone PWA tints the area around the page with theme-color, including the home-indicator
-      safe area — so that band sat under every screen, and read as a bar precisely because #12151b is
-      lighter than the app's ground and lighter still than the splash's pure black. The screenshot
-      agrees: the strip is LIGHTER than the black splash, which no missing-element gap would be.
-      Fixed by setting both to #000000, matching the splash and the manifest's existing
-      background_color, so the band is the same colour as what it sits under.
-      **Note it also explains #135's right-hand strip** — same band, the side edge — which is why that
-      one survived the v6.78 overflow fix. If the right strip is gone too, close #135 on this.
-      Caveat for him: the META takes effect on reload, but iOS may have cached the MANIFEST from
-      install, so a full close-and-reopen (or worst case re-adding to the Home Screen) may be needed
-      before the manifest half applies.
-      **v6.79 did NOT fix it either** (*"Fully closed and re opened and it's still there"*), so the
-      theme-color theory was wrong too. Two wrong guesses.
-      **v6.80-diag settled it with a measurement instead of a third guess.** A magenta band was painted
-      across the last 60px of the PAGE with a cyan hairline on the page's true bottom edge, and the
-      live numbers printed in it. His screenshot: **innerH 894 · visualH 894 · safeBottom 34 · dpr 3 ·
-      standalone yes**, and the magenta band sits ABOVE a remaining dark strip.
-      **Conclusion, now evidence-backed: the page ENDS EARLY and the bar is OUTSIDE the page.** The page
-      is inset from the bottom by ~34pt — exactly the home-indicator safe area — even though
-      `viewport-fit=cover` is present and `env(safe-area-inset-bottom)` correctly reports 34.
-      **Nothing in CSS can ever paint there.** That is why the overflow fix and the theme-color fix both
-      changed nothing, and it retires every "an element is too short" theory.
-      **Most likely cause: iOS caches the launch configuration at ADD-TO-HOME-SCREEN time.** Closing and
-      reopening does not re-read the viewport meta or manifest for an installed PWA. His icon is still
-      launching with whatever config was current when he first installed it. **Next step is his, not a
-      code change: delete the Home Screen icon and re-add it**, then check. If the bar survives a fresh
-      install, the config itself is wrong and the next suspect is the interaction between
-      `apple-mobile-web-app-status-bar-style: black-translucent` (deprecated) and `viewport-fit=cover`
-      on iOS 26 — try dropping the legacy meta so the manifest alone drives standalone.
-      Probe removed in v6.80; do not ship it again without a reason.
-      **SOLVED in v6.85, and it was never a layout bug at all.** index.html painted the document
-      CANVAS pure black — `<style>html,body{background:#000}</style>` — while the app's ground is
-      #060c0f. The canvas covers the whole WEB VIEW, which under viewport-fit=cover on iOS is larger
-      than the layout viewport the page is laid out in. So every sliver the page did not cover showed
-      as a distinct BLACK bar: right edge, bottom edge, over the splash, on home and in a project.
-      That is why five attempts failed. An overflow-x rule, a theme-color change, a fresh install and
-      two reverts all hunted an element that was too small — and a four-agent audit proved no such
-      element exists: no stylesheet rule constrains the width, env(safe-area-inset-right) is used zero
-      times, nothing overflows horizontally, and no commit since v6.73 can narrow the page. His own
-      probe screenshot agreed: innerW/outerW/screen.w/clientW/visualW/bodyW/scrollW ALL 440.
-      Fix: html now paints the app's ground (inline for the first frame, `html { background: var(--bg) }`
-      in styles.css so each theme drives it), and the splash surround matches too so it cannot show
-      during load. Three colour values; no layout touched.
-      **Lesson for next time, worth more than the fix:** the very first screenshot showed a strip
-      DARKER than the app. I read that as "an element is missing" when it actually said "something
-      behind everything is a different colour". Six rounds could have been one.
 
 - [x] **135 — Black bar down the right edge (and the bottom).** (v6.85 — SIXTH attempt, finally the real cause.) He ticked it off
       (*"just assume it's fixed for now"*) and then immediately: *"Never mind it just came up."*
@@ -1738,6 +1084,666 @@ better still, keep working inside the turn rather than parking work for a later 
       the App Store, a public link, a demo or a tutorial series.
 
 ---
+
+<!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
+
+- [ ] **168 — PC: kill the left side rail, move everything into the transport row.** (13 Aug, with two *(logged as #143 by mistake — that number was already used by an earlier shipped item, so it is #168 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #143.)*
+      Studio screenshots at v6.86.) His words: *"on pc we can lokey remove the side bar, put export on the
+      far left of the row with the play buttons then to it's right the settings button then the Version
+      refresh, then on the right side of the play button after the copy paste button, put delete and the
+      binding button and the group button, they only show up when they should, not always there."*
+      Reading it as a layout, left to right along the one transport row:
+      **Export · Settings · version-refresh chip** — then the existing centred cluster
+      (undo · redo · ⏮ · ▶ · ⏭ · duplicate) — then, to the RIGHT of duplicate:
+      **Delete · Bind (parenting) · Group**.
+      The last clause is the part to get right: *"they only show up when they should, not always there."*
+      Delete/Bind/Group are selection-dependent — Group wants 2+ layers, Bind wants a selection and a
+      target, Delete wants any selection — so the row must grow and shrink with the selection rather
+      than showing three permanently-dimmed buttons. Watch the centre cluster staying visually centred
+      as the right side changes width, or the play button will drift as you select things.
+      Screenshot 1 shows the rail to remove: back arrow, `↻ v6.86`, duplicate, delete, export, settings.
+      **AMENDED minutes later, and this supersedes the left-hand half above.** His words: *"since you
+      will needa spot for the back button, to go to the home screen, put the export button to the very
+      far right just one before the view options button and put the settings cog to its left, change
+      its logo to a normal image and not colourful (pc version only) so it fits in with everything
+      else. Then back button to leave project can be at the far left."* So the row reads:
+      **← back** (far left) · undo · redo · ⏮ · ▶ · ⏭ · duplicate · **delete · bind · group** (only when
+      they apply) · … · **settings cog · export · view options** (far right).
+      **ANSWERED 14 Aug, so this is no longer blocked.** His words: *"on the of move the refresh button
+      to re load the page would go on the far right where the export button and settings cog would be,
+      it would come after all of them so on the left of them."* So the chip joins the far-RIGHT cluster
+      and sits to the LEFT of the cog and export. Final order for that end of the row:
+      **`↻ v7.00` · settings cog · export · view options** (view options stays outermost, per the
+      amendment). Nothing goes at the far left except the back button.
+      **One thing still open:** *"change its logo"* — the cog is already a plain outline icon and the EXPORT
+      button is the colourful glass one from #71, so this almost certainly means give export a plain
+      monochrome icon on PC while the phone keeps the glass artwork. Building it that way; flagging it
+      so he can correct me in one word if I have it backwards.
+
+- [x] **143 — A bar at the bottom, on EVERY screen.** (v6.79) Screenshot on v6.78: the splash paints
+      pure black with the wordmark and "tap to skip", and the bottom ~40px is a DIFFERENT, slightly
+      lighter dark — the app background showing below a splash that does not reach the bottom edge.
+      **Almost certainly the same defect as #135, on the other axis**: #135 is a full-height strip down
+      the RIGHT (element too narrow), this is a strip along the BOTTOM (element too short). Treat them
+      as one bug — "a full-bleed element is not filling the viewport" — rather than two, and fix them
+      together. Two independent sightings on two axes is much better evidence than either alone.
+      **Then he found the decisive fact:** *"it's there when you're in the home menu too… Oh wait it's
+      def a glitch, it's there even when I'm in a project, urgently fix."* Present on the splash, on
+      home AND inside a project — so it is not any one screen's layout, and it cannot be a gap under a
+      z-index-10000 `position:fixed; inset:0` splash either. Nothing in the PAGE could paint it.
+      **Cause: `theme-color`.** It was `#12151b` in both the meta tag and manifest.json. On iOS 26 a
+      standalone PWA tints the area around the page with theme-color, including the home-indicator
+      safe area — so that band sat under every screen, and read as a bar precisely because #12151b is
+      lighter than the app's ground and lighter still than the splash's pure black. The screenshot
+      agrees: the strip is LIGHTER than the black splash, which no missing-element gap would be.
+      Fixed by setting both to #000000, matching the splash and the manifest's existing
+      background_color, so the band is the same colour as what it sits under.
+      **Note it also explains #135's right-hand strip** — same band, the side edge — which is why that
+      one survived the v6.78 overflow fix. If the right strip is gone too, close #135 on this.
+      Caveat for him: the META takes effect on reload, but iOS may have cached the MANIFEST from
+      install, so a full close-and-reopen (or worst case re-adding to the Home Screen) may be needed
+      before the manifest half applies.
+      **v6.79 did NOT fix it either** (*"Fully closed and re opened and it's still there"*), so the
+      theme-color theory was wrong too. Two wrong guesses.
+      **v6.80-diag settled it with a measurement instead of a third guess.** A magenta band was painted
+      across the last 60px of the PAGE with a cyan hairline on the page's true bottom edge, and the
+      live numbers printed in it. His screenshot: **innerH 894 · visualH 894 · safeBottom 34 · dpr 3 ·
+      standalone yes**, and the magenta band sits ABOVE a remaining dark strip.
+      **Conclusion, now evidence-backed: the page ENDS EARLY and the bar is OUTSIDE the page.** The page
+      is inset from the bottom by ~34pt — exactly the home-indicator safe area — even though
+      `viewport-fit=cover` is present and `env(safe-area-inset-bottom)` correctly reports 34.
+      **Nothing in CSS can ever paint there.** That is why the overflow fix and the theme-color fix both
+      changed nothing, and it retires every "an element is too short" theory.
+      **Most likely cause: iOS caches the launch configuration at ADD-TO-HOME-SCREEN time.** Closing and
+      reopening does not re-read the viewport meta or manifest for an installed PWA. His icon is still
+      launching with whatever config was current when he first installed it. **Next step is his, not a
+      code change: delete the Home Screen icon and re-add it**, then check. If the bar survives a fresh
+      install, the config itself is wrong and the next suspect is the interaction between
+      `apple-mobile-web-app-status-bar-style: black-translucent` (deprecated) and `viewport-fit=cover`
+      on iOS 26 — try dropping the legacy meta so the manifest alone drives standalone.
+      Probe removed in v6.80; do not ship it again without a reason.
+      **SOLVED in v6.85, and it was never a layout bug at all.** index.html painted the document
+      CANVAS pure black — `<style>html,body{background:#000}</style>` — while the app's ground is
+      #060c0f. The canvas covers the whole WEB VIEW, which under viewport-fit=cover on iOS is larger
+      than the layout viewport the page is laid out in. So every sliver the page did not cover showed
+      as a distinct BLACK bar: right edge, bottom edge, over the splash, on home and in a project.
+      That is why five attempts failed. An overflow-x rule, a theme-color change, a fresh install and
+      two reverts all hunted an element that was too small — and a four-agent audit proved no such
+      element exists: no stylesheet rule constrains the width, env(safe-area-inset-right) is used zero
+      times, nothing overflows horizontally, and no commit since v6.73 can narrow the page. His own
+      probe screenshot agreed: innerW/outerW/screen.w/clientW/visualW/bodyW/scrollW ALL 440.
+      Fix: html now paints the app's ground (inline for the first frame, `html { background: var(--bg) }`
+      in styles.css so each theme drives it), and the splash surround matches too so it cannot show
+      during load. Three colour values; no layout touched.
+      **Lesson for next time, worth more than the fix:** the very first screenshot showed a strip
+      DARKER than the app. I read that as "an element is missing" when it actually said "something
+      behind everything is a different colour". Six rounds could have been one.
+
+- [ ] **169 — PC: trim/split move onto the playhead, and the align buttons get the whole panel.** (13 Aug, *(logged as #144 by mistake — that number was already used by an earlier shipped item, so it is #169 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #144.)*
+      second screenshot, multi-select state.) His words: *"put the delete left side button to the left of
+      the play head and then same for the right button, and put the split button in the middle on top of
+      the playhead. Then in the left massive area where its currently got the six small buttons, just get
+      rid of the buttons that are near the play head and then with the align buttons just make them big
+      and fill up the whole section."*
+      So: the three trim/split controls (`[|` trim-left, `<|>` split, `|]` trim-right) stop being a row
+      floating above the ruler and become **playhead-anchored** — trim-left sits immediately LEFT of the
+      playhead line, trim-right immediately RIGHT of it, and split sits centred ON the playhead. They
+      travel with the playhead. Then the inspector's "EDIT 2 CLIPS" row is deleted outright (those are
+      the same three buttons), leaving **ALIGN ON TIMELINE** alone in that panel — and its three buttons
+      grow to fill the whole area instead of sitting as a small row at the top.
+      Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
+      single clip too (screenshot 1) — the playhead move applies to both.
+
+- [x] **144 — The slam shake reveals the editor behind home.** (v6.82) His words: *"When the shake happens it
+      shows the editing page behind it, looks weird, just make sure you don't see the page behind it,
+      either make the page extend so the shake doesn't show anything else or what you think is best.
+      Also idk why you would be able to see that behind it, like are both screens just sitting on top of
+      each other? If so that seems lag a cause of lag."*
+      Two parts, and the second is the better question:
+      (a) **The visual.** #home-screen is position:fixed inset:0 and the slam TRANSLATES it up to ~13px,
+          so for those 420ms there is a strip of un-covered viewport and #app shows through. Fix by
+          painting the surround rather than by moving less — the impact IS the point of the egg.
+      (b) **His architecture question, which is fair:** yes, the editor sits under home rather than being
+          torn down. Whether that costs anything depends entirely on whether it keeps RENDERING while
+          home is up — a covered but idle DOM tree is nearly free, a covered but still-drawing canvas is
+          not. Measure it before claiming either way, and give him the honest answer.
+      **Shipped v6.82 (a), answered (b).**
+      (a) `#home-screen.hm-slam` now carries `box-shadow: 0 0 0 140px var(--bg)` — a ring of home's
+          OWN background, on the same element, so it travels and twists with the shake and the gap is
+          always the same colour as home. Chosen over moving less, because the impact is the whole
+          point of the egg. Verified by painting the editor bright red and freezing home at the shake's
+          worst frame (13px down, .34deg): no red anywhere. Note elementFromPoint CANNOT verify this —
+          it ignores box-shadow and still reports the element underneath; only a screenshot can.
+      (b) **Measured: the editor is NOT costing anything while home is up.** renderScene ran 0 times in
+          1.5s with home open, and 0 times sitting idle in the editor — the canvas only draws on demand
+          (scrub, play, edit), it has no idle loop. So the two screens stacking is not a lag source. The
+          editor's DOM does stay laid out behind home, but that is a one-off layout, not per-frame work.
+          His instinct was a good one; it just does not happen to be true here.
+
+- [x] **170 — Add menu: colour the section buttons apart from the item buttons, and stop the PC icons *(logged as #145 by mistake — that number was already used by an earlier shipped item, so it is #170 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #145.)*
+      looking goofy.** (v6.93) (13 Aug, two messages.) His words: *"make the background of all the buttons like
+      elements shape etc a different colour to the ones in inside each section, like text etc. so it shows
+      the difference in action, and then you can add colour to all the sub section buttons, while ur at it
+      as well make them look better for the pc version because when theyre big icons it looks really
+      goofy."* Then, immediately after: *"on pc they should be sharp and detailed and have black outlines
+      etc."*
+      Three things:
+      1. **Two visual classes, not one.** A button that CHANGES SECTION (Shape, Media, Audio, Object,
+         Template, Elements, Freehand…) must not look like a button that ADDS A THING (Text, a specific
+         shape, …). Different background colour, so "the difference in action" is visible before you tap.
+      2. **Colour on the sub-section buttons too** — the item buttons get colour rather than staying grey.
+      3. **PC: the big icons look goofy.** At the desktop size the glyphs are simple line drawings scaled
+         up, which is exactly when a 24px icon falls apart. He wants them *"sharp and detailed"* with
+         *"black outlines"* — so a heavier, properly-drawn treatment at the large size, not the same path
+         stretched.
+      Reading "elements shape etc" as the add menu's SECTION tabs and "text etc" as the items inside a
+      section. If he meant the inspector's nine category cards instead, it is a one-word correction —
+      **asking next time he speaks.**
+      **Shipped v6.93, all three parts.** Tabs and cards really were one shared background rule, so a
+      button that changes section was pixel-identical to one that adds a layer. Tabs are now a recessed
+      well — the light falls *into* them, the way a control strip should read — and each item card
+      carries a tinted plate behind its icon. Colour comes from a curated eight-hue ring walked by
+      position, so every button gets one, neighbours stay far apart, and nothing needs maintaining when
+      an item is added. Media tiles keep their own frame with no plate over it.
+      The PC complaint was a real drawing fault, not taste: the glyphs are drawn at 24px with a 1.8
+      stroke and rendered at 34px, so the figure grows while the line stays put and the whole thing
+      thins out — desktop gets more weight plus the hard black edge you asked for.
+      **One thing to look at when you're back:** the Shape grid is 6 tiles across in a 288px panel and
+      genuinely has no room for a plate, so those tiles take the colour on the stroke only. It reads
+      fine, but it is the one place the two families look less different than elsewhere.
+      **CORRECTED BY HIM, 14 Aug — I built the wrong thing.** His words, with the whole "Text" CARD
+      circled in his screenshot: *"When I said I want the background of these icons to have different
+      colours I meant the whole shape around it, so you get rid of that little square bubble around then
+      that's colourful, and since you made the top icons go dark when not selected you've already done
+      enough. Also on the of version all the icons with this effect are now off centred."*
+      So three things:
+      1. **Kill the plate.** The little coloured square behind each icon goes entirely.
+      2. **Tint the WHOLE CARD instead** — the background of the button itself is the colour.
+      3. **The tabs are already sorted.** Making them go dark when not selected was enough on its own;
+         nothing more is wanted there.
+      Plus a defect I introduced: **the icons sit off-centre inside the plate** (visible on Text,
+      Captions, Camera in his shot). That should die with the plate, but verify it rather than assume.
+
+- [ ] **145 — Why does Alight Motion take ages to load and ours doesn't?** His words: *"alight motion
+      always takes ages to load when you open the app but ours doesn't, idk if that's coz ours is shit
+      and has nothing to load or just loads it well."* Not a bug — a question that deserves an honest
+      answer rather than a flattering one. Answer with actual numbers: what we load at boot, what is
+      deferred, and which parts are genuine architecture versus simply having far less to load than a
+      mature native app.
+
+- [x] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** (v6.94) His words:
+      *"also on pc get rid of the project name editor thats at the top, its already at the bottom."*
+      Screenshot 1 shows both: **IF I HAD ONE** across the top-left, and the same name again on the
+      INSPECTOR header at the bottom-left. Two editors for one field. Keep the bottom one — that is the
+      one beside the layer/selection context — and remove the top. Belongs with #143/#144, which are
+      rebuilding that top strip anyway.
+      **Shipped v6.94, with one judgement call you should check.** That top field is **dual-purpose**:
+      with a layer selected it renames THAT LAYER, and only with nothing selected does it show the
+      project name. (That is why your screenshot has *"IF I HAD ONE"* up top and *"If i had one slowed"*
+      in the inspector — they are a layer name and a project name, not two copies of one thing.) So it
+      duplicates the inspector header **exactly when nothing is selected**, and the rest of the time it
+      is the only rename control in the top strip.
+      Deleting it outright would have quietly taken away layer renaming from the PC top bar, which you
+      did not ask for — so it now hides **only** while it would be the second copy of the project name,
+      and comes back as the layer renamer the moment you select something. Studio layout only; the
+      classic layout has no second field to duplicate.
+      **If you did mean "gone in both states", say so and it is one line.** Renaming a layer would then
+      live on the timeline (double-click a track head), which already works.
+
+- [ ] **147 — PC: the text editor covers the text you are editing. Get it off the canvas.** (13 Aug,
+      screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
+      text while you edit it, get it off the canvas, also the text edit stuff on pc for some reason
+      covers up the canvas, making it smaller when you could just put it in the add menu, so it doesnt
+      take up real estate on the screen."*
+      Two faults, and the second one carries his proposed fix:
+      1. **It covers its own subject.** The "Aa" sheet (Spacing / Line height / Curve / Animate / caption
+         controls) and the toolbar + text field below it are painted over the canvas — in the screenshot
+         they cover the frame completely, so you are typing blind at the one moment you most need to see
+         the result. This is the worst version of the bug: a text editor that hides the text.
+      2. **On PC it also shrinks the canvas** to make room, spending screen on a panel that only exists
+         while you type. His fix: *"you could just put it in the add menu"* — i.e. on desktop the whole
+         text-editing UI belongs in the LEFT panel column (where Add / the inspector live), not as a
+         canvas overlay. The canvas then keeps its full size and the text stays visible while you edit.
+      Phone is a different problem and is NOT covered by this — there is no side column there, and the
+      current overlay is the right shape for a phone. Desktop only.
+      **Half shipped in v6.96 — the half you were actually looking at — and I want to be straight about
+      which half.** Measured on a 1280x860 window (`tests/_tecover.html`):
+
+      | | covers of the canvas |
+      |---|---|
+      | the editor card (toolbar + text field) | **0.0%** |
+      | **the Aa options panel** | **100.0%** |
+
+      So the card was never the thing hiding your text: `layoutDesktop` already reserves a band for it
+      and that works. It was the **Aa panel**, covering the canvas completely — which is exactly your
+      screenshot. It now opens in the side column instead, where the app already keeps vertical lists of
+      controls, i.e. where you said to put it. Measured after: **0.0%**. Falls back to the old placement
+      if that column is too small to hold it, so it can never be worse than it was.
+      **Still outstanding: the second half.** The card reserves **169px** at the bottom of the stage, and
+      that is the *"makes it smaller"* complaint. Removing it means docking the toolbar and field into
+      the side column too — the column is 286px and the card's minimum is 320px, so it needs a real
+      re-layout rather than a reparent, and it lands in the same strip #143/#144 are rebuilding. Left for
+      when those are settled, so it is done once rather than twice.
+
+- [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
+      His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
+      trying to play back stuff, this is related to the long on going lag issues with freemotion."*
+      **Taking his diagnosis seriously — it is the most useful thing in the report.** Scratchy popping on
+      playback is the classic signature of audio BUFFER UNDERRUN: the audio graph is starved because the
+      main thread is busy, so the output drops to silence for a few samples and every gap is a click. That
+      makes it the same illness as #125/#130, heard instead of seen — which is why it belongs with them
+      and not on its own. It is also the loudest possible evidence FOR the lag being real, and unlike a
+      dropped frame it is physically unpleasant.
+      Other candidates to rule out before accepting that, because a pop has more than one cause:
+      **discontinuities at clip/loop boundaries** (starting or stopping a source mid-waveform without a
+      ramp clicks every time — a 5ms fade kills it), **sample-rate mismatch** between the decoded file and
+      the AudioContext, and **clipping** if gain sums past 1.0. Measure which one it is before changing
+      anything: record the output and look for the gaps, rather than guessing from the symptom the way
+      the film-grain fix went wrong four times.
+      Pairs with **69** (audio must never lag — make the audio clock the master), which is probably the
+      real fix if it is starvation.
+      **FOUND AND FIXED, v6.91 — and you were right that it is tied to the lag, though not by the route
+      I expected.** Five independent readings of the audio path found nothing that survived a skeptic
+      (no ScriptProcessor anywhere, so lag cannot starve the audio thread; no double-connect; no
+      unramped clip boundary that could reach a plain imported song). What none of them examined was
+      the drift correction. Measured in a real browser — four seconds of ONE plain audio clip, no
+      effects, speed 1:
+
+      | | before | after |
+      |---|---|---|
+      | real writes to `el.playbackRate` | **85 (21/s headless, 55/s real browser)** | **6 (1.5/s)** |
+      | median sync error | 152.9 ms | **23.4 ms** (inside the 45 ms dead band) |
+      | decisions that were a rate trim | 232 of 240 | 76 of 240 |
+
+      `preservesPitch` defaults to true, so a media element answers a rate change with a **time-stretcher**,
+      not a resample — and re-priming a WSOLA stretcher tens of times a second is exactly a scratchy,
+      warbling noise. Nothing is ever dropped, which is why it left no trace in the seek counter and
+      survived every reading of the file.
+      **Why it never settled** is the actual defect: `el.currentTime` is latched to the last block the
+      element handed the audio device, so it reads a constant OUTPUT LATENCY behind the true audible
+      position. That constant is not drift, and a proportional controller cannot remove a constant — it
+      just leaned on the throttle forever, asking for +10% permanently and re-deciding it every frame.
+      A busier machine means a bigger, noisier latency, which is the real link to the lag.
+      Fix: learn the constant with a slow EMA and subtract it (genuine drift accumulates and outruns
+      the filter, so it is still corrected), and rate-limit the trim writes to 4/s — a ±10% correction
+      needs a full second to close 100 ms, so re-deciding it 55 times inside that second bought nothing
+      and cost a stretcher re-prime each time. A speed ramp or preview-rate change is the user asking
+      for a rate and is still honoured on the very next frame.
+      Covered by a regression test that gives the fake element an 80 ms latency — the harness's element
+      was a *perfect* clock, which is why it reported everything healthy while a real browser churned.
+      Mutation-checked: with the fix disabled it reports 26.5 writes/s and goes red.
+      **Still worth your ears** — this is measured, not heard. If it still sounds scratchy, say so and
+      the next suspect is the decode path, not the sync loop.
+
+- [x] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** (v6.95) His words:
+      *"when dragging the cue length for captions it should show it changing live not just wait for you
+      to let go then jump."*
+      **First look done, and the obvious suspects do NOT explain it — do not start by assuming they do.**
+      The timeline chip already sets its own left/width on every pointermove, and the move handler
+      already clamps to the clip duration exactly the way `normalize()` does on release, so neither the
+      chip geometry nor the release-time clamp is an obvious jump. What is definitely NOT live: the
+      inspector's captions list, which is only refreshed in the pointerup branch.
+      So: **measure which surface actually jumps before touching anything** — sample the chip width,
+      the inspector row and the rendered canvas text on each frame of a drag and compare each against
+      its value after release. Guessing at one surface is how the black bar cost six attempts.
+      **Measured, and the answer was the surface I had just talked myself out of.** The note above was
+      wrong: the chip only *looked* live in the source. `tests/_cuelive.html` samples all three surfaces
+      through a real drag —
+
+      | surface | during the drag | across the release |
+      |---|---|---|
+      | the cue data (`cue.end`) | live | no change |
+      | **the timeline chip's rendered width** | **flat at 0.0px** | **0.0 → 462.5 — the jump** |
+
+      A rendered width of **zero** is the tell: the chip was DETACHED. `startCue` calls `selectLayer()`,
+      which rebuilds the timeline and throws away the chip element captured one line earlier — so every
+      pointermove afterwards was restyling a node that had left the document. Styling a detached node
+      raises nothing and shows nothing, which is why reading the code said "already live" while the
+      screen said otherwise, and why nothing ever caught it.
+      **Fixed v6.95** in two halves: don't rebuild at all when the layer is already selected (the common
+      case — you drag a cue on the track you are working on), and re-acquire the chip from the live DOM
+      whenever a rebuild does take it, so a drag can never be left holding an orphan. Measured after:
+      the chip tracks the finger for 101.9px and does not move at all on release — what you see while
+      dragging is what you get. Mutation-checked; the test measures the RENDERED width, because the data
+      and the style property were both correct the whole time.
+
+- [ ] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans.** His words:
+      *"make the auto detect captions button way easier to access and use. and it should have a choice
+      between only detecting where the captions are added in the project or detecting the whole project
+      or detecting a specific audio later then let you select it."*
+      Two parts:
+      1. **Access.** Today "Detect speech" is buried in the Aa sheet next to a source dropdown (his own
+         screenshot for #147 shows it). It should be reachable without going three levels deep.
+      2. **Scope, three options**: (a) only the span the captions layer covers, (b) the whole project,
+         (c) a specific audio layer — and for (c) a picker to choose which. Today it detects against one
+         implicit source with no say in the matter.
+      **UNBLOCKED — #152 is measured and the detector works** (see it for the numbers). And the measurement
+      makes part 2 more important than it looked: it fails specifically when music sits within ~12 dB of
+      the voice, so *"detecting a specific audio layer then let you select it"* is not a convenience, it
+      is **the fix** — pointing it at the voice track instead of the finished mix is the difference
+      between 3 cues and 0. Build the scope picker with that framing, and default to the most voice-like
+      source rather than to whatever clip happens to be first.
+
+- [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
+      *"Also when editing a caption layer you should be able to chose somehow between adding effects to
+      each section or adding effects that effect the whole layer."* So a caption track carries one
+      effect stack today (it is a text layer, so `layer.effects` applies to the whole thing), and he
+      wants the choice: apply this effect to THIS CUE only, or to the track. That is a real data-model
+      change — per-cue effect stacks — plus a control in the effects panel to say which you mean, so
+      cost it honestly before starting. Sits naturally with #150 and #149 as a captions pass.
+
+- [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
+      His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,
+      could be soemthing way to hard to do and would be better to not add it then add a shit version for
+      now."*
+      **This changes #150's premise and must be settled first** — making a broken feature easier to reach
+      is worse than leaving it buried. What is actually known today: the suite has a green test,
+      *"captions: speech detection finds the bursts and ignores a steady tone"*, so the VAD does separate
+      bursts from a constant tone **on synthetic audio**. That is a very low bar and says nothing about
+      real speech over music, which is his case. It has never been measured on a real recording.
+      **MEASURED, v6.90. Short answer: don't delete it — it works, and your report is still right.**
+      Ran it against real speech (three sentences from the macOS speech synthesiser, laid out with
+      silences of our choosing so the truth is exact — `tests/_vadreal.html`, fixtures committed):
+
+      | what it was given | should find | found | verdict |
+      |---|---|---|---|
+      | a clean voice recording | 3 | **3** | edges within ~100 ms |
+      | voice + music 18 dB down | 3 | **3** | ends up to 290 ms early |
+      | voice + music 12 dB down | 3 | **2** | one missed, one 2.35 s late |
+      | voice + music 6 dB down | 3 | **0** | finds nothing at all |
+      | music, nobody talking | 0 | **0** | correct — invents nothing |
+
+      So it is a genuinely working voice detector that **collapses once music comes within ~12 dB of the
+      voice** — and the case you would actually try it on is an imported SONG, where there is no voice
+      above the music at all. It then said *"No speech found"*, which reads exactly like a broken button.
+      Crucially it does NOT scatter empty captions over a song, which is the failure that would have
+      deserved deleting it.
+      **v6.90 makes it say which it is**: when it finds nothing and the level never varies — a voice
+      swings the level hugely (clipDbStd 100 on clean speech) and a music bed does not (0.18 with no
+      voice, against 4.5 at −18 dB where detection still worked) — the message is now *"that reads as
+      music, not talking"* instead of a flat "no speech found", with the full stats in the console.
+      The suite's old VAD test only asked whether it could tell bursts from a steady tone, which could
+      never have answered your question; there is a real-speech test now that fails if a clean voice
+      stops being found within 250 ms, or if a cue is ever invented over music.
+      **Still your call, and here is the honest trade-off:** the remaining gap is speech buried under
+      loud music, which needs a real speech/music discriminator (spectral flux, not level) — a
+      substantial piece of work. If you only ever caption voice recordings, it already does the job. Say
+      the word and it goes; I am not attached to it.
+
+- [x] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (v7.02) (14 Aug,
+      screenshot of home with a black band across the very bottom.) His words: *"When leaving a project
+      for a split second there's a black bar at the bottom then it fixes itself."*
+      **Same family as the v6.85 bar, and READ THAT ENTRY FIRST — it cost six attempts.** The lesson
+      from it: a strip DARKER than the app means something behind everything is a different colour, not
+      that an element is too small. The document canvas is already `#060c0f` (v6.85), so this is
+      something else that is briefly uncovered or briefly painted black.
+      What is different this time, and is the whole clue: it is **transient and tied to the leave-project
+      transition**, so it is a state that exists only DURING the reverse push and is corrected on the
+      frame after. Prime suspects, in order: the home screen's own background not yet painted on the
+      first frame of its entrance; `#app` still occupying the strip while sliding out; or an element
+      with an explicit `#000` (the stage/canvas is painted black by design) showing through for a frame.
+      **Measure it as a sequence, not a still** — sample what occupies the bottom strip on every frame
+      of the transition and find the frame where it is black. A single screenshot cannot see a
+      one-frame fault, which is exactly why the last one took six goes.
+      **FOUND AND FIXED, v7.02 — and it is the RESIDUAL of the v6.85 fix, not a new bug.** He reported it
+      a second time ("Black bar again", with the band under the + on home), which is what made it worth
+      chasing as a steady state rather than a one-frame flash.
+      Measured on the live app: `<html>` painted a **flat `#060c0f` with `background-image: none`**,
+      while `<body>` carried the glass theme's two radial gradients. Once `<html>` has a background of
+      its own, `<body>`'s no longer propagates to the document CANVAS — and the canvas is what paints
+      the whole web view, which under `viewport-fit=cover` is taller than the layout viewport. So every
+      strip the page did not cover was the ground colour with **none of the theme's light**, while
+      everything just above it was lit. Same colour, different brightness: a flat band along the bottom.
+      **v6.85 matched the canvas COLOUR and stopped there; it never matched the LIGHT.** The gradients
+      live on `<html>` now and `<body>` is transparent, so the two cannot double-paint where they
+      overlap.
+      The test that came out of it is the durable part: it asserts the canvas is never black against a
+      non-black ground (v6.85), never flat against a lit page (this one), and never doubled — checked in
+      **both** themes. Three attempts at this family have now each fixed one property of the canvas; the
+      invariant is "html paints what the page paints", and it is pinned.
+      **He then said "This still happens when I edit text fyi", with a phone screenshot.** Timing matters
+      here: his version chip read **v7.00** in the shot just before, so that device had not loaded the
+      v7.02 fix yet — it needs a reload before the report means anything. Flagged rather than assumed
+      either way. If it DOES persist after reloading, the phone's text-editing takeover is a genuinely
+      different path (`body.text-editing #app` collapses the grid to one cell and #stage takes the whole
+      area at `var(--stage)`, which is darker than the home ground by design), so ask him which strip he
+      means before chasing it.
+      (14 Aug, with an Alight Motion screenshot.) His words: *"When dragging a clip from the edges to
+      extend, in alight motions there's some differences, it tells you all of this information and also
+      shows on little notches, by colouring in the exact notch it will land on, because the notches are
+      frames and the whole thing has to actually line up with the notches."*
+      Two things, and the second is the one with teeth:
+      1. **The readout.** Six values in two rows above the strip, live while you drag:
+         `Start` · `End` · `Duration` on the top row, `In` · `Out` · `Change` on the second — where
+         Change is signed (`+00:02:59` in his shot). Note Start/End are the clip's place on the
+         TIMELINE and In/Out are the trim points within the source, which is why AM shows both.
+      2. **The notch strip, and the reason for it.** A tick strip under the numbers where **the exact
+         notch the edge will land on is filled in**. His reasoning is the important part: *"the notches
+         are frames and the whole thing has to actually line up with the notches."* So a trim is
+         quantised to whole FRAMES and the strip is the readout of which frame you are about to get.
+         His screenshot also has a coloured mark at each end (pink at the in-point, green at the
+         out-point), so the strip shows the whole clip's span, not just the edge being dragged.
+      Worth checking first whether our trim already quantises to frames — if it does not, the strip
+      would be drawing a promise the trim does not keep, and the quantising is the real work.
+
+- [ ] **155 — Put the open-project glint on the SELECTED add-menu tab.** (14 Aug.) His words: *"I want
+      the effect that you have on the open project, like with the shiny line going around it, also on
+      whatever you have selected, like elements or shapes etc"*, then immediately: *"Not the elements or
+      shapes inside but the main button that opens the menu."*
+      So: the travelling light that runs around the OPEN project's card on home (#135, v6.13) goes on the
+      **active add-menu tab** — Elements / Shape / Media / Audio / Template — not on the item cards
+      inside it. Same meaning in both places: *this is the one that is open*.
+      Build it from the SAME implementation rather than a second copy, or the two will drift the way the
+      slider glide drifted from the timeline's in #116.
+
+- [x] **156 — Duplicating should leave the copy exactly where the original is.** (v7.01) (14 Aug.) His words:
+      *"Duplicating stuff should duplicate it in its exact position, not move it slightly."*
+      `FM.cloneLayer` adds **+30px to x and y** on every duplicate (and to every keyframe of an animated
+      path), under the comment "nudge so the copy is visible". That was a reasonable default when
+      "Duplicate in place" existed as a separate menu entry — but that entry was removed in v5.91 when
+      he circled six items and said *"Remove the circled options in this menu"*, so the nudging version
+      is now the ONLY duplicate there is. He wants the other one.
+      **Shipped v7.01.** The nudge is gone — a duplicate lands exactly on its original, and an animated
+      layer's whole keyframe path comes across unmoved (that half hides better than the static one: a
+      path shifted 30px is an entire animation displaced). Paste loses the offset with it, which matches
+      the AM behaviour that function already follows for time.
+      The copy is still tellable apart now that it is underneath the original: it is selected on
+      creation, named "… copy", and takes the next clip colour on its own timeline row — and the test
+      asserts those two, because with the offset gone they are the only things left doing that job.
+
+- [ ] **157 — TRY moving the film grain off the project cards and onto the background.** (14 Aug.) His
+      words: *"I want to try removing the film grain from the projects and instead move it to the
+      background, it might be better if the projects are smooth and shiny with a rough textured
+      background instead of"* (message ends there). So: cards go **smooth and shiny**, the home
+      **background** gets the rough texture.
+      He said *"I want to try"* — this is an experiment, so keep it cheap to reverse and expect a verdict
+      rather than assuming it lands.
+      What is already there to move: the two-layer cross-fading grain on `.hm-card::before/::after`
+      (queue 76 → 94 → 105 → 133, four rounds of tuning), six generated noise tiles, and a per-card
+      phase. The home background's own `::before`/`::after` are BOTH already taken by the drifting light,
+      so the grain needs its own layer rather than a third pseudo-element — and it should reuse the same
+      keyframes rather than gaining a second copy (see #116 and #155 for why).
+
+- [x] **158 — The spiral's last stretch is straight instead of curved.** (v7.03) (14 Aug, screenshot of a Spiral
+      layer at v7.00.) His words: *"Spiral shapes last little bit is straight instead of round."*
+      Visible in his shot: the outer end of the spiral runs off in a straight tail at the upper-left
+      instead of continuing the curve. The spiral is an OPEN_POLY — it strokes its polyline rather than
+      filling it — so the fault is in the point data or in which points are marked as curve-through
+      points, not in the fill.
+      **Fixed v7.03, and it was never about the spiral's data.** The tangent at each point is the
+      Catmull-Rom (next - prev)/6. On a CLOSED path both neighbours always exist; on an OPEN one the
+      missing neighbour was **clamped to the endpoint itself**, so at the last point "next" WAS the point
+      and the tangent collapsed to (p - prev)/6 — half the length it should be, aimed straight down the
+      chord. Invisible on a closed shape. On the spiral, whose final segment sweeps a wide arc at maximum
+      radius, it is a straight tail.
+      Reflecting the missing neighbour across the endpoint (2p - prev, the standard phantom point)
+      restores it to (p - prev)/3. **This fixes every open path at once** — the spiral, and freehand and
+      vector drawings, whose first and last strokes were flattening for exactly the same reason and which
+      nobody had connected to this.
+
+- [ ] **159 — Shape icons in the add menu do not match the shapes they add. Make them 1:1.** (14 Aug.)
+      His words: *"most shapes icons vary largely to the actual shape, try and make them 1-1."*
+      Worth knowing before starting: js/addmenu.js already claims to render each icon **straight from
+      the shape's own polygon data** (`FM.SHAPE_POLYS`), with the comment "the menu preview can never
+      drift from what actually gets added". So either that path is not being used for the shapes he
+      means, or it IS used and the RENDERING differs — stroke vs fill, a different aspect ratio, or the
+      icon drawing the unit box where the real shape spawns at its own SHAPE_ASPECT.
+      **Measure which before touching anything**: render each shape's icon and the shape itself and
+      compare them, the same way #114's bounds were checked across all 54 at once. That also answers
+      whether this is one broken path or fifty-four small drift bugs.
+
+- [ ] **160 — The two people shapes need arms, and he wants agents to check the result.** (14 Aug.) His
+      words: *"The two people shapes are good but need arms, make sure when adding arms you get other
+      agents to verify if it's any good or not."*
+      Two shapes: `person` and `woman`. Both currently read as head + body with no arms.
+      **The verification is part of the request, not an optional extra** — same arrangement as #63, the
+      car, where he asked for "agents holding me accountable". So: draw the arms, render them, and have
+      independent agents judge whether the result actually reads as a person with arms, before it ships.
+      A drawing change is exactly the kind where my own judgement is worth least — I cannot see it the
+      way he can, and the car took several passes.
+      **First attempt made and reverted — the SUITE rejected it before any agent saw it, which is worth
+      knowing before the next go.** Two existing invariants I had not accounted for:
+      1. **"a torso that only tapers".** There is a test asserting the silhouette never narrows and then
+         widens again between shoulder and crotch — it calls that "the hip nick". My design pinched the
+         waist so the gap between arm and body would open downward; that is exactly the forbidden shape.
+      2. **The sub-paths must wind the same way.** Both figures are filled with nonzero winding, so my
+         left arm and right arm — built by mirrored branches — wound oppositely and CANCELLED where they
+         met the shoulder. The test caught it as "person at 48px has 2 enclosed hole(s)".
+      Also learned, and it constrains the design hard: a separating gap has to be **≥ ~0.03H** or it
+      closes to a smear on the 24px add-menu icon. The file already records the same finding for the neck
+      gap, sized by render rather than by taste.
+      **So the next attempt cannot pinch the waist.** The workable direction is arms OUTBOARD of the
+      torso — the silhouette's widest point, tapering monotonically once the arms end — with both arms
+      generated by one builder and mirrored by coordinate, never by a second code path, so the winding
+      cannot differ. Then render and hand it to the agents, as he asked.
+
+      **SECOND ATTEMPT BUILT, SUITE-GREEN (248/248), AND REJECTED BY ALL THREE AGENTS. Not shipped.**
+      This is the arrangement working exactly as you asked for it: the drawing passed every automated
+      check and was still wrong, and three independent readers said so before it reached you.
+      They converged on the same measurements:
+
+      | | man | woman |
+      |---|---|---|
+      | arm actually separated from the body | ~21% of height | **~3%** |
+      | gap between arm and body | 15px of 501 | 5–10px |
+      | what it reads as | arms, but as *slots cut in a slab* | **cap sleeves / notches** |
+
+      · **The woman is a regression** — all three said so independently, and two said they would take
+        the old armless figure over it. At 96px her gap fills in completely; her bounding box is
+        IDENTICAL before and after, so the arms add nothing but two bites out of her outline that read
+        as damage.
+      · **I made room by eating the man's body.** His torso went from a 148→120px taper to a dead
+        constant 98px and his legs 45→35px. One agent called it a clothespin. The arms should have been
+        hung outside the body, not carved out of it.
+      · **At 24px it costs crispness rather than costing nothing**: solid-black pixels down 21%,
+        mid-greys up 22%. The figure got softer, not more informative.
+      · A real construction defect I introduced: the arm's outer edge sits ~1px proud of the shoulder
+        cap, leaving a visible nick where the cap's radius ends.
+      · And **my own judging sheet was clipped** — it never rendered the 24px woman at all, the very
+        case that fails first. The third agent caught that. Sheet fixed to wrap.
+
+      **THE REAL PROBLEM IS A CONFLICT, AND IT IS YOURS TO SETTLE.** What they want — a proper body, a
+      gap at least as wide as the arm, and arms outside the torso — **cannot fit** inside the existing
+      rule that shoulders stay within 1.7–2.3 head-widths. A 120px body plus a 40px gap already reaches
+      the shoulder limit before the arm has any width at all. Pick one:
+      **(a)** widen the shoulders past the pictogram band (they stop being 1.7–2.3 head-widths);
+      **(b)** keep the narrow body and accept a slabbier figure;
+      **(c)** give the MAN arms and leave the WOMAN as she is — she reads well armless and every agent
+              preferred that to what I built;
+      **(d)** leave both alone.
+      My own read, for what it is worth: **(c)**, because her dress geometrically has nowhere to put an
+      arm that survives 24px, and a mismatched pair is better than a damaged silhouette.
+
+- [x] **161 — Make the Freehand Drawing icon a pencil.** (v7.04) His words: *"Make the free hand drawing
+      icon a pencil."* It was a squiggle with a small nib.
+      **Vector Drawing's icon was ALREADY a pencil silhouette**, so doing only what was asked would have
+      left two pencils side by side — the exact fault the Elements cube note in this file records ("at
+      22px the two were nearly the same mark and neither told you what it opened"). So Freehand takes the
+      pencil, properly drawn with a ferrule and a tip, and **Vector becomes what it actually is**: a curve
+      with two anchor squares, which is the universal mark for a vector path. Say the word if you would
+      rather Vector kept its old icon and the pair stayed similar.
+
+- [x] **162 — The loading screen is not fully black any more.** (v7.05) His words: *"Loading screen
+      isn't fully black anymore"*, with a screenshot: the splash video's own frame is pure black and the
+      surround around it is the app's dark navy, so the letterbox shows as two bands.
+      It was deliberate, and the reasoning had expired. Queue 143 changed the splash surround from #000
+      to the app ground because a pure-black splash made the UNCOVERED canvas beside it stand out as a
+      bar — that was the first ever sighting of the black-bar bug. The note even claims "#060c0f against
+      a black video edge is imperceptible at this size"; his screenshot is the disproof.
+      **v7.02 removed the reason.** Now that the canvas paints what the page paints, the splash can be
+      pure black again — as long as the CANVAS is black too while it is up, or the bands simply move to
+      the safe area. So the boot script marks the document while the splash shows and both go black
+      together, and the mark is dropped when the splash is removed, restoring the themed light.
+
+- [ ] **163 — Make the pencil and vector drawing icons genuinely good, judged to a high bar.** (14 Aug.)
+      His words: *"Make the logos for the pencil drawing and freehand drawing better, get multiple agents
+      with really high standards to not accept it until it's perfect."*
+      So the two icons v7.04 just changed (#161) are a starting point, not the finish. The verification is
+      part of the request again, and the bar is explicitly higher than "does it read": multiple judges,
+      high standards, iterate until they accept.
+      **Bounded on purpose** — his standing instruction is that no agent loop may run away: a hard cap on
+      rounds and a dry-round counter, never an open loop on a judge's own answer. Each round renders the
+      candidates at 24 / 48 / 96px (24 is the size that actually matters — it is the shape-picker cell)
+      and hands the sheet to judges who score and critique; I revise and re-render.
+
+- [ ] **164 — A freehand stroke gets THICKER the moment you let go.** (14 Aug.) His words: *"When I do
+      freehand drawing and finish a stroke it will for some reason make the stroke thicker when I let go
+      of drawing, stop that from happening."*
+      So the live preview and the committed layer disagree about width — you draw at one weight and get
+      another. Almost certainly a coordinate-space mismatch: the preview strokes in SCREEN px on the
+      overlay while the committed path is a shape layer whose stroke is in PROJECT px and then scaled by
+      the canvas fit, or the committed path picks up a default width instead of the drawing one.
+      **Measure both numbers before changing either** — the width used while drawing and the width stored
+      on the layer — rather than nudging a constant until it looks close.
+
+- [ ] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo.**
+      (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:
+      1. *"I don't like how it puts the screen to the bottom, needs to be in the middle."* His shot shows
+         the canvas shoved down against the tool bar with a large empty band above it — the drawing
+         surface should be centred in the space it has.
+      2. *"you should add an option to switch from drawing to erasing"* — a draw/erase toggle in the
+         drawing bar. Worth settling: does erase remove whole strokes, or rub out parts of one? Rubbing
+         out part of a stroke means splitting a path, which is real work; removing the stroke you touch
+         is a tenth of the effort and is what most simple editors do.
+      3. *"another option that lets you grab the screen and zoom in or out so you can do more detailed
+         drawing"* — pan and pinch-zoom the drawing surface. Note this collides with the drawing gesture
+         itself, so it needs to be a MODE (a grab/hand toggle) rather than a second meaning for one
+         finger.
+      4. *"instead of an undo button just add the undo and redo icons that we have in the normal menu so
+         you can go back or forwards"* — the bar has a text "Undo" today; it should carry the same two
+         glyphs the transport row uses, and redo must actually work inside drawing mode.
+      Good sign in the same message: *"The free hand drawing is usable on mobile now"* — so this is
+      polish on something that finally works, not another repair.
+
+- [ ] **166 — You cannot swipe the timeline up and down when clips fill it.** (14 Aug, screenshot at
+      v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
+      can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
+      free hand drawing layers."*
+      **That second message confirms the diagnosis** — it is not freehand-specific at all. It is that he
+      had NINE rows, so every touch lands on a clip. `.track-lane` carries `touch-action: none`, so the browser never scrolls it natively, and the
+      clip's own touch handler treats any movement past the threshold as a horizontal SCRUB:
+      `scrubIntent = adx > 6 && adx > ady` is computed but a vertical drag still falls through to
+      `FM.scrubTime(...)`. With few layers you can start a swipe on empty lane and it works; fill the
+      timeline with clips and there is nowhere left to start one.
+      Fix direction: a vertical-dominant drag that begins on a clip should scroll the track list, which
+      has to be done programmatically because touch-action has already opted out of the native scroll.
+      **Check the empty-lane path still scrolls too**, and that this does not break the hold-to-move
+      gesture — a hold is stationary, so it should be unaffected, but measure rather than assume.
+
+- [x] **167 — Freehand made a NEW LAYER for every stroke.** (v7.07) His words: *"For some reason when you
+      draw with free hand drawing it creates multiple layers, it should all be inside the one drawing you
+      just made not keep creating more."* His screenshot: nine `Freehand` rows from one drawing.
+      **This is also the cause of #166** — with a row per stroke there was no empty lane left to start a
+      vertical swipe on, which is why he could not scroll the timeline.
+      `commitStroke()` called `addPathLayer` per stroke, by design ("a stroke is committed and the tool
+      stays armed for the next one"). The renderer never needed that: `layer.subs` has been a
+      multi-subpath field all along and nothing was ever writing more than one into it.
+      **Fixed v7.07.** The first stroke of a session creates the layer; every stroke after it is appended
+      and the layer is re-fitted around the union — the box grows and all strokes are re-normalised into
+      it, since subs are stored in [0,1] of the layer's own box and a stroke drawn outside the old box
+      would otherwise land outside the drawing. The layer keeps its id, stack position and selection.
+      Also reset on `startDraw`, not just `stop()`: without that a second drawing would silently append
+      its strokes to the first drawing's layer, which is a worse bug than the one being fixed.
 
 ## Done
 
