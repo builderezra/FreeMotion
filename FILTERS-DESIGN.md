@@ -227,6 +227,17 @@ cancelled tomorrow, which is why they go first.
    case and the comment says so rather than claiming a guard it does not provide.
 4. **The inspector row** — expandable, children scoped to their own stack descriptor, accordion scoped
    to siblings-at-depth, reorder as one unit in v1.
+   **SHIPPED v7.41.** `fxRow` gained a 4th `stack` param, the same descriptor shape `AFX_STACK`
+   already used for audio — so `listOf()`/`after` drive the accordion, the delete, the grip test and
+   `attachFxGestures`. Children get `{ list: () => fx.effects, after: afterFx }`. `fxBrowser.open`
+   takes `{ into: fx }` and re-checks the container is still in the live stack at add time (an undo
+   between open and pick can remove it). Creation is a plain `+ Add Filter` button rather than a
+   "group the effects you already have" action — there is no multi-select in this stack, so the only
+   unambiguous meaning of that would be "all of them".
+   **The bug worth remembering:** `.fx-row.fx-open .fx-disc { rotate(90deg) }` is a DESCENDANT
+   selector, and a filter's children live inside the open filter's DOM — so three closed effects all
+   rendered the open chevron. Every DOM assertion was green (aria-expanded correct, no bodies); only
+   the 380px screenshot showed it. Now scoped with `>` and asserted on the computed transform.
 5. **The third browser tab** + `fxModeToggle`'s third entry with its own wording and gate, and its own
    thumbnail path (the per-effect tuners assume `hero.effects[0]` **is** the effect — ~60 callbacks).
 6. **The library itself**, authored against the ordering rule in §6.

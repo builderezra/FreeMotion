@@ -14029,6 +14029,133 @@
     if (got !== 1) throw new Error('an out-of-range Strength survived the load path as ' + got + ' (max is 1)');
   });
 
+  /* ---------------- #113 step 4: the filter row in the effects list ---------------- */
+  async function withFilterLayer(fn) {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#c04070', start: 0, duration: 5 });
+    var keep = FM.scene.layers.slice();
+    FM.scene.layers.push(L); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    /* The inspector opens on the CATEGORY list, not on the effect stack — Effects is one of nine
+       cards you tap into. A test that just refreshes and queries for .fx-add-btn finds nothing and
+       reads as "the button is missing" when the panel simply is not showing that page. */
+    var cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label'))
+      .filter(function (n) { return /^Effects$/i.test((n.textContent || '').trim()); })[0];
+    if (!cat) throw new Error('no Effects category card in the inspector to open');
+    cat.closest('[class*=cat]').click(); await sleep(120);
+    try { return await fn(L); }
+    finally { FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40); }
+  }
+  function clickText(sel, re) {
+    var n = Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (b) { return re.test(b.textContent || ''); })[0];
+    if (!n) throw new Error('no ' + sel + ' matching ' + re);
+    n.click(); return n;
+  }
+
+  test('filter row: Add Filter drops an empty filter into the stack, opened', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function (L) {
+      clickText('.fx-add-btn', /add filter/i);
+      await sleep(60);
+      if (!(L.effects || []).length || !FM.isFxContainer(L.effects[0])) throw new Error('Add Filter did not add a filter to the stack');
+      if (!L.effects[0]._expanded) throw new Error('the new filter landed closed — you cannot see there is anything to put in it');
+      if (!document.querySelector('.fx-kids')) throw new Error('the open filter shows no area for the effects it holds');
+      if (!document.querySelector('.fx-add-kid')) throw new Error('there is no way to add an effect INTO the filter');
+    });
+  });
+
+  test('filter row: its children render as rows inside it, below its Strength', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function (L) {
+      var box = { type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [FM.fxRegistry.makeInstance('blur')], _expanded: true };
+      L.effects = [box];
+      FM.inspector.refresh(); await sleep(60);
+      var kidRows = document.querySelectorAll('.fx-kids .fx-row');
+      if (kidRows.length !== 1) throw new Error('expected exactly one child row inside the filter, found ' + kidRows.length);
+      if (!/blur/i.test(kidRows[0].textContent || '')) throw new Error('the child row is not the effect that is in the filter: ' + kidRows[0].textContent);
+      // Strength must sit ABOVE the children — it is the control that acts on all of them.
+      var body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+      var kids = body && body.querySelector('.fx-kids');
+      var strength = body && Array.prototype.slice.call(body.children).filter(function (c) { return /strength/i.test(c.textContent || '') && !c.classList.contains('fx-kids'); })[0];
+      if (!strength) throw new Error('the filter row has no Strength control');
+      if (!kids || (strength.compareDocumentPosition(kids) & Node.DOCUMENT_POSITION_FOLLOWING) === 0) {
+        throw new Error('Strength does not sit above the effects it governs');
+      }
+    });
+  });
+
+  /* THE bug the stack descriptor exists to prevent: a child row carries its index INSIDE the filter,
+     so deleting it against the LAYER's stack removes whatever unrelated effect sits at that position. */
+  test('filter row: deleting a child removes it from the filter, not from the layer stack', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function (L) {
+      var keeper = FM.fxRegistry.makeInstance('sepia');
+      var kid = FM.fxRegistry.makeInstance('blur');
+      L.effects = [keeper, { type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [kid], _expanded: true }];
+      FM.inspector.refresh(); await sleep(60);
+      var kidRow = document.querySelector('.fx-kids .fx-row');
+      if (!kidRow) throw new Error('no child row to delete');
+      kidRow.querySelector('.fx-head').click(); await sleep(50);        // open it — delete lives on an open row
+      var del = document.querySelector('.fx-kids .fx-row .fx-del');
+      if (!del) throw new Error('an open child row has no delete button');
+      del.click(); await sleep(60);
+      if (L.effects.length !== 2) throw new Error('deleting inside the filter changed the LAYER stack length to ' + L.effects.length);
+      if (L.effects[0] !== keeper) throw new Error('deleting a child inside the filter removed an unrelated effect from the layer instead');
+      if (L.effects[1].effects.length !== 0) throw new Error('the child was not removed from the filter (' + L.effects[1].effects.length + ' left)');
+    });
+  });
+
+  test('filter row: opening a child does not close the filter holding it', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function (L) {
+      var a = FM.fxRegistry.makeInstance('blur'), b = FM.fxRegistry.makeInstance('sepia');
+      var box = { type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [a, b], _expanded: true };
+      L.effects = [box];
+      FM.inspector.refresh(); await sleep(60);
+      document.querySelectorAll('.fx-kids .fx-row .fx-head')[0].click(); await sleep(60);
+      if (!box._expanded) throw new Error('opening an effect inside the filter closed the filter — the row you just tapped collapses out of existence');
+      if (!a._expanded) throw new Error('the child did not open');
+      // …and the accordion still works BETWEEN siblings at that depth.
+      document.querySelectorAll('.fx-kids .fx-row .fx-head')[1].click(); await sleep(60);
+      if (a._expanded) throw new Error('opening the second child left the first one open — the accordion is not scoped to the filter');
+      if (!box._expanded) throw new Error('…and the filter closed again');
+    });
+  });
+
+  /* A CLOSED row must not wear the OPEN arrow. This shipped broken for exactly one screenshot: the
+     rotate rule was `.fx-row.fx-open .fx-disc`, and a filter's children sit inside the open filter's
+     DOM, so all three closed effects rendered with the open chevron. Every DOM assertion was green —
+     aria-expanded was right, the bodies were absent — because the lie was purely in the CSS. So this
+     asserts the computed transform, which is the only thing that would have caught it. */
+  test('filter row: a closed child does not wear its parent’s open chevron', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function (L) {
+      var box = { type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('sepia')], _expanded: true };
+      L.effects = [box];
+      FM.inspector.refresh(); await sleep(80);
+      var rot = function (n) { var tr = getComputedStyle(n).transform; return tr && tr !== 'none' && tr !== 'matrix(1, 0, 0, 1, 0, 0)'; };
+      var parent = document.querySelector('.fx-row.fx-open > .fx-swipe-wrap > .fx-head > .fx-disc');
+      if (!parent || !rot(parent)) throw new Error('the OPEN filter row is not showing an open chevron');
+      var kidDiscs = Array.prototype.slice.call(document.querySelectorAll('.fx-kids .fx-row .fx-disc'));
+      if (kidDiscs.length !== 2) throw new Error('expected 2 child chevrons, found ' + kidDiscs.length);
+      var wrong = kidDiscs.filter(rot).length;
+      if (wrong) throw new Error(wrong + ' of ' + kidDiscs.length + ' CLOSED children are drawn with the open chevron — the arrow says the row is open when it is not');
+      // …and it still turns when the child really does open.
+      document.querySelectorAll('.fx-kids .fx-row .fx-head')[0].click(); await sleep(80);
+      var nowOpen = document.querySelector('.fx-kids .fx-row.fx-open > .fx-swipe-wrap > .fx-head > .fx-disc');
+      if (!nowOpen || !rot(nowOpen)) throw new Error('an opened child does not show the open chevron either — the rule is now too narrow');
+    });
+  });
+
+  test('filter row: the browser adds into the filter you asked it to, and refuses a filter inside one', { item: 'fx-filter-ui' }, async function () {
+    await withFilterLayer(async function (L) {
+      var box = { type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [], _expanded: true };
+      L.effects = [box];
+      FM.inspector.refresh(); await sleep(60);
+      clickText('.fx-add-kid', /add effect to this filter/i);
+      await sleep(120);
+      var tile = document.querySelector('#fx-browser .fxb-card');   // .fxb-card is the tile class — .fxb-tile never existed
+      if (!tile) { if (FM.fxBrowser) FM.fxBrowser.close(); throw new Error('the browser opened with no effect tiles to pick'); }
+      tile.click(); await sleep(120);
+      if (FM.fxBrowser) FM.fxBrowser.close();
+      if (L.effects.length !== 1) throw new Error('the effect landed on the LAYER stack instead of inside the filter (' + L.effects.length + ' entries)');
+      if (!box.effects.length) throw new Error('the effect did not land inside the filter at all');
+    });
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

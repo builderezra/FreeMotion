@@ -1192,7 +1192,11 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   transition: transform .18s cubic-bezier(.3, .8, .3, 1), color .15s ease;
 }
 .fx-disc svg { width: 17px; height: 17px; display: block; }
-.fx-row.fx-open .fx-disc { transform: rotate(90deg); }
+/* Scoped to the row's OWN chevron, not every chevron beneath it. A filter's children live inside the
+   open filter's DOM, so the plain descendant form rotated their chevrons too: three closed effects
+   all wearing the open arrow, which is the one thing a disclosure triangle must never do. Caught by
+   the phone screenshot, not by the DOM assertions — aria-expanded was correct the whole time. */
+.fx-row.fx-open > .fx-swipe-wrap > .fx-head > .fx-disc { transform: rotate(90deg); }
 /* …and the head has to LOOK pressable, because tapping it is the interaction. */
 .fx-head { cursor: pointer; border-radius: 8px; transition: background .14s ease; }
 .fx-head:hover { background: rgba(255, 255, 255, .05); }
@@ -4820,3 +4824,20 @@ body.fm-pushing #toast { z-index: 213; }
 }
 @keyframes vb-hint-in { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .vb-hint { animation: none; } }
+
+/* ---- effects INSIDE a filter (queue 113) -------------------------------------------------------
+   A filter is one row in the stack that opens to reveal the effects it holds. Those children have to
+   read as CONTAINED rather than as more siblings, and on a phone that has to happen without eating
+   the row width — hence a hairline rail and a small indent rather than a nested card with padding of
+   its own, which at 380px would leave a child slider narrower than a thumb. */
+.fx-kids {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 6px 0 0 6px; padding-left: 8px;
+  border-left: 1.5px solid color-mix(in srgb, var(--accent, #4d8bf0) 42%, transparent);
+}
+.fx-kids .fx-row { background: color-mix(in srgb, var(--panel-2, #151d24) 76%, transparent); }
+.fx-kids .insp-hint { margin: 2px 0 0; }
+/* The child add-button is secondary to the layer's own "+ Add Effect" — quieter, and clearly the
+   filter's, not the layer's. */
+.fx-add-kid { margin-top: 2px; font-size: 12px; padding: 7px 10px; opacity: 0.9; }
+.fx-add-filter { margin-top: 6px; }

@@ -905,8 +905,14 @@ window.FM = window.FM || {};
 
   // One effect row (AM): collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
   // Reorder = press-hold + drag; delete = swipe left (see attachFxGestures).
-  function fxRow(layer, fx, idx) {
+  function fxRow(layer, fx, idx, stack) {
     const reg = FM.fxRegistry.get(fx.type) || { label: fx.type, params: [] };
+    // Which list this row lives in. Without it a row inside a filter deletes from the LAYER's stack at
+    // its own child index — i.e. removes whichever unrelated effect happens to sit at that position.
+    // Same descriptor the audio stack already uses (AFX_STACK), one level in.
+    const listOf = () => (stack ? (stack.list(layer) || []) : (layer.effects || []));
+    const after = stack ? stack.after : afterFx;
+    const isBox = FM.isFxContainer(fx);
     const expanded = !!fx._expanded, off = fx.enabled === false;
     const row = el('div', 'fx-row' + (off ? ' fx-off' : '') + (expanded ? ' fx-open' : ''));
     fxTapHint();
@@ -921,7 +927,10 @@ window.FM = window.FM || {};
     const toggle = () => {
       if (_justReordered()) return;                       // a drag just dropped here — not a tap
       if (row._g && row._g.moved) { row._g.moved = false; return; }
-      (layer.effects || []).forEach(e => { if (e !== fx) e._expanded = false; });
+      // Accordion scoped to SIBLINGS AT THIS DEPTH. Scoped to the whole layer instead, opening an
+      // effect inside a filter would close the filter holding it — collapsing the row you just tapped
+      // out of existence.
+      listOf().forEach(e => { if (e !== fx) e._expanded = false; });
       fx._expanded = !expanded;
       kfNavSync();   // a different effect's params are in play now — drop the old row, re-arm the timeline
       FM.inspector.refresh();
@@ -929,13 +938,13 @@ window.FM = window.FM || {};
     // Tap ANYWHERE on the row header to open/close the editor — not just the ▸ arrow. The action
     // buttons (eye / ⋯ / delete) keep their own behaviour; the disc + name + empty space all toggle.
     head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
-    if ((layer.effects || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder) — on OPEN rows too, or the one you are editing looks unmovable
+    if (listOf().length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // drag affordance (press-hold to reorder) — on OPEN rows too, or the one you are editing looks unmovable
     head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
       const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
       more.addEventListener('click', (ev) => fxMoreMenu(layer, fx, idx, ev.currentTarget));
       const del = el('button', 'fx-icon-btn fx-del'); del.title = 'Delete effect'; del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
-      del.addEventListener('click', () => { layer.effects.splice(idx, 1); afterFx(); });
+      del.addEventListener('click', () => { listOf().splice(idx, 1); after(); });
       head.appendChild(more); head.appendChild(del);
     } else {
       const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : '')); eye.title = off ? 'Effect off — enable' : 'Effect on — disable';
@@ -997,13 +1006,30 @@ window.FM = window.FM || {};
         pick.addEventListener('click', () => FM.touchupTool.open(layer.id, fx));
         body.appendChild(pick);
       }
-      if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+      /* A FILTER'S CHILDREN (queue 113). They come AFTER the container's own controls, so Strength —
+         the one thing that acts on all of them — reads as the heading it is rather than as one more
+         effect in the list. Ezra: "at the top you will have an opacity slider, so you can turn down the
+         effects strength and it will automatically apply it to every effect under that filter."
+         Each child is a normal fxRow pointed at the FILTER's list, so it gets the same open/close, eye,
+         delete, swipe and drag-to-reorder as any other effect, scoped to inside the filter. */
+      if (isBox) {
+        const kids = el('div', 'fx-kids');
+        const kl = fx.effects || [];
+        if (!kl.length) kids.appendChild(el('div', 'insp-hint', 'This filter is empty \u2014 add an effect to it below.'));
+        const KID_STACK = { list: () => fx.effects || [], after: afterFx };
+        kl.forEach((ch, ci) => kids.appendChild(fxRow(layer, ch, ci, KID_STACK)));
+        const addK = el('button', 'fx-add-btn fx-add-kid', '+ Add effect to this filter');
+        addK.addEventListener('click', () => { if (FM.fxBrowser) FM.fxBrowser.open(layer, { into: fx }); });
+        kids.appendChild(addK);
+        body.appendChild(kids);
+      }
+      if (!reg.params.length && !isBox) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
       wrap.appendChild(body);
     }
     row.appendChild(delBg);
     row.appendChild(wrap);
     row._wrap = wrap; row._delBg = delBg;
-    attachFxGestures(row, head, layer, fx, idx);   // swipe-left = delete · press-hold + drag = reorder
+    attachFxGestures(row, head, layer, fx, idx, stack);   // swipe-left = delete · press-hold + drag = reorder
     return row;
   }
 
@@ -1015,6 +1041,23 @@ window.FM = window.FM || {};
     const add = el('button', 'fx-add-btn', '+ Add Effect');
     add.addEventListener('click', () => { if (FM.fxBrowser) FM.fxBrowser.open(layer); });
     s.appendChild(add);
+    /* An empty filter to put effects into (queue 113). Deliberately NOT a "group the effects you
+       already have" action: there is no multi-select in this stack, so the only unambiguous meaning
+       of that would be "all of them", which is rarely what someone wants. Add an empty one, then use
+       the button inside it. The ready-made filters people can pick from arrive with the library. */
+    const addF = el('button', 'fx-add-btn fx-add-filter', '+ Add Filter');
+    addF.title = 'A group of effects that act as one, with a single Strength';
+    addF.addEventListener('click', () => {
+      const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+      if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }
+      box.effects = [];
+      if (!layer.effects) layer.effects = [];
+      layer.effects.forEach(e => { e._expanded = false; });
+      box._expanded = true;
+      layer.effects.push(box);
+      afterFx();
+    });
+    s.appendChild(addF);
     // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)
     const tools = el('div', 'fx-stack-tools');
     /* Both buttons speak to FM.fxClipboard now (v6.32) — see the note on it. They used to use a

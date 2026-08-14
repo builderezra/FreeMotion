@@ -12,6 +12,7 @@ window.FM = window.FM || {};
   // pseudo-tiles that drive layer state directly. They still look like effects and sit in the same
   // grid, so they are favouritable like everything else; readList has to stop filtering them out.
   // (Declared here, populated after the tile builders exist — see PSEUDO_TILES.) (#62)
+  let _into = null;   // the filter container an add is destined for, or null for the layer's own stack
   const PSEUDO = { _mask: 'Mask', _objblur: 'Motion Blur (Object)' };
   /* Own keys only. This one is the sharpest of the family, because the ids it is keyed by come
    * straight out of localStorage ('fm.fx.recents' / 'fm.fx.fav') and PSEUDO_TILES is CALLED, not just
@@ -84,9 +85,14 @@ window.FM = window.FM || {};
       return;
     }
     if (!layer.effects) layer.effects = [];
-    layer.effects.forEach(e => { e._expanded = false; });   // accordion: the newcomer is the one open editor
+    // Into a filter, if one asked for it AND it is still in this layer's stack — an undo between
+    // opening the browser and picking an effect can take the container with it.
+    const box = (_into && layer.effects.indexOf(_into) >= 0 && FM.isFxContainer(_into)) ? _into : null;
+    if (box && FM.isFxContainer(inst)) { if (FM.toast) FM.toast('A filter can’t hold another filter', 1800); return; }
+    const dest = box ? box.effects : layer.effects;
+    dest.forEach(e => { e._expanded = false; });          // accordion: the newcomer is the one open editor
     inst._expanded = true;                                    // land with the new effect's controls ready to tweak
-    layer.effects.push(inst);             // <- exactly one entry
+    dest.push(inst);                      // <- exactly one entry
     pushRecent(id);
     FM.fxBrowser.close();
     // Land ON the new effect's controls. inst._expanded above only decides which row is open —
@@ -916,10 +922,14 @@ window.FM = window.FM || {};
       searchBtn.addEventListener('click', () => { searchInput.classList.toggle('hidden'); if (!searchInput.classList.contains('hidden')) searchInput.focus(); else { searchInput.value = ''; rebuild(); } });
       searchInput.addEventListener('input', () => { clearTimeout(_searchDebounce); _searchDebounce = setTimeout(rebuild, 120); });   // debounce: every keystroke tore down + rebuilt the whole result grid, re-mounting a canvas per match
     },
-    open: function (layer) {
+    open: function (layer, opts) {
       if (!root) FM.fxBrowser.init();
       if (!root) return;
       _layer = layer || (FM.scene && FM.layerById(FM.scene, FM.scene.selectedId));
+      // opts.into: add into a FILTER's own list rather than the layer's stack (queue 113). Held by
+      // identity, and re-checked against the live layer at add time — the same reason addEffect
+      // re-resolves the layer rather than trusting the one cached here.
+      _into = (opts && opts.into) || null;
       if (!_layer) { if (FM.toast) FM.toast('Select a layer first', 1400); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
       root.classList.remove('hidden');
@@ -930,6 +940,6 @@ window.FM = window.FM || {};
         FM.toast('Tip: hold any effect to browse its presets', 2600);
       }
     },
-    close: function () { if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
+    close: function () { _into = null; if (!root) return; stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
   };
 })(window.FM);

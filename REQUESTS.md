@@ -783,7 +783,17 @@ better still, keep working inside the turn rather than parking work for a later 
       compositor uses elsewhere; that shortcut is only correct where the top image is fully opaque, so it
       would have gone visibly wrong on soft edges and on any filter holding a key or a matte. Reverting to
       it turns a test red, which is what makes the extra work justified rather than assumed.
-      Still nothing in the UI to create one — next is step 4, the expandable row in the effects list.
+      **Step 4 shipped in v7.41 — and this is the first bit you can actually touch.** In the Effects
+      panel there is now a "+ Add Filter" under "+ Add Effect". It drops in an empty filter, already
+      open, with its own "+ Add effect to this filter" button inside it. Whatever you put in shows up
+      as normal rows indented under the filter — same open/close, eye, delete, swipe and drag as any
+      effect — with Strength sitting above them, since that is the control acting on all of them.
+      Everything inside is scoped to the filter properly: deleting one removes it from the FILTER,
+      not from whatever unrelated effect happens to sit at that spot in the layer's list, and opening
+      one no longer closes the filter holding it.
+      Worth a look and a poke — this is the point where you can tell me if it feels right before I
+      build the library of ready-made filters on top of it (step 6, the "lots of people won't want to
+      make filters themselves" half of what you asked for). Next is step 5, the filters tab.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.
