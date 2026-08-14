@@ -4538,6 +4538,15 @@ body.fm-pushing #toast { z-index: 213; }
 
 /* ---------- Project notepad (queue 139) ---------- */
 .tb-notes, #m-notes { position: relative; }
+/* Optical spacing, not geometric (queue 185). Ezra: "the spacing for the notes button in regards to the
+   ones around it is off, it's too far to the left."
+   Measured at 380px: the version pill is a bordered chip whose text runs to its own border, while every
+   icon button carries ~10px of padding inside its 42px box. So with one flat 4px gap everywhere, the
+   notes ICON sat 14px from the chip and 24px from the cog — geometrically even, visibly shoved left.
+   10px on this one button lands both optical gaps on 24px. It is on the button rather than on .m-ver
+   because the chip is hidden in select mode and a margin there would move the wrong things. The project
+   name pays for it out of its flex, dropping 128px → 118px, which is still a readable field. */
+#m-notes { margin-left: 10px; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--panel); display: none;

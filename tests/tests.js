@@ -12516,6 +12516,38 @@
     }
   });
 
+  /* #172 / #173. Two small ones that both hinge on the same trap: a default is only a default until
+     something remembers over the top of it. */
+  test('export offers "same as project" for size, and opens on High quality', { item: 'export-defaults' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const P = FM.scene.project, keep = localStorage.getItem('fm.exportPrefs');
+    try {
+      // A pref written by an older build — the exact state Ezra's own browser is in.
+      localStorage.setItem('fm.exportPrefs', JSON.stringify({ format: 'mp4', quality: '0.1' }));
+      FM.showExportDialog(); await sleep(70);
+      const q = document.getElementById('exp-quality'), res = document.getElementById('exp-res');
+      if (q.value !== '0.18') {
+        throw new Error('opened on quality ' + q.value + ' — a remembered Medium from before the change is still outranking the new High default');
+      }
+      const top = res.options[0];
+      if (!/Same as project/.test(top.textContent)) {
+        throw new Error('the resolution list still leads with "' + top.textContent + '" — the frame rate above it says "Same as project", so the same answer has to use the same words');
+      }
+      if (!top.textContent.includes(P.width + '×' + P.height)) throw new Error('the top rung does not show the project size');
+
+      // …and once it has been chosen HERE, it is kept: the migration must fire once, not every open.
+      q.value = '0.05';
+      if (FM._expPrefsSave) FM._expPrefsSave();
+      FM.showExportDialog(); await sleep(70);
+      if (q.value !== '0.05') throw new Error('a quality chosen after the migration was not remembered (' + q.value + ')');
+    } finally {
+      if (keep == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep);
+      document.querySelectorAll('#export-dialog').forEach(d => d.classList.add('hidden'));
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

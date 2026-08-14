@@ -1874,6 +1874,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       the export just this clip tick at the bottom, make it say export just this layer, and also make it
       so when you press it, it isn't a tick but it's a button and it lets you select what layer."* So:
       relabel, and replace the checkbox with a button that opens a layer chooser.
+- [x] **185 — The notes button sits too close to the version chip.** (v7.13) His words: *"The spacing for
+      the notes button in regards to the ones around it is off, it's too far to the left."* Measured at
+      380px and he is right: the version pill is a bordered chip with no air inside its right edge, while
+      the icon buttons carry ~10px of internal padding each — so the notes icon had 14px to the chip on
+      its left and 24px to the cog on its right. Evened up.
+- [x] **186 — Make the notes icon look like a note.** (v7.13) His words: *"Make the little icon for the
+      notes menu have a yellow outline with a white background instead of clear and then black lines."*
+      It was a plain stroked outline in the bar's own colour like every other icon; now it is a small
+      sheet of paper — white page, yellow edge, dark ruled lines — which is the same object the panel it
+      opens now is.
 - [ ] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap.** Three parts,
       from one message (AM screenshot attached showing the four buttons above the 1.00x slider):
       1. *"the speed menu needs the crop buttons… let's say your clip is slightly too short for what you

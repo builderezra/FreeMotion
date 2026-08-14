@@ -2541,7 +2541,18 @@ window.FM = window.FM || {};
   // scale only means anything relative to one project's size, so 0.5 remembered from a 4K project
   // would silently mean 540p in a 1080p one. The short side survives the change of comp.
   const EXP_PREFS = 'fm.exportPrefs';
-  function expPrefsRead() { try { return JSON.parse(localStorage.getItem(EXP_PREFS)) || {}; } catch (e) { return {}; } }
+  /* PREFS SCHEMA 2 (queue 173). Ezra: "Quality should default on high."
+   * Changing the <option selected> alone would have been a fix that only worked on a device that had
+   * never exported: since queue 121 the quality IS remembered, so his own browser would have restored
+   * the Medium it saved months ago and he would have reported the same thing again. So prefs written
+   * before this change drop their remembered quality exactly once, which lets the new default win, and
+   * the next save stamps v:2 so a quality chosen from here on is kept. */
+  const EXP_PREFS_V = 2;
+  function expPrefsRead() {
+    let p; try { p = JSON.parse(localStorage.getItem(EXP_PREFS)) || {}; } catch (e) { return {}; }
+    if (p.v !== EXP_PREFS_V) delete p.quality;
+    return p;
+  }
   /* WHAT EXPORT REMEMBERS, AND WHAT IT INHERITS (queue 121).
    * Ezra: "the settings menu and export menu should replicate each other, so if I change a setting in
    * the cog it should go to the export section as that" — and then the half that decides the design:
@@ -2560,6 +2571,7 @@ window.FM = window.FM || {};
     const g = id => document.getElementById(id);
     try {
       localStorage.setItem(EXP_PREFS, JSON.stringify({
+        v: EXP_PREFS_V,
         format: (g('exp-format') || {}).value || 'mp4',
         quality: (g('exp-quality') || {}).value || '',
       }));
@@ -2610,7 +2622,11 @@ window.FM = window.FM || {};
       const prev = sel.value;
       sel.innerHTML = '';
       const add = (val, label) => { const o = document.createElement('option'); o.value = val; o.textContent = label; sel.appendChild(o); };
-      add(1, 'Full — ' + W + '×' + H);
+      /* "SAME AS PROJECT", not "Full" (queue 172). Ezra: "Resolution should have a same as project
+         option as well" — and it always did; this top rung IS the project's own size. The word was the
+         problem. The frame-rate list right above it says "Same as project — 30 fps", so a list that
+         answered the same question with a different word read as a list that did not answer it. */
+      add(1, 'Same as project — ' + W + '×' + H);
       [2160, 1440, 1080, 720, 480, 360].forEach(t => {
         if (t < shortSide - 1) { const s = t / shortSide; add(s, t + 'p — ' + Math.round(W * s) + '×' + Math.round(H * s)); }
       });
@@ -2618,7 +2634,7 @@ window.FM = window.FM || {};
          Every rung above is a uniform SCALE of the project, so the list could only ever offer the
          project's own aspect. This one hands width and height to the exporter directly. */
       add('custom', 'Custom size…');
-      // keep the previous choice if it still exists, else default to Full
+      // keep the previous choice if it still exists, else default to the project's own size
       if (prev && [].some.call(sel.options, o => o.value === prev)) sel.value = prev;
       const cf = document.getElementById('exp-custom-field');
       const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');

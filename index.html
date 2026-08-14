@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=367">
+<link rel="stylesheet" href="styles.css?v=369">
 <link rel="stylesheet" href="theme-glass.css?v=25">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.12</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.13</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -195,7 +195,7 @@
              LEFT OF THE COG since v7.12 (queue 171) — "Put the notes button to the left of the settings
              cog, pushing the refresh button to the left". Once #168/#169 lands the refresh chip takes
              the slot to the left of this one, so the run reads refresh · notes · cog · export. -->
-        <button id="btn-notes" class="btn tb-notes" title="Project notes" aria-label="Project notes"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span id="btn-notes-dot" class="tb-notes-dot"></span></button>
+        <button id="btn-notes" class="btn tb-notes" title="Project notes" aria-label="Project notes"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke-linecap="round" stroke-linejoin="round"><!-- A sheet of paper, not an outline in the bar's colour (queue 186): white page, yellow edge, dark rules. Fixed colours on purpose — it is the one control that opens a light surface, and it should look like the thing it opens. --><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#fffdf7" stroke="#ffcf47" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h3" stroke="#23211a" stroke-width="1.8"/></svg><span id="btn-notes-dot" class="tb-notes-dot"></span></button>
         <!-- App Settings on PC (v4.99). Ezra: "on mobile, there's a settings cog, but on PC, there
              isn't… the settings code should be added to PC version." Until now FM.settings was
              reachable ONLY from the home screen on desktop — including the Classic/Studio layout
@@ -239,7 +239,7 @@
            hide-lists the cog is in (body.sel-mode, body.m-editing) and nowhere else. That is the whole
            safety story on this bar: the moment a selection owns it, every project control leaves
            together, so the delete bin can never land on a slot a thumb learned as something else. -->
-      <button id="m-notes" class="m-tbtn" aria-label="Project notes"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span id="m-notes-dot" class="m-notes-dot"></span></button>
+      <button id="m-notes" class="m-tbtn" aria-label="Project notes"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke-linecap="round" stroke-linejoin="round"><!-- A sheet of paper, not an outline in the bar's colour (queue 186): white page, yellow edge, dark rules. Fixed colours on purpose — it is the one control that opens a light surface, and it should look like the thing it opens. --><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#fffdf7" stroke="#ffcf47" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h3" stroke="#23211a" stroke-width="1.8"/></svg><span id="m-notes-dot" class="m-notes-dot"></span></button>
       <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button id="m-export" class="m-export" aria-label="Export"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M6 20h12"/></svg></button>
       <button id="m-group" class="m-tbtn" aria-label="Group selected layers"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
@@ -601,8 +601,8 @@
       </label>
       <label class="field"><span>Quality</span>
         <select id="exp-quality">
-          <option value="0.18">High</option>
-          <option value="0.1" selected>Medium</option>
+          <option value="0.18" selected>High</option>
+          <option value="0.1">Medium</option>
           <option value="0.05">Low</option>
         </select>
       </label>
@@ -732,7 +732,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=48"></script>
-  <script src="js/app.js?v=250"></script>
+  <script src="js/app.js?v=251"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/voice-rec.js?v=1"></script>
   <script src="js/audio-react.js?v=4"></script>
