@@ -936,7 +936,7 @@ better still, keep working inside the turn rather than parking work for a later 
       wall. Fix the momentum to end at the boundary rather than letting it run and yanking it back.
       RELATED to 103 — a longer glide will make this worse and more visible, so do them together.
 
-- [ ] **101 — Timeline ruler notches vanish when fully zoomed IN.** *NOT REPRODUCED, and my first
+- [x] **101 — Timeline ruler notches vanish when fully zoomed IN.** (v7.36) *NOT REPRODUCED, and my first
       diagnosis was wrong — recorded so nobody re-walks it.* I found the notch thinner capping on
       `totalFrames / frameStep > 1500`, i.e. on the WHOLE project rather than the visible window, and
       built a windowed renderer for it. Then measured, and the cap never binds: at MAX zoom the ruler
@@ -974,6 +974,25 @@ better still, keep working inside the turn rather than parking work for a later 
       node budget spread across a whole project can keep notches on screen at 12x. It needs the ruler
       to render the VISIBLE span only and re-render as the timeline scrolls, so it is deliberately not
       being rushed in at the end of a session.
+      **FIXED (v7.36) with the windowed ruler.** The thinning was computed from the WHOLE project's frame
+      count, so a long project started with a coarse step and zooming IN multiplied that step's pixel gap
+      without ever adding a notch back. The ruler now draws only the visible stretch plus a screen of
+      margin, so the step follows the ZOOM and the node count follows the SCREEN.
+      Same 380px lane, notches visible at each zoom — density is now identical whatever the project's
+      length, which is the whole complaint:
+      | project | 0.5x | 1x | 4x | 12x |
+      |---|---|---|---|---|
+      | 15s | 38 | 19 | 24 | 8 |
+      | 300s (was 19 / 10 / 3 / **1**) | 38 | 19 | 24 | 8 |
+      | 1800s (was 5 / 3 / **1** / **1**) | 38 | 19 | 24 | 8 |
+      **And it removes the cost that #95's investigation measured on the edit path:** the ruler emitted
+      901 notch + 151 tick divs on a 300s project, ~14.8ms on a path that runs on every tap. Now at most
+      ~112 nodes regardless of length. The repaint-on-scroll is its own listener, deliberately not a line
+      inside the scroll handler that drives FM.time and the playhead — that one has a stack of hard-won
+      guards this needs none of, and it only repaints when the view leaves the margin already drawn.
+      The earlier revert of a windowed ruler was right at the time — it was justified by a wrong cause —
+      but the cause is now measured, and no node budget spread over a whole project can keep notches on
+      screen at 12x.
 - [x] **102 — The playhead line is off-centre under its triangle.** **DONE v6.71.** His words: *"the playhead is
       actually off centred to its little triangle at the top, if you just slightly move over the little
       start triangle bit to the left it should be good."* So the TRIANGLE moves left a touch, not the
@@ -1034,6 +1053,15 @@ better still, keep working inside the turn rather than parking work for a later 
       verified synthetically and not against the real phone layout. DO NOT fix this one blind again —
       reproduce the misalignment at phone size first and prove the draw surface and the comp share one
       coordinate space.
+      **MEASURED 14 Aug — the coordinate half does NOT reproduce.** Entering by his own route (+ FAB →
+      Freehand Drawing, not the API), at 380x820 with touch emulation: `#draw-overlay`'s rect is
+      identical to `#preview`'s — dx/dy/dw/dh all 0.00 — in every comp aspect tested, and injected
+      strokes land within ~1.5px of the screen coordinates they were aimed at. The draw surface and the
+      comp share one coordinate space.
+      **What was real in this report was the BAND**, tracked as the "#97 update" entry below and fixed
+      in v7.35 — the canvas was shoved to the bottom of the screen, which makes drawing feel wrong in a
+      way that is easy to describe as "broken". Marking this half as not-reproduced rather than fixed,
+      because that is what the evidence says.
 - [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
       better."* From the screenshot: (a) TWO separate confirm buttons on screen at once — the blue ✓ in
       the top bar and another ✓ in the bar above the keyboard; (b) that second bar also carries ^ and v
@@ -1043,6 +1071,20 @@ better still, keep working inside the turn rather than parking work for a later 
       small and fiddly at that size. Not a crash, a quality pass — but it is the screen people meet
       first when they add text.
 
+      **INVESTIGATED 14 Aug, and it splits three ways.**
+      · **(a) and (b) are not our UI at all.** With the phone text editor open the document contains
+        exactly ONE `.te-bar`, ONE `.te-panel`, ONE `.te-dock`, exactly one visible ✓, zero up/down
+        arrow glyphs and zero "Done" words. A second ✓ on a bar with ^ and v arrows sitting directly
+        above the keyboard is **iOS Safari's own form-assistant accessory bar** — it cannot be seen in
+        headless Chrome and nothing in our DOM can produce it. **This needs one photo from him to
+        close**: if the extra row sits flush on top of the keyboard, it is Safari's and not ours.
+      · **(c) "225pt renders tiny" is #134, shipped in v6.86 — but the fix is a NO-OP on portrait.**
+        The default is `min(W,H)/6.75`, and `1920/12 === 1080/6.75 === 160`, so a 9:16 project gets a
+        byte-identical default to the build he screenshotted. Whether (c) is fixed for him depends
+        entirely on his project's aspect. 225pt implies the old `height/12` on a 2700-tall comp.
+      · And the band from the "#97 update" entry applied to the text screen too (same CSS rule, fixed in
+        v7.35), which squeezed the whole editor into the bottom third of the phone — very likely why (c)
+        looked worse than it is.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
       it's the only thing in the timeline."* "Only thing in the timeline" rules out mixing, layer count,

@@ -571,6 +571,25 @@ window.FM = window.FM || {};
 
   // timecode MM:SS:FF for a given time (frame-accurate)
   function tc(t) { const f = fps(); const tot = Math.round(t * f); const ff = tot % f; const s = Math.floor(tot / f); const mm = Math.floor(s / 60); const ss = s % 60; const p2 = n => (n < 10 ? '0' : '') + n; return p2(mm) + ':' + p2(ss) + ':' + p2(ff); }
+  /* WHAT PART OF THE RULER IS ACTUALLY ON SCREEN, in project seconds, plus a screen of margin either
+   * side so ordinary scrolling never reaches bare ruler before the next repaint. Derived from the two
+   * elements' real rects rather than from scrollLeft, so it cannot drift out of step with whatever the
+   * head width and padding happen to be. */
+  function rulerWindow() {
+    const dur = viewDur(), pps = pxPerSec();
+    if (!rulerEl || !timelineEl || !pps) return { a: 0, b: dur, all: true };
+    const rr = rulerEl.getBoundingClientRect(), tr = timelineEl.getBoundingClientRect();
+    if (!tr.width || !rr.width) return { a: 0, b: dur, all: true };
+    const x0 = tr.left - rr.left, x1 = x0 + tr.width;
+    const m = tr.width;                                   // one screen of margin on each side
+    return {
+      a: Math.max(0, (x0 - m - PAD) / pps),
+      b: Math.min(dur, (x1 + m - PAD) / pps),
+      all: false,
+    };
+  }
+  let _rulerAt = null, _rulerRAF = 0;   // the window the ruler was last drawn for
+
   function buildRuler() {
     const dur = viewDur(), pps = pxPerSec(), f = fps();
     // FRAME NOTCHES: a fine tick per frame (thinned so they stay >=5px apart; denser as you zoom in).
@@ -581,15 +600,29 @@ window.FM = window.FM || {};
     const majStep = nice.find(s => s * pps >= 88) || nice[nice.length - 1];
     let html = '';
     const totalFrames = Math.ceil(dur * f);
-    // Hard-cap the notch count: a long project at fine zoom otherwise emits tens of thousands of
-    // absolutely-positioned divs via innerHTML on EVERY rebuild (every tap) — an iPhone killer.
-    while (totalFrames / frameStep > 1500) frameStep *= 2;
-    for (let fr = 0; fr <= totalFrames; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
+    /* ONLY THE VISIBLE STRETCH (queue 101, and the rebuild cost in queue 95).
+     * This used to emit a notch for the WHOLE project and then thin them to keep the node count under
+     * 1500 — which is why "the little notches are missing… not at fully zoomed in": the thinning was
+     * computed from the project's length, so a long project started coarse and zooming IN multiplied
+     * that step's pixel gap without ever adding a notch back. Measured on a 380px lane: a 1800s project
+     * showed ONE notch, 1577px apart, at 12x zoom, and 300s showed one 197px apart.
+     * It also made every rebuild cost the whole timeline: 901 notch + 151 tick divs at 300s, ~14.8ms
+     * per rebuild, on a path that runs on every tap.
+     * Windowing fixes both at once — the step now follows the ZOOM alone, and the node count follows
+     * the screen rather than the project. */
+    const win = rulerWindow();
+    _rulerAt = win;
+    const winFrames = Math.max(1, (win.b - win.a) * f);
+    while (winFrames / frameStep > 2000) frameStep *= 2;   // a backstop, not the thinning rule
+    const fr0 = Math.max(0, Math.floor((win.a * f) / frameStep) * frameStep);
+    const fr1 = Math.min(totalFrames, Math.ceil(win.b * f));
+    for (let fr = fr0; fr <= fr1; fr += frameStep) { const t = fr / f; html += '<div class="notch" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     // Major ticks are LINES only — no numbers. The single centred timecode pill is the only readout
     // (Ezra: "I only want the numbers on the little counter in the middle").
-    let tickStep = majStep;   // cap the major ticks too — a long project at deep zoom emitted thousands (same iPhone killer as the notches)
-    while (dur / tickStep > 800) tickStep *= 2;
-    for (let t = 0; t <= dur + 1e-6; t += tickStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"></div>'; }
+    let tickStep = majStep;
+    while ((win.b - win.a) / tickStep > 800) tickStep *= 2;
+    const t0 = Math.max(0, Math.floor(win.a / tickStep) * tickStep);
+    for (let t = t0; t <= Math.min(dur, win.b) + 1e-6; t += tickStep) { html += '<div class="tick" style="left:' + (PAD + t * pps) + 'px"></div>'; }
     rulerEl.innerHTML = html;
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
@@ -1722,6 +1755,18 @@ window.FM = window.FM || {};
       // scroll (trackpad / scrollbar / wheel) therefore MOVES the playhead. Without this, scrolling left
       // scrollLeft decoupled from FM.time, so the next render (selecting/deselecting a clip) snapped the
       // view back to the playhead — the "I'm 40s in, click a clip, get sent to the start" bug.
+      /* The ruler now draws only what is on screen (see buildRuler), so it has to be redrawn as the
+       * view moves. Deliberately its OWN listener rather than a line inside the handler below: that one
+       * drives FM.time and the playhead and has a stack of hard-won guards, and this needs none of
+       * them. Repaints only when the view has left the margin the last paint covered — during a normal
+       * flick that is a handful of repaints, not one per frame — and coalesces onto a rAF. */
+      if (timelineEl) timelineEl.addEventListener('scroll', () => {
+        if (_rulerRAF || !_rulerAt || _rulerAt.all) return;
+        const w = rulerWindow();
+        const covered = w.a >= _rulerAt.a && w.b <= _rulerAt.b;
+        if (covered) return;
+        _rulerRAF = requestAnimationFrame(() => { _rulerRAF = 0; buildRuler(); });
+      }, { passive: true });
       if (timelineEl) timelineEl.addEventListener('scroll', () => {
         if (trimDrag || clipMove || kfDrag || scrub) return;            // those drive scroll/time themselves
         // A HIDDEN timeline cannot have been scrolled by a hand. While the focused text editor is

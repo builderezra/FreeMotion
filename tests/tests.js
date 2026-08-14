@@ -13447,6 +13447,54 @@
     }
   });
 
+  /* #101 — "the little notches are missing, there are some if you zoom out but not at fully zoomed in."
+     The thinning was computed from the WHOLE PROJECT's frame count, so a long project started with a
+     coarse step and zooming IN multiplied that step's pixel gap without ever adding a notch back.
+     Measured on a 380px lane before the fix: a 1800s project showed ONE notch, 1577px apart, at 12x.
+     The ruler draws only the visible stretch now, so density follows the ZOOM and the node count
+     follows the screen — which also removes the whole-timeline cost from every rebuild (measured at
+     ~14.8ms on a 300s project in the #95 investigation). */
+  test('ruler notches do not thin out just because the project is long', { item: 'ruler-window' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene, hadZoom = FM.timeline.getZoom ? FM.timeline.getZoom() : 1;
+    try {
+      const countAt = async (dur, zoom) => {
+        FM.scene = scene([]);
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: dur }));
+        FM.scene.project.duration = dur;
+        FM.selectLayer(null);
+        FM.timeline.setZoom(zoom);
+        FM.timeline.rebuild();
+        await sleep(70);
+        const tl = document.getElementById('timeline');
+        const r = tl.getBoundingClientRect();
+        const all = [].slice.call(document.querySelectorAll('#tl-ruler .notch'));
+        const seen = all.filter(el => { const b = el.getBoundingClientRect(); return b.left >= r.left - 1 && b.left <= r.right + 1; });
+        return { dom: all.length, seen: seen.length };
+      };
+
+      // The same zoom must look the same whatever the project's length. That is the whole complaint.
+      const shortP = await countAt(15, 12);
+      const longP = await countAt(1800, 12);
+      if (longP.seen < 4) {
+        throw new Error('a 1800s project shows ' + longP.seen + ' notches on screen at 12x zoom — that is the bare ruler he photographed');
+      }
+      if (Math.abs(longP.seen - shortP.seen) > 2) {
+        throw new Error('at the same zoom a 15s project shows ' + shortP.seen + ' notches and a 1800s one shows ' + longP.seen +
+          ' — density must follow the ZOOM, not the project length');
+      }
+      // …and the ruler must not be emitting the whole timeline any more.
+      if (longP.dom > 400) throw new Error('the ruler emitted ' + longP.dom + ' notches for a 1800s project — it is still drawing the whole timeline, which is the cost on every rebuild');
+    } finally {
+      FM.scene = savedScene;
+      if (FM.timeline.setZoom) FM.timeline.setZoom(hadZoom);
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
