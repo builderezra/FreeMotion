@@ -197,7 +197,7 @@ window.FM = window.FM || {};
     if (layer.stroke) ['width', 'color'].forEach(k => slots.push({ c: layer.stroke, k: k }));     // border keyframes
     if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => slots.push({ c: layer.crop, k: k }));       // crop keyframes (they draw diamonds via animatedProps — must be deletable too)
     if (layer.shadow) ['blur', 'dx', 'dy', 'alpha', 'color'].forEach(k => slots.push({ c: layer.shadow, k: k }));   // shadow keyframes
-    (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
+    FM.eachFx(layer, fx => { if (fx.params) Object.keys(fx.params).forEach(k => slots.push({ c: fx.params, k: k })); });
     // Everything below draws a diamond via FM.animatedProps (js/scene.js) but used to be missing here,
     // so those keyframes were UNDELETABLE — you could see them on the clip and nothing would remove
     // them. Confirmed in BUG-HUNT. The two lists have to cover the same containers, and that matters
@@ -233,9 +233,13 @@ window.FM = window.FM || {};
     if (layer.crop) for (const k of ['x', 'y', 'w', 'h']) if (layer.crop[k] === p) return 'crop.' + k;
     if (layer.stroke) { if (layer.stroke.width === p) return 'stroke.width'; if (layer.stroke.color === p) return 'stroke.color'; }
     if (layer.shadow) for (const k of ['blur', 'dx', 'dy', 'alpha', 'color']) if (layer.shadow[k] === p) return 'shadow.' + k;
-    const fx = layer.effects || [];
-    for (let i = 0; i < fx.length; i++) { const params = fx[i].params || {}; for (const k of Object.keys(params)) if (params[k] === p) return 'effect.' + i + '.' + k; }
-    return null;
+    let found = null;
+    FM.eachFx(layer, (fx, path) => {
+      if (found) return;
+      const params = fx.params || {};
+      for (const k of Object.keys(params)) if (params[k] === p) { found = FM.fxAddr(path, k, 'effect', '.'); return; }
+    });
+    return found;
   }
   function resolveSlot(layer, key) {
     if (key === 'volume' || key === 'fill' || key === 'color' || key === 'speed') return { c: layer, k: key };
@@ -243,8 +247,8 @@ window.FM = window.FM || {};
     if (key.indexOf('crop.') === 0) return layer.crop ? { c: layer.crop, k: key.slice(5) } : null;   // null-guard: pasting onto a layer lacking this container must skip, not crash
     if (key.indexOf('stroke.') === 0) return layer.stroke ? { c: layer.stroke, k: key.slice(7) } : null;
     if (key.indexOf('shadow.') === 0) return layer.shadow ? { c: layer.shadow, k: key.slice(7) } : null;
-    const m = key.match(/^effect\.(\d+)\.(.+)$/);
-    if (m) { const fx = (layer.effects || [])[parseInt(m[1], 10)]; if (fx && fx.params) return { c: fx.params, k: m[2] }; }
+    const a = FM.fxAddrParse(key, 'effect', '.');
+    if (a) { const fx = FM.fxAt(layer, a.path); if (fx && fx.params) return { c: fx.params, k: a.key }; }
     return null;
   }
   function copyKfAt(layer, tt) {
@@ -292,6 +296,9 @@ window.FM = window.FM || {};
     FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
   }
   FM.pasteKfAtPlayhead = pasteKfAtPlayhead;   // the layer ≡/⋯ menu needs it: a layer with NO keyframes has no diamond to long-press
+  // …and its other half, exposed for the same reason deleteKeyframesAt is: the suite has to be able to
+  // prove copy/paste addresses the slot it actually meant, without faking a long-press on a diamond.
+  FM.copyKfAt = copyKfAt;
 
   function shade(hex, pct) {
     const n = parseInt(hex.slice(1), 16);

@@ -20,8 +20,10 @@ window.FM = window.FM || {};
   // Index, not id — fxRegistry.makeInstance doesn't stamp ids, so position in layer.effects is the
   // only stable handle, and a bake resolves it immediately.
   function parseFxProp(prop) {
-    const m = /^fx:(\d+):(.+)$/.exec(String(prop || ''));
-    return m ? { idx: +m[1], key: m[2] } : null;
+    // Widened for filter containers (queue 113): 'fx:<i>:<key>' still parses, and a child inside a
+    // filter is 'fx:<i>:<j>:<key>'. Every saved link is in the short form, so both must resolve.
+    const a = FM.fxAddrParse(prop, 'fx', ':');
+    return a ? { path: a.path, idx: a.path[0], key: a.key } : null;
   }
 
   // The registry already normalises every effect's controls; only `range` ones are keyframable, and
@@ -299,7 +301,7 @@ window.FM = window.FM || {};
       const fxT = parseFxProp(prop);
       let fx = null, fxSchema = null;
       if (fxT) {
-        fx = target && target.effects && target.effects[fxT.idx];
+        fx = FM.fxAt(target, fxT.path);
         fxSchema = fx && fxParamSchema(fx.type, fxT.key);
         if (!fx || !fxSchema) { if (FM.toast) FM.toast('That effect control is no longer there'); return 0; }
       } else if (!PROP_OK[prop] || !target || !target.transform) {
@@ -392,7 +394,7 @@ window.FM = window.FM || {};
     function metaOf(prop) {
       const fxT = parseFxProp(prop);
       if (!fxT) return PROP_META[prop] || PROP_META.scale;
-      const eff = (targetLayer().effects || [])[fxT.idx];
+      const eff = FM.fxAt(targetLayer(), fxT.path);
       const sch = eff && fxParamSchema(eff.type, fxT.key);
       if (!sch) return PROP_META.scale;
       return { label: sch.label, unit: sch.unit || '', def: null, toStore: v => v, schema: sch, eff: eff };
@@ -530,14 +532,19 @@ window.FM = window.FM || {};
       propSel.appendChild(base);
 
       let n = 0;
-      (targetLayer().effects || []).forEach((eff, idx) => {
+      FM.eachFx(targetLayer(), (eff, path, parent) => {
         if (eff.enabled === false) return;
+        if (parent && parent.enabled === false) return;   // a child of a disabled filter is not drivable either
         const reg = FM.fxRegistry && FM.fxRegistry.get(eff.type);
         const controls = ((reg && reg.params) || []).filter(p => p.keyframable && p.type === 'range');
         if (!controls.length) return;
         const g = document.createElement('optgroup');
-        g.label = (reg && reg.label) || eff.type;
-        controls.forEach(c => { addOpt(g, 'fx:' + idx + ':' + c.key, c.label); n++; });
+        // A child is named under its filter, so two copies of the same effect in different filters
+        // are told apart in the list rather than appearing twice with the same label.
+        const own = (reg && reg.label) || eff.type;
+        const preg = parent && FM.fxRegistry && FM.fxRegistry.get(parent.type);
+        g.label = parent ? (((preg && preg.label) || parent.type) + ' \u203a ' + own) : own;
+        controls.forEach(c => { addOpt(g, FM.fxAddr(path, c.key, 'fx', ':'), c.label); n++; });
         propSel.appendChild(g);
       });
       // the previously chosen effect param may not exist on the new target — fall back to Scale

@@ -760,6 +760,21 @@ better still, keep working inside the turn rather than parking work for a later 
       Scouting also corrected five factual errors in FILTERS-DESIGN.md, two of which would have sent
       later steps down the wrong road — including the cross-fade precedent, which had the wrong ZERO
       (copying it would have made strength 0 hide the layer instead of showing it unfiltered).
+      **Step 2 shipped in v7.39 — one walker.** Seven places in the app walked a layer's effects one
+      level deep, which is fine today and breaks silently the moment an effect can hold other effects.
+      Each fails in its own quiet way: no keyframe diamonds for anything inside a filter; keyframes you
+      can SEE and cannot delete; copy/paste landing on a different parameter than the one you copied; an
+      audio link driving the wrong effect; and a Luma Matte or Displacement Map keeping a dead layer id
+      after a duplicate, import or template insert — it just renders plain and never says why. All seven
+      go through one walker now, and the three separate keyframe address grammars (the timeline's, the
+      audio panel's, and the one the AI sends) share a single parser that reads both the old form and the
+      nested one, so nothing already saved changes.
+      Nothing creates a filter yet — this is deliberately the groundwork, landing before anything can
+      depend on it. Next is step 3, the container rendering + the strength cross-fade, which is the
+      risky one.
+      One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
+      out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
+      reverted. Rewritten to duplicate a group holding both, and it now goes red properly.
 
 - [x] **111 — Snapping and Onion skin should say on screen what they just did.** **DONE v6.70.** His words: *"Make it so
       when you press the snapping and onion skin buttons it actually tells you on screen what happened."*

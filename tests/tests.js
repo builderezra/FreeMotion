@@ -13772,6 +13772,168 @@
     }
   });
 
+  /* ---------------- #113 step 2: one walker over the effect stack ----------------
+   * Seven places walked layer.effects exactly one level deep, and with a filter container in the
+   * stack each of them fails SILENTLY — no diamonds, undeletable keyframes, copy/paste landing on the
+   * wrong parameter, an audio link driving a different effect, and a dead layer id after a duplicate.
+   * They all go through FM.eachFx now. Nothing creates a container yet, so these build one as data. */
+
+  // A filter holding two real effects, one of them keyframed. Data only — nothing renders it.
+  function fxContainer() {
+    var child = FM.fxRegistry.makeInstance('brightness');
+    child.params.amount = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 1, v: 1.5, e: 'linear' }] };
+    return { type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [child, FM.fxRegistry.makeInstance('blur')] };
+  }
+
+  test('effect walker: with no filters in the stack it is exactly the old flat walk', { item: 'fx-walker' }, function () {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+    L.effects = [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('brightness')];
+    var seen = [];
+    FM.eachFx(L, function (fx, path, parent) { seen.push(fx.type + '@' + path.join(',') + (parent ? '!' : '')); });
+    if (seen.join(' ') !== 'blur@0 brightness@1') throw new Error('the walker is not equivalent to a plain forEach on a flat stack: ' + seen.join(' '));
+  });
+
+  test('effect walker: a filter visits itself and then its children, and never recurses', { item: 'fx-walker' }, function () {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
+    var nested = fxContainer();
+    nested.effects.push({ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [FM.fxRegistry.makeInstance('blur')] });
+    L.effects = [FM.fxRegistry.makeInstance('sepia'), nested];
+    var seen = [];
+    FM.eachFx(L, function (fx, path) { seen.push(fx.type + '@' + path.join(',')); });
+    // The nested-container child is VISITED (it is an entry like any other) but not descended into —
+    // that is the depth cap, and it is what stops a hand-edited file from hanging the walk.
+    if (seen.join(' ') !== 'sepia@0 filter@1 brightness@1,0 blur@1,1 filter@1,2') {
+      throw new Error('unexpected walk order/depth: ' + seen.join(' '));
+    }
+  });
+
+  test('effect walker: a keyframe inside a filter draws a diamond and can be deleted', { item: 'fx-walker' }, function () {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
+    L.effects = [fxContainer()];
+    var props = FM.animatedProps(L);
+    if (props.indexOf(L.effects[0].effects[0].params.amount) < 0) {
+      throw new Error('a keyframed param inside a filter is invisible to animatedProps — no diamond on the clip for it');
+    }
+    FM.scene.layers.push(L);
+    try {
+      FM.timeline.deleteKeyframesAt ? FM.timeline.deleteKeyframesAt(L, 0) : null;
+      var p = L.effects[0].effects[0].params.amount;
+      var still = FM.isAnimated(p) && p.kf.some(function (k) { return Math.abs(k.t - 0) < 1e-3; });
+      if (still) throw new Error('the keyframe drew a diamond and would not delete — the exact bug the delete path already shipped once');
+    } finally { FM.scene.layers = FM.scene.layers.filter(function (x) { return x !== L; }); }
+  });
+
+  /* Both index forms, in one place, because the three grammars share one parser now. */
+  test('effect walker: the address grammar reads the old 2-part form and the new 3-part one', { item: 'fx-walker' }, function () {
+    var cases = [
+      ['effect.3.amount', '.', 'effect', [3], 'amount'],
+      ['effect.3.2.amount', '.', 'effect', [3, 2], 'amount'],
+      ['fx:0:radius', ':', 'fx', [0], 'radius'],
+      ['fx:0:1:radius', ':', 'fx', [0, 1], 'radius'],
+      ['effect.0.5', '.', 'effect', [0], '5'],          // a param key that is itself a number stays a key
+      ['effect.0.1.5', '.', 'effect', [0, 1], '5'],
+    ];
+    cases.forEach(function (c) {
+      var got = FM.fxAddrParse(c[0], c[2], c[1]);
+      if (!got) throw new Error(c[0] + ' did not parse at all');
+      if (got.path.join(',') !== c[3].join(',') || got.key !== c[4]) {
+        throw new Error(c[0] + ' parsed as path [' + got.path + '] key "' + got.key + '", expected [' + c[3] + '] "' + c[4] + '"');
+      }
+      if (FM.fxAddr(c[3], c[4], c[2], c[1]) !== c[0]) throw new Error('round trip failed for ' + c[0]);
+    });
+    if (FM.fxAddrParse('transform.x', 'effect', '.')) throw new Error('a transform address was parsed as an effect address');
+    if (FM.fxAddrParse('effect.amount', 'effect', '.')) throw new Error('an address with no index parsed anyway');
+  });
+
+  test('effect walker: copying a keyframe from inside a filter pastes back into the same slot', { item: 'fx-walker' }, function () {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
+    L.effects = [FM.fxRegistry.makeInstance('sepia'), fxContainer()];
+    var p = L.effects[1].effects[0].params.amount;
+    var addr = null;
+    // propKey is private; go through the public copy path, which is what a user actually does.
+    FM.scene.layers.push(L); FM.selectLayer(L.id);
+    try {
+      var n = FM.copyKfAt(L, 0);
+      var entry = (FM.kfClipboard || []).filter(function (e) { return /^effect\./.test(e.key); })[0];
+      if (!entry) throw new Error('copying at t=0 produced no effect-param entry at all (' + n + ' copied) — a keyframe inside a filter is not copyable');
+      addr = entry.key;
+      if (addr !== 'effect.1.0.amount') throw new Error('the child was addressed as "' + addr + '" rather than effect.1.0.amount — paste would land on the wrong parameter');
+      // …and it must RESOLVE back to that same child on paste, not to the filter or the sibling.
+      var T2 = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
+      T2.effects = [FM.fxRegistry.makeInstance('sepia'), fxContainer()];
+      T2.effects[1].effects[0].params.amount = 0.9;                       // static: paste must animate it
+      FM.scene.layers.push(T2); FM.selectLayer(T2.id);
+      var t0 = FM.time; FM.time = 0.5;
+      try { FM.pasteKfAtPlayhead(); } finally { FM.time = t0; }
+      var landed = T2.effects[1].effects[0].params.amount;
+      FM.scene.layers = FM.scene.layers.filter(function (x) { return x !== T2; });
+      if (!FM.isAnimated(landed)) throw new Error('pasting an effect.1.0.amount keyframe did not reach the child inside the filter');
+      if (FM.isAnimated(T2.effects[0].params.amount)) throw new Error('the paste landed on the TOP-LEVEL effect instead of the child — the exact silent mis-address this step exists to stop');
+    } finally { FM.scene.layers = FM.scene.layers.filter(function (x) { return x !== L; }); FM.selectLayer(null); }
+  });
+
+  test('effect walker: a save/load keeps a filter and its children, and refuses a filter inside one', { item: 'fx-walker' }, function () {
+    var deep = fxContainer();
+    deep.effects.push({ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [FM.fxRegistry.makeInstance('blur')] });
+    var l = { effects: [deep] };
+    FM.storage._sanitizeEffects(l);
+    var c = l.effects[0];
+    if (!c || c.type !== FM.FX_CONTAINER) throw new Error('the filter itself did not survive the load path');
+    if (!Array.isArray(c.effects)) throw new Error('the filter came back with no children array — every effect inside it is gone');
+    if (c.effects.length !== 2) throw new Error('expected 2 surviving children (the third is a filter-in-a-filter and must be refused), got ' + c.effects.map(function (x) { return x.type; }).join(','));
+    var kf = c.effects[0].params.amount;
+    if (!FM.isAnimated(kf) || kf.kf.length !== 2) throw new Error('the child keyframes did not survive');
+  });
+
+  /* THE FIRST VERSION OF THIS TEST COULD NOT FAIL, and it is recorded because the mistake is easy to
+     repeat: it duplicated only the layer CARRYING the effect, leaving the referenced layer out of the
+     duplicate. The id map therefore had no entry for it, the remap was a no-op in both directions, and
+     the copy kept pointing at the original — which still exists, so "does the ref resolve" passed with
+     the fix reverted. The ref has to be remapped to the COPY, so both layers must be inside what is
+     being duplicated, and the assertion has to be "points at the new one", not "points at something". */
+  test('effect walker: a layer ref inside a filter follows the duplicate instead of the original', { item: 'fx-walker' }, async function () {
+    var G = FM.makeLayer('group', { name: 'G' });
+    var src = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#f0f' });
+    var host = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#fff' });
+    src.parent = G.id; host.parent = G.id;
+    var child = FM.fxRegistry.makeInstance('lumamatte');
+    if (!child) throw new Error('lumamatte is gone from the registry — pick another layer-ref effect');
+    child.params.source = src.id;
+    host.effects = [{ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [child] }];
+    var keep = FM.scene.layers.slice();
+    FM.scene.layers.push(G, src, host);
+    try {
+      FM.selectLayer(G.id);
+      await FM.duplicateLayer(G.id, true);
+      var copies = FM.scene.layers.filter(function (x) { return x !== host && x.effects && x.effects[0] && FM.isFxContainer(x.effects[0]); });
+      if (!copies.length) throw new Error('the duplicated group lost the filter on its member');
+      var got = copies[0].effects[0].effects[0].params.source;
+      if (!got) throw new Error('the source ref inside the filter was blanked by the duplicate');
+      if (got === src.id) throw new Error('the copy still points at the ORIGINAL source layer — a ref inside a filter was not remapped, so editing the original silently changes the copy');
+      var target = FM.scene.layers.filter(function (x) { return x.id === got; })[0];
+      if (!target) throw new Error('the ref inside the filter points at a layer that does not exist (' + got + ') — the matte silently renders plain');
+      if (target === src) throw new Error('resolved back to the original rather than the duplicate');
+    } finally { FM.scene.layers = keep; FM.selectLayer(null); }
+  });
+
+  /* The import / template / element-insert side of the same remap. Every layer coming in from a file
+     is re-id'd, so a reference held inside a filter has to be re-pointed with it — otherwise the
+     imported project carries an id from the project it came from, renders plain, and autosaves that
+     way. Tested against the pure function rather than applyScene, which would replace the live scene. */
+  test('effect walker: importing re-points a layer ref held inside a filter', { item: 'fx-walker' }, function () {
+    if (!FM.storage._reIdLayers) throw new Error('FM.storage._reIdLayers is gone');
+    var src = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#f0f' });
+    var host = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#fff' });
+    var child = FM.fxRegistry.makeInstance('lumamatte');
+    child.params.source = src.id;
+    host.effects = [{ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [child] }];
+    var re = FM.storage._reIdLayers([src, host]);
+    var newHost = re.layers[1], newSrcId = re.layers[0].id;
+    var got = newHost.effects[0].effects[0].params.source;
+    if (got === src.id) throw new Error('the imported filter still holds the id from the project it came from — the matte resolves to nothing and renders plain');
+    if (got !== newSrcId) throw new Error('the ref inside the filter points at ' + got + ', expected the re-id\'d source ' + newSrcId);
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -332,6 +332,65 @@ window.FM = window.FM || {};
 
   /* Every animated prop container ({kf:[…]}) on a layer — transform props plus visual/audio effect
    * params — so the timeline can show/drag/delete effect-parameter keyframes alongside transform ones. */
+  /* ---- THE effect-stack walker (queue 113, step 2 of the filters plan) --------------------------
+   *
+   * A filter is one normal effect that happens to hold other effects (FILTERS-DESIGN.md §1), so
+   * `layer.effects` stays the flat array it has always been and the nesting lives on ONE entry. That
+   * keeps the ~45 compositor sites and the 20 that peel an effect off the stack by object identity
+   * working untouched — but it means anything that walks the stack ONE LEVEL DEEP now sees a
+   * container and misses everything inside it, silently, in seven different ways: no timeline
+   * diamonds, keyframes you can see and cannot delete, keyframe copy/paste landing on the wrong
+   * parameter, an audio link retargeting a different effect, and a Luma Matte / Compound Blur /
+   * Match Grade / Displacement Map keeping a DEAD layer id after a duplicate, import or paste.
+   *
+   * So there is exactly one walker and every one of those sites goes through it. Landed BEFORE any
+   * filter can be created, so the whole of step 2 is assertable as "nothing changed": with no
+   * containers in the data this is a plain forEach over layer.effects.
+   *
+   * `fn(fx, path, parent)` — path is [i] for a top-level effect and [i, j] for a child; parent is
+   * null or the container. The container itself is visited too, because it owns a real param of its
+   * own (strength) that keyframes like any other. */
+  FM.FX_CONTAINER = 'filter';
+  FM.isFxContainer = function (fx) { return !!(fx && fx.type === FM.FX_CONTAINER && Array.isArray(fx.effects)); };
+  FM.eachFx = function (layer, fn) {
+    const list = (layer && layer.effects) || [];
+    for (let i = 0; i < list.length; i++) {
+      const fx = list[i];
+      if (!fx) continue;
+      fn(fx, [i], null);
+      // Depth is capped at 1 by the data shape itself — a child is never descended into, so even a
+      // hand-edited project file claiming a filter inside a filter cannot make this recurse.
+      if (FM.isFxContainer(fx)) {
+        for (let j = 0; j < fx.effects.length; j++) { const ch = fx.effects[j]; if (ch) fn(ch, [i, j], fx); }
+      }
+    }
+  };
+  FM.fxAt = function (layer, path) {
+    if (!path || !path.length) return null;
+    let fx = ((layer && layer.effects) || [])[path[0]];
+    if (path.length > 1) fx = FM.isFxContainer(fx) ? fx.effects[path[1]] : null;
+    return fx || null;
+  };
+  /* Three independent address grammars index this stack one level deep — 'effect.<i>.<key>' (the
+   * timeline's keyframe clipboard), 'fx:<i>:<key>' (audio-react) and 'effect:<i>:<key>' (arriving
+   * from the AI model, never built locally). Rather than widen three regexes three different ways,
+   * they share these two, which read and write BOTH the 2-part and 3-part index forms.
+   * Old addresses keep working unchanged: that back-compatibility is the point, since kfClipboard
+   * entries and saved audio links are both written in the short form today. */
+  FM.fxAddr = function (path, key, prefix, sep) { return prefix + sep + path.join(sep) + sep + key; };
+  FM.fxAddrParse = function (s, prefix, sep) {
+    s = String(s == null ? '' : s);
+    const head = prefix + sep;
+    if (s.indexOf(head) !== 0) return null;
+    const parts = s.slice(head.length).split(sep);
+    const path = [];
+    // Consume leading integers as indices, never the last segment (that is always the param key), and
+    // never more than two — so a param key that is itself a number stays a key, not an index.
+    while (parts.length > 1 && path.length < 2 && /^\d+$/.test(parts[0])) path.push(parseInt(parts.shift(), 10));
+    if (!path.length || !parts.length) return null;
+    return { path: path, key: parts.join(sep) };
+  };
+
   FM.animatedProps = function (layer) {
     const out = [];
     Object.keys(layer.transform).forEach(k => { if (isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
@@ -348,7 +407,7 @@ window.FM = window.FM || {};
     if (layer.stroke && layer.stroke.dash && isAnimated(layer.stroke.dash.offset)) out.push(layer.stroke.dash.offset);   // marching-ants
     if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => { if (isAnimated(layer.repeater[k])) out.push(layer.repeater[k]); });   // shape repeater
     if (layer.masks) layer.masks.forEach(m => { if (m && isAnimated(m.path)) out.push(m.path); });   // pen-mask path (moving reveal / roto) — its keyframes show on the clip and retime with it
-    (layer.effects || []).forEach(fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
+    FM.eachFx(layer, fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
   };

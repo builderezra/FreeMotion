@@ -340,8 +340,9 @@ window.FM = window.FM || {};
               if (key === 'anchorX' || key === 'anchorY') { drop(o.op, ref, 'anchor cannot be keyframed'); break; }
               container = layer.transform; range = TRANSFORM_RANGE[key];
             } else if (typeof o.path === 'string' && o.path.indexOf('effect:') === 0) {
-              var pr = o.path.split(':'); var fxi = parseInt(pr[1], 10); var pkey = pr[2];
-              var fx = layer.effects && layer.effects[fxi];
+              var ap = FM.fxAddrParse(o.path, 'effect', ':');
+              var pkey = ap && ap.key;
+              var fx = ap && FM.fxAt(layer, ap.path);
               if (!fx) { drop(o.op, ref, 'no effect at index'); break; }
               // Resolve the param against the registry schema (handles MULTI-param effects, which have no
               // def.param) and allow any keyframable range param — was rejecting all of them. (#2)

@@ -2037,7 +2037,7 @@ window.FM = window.FM || {};
         // Displacement Map): a source INSIDE the duplicated subtree must follow the copy. A source
         // outside it is deliberately left alone — that layer is still in the scene, and both the
         // original and the copy legitimately matte off it.
-        if (Array.isArray(l.effects)) l.effects.forEach(fx => {
+        FM.eachFx(l, fx => {
           if (fx && fx.params && fx.params.source && idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
         });
         if (l.karaokeOf && idMap[l.karaokeOf]) l.karaokeOf = idMap[l.karaokeOf];
@@ -2144,7 +2144,7 @@ window.FM = window.FM || {};
         });
       });
       // …and an effect's layer ref, by the same three-way rule.
-      if (Array.isArray(copy.effects)) copy.effects.forEach(fx => {
+      FM.eachFx(copy, fx => {
         if (!fx || !fx.params || !fx.params.source) return;
         if (idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
         else if (!FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';

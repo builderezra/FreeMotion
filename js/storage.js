@@ -547,7 +547,7 @@ window.FM = window.FM || {};
    * right for a handful of audio filters and very wrong here: one 404'd script would strip every
    * effect off every layer and then autosave the gutted project over the original.
    */
-  const FX_MAX = 120, FX_ID_MAX = 64;
+  const FX_MAX = 120, FX_ID_MAX = 64, FX_CHILD_MAX = 24;
   // -> {keep:false} means leave the key ABSENT, which is not the same as writing the default (above).
   function safeFxParam(pd, v) {
     const ty = pd.type;
@@ -573,15 +573,24 @@ window.FM = window.FM || {};
     if (l.effects == null) return;
     if (!Array.isArray(l.effects)) { delete l.effects; return; }
     if (!FM.fxRegistry || typeof FM.fxRegistry.get !== 'function') return;   // no whitelist → touch nothing
-    l.effects = l.effects.slice(0, FX_MAX).map(f => {
+    const sane = (f, depth) => {
       if (!f || typeof f !== 'object' || typeof f.type !== 'string') return null;
+      // A filter container (queue 113) is a normal effect that happens to carry children. Recognised
+      // by SHAPE here rather than by registry lookup, because the type is not registered until step 5
+      // and this has to hold the structure together before then.
+      const container = f.type === FM.FX_CONTAINER && Array.isArray(f.effects);
+      // Nesting is capped at 1, and capped HERE as well as in the add path — the add path only governs
+      // what this build creates, and a hand-edited or older file is exactly the input this function
+      // exists for. Two levels would cost 2^depth full rasterisations, each holding a comp-sized plate
+      // pair (~16.6MB at 1080x1920), against depth counters in the compositor that are not capped.
+      if (container && depth > 0) return null;
       const reg = FM.fxRegistry.get(f.type);
       // The round-trip IS the own-property guarantee: a get() that walked the prototype chain returns
       // something whose own .type cannot match what was asked for.
-      if (!reg || typeof reg !== 'object' || reg.type !== f.type) return null;
+      if (!container && (!reg || typeof reg !== 'object' || reg.type !== f.type)) return null;
       const src = (f.params && typeof f.params === 'object') ? f.params : {};
       const params = {};
-      (reg.params || []).forEach(pd => {
+      ((reg && reg.params) || []).forEach(pd => {
         if (!pd || typeof pd.key !== 'string') return;
         if (!hasOwn(src, pd.key)) return;                                    // absent stays absent
         const r = safeFxParam(pd, src[pd.key]);
@@ -590,8 +599,11 @@ window.FM = window.FM || {};
       // enabled: absence stays ON — matches makeInstance and the engine's own `e.enabled === false` test.
       // Transient UI state (fx._expanded) is dropped by the rebuild, which is what the leading
       // underscore means everywhere else in this file.
-      return { type: reg.type, enabled: f.enabled !== false, params: params };
-    }).filter(Boolean);
+      const out = { type: f.type, enabled: f.enabled !== false, params: params };
+      if (container) out.effects = f.effects.slice(0, FX_CHILD_MAX).map(c => sane(c, depth + 1)).filter(Boolean);
+      return out;
+    };
+    l.effects = l.effects.slice(0, FX_MAX).map(f => sane(f, 0)).filter(Boolean);
   }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
@@ -711,7 +723,7 @@ window.FM = window.FM || {};
     // autosaved into the copy, so the duplicated / imported / templated project silently renders
     // differently from the original and stays that way. karaokeOf is the same unremapped class.
     out.forEach(l => {
-      if (Array.isArray(l.effects)) l.effects.forEach(fx => {
+      FM.eachFx(l, fx => {
         if (fx && fx.params && fx.params.source) fx.params.source = map[fx.params.source] || '';
       });
       if (l.karaokeOf) l.karaokeOf = map[l.karaokeOf] || null;

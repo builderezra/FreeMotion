@@ -201,6 +201,13 @@ cancelled tomorrow, which is why they go first.
    import and autosave paths. Fixes the live panel-crash path above.
 2. **`FM.eachFx` + the widened address grammar** — route all seven one-level walkers through it. No
    filters exist yet, so the assertion is that everything behaves byte-identically.
+   **SHIPPED v7.39.** `FM.eachFx` / `FM.isFxContainer` / `FM.fxAt` / `FM.fxAddr` / `FM.fxAddrParse` live in
+   `js/scene.js`; the container is `{ type: FM.FX_CONTAINER, enabled, params, effects: [] }` and depth is
+   capped at 1 by the walker itself (a child is never descended into) as well as in `sanitizeEffects`.
+   All three grammars share `fxAddrParse`, which consumes leading integers but never the last segment,
+   so a param key that is itself a number stays a key. Routed: `animatedProps`, `deleteKeyframesAt`,
+   `propKey`, `resolveSlot`, audio-react's parser + option builder, ai-ops' path parser, and all three
+   layer-id remaps (`app.js` duplicate + paste, `storage.js` reIdLayers). Seven mutation checks.
 3. **The container type + strength cross-fade** in the compositor. Assert: no-filter projects
    byte-identical; strength 1 identical to the children applied directly; strength 0 a true no-op.
 4. **The inspector row** — expandable, children scoped to their own stack descriptor, accordion scoped
