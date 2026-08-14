@@ -2096,6 +2096,23 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       **Worth a decision from you: synthesised set first, or sourced files?** My recommendation is to
       build the browser plus a synthesised starter set — it ships immediately, is legally clean, and the
       same menu can take real files later.
+      **His reply: "Good ideas btw for the sound effects menu."** Taking that as agreement with the
+      approach, so when this comes up the plan is: the browser + a synthesised starter set, with room
+      for real files later. Confirm before spending time on sourcing audio.
+- [x] **197 — Drop the "…" from the Import buttons in Media and Audio.** (v7.24) His words: *"On both the
+      import buttons in the media and audio menus on mobile it has three dots on the text for those two
+      buttons, get rid of that."*
+      Checked it was not CSS truncation first — `.addmenu-lbl` does ellipsise, so that was the obvious
+      suspect, but measuring every label in every tab (`tests/_lbltrunc.html`) showed **none of them is
+      cut**. The dots are literal characters in the labels, `Import…` and `Import audio…`, the desktop
+      convention for "this opens a picker". On a phone every tile opens something, so it says nothing
+      and just looks like a truncated word. Removed.
+- [x] **198 — Take Project notes out of App settings.** (v7.24) His words: *"Get project notes out of the
+      app settings menu."* It only lived there because the notepad's phone button had been reverted once
+      (the suite caught that it shifted the cog into the delete bin's slot); since #171 there is a real
+      notes button on BOTH bars, so the settings row was a second door. Same rule as #175 (loop playback)
+      and #122 (onion skin): one control, one home. Checked the remaining door exists on both bars before
+      removing it.
 - [ ] **191 — The arrow beside a group's hide button, and the layout it shoves sideways.** His words:
       *"some weird stuff going on in the grouping menu, like an arrow next to the hide button, idk what
       that does and it pushes the ui over making it ugly."* Visible in his #190 screenshot: the group's

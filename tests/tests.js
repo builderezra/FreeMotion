@@ -7318,6 +7318,12 @@
          mistake queue 53 made with Group, where the action survived and every way to reach it did not. */
       if (cogHas('Loop playback')) throw new Error('the cog has a Loop playback row again — its one home is the ⛶ view bar');
       if (!document.getElementById('vb-loop')) throw new Error('loop was taken out of the cog and the view bar has no loop button — it is now unreachable');
+      /* Project notes left too (queue 198), and the same pairing applies: the row must be gone AND the
+         buttons that replaced it must exist, on both bars. */
+      if (cogHas('Project notes')) throw new Error('the cog has a Project notes row again — the bars have their own button now');
+      if (!document.getElementById('btn-notes') || !document.getElementById('m-notes')) {
+        throw new Error('notes was taken out of the cog and one of the bar buttons is missing — it would be unreachable on that device');
+      }
       // The block this replaced ended by PRESSING a row, and actionRow closes the panel on its way out.
       // Checking for absence presses nothing, so the panel has to be shut by hand or it leaks into the
       // next test — which is exactly what happened: a caption-cue drag landed on the settings scrim.

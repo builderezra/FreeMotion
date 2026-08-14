@@ -317,8 +317,10 @@ window.FM = window.FM || {};
       // runs the action, so each one's result (a re-drawn timeline, the browser's save sheet, the
       // reset confirm) lands on the project rather than behind this scrim.
       body.appendChild(group(
-        actionRow('Project notes', 'Jot down anything about this project, and tick the ones you want to be reminded of when you export.', 'Open…',
-          () => { if (FM.notepad) FM.notepad.open(); }),
+        /* (Project notes is NOT here any more — queue 198. Ezra: "Get project notes out of the app
+           settings menu." It only lived here because the notepad's phone button had been reverted once;
+           since queue 171 there is a real notes button on BOTH bars, so this was a second door to it.
+           Same rule as loop playback in queue 175 and onion skin in queue 122: one control, one home.) */
         actionRow('Trim to last clip', 'Ends the project exactly where the last clip does, instead of running on into empty time.', 'Trim',
           () => press('btn-fit')),
         actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',

@@ -275,7 +275,11 @@ window.FM = window.FM || {};
       + '<path d="M3 17V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10" stroke="#7CC9EA"/>'
       + '<path d="M3 17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2" stroke="#4ADE80"/>'), options: function () {
       var base = [
-        { label: 'Import…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
+        // No trailing "…" (queue 197). Ezra: "on both the import buttons in the media and audio menus on
+        // mobile it has three dots on the text for those two buttons, get rid of that." The ellipsis is
+        // the desktop convention for "this opens a picker", and on a phone every tile opens something,
+        // so it says nothing and just reads as a truncated word.
+        { label: 'Import', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
         { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
         { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
       ];
@@ -298,7 +302,7 @@ window.FM = window.FM || {};
       // a song like adding media it stays in the audios section"). They used to land in Media, mixed
       // in among the video thumbnails with no artwork to tell them apart.
       return [
-        { label: 'Import audio…', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport },
+        { label: 'Import audio', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport },
         /* Record voice… sits BESIDE Import rather than replacing it, and second rather than first:
            importing is still the commoner move, and the tile you have always tapped should not
            change position under your finger.

@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">…</pre>
+<iframe id="a" src="../index.html" style="width:390px;height:820px;border:0"></iframe>
+<script>
+/* Ezra: "On both the import buttons in the media and audio menus on mobile it has three dots on the
+   text for those two buttons, get rid of that."
+   .addmenu-lbl is white-space:nowrap with max-width:78px and text-overflow:ellipsis, so any label
+   wider than 78px is cut. This lists every truncated label per tab (scrollWidth > clientWidth), so the
+   fix can be checked against the whole menu rather than the two he happened to notice. */
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, d = w.document, n = 0;
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.timeline)) { if (n++ > 300) return; return setTimeout(wait, 50); }
+    (async function () {
+      if (w.FM.home && w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
+      await sleep(500);
+      var out = [];
+      var fab = d.getElementById('add-fab');
+      if (fab) fab.click();
+      await sleep(500);
+      var tabs = [].slice.call(d.querySelectorAll('.addmenu-tab'));
+      out.push('tabs found: ' + tabs.map(function(t){return t.dataset.key;}).join(', '));
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].click();
+        await sleep(320);
+        var key = tabs[i].dataset.key;
+        var cut = [].slice.call(d.querySelectorAll('.addmenu-card .addmenu-lbl')).filter(function (el) {
+          return el.scrollWidth > el.clientWidth + 1;
+        }).map(function (el) { return '"' + el.textContent + '" (' + el.scrollWidth + '>' + el.clientWidth + ')'; });
+        out.push(('  ' + key).padEnd(12) + (cut.length ? 'CUT: ' + cut.join('  ') : 'all labels fit'));
+      }
+      document.getElementById('o').textContent = out.join('\n');
+      window.__done = true;
+    })();
+  })();
+});
+</script></body></html>
