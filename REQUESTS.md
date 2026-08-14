@@ -1245,9 +1245,21 @@ better still, keep working inside the turn rather than parking work for a later 
       the other three, so no amount of tuning inside the current design can help — nothing is wrong with
       the blur, it is being asked to smear motion it cannot see.
       **Two halves, and they need different answers:**
-      · **Camera** looks tractable and cheap. Camera lens already reaches `applyLayerTransform`; if the
-        camera's own movement is composed into the matrix that motion blur samples, the existing
-        re-projection smears it for free. Do this half first.
+      · **Camera** — and reading the code changed the answer here, so it is recorded before building.
+        Layers do NOT render through the camera's transform: with a camera in the scene, every layer is
+        drawn into a camera-space plate and **the camera's transform is applied once, to that whole
+        plate**, at composite time. A layer's own matrix carries only the parallax term, and even that is
+        read from a module-level stash frozen at the current frame — so sampling it either side of the
+        shutter cannot see camera movement, which is exactly what the measurement showed.
+        **So camera blur belongs at the COMPOSITE level, not per layer.** Smearing it per layer would
+        double-count: the layer would be re-projected by the camera delta and then the composite would
+        apply the camera transform again on top. Done at the composite it is also far cheaper — ONE
+        re-projection of the camera plate smears the entire scene, whatever the layer count, instead of
+        N per-layer passes.
+        **That is a design decision he should make, because it changes what the control means:** motion
+        blur is currently a per-LAYER switch, and camera blur would be a property of the CAMERA. So the
+        camera needs its own motion-blur toggle and shutter — which is also how every real editor does
+        it, and it is the answer to "why doesn't my whip pan smear". **Ask him before building.**
       · **Effects** cannot be done this way at all — Orbit and Wiggle displace pixels INSIDE the layer's
         render, so re-projecting one plate can never reproduce them. That needs either N real renders
         (the expensive path this design exists to avoid) or the content-aware motion blur that already
