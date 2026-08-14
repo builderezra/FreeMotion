@@ -121,7 +121,16 @@
   say('');
   say('(b) IN A CORNER — a 60x60 layer, wiggle amount 30 then 90');
   say('    position            ink no wiggle   at amt 30    lost         lost at amt 90');
-  [['middle', W / 2, H / 2], ['left edge', 34, H / 2], ['top-left corner', 34, 34]].forEach(([name, x, y]) => {
+  /* THE EARLIER VERSION OF THIS TEST MEASURED THE WRONG THING, which is why the fix looked like a
+     no-op. It placed the layer FULLY INSIDE the frame, so there was never any content outside to pull
+     in: wiggling it toward an edge pushes part of it off-screen and it is clipped, which is correct
+     behaviour, not a bug. The expanded-plate path ran every time (counter: 112/112) and could only
+     ever reproduce the same pixels.
+     The real fault is the opposite case — a layer ALREADY part-way off frame. The plate wiggle works
+     on is frame-sized, so the off-screen half has already been thrown away: wiggling it back toward
+     the middle reveals nothing, and the layer can only ever LOSE ink, never regain it. That is what
+     "should work in corners better" means, and it is what these positions test. */
+  [['fully inside (control)', W / 2, H / 2], ['half off the left', 8, H / 2], ['half off the corner', 8, 8]].forEach(([name, x, y]) => {
     let a = 0, b = 0, big = 0;
     for (let i = 0; i < 10; i++) {
       const tt = 0.3 + i * 0.19;
@@ -135,6 +144,8 @@
     say('    ' + name.padEnd(20) + a.toFixed(0).padEnd(16) + b.toFixed(0).padEnd(13) + lost.toFixed(1) + '%'.padEnd(8) + '   at 90: ' + lostBig.toFixed(1) + '%');
   });
   say('');
+  say('');
+  say('expanded-plate path: tried ' + (FM._wigTried || 0) + ', used ' + (FM._wigUsed || 0));
   say('If the corner loses much more ink than the middle, wiggle is pulling empty space in behind the');
   say('layer rather than moving it — which is the "should work in corners better" half.');
   window.__done = true;

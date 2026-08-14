@@ -13259,6 +13259,45 @@
     }
   });
 
+  /* #93(b) — "it should work in corners better." Wiggle runs on a FRAME-SIZED plate, so for a layer
+     that is already part-way off screen the off-frame half has been thrown away before wiggle sees it:
+     displacing it back toward the middle reveals nothing, and the layer can only ever lose ink.
+     Measured before the fix, a 60x60 layer half off the corner lost 17.8% of itself at amount 30 and
+     33.0% at amount 90. It now sources from a plate that reaches past the frame, so that content comes
+     back — and a layer nowhere near an edge still takes the cheap path, byte-identically. */
+  test('wiggle does not eat a layer that is part-way off frame', { item: 'wiggle-edges' }, async function () {
+    const W = 300, H = 200;
+    const ink = (x, y, amount) => {
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const l = FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 6 });
+      if (amount) l.effects = [{ type: 'wiggle', enabled: true, params: { amount: amount, speed: 3 } }];
+      let lit = 0;
+      for (let i = 0; i < 8; i++) {
+        g.clearRect(0, 0, W, H);
+        FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 6, background: '#000000', markers: [] }, layers: [l] }, 0.3 + i * 0.19);
+        const d = g.getImageData(0, 0, W, H).data;
+        for (let k = 0; k < d.length; k += 4) if (d[k] > 40) lit++;
+      }
+      return lit / 8;
+    };
+
+    // A layer half off the corner: the case that used to lose a third of itself.
+    const plain = ink(8, 8, 0), wig = ink(8, 8, 90);
+    if (plain < 200) throw new Error('the test layer is barely on screen (' + plain.toFixed(0) + 'px) — this would prove nothing');
+    const lost = 100 * (1 - wig / plain);
+    if (lost > 8) {
+      throw new Error('a layer half off the corner lost ' + lost.toFixed(1) + '% of its ink to wiggle — the off-frame half is being thrown away before wiggle sees it, so it can never come back');
+    }
+
+    /* …and the cheap path must be untouched for a layer nowhere near an edge. An expanded plate costs a
+       second full render of the layer, and this is the app's heaviest screen. */
+    const midPlain = ink(W / 2, H / 2, 0), midWig = ink(W / 2, H / 2, 30);
+    if (Math.abs(1 - midWig / midPlain) > 0.08) {
+      throw new Error('a centred layer changed by ' + (100 * Math.abs(1 - midWig / midPlain)).toFixed(1) + '% — the middle of the frame should be unaffected by this');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -4586,7 +4586,7 @@ window.FM = window.FM || {};
    * reusing the very same __fmOX/__fmOY origin machinery the viewport crop uses (there it moves the
    * origin inward; here it moves outward). Returns the plate, the margin in project units, and the
    * scale — or null when the layer is already inside the frame and the normal plate will do. */
-  function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH) {
+  function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM) {
     const tr = layer.transform || {};
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
     const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
@@ -4597,8 +4597,9 @@ window.FM = window.FM || {};
     const reach = 0.5 * Math.hypot(sz.w || 0, sz.h || 0) * sc;
     const cx = FM.evalProp(tr.x, t) || 0, cy = FM.evalProp(tr.y, t) || 0;
     // One symmetric margin, sized by whichever side actually overflows.
-    let mx = Math.max(0, Math.max(reach - cx, cx + reach - PW));
-    let my = Math.max(0, Math.max(reach - cy, cy + reach - PH));
+    const _min = Math.max(0, minM || 0);
+    let mx = Math.max(_min, Math.max(0, Math.max(reach - cx, cx + reach - PW)));
+    let my = Math.max(_min, Math.max(0, Math.max(reach - cy, cy + reach - PH)));
     if (mx < 2 && my < 2) return null;                          // nothing outside the frame — caller uses the normal plate
     mx = Math.min(mx, PW * 0.6); my = Math.min(my, PH * 0.6);   // cost ceiling: at most ~4.8x the comp's pixels
     const EW = Math.max(1, Math.round((PW + 2 * mx) * ps)), EH = Math.max(1, Math.round((PH + 2 * my) * ps));
@@ -4673,7 +4674,7 @@ window.FM = window.FM || {};
     // Tiles' whole-clip repeat needs the layer's content from OUTSIDE the frame, which the normal
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
-    const expand = () => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH);
+    const expand = (minM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM);
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, t - (layer._clipStart != null ? layer._clipStart : (layer.start || 0)), layer, ps, expand);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
@@ -6083,9 +6084,21 @@ window.FM = window.FM || {};
       B.drawImage(A, 0, 0);
     },
     // ---- Move / Transform (motion about the layer's rendered bounds) ----
-    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps) {
-      const amt = fparam(p, 'amount', 40, t) * (ps || 1), spd = fparam(p, 'speed', 2, t);
-      B.save(); B.translate(amt * wnoise(tl * spd), amt * wnoise(tl * spd + 100)); B.drawImage(A, 0, 0); B.restore();
+    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+      const S = ps || 1;
+      const amt = fparam(p, 'amount', 40, t) * S, spd = fparam(p, 'speed', 2, t);
+      const dx = amt * wnoise(tl * spd), dy = amt * wnoise(tl * spd + 100);
+      const near = !!bb && (bb.x < amt || bb.y < amt || bb.x + bb.w > W - amt || bb.y + bb.h > H - amt);
+      if (near && expand) {
+        const ex = expand(Math.ceil(amt / S) + 2);
+        FM._wigTried = (FM._wigTried || 0) + 1;
+        if (ex && ex.cv) {
+          FM._wigUsed = (FM._wigUsed || 0) + 1;
+          B.drawImage(ex.cv, ex.mx * ex.ps - dx, ex.my * ex.ps - dy, W, H, 0, 0, W, H);
+          return;
+        }
+      }
+      B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
     shake: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const amt = fparam(p, 'amount', 20, t) * (ps || 1), spd = fparam(p, 'speed', 12, t), tw = fparam(p, 'twist', 4, t);

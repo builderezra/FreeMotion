@@ -1085,14 +1085,28 @@ better still, keep working inside the turn rather than parking work for a later 
       | top-left corner | 7.6% | **23.6%** |
       Cause is exactly as guessed: wiggle translates the frame-sized plate, so at an edge it pulls EMPTY
       SPACE in behind the layer instead of moving it.
-      **Attempted the fix and backed it out** rather than ship it half-understood. The intended shape is
-      right — `drawCanvasEffect` already hands effects an `expand()` callback that re-renders the layer
-      on a larger plate, so wiggle can source real pixels from outside the frame — and `expand` is
-      genuinely reachable from wiggle (proved by making it early-return: the layer vanished). But the
-      expanded draw produced pixel-identical output to the cheap path, which I have not explained yet,
-      and `renderExpandedPlate` sizes its margin from the LAYER's overflow rather than from how far the
-      EFFECT reaches, so it needs a minimum-margin argument as well. Next session: find out why the
-      expanded blit is a no-op before changing anything else.
+      **(b) FIXED in v7.32 — and the reason it first looked like a no-op is that MY TEST WAS WRONG.**
+      Two faults, found in that order:
+      1. The margin argument never applied. Four edits were made and only three were asserted; the one
+         that let an effect ask `expand()` for a bigger margin silently matched nothing. Every
+         replacement is asserted now — an unasserted string replace is a change that can quietly not
+         happen, which is how an hour went into debugging code that was never there.
+      2. **The test measured the wrong scenario.** It placed the layer FULLY INSIDE the frame, where
+         there is no content outside to pull in — so displacing it toward an edge pushes part of it off
+         screen and it is clipped, which is correct behaviour, not a bug. With the counter added, the
+         expanded path was running every single time (112/112) and could only ever reproduce the same
+         pixels. The real fault is the opposite case: **a layer ALREADY part-way off frame**. Wiggle
+         works on a frame-sized plate, so that layer's off-screen half has been thrown away before
+         wiggle sees it — displacing it back toward the middle reveals nothing, and it can only lose.
+      Measured before and after, same scene, a 60×60 layer:
+      | position | before | after |
+      |---|---|---|
+      | fully inside (control) | −2.5% / −1.5% | **identical** — the cheap path is untouched |
+      | half off the left | lost 9.0% / 22.2% | −4.1% / +2.2% |
+      | half off the corner | lost 17.8% / **33.0%** | −14.4% / −22.6% (content returns) |
+      Wiggle now sources from a plate that reaches past the frame, but only when the layer's own bounds
+      are within the displacement of an edge — an expanded plate costs a second full render of the
+      layer, and this is the app's heaviest screen. Mutation-checked: without it, 41.2% eaten.
 
 - [x] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** **DONE v6.61.** His words:
       *"With the faves section I want it to be really easy to open, remove the feature of swiping right
