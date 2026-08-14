@@ -1,6 +1,6 @@
-# Where things stand — written before a chat compaction (15 Aug 2026)
+# Where things stand — written before a chat compaction (15 Aug 2026, updated at v7.47)
 
-**Live: v7.45. Working tree clean, HEAD == ssh/main. Suite 322/322. Nothing half-finished.**
+**Live: v7.47. Working tree clean, HEAD == ssh/main. Suite 327/327. Nothing half-finished.**
 
 [REQUESTS.md](REQUESTS.md) is the real list and is up to date. This file is the short version plus
 the things that are easy to get wrong.
@@ -23,7 +23,7 @@ the things that are easy to get wrong.
 
 ---
 
-## #113 (filters) — six releases in, ONE piece left
+## #113 (filters) — DONE except the tile previews
 
 Shipped v7.38 → v7.45. The plan and every correction to it are in [FILTERS-DESIGN.md](FILTERS-DESIGN.md).
 
@@ -37,19 +37,18 @@ Shipped v7.38 → v7.45. The plan and every correction to it are in [FILTERS-DES
 | v7.43 | "always first" on the nine effects whose position cannot matter |
 | v7.44 | the library: 16 looks in 4 sections, `js/filters.js`, picker on "+ Add Filter" |
 | v7.45 | the Colouring shortcut |
+| v7.46 | **step 5** — Filters is a third subsection beside Effects and Audio, a sectioned browse list |
+| v7.47 | (queue 96) the last two "pressed play, nothing happened" paths |
 
-### What is left: step 5, the Filters TAB
+### What is left of #113: the tile previews only (REQUESTS #219)
 
-He asked for *"a third subsection for filters. It'll work the same as the others"* — i.e. a third pill
-next to **Effects | Audio**, browsable, with thumbnails. The picker menu shipped in v7.44 is a
-**stopgap**, not that.
+The subsection itself shipped in v7.46 — three pills, a sectioned list, each row naming the effects the
+look is built from. What is missing is a PICTURE on each row, and for choosing a look a picture beats a
+sentence, so expect him to want it.
 
 **The scouting that matters, so it is not redone:**
 
-- The toggle is `fxModeToggle(layer, current, onPick)` at `js/inspector.js:1952`, exported as
-  `FM.fxModeToggle` and built identically by `fx-browser.js` and `audio-fx-browser.js`. A third entry
-  goes in the array literal there — it needs its own `ok` gate and its own disabled wording.
-- **The thumbnails are the expensive half, and `mountPreset` will NOT take a filter.**
+- **`mountPreset` will NOT take a filter.**
   `FM.fxThumbs.mountPreset(cv, preset, layer)` looks promising but `preset.fx` is a **single effect
   TYPE string** (`js/fx-thumbs.js:908` does `FM.fxRegistry.get(preset.fx)`), not an effect list. The
   whole thumbnail system is built around one effect type — which is also why FILTERS-DESIGN.md warned
@@ -60,8 +59,23 @@ next to **Effects | Audio**, browsable, with thumbnails. The picker menu shipped
 - A filter thumbnail should be **static**, not animated: none of the 16 is time-varying except the
   grain/noise ingredients, and paying an animated tile for 16 looks on a phone is not worth it.
 
-**Do it in this order:** the third pill + a list view (name, description, what is inside) FIRST and
-ship it — that is already better than the picker — then thumbnails as a second release.
+**When you build it:** `filtersSection()` in `js/inspector.js` is the list to convert to tiles. Keep the
+"what it is made of" line — it is the thing a picture cannot tell you, and the whole promise of a filter
+here is that it is not a black box.
+
+## The next item up: #47
+
+**Export must not lose the render on a crash, and should get off the main thread.** Not blocked on him —
+just big, which is why it was not started at the tail of a long session. Its two halves are very
+different sizes:
+
+- **crash-resume** — persist rendered chunks so a reload can carry on. Contained in `js/exporter.js`
+  (~650 lines). REQUESTS says "chunk-replay resume is proven; not landed", so look for that first.
+- **off the main thread** — a worker, which means the whole compositor (9,600 lines, DOM-canvas
+  throughout) on OffscreenCanvas. Much larger.
+
+**Do the first half on its own.** It sits right next to **#215 (an export came out with NO AUDIO)**,
+which he has been asked twice about jumping the queue.
 
 ### Two things he owes an answer on
 
@@ -69,6 +83,12 @@ ship it — that is already better than the picker — then thumbnails as a seco
   twice which are wrong / missing / whether 16 is the right number. Do not add 30 more before he says.
 - Whether **#215 (an export came out with NO AUDIO)** jumps the queue. I rate it the most serious open
   item and have offered twice; it is still sitting at its queue position.
+
+Everything else in the oldest-first queue ahead of #47 is genuinely blocked on him: #31b (does he want a
+camera motion-blur toggle), #93(a) (what he was doing when wiggle "stopped"), #95's timeline half (needs
+the numbers from HIS device), #98 (needs a photo), #114 (was the music note rotated/scaled), #206 (HELD,
+he is doing it with me). Verified, not assumed — #95 and #96 both still have real open halves, so do not
+tick them.
 
 ---
 
