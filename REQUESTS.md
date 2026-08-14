@@ -2224,6 +2224,29 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       already draws its own point handles, so the selection box on top of them is pure clutter. Do both
       in one pass: a single rule for "this section owns the canvas overlay, so the selection box stands
       down", rather than two special cases that will drift apart.
+- [ ] **206 — Shapes need SENSIBLE edit points, not a million dots. ⚠️ HELD — he is doing this one WITH
+      me, and asked me not to start it.** His words: *"in alight motion, each shape has sensible edit
+      points that are actually useful and make sense, in ours only some shapes have that but most have
+      just got a million little edit dots, which is finicky as shit, so we're going to have to fix that
+      up but I know if you just go and do that urself ur gonna ruin every shape and make it look shit.
+      So wait for me."*
+      **DO NOT START THIS ALONE.** He is right about the risk: editing the point sets IS the shape
+      library, and a bad pass would quietly wreck fifty-four shapes at once. This entry exists to hold
+      the ask, not to authorise the work.
+      What is worth knowing when he is ready — recorded now so the session with him starts informed
+      rather than starting from scratch:
+      · The dots come straight from `FM.SHAPE_POLYS`. A shape traced from a reference carries every
+        sampled vertex, so a curve that reads as one smooth arc is a dozen points to drag; a shape drawn
+        as geometry (rect, triangle, chevron) has only the points that mean something. That is exactly
+        the split he is describing — "only some shapes have that".
+      · So the fix is per-shape and is a DRAWING job, not a code job: choosing which points carry the
+        form and letting the existing smooth-flag/bezier machinery (`FM.pointCtrl`) hold the curve
+        between them, instead of approximating it with vertices.
+      · Suggested first step, and it costs nothing and changes nothing: count the points per shape and
+        rank them, so the conversation starts from "these eleven are the finicky ones" rather than from
+        opinion. **Ask him before even doing that** — he said wait, and that includes me being clever.
+      · Whatever we change, the ADD-MENU ICON follows automatically now (queue 159 made the icon read
+        the same polygons), so the tile and the shape cannot drift apart while we work.
 - [ ] **201 — Show that a layer is LOADING, with a spinner bottom-left.** His words: *"I think the issue
       with layers I add being invisible is because they're just loading, so make the app identify this
       loading and put a nice smooth loading circle that moves in the bottom left corner."*
