@@ -13220,6 +13220,45 @@
     }
   });
 
+  /* #70 — "it doesn't show it like an audio file, with the bumps to volume or whatever it's called."
+     Extract Audio makes its twin by duplicating the VIDEO layer, so the twin had a picture and the
+     timeline drew it a filmstrip: a strip of invisible frames, identical to the clip it came from,
+     with nothing about it saying "this is the sound". The waveform path already existed and was only
+     reachable by a video with no picture at all. */
+  test('extracted audio is drawn as a waveform, not a filmstrip', { item: 'extract-audio-look' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene;
+    const id = '_extractProbe';
+    try {
+      FM.scene = scene([]);
+      const layer = FM.makeLayer('video', { name: 'Clip', start: 0, duration: 3 });
+      layer.id = id;
+      FM.scene.layers.push(layer);
+      // A record with a real picture — which is exactly what sent the twin down the filmstrip path.
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36;
+      FM.media.set(id, { kind: 'video', el: cv, file: new Blob(['x']), width: 64, height: 36, duration: 3, waveform: null });
+
+      await FM.extractAudio(layer);
+      const twin = FM.scene.layers.find(l => l.id !== id);
+      if (!twin) throw new Error('Extract Audio produced no second layer');
+      if (!twin.audioOnly) {
+        throw new Error('the extracted twin is not marked audio-only, so the timeline still sees a video WITH a picture and draws it a filmstrip of invisible frames');
+      }
+      if (!twin.muted && layer.muted !== true) throw new Error('the original was not muted, so the sound would play twice');
+
+      // …and the twin must still be a real audio-carrying clip, not merely relabelled.
+      if (twin.transform.opacity !== 0) throw new Error('the twin still shows its picture');
+      if (twin.duration !== layer.duration) throw new Error('the twin does not cover the same time as the clip it came from');
+    } finally {
+      if (FM.media.remove) FM.media.remove(id);
+      FM.scene = savedScene;
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(40);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -1086,7 +1086,11 @@ window.FM = window.FM || {};
     if (layer.type === 'video' || layer.type === 'image') {
       const m = FM.media.get(layer.id);
       if (m && m.el) {
-        const hasPicture = layer.type === 'image' || (m.width > 0 && m.height > 0);
+        /* `audioOnly` is set by FM.extractAudio (queue 70): the twin is a copy of a video layer, so it
+           HAS a picture and was drawn a filmstrip — a strip of invisible frames identical to the clip
+           it came from. Marking it audio routes it down the waveform path below, which already handles
+           trim, speed and reverse; it was only ever unreachable for a layer that had a picture. */
+        const hasPicture = !layer.audioOnly && (layer.type === 'image' || (m.width > 0 && m.height > 0));
         // Cap the backing width: duration*pps is unbounded (long clip × deep zoom) and a canvas wider
         // than ~16384px renders BLANK on iOS Safari. CSS keeps the clip full-width; only the off-screen
         // backing buffer is capped (slightly lower-res at extreme zoom, but actually visible). (#9)

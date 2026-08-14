@@ -578,6 +578,14 @@ window.FM = window.FM || {};
     if (!dup) return;
     dup.name = (layer.name || 'Clip') + ' (audio)';
     dup.transform.opacity = 0;      // picture invisible; the tick still plays its sound
+    /* AND IT HAS TO LOOK LIKE AUDIO (queue 70). Ezra: "it doesn't show it like an audio file, with the
+     * bumps to volume or whatever it's called" — i.e. a waveform.
+     * The twin is a copy of the VIDEO layer, so the timeline saw a video that has a picture and drew it
+     * a filmstrip: a strip of invisible frames, identical to the original it was extracted from, with
+     * nothing to say it is the sound. The waveform path already exists and is thorough (it honours
+     * trim, speed and reverse) — it was simply only reachable by a video that has no picture at all.
+     * This flag says "treat me as audio", which is what the layer actually is. */
+    dup.audioOnly = true;
     layer.muted = true;             // the original keeps the picture, the twin keeps the voice
     FM.refreshAll(); if (FM.history) FM.history.commit();
     if (FM.toast) FM.toast('Audio extracted to its own layer — original muted');

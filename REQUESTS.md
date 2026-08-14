@@ -1167,8 +1167,17 @@ better still, keep working inside the turn rather than parking work for a later 
       so the control is live instead of hidden. Checked by actually dragging it on a shape: speed
       100% → 200% takes a 4s clip to 2s and moves its keyframes from 0/2/4 to 0/1/2.
 - [ ] **69 — Audio must never lag.** Make the audio clock the master.
-- [ ] **70 — Extracted audio should look like an audio track.** *"it doesn't show it like an audio
+- [x] **70 — Extracted audio should look like an audio track.** (v7.31) *"it doesn't show it like an
+      audio
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
+      **Cause, and it was one line.** `FM.extractAudio` builds the twin by DUPLICATING the video layer
+      and setting its opacity to 0. So the twin was still a video layer *with a picture*, and the
+      timeline drew it a filmstrip — a strip of invisible frames, identical to the clip it was extracted
+      from, with nothing about it saying "this is the sound".
+      The waveform path already existed and is thorough (it honours trim, speed and reverse); it was
+      simply only reachable by a video that has **no picture at all**, which the twin is not. The twin is
+      now marked `audioOnly`, which is what it actually is, and the timeline treats that as "no picture"
+      — so it draws the waveform that was already there. Mutation-checked.
 - [x] **74 — Swipe up for a full-screen Favourites browser.** **DONE v6.40.** All three sorts, each
       invertible (press the active sort again to flip it) — Recent, Type (grouped under category
       headings) and A–Z. Your choice is remembered. **One decision I made and one I left to you:**
