@@ -276,6 +276,10 @@ window.FM = window.FM || {};
     if (mSettings) mSettings.addEventListener('click', function () { clickHidden('btn-canvas'); });
     var mExport = document.getElementById('m-export');
     if (mExport) mExport.addEventListener('click', function () { clickHidden('btn-export'); });
+    /* No notes button on the phone BAR (queue 139). One was added and the suite caught the hazard:
+       any extra control in that group shifts the settings cog sideways into the spot the delete bin
+       occupies in select mode — "a thumb going where it has always gone hits delete". The phone reaches
+       the notepad through Settings, which is where every other project-level action already lives. */
 
     // Add sheet
     var addFab = document.getElementById('add-fab');

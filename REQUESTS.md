@@ -249,7 +249,7 @@ better still, keep working inside the turn rather than parking work for a later 
       at a glance down a long list. Keep it in the app's existing glass/cyan language rather than
       inventing a new colour, and it still must not shout over the thumbnail or the OPEN glint.
 
-- [ ] **139 — Project notepad + export reminders.** His words: *"In the top menu, put a little note pad
+- [x] **139 — Project notepad + export reminders.** (v7.10) His words: *"In the top menu, put a little note pad
       icon and make it so you can add notes about the project and reminders, make it so you can tick
       wether it will remind you to do these things when you press the export button, so anytime you press
       export it'll give you a pop up first showing the reminder."*
@@ -265,6 +265,20 @@ better still, keep working inside the turn rather than parking work for a later 
       beesoon."* So the notepad button needs a home in the Studio top bar as well as the phone one, and
       the pre-export reminder must fire from BOTH export entry points (the editor button and the home
       ⋯ → Export video…), not just the mobile one.
+      **Shipped v7.10.** Notes live on the project, so they travel and save with it. Each one has a tick:
+      untickcd it is just a note and never interrupts; ticked, it is shown once before the export dialog
+      opens, with **Back** and **Export anyway** — and Back is the louder button, because a reminder
+      exists precisely because you probably meant to do the thing first. Nothing ticked means no popup at
+      all, and a ticked-but-empty note does not count, since it would interrupt with nothing to say.
+      The gate sits inside `showExportDialog`, which is the ONE funnel every export route already goes
+      through — top bar, phone bar, and home's ⋯ → Export video — so it covers all of them and cannot
+      drift when a fourth appears.
+      **On the phone it lives in Settings, not the top bar, and that was forced.** I added a bar button
+      and the suite caught a real hazard: any extra control in that group shifts the settings cog
+      sideways into the position the delete bin occupies in select mode — "a thumb going where it has
+      always gone hits delete". The phone bar has no room, so notes joins the other project-level actions
+      in the cog. On desktop it is a dedicated notepad button beside Export, with a dot when something is
+      ticked.
 
 - [x] **138 — Pin to top, in every home category.** (v6.76) His words: *"For each category make it so if you
       press the three dots on a project or even template etc you can press pin and the project will stay

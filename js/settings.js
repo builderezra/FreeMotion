@@ -313,6 +313,8 @@ window.FM = window.FM || {};
       // runs the action, so each one's result (a re-drawn timeline, the browser's save sheet, the
       // reset confirm) lands on the project rather than behind this scrim.
       body.appendChild(group(
+        actionRow('Project notes', 'Jot down anything about this project, and tick the ones you want to be reminded of when you export.', 'Open…',
+          () => { if (FM.notepad) FM.notepad.open(); }),
         actionRow('Trim to last clip', 'Ends the project exactly where the last clip does, instead of running on into empty time.', 'Trim',
           () => press('btn-fit')),
         actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',

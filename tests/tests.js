@@ -12286,6 +12286,60 @@
     if (!FM.exportFitRect(1080, 1920, 1080, 1080).letterboxed) throw new Error('a portrait-into-square export is NOT letterboxed — the bars would be left unpainted');
   });
 
+  /* #139 — Ezra: "put a little note pad icon and make it so you can add notes about the project and
+     reminders, make it so you can tick wether it will remind you to do these things when you press the
+     export button, so anytime you press export it'll give you a pop up first showing the reminder."
+     The two halves that make it useful rather than annoying: an UNTICKED note must never interrupt an
+     export, and a ticked one must always stop it — with a way past. An empty popup on every export
+     would be worse than not having the feature. */
+  test('notepad: ticked notes stop an export, plain notes never do', { item: 'notepad' }, async function () {
+    if (!FM.notepad) throw new Error('FM.notepad is missing');
+    const P = FM.scene.project;
+    const had = P.notes;
+    try {
+      // 1) No notes at all → export must proceed with nothing shown.
+      P.notes = [];
+      let go = await FM.notepad.confirmExport();
+      if (go !== true) throw new Error('an export was blocked with no notes at all');
+      if (document.querySelector('.np-remind')) throw new Error('the reminder card appeared with no notes — an empty popup on every export is worse than no feature');
+
+      // 2) A plain, unticked note is just a note.
+      P.notes = [{ id: 'a', text: 'remember the intro', remind: false }];
+      go = await FM.notepad.confirmExport();
+      if (go !== true) throw new Error('an UNTICKED note blocked the export — that is a note, not a reminder');
+      if (document.querySelector('.np-remind')) throw new Error('an unticked note raised the reminder card');
+
+      // 3) A ticked one stops it, shows its text, and offers a way through.
+      P.notes = [{ id: 'a', text: 'remember the intro', remind: false }, { id: 'b', text: 'fix the audio fade', remind: true }];
+      if (FM.notepad.pending().length !== 1) throw new Error('pending() counted ' + FM.notepad.pending().length + ' — only ticked notes with text should count');
+      const p = FM.notepad.confirmExport();
+      await sleep(60);
+      const card = document.querySelector('.np-remind');
+      if (!card) throw new Error('a ticked reminder did not stop the export');
+      if (!/fix the audio fade/.test(card.textContent)) throw new Error('the card does not show the reminder text, so it says nothing useful');
+      if (/remember the intro/.test(card.textContent)) throw new Error('the card is listing an UNTICKED note as well');
+      const anyway = card.querySelector('.np-anyway');
+      if (!anyway) throw new Error('there is no way past the reminder — a gate with no door is a trap');
+      anyway.click();
+      if (await p !== true) throw new Error('"Export anyway" did not let the export through');
+
+      // 4) …and Back must actually stop it.
+      const p2 = FM.notepad.confirmExport();
+      await sleep(60);
+      const back = document.querySelector('.np-remind .np-back');
+      if (!back) throw new Error('the reminder card has no Back');
+      back.click();
+      if (await p2 !== false) throw new Error('Back did not cancel the export');
+
+      // A ticked but EMPTY note must not interrupt either — it says nothing.
+      P.notes = [{ id: 'c', text: '   ', remind: true }];
+      if (FM.notepad.pending().length) throw new Error('a blank ticked note counts as a reminder — it would interrupt with nothing to say');
+    } finally {
+      P.notes = had;
+      document.querySelectorAll('.np-scrim').forEach(n => n.remove());
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

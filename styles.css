@@ -4528,3 +4528,41 @@ body.fm-pushing #toast { z-index: 213; }
   .vr-playbtn { width: 48px; height: 48px; }
   .vr-playbar { height: 48px; }   /* the target grows with the finger; the 8px track does not */
 }
+
+/* ---------- Project notepad (queue 139) ---------- */
+.tb-notes { position: relative; }
+.tb-notes-dot, .m-notes-dot {
+  position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--panel); display: none;
+}
+.tb-notes-dot.on, .m-notes-dot.on { display: block; }
+#m-notes { position: relative; }
+.np-scrim { position: fixed; inset: 0; z-index: 3000; background: rgba(2,6,9,.62); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.np-card { display: flex; flex-direction: column; gap: 10px; width: min(420px, 94vw); max-height: min(86vh, 86dvh);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.55); }
+.np-head { display: flex; align-items: baseline; justify-content: space-between; }
+.np-title { font-weight: 800; font-size: 16px; }
+.np-hint { font-size: 12px; color: var(--text-dim); margin-top: -4px; }
+.np-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+.np-empty { color: var(--text-faint); font-size: 13px; padding: 14px 2px; }
+.np-row { display: flex; align-items: flex-start; gap: 8px; }
+/* The tick is the whole feature — it is what separates "a note" from "stop me before I export" — so
+   it gets a real 34px target rather than a checkbox glyph. */
+.np-tick { flex: none; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: transparent; display: grid; place-items: center; cursor: pointer; }
+.np-tick svg { width: 17px; height: 17px; }
+.np-tick.on { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
+.np-text { flex: 1 1 auto; min-width: 0; resize: none; overflow: hidden; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13.5px; line-height: 1.35; }
+.np-text:focus { outline: none; border-color: var(--accent); background: var(--panel-3); }
+.np-del { flex: none; width: 30px; height: 34px; background: none; border: 0; color: var(--text-faint); font-size: 15px; cursor: pointer; border-radius: 8px; }
+.np-del:hover { color: #ff6b6b; }
+.np-add { flex: none; }
+.np-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; }
+/* The pre-export card. "Export anyway" is the quieter of the two on purpose: a reminder exists
+   because you probably meant to do the thing first. */
+.np-card--remind { width: min(440px, 94vw); }
+.np-remind-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
+.np-remind-row { display: flex; gap: 8px; align-items: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.np-remind-dot { color: var(--accent); font-size: 16px; line-height: 1.2; }
+.np-remind-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
+.np-back { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }
+.np-anyway { color: var(--text-dim); }

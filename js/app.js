@@ -2566,7 +2566,21 @@ window.FM = window.FM || {};
       if (hit) res.value = hit.value;
     }
   }
-  function showExportDialog() {
+  /* THE REMINDER GATE (queue 139). Ezra: "so anytime you press export it'll give you a pop up first
+   * showing the reminder."
+   * It lives HERE rather than on the buttons because showExportDialog is the one funnel every export
+   * route already goes through — the top-bar button, the phone bar, and home's ⋯ → Export video all
+   * call it — so gating it once covers all of them and cannot drift when a fourth route appears.
+   * It resolves immediately when nothing is ticked, so an ordinary export is not made slower by a
+   * feature that has nothing to say. */
+  async function showExportDialog() {
+    if (FM.notepad && FM.notepad.confirmExport) {
+      const go = await FM.notepad.confirmExport();
+      if (!go) return;
+    }
+    return showExportDialogNow();
+  }
+  function showExportDialogNow() {
     // Build resolution presets from THIS project's size. "p" = the shorter side (1080p portrait =
     // 1080 wide); value stays a SCALE factor so the exporter math is unchanged. Full first, then
     // each standard rung below the native short side (downscale only — no blurry upscales), each
@@ -2932,6 +2946,8 @@ window.FM = window.FM || {};
       sampleBtn.disabled = false; sampleBtn.textContent = 'Sample clip';
     });
     document.getElementById('btn-export').addEventListener('click', showExportDialog);
+    const notesBtn = document.getElementById('btn-notes');
+    if (notesBtn) notesBtn.addEventListener('click', () => { if (FM.notepad) FM.notepad.open(); });
     // Home's project ⋯ opens this same dialog, so it can't stay private to this module.
     FM.showExportDialog = showExportDialog;
     const helpBtn = document.getElementById('btn-help');
