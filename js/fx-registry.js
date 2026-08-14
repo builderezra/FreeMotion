@@ -104,6 +104,7 @@ window.FM = window.FM || {};
     lensdistort: 'distort', pixelsort: 'stylize', lumamatte: 'matte', compoundblur: 'blur', matchgrade: 'color',
     // batch 39 (the frame edges become solid)
     squish: 'distort',
+    filter: 'other',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -462,19 +463,25 @@ window.FM = window.FM || {};
       category: CATEGORY_OF[def.type] || 'other',
       params: paramsOf(def),
       appliesTo: TEXT_ONLY[def.type] ? 'text' : (MEDIA_ONLY[def.type] ? 'media' : 'all'),
+      // Not offered in the effects grid. The filter container is a real registry entry — the load path
+      // validates its params like any other effect's — but you do not add an empty one from the grid.
+      hidden: !!def.hidden,
       _def: def,
     };
   });
 
   // Categories that actually have at least one effect, in display order.
   FM.FX_CATEGORIES = CATEGORY_ORDER
-    .filter(key => Object.keys(REG).some(t => REG[t].category === key))
+    .filter(key => Object.keys(REG).some(t => REG[t].category === key && !REG[t].hidden))
     .map(key => ({ key: key, label: CATEGORY_LABELS[key] || key }));
 
   FM.fxRegistry = {
     get: function (id) { return REG[id] || null; },
-    all: function () { return (FM.EFFECTS || []).map(d => REG[d.type]); },
-    byCategory: function (catKey) { return (FM.EFFECTS || []).map(d => REG[d.type]).filter(e => e.category === catKey); },
+    all: function () { return (FM.EFFECTS || []).map(d => REG[d.type]).filter(e => e && !e.hidden); },
+    byCategory: function (catKey) { return (FM.EFFECTS || []).map(d => REG[d.type]).filter(e => e && !e.hidden && e.category === catKey); },
+    // …and the unfiltered view, for the paths that must resolve a hidden type by name (the load path,
+    // the inspector row). get() already returns hidden entries; this is only for enumeration.
+    allIncludingHidden: function () { return (FM.EFFECTS || []).map(d => REG[d.type]); },
     categories: function () { return FM.FX_CATEGORIES; },
     paramsOf: function (id) { return (REG[id] && REG[id].params) || []; },
     // THE single creation path — returns exactly ONE instance (kills the duplicate-add bug by design).

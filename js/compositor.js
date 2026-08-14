@@ -868,6 +868,23 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Match', options: [[0, 'Colour + contrast'], [1, 'Colour only'], [2, 'Contrast only']], def: 0 },
     ] },
+
+    /* ---- the FILTER CONTAINER (queue 113, step 3) ----------------------------------------------
+     * Ezra: "I want it to show up in the effects menu and actually be grouped as one thing … basically
+     * effects inside effects (filters) and at the top you will have an opacity slider, so you can turn
+     * down the effects strength and it will automatically apply it to every effect under that filter."
+     *
+     * So this is a NORMAL effect that happens to carry other effects on `fx.effects`. Being normal is
+     * the whole design: layer.effects stays the flat array it has always been, so the ~20 compositor
+     * kernels that peel themselves off the stack by object identity keep working untouched and a
+     * project with no filters renders byte-identically.
+     *
+     * `hidden` keeps it out of the effects BROWSER — you do not add an empty container from the effects
+     * grid, you add a filter from its own tab (step 5). It is a real registry entry in every other
+     * respect, which is what lets the load path validate its strength like any other param. */
+    { type: 'filter', label: 'Filter', hidden: true,
+      desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
+      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 }] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1617,7 +1634,7 @@ window.FM = window.FM || {};
   // Each draw* renders a clean copy of the layer with THIS effect instance removed (recursing
   // inward through the remaining post-fx), then applies its own transform — so they compose in
   // array order regardless of type.
-  const POSTFX = { rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
+  const POSTFX = { filter: 1, rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
     solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
     vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1,
     wave: 1, ripple: 1, twirl: 1, bulge: 1,
@@ -1656,6 +1673,7 @@ window.FM = window.FM || {};
   // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
   function applyPostFx(ctx, layer, t, scene, fx) {
     const p = fx.params || {};
+    if (fx.type === FM.FX_CONTAINER) return drawFilterContainer(ctx, layer, t, scene, fx);
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
     if (fx.type === 'pixelate') return drawPixelate(ctx, layer, t, scene, FM.evalProp(p.size, t) || 1, fx);
     if (fx.type === 'posterize') return drawPosterize(ctx, layer, t, scene, FM.evalProp(p.levels, t) || 5, fx);
@@ -1925,6 +1943,92 @@ window.FM = window.FM || {};
       ctx.drawImage(pB, 0, 0, PW, PH);   // plate → project units; identical to drawImage(pB,0,0) at scale 1
       ctx.restore();
     } finally { _pfDepth--; }
+  }
+
+  /* ---- FILTER CONTAINER (queue 113, step 3) ---------------------------------------------------
+   *
+   * A filter holds effects and has one Strength that fades the whole group. Two things about how.
+   *
+   * STRENGTH IS A CROSS-FADE, NEVER A PARAMETER SCALE. The obvious reading of "turn it down" is to
+   * multiply the children's params, and that is wrong in three separate ways: a param slot holds
+   * either a number or a keyframe list, so scaling a keyframed child means rewriting its keyframes in
+   * place — destructive, and not reversible at strength 1; the params are heterogeneous (px radii,
+   * degrees, 0..1 amounts, colour strings, mode integers), and half a hue rotation is not half the
+   * effect while half a colour string is meaningless; and scaling Mirror's mode integer corrupts the
+   * look rather than weakening it. So: render the stack WITH the children, render it WITHOUT, and mix.
+   *
+   * AND IT IS A REAL MIX, not "draw the filtered plate over the unfiltered one at alpha s". The house
+   * pattern elsewhere (CANVAS_FX.liquidglass) composites source-over, which equals a lerp only where
+   * the top plate is opaque — so on anything with soft edges, or with a key or a matte among the
+   * children, the two disagree. Drawing A at (1-s) onto a cleared plate and then B at s with 'lighter'
+   * adds premultiplied values, giving A*(1-s) + B*s in colour AND alpha, which is the actual mix.
+   * NOTE the group-unit path is NOT the precedent it looks like: a group blits over the scene below
+   * with no copy of its own input underneath, so its alpha 0 HIDES the layer. A filter at strength 0
+   * must show the layer unfiltered. Same shape, opposite zero.
+   *
+   * Both ends skip the plates entirely, so they are byte-identical to the flat cases rather than
+   * merely close to them: strength 0 draws the layer with the filter simply absent, and strength 1
+   * draws it with the children standing exactly where the filter stood. */
+  const _fcPool = [];
+  let _fcDepth = 0;
+  const FC_MAX_DEPTH = 4;   // capped, unlike the older pools — see FILTERS-DESIGN.md §3
+  function drawFilterContainer(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const all = layer.effects || [];
+    const idx = all.indexOf(fx);
+    const rest = all.filter(e => e !== fx);
+    /* A container inside a container is refused here as well as in the data, so a hand-edited file
+     * cannot make this re-enter itself.
+     * The `enabled` half is a PERF short-circuit, not a correctness guard, and the comment says so
+     * because no test can tell the difference: the stack loop in drawLayer already drops disabled
+     * effects, so a switched-off child renders nothing either way. What this buys is the case where
+     * EVERY child is off — kids is then empty, which takes the cheap early-out below instead of
+     * building a spliced stack and walking it to draw the same pixels. */
+    const kids = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const spliced = idx < 0 ? rest.concat(kids) : all.slice(0, idx).concat(kids, all.slice(idx + 1));
+    const asLayer = list => Object.assign({}, layer, { effects: list });
+    const s = clamp01(fx.params && fx.params.strength != null ? FM.evalProp(fx.params.strength, t) : 1);
+
+    if (s <= 0 || !kids.length) return drawLayer(ctx, asLayer(rest), t, scene);
+    if (s >= 1 || _fcDepth >= FC_MAX_DEPTH) return drawLayer(ctx, asLayer(spliced), t, scene);
+
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height, ps = plateScale(ctx);
+    const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
+    const d = _fcDepth++;
+    try {
+      if (!_fcPool[d]) _fcPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas') };
+      const P = _fcPool[d];
+      ['A', 'B', 'M'].forEach(k => { if (P[k].width !== W || P[k].height !== H) { P[k].width = W; P[k].height = H; } });
+      // Blend mode and opacity are neutralised on the plates and re-applied once on the blit, exactly
+      // as drawPixelEffect does — otherwise the layer's opacity is applied twice and its blend mode
+      // fires against the plate instead of against the scene.
+      const plate = (cv, list) => {
+        cv.__fmRS = ps; cv.__fmOX = 0; cv.__fmOY = 0;   // a nested effect inherits this scale
+        const c = cv.getContext('2d');
+        baseT(c); c.clearRect(0, 0, PW, PH);
+        c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+        drawLayer(c, Object.assign({}, layer, {
+          blendMode: 'normal', effects: list, behaviors: sansOpacityBehaviors(layer),
+          transform: Object.assign({}, layer.transform, { opacity: 1 }),
+        }), t, scene);
+      };
+      plate(P.A, rest);        // the layer as if the filter were not there
+      plate(P.B, spliced);     // …and as if its children were simply part of the stack
+      const m = P.M.getContext('2d');
+      m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, W, H); m.filter = 'none';
+      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
+      m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(P.M, 0, 0, PW, PH);
+      ctx.restore();
+    } finally { _fcDepth--; }
   }
 
   // Per-pixel effect functions. Each mutates the RGBA byte array in place. Read params via FM.evalProp.

@@ -210,6 +210,21 @@ cancelled tomorrow, which is why they go first.
    layer-id remaps (`app.js` duplicate + paste, `storage.js` reIdLayers). Seven mutation checks.
 3. **The container type + strength cross-fade** in the compositor. Assert: no-filter projects
    byte-identical; strength 1 identical to the children applied directly; strength 0 a true no-op.
+   **SHIPPED v7.40.** `drawFilterContainer` (js/compositor.js, next to drawPixelEffect, whose plate
+   mechanism it copies). `filter` is a real FM.EFFECTS entry carrying one `strength` param, marked
+   `hidden` so `all()`/`byCategory()` keep it out of the effects grid while `get()` still resolves it
+   for the load path. Routed via `POSTFX.filter` + a branch in `applyPostFx`. Depth capped at 4
+   (`FC_MAX_DEPTH`), unlike the older pools.
+   Both ends skip the plates entirely — strength 0 draws the layer with the filter absent, strength 1
+   draws it with the children spliced in where the filter stood — so they are byte-identical rather
+   than merely close. The mix is `A` at `1-s` then `B` at `s` with **`lighter`**, which adds
+   premultiplied values and so gives a true `A*(1-s)+B*s` in colour AND alpha. Mutating it back to the
+   liquidglass `source-over` shortcut turns the halfway test red, which is the measurement that the
+   §2 correction was worth making.
+   Two mutants came back GREEN and were *equivalent*, not dead tests: the strength-0 early-out (the
+   lerp already returns exactly A at s=0) and the child `enabled` filter (drawLayer's stack loop
+   already drops disabled effects). The second is kept as a perf short-circuit for the all-children-off
+   case and the comment says so rather than claiming a guard it does not provide.
 4. **The inspector row** — expandable, children scoped to their own stack descriptor, accordion scoped
    to siblings-at-depth, reorder as one unit in v1.
 5. **The third browser tab** + `fxModeToggle`'s third entry with its own wording and gate, and its own

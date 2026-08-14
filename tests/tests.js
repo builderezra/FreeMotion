@@ -13934,6 +13934,101 @@
     if (got !== newSrcId) throw new Error('the ref inside the filter points at ' + got + ', expected the re-id\'d source ' + newSrcId);
   });
 
+  /* ---------------- #113 step 3: the container renders, and Strength cross-fades it ----------------
+   * The two ends are the whole contract and both are exact, not approximate: at Strength 1 a filter
+   * must be indistinguishable from its children sitting in the stack directly, and at Strength 0 it
+   * must be indistinguishable from the filter not being there. Anything less and a filter is a
+   * different look from the effects it contains, which is the one thing it must never be. */
+  function fxRender(effects, W, H) {
+    W = W || 120; H = H || 90;
+    var L = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W * 0.6, shapeH: H * 0.6, fill: '#c04070', start: 0, duration: 5 });
+    L.effects = effects;
+    var c = offscreen(W, H);
+    FM.renderScene(c.getContext('2d'), scene([L], { project: { width: W, height: H, fps: 30, duration: 5, background: '#101820' } }), 0.4);
+    return c.getContext('2d').getImageData(0, 0, W, H).data;
+  }
+  function pxDiff(a, b) {
+    var maxd = 0, n = 0;
+    for (var i = 0; i < a.length; i++) { var d = Math.abs(a[i] - b[i]); if (d) { n++; if (d > maxd) maxd = d; } }
+    return { bytes: n, max: maxd };
+  }
+  function mkFilter(strength, kids) {
+    return { type: FM.FX_CONTAINER, enabled: true, params: { strength: strength }, effects: kids };
+  }
+
+  test('filter: at Strength 1 it renders exactly as its children would on their own', { item: 'fx-filter' }, function () {
+    var kids = function () { return [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('brightness')]; };
+    var flat = fxRender(kids());
+    var wrapped = fxRender([mkFilter(1, kids())]);
+    var d = pxDiff(flat, wrapped);
+    if (d.bytes) throw new Error('a filter at full strength is not the same picture as its own effects applied directly — ' + d.bytes + ' bytes differ (max ' + d.max + ')');
+    // …and the control: the effects have to be DOING something, or this test proves nothing.
+    var bare = fxRender([]);
+    if (!pxDiff(bare, flat).bytes) throw new Error('the children render no differently from no effects at all — this comparison cannot detect anything');
+  });
+
+  test('filter: at Strength 0 it is a true no-op, not a faint version of itself', { item: 'fx-filter' }, function () {
+    var bare = fxRender([]);
+    var off = fxRender([mkFilter(0, [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('invert')])]);
+    var d = pxDiff(bare, off);
+    if (d.bytes) throw new Error('a filter at zero strength still changed the picture — ' + d.bytes + ' bytes (max ' + d.max + ')');
+  });
+
+  test('filter: Strength half sits between the two ends rather than at one of them', { item: 'fx-filter' }, function () {
+    var kids = function () { return [FM.fxRegistry.makeInstance('invert')]; };
+    var bare = fxRender([]);
+    var full = fxRender(kids());
+    var half = fxRender([mkFilter(0.5, kids())]);
+    var toBare = pxDiff(bare, half), toFull = pxDiff(full, half);
+    if (!toBare.bytes) throw new Error('half strength is identical to the filter being off');
+    if (!toFull.bytes) throw new Error('half strength is identical to the filter being fully on');
+    // A real mix lands near the midpoint of the two, so neither end should be much further than the
+    // other. A "draw the filtered plate over the unfiltered one" shortcut fails this on soft edges.
+    var span = pxDiff(bare, full).max || 1;
+    if (toBare.max > span * 0.75 || toFull.max > span * 0.75) {
+      throw new Error('half strength is not halfway: ' + toBare.max + ' from off, ' + toFull.max + ' from on, full span ' + span);
+    }
+  });
+
+  test('filter: a disabled child is skipped, and an empty filter changes nothing', { item: 'fx-filter' }, function () {
+    var bare = fxRender([]);
+    if (pxDiff(bare, fxRender([mkFilter(1, [])])).bytes) throw new Error('a filter with no effects in it still altered the frame');
+    /* pixelate, NOT invert. The first version of this used invert and could not fail: invert is one of
+       the nine effects collected into a single ctx.filter string, so its enabled check happens on a
+       different path entirely and stays green however the container is mutated. pixelate routes through
+       POSTFX, which is the path a filter's children actually take. */
+    var offChild = FM.fxRegistry.makeInstance('pixelate'); offChild.params.size = 12; offChild.enabled = false;
+    if (pxDiff(bare, fxRender([mkFilter(1, [offChild])])).bytes) throw new Error('a child switched OFF inside a filter still rendered');
+    var onChild = FM.fxRegistry.makeInstance('pixelate'); onChild.params.size = 12;
+    if (!pxDiff(bare, fxRender([mkFilter(1, [onChild])])).bytes) throw new Error('…and the same child switched ON changes nothing, so this comparison proves nothing either way');
+  });
+
+  test('filter: effects before and after it in the stack still apply, in order', { item: 'fx-filter' }, function () {
+    var mk = function (wrap) {
+      var mid = [FM.fxRegistry.makeInstance('invert')];
+      return [FM.fxRegistry.makeInstance('blur')].concat(wrap ? [mkFilter(1, mid)] : mid).concat([FM.fxRegistry.makeInstance('brightness')]);
+    };
+    var d = pxDiff(fxRender(mk(false)), fxRender(mk(true)));
+    if (d.bytes) throw new Error('wrapping the middle effect in a filter changed the result (' + d.bytes + ' bytes) — the stack around a filter must be unaffected by it');
+  });
+
+  test('filter: the container is not offered as an effect in the browser', { item: 'fx-filter' }, function () {
+    if (FM.fxRegistry.all().some(function (e) { return e.type === FM.FX_CONTAINER; })) {
+      throw new Error('an empty Filter container is addable from the effects grid — it should only come from the filters tab');
+    }
+    if (!FM.fxRegistry.get(FM.FX_CONTAINER)) throw new Error('…but the registry must still resolve it by name, or the load path cannot validate its Strength');
+    if (FM.fxRegistry.allIncludingHidden().filter(function (e) { return e && e.type === FM.FX_CONTAINER; }).length !== 1) {
+      throw new Error('the container is missing from the unfiltered registry view');
+    }
+  });
+
+  test('filter: Strength is validated on load like any other effect parameter', { item: 'fx-filter' }, function () {
+    var l = { effects: [{ type: FM.FX_CONTAINER, enabled: true, params: { strength: 999 }, effects: [FM.fxRegistry.makeInstance('blur')] }] };
+    FM.storage._sanitizeEffects(l);
+    var got = l.effects[0].params.strength;
+    if (got !== 1) throw new Error('an out-of-range Strength survived the load path as ' + got + ' (max is 1)');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

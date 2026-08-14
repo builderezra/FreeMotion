@@ -770,8 +770,20 @@ better still, keep working inside the turn rather than parking work for a later 
       audio panel's, and the one the AI sends) share a single parser that reads both the old form and the
       nested one, so nothing already saved changes.
       Nothing creates a filter yet — this is deliberately the groundwork, landing before anything can
-      depend on it. Next is step 3, the container rendering + the strength cross-fade, which is the
-      risky one.
+      depend on it.
+      **Step 3 shipped in v7.40 — a filter renders, and Strength fades the whole group.** Strength is a
+      cross-fade between the picture with the filter's effects and the picture without, NOT a scaling of
+      the children's settings. That was the obvious approach and it is wrong three ways: half a colour is
+      meaningless, half a "mode" switch corrupts the look instead of weakening it, and scaling a child
+      that has keyframes would rewrite them permanently. Both ends are exact — at Strength 1 a filter is
+      byte-for-byte the same picture as those effects sitting in the stack directly, at Strength 0 it is
+      byte-for-byte the same as the filter not being there — so a filter can never be a different look
+      from the effects inside it.
+      The blend in between is a real mix rather than the "draw one image over the other" shortcut the
+      compositor uses elsewhere; that shortcut is only correct where the top image is fully opaque, so it
+      would have gone visibly wrong on soft edges and on any filter holding a key or a matte. Reverting to
+      it turns a test red, which is what makes the extra work justified rather than assumed.
+      Still nothing in the UI to create one — next is step 4, the expandable row in the effects list.
       One test caught along the way that COULD NOT FAIL: the duplicate check left the referenced layer
       out of what was being duplicated, so the remap was a no-op either way and it passed with the fix
       reverted. Rewritten to duplicate a group holding both, and it now goes red properly.
