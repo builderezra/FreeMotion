@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=362">
+<link rel="stylesheet" href="styles.css?v=363">
 <link rel="stylesheet" href="theme-glass.css?v=25">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.08</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.09</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -554,6 +554,17 @@
       <label class="field"><span>Resolution</span>
         <select id="exp-res"><!-- options built per-project in showExportDialog (named presets + sizes) --></select>
       </label>
+      <!-- Custom output size (queue 141). Ezra: "there's no way to do custom export ratios, or fps."
+           Hidden until "Custom…" is chosen in the list above, so the ordinary export is not made busier
+           by a control almost nobody needs. The frame is CONTAINED in whatever size you type — never
+           cropped — because an export that silently discards part of your work is not a size option. -->
+      <label class="field hidden" id="exp-custom-field"><span>Custom size</span>
+        <span class="exp-custom">
+          <input type="number" id="exp-cw" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export width">
+          <span class="exp-x">×</span>
+          <input type="number" id="exp-ch" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export height">
+        </span>
+      </label>
       <label class="field"><span>Frame rate</span>
         <select id="exp-fps">
           <!-- Ordered, and matched to the canvas picker (queue 119/120). Ezra: "This menu is all over
@@ -699,13 +710,13 @@
   <script src="js/graph-editor.js?v=14"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=90"></script>
+  <script src="js/exporter.js?v=91"></script>
   <script src="js/sample.js?v=9"></script>
   <script src="js/contextmenu.js?v=41"></script>
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=48"></script>
-  <script src="js/app.js?v=246"></script>
+  <script src="js/app.js?v=247"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/voice-rec.js?v=1"></script>
   <script src="js/audio-react.js?v=4"></script>

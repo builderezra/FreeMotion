@@ -8,6 +8,23 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
+  /* Where the project's frame lands inside a differently-shaped output (queue 141). Pure, and exposed,
+   * so the arithmetic can be tested without running an encoder — an export is the one operation you
+   * cannot casually re-run to check, so its maths should not need one.
+   * CONTAIN: the whole frame always fits, centred, with bars on the two spare sides. Never cover/crop —
+   * cropping an export silently discards part of what someone made. */
+  FM.exportFitRect = function (pw, ph, ow, oh) {
+    pw = Math.max(1, pw || 1); ph = Math.max(1, ph || 1);
+    ow = Math.max(1, ow || 1); oh = Math.max(1, oh || 1);
+    const k = Math.min(ow / pw, oh / ph);
+    const dw = pw * k, dh = ph * k;
+    return {
+      dx: (ow - dw) / 2, dy: (oh - dh) / 2, dw: dw, dh: dh,
+      letterboxed: Math.abs(dw - ow) > 0.5 || Math.abs(dh - oh) > 0.5,
+    };
+  };
+
+
   function download(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -395,8 +412,30 @@ window.FM = window.FM || {};
       }
       const scene = FM.scene, P = scene.project;
       const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
-      const outW = Math.max(2, Math.round(P.width * scale / 2) * 2);
-      const outH = Math.max(2, Math.round(P.height * scale / 2) * 2);
+      /* CUSTOM OUTPUT SIZE (queue 141). Ezra: "there's no way to do custom export ratios, or fps."
+       * Everything here used to derive the output from ONE uniform scale, so the export could only ever
+       * have the project's own aspect. opts.outW/outH let it differ; when they are absent this is the
+       * old arithmetic exactly, so the ordinary path is untouched.
+       * Even numbers because H.264 chroma subsampling needs them and an odd dimension is rejected by
+       * some encoders outright. */
+      const custom = opts.outW > 0 && opts.outH > 0;
+      const outW = Math.max(2, Math.round((custom ? opts.outW : P.width * scale) / 2) * 2);
+      const outH = Math.max(2, Math.round((custom ? opts.outH : P.height * scale) / 2) * 2);
+      /* CONTAIN, never crop. Exporting 9:16 work as 1:1 has to letterbox: cropping would silently throw
+       * away part of the frame, and a video editor must never quietly delete what you made. The bars
+       * take the project's own background colour so they read as the frame, not as damage. */
+      const fit = FM.exportFitRect(P.width, P.height, outW, outH);
+      const barFill = (P.background == null) ? null : P.background;
+      const blit = (ctx) => {
+        ctx.save();
+        if (fit.letterboxed) {
+          ctx.globalCompositeOperation = 'source-over';
+          if (barFill) { ctx.fillStyle = barFill; ctx.fillRect(0, 0, outW, outH); }
+          else ctx.clearRect(0, 0, outW, outH);   // transparent export keeps the bars transparent
+        }
+        ctx.drawImage(projCanvas, fit.dx, fit.dy, fit.dw, fit.dh);
+        ctx.restore();
+      };
       const bitrate = Math.min(80e6, opts.bitrate || Math.round(outW * outH * fps * 0.12));   // cap so 4K60 doesn't choke the encoder
       const start = (opts.from != null) ? Math.max(0, opts.from) : 0;
       const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
@@ -458,7 +497,7 @@ window.FM = window.FM || {};
         const t = start + f / fps;
         await seekAllVideos(scene, t);
         FM.renderScene(projCtx, scene, t);
-        outCtx.drawImage(projCanvas, 0, 0, outW, outH);
+        blit(outCtx);
         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
         encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 });
         frame.close();
@@ -534,7 +573,7 @@ window.FM = window.FM || {};
           await seekAllVideos(scene, t);
           FM.renderScene(projCtx, scene, t);
           outCtx.clearRect(0, 0, outW, outH);
-          outCtx.drawImage(projCanvas, 0, 0, outW, outH);
+          blit(outCtx);
           const data = outCtx.getImageData(0, 0, outW, outH).data;
           gif.addFrame(data, delayMs);   // streaming: encoder appends this frame now, retains no pixels
           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'gif');
@@ -592,7 +631,7 @@ window.FM = window.FM || {};
           await seekAllVideos(scene, t);
           FM.renderScene(projCtx, scene, t);
           outCtx.clearRect(0, 0, outW, outH);
-          outCtx.drawImage(projCanvas, 0, 0, outW, outH);
+          blit(outCtx);
           const blob = await new Promise(res => outCanvas.toBlob(res, 'image/png'));
           const buf = new Uint8Array(await blob.arrayBuffer());
           const idx = String(f).padStart(4, '0');

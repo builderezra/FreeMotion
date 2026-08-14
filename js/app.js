@@ -2594,8 +2594,23 @@ window.FM = window.FM || {};
       [2160, 1440, 1080, 720, 480, 360].forEach(t => {
         if (t < shortSide - 1) { const s = t / shortSide; add(s, t + 'p — ' + Math.round(W * s) + '×' + Math.round(H * s)); }
       });
+      /* CUSTOM SIZE, last (queue 141). Ezra: "there's no way to do custom export ratios, or fps."
+         Every rung above is a uniform SCALE of the project, so the list could only ever offer the
+         project's own aspect. This one hands width and height to the exporter directly. */
+      add('custom', 'Custom size…');
       // keep the previous choice if it still exists, else default to Full
       if (prev && [].some.call(sel.options, o => o.value === prev)) sel.value = prev;
+      const cf = document.getElementById('exp-custom-field');
+      const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');
+      const syncCustom = () => {
+        const on = sel.value === 'custom';
+        if (cf) cf.classList.toggle('hidden', !on);
+        // Seed from the project the first time, so it opens on something valid rather than empty.
+        if (on && cw && !cw.value) cw.value = W;
+        if (on && ch && !ch.value) ch.value = H;
+      };
+      if (!sel._customWired) { sel._customWired = 1; sel.addEventListener('change', syncCustom); }
+      syncCustom();
     }
     // 'Selected clip only' and the solo checkbox need a selection — grey them out otherwise
     const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
@@ -2648,7 +2663,18 @@ window.FM = window.FM || {};
       else if (FM.toast) FM.toast('Frame capture unavailable');
       return;
     }
-    const scale = parseFloat(document.getElementById('exp-res').value) || 1;
+    /* Custom size hands the exporter explicit dimensions; every other rung is a uniform scale of the
+       project (queue 141). The frame is CONTAINED in whatever is typed — see FM.exportFitRect. */
+    const resVal = document.getElementById('exp-res').value;
+    const isCustom = resVal === 'custom';
+    const scale = isCustom ? 1 : (parseFloat(resVal) || 1);
+    const cwEl = document.getElementById('exp-cw'), chEl = document.getElementById('exp-ch');
+    const clampDim = (v, fallback) => {
+      const n = Math.round(parseFloat(v));
+      return (isFinite(n) && n >= 16) ? Math.min(7680, n) : fallback;
+    };
+    const outW = isCustom ? clampDim(cwEl && cwEl.value, FM.scene.project.width) : 0;
+    const outH = isCustom ? clampDim(chEl && chEl.value, FM.scene.project.height) : 0;
     // 'project' resolves to the project's own rate, custom values included (queue 141).
     const fpsRaw = document.getElementById('exp-fps').value;
     const fps = (fpsRaw === 'project')
@@ -2657,7 +2683,10 @@ window.FM = window.FM || {};
     const qEl = document.getElementById('exp-quality');
     const qf = (qEl && parseFloat(qEl.value)) || 0.1;
     const P = FM.scene.project;
-    const bitrate = Math.min(80e6, Math.round(P.width * scale * P.height * scale * fps * qf));
+    // Sized off the REAL output, which is not P*scale once a custom size is in play (queue 141) —
+    // otherwise a large custom render would be encoded at the project's bitrate and look starved.
+    const bpW = outW || (P.width * scale), bpH = outH || (P.height * scale);
+    const bitrate = Math.min(80e6, Math.round(bpW * bpH * fps * qf));
     // Resolve the range BEFORE showing the overlay so early exits can bounce back to the dialog.
     const rangeEl = document.getElementById('exp-range');
     const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
@@ -2699,7 +2728,7 @@ window.FM = window.FM || {};
       } else if (fmt === 'frames') {
         await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', onProgress });
       } else {
-        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, onProgress });
+        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress });
       }
       status.textContent = 'Done — saved to your Downloads.';
       setTimeout(() => overlay.classList.add('hidden'), 900);

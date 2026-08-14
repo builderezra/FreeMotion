@@ -211,6 +211,17 @@ better still, keep working inside the turn rather than parking work for a later 
       1. **Custom is missing from export.** The canvas/project pickers offer Custom; the export dialog
          does not — I flagged exactly this when queue 119 landed the ordering. Needs custom fps AND a
          custom aspect/resolution.
+         **PART 1 SHIPPED, v7.09.** The resolution list now ends with **"Custom size…"**, which reveals
+         width and height fields. Every other rung is a uniform SCALE of the project, which is exactly
+         why the dialog could only ever offer the project's own aspect — a custom size hands the exporter
+         explicit dimensions instead.
+         **The frame is CONTAINED in whatever you type, never cropped.** Exporting 9:16 work as 1:1 has to
+         letterbox, and the alternative — cover/crop — silently throws away part of what you made, which
+         is not a size option. The bars take the project's own background colour, or stay transparent on a
+         transparent export. The bitrate is sized off the REAL output too, or a large custom render would
+         have been encoded at the project's bitrate and come out starved.
+         The fit maths is a pure exposed function so it can be tested without running an encoder — an
+         export is the one operation you cannot casually re-run to check.
       2. **A project already on a custom setting cannot be exported at it.** This is the real defect:
          you can build at a custom fps or ratio and then have no way to render it out that way. Export
          should always offer "same as project" and default to it.

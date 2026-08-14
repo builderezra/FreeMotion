@@ -572,6 +572,12 @@ body {
 .ps-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); padding: 18px; }
 .ps-card { background: #1b2233; border: 1px solid var(--line); border-radius: 18px; padding: 16px; width: min(340px, 88vw); box-shadow: 0 22px 54px rgba(0,0,0,.55); }
 .ps-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; color: var(--text); margin: 2px 4px 14px; }
+/* Custom export size (queue 141) — two number fields reading as one control. */
+.exp-custom { display: flex; align-items: center; gap: 6px; flex: none; }
+.exp-custom input { width: 74px; background: var(--panel-3); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.exp-custom input:focus { outline: none; border-color: var(--accent); }
+.exp-x { color: var(--text-dim); font-size: 12px; }
+
 .ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .ps-cat { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; color: #8d9bb2; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 /* No `fill`/`stroke` here any more (queue 127): these tiles draw the inspector's own gradient glyphs

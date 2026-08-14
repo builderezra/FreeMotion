@@ -12249,6 +12249,43 @@
     }
   });
 
+  /* #141 (part 1) — Ezra: "there's no way to do custom export ratios, or fps."
+     Every resolution rung was a uniform SCALE of the project, so an export could only ever carry the
+     project's own aspect. A custom size hands width and height over directly, and the frame is
+     CONTAINED in it — never cropped, because an export that silently discards part of what someone made
+     is not a size option. The fit maths is a pure function precisely so it can be checked without
+     running an encoder: an export is the one operation you cannot casually re-run to see. */
+  test('export: a custom size contains the frame and never crops it', { item: 'export-custom-size' }, function () {
+    if (!FM.exportFitRect) throw new Error('FM.exportFitRect is missing — the custom-size maths cannot be checked');
+    const cases = [
+      { pw: 1080, ph: 1920, ow: 1080, oh: 1080, why: 'portrait into square' },
+      { pw: 1920, ph: 1080, ow: 1080, oh: 1920, why: 'landscape into portrait' },
+      { pw: 1080, ph: 1080, ow: 1920, oh: 1080, why: 'square into landscape' },
+      { pw: 1080, ph: 1920, ow: 540,  oh: 960,  why: 'same aspect, half size' },
+    ];
+    cases.forEach(c => {
+      const f = FM.exportFitRect(c.pw, c.ph, c.ow, c.oh);
+      // Contained: never larger than the output, in either axis.
+      if (f.dw > c.ow + 0.51 || f.dh > c.oh + 0.51) {
+        throw new Error(c.why + ': the frame is drawn ' + f.dw.toFixed(1) + 'x' + f.dh.toFixed(1) +
+          ' into ' + c.ow + 'x' + c.oh + ' — it overflows, which means the export is CROPPED');
+      }
+      // Aspect preserved: a stretched export is as wrong as a cropped one.
+      const inA = c.pw / c.ph, outA = f.dw / f.dh;
+      if (Math.abs(inA - outA) > 0.002) throw new Error(c.why + ': aspect went ' + inA.toFixed(3) + ' → ' + outA.toFixed(3) + ' — the frame is being stretched');
+      // Centred.
+      if (Math.abs((c.ow - f.dw) / 2 - f.dx) > 0.51 || Math.abs((c.oh - f.dh) / 2 - f.dy) > 0.51) {
+        throw new Error(c.why + ': the frame is not centred in the output');
+      }
+      // …and it must FILL one axis, or it has been needlessly shrunk inside the frame.
+      const fillsOne = Math.abs(f.dw - c.ow) < 0.51 || Math.abs(f.dh - c.oh) < 0.51;
+      if (!fillsOne) throw new Error(c.why + ': the frame touches neither edge — it is smaller than it needs to be');
+    });
+    // Same aspect must NOT report letterboxing, or every ordinary export would paint pointless bars.
+    if (FM.exportFitRect(1080, 1920, 540, 960).letterboxed) throw new Error('a same-aspect export is being letterboxed');
+    if (!FM.exportFitRect(1080, 1920, 1080, 1080).letterboxed) throw new Error('a portrait-into-square export is NOT letterboxed — the bars would be left unpainted');
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
