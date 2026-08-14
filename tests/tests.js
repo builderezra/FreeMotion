@@ -13542,10 +13542,246 @@
     }
   });
 
+  /* ---------------- #113 step 1: the effect stack stops trusting the file it came from ----------------
+   *
+   * FILTERS-DESIGN.md's build order puts this first, and it is worth having whether or not filters ever
+   * ship. Two halves:
+   *   (a) two of the six render dispatch tables were still inheriting from Object.prototype;
+   *   (b) layer.effects had NO validation on either way in — not the .fmproj import, not the autosave
+   *       load that every project takes on every open.
+   * The tests below are written so that undoing either half turns one of them red. */
+
+  // Deep structural equality, written out rather than JSON-compared: JSON.stringify is key-ORDER
+  // sensitive, and "the sanitiser rebuilt this object in a different key order" is not a defect.
+  function deepEq(a, b, path, out) {
+    path = path || '$';
+    if (a === b) return true;
+    if (typeof a !== typeof b) { out.push(path + ': ' + typeof a + ' vs ' + typeof b); return false; }
+    if (a === null || b === null || typeof a !== 'object') { out.push(path + ': ' + JSON.stringify(a) + ' vs ' + JSON.stringify(b)); return false; }
+    if (Array.isArray(a) !== Array.isArray(b)) { out.push(path + ': array vs non-array'); return false; }
+    var ka = Object.keys(a).sort(), kb = Object.keys(b).sort(), ok = true;
+    if (ka.join(',') !== kb.join(',')) { out.push(path + ': keys [' + ka + '] vs [' + kb + ']'); return false; }
+    ka.forEach(function (k) { if (!deepEq(a[k], b[k], path + '.' + k, out)) ok = false; });
+    return ok;
+  }
+
+  /* THE CONTRACT, asserted over the whole catalogue at once: a valid effect must come out of the
+   * sanitiser EXACTLY as it went in. Not "renders about the same" — identical data, which is strictly
+   * stronger than a pixel comparison and costs no renders, so all ~180 effects can be checked rather
+   * than a hand-picked handful.
+   * It also audits the CATALOGUE, not just the sanitiser: a colour default safeColor rejects, a segment
+   * default missing from its own options list, or a range default outside its own min/max all surface
+   * here as a param the sanitiser had to drop. */
+  test('effects: sanitising a fresh instance of every effect changes nothing', { item: 'fx-sanitize' }, function () {
+    if (!FM.storage || !FM.storage._sanitizeEffects) throw new Error('FM.storage._sanitizeEffects is not exposed — the suite cannot test the real function');
+    var all = FM.fxRegistry.all(), bad = [];
+    all.forEach(function (e) {
+      var made = FM.fxRegistry.makeInstance(e.type);
+      if (!made) { bad.push(e.type + ': makeInstance returned null'); return; }
+      var before = JSON.parse(JSON.stringify(made));
+      var layer = { effects: [made] };
+      FM.storage._sanitizeEffects(layer);
+      if (layer.effects.length !== 1) { bad.push(e.type + ': DROPPED by the sanitiser'); return; }
+      var diff = [];
+      if (!deepEq(before, layer.effects[0], '$', diff)) bad.push(e.type + ': ' + diff.slice(0, 3).join(' | '));
+    });
+    if (bad.length) throw new Error(bad.length + ' of ' + all.length + ' effects do not survive sanitising unchanged: ' + bad.slice(0, 6).join(' ;; '));
+  });
+
+  /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.
+   * An ABSENT param key is meaningful — the renderer falls back to the effect's `legacy` value, which
+   * for a param added to an existing effect is what that effect used to hardcode, NOT the schema
+   * default. Filling absences in would restyle every old project without touching a single pixel of
+   * source. Edge Glow is the worked example in fx-registry's own comment: legacy radius 3, default 8. */
+  test('effects: a param the file omits stays omitted, so old projects keep rendering as they did', { item: 'fx-sanitize' }, function () {
+    var reg = FM.fxRegistry.all().filter(function (e) {
+      return (e.params || []).some(function (p) { return p.legacy != null && p.legacy !== p.default; });
+    });
+    if (!reg.length) throw new Error('no effect in the catalogue declares a legacy value that differs from its default — this test can no longer prove anything, rewrite it');
+    var fails = [];
+    reg.forEach(function (e) {
+      var key = e.params.filter(function (p) { return p.legacy != null && p.legacy !== p.default; })[0].key;
+      var inst = FM.fxRegistry.makeInstance(e.type);
+      delete inst.params[key];                                   // an instance saved before that param existed
+      var layer = { effects: [inst] };
+      FM.storage._sanitizeEffects(layer);
+      var out = layer.effects[0];
+      if (!out) { fails.push(e.type + ' was dropped entirely'); return; }
+      if (Object.prototype.hasOwnProperty.call(out.params, key)) {
+        fails.push(e.type + '.' + key + ' was filled in with ' + JSON.stringify(out.params[key]) +
+                   ' — the renderer would now use that instead of its legacy fallback ' + JSON.stringify(e.params.filter(function (p) { return p.key === key; })[0].legacy));
+      }
+    });
+    if (fails.length) throw new Error(fails.slice(0, 4).join(' ;; '));
+  });
+
+  test('effects: a keyframed parameter survives sanitising with its keyframes intact', { item: 'fx-sanitize' }, function () {
+    var e = FM.fxRegistry.all().filter(function (x) {
+      return (x.params || []).some(function (p) { return p.type === 'range' && p.keyframable !== false && isFinite(p.min) && isFinite(p.max); });
+    })[0];
+    if (!e) throw new Error('no keyframable range param anywhere in the catalogue');
+    var pd = e.params.filter(function (p) { return p.type === 'range' && p.keyframable !== false && isFinite(p.min) && isFinite(p.max); })[0];
+    var inst = FM.fxRegistry.makeInstance(e.type);
+    inst.params[pd.key] = { kf: [{ t: 0, v: pd.min, e: 'linear' }, { t: 2, v: pd.max, e: 'easeIn' }] };
+    var layer = { effects: [inst] };
+    FM.storage._sanitizeEffects(layer);
+    var got = layer.effects[0] && layer.effects[0].params[pd.key];
+    if (!got || !Array.isArray(got.kf)) throw new Error('the animated ' + e.type + '.' + pd.key + ' was flattened or dropped — every keyframe on every effect would be lost on load');
+    if (got.kf.length !== 2) throw new Error('expected 2 keyframes back, got ' + got.kf.length);
+    if (got.kf[1].v !== pd.max) throw new Error('keyframe value was altered: ' + got.kf[1].v + ' vs ' + pd.max);
+  });
+
+  /* The hole itself. `type` is a bare bracket key into six dispatch tables; a prototype key resolves to
+   * a FUNCTION in any of them that is still inheriting. Asserted from BOTH ends — the tables refuse the
+   * key, and the sanitiser never lets it reach them. */
+  test('effects: prototype keys are not effects — the render tables refuse them', { item: 'fx-sanitize' }, function () {
+    var proto = ['toString', 'valueOf', 'constructor', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable'];
+    var leaks = [];
+    proto.forEach(function (k) {
+      if (FM.fxRegistry.get(k)) leaks.push('fxRegistry.get(' + k + ')');
+      if (FM.fxRegistry.supportsLayer(k, { type: 'text' })) leaks.push('supportsLayer(' + k + ')');
+      if (FM.TEXT_FX && FM.TEXT_FX[k] !== undefined) leaks.push('TEXT_FX[' + k + ']');
+    });
+    if (leaks.length) throw new Error('these resolve to something inherited from Object.prototype: ' + leaks.join(', '));
+  });
+
+  /* Ten tables in the compositor are keyed by an effect TYPE, i.e. by a string out of a project file.
+   * Four were cut off from Object.prototype earlier; TEXT_FX and PIXEL_ADJ were missed, and TEXT_FX is
+   * the one whose lookup CALLS what it finds. Checking them one at a time is how the next one gets
+   * missed too, so the compositor hands over the whole set and this walks it. */
+  test('effects: every type-keyed render table is prototype-free, not just the ones we remembered', { item: 'fx-sanitize' }, function () {
+    var tables = FM._FX_TABLES;
+    if (!tables) throw new Error('FM._FX_TABLES is gone — the tables are no longer checkable, which is worse than any one of them being unguarded');
+    var proto = ['toString', 'valueOf', 'constructor', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString'];
+    var names = Object.keys(tables), leaks = [];
+    if (names.length < 10) throw new Error('only ' + names.length + ' tables are being checked — the list has shrunk, so something is now unguarded and silent');
+    names.forEach(function (n) {
+      if (Object.getPrototypeOf(tables[n]) !== null) leaks.push(n + ' still has a prototype');
+      proto.forEach(function (k) { if (tables[n][k] !== undefined) leaks.push(n + '[' + k + ']'); });
+    });
+    if (leaks.length) throw new Error(leaks.join(', '));
+  });
+
+  /* The one route that still THREW after the compositor was hardened, and the only one whose key comes
+   * from localStorage rather than a project file: the effects browser's recents / favourites lists. */
+  test('effects browser: junk ids in the saved recents list do not take the browser down', { item: 'fx-sanitize' }, async function () {
+    var RK = 'fm.fx.recents', FK = 'fm.fx.fav';
+    var r0 = localStorage.getItem(RK), f0 = localStorage.getItem(FK);
+    try {
+      var junk = JSON.stringify(['toString', 'valueOf', 'constructor', 'hasOwnProperty', 'blur']);
+      localStorage.setItem(RK, junk); localStorage.setItem(FK, junk);
+      if (!FM.fxBrowser || !FM.fxBrowser.open) throw new Error('no FM.fxBrowser.open to exercise');
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 80, fill: '#fff' });
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.fxBrowser.open();                                  // must not throw
+      await sleep(120);
+      var grid = document.querySelector('.fxb-grid, #fx-browser .fxb-grid');
+      if (grid && /\[object /.test(grid.textContent)) throw new Error('a prototype function was rendered as a tile: ' + grid.textContent.slice(0, 60));
+      if (FM.fxBrowser.close) FM.fxBrowser.close();
+      await sleep(60);
+    } finally {
+      if (r0 == null) localStorage.removeItem(RK); else localStorage.setItem(RK, r0);
+      if (f0 == null) localStorage.removeItem(FK); else localStorage.setItem(FK, f0);
+      FM.scene.layers = FM.scene.layers.filter(function (l) { return l.type !== 'shape' || l.fill !== '#fff' || l.shapeW !== 80; });
+      FM.selectLayer(null);
+    }
+  });
+
+  test('effects: hasCopyBg says no to a junk effect type', { item: 'fx-sanitize' }, function () {
+    if (!FM.hasCopyBg) throw new Error('FM.hasCopyBg is gone');
+    if (FM.hasCopyBg({ effects: [{ type: 'toString', enabled: true }] })) {
+      throw new Error('a prototype key read as a Copy Background effect — every layer would snapshot the backdrop behind it');
+    }
+    if (!FM.hasCopyBg({ effects: [{ type: 'copybg', enabled: true }] })) throw new Error('and now it does not recognise the real one');
+  });
+
+  /* ez / ti / to are the fields safeKfProp used to drop on the floor. That was survivable while it only
+   * saw audio params; it stops being survivable now effect params go through it, because the keyframe
+   * clipboard carries ti/to onto an 'effect.<i>.<key>' address and fx-presets keeps them too. A curve
+   * shaped by hand would come back a straight line after one reload, with nothing on screen to say why. */
+  test('effects: a hand-shaped keyframe curve survives a reload', { item: 'fx-sanitize' }, function () {
+    var e = FM.fxRegistry.all().filter(function (x) {
+      return (x.params || []).some(function (p) { return p.type === 'range' && p.keyframable !== false && isFinite(p.min) && isFinite(p.max); });
+    })[0];
+    var pd = e.params.filter(function (p) { return p.type === 'range' && p.keyframable !== false && isFinite(p.min) && isFinite(p.max); })[0];
+    var inst = FM.fxRegistry.makeInstance(e.type);
+    // NOT EASE_FAMILIES[0] — that is the bezier family, and FM.easePreset deliberately returns null
+    // for it (`if (!F || F.bez) return null`), so a bezier ez is one the engine itself ignores and the
+    // sanitiser is right to drop. Pick a family that carries real parameterised presets.
+    var fam = (FM.EASE_FAMILIES || []).filter(function (f) { return !f.bez && (f.presets || []).length; })[0];
+    var ez = fam ? { fam: fam.key, preset: fam.presets[0].key } : null;
+    inst.params[pd.key] = { kf: [
+      { t: 0, v: pd.min, e: 'linear', to: 0.25 },
+      { t: 1, v: pd.max, e: 'linear', ti: -0.25, ez: ez },
+    ] };
+    var layer = { effects: [inst] };
+    FM.storage._sanitizeEffects(layer);
+    var kf = layer.effects[0].params[pd.key].kf;
+    if (kf[0].to !== 0.25) throw new Error('the OUT tangent was dropped (' + JSON.stringify(kf[0]) + ') — the curve flattens to a straight line on load');
+    if (kf[1].ti !== -0.25) throw new Error('the IN tangent was dropped (' + JSON.stringify(kf[1]) + ')');
+    if (ez && ez.preset && !kf[1].ez) throw new Error('the parameterised ease was dropped — a bounce/steps curve reverts to linear on load');
+    // …and a hostile one still does not survive
+    var bad = { effects: [Object.assign(FM.fxRegistry.makeInstance(e.type), { params: (function () { var p = {}; p[pd.key] = { kf: [{ t: 0, v: pd.min, ti: Infinity, ez: { fam: 'no-such-family', preset: 'x' } }, { t: 1, v: pd.max }] }; return p; })() })] };
+    FM.storage._sanitizeEffects(bad);
+    var bk = bad.effects[0].params[pd.key].kf[0];
+    if ('ti' in bk) throw new Error('an Infinity tangent was stored');
+    if ('ez' in bk) throw new Error('an unknown ease family was stored');
+  });
+
+  test('effects: a text layer carrying a junk effect renders instead of throwing', { item: 'fx-sanitize' }, function () {
+    // valueOf is the sharp one: FM.applyTextEffects does not merely TEST the table hit, it CALLS it,
+    // and Object.prototype.valueOf invoked with `this` undefined (strict module) throws — out of the
+    // render, killing the frame. A saved project only has to name an effect 'valueOf'.
+    var L = FM.makeLayer('text', { text: 'hello', x: 160, y: 120 });
+    L.effects = [{ type: 'valueOf', enabled: true, params: {} }, { type: 'hasOwnProperty', enabled: true, params: {} }];
+    var s = scene([L]);
+    var c = offscreen(320, 240);
+    FM.renderScene(c.getContext('2d'), s, 0);                   // must not throw
+    var st = FM.applyTextEffects(L, 'hello', 0, 0, s);
+    if (st.text !== 'hello') throw new Error('a junk effect rewrote the text to ' + JSON.stringify(st.text));
+  });
+
+  test('effects: junk types are stripped on the way in, real ones are kept', { item: 'fx-sanitize' }, function () {
+    var real = FM.fxRegistry.makeInstance('brightness');
+    var layer = { effects: [
+      { type: 'toString', enabled: true, params: {} },
+      real,
+      { type: 'valueOf', enabled: true, params: {} },
+      { type: '__proto__', enabled: true, params: {} },
+      { type: 'no-such-effect-anywhere', enabled: true, params: {} },
+      { type: 42, enabled: true, params: {} },
+      null,
+    ] };
+    FM.storage._sanitizeEffects(layer);
+    if (layer.effects.length !== 1) throw new Error('expected only the real effect to survive, got ' + JSON.stringify(layer.effects.map(function (f) { return f && f.type; })));
+    if (layer.effects[0].type !== 'brightness') throw new Error('the surviving effect is ' + layer.effects[0].type);
+  });
+
+  /* The failure mode that would be WORSE than the bug: a script that fails to load takes the whitelist
+   * with it, every effect stops matching, and the gutted project is autosaved over the original 600ms
+   * later. sanitizeAudioFx deletes in that case; this one must not. */
+  test('effects: with no registry loaded the stack is left alone, not gutted', { item: 'fx-sanitize' }, function () {
+    var real = FM.fxRegistry;
+    var layer = { effects: [{ type: 'brightness', enabled: true, params: { amount: 1.5 } }] };
+    try {
+      FM.fxRegistry = null;
+      FM.storage._sanitizeEffects(layer);
+    } finally { FM.fxRegistry = real; }
+    if (layer.effects.length !== 1 || layer.effects[0].params.amount !== 1.5) {
+      throw new Error('a missing registry destroyed the effect stack — one 404 would wipe every effect in every project');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
       var t = T[i], ok = true, err = null;
+      /* _cdp.py has always READ this on a timeout to report which test hung (tests/_cdp.py:159) and
+       * nothing ever WROTE it, so a hang printed lastTest:"" and told you nothing. One line, and it
+       * pays for itself the first time something loops forever — which the filters work ahead is
+       * specifically at risk of (FILTERS-DESIGN.md §1: a flattened container re-enters the same
+       * compositor kernel and never terminates). */
+      window.__fmLastTest = t.name;
       try { var r = t.fn(); if (r && typeof r.then === 'function') await r; }
       catch (e) { ok = false; err = String((e && e.message) || e); }
       /* HYGIENE, charged to the test that caused it. A timeline gesture that outlives the test which

@@ -141,6 +141,57 @@ rebuild params from the schema with clamps, cap child count, forbid container-in
 
 ---
 
+## Corrections to the above, found while building step 1 (v7.38)
+
+Five read-only agents re-checked every claim in this file against the code. The decisions all survive;
+several of the *facts* underneath them did not. Recorded here rather than quietly edited, because two of
+them would have sent steps 3–5 down the wrong road.
+
+- **§2's precedent is the wrong one, and its zero is backwards.** Group units do **not** cross-fade.
+  `buildGroupUnit` rasterises members into a plate and `drawLayer` blits it at `globalAlpha = opacity`
+  **over the scene below** — there is no untouched copy of its own input underneath, so at alpha 0 a
+  group *vanishes*. A filter at strength 0 must show the **unfiltered layer**. Copying group units gives
+  the wrong zero. The real precedent is `CANVAS_FX.liquidglass` (`js/compositor.js:5892-5895`) —
+  `B.drawImage(A,0,0); B.globalAlpha = amt; B.drawImage(_gA,0,0);` — with its true no-op early-out at
+  `:5830`, `if (amt <= 0) { B.drawImage(A, 0, 0); return; }`. **Copy liquidglass, not group units.**
+- **§1's "twenty-four kernels" is the right count of the wrong thing.** Only **20** depend on `fx`
+  object identity; they come in two shapes, the literal `filter(e => e !== fx)` (13 sites) and an
+  fx-optional ternary (7). The other 4 filter a **different layer's** effects **by type** — Luma Matte,
+  Compound Blur, Match Grade, Displacement Map. Those 4 are a *separate* hazard: they look one level
+  deep, so they would miss a Displacement Map nested inside a filter.
+- **§4's "seven places" is a large undercount — there are ~110 `.effects` accesses.** The table lists
+  the seven that need the walker, and three of its line numbers point at comments rather than code
+  (`app.js:1845`/`:1949` are prose; the real remaps are `app.js:2040` and `:2147`. `scene.js:336` is
+  `const out = []`; the walk is `:351`). Omitted entirely: the whole compositor render path (~45 sites,
+  none recursing), the inspector's effect-stack UI (~25, index-based), `fx-browser.js:78-81`,
+  `ai-ops.js:321/342`, `touchup-tool.js:68`, and three registry-type filters
+  (`inspector.js:252/1531/3495`) that would **silently delete a container and all its children**.
+- **§5 is not one grammar, it is three.** `'effect.<i>.<key>'` (timeline), `'fx:<i>:<key>'`
+  (audio-react), and `'effect:<i>:<key>'` (ai-ops, arriving from the model and never built locally).
+  All three index `layer.effects` one level deep. On the upside `FM.kfClipboard` is memory-only, so
+  widening the first needs no data migration.
+- **§1's memory figure is half the real one.** `drawPixelEffect` allocates **two** canvases per depth
+  level, so a 1080×1920 pair is ~16.6MB, not ~8MB. And "no depth counter is capped" is nearly right:
+  eleven are uncapped, but `_dspLvl > 6` and `_dispDepth < 3` **are** capped — those two are the house
+  pattern to copy when capping nesting.
+- **§7's live bug was already fixed** — `REG` has been `Object.create(null)` since v6.74, and
+  `supportsLayer` gained a `typeof` guard in the same commit. The inspector degrades rather than throws.
+  What was *still* open is now closed in v7.38: six more tables (§ below) and the missing input
+  validation.
+
+**Step 1 shipped in v7.38** and went wider than this file scoped it. Ten type-keyed tables are now
+prototype-free and enumerated in `FM._FX_TABLES` so the suite walks the whole set; the effects browser's
+localStorage-keyed `PSEUDO`/`PSEUDO_TILES` are closed (that was the one path still *throwing*); and
+`sanitizeEffects()` runs on both the import and the autosave-load path — which is also the project
+open/switch path, since `projects.open()` calls `FM.storage.load()`.
+
+**Still open after step 1, and worth doing before step 3:** `sanitizeImportedLayers` has exactly one
+caller, so template insert, element insert, project duplicate, layer paste and undo/redo restore all
+still bypass every sanitiser; and three localStorage-backed routes write straight into `layer.effects`
+with type-only filtering — `FM.fxClipboard` (`fm.fxclip`), `FM.fxPresets` (`fm.fxpresets`) and
+`FM.layerPresets` (`fm.layerpresets`). A filter container arriving through any of those gets no
+validation at all. Logged as REQUESTS #217 and #218.
+
 ## Build order
 
 Each step is shippable and verifiable on its own. Steps 1–2 are worth doing even if filters were

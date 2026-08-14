@@ -1152,6 +1152,13 @@ window.FM = window.FM || {};
       else st.text = lt.toFixed(1) + 's';
     },
   };
+  // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
+  // one where an inherited key is worst: the lookup below doesn't just test the hit, it CALLS it.
+  // TEXT_FX['valueOf'] resolves to Object.prototype.valueOf, and invoking it as a bare fn() in a strict
+  // module means `this` is undefined — "Cannot convert undefined or null to object", thrown inside the
+  // render, which kills the whole frame. A saved project only has to name an effect 'valueOf' on a text
+  // layer, and layer.effects is the sub-structure with the weakest validation on the way in.
+  Object.setPrototypeOf(TEXT_FX, null);
   FM.TEXT_FX = TEXT_FX;
   // Fold every enabled text effect over the base string + spacing, in layer order. Returns {text, letterSpacing}.
   FM.applyTextEffects = function (layer, baseText, baseSpacing, t, scene) {
@@ -1782,6 +1789,7 @@ window.FM = window.FM || {};
    * (Measure this with the effect path WARMED. Timing a cold first effect render reports the
    * bounded build 1.6ms slower, which is JIT and the plate-pool allocation, not the change.) */
   const BOUNDED_FX = { letterbox: 1, border: 1 };
+  Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
    * content. No stride, no pad, nothing inferred — this reads the very pixels the question is about.
@@ -4577,6 +4585,7 @@ window.FM = window.FM || {};
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
   const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
    * drag a clip half off the bottom and its on-frame alpha bounds are a sliver, so tiling those
@@ -6893,12 +6902,14 @@ window.FM = window.FM || {};
   // draw — one plate, footprint-clipped backdrop — with a scale applied to the copy, so it routes
   // through the SAME branch rather than through the post-effect pipeline (see the catalog note).
   const COPYBG_FX = { copybg: 1, magnifybg: 1 };
+  Object.setPrototypeOf(COPYBG_FX, null);   // own keys only — see POSTFX
   FM.hasCopyBg = function (layer) { return !!(layer.effects && layer.effects.some(function (e) { return COPYBG_FX[e.type] && e.enabled !== false; })); };
   /* Which effects need a snapshot of everything drawn BELOW this layer. Copy Background was the only
    * one; Light Wrap needs the same picture for the opposite reason — it does not replace the layer
    * with the backdrop, it bleeds the backdrop's light around the layer's own edge. The capture is
    * gated because it is a full-frame blit per layer per frame, so only layers that ask for it pay. */
   const BG_SNAP_FX = { copybg: 1, lightwrap: 1, magnifybg: 1 };
+  Object.setPrototypeOf(BG_SNAP_FX, null);   // own keys only — see POSTFX
   FM.needsBgSnap = function (layer) {
     return !!(layer.effects && layer.effects.some(function (e) { return BG_SNAP_FX[e.type] && e.enabled !== false; }));
   };
@@ -8784,6 +8795,18 @@ window.FM = window.FM || {};
   // the layer-level draw* math exactly). Geometric post-fx (pixelate/mirror/rgbsplit) aren't done
   // here — they need a geometry pass, so they only apply per-layer for now.
   const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1 };
+  // Own keys only — see POSTFX. Missed with TEXT_FX when the others were cut off. Milder than that one
+  // (the filter below only TESTS the hit), but a junk type still passes, so applyAdjustment believes it
+  // has pixel work to do and pays for a full comp-sized getImageData/putImageData round trip that
+  // applyPixelFx then matches nothing in and returns from. A per-frame cost for an effect that isn't one.
+  Object.setPrototypeOf(PIXEL_ADJ, null);
+  /* Every table in this file that is keyed by an effect TYPE — a string that arrives from a saved
+   * project — collected in one place so the suite can prove they are all still prototype-free.
+   * Exposed for that reason only; nothing in the app reads it.
+   * IF YOU ADD A NEW TYPE-KEYED TABLE, ADD IT HERE. The test can only check the tables it is handed,
+   * so a table left out of this list is a table with no guard on it — which is exactly how TEXT_FX
+   * and PIXEL_ADJ were missed when the first four were cut off. */
+  FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX };
   function applyPixelFx(d, fx, t, W, H) {
     const p = fx.params || {};
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for

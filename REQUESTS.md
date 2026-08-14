@@ -741,6 +741,25 @@ better still, keep working inside the turn rather than parking work for a later 
       sanitisation at all. Now null-prototype with own-property guards, verified live: those keys return
       nothing and a real effect still resolves. Steps 2–6 (the walker, the container, the inspector row,
       the browser tab, the library) are still to come, and nothing after step 2 is safe to start early.
+      **Step 1 FINISHED in v7.38.** v6.74 had only done four of the tables. Six more were still open, and
+      one of them mattered a lot: TEXT_FX doesn't just *test* what it looks up, it **calls** it — so a
+      project naming an effect `valueOf` on a text layer threw out of the render and killed the frame.
+      The effects browser had a worse one, keyed off **localStorage** rather than a project file: a junk
+      id in your recents list built a "tile" out of a prototype function and took the browser down the
+      moment you opened it. All ten tables are now prototype-free and listed in one place so the suite
+      walks the whole set instead of the ones someone remembered.
+      And the actual gap this step existed to close is closed: `layer.effects` — alone among the layer's
+      sub-structures — had no validation coming in, on the import path OR on the autosave load that every
+      project takes on every open. It has one now, and the hard part was making it change *nothing*: a
+      param the file leaves out has to STAY left out, because the renderer falls back to a legacy value
+      rather than the schema default, so helpfully filling it in would have restyled every old project
+      without a pixel of source changing. Asserted across all 180 effects at once.
+      Found and fixed on the way past, unrelated to filters: a keyframe curve you shaped by hand was
+      losing its tangents and its parameterised ease **on every reload** — the sanitiser they pass through
+      only ever emitted `{t, v, e}`. So a bounce you dialled in came back linear and nothing said why.
+      Scouting also corrected five factual errors in FILTERS-DESIGN.md, two of which would have sent
+      later steps down the wrong road — including the cross-fade precedent, which had the wrong ZERO
+      (copying it would have made strength 0 hide the layer instead of showing it unfiltered).
 
 - [x] **111 — Snapping and Onion skin should say on screen what they just did.** **DONE v6.70.** His words: *"Make it so
       when you press the snapping and onion skin buttons it actually tells you on screen what happened."*
@@ -2596,6 +2615,21 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
       hide themselves when it is chosen, rather than sitting there meaning nothing.
+- [ ] **217 — Most ways of getting a layer into the app skip the safety checks.** *(Found by me on
+      14 Aug while doing #113 step 1 — not something you reported.)* There is a function that rebuilds an
+      imported layer's audio effects, masks, behaviours and camera from a known-good schema, so a corrupt
+      or hand-edited project file can't reach the renderer. It has exactly ONE caller: importing a
+      `.fmproj` file. Everything else gets nothing — inserting a template, inserting an element, duplicating
+      a project, pasting a layer, and undo/redo restore. Effects are covered everywhere now (v7.38 wired
+      those in separately, including the autosave load), but the rest of the layer still isn't.
+      Not urgent and nothing you'd see today; the reason to fix it is that #113's filters make
+      `layer.effects` a nested structure, and "which paths validate" stops being an academic question the
+      moment a container can arrive through one that doesn't.
+- [ ] **218 — Three saved lists write straight into a layer's effects with almost no checking.** *(Also
+      found on 14 Aug.)* The effect clipboard, the effect presets and the layer presets all live in
+      localStorage and all rebuild `layer.effects` from what they find there, checking only that the
+      effect NAME is real — never the values. Same story as #217: harmless-ish today, genuinely not once a
+      filter is a container with children inside it. Worth folding into the same pass as #217.
 - [ ] **213 — The + at the bottom of the home screen needs a bigger HIT BOX, not a bigger button.** His
       words: *"Make it so the button on the bottom of the screen has a larger hit box, don't make it
       bigger but larger hit box cos I keep accidentally opening projects."*

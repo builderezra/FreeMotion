@@ -165,6 +165,14 @@ window.FM = window.FM || {};
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       FM.scene.project = scene.project;
       FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
+      // The AUTOSAVE path sanitises nothing — applyScene (the .fmproj import) is the only caller of
+      // sanitizeImportedLayers, and this is the route every project takes on every open. So anything
+      // an import once let through has been autosaved back into localStorage and comes in unchecked
+      // here forever after. Effects are the sharpest edge of that (a type is a bare key into six
+      // render dispatch tables), so they get checked here. The rest of the sanitisers are NOT run:
+      // rewriting audioFx / masks / behaviours across his existing projects is a much larger change
+      // than this one is allowed to be, and it is logged as its own item rather than smuggled in.
+      FM.scene.layers.forEach(l => { if (l) sanitizeEffects(l); });
       // BEFORE anything walks the graph. A document saved by a pre-v5.06 build can carry a parent
       // cycle; every parent walk below (refreshAll → the timeline, the layers panel, the compositor)
       // then throws, and because that throw happens inside this promise the boot .then() never runs:
@@ -292,6 +300,22 @@ window.FM = window.FM || {};
   // 'constructor' pass the whitelist — scene.js then calls it unbound and every eval goes NaN.
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   function easeOk(e) { return typeof e === 'string' && (hasOwn(FM.EASES, e) || hasOwn(FM.EASE_PRESETS, e)); }
+  /* A parameterised ease — { fam, preset, p } — written by the graph editor (graph-editor.js:161).
+   * Whitelisted by ASKING the ease catalogue whether that family/preset pair exists, which is the same
+   * test FM.easeApply makes at eval time; anything it would ignore is dropped here instead of stored. */
+  const EZ_MAX_P = 12;
+  function safeEz(ez) {
+    if (!ez || typeof ez !== 'object') return null;
+    if (typeof ez.fam !== 'string' || typeof ez.preset !== 'string') return null;
+    if (!FM.easePreset || !FM.easePreset(ez.fam, ez.preset)) return null;
+    const out = { fam: ez.fam, preset: ez.preset };
+    if (ez.p && typeof ez.p === 'object') {
+      const p = {};
+      Object.keys(ez.p).slice(0, EZ_MAX_P).forEach(k => { const n = +ez.p[k]; if (isFinite(n)) p[k] = n; });
+      out.p = p;
+    }
+    return out;
+  }
   function safeKfProp(p, min, max) {
     if (!p || typeof p !== 'object' || !Array.isArray(p.kf)) return null;
     const kf = [];
@@ -301,6 +325,16 @@ window.FM = window.FM || {};
       if (!isFinite(t) || t < 0 || !isFinite(v)) return;
       const o = { t: Math.min(3600, t), v: Math.max(min, Math.min(max, v)), e: easeOk(k.e) ? k.e : 'linear' };
       if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(n => isFinite(+n))) o.bez = k.bez.map(Number);
+      /* ez / ti / to used to be dropped here, silently. That was survivable while this function only
+       * saw audio params, and stops being survivable the moment effect params come through it (below):
+       * evalProp honours all three on ANY prop (scene.js:105 for ez, :118-126 for the Hermite tangents),
+       * the keyframe clipboard deliberately carries ti/to onto whatever you paste them to — including an
+       * 'effect.<i>.<key>' address — and fx-presets.js:69-70 preserves them through an effect preset.
+       * So a curve someone shaped by hand would come back a straight line after a reload, with nothing
+       * on screen to say why. Kept, validated: non-finite is what evalProp already treats as absent. */
+      const ez = safeEz(k.ez); if (ez) o.ez = ez;
+      if (isFinite(+k.ti)) o.ti = Math.max(-1e7, Math.min(1e7, +k.ti));
+      if (isFinite(+k.to)) o.to = Math.max(-1e7, Math.min(1e7, +k.to));
       kf.push(o);
     });
     if (!kf.length) return null;
@@ -493,9 +527,76 @@ window.FM = window.FM || {};
       l.fog = { enabled: !!g.enabled, color: safeColor(g.color) ? g.color : '#ffffff', near: near, far: (far === near ? near + 1 : far) };
     }
   }
+  /* layer.effects — the last major layer sub-structure with no validation on the way in, and the one
+   * with the longest reach: `type` is a bare bracket key into six render dispatch tables, and every
+   * value in `params` is evaluated per frame and handed to canvas APIs. Two of those tables were still
+   * inheriting from Object.prototype until today (compositor TEXT_FX / PIXEL_ADJ), and the TEXT_FX
+   * lookup CALLS what it finds — an effect named 'valueOf' on a text layer threw out of the render.
+   * The tables are cut off now; this closes the other end, so a bad type never reaches them at all.
+   *
+   * BYTE-IDENTITY IS THE CONTRACT, and it is why this deliberately does NOT copy sanitizeAudioFx's
+   * shape. That one rebuilds every param from the schema, filling absences with the default. Here an
+   * ABSENT param key is MEANINGFUL: the renderer falls back to the effect's `legacy` value, which for
+   * a param added to an existing effect is whatever that effect used to hardcode — not the schema
+   * default (fx-registry paramsOf: "an old instance must keep rendering as it always did"). Filling
+   * absences would quietly restyle every old project; Edge Glow's radius alone jumps 3 → 8.
+   * So the rule is: whitelist the TYPE, keep only keys the schema declares, validate each key that is
+   * PRESENT, and leave absent keys absent.
+   *
+   * And when the registry has not loaded, do NOTHING. sanitizeAudioFx deletes in that case, which is
+   * right for a handful of audio filters and very wrong here: one 404'd script would strip every
+   * effect off every layer and then autosave the gutted project over the original.
+   */
+  const FX_MAX = 120, FX_ID_MAX = 64;
+  // -> {keep:false} means leave the key ABSENT, which is not the same as writing the default (above).
+  function safeFxParam(pd, v) {
+    const ty = pd.type;
+    if (ty === 'color') return safeColor(v) ? { keep: true, value: v } : { keep: false };
+    if (ty === 'layer') return (typeof v === 'string' && v.length <= FX_ID_MAX) ? { keep: true, value: v } : { keep: false };
+    if (ty === 'toggle') return (typeof v === 'boolean' || v === 0 || v === 1) ? { keep: true, value: v } : { keep: false };
+    if (ty === 'segment') {
+      // Options are normalised to [value, label] pairs by fx-registry. Compare both ways: a bare-label
+      // list makes the value the INDEX (a number), while an explicit pair can carry anything the
+      // catalogue author wrote.
+      const ok = (pd.options || []).some(o => Array.isArray(o) && (o[0] === v || (isFinite(+o[0]) && isFinite(+v) && +o[0] === +v)));
+      return ok ? { keep: true, value: v } : { keep: false };
+    }
+    const min = isFinite(pd.min) ? pd.min : -1e7, max = isFinite(pd.max) ? pd.max : 1e7;
+    if (typeof v === 'number' && isFinite(v)) return { keep: true, value: Math.max(min, Math.min(max, v)) };
+    // A numeric STRING is coerced rather than dropped. The renderer coerces it anyway (evalProp feeds
+    // arithmetic), so keeping it renders the same and dropping it would change how the layer looks.
+    if (typeof v === 'string' && v.trim() !== '' && isFinite(+v)) return { keep: true, value: Math.max(min, Math.min(max, +v)) };
+    if (pd.keyframable !== false) { const kfp = safeKfProp(v, min, max); if (kfp) return { keep: true, value: kfp }; }
+    return { keep: false };
+  }
+  function sanitizeEffects(l) {
+    if (l.effects == null) return;
+    if (!Array.isArray(l.effects)) { delete l.effects; return; }
+    if (!FM.fxRegistry || typeof FM.fxRegistry.get !== 'function') return;   // no whitelist → touch nothing
+    l.effects = l.effects.slice(0, FX_MAX).map(f => {
+      if (!f || typeof f !== 'object' || typeof f.type !== 'string') return null;
+      const reg = FM.fxRegistry.get(f.type);
+      // The round-trip IS the own-property guarantee: a get() that walked the prototype chain returns
+      // something whose own .type cannot match what was asked for.
+      if (!reg || typeof reg !== 'object' || reg.type !== f.type) return null;
+      const src = (f.params && typeof f.params === 'object') ? f.params : {};
+      const params = {};
+      (reg.params || []).forEach(pd => {
+        if (!pd || typeof pd.key !== 'string') return;
+        if (!hasOwn(src, pd.key)) return;                                    // absent stays absent
+        const r = safeFxParam(pd, src[pd.key]);
+        if (r.keep) params[pd.key] = r.value;
+      });
+      // enabled: absence stays ON — matches makeInstance and the engine's own `e.enabled === false` test.
+      // Transient UI state (fx._expanded) is dropped by the rebuild, which is what the leading
+      // underscore means everywhere else in this file.
+      return { type: reg.type, enabled: f.enabled !== false, params: params };
+    }).filter(Boolean);
+  }
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
+      sanitizeEffects(l);
       sanitizeAudioFx(l);
       sanitizeTrimRepeater(l);
       sanitizeBehaviors(l);
@@ -515,6 +616,9 @@ window.FM = window.FM || {};
       }
     });
   }
+  // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a
+  // re-implementation of it in the test (which would only ever agree with itself).
+  FM.storage._sanitizeEffects = sanitizeEffects;
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render

@@ -13,6 +13,14 @@ window.FM = window.FM || {};
   // grid, so they are favouritable like everything else; readList has to stop filtering them out.
   // (Declared here, populated after the tile builders exist — see PSEUDO_TILES.) (#62)
   const PSEUDO = { _mask: 'Mask', _objblur: 'Motion Blur (Object)' };
+  /* Own keys only. This one is the sharpest of the family, because the ids it is keyed by come
+   * straight out of localStorage ('fm.fx.recents' / 'fm.fx.fav') and PSEUDO_TILES is CALLED, not just
+   * tested: a stored id of 'toString' passes knownId, survives readList, and tileForId then invokes
+   * Object.prototype.toString and hands back the STRING '[object Undefined]' — which grid.appendChild
+   * rejects with "parameter 1 is not of type 'Node'", taking the effects browser down on open. The
+   * favourites list has a second route to the same place: favLabel returns the function itself and
+   * the sort calls .localeCompare on it. */
+  Object.setPrototypeOf(PSEUDO, null);
   function knownId(id) { return !!(PSEUDO[id] || FM.fxRegistry.get(id)); }
   function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(knownId) : []; } catch (e) { return []; } }
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
@@ -242,6 +250,7 @@ window.FM = window.FM || {};
   // Build whatever tile an id names — a registry effect or one of the two pseudo-entries. This is what
   // lets the Favourites page hold a favourited Mask / Motion Blur (Object) instead of dropping it. (#62)
   const PSEUDO_TILES = { _mask: maskTile, _objblur: objectBlurTile };
+  Object.setPrototypeOf(PSEUDO_TILES, null);   // own keys only — see PSEUDO. This table gets CALLED.
   function tileForId(id, onStarChange) {
     if (PSEUDO_TILES[id]) return PSEUDO_TILES[id](onStarChange);
     const reg = FM.fxRegistry.get(id);
