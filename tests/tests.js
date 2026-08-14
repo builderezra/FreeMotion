@@ -12903,12 +12903,23 @@
 
       const gaps = [];
       for (let i = 1; i < run.length; i++) gaps.push(run[i].left - run[i - 1].right);
-      const spread = Math.max.apply(null, gaps) - Math.min.apply(null, gaps);
-      if (spread > 2) {
-        throw new Error('the visible gaps across refresh · notes · cog · Export are ' +
-          gaps.map(g => g.toFixed(1)).join(' / ') + ' — a ' + spread.toFixed(1) + 'px spread, which is the wonkiness he keeps pointing at');
+      /* THE RULE IS NOT "ALL THREE EQUAL" — that was the version before this, and he rejected it:
+         "the space between the settings cog and notes pad is perfect but you've got them far away from
+         the export button and refresh button". A gap bounded by a hard painted edge (the version chip,
+         the filled Export button) reads WIDER than the same gap between two soft glyphs, because
+         between two icons the eye counts part of the space as belonging to the icons. So the two
+         edge-bounded gaps must be visibly smaller than the icon-to-icon one to look the same. */
+      const [chipToNotes, notesToCog, cogToExport] = gaps;
+      const outerDiff = Math.abs(chipToNotes - cogToExport);
+      if (outerDiff > 1.5) {
+        throw new Error('the two edge-bounded gaps are ' + chipToNotes.toFixed(1) + ' and ' + cogToExport.toFixed(1) +
+          'px — they sit either side of the pair he judges together and must match');
       }
-      if (gaps.some(g => g < 8)) throw new Error('one of the gaps collapsed to ' + Math.min.apply(null, gaps).toFixed(1) + 'px — the run is cramped, not even');
+      if (notesToCog <= Math.max(chipToNotes, cogToExport) + 2) {
+        throw new Error('notes→cog is ' + notesToCog.toFixed(1) + 'px against outer gaps of ' + chipToNotes.toFixed(1) +
+          ' — an icon-to-icon gap has to be the LARGER one or it reads tighter than the two beside it');
+      }
+      if (gaps.some(g => g < 8)) throw new Error('one of the gaps collapsed to ' + Math.min.apply(null, gaps).toFixed(1) + 'px — the run is cramped, not spaced');
     } finally {
       frame.style.width = hadW; frame.style.height = hadH;
       await sleep(160);
@@ -13058,11 +13069,25 @@
     if (getComputedStyle(fab).overflow !== 'visible') {
       throw new Error('#add-fab has overflow:' + getComputedStyle(fab).overflow + ' — the filter is applied before the clip, so this slices the glow off square');
     }
-    if (getComputedStyle(aura).overflow === 'visible') throw new Error('the aura is not clipped to the button, so its colour spills past the circle');
-    const pools = aura.querySelectorAll('i');
-    if (pools.length < 2) throw new Error('only ' + pools.length + ' pool(s) — two on mismatched clocks is what stops them sliding as one sheet');
-    const durs = [].map.call(pools, p => getComputedStyle(p).animationDuration);
-    if (new Set(durs).size < 2) throw new Error('both pools run on the same clock (' + durs.join(', ') + ') — they will drift as one flat sheet');
+    /* The aura is clipped by its own BORDER-RADIUS, not by an overflow clip — that is the whole point
+       of the rebuild, since a rounded overflow clip is the thing WebKit lets composited children
+       escape. A background is clipped by border-radius in every engine. */
+    const rad = getComputedStyle(aura).borderRadius;
+    if (!/50%|\d/.test(rad) || rad === '0px') throw new Error('the aura has border-radius ' + rad + ' — its background would paint as a square');
+    /* NOTHING HERE MAY DEPEND ON A ROUNDED OVERFLOW CLIP HOLDING A COMPOSITED CHILD. WebKit is known to
+       let those escape, and what escapes is a square — which is what he reported. The pools are plain
+       backgrounds on the aura and its ::before, clipped by their own border-radius, which every engine
+       does reliably. This asserts the structure, not just the look. */
+    if (aura.children.length) {
+      throw new Error('the aura has ' + aura.children.length + ' child element(s) — the pools must be backgrounds, not children, so no rounded overflow clip has to hold a composited layer');
+    }
+    const auraCs = getComputedStyle(aura), beforeCs = getComputedStyle(aura, '::before');
+    if (auraCs.mixBlendMode !== 'normal' || beforeCs.mixBlendMode !== 'normal') {
+      throw new Error('a blend mode is back on the aura — that promotes a layer, which is exactly what escaped its clip on his phone');
+    }
+    const durs = [auraCs.animationDuration, beforeCs.animationDuration];
+    if (durs.some(d => !d || d === '0s')) throw new Error('one of the two pools is not animating (' + durs.join(', ') + ')');
+    if (durs[0] === durs[1]) throw new Error('both pools run on the same clock (' + durs.join(', ') + ') — they will drift as one flat sheet');
 
     /* The palette really is the home screen's. Pull the hues out of BOTH rules and compare, so a
        later change to one is caught rather than quietly diverging. */
@@ -13074,13 +13099,15 @@
         const sel = r.selectorText || '';
         const txt = (r.style && r.style.cssText) || '';
         if (/#home-screen::before/.test(sel)) homeCss += txt;
-        if (/\.fa-pool-/.test(sel)) fabCss += txt;
+        if (/\.fab-aura/.test(sel)) fabCss += txt;
         if (r.cssRules && r.cssRules.length) walk(r.cssRules);   // NOT `if (r.cssRules)` — every style rule has one since CSS nesting
       });
       walk(rules);
     });
     if (!homeCss) throw new Error('could not read the home background rule — this test cannot compare palettes');
     if (!fabCss) throw new Error('could not read the + button pools');
+    // The shade over the glyph is deliberately near-black and is not part of the palette.
+    fabCss = fabCss.replace(/rgba?\(\s*4\s*,\s*14\s*,\s*22[^)]*\)/g, '');
     const want = hues(homeCss), got = hues(fabCss);
     const missing = want.filter(h => got.indexOf(h) < 0);
     if (missing.length) {

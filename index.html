@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=375">
+<link rel="stylesheet" href="styles.css?v=378">
 <link rel="stylesheet" href="theme-glass.css?v=25">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -413,9 +413,11 @@
        the button's background, because it has to be clipped to the circle and #add-fab itself must
        never take an overflow clip — per spec the filter runs before the clip, so any overflow:hidden
        here would slice the glow off on a hard line, which is the "box" Ezra reported twice. Clipping
-       the inner span instead keeps the outer glow whole. Two pools, so they can drift on separate
-       clocks the way the background's do rather than sliding as one sheet. -->
-  <button id="add-fab" aria-label="Add"><span class="fab-aura" aria-hidden="true"><i class="fa-pool-a"></i><i class="fa-pool-b"></i></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+       the inner span instead keeps the outer glow whole.
+       The span is EMPTY: the pools are backgrounds on it and on its own ::before, which a border-radius
+       clips in every engine. An earlier version used child elements with mix-blend-mode, and WebKit is
+       known to let composited children escape a rounded overflow clip — as a square. -->
+  <button id="add-fab" aria-label="Add"><span class="fab-aura" aria-hidden="true"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
   <div id="add-sheet">
     <button id="add-grab" class="sheet-grab" type="button" aria-label="Close"><span class="grab-bar"></span></button>
     <div class="sheet-title">Add</div>

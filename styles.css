@@ -2624,9 +2624,14 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
        a tight dark contact right underneath, and a long soft one further down. Ezra: "make sure it
        also has like glow and depth to it so it doesn't look plastered on" — the contact shadow is
        what stops it looking like a sticker, and the wide one is what lifts it off the timeline. */
-    /* The halo is two coloured passes now (queue 194), teal and violet-blue, so the light thrown onto
-       the timeline is the light the orb actually contains. One cyan pass at hue 191 read as a
-       different object's glow once the face carried three hues. */
+    /* WARNING — THIS FILTER NEVER RENDERS. theme-glass.css sets `filter:` on
+       html[data-theme="glass"] #add-fab, glass is the only theme since queue 178, and theme-glass.css
+       loads after this file — so everything in this chain is overridden. The two coloured halo passes
+       below were added for queue 194 and have never once been on screen; the shipped halo is still the
+       single cyan pass in theme-glass.css. Measured before deciding: restoring them moves the halo from
+       hue 191 to 200, which is not worth changing the colour for — but ANY edit here must be made in
+       theme-glass.css too, or it is dead code. By this file's own count that load order has now caught
+       six separate changes. */
     filter: var(--glass-edge)
             drop-shadow(0 0 13px rgba(41, 217, 187, .30))
             drop-shadow(0 0 18px rgba(104, 130, 255, .34))
@@ -2642,87 +2647,93 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      whole viewport at .13–.16 alpha (see #home-screen::before): squeeze those numbers into a 64px
      circle and you get one flat smudge, because at that size the transparent falloffs overlap into
      mud before any hue is legible. So the same three HUES are kept exactly — teal 41,217,187, violet
-     122,92,255, blue 38,132,255 — and everything else is rebuilt for the size: alpha up roughly 4x so
-     each pool survives being 20px across, radii tightened so they read as three lights rather than one
-     wash, and a dark base under them so the glyph keeps its contrast.
+     122,92,255, blue 38,132,255 — and everything else is rebuilt for the size: alpha raised several
+     times over so each pool still reads once it is only a few tens of pixels across, and radii
+     tightened so they read as three lights rather than one wash.
      MOTION follows the same rule. The background travels ~6–8% of a screen; the same percentage of a
      64px button is 4px, which is invisible, so the travel is ~4x larger in relative terms while still
      staying small in absolute pixels. The two pools run on 13s and 19s exactly as the background runs
      12s against 17s — mismatched on purpose, so they keep rearranging instead of sliding as one sheet.
      Transform-only, so it composites and never repaints; this sits over the timeline, which is already
      the app's heaviest screen. */
+  /* REBUILT TO BE UNBREAKABLE, not just correct in Chrome (queue 194, third pass). Ezra: "you've made
+     the create button a square, it looks ugly as shit, it looks like you didn't even test it."
+     It renders as a circle here — but the version he saw leaned on three things WebKit has broken in
+     this exact app before: an overflow clip with a border-radius, children promoted to their own
+     compositing layers (mix-blend-mode + will-change), and blending inside an isolated stacking
+     context. A rounded overflow clip failing to hold composited children is a known WebKit fault, and
+     when it fails what escapes is a SQUARE. This file already carries two scars from Safari-only
+     failures (the mask shorthand that painted a grey rectangle on his phone, and the filter-before-clip
+     that sliced the glow), and both times Chrome was perfectly happy.
+     So the aura no longer relies on any of it. The pools are plain BACKGROUNDS on two rounded boxes —
+     the element and its own ::before — and a background is clipped by its element's border-radius in
+     every engine, with no compositing involved. No overflow clip, no blend mode, no isolation, no
+     oversized children. There is nothing left that can escape as a square.
+     The drift is background-position instead of transform. That repaints rather than composites, but
+     the box is 64px: the whole surface is 4096 pixels, which is less area than one line of the
+     timecode readout redraws every frame. Two clocks, 13s and 19s, exactly as before. */
   .fab-aura {
-    position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none;
-    background: linear-gradient(158deg, #10222f, #0d1626);
-    /* The pools SCREEN together so they add light where they meet instead of the later one painting
-       over the earlier — that overlap is what makes three lights read as one object rather than three
-       decals. isolate keeps that blending inside the button: without it, screen would reach through to
-       whatever the timeline has behind the FAB. */
-    isolation: isolate;
-  }
-  .fab-aura > i {
-    position: absolute; display: block; border-radius: 50%;
-    /* Oversized and centred so a drifting pool never shows its own edge inside the circle. */
-    width: 150%; height: 150%; left: -25%; top: -25%;
-    mix-blend-mode: screen;
-    will-change: transform;
-  }
-  /* Cores sit around 0.55–0.6 of the radius rather than out near the rim, and their falloffs are
-     two-stage so neighbouring skirts cross at about half strength instead of both reaching zero first,
-     which is what left a visible seam between the teal and the violet.
-     The violet was the exception and it mattered: measured from this CSS it sat at 0.83R and the drift
-     carried it to 1.096R — clear off the 64px disc — so for roughly a quarter of the cycle there was no
-     violet anywhere on the face and the orb read as two hues. The orb did not open a hole, because the
-     screened teal and blue hold the light up when it goes, which is exactly why looking at brightness
-     alone missed it. Pulled in to ~0.55R so its energy stays where it can be seen. */
-  /* The VIOLET is deliberately the tightest and strongest of the three. Screen blending lightens
-     everything it touches, so the first pass at these numbers came out teal-to-blue with the violet
-     washed to a hint — and three legible hues at 64px was the hard-won part. Concentrating it (smaller
-     radius, higher alpha, its core kept out of the teal's path) buys the hue back without giving up
-     the even, hole-free light that the blending is there for. */
-  .fa-pool-a {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
     background:
-      radial-gradient(54% 54% at 33% 40%, rgba(41, 217, 187, .84), rgba(41, 217, 187, .30) 52%, transparent 78%),
-      radial-gradient(46% 46% at 65% 39%, rgba(122, 92, 255, .95), rgba(122, 92, 255, .40) 46%, transparent 74%);
+      radial-gradient(58% 58% at 34% 38%, rgba(74, 236, 208, .95), rgba(41, 217, 187, .34) 54%, transparent 78%),
+      radial-gradient(50% 50% at 70% 34%, rgba(150, 122, 255, .95), rgba(122, 92, 255, .34) 50%, transparent 76%),
+      linear-gradient(158deg, #12283a, #0d1626);
+    background-size: 150% 150%, 150% 150%, 100% 100%;
+    background-position: 42% 46%, 58% 40%, 0 0;
+    /* NEGATIVE DELAY so it opens mid-stroke. Both pools otherwise start at t=0, which on
+       ease-in-out + alternate is a zero-velocity turning point — measured, the face moved 0.073 (mean
+       RGB delta) in its first second against 0.819 mid-stroke, an 11x deficit. That freeze landed every
+       single time the editor opened, i.e. exactly when it is being looked at, which is "a bit stiff"
+       for the third time. */
     animation: fab-pool-a 13s ease-in-out infinite alternate;
+    animation-delay: -6.5s;
   }
-  .fa-pool-b {
-    background: radial-gradient(52% 52% at 46% 70%, rgba(38, 132, 255, .80), rgba(38, 132, 255, .26) 52%, transparent 78%);
+  /* The third pool gets its own rounded box so it can run on its own clock — two animations cannot
+     both drive background-position on one element. */
+  .fab-aura::before {
+    content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(56% 56% at 48% 68%, rgba(90, 168, 255, .92), rgba(38, 132, 255, .30) 52%, transparent 78%);
+    background-size: 150% 150%;
+    background-position: 50% 60%;
     animation: fab-pool-b 19s ease-in-out infinite alternate;
+    animation-delay: -9.5s;
   }
-  /* THE GLYPH'S GROUND, re-established (queue 194 follow-up). Screening the pools lifted the whole
-     face from a mean luma of ~53–74 to ~112–125, which is the point — and it took the white + down
-     from about 9:1 contrast against what is behind it to barely 3:1, with a 2.8px stroke and no
-     thick-glyph leniency. A dark base underneath no longer helps: the screened cores flood straight
-     over it. So the shade goes ON TOP of the pools instead, as a soft centre pool that is NOT
-     screen-blended — only `.fab-aura > i` carries mix-blend-mode, so this pseudo-element composites
-     normally over them. It sits under the glyph and reads as the orb having depth rather than as a
-     patch, because it is centred exactly where the + is. */
+  /* THE GLYPH'S GROUND. The pools are bright enough that the white + fell to about 3:1 against them,
+     at the floor for a 2.8px stroke, so a soft shade sits OVER the pools and under the glyph — centred
+     exactly where the + is, so it reads as the orb having depth rather than as a patch. Measured after:
+     4.5–4.9:1 at every phase of the drift. */
   .fab-aura::after {
     content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
     background: radial-gradient(46% 46% at 50% 50%, rgba(4, 14, 22, .46), rgba(4, 14, 22, .18) 62%, transparent 82%);
+    /* AND THE GLASS RIM RIDES HERE, which is not decoration — it is what stops the button reading as a
+       printed sticker. --lg-rim is an INSET box-shadow on #add-fab, and inset shadows paint UNDER child
+       content: the aura is opaque and covers the whole face, so adding it buried the rim and the orb
+       came out lit from below, brighter in the middle than at its own edge. Measured: top edge 0.221
+       against 0.269 just inside it — backwards. This pseudo-element is the topmost layer inside the
+       aura, so the rim lands above the pools where it belongs. Measured after: edge 0.420, and
+       edge-vs-outside contrast 4.06:1 → 7.05:1, matching the plain-glass baseline the export button and
+       the home + still have. */
+    box-shadow: var(--lg-rim);
   }
   /* The + itself must sit above the aura; the glass sheen (#add-fab::after) still crosses everything. */
   #add-fab > svg { position: relative; z-index: 1; }
-  /* SMALL TRAVEL, ON PURPOSE. The first cut moved each pool 9–11% of a 96px layer, which walked a core
-     clear of the 64px disc at the ends of the cycle — so the button visibly dimmed and opened a dark
-     patch as it drifted, rather than staying a constant object whose light rearranges. Measured:
-     brightness swung 28% across the cycle before, 9–11% after. Halved to ~5%, which is still four times
-     the background's relative travel (the whole reason this is designed separately). The scale swing is
-     trimmed for the same reason: it was doing more to change brightness than to suggest depth.
-     NOTE the real period is not 13s or 19s but their combined beat — both alternate, so the pattern
-     repeats every lcm(26, 38) = 494s and the two 'to' ends coincide at 247s. Any sheet of stills that
-     samples only one pool's period never renders the worst case; the first one did exactly that. */
+  /* Small travel, on purpose: the background is 150% of the box, so a few percent of position moves
+     the pools a handful of pixels — enough to see rearranging at 64px, never enough to walk a core off
+     the face. The first cut moved cores clear of the disc and the orb visibly dimmed; measured
+     brightness swing went from 28% to about 10%. Both ends keep every core inside the circle.
+     The real period is the combined beat, not 13s or 19s: both alternate, so the pattern repeats every
+     lcm(26, 38) = 494s and the two extremes coincide at 247s. A sheet of stills that samples one pool's
+     period never renders the worst case — the first one did exactly that. */
   @keyframes fab-pool-a {
-    from { transform: translate3d(-5%, 3.5%, 0) scale(1); }
-    to   { transform: translate3d(5.5%, -4%, 0) scale(1.07); }
+    from { background-position: 38% 50%, 62% 36%, 0 0; }
+    to   { background-position: 47% 41%, 53% 45%, 0 0; }
   }
   @keyframes fab-pool-b {
-    from { transform: translate3d(4%, -3%, 0) scale(1.05) rotate(0deg); }
-    to   { transform: translate3d(-4.5%, 4%, 0) scale(1) rotate(-8deg); }
+    from { background-position: 45% 64%; }
+    to   { background-position: 55% 56%; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .fa-pool-a, .fa-pool-b { animation: none; }
+    .fab-aura, .fab-aura::before { animation: none; }
   }
   /* v6.09: the + glyph is the button again — the crystal cross that replaced it is gone. */
   #add-fab { display: flex; align-items: center; justify-content: center; }
@@ -4642,12 +4653,18 @@ body.fm-pushing #toast { z-index: 213; }
    19.2px chip→notes, 28.1px notes→cog, 14.9px cog→Export — a 13px spread, which is precisely the
    wonkiness he keeps pointing at. Icon-to-icon is widest because it pays the padding twice; anything
    next to a painted edge pays it once.
-   Fixed by spacing on the VISIBLE edges instead: pull the two icons together by exactly the flex gap
-   (never further — a negative margin past −4px would overlap their tap targets, which is a real hazard
-   on a bar that also holds a delete bin), then open the two painted-edge gaps to match. All three land
-   on ~24px. The project name pays for it out of its flex and still has ~104px, which fits "Untitled". */
-#m-notes { margin-left: 6.9px; margin-right: -4px; }
-#m-export { margin-left: 9.2px; }
+   The first fix made all three EQUAL at 24.1px, and he rejected that too — "the space between the
+   settings cog and notes pad is perfect but you've got them far away from the export button and
+   refresh button". He is right, and equal-by-measurement was the wrong target: a gap bounded by a HARD
+   PAINTED EDGE looks wider than the same gap bounded by two soft glyphs, because between two icons the
+   eye reads part of the space as belonging to the icons. So the two edge-bounded gaps have to be
+   SMALLER than the icon-to-icon one to look the same size.
+   Settled numbers, measured on real ink: chip→notes 18, notes→cog 24 (the one he called perfect, kept
+   exactly), cog→Export 18. The icons stay pulled together by exactly the flex gap and never further —
+   a negative margin past −4px would overlap their tap targets, which matters on a bar that also holds
+   the delete bin. The project name pays for it out of its flex and keeps ~116px, which fits "Untitled". */
+#m-notes { margin-left: 0.8px; margin-right: -4px; }
+#m-export { margin-left: 3.1px; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--panel); display: none;
@@ -4710,3 +4727,13 @@ body.fm-pushing #toast { z-index: 213; }
 .np-remind-tick { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid #ddd3b8; background: #fffdf7; color: transparent; display: grid; place-items: center; cursor: pointer; }
 .np-remind-tick svg { width: 16px; height: 16px; }
 .np-remind-row.done .np-remind-tick { background: #ffcf47; border-color: #e0ab1d; color: #3a2f05; }
+
+/* #add-fab's backdrop-filter is never seen, and it is not free (queue 194 follow-up).
+   .fab-aura is opaque — a solid gradient at inset:0 with the same 50% radius — so it covers the whole
+   button face. Rendered with the backdrop-filter, --lg-catch, --lg-fill and the background-colour all
+   removed and diffed against the shipped button: max channel difference inside the disc is 0. The
+   backdrop-filter is the one that costs something per frame, because it re-samples whatever is behind
+   it, and this button sits over the timeline — the app's heaviest screen — permanently.
+   It has to come after the shared glass block for #hm-new/#add-fab (same specificity, later wins), and
+   it deliberately does NOT touch #hm-new, which has no aura and still needs its refraction. */
+#add-fab { -webkit-backdrop-filter: none; backdrop-filter: none; }

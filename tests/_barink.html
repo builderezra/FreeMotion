@@ -54,9 +54,18 @@ document.getElementById('a').addEventListener('load', function () {
         gaps.push(g);
         out.push('   ' + (items[i - 1].id + ' -> ' + items[i].id).padEnd(30) + g.toFixed(1) + 'px');
       }
-      var min = Math.min.apply(null, gaps), max = Math.max.apply(null, gaps);
+      /* THE RULE IS NOT "ALL THREE EQUAL". That was the second attempt and he rejected it: "the space
+         between the settings cog and notes pad is perfect but you've got them far away from the export
+         button and refresh button". A gap bounded by a hard painted edge LOOKS wider than the same gap
+         between two soft glyphs, so the two edge-bounded gaps must be smaller to read the same.
+         What must hold: the two outer gaps match each other, and the icon-to-icon gap is the larger. */
+      var outer = [gaps[0], gaps[2]], inner = gaps[1];
+      var outerSpread = Math.abs(outer[0] - outer[1]);
       out.push('');
-      out.push('spread ' + (max - min).toFixed(1) + 'px   ' + ((max - min) <= 1.5 ? 'EVEN' : 'UNEVEN — this is what he is seeing'));
+      out.push('outer gaps (chip→notes, cog→Export): ' + outer.map(function (g) { return g.toFixed(1); }).join(' / ') +
+        '   difference ' + outerSpread.toFixed(1) + 'px   ' + (outerSpread <= 1.5 ? 'MATCHED' : 'MISMATCHED'));
+      out.push('inner gap  (notes→cog): ' + inner.toFixed(1) + 'px   ' +
+        (inner > Math.max.apply(null, outer) + 2 ? 'larger, as it should be' : 'NOT larger — it will read as tighter than the outer two'));
       document.getElementById('o').textContent = out.join('\n');
       window.__done = true;
     }, 700);
