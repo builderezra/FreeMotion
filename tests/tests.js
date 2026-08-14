@@ -12061,6 +12061,47 @@
     }
   });
 
+  /* #154, and the third time this family has bitten. The document CANVAS — what <html> paints — covers
+     the whole web view, which under viewport-fit=cover is TALLER than the layout viewport. So anything
+     the page does not cover shows the canvas, and if the canvas does not look like the app, that strip
+     reads as a bar.
+       v6.78-v6.81  four wrong fixes chasing "an element is too small"
+       v6.85        the canvas was #000 against an app ground of #060c0f — colour fixed
+       v7.02        the canvas had the ground COLOUR but none of the theme's gradient LIGHT, so the
+                    uncovered strip was flat where the page above it was lit
+     The invariant is therefore not "html is the right colour" but "html paints what the page paints",
+     and body must not paint it a second time or the overlap doubles. */
+  test('the document canvas looks like the app, so an uncovered strip cannot read as a bar', { item: 'canvas-ground' }, async function () {
+    const root = document.documentElement;
+    const was = root.getAttribute('data-theme');
+    try {
+      for (const theme of ['glass', 'classic']) {
+        root.setAttribute('data-theme', theme);
+        await sleep(30);
+        const h = getComputedStyle(root), b = getComputedStyle(document.body);
+        const ground = h.getPropertyValue('--bg').trim();
+        if (!ground) throw new Error(theme + ': --bg is unset, so there is no ground to match');
+        if (h.backgroundColor === 'rgba(0, 0, 0, 0)' || h.backgroundColor === 'transparent') {
+          throw new Error(theme + ': <html> paints no background — the canvas falls back to white or to the UA default');
+        }
+        // Never black-on-not-black again (v6.85).
+        if (h.backgroundColor === 'rgb(0, 0, 0)' && ground.toLowerCase() !== '#000000' && ground.toLowerCase() !== '#000') {
+          throw new Error(theme + ': the canvas is pure black while the app ground is ' + ground + ' — that is the v6.85 bar');
+        }
+        // …and never lit-page-on-flat-canvas either (v7.02): if the page has gradient light, the canvas
+        // must have it too, or the uncovered strip is visibly flatter than everything above it.
+        const bodyLit = b.backgroundImage !== 'none';
+        const htmlLit = h.backgroundImage !== 'none';
+        if (bodyLit && !htmlLit) {
+          throw new Error(theme + ': <body> paints gradient light that <html> does not, so any strip the page fails to cover is flat ground — that is the #154 bar');
+        }
+        if (bodyLit && htmlLit) {
+          throw new Error(theme + ': BOTH <html> and <body> paint the light, so it composites twice wherever they overlap');
+        }
+      }
+    } finally { if (was) root.setAttribute('data-theme', was); else root.removeAttribute('data-theme'); }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

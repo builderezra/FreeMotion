@@ -51,13 +51,25 @@ html[data-theme="glass"] {
 }
 
 /* The app ground gets a faint cyan light from above — the same light the logo is lit by. Fixed and
-   static, so it costs nothing to composite. */
-html[data-theme="glass"] body {
+   static, so it costs nothing to composite.
+   ON <html>, NOT ON <body> (queue 154, and it is the residual of the v6.85 black bar).
+   styles.css sets `html { background: var(--bg) }`, and once <html> has a background of its own the
+   <body>'s no longer propagates to the document CANVAS. The canvas is what paints the whole web view —
+   which under `viewport-fit=cover` is TALLER than the layout viewport — so every strip the page did not
+   cover was painted flat #060c0f while everything the page did cover carried these gradients. Same
+   colour, no light: a visibly flatter band along the bottom edge, which is exactly what Ezra reported
+   twice ("When leaving a project for a split second there's a black bar at the bottom", then "Black bar
+   again" with the band under the + button).
+   v6.85 matched the canvas COLOUR to the app ground and stopped there; it never matched the theme's
+   LIGHT. Putting the gradients here fixes both at once, and <body> is made transparent below so the
+   two cannot double-paint where they overlap. */
+html[data-theme="glass"] {
   background:
     radial-gradient(120% 70% at 50% -10%, rgba(53, 133, 161, .20), transparent 60%),
     radial-gradient(80% 50% at 100% 100%, rgba(55, 168, 212, .07), transparent 70%),
     var(--bg);
 }
+html[data-theme="glass"] body { background: transparent; }
 
 /* ---- the material -------------------------------------------------------------------------- */
 /* One reusable recipe: translucent tint + backdrop blur + a lit top rim + depth shadow. */

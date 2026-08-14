@@ -224,6 +224,19 @@ better still, keep working inside the turn rather than parking work for a later 
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
 
+- [ ] **157 — TRY moving the film grain off the project cards and onto the background.** (14 Aug.) His
+      words: *"I want to try removing the film grain from the projects and instead move it to the
+      background, it might be better if the projects are smooth and shiny with a rough textured
+      background instead of"* (message ends there). So: cards go **smooth and shiny**, the home
+      **background** gets the rough texture.
+      He said *"I want to try"* — this is an experiment, so keep it cheap to reverse and expect a verdict
+      rather than assuming it lands.
+      What is already there to move: the two-layer cross-fading grain on `.hm-card::before/::after`
+      (queue 76 → 94 → 105 → 133, four rounds of tuning), six generated noise tiles, and a per-card
+      phase. The home background's own `::before`/`::after` are BOTH already taken by the drifting light,
+      so the grain needs its own layer rather than a third pseudo-element — and it should reuse the same
+      keyframes rather than gaining a second copy (see #116 and #155 for why).
+
 - [x] **156 — Duplicating should leave the copy exactly where the original is.** (v7.01) (14 Aug.) His words:
       *"Duplicating stuff should duplicate it in its exact position, not move it slightly."*
       `FM.cloneLayer` adds **+30px to x and y** on every duplicate (and to every keyframe of an animated
@@ -249,7 +262,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Build it from the SAME implementation rather than a second copy, or the two will drift the way the
       slider glide drifted from the timeline's in #116.
 
-- [ ] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (14 Aug,
+- [x] **154 — Leaving a project flashes a black bar at the bottom, then it corrects itself.** (v7.02) (14 Aug,
       screenshot of home with a black band across the very bottom.) His words: *"When leaving a project
       for a split second there's a black bar at the bottom then it fixes itself."*
       **Same family as the v6.85 bar, and READ THAT ENTRY FIRST — it cost six attempts.** The lesson
@@ -264,6 +277,22 @@ better still, keep working inside the turn rather than parking work for a later 
       **Measure it as a sequence, not a still** — sample what occupies the bottom strip on every frame
       of the transition and find the frame where it is black. A single screenshot cannot see a
       one-frame fault, which is exactly why the last one took six goes.
+      **FOUND AND FIXED, v7.02 — and it is the RESIDUAL of the v6.85 fix, not a new bug.** He reported it
+      a second time ("Black bar again", with the band under the + on home), which is what made it worth
+      chasing as a steady state rather than a one-frame flash.
+      Measured on the live app: `<html>` painted a **flat `#060c0f` with `background-image: none`**,
+      while `<body>` carried the glass theme's two radial gradients. Once `<html>` has a background of
+      its own, `<body>`'s no longer propagates to the document CANVAS — and the canvas is what paints
+      the whole web view, which under `viewport-fit=cover` is taller than the layout viewport. So every
+      strip the page did not cover was the ground colour with **none of the theme's light**, while
+      everything just above it was lit. Same colour, different brightness: a flat band along the bottom.
+      **v6.85 matched the canvas COLOUR and stopped there; it never matched the LIGHT.** The gradients
+      live on `<html>` now and `<body>` is transparent, so the two cannot double-paint where they
+      overlap.
+      The test that came out of it is the durable part: it asserts the canvas is never black against a
+      non-black ground (v6.85), never flat against a lit page (this one), and never doubled — checked in
+      **both** themes. Three attempts at this family have now each fixed one property of the canvas; the
+      invariant is "html paints what the page paints", and it is pinned.
       (14 Aug, with an Alight Motion screenshot.) His words: *"When dragging a clip from the edges to
       extend, in alight motions there's some differences, it tells you all of this information and also
       shows on little notches, by colouring in the exact notch it will land on, because the notches are
