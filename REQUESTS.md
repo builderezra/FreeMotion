@@ -2116,6 +2116,48 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       · A judging agent left a hand-copied duplicate of this CSS in `tests/_fabcorners.html`, which was
         swept into the v7.26 commit. Deleted — a second copy of the pool values is precisely the
         drift-in-silence trap this codebase keeps hitting.
+- [x] **199 — The top-bar run, corrected AGAIN — and the RULE was wrong, not just the numbers.** (v7.28)
+      His words: *"Holy fuck why are you so bad at aligning the top buttons… Now the space between the
+      settings cog and notes pad is perfect but you've got them far away from the export button and
+      refresh button."*
+      Three attempts, and the first two both chased the wrong target. #185 moved one button. #189 made
+      all three gaps EQUAL by measurement (24.1px each) — and he rejected that too, correctly. **Equal
+      distance is not equal appearance here:** a gap bounded by a HARD PAINTED EDGE (the version chip,
+      the filled Export button) reads wider than the same gap between two soft glyphs, because between
+      two icons the eye counts part of the space as belonging to the icons.
+      So the rule is: the two edge-bounded gaps match EACH OTHER and are smaller than the icon-to-icon
+      one. Measured now: **18.0 / 24.1 / 18.0** — notes→cog kept at exactly the value he called perfect,
+      the outer two brought in and matched. The test encodes that rule now rather than "all equal".
+- [x] **200 — The + button had lost its glass rim, which is why it read as flat.** (v7.28) His words:
+      *"you've made the create button a square, it looks ugly as shit, it looks like you didn't even
+      test it to see if it's good. Slow the fuck down."*
+      It renders as a circle in the app — verified in the real editor, not a harness — so the "square"
+      is either his phone hitting a WebKit fault or the rounded-square CARDS in the sheet I sent him,
+      which was my mistake to send as though it were the button. Two real faults were found regardless:
+      · **The glass rim was buried.** `--lg-rim` is an INSET box-shadow on the button, and inset shadows
+        paint UNDER child content — the aura is opaque and covers the whole face, so the rim vanished
+        and the orb came out lit from below: measured top edge 0.221 against 0.269 just inside it, i.e.
+        backwards. That is exactly what makes something read as a printed sticker rather than a lens.
+        The rim now rides the aura's topmost layer: edge 0.420, edge-vs-outside 4.06:1 → 7.05:1,
+        matching the export button and the home +.
+      · **It was frozen for the first two seconds.** Both pools started at t=0, which on
+        ease-in-out + alternate is a zero-velocity turning point: 0.073 mean RGB delta in the first
+        second against 0.819 mid-stroke, an 11x deficit — every single time the editor opened. Negative
+        animation-delays open both mid-stroke.
+      Also rebuilt to be unbreakable rather than merely correct in Chrome: no mix-blend-mode, no
+      isolation, no oversized children, no rounded overflow clip holding a composited layer — that last
+      being a known WebKit fault whose failure mode is a SQUARE.
+      **Two finds worth more than the fix itself:**
+      · `theme-glass.css` sets `filter:` on `#add-fab` and loads after styles.css, so the two coloured
+        halo passes added in v7.26 **never rendered at all**. By this file's own count that load order
+        has now silently killed six separate changes. Commented in place.
+      · `#add-fab`'s `backdrop-filter` is invisible — the opaque aura covers the face, and rendering
+        with it removed is byte-identical — while re-sampling the timeline every frame on the app's
+        heaviest screen. Dropped.
+      **Open question for him, not fixed silently:** he said "the plus create button" and referenced the
+      home menu. The aura went on the EDITOR's +. The home screen's own "New project" + (`#hm-new`) has
+      none — and a coloured button sitting on the coloured home background may lose separation, so that
+      is a direction call rather than an oversight.
 - [ ] **195 — The volume control should be a scrub field like the effects sliders, not a dot on a line.**
       His words: *"The volume slider needs to be like the effects slider and not a dot on a line, because
       I want to be able adjust the volume up to like 1000%."* Two things in one: the CONTROL type (the
