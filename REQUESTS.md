@@ -2410,32 +2410,6 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
       only while something is pending and stops itself, because an always-on interval on the heaviest
       screen is exactly the sort of thing this project has had to hunt down before.
-- [ ] **212 — A long-exposure camera tool for the phone, like Slow Shutter Cam.** His words: *"Would it
-      be possible for you to create me a camera tool for my phone that can do cool long exposure
-      photography? Like this app here, if so make a plan on how ur gonna do this and lmk if it would be
-      better if I switched this project to my laptop for development (Mac)."* Screenshot: the App Store
-      page for **Slow Shutter Cam** (£4.99, No.7 in Photo & Video) — Capture Mode *Motion Blur / Light
-      Trail / Low Light*, Light Sensitivity, Shutter Speed, ISO.
-      **He asked for a plan, and the plan is written: [CAMERA-PLAN.md](CAMERA-PLAN.md).** The answer is
-      yes, and the one part that is NOT possible shapes the rest — a web page cannot open the shutter
-      for 15 seconds on an iPhone (`exposureTime` and `ImageCapture` are Chrome-side APIs Safari has not
-      shipped), so a long exposure has to be built by accumulating ordinary 1/30s frames. That is not a
-      cheat: it is the same integral sampled discretely, and it is what every phone app in this category
-      does. Three modes, each one line of maths — Light Trail is `max` (exact in 8-bit, so it ships
-      first), Motion Blur and Low Light are a running average (needs a half-float target, so WebGL, the
-      first in this codebase). It lands as an ordinary image layer through the SAME importer path the
-      voice recorder already uses, so nothing new touches storage.
-      **Shipped with this entry: [tests/_camprobe.html](tests/_camprobe.html)** — open it on the phone
-      and it measures what that device really allows (exposure control, unique frames/sec, whether it
-      keeps up at 1080p, half-float support) and then shoots a real 4-second light-trail exposure so he
-      can SEE the answer instead of reading my estimate of it.
-      **The Mac question, answered in §8:** don't move the project — nothing here needs a laptop. Do get
-      the Mac out for the USB cable: Safari Web Inspector gives a real console for the page running on
-      the phone, and camera work fails in exactly the ways that are invisible without one. A webcam is a
-      useless stand-in for a rear phone camera at night, so the real judgements happen on the phone
-      either way.
-      **Waiting its turn** behind the rest of the list — he asked whether it was possible and for a plan,
-      not for it now. Say the word and it jumps.
 - [ ] **211 — The layer thumbnails in the track heads are stretched and overflow their box.** His words:
       *"The images for each layer on the left side are glitched out, you see how they're like stretched
       and going out too far? Looks shit."* Screenshot: a blue house and an orange umbrella in the track
