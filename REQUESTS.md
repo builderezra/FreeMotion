@@ -1539,11 +1539,29 @@ better still, keep working inside the turn rather than parking work for a later 
       doesn't animate. Say the word and I'll build the three cheap ones and you can listen.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
-      **THIS IS THE NEXT ITEM UP** (15 Aug). It is not blocked on you — it is simply big, and I stopped
-      rather than start it badly at the end of a long session. Two halves, and they are very different
-      sizes: crash-resume (persist rendered chunks so a reload can carry on) is a contained job in
-      `js/exporter.js`; getting the render off the main thread means a worker, which means the whole
-      compositor would have to run on OffscreenCanvas. Do the first half on its own, first.
+      **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than
+      start it badly at the end of a long session.
+      **First, a correction to this entry's own claim.** "Chunk-replay resume is proven" implies there is
+      working code somewhere to land. There is not. I searched the whole repo, the staged-diffs folder and
+      the git history: the only mention of chunk-replay anywhere is this line and the handover note
+      quoting it. Whatever was "proven" was proven in a conversation and never written down. This file has
+      been caught by that shape of entry twice before (#37 was already done; the staged folder turned out
+      to hold twelve diffs that had all shipped), so it is corrected rather than left to waste someone's
+      morning.
+      **And the real obstacle, now that I have read the export path.** The output is assembled in PAGE
+      MEMORY — `createMp4Sink` holds folded Blobs plus a list of late patches and only becomes a file at
+      `finish()`. Persisting those bytes to IndexedDB as they fold is easy. What cannot be persisted is
+      the MUXER's own state: mp4-muxer keeps its track and sample tables in memory, and there is no way to
+      rehydrate them, so you cannot reopen a half-written file and keep muxing into it. Encoding has the
+      same problem one level down — a VideoEncoder cannot be resumed mid-GOP.
+      So "save the chunks and carry on" is not achievable as stated. The shape that IS achievable is
+      **segmented export**: render in N-second segments, each finalised into a complete little file in
+      IndexedDB as it finishes, then join them at the end. A crash then costs you at most one segment, and
+      it makes the progress bar honest as a side effect. That is a different and larger design than the
+      line above promised, and it should be agreed before it is built.
+      The second half — off the main thread — is much larger again: a worker means the whole compositor
+      (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Do the first half alone, and only after the
+      design above is settled.
       It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on
       your word to jump the queue.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**

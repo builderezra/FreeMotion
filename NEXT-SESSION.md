@@ -69,8 +69,14 @@ here is that it is not a black box.
 just big, which is why it was not started at the tail of a long session. Its two halves are very
 different sizes:
 
-- **crash-resume** — persist rendered chunks so a reload can carry on. Contained in `js/exporter.js`
-  (~650 lines). REQUESTS says "chunk-replay resume is proven; not landed", so look for that first.
+- **crash-resume** — and REQUESTS' "chunk-replay resume is proven" is WRONG, corrected there on 15 Aug:
+  there is no such code anywhere in the repo, the staged diffs or the history. Do not go looking.
+  The real obstacle is that `createMp4Sink` assembles the file in PAGE MEMORY and mp4-muxer keeps its
+  track/sample tables in memory with no way to rehydrate them — so a half-written file cannot be
+  reopened and muxed into, and a VideoEncoder cannot resume mid-GOP. The achievable shape is
+  **segmented export**: N-second segments, each finalised into IDB as it completes, joined at the end.
+  A crash then costs one segment. That is a bigger design than the old line promised — agree it with
+  him before building.
 - **off the main thread** — a worker, which means the whole compositor (9,600 lines, DOM-canvas
   throughout) on OffscreenCanvas. Much larger.
 
