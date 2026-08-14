@@ -1,0 +1,91 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#31b — which kinds of motion can transform blur actually smear?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body><pre id="out">…</pre>
+<script src="js/settings.js"></script><script src="js/screen.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* #31b, the oldest open item: "Transform blur can't smear effect- or camera-driven motion."
+ * Motion blur here is RE-PROJECTION — the layer is rasterised once at t and the plate is pushed
+ * through D = M(tau)·M(t)⁻¹ — so it can only smear motion that shows up in the layer's own matrix,
+ * `layerCTM`. This measures which sources of motion actually reach that matrix, rather than reasoning
+ * about it: for each source, render one frame with blur OFF and one with blur ON and compare the ink.
+ * A smear is WIDER and SOFTER than the sharp shape; if the two frames are identical, the blur never
+ * saw the motion. `FM._layerCTM` is sampled either side of the shutter as a second, independent
+ * witness — if the matrix does not change, no re-projection blur can ever work, whatever it draws. */
+(function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+  const W = 320, H = 200, FPS = 30, T = 1.0;
+
+  function build(kind) {
+    const l = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 4 });
+    const layers = [l];
+    if (kind === 'transform') {
+      // the control: plain keyframed X, which is what this blur was built for
+      l.transform.x = { kf: [{ t: 0, v: 40, e: 'linear' }, { t: 2, v: 280, e: 'linear' }] };
+    } else if (kind === 'effect-orbit') {
+      l.effects = [{ type: 'orbit', enabled: true, params: { radius: 90, speed: 1.2 } }];
+    } else if (kind === 'effect-wiggle') {
+      l.effects = [{ type: 'wiggle', enabled: true, params: { amount: 140, speed: 6 } }];
+    } else if (kind === 'camera') {
+      const cam = FM.makeLayer('camera', { start: 0, duration: 4 });
+      cam.transform.x = { kf: [{ t: 0, v: 40, e: 'linear' }, { t: 2, v: 280, e: 'linear' }] };
+      layers.push(cam);
+    }
+    return { layer: l, scene: { layers: layers, project: { width: W, height: H, fps: FPS, duration: 4, background: '#000000', markers: [] } } };
+  }
+
+  function ink(sc) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, sc, T);
+    const d = g.getImageData(0, 0, W, H).data;
+    let lit = 0, x0 = W, x1 = -1, soft = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const v = Math.max(d[i], d[i + 1], d[i + 2]);
+      if (v > 16) { lit++; if (x < x0) x0 = x; if (x > x1) x1 = x; }
+      if (v > 16 && v < 200) soft++;          // partially-covered pixels: what a smear is made of
+    }
+    return { lit: lit, w: x1 - x0 + 1, soft: soft };
+  }
+
+  say('one 40x40 shape, motion blur shutter 0.9 / 24 samples, frame at t=' + T + 's');
+  say('');
+  say('motion source     CTM moves?   ink w OFF   ink w ON   lit OFF   lit ON   soft ON   verdict');
+  ['transform', 'camera', 'effect-orbit', 'effect-wiggle'].forEach(kind => {
+    const off = build(kind);
+    const a = ink(off.scene);
+
+    const on = build(kind);
+    on.layer.motionBlur = { enabled: true, shutter: 0.9, samples: 24 };
+    const b = ink(on.scene);
+
+    // Independent witness: does the layer's own matrix differ across the shutter window?
+    let moved = '—';
+    try {
+      const dt = 0.9 / FPS;
+      const A = FM._layerCTM(on.layer, T - dt / 2, on.scene);
+      const B = FM._layerCTM(on.layer, T + dt / 2, on.scene);
+      if (A && B) {
+        const dx = Math.abs(A.e - B.e), dy = Math.abs(A.f - B.f);
+        const dr = Math.abs(A.a - B.a) + Math.abs(A.b - B.b);
+        moved = (dx + dy + dr * 100) > 0.05 ? 'yes' : 'NO';
+      }
+    } catch (e) { moved = 'err'; }
+
+    const widened = b.w - a.w, softer = b.soft - a.soft;
+    const verdict = (widened > 3 || softer > 60) ? 'SMEARS' : 'no smear';
+    say(kind.padEnd(18) + String(moved).padEnd(13) + String(a.w).padEnd(12) + String(b.w).padEnd(11) +
+        String(a.lit).padEnd(10) + String(b.lit).padEnd(9) + String(b.soft).padEnd(10) + verdict);
+  });
+  say('');
+  say('"CTM moves? NO" means no re-projection blur can ever smear that source — the layer is in the');
+  say('same place across the shutter and the motion lives somewhere the matrix does not reach.');
+  window.__done = true;
+})();
+</script></body></html>

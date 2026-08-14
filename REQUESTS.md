@@ -1230,6 +1230,29 @@ better still, keep working inside the turn rather than parking work for a later 
       Nothing else moved — 288 of 288 configurations byte-identical against v6.41.
 - [ ] **37 — Presets rework:** AM's "Preset preview" screen. Supersedes the earlier thumbnail spec.
 - [ ] **31b — Transform blur can't smear effect- or camera-driven motion.**
+      **MEASURED 2026-08-14 (`tests/_mbsources.html`) — confirmed exactly as written, and the cause is
+      structural rather than a bug.** One 40×40 shape, shutter 0.9, 24 samples, one frame:
+      | motion source | layer matrix moves? | smear |
+      |---|---|---|
+      | keyframed transform (the control) | yes | **smears** — ink widens 40→44px, 240 soft pixels |
+      | camera movement | **no** | none — output byte-identical with blur on |
+      | Orbit effect | **no** | none |
+      | Wiggle effect | **no** | none |
+      **Why.** This blur is RE-PROJECTION, and deliberately so: the layer is rasterised once at t and
+      that plate is pushed through `D = M(τ)·M(t)⁻¹`, which is one render plus N cheap blits instead of
+      N full renders. The price is that it can only smear motion which appears in the layer's own
+      matrix (`layerCTM`). The independent witness in the probe says the matrix does not move at all for
+      the other three, so no amount of tuning inside the current design can help — nothing is wrong with
+      the blur, it is being asked to smear motion it cannot see.
+      **Two halves, and they need different answers:**
+      · **Camera** looks tractable and cheap. Camera lens already reaches `applyLayerTransform`; if the
+        camera's own movement is composed into the matrix that motion blur samples, the existing
+        re-projection smears it for free. Do this half first.
+      · **Effects** cannot be done this way at all — Orbit and Wiggle displace pixels INSIDE the layer's
+        render, so re-projecting one plate can never reproduce them. That needs either N real renders
+        (the expensive path this design exists to avoid) or the content-aware motion blur that already
+        exists in the effect list. **Measure whether that effect already covers this case before
+        building anything** — it may be that the answer is "use that one", plus making the app say so.
 
 ### Work that exists but isn't landed
 - [x] **Every other recovered diff is now landed.** Checked at v6.42, and the answer is that the
