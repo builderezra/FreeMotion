@@ -169,8 +169,23 @@ window.FM = window.FM || {};
   function commitStroke() {
     var t = FM.drawTool;
     if (t.mode !== 'freehand' || t.points.length < 2) { redraw(); return false; }
-    var layer = FM.addPathLayer(smoothFreehand(t.points), { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
-    if (layer) strokes.push(layer.id);
+    /* ONE LAYER PER DRAWING, not per stroke (queue 167). Ezra: "when you draw with free hand drawing it
+     * creates multiple layers, it should all be inside the one drawing you just made not keep creating
+     * more." Nine strokes made nine timeline rows — which is also what left him unable to scroll the
+     * timeline at all (#166), since every row was a clip and there was no empty lane to swipe on.
+     * The first stroke of a session creates the layer; every stroke after it is appended and the layer
+     * is re-fitted around the union of them all. The renderer already supported this — layer.subs has
+     * been a multi-subpath field all along; nothing was ever writing more than one into it. */
+    var sub = smoothFreehand(t.points);
+    sessionSubs.push(sub);
+    var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
+    if (!layer) {
+      layer = FM.addPathLayer(sub, { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
+      if (layer) { sessionLayerId = layer.id; strokes.push(layer.id); }
+    } else if (FM.refitPathLayer) {
+      FM.refitPathLayer(layer, sessionSubs);
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // the thumbnail has to follow the drawing
+    }
     t.points = [];
     // Committing a layer SELECTS it, and on a phone a selection opens the inspector sheet over the
     // whole screen — which is the thing that made this unusable. Stay deselected while drawing; the
@@ -247,7 +262,10 @@ window.FM = window.FM || {};
     });
   }
 
-  var strokes = [];   // layer ids committed during THIS freehand session, for Undo and for the exit selection
+  var strokes = [];                              // layer ids committed during THIS freehand session, for Undo and for the exit selection
+  // Queue 167: the ONE layer a freehand session is building, and every stroke that has gone into it
+  // (kept in PROJECT pixels, because the layer's box is re-fitted around their union on every stroke).
+  var sessionLayerId = null, sessionSubs = [];
 
   // Exposed so the suite can measure the smoothing directly. Driving the whole tool just to check
   // the shape of a curve makes the test about the UI instead of about the maths.
@@ -273,6 +291,7 @@ window.FM = window.FM || {};
 
   function stop() {
     strokes = [];
+    sessionLayerId = null; sessionSubs = [];       // a new drawing starts a new layer (queue 167)
     FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false;
     FM.drawTool.cursor = null; FM.drawTool.snapX = FM.drawTool.snapY = null;
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
@@ -375,6 +394,10 @@ window.FM = window.FM || {};
     if (!overlay) return;
     FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false;
     FM.drawTool.snapX = FM.drawTool.snapY = null;
+    /* A NEW drawing starts a new layer (queue 167). stop() clears these too, but not every exit runs
+       through it — and without the reset here a second drawing would silently append its strokes to
+       the layer the FIRST one built, which is a worse bug than the one being fixed. */
+    sessionLayerId = null; sessionSubs = [];
     // Vector starts with the cursor parked in the middle of the frame, so the pad has something to
     // move from the moment the tool opens rather than only after a first tap.
     FM.drawTool.cursor = mode === 'vector' ? [FM.scene.project.width / 2, FM.scene.project.height / 2] : null;

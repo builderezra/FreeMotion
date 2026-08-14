@@ -323,6 +323,21 @@ better still, keep working inside the turn rather than parking work for a later 
       compare them, the same way #114's bounds were checked across all 54 at once. That also answers
       whether this is one broken path or fifty-four small drift bugs.
 
+- [x] **167 — Freehand made a NEW LAYER for every stroke.** (v7.07) His words: *"For some reason when you
+      draw with free hand drawing it creates multiple layers, it should all be inside the one drawing you
+      just made not keep creating more."* His screenshot: nine `Freehand` rows from one drawing.
+      **This is also the cause of #166** — with a row per stroke there was no empty lane left to start a
+      vertical swipe on, which is why he could not scroll the timeline.
+      `commitStroke()` called `addPathLayer` per stroke, by design ("a stroke is committed and the tool
+      stays armed for the next one"). The renderer never needed that: `layer.subs` has been a
+      multi-subpath field all along and nothing was ever writing more than one into it.
+      **Fixed v7.07.** The first stroke of a session creates the layer; every stroke after it is appended
+      and the layer is re-fitted around the union — the box grows and all strokes are re-normalised into
+      it, since subs are stored in [0,1] of the layer's own box and a stroke drawn outside the old box
+      would otherwise land outside the drawing. The layer keeps its id, stack position and selection.
+      Also reset on `startDraw`, not just `stop()`: without that a second drawing would silently append
+      its strokes to the first drawing's layer, which is a worse bug than the one being fixed.
+
 - [ ] **166 — You cannot swipe the timeline up and down when clips fill it.** (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just

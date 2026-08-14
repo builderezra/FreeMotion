@@ -12184,6 +12184,37 @@
     }
   });
 
+  /* #167 — Ezra: "when you draw with free hand drawing it creates multiple layers, it should all be
+     inside the one drawing you just made not keep creating more." Nine strokes made nine timeline rows,
+     which is also what left him unable to scroll the timeline (#166): every row was a clip, so there was
+     no empty lane to swipe on.
+     The renderer always supported this — layer.subs is a multi-subpath field — and nothing was ever
+     writing more than one into it. */
+  test('freehand: a drawing session is ONE layer holding every stroke', { item: 'freehand-one-layer' }, function () {
+    if (!FM.refitPathLayer) throw new Error('FM.refitPathLayer is missing — strokes cannot be merged into one layer');
+    const before = FM.scene.layers.length;
+    // Stroke one builds the layer; stroke two must land in the same one.
+    const a = FM.addPathLayer([[40, 40], [90, 60], [140, 50]], { closed: false, name: 'Freehand', color: '#fff', stroke: 8 });
+    if (!a) throw new Error('the first stroke produced no layer');
+    try {
+      const subs = [[[40, 40], [90, 60], [140, 50]], [[200, 150], [260, 190], [320, 160]]];
+      FM.refitPathLayer(a, subs);
+      if (FM.scene.layers.length !== before + 1) throw new Error('adding a second stroke changed the layer count to ' + (FM.scene.layers.length - before) + ' — a drawing must stay one layer');
+      if (!Array.isArray(a.subs) || a.subs.length !== 2) throw new Error('the layer holds ' + (a.subs ? a.subs.length : 0) + ' stroke(s), expected 2');
+      if (a.points) throw new Error('layer.points survived alongside subs — traceShapePath prefers subs, so the stale single path is a trap');
+      // The box must GROW to hold both, or the second stroke lands outside the drawing.
+      if (a.shapeW < 260 || a.shapeH < 130) throw new Error('the layer box is ' + a.shapeW + 'x' + a.shapeH + ' — too small to contain both strokes');
+      // …and every point must be inside [0,1] of that box, which is what "contained" actually means.
+      a.subs.forEach((sub, i) => sub.forEach(p => {
+        if (p[0] < -0.001 || p[0] > 1.001 || p[1] < -0.001 || p[1] > 1.001) {
+          throw new Error('stroke ' + i + ' has a point at ' + p[0].toFixed(3) + ',' + p[1].toFixed(3) + ' — outside the layer box, so it would draw off the drawing');
+        }
+      }));
+    } finally {
+      const i = FM.scene.layers.indexOf(a); if (i >= 0) FM.scene.layers.splice(i, 1);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

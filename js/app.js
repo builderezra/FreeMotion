@@ -1498,6 +1498,33 @@ window.FM = window.FM || {};
   // Path shape layer from drawn points (freehand brush stroke / vector polygon). projPts are in
   // project pixels; stored normalized [0,1] inside a box fitted to their bounds so they scale/rotate
   // like any shape. opt: { closed, name, color, fill, stroke }.
+  /* Re-fit an existing path layer around a NEW set of sub-strokes, in project pixels (queue 167).
+   * Ezra: "when you draw with free hand drawing it creates multiple layers, it should all be inside
+   * the one drawing you just made not keep creating more."
+   * Every stroke used to become its own layer — nine strokes, nine timeline rows — which is also why
+   * he could not scroll the timeline (#166). A drawing session is ONE layer now, and each new stroke
+   * re-fits it: the box grows to the union of every stroke, and all of them are re-normalised into
+   * that box, because subs are stored in [0,1] of the layer's own box and a stroke drawn outside the
+   * old box would otherwise land outside the drawing.
+   * The layer keeps its id, its place in the stack and its selection — this only moves geometry. */
+  FM.refitPathLayer = function (layer, projSubs) {
+    if (!layer || !projSubs || !projSubs.length) return layer;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    projSubs.forEach(sub => sub.forEach(p => {
+      if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
+    }));
+    if (!isFinite(minX)) return layer;
+    const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
+    layer.subs = projSubs.map(sub => sub.map(p => (p.length > 2
+      ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
+      : [(p[0] - minX) / w, (p[1] - minY) / h])));
+    layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
+    layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
+    layer.transform.x = minX + w / 2; layer.transform.y = minY + h / 2;
+    return layer;
+  };
+
   FM.addPathLayer = function (projPts, opt) {
     opt = opt || {};
     if (!projPts || projPts.length < 2) return null;
