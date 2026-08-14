@@ -694,15 +694,29 @@ window.FM = window.FM || {};
       name.replaceWith(input); input.focus(); input.select();
     });
 
+    /* THE CHEVRON'S SLOT EXISTS ON EVERY ROW (queue 191). Ezra: "an arrow next to the hide button, idk
+     * what that does and it pushes the ui over making it ugly."
+     * It is the group's expand/collapse toggle, and only group rows had one — so a group's eye, thumb
+     * and name all started 16px further right than every other row's, and the whole head read as
+     * shunted sideways next to its neighbours. A control that only some rows carry must not move the
+     * ones that do not, so the slot is always there and merely EMPTY on a normal layer: same width,
+     * nothing drawn, nothing to tap.
+     * The title also now says what it is in words rather than expecting a triangle to explain itself. */
     // (Solo "S" button removed per Ezra — was the per-layer "isolate this layer" toggle.)
     if (layer.type === 'group') {   // collapsible group row
       const chev = document.createElement('button');
       chev.className = 'th-chevron';
       chev.textContent = layer.collapsed ? '▸' : '▾';
-      chev.title = layer.collapsed ? 'Expand group' : 'Collapse group';
+      chev.title = layer.collapsed ? 'Show what is inside this group' : 'Hide what is inside this group';
+      chev.setAttribute('aria-label', chev.title);
       chev.addEventListener('click', (e) => { e.stopPropagation(); layer.collapsed = !layer.collapsed; FM.timeline.rebuild(); });
       head.appendChild(chev);
       head.classList.add('group-head');
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'th-chevron th-chevron--empty';
+      spacer.setAttribute('aria-hidden', 'true');
+      head.appendChild(spacer);
     }
     if (inGroup(layer)) head.classList.add('in-group');
     const stripe = document.createElement('span');

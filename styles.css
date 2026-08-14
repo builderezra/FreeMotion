@@ -3130,6 +3130,9 @@ body.hm-selecting .hm-pin { display: none; }
 
 /* ---- Grouping / multi-select (v2.26) ---- */
 .th-chevron { background: none; border: none; color: var(--text-dim); font-size: 11px; width: 16px; padding: 0; margin-right: -2px; cursor: pointer; flex: none; }
+/* The same slot on a non-group row: holds the width so every head lines up, draws nothing, takes no
+   taps. See the note in buildHead (queue 191). */
+.th-chevron--empty { visibility: hidden; pointer-events: none; }
 /* The group row's tint, layered over an OPAQUE panel base — see the note by .track-head.sel. A bare
    `background: rgba(126,231,255,.06)` here left the group's head column 94% transparent, so the
    group's own clip bar (which is scrolled underneath the sticky head) painted the whole row edge to

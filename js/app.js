@@ -1803,7 +1803,18 @@ window.FM = window.FM || {};
     const end = Math.max.apply(null, members.map(l => l.start + l.duration));
     // NEUTRAL transform (0,0) — the group becomes the members' PARENT, so any x/y here would
     // instantly displace every member by that amount the moment they're grouped.
+    /* A NEW GROUP STARTS CLOSED (queue 192/193). Ezra: "when I group stuff I want the layers grouped to
+     * move inside the group not be duplicated and left outside the group", and "groups inside groups
+     * should show up on the original timeline, only when you go inside the group".
+     * Nothing was ever duplicated — groupSelection re-inserts the very same layer objects and the scene
+     * grows by exactly one row, the group itself. What he was seeing is that a new group opened
+     * EXPANDED, so its members stayed listed on the top-level timeline underneath it, which looks
+     * exactly like copies left outside; and with nested groups, every level was listed at once (his
+     * screenshot: four Group rows stacked, then the two shapes). Starting closed makes grouping do
+     * visually what it does structurally — the layers go in — and the chevron, or entering the group,
+     * is how you look inside. */
     const g = FM.makeLayer('group', { name: opts.mask ? 'Mask Group' : 'Group', x: 0, y: 0, start: start, duration: end - start });
+    g.collapsed = true;
     if (opts.mask) g.maskGroup = true;
     if (FM.groupContext) g.parent = FM.groupContext;   // grouping while editing a group nests inside it
     // Re-parent only top-level members — a child whose parent is also being grouped keeps it.

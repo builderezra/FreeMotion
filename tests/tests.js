@@ -12951,6 +12951,89 @@
     }
   });
 
+  /* #191/#192/#193 — one screenshot, three complaints, one cause.
+     "when I group stuff I want the layers grouped to move inside the group not be duplicated and left
+     outside the group", "groups inside groups should show up on the original timeline, only when you go
+     inside the group", and "an arrow next to the hide button… it pushes the ui over".
+     Nothing was ever duplicated: groupSelection re-inserts the same objects and the scene grows by one.
+     A new group simply opened EXPANDED, so its members stayed on the top-level timeline underneath it —
+     which looks exactly like copies left behind — and every nested level was listed at once. */
+  test('grouping puts the layers inside the group, and the head does not shift', { item: 'group-tree' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedScene = FM.scene;
+    try {
+      FM.scene = scene([
+        FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
+        FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 2 }),
+      ]);
+      FM.selectLayer(null); FM.timeline.rebuild(); await sleep(80);
+      const before = FM.scene.layers.length;
+      const rowsBefore = document.querySelectorAll('#tl-tracks .track-row').length;
+
+      FM.scene.selectedIds = FM.scene.layers.map(l => l.id);
+      FM.groupSelection();
+      FM.timeline.rebuild(); await sleep(80);
+
+      // 1. NOTHING is duplicated — the scene grows by exactly the group.
+      if (FM.scene.layers.length !== before + 1) {
+        throw new Error('grouping ' + before + ' layers left ' + FM.scene.layers.length + ' — it should add exactly one row, the group itself');
+      }
+      // 2. …and the members are no longer ON the top-level timeline.
+      const rows = [].slice.call(document.querySelectorAll('#tl-tracks .track-row'));
+      if (rows.length !== 1) {
+        throw new Error('after grouping, the timeline shows ' + rows.length + ' rows — the members are still listed outside the group, which is what reads as "duplicated and left outside"');
+      }
+      // 3. Nested groups do not stack up either.
+      FM.scene.selectedIds = [FM.scene.layers.find(l => l.type === 'group').id];
+      const extra = FM.makeLayer('shape', { name: 'C', shape: 'rect', x: 20, y: 20, shapeW: 20, shapeH: 20, fill: '#00f', start: 0, duration: 2 });
+      FM.scene.layers.push(extra);
+      FM.scene.selectedIds.push(extra.id);
+      FM.groupSelection();
+      FM.timeline.rebuild(); await sleep(80);
+      const nested = [].slice.call(document.querySelectorAll('#tl-tracks .track-row'));
+      if (nested.length !== 1) {
+        throw new Error('a group inside a group shows ' + nested.length + ' rows at top level — he asked to see them "only when you go inside the group"');
+      }
+
+      // 4. …and you can still get in, both ways.
+      const outer = FM.scene.layers.find(l => l.type === 'group' && !l.parent);
+      const chev = document.querySelector('#tl-tracks .track-head.group-head .th-chevron');
+      if (!chev) throw new Error('the group row has no expand control at all — collapsed by default with no way to open it is a trap');
+      chev.click(); await sleep(60);
+      if (document.querySelectorAll('#tl-tracks .track-row').length < 2) throw new Error('pressing the chevron did not reveal what is inside the group');
+      chev.click(); await sleep(60);
+      FM.enterGroup(outer.id); FM.timeline.rebuild(); await sleep(60);
+      if (document.querySelectorAll('#tl-tracks .track-row').length < 1) throw new Error('entering the group shows nothing');
+      FM.exitGroup(true); FM.timeline.rebuild(); await sleep(60);
+
+      /* 5. #191: the chevron must not shove the rest of the head sideways. Compare the EYE — the first
+            thing every row has — and only across rows at the SAME depth. Members carry a deliberate
+            18px indent (.track-head.in-group), which is the tree showing its structure, not the fault
+            he is describing; the first version of this check compared across depths and was arguing
+            with that indent. So: a top-level group against a top-level plain layer. */
+      const g2 = FM.scene.layers.find(l => l.type === 'group' && !l.parent);
+      g2.collapsed = false;
+      FM.scene.layers.push(FM.makeLayer('shape', { name: 'D', shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#ff0', start: 0, duration: 2 }));
+      FM.timeline.rebuild(); await sleep(80);
+      const topEyes = [].slice.call(document.querySelectorAll('#tl-tracks .track-head'))
+        .filter(h => !h.classList.contains('in-group'))
+        .map(h => { const e = h.querySelector('.th-eye'); return e ? Math.round(e.getBoundingClientRect().left - h.getBoundingClientRect().left) : null; })
+        .filter(v => v != null);
+      if (topEyes.length < 2) throw new Error('needed a top-level group AND a top-level plain layer to compare, found ' + topEyes.length);
+      const spread = Math.max.apply(null, topEyes) - Math.min.apply(null, topEyes);
+      if (spread > 1) {
+        throw new Error('the eye sits at ' + topEyes.join('/') + 'px from the left on rows at the same depth — the group chevron is still shifting the head sideways');
+      }
+    } finally {
+      if (FM.exitGroup) FM.exitGroup(true);
+      FM.scene = savedScene;
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

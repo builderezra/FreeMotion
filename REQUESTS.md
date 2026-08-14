@@ -2051,7 +2051,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       that also holds the delete bin) and open the two painted-edge gaps to match. **All three now
       24.1px, spread 0.1px.** `tests/_barink.html` measures real ink boxes rather than tap boxes, which
       is what the first two attempts were missing.
-- [ ] **193 — Nested groups should not be listed on the top-level timeline.** His words: *"groups inside
+- [x] **193 — Nested groups should not be listed on the top-level timeline.** His words: *"groups inside
       groups should show up on the original timeline, only when you go inside the group."* His screenshot
       shows the phone timeline with FOUR "Group" rows stacked (teal, orange, red, purple), each indented
       one step further, and then Squircle and Square un-indented at the bottom — so every level of the
@@ -2059,6 +2059,10 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       shows only the outermost group, and you see what is inside it by going in.
       **Do #191, #192 and #193 together** — they are three views of one thing, how the timeline renders
       group hierarchy, and the screenshot for #192 is the same picture as this one.
+      **Done (v7.25) by the same change** — with new groups starting closed, a group inside a group is
+      one row at the top level, and you see what is in it by pressing its chevron or going inside. Both
+      doors are asserted, because defaulting to closed with no way to open would be a worse bug than the
+      one being fixed.
 - [ ] **194 — Make the + create button beautiful: the home background's palette, moving like it does.**
       His words: *"Make the plus create button look really appealing, give it the colour scheme of the
       background in the home menu and have it move around like it too, you'll need to design in
@@ -2113,7 +2117,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       notes button on BOTH bars, so the settings row was a second door. Same rule as #175 (loop playback)
       and #122 (onion skin): one control, one home. Checked the remaining door exists on both bars before
       removing it.
-- [ ] **191 — The arrow beside a group's hide button, and the layout it shoves sideways.** His words:
+- [x] **191 — The arrow beside a group's hide button, and the layout it shoves sideways.** His words:
       *"some weird stuff going on in the grouping menu, like an arrow next to the hide button, idk what
       that does and it pushes the ui over making it ugly."* Visible in his #190 screenshot: the group's
       track head carries a small ▾ to the LEFT of the eye, which is presumably the expand/collapse
@@ -2121,13 +2125,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       row's contents shift. Two parts: say what it does (or remove it if the row already expands another
       way), and stop it changing the head's width — a control that only some rows have must not move the
       ones that do not.
-- [ ] **192 — Grouping should MOVE the layers in, not copy them.** His words: *"when I group stuff I want
+      **Done (v7.25).** It is the group's expand/collapse toggle, and only group rows had one — so a
+      group's eye, thumbnail and name all began 16px further right than every other row's, which is the
+      shove he is describing. The slot now exists on EVERY row and is simply empty on a normal layer:
+      same width, nothing drawn, nothing to tap. Its tooltip says what it does in words instead of
+      expecting a triangle to explain itself. The test compares the eye's position across rows AT THE
+      SAME DEPTH — members carry a deliberate 18px indent, which is the tree showing structure and not
+      the fault he reported; the first version of the check argued with that indent and failed.
+- [x] **192 — Grouping should MOVE the layers in, not copy them.** His words: *"when I group stuff I want
       the layers grouped to move inside the group not be duplicated and left outside the group."*
       Potentially serious — if grouping really leaves copies behind, every group doubles the scene. Check
       first whether they are genuine duplicates or the timeline is LISTING each member twice (once inside
       the expanded group, once at top level), because those are completely different bugs with the same
       appearance. Count `FM.scene.layers` before and after grouping to tell them apart before touching
       anything.
+      **Done (v7.25), and nothing was ever duplicated.** `groupSelection` re-inserts the very same
+      layer objects and the scene grows by exactly one row — the group itself; the test now asserts that
+      count. What he saw is that a new group opened EXPANDED, so its members stayed listed on the
+      top-level timeline underneath it, which looks exactly like copies left outside. A new group starts
+      CLOSED now, so grouping does visually what it does structurally: the layers go in.
 - [x] **190 — Remove the "Editing group ‹ Group" pill.** (v7.23) His words: *"Get rid of the editing group go back
       button pop up, the top left back button works fine."* Phone screenshot: a bordered pill floating at
       the bottom of the inspector reading "‹ Editing group  Group" while inside a group. He is right that
