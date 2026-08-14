@@ -1166,7 +1166,27 @@ better still, keep working inside the turn rather than parking work for a later 
       that, and now that it retimes keyframes it genuinely does something on a shape or text layer,
       so the control is live instead of hidden. Checked by actually dragging it on a shape: speed
       100% → 200% takes a 4s clip to 2s and moves its keyframes from 0/2/4 to 0/1/2.
-- [ ] **69 — Audio must never lag.** Make the audio clock the master.
+- [x] **69 — Audio must never lag.** Make the audio clock the master.
+      **ALREADY DONE — second stale entry found by working oldest-first (2026-08-14).** The transport
+      clock does exactly this today:
+      · `clockAdopt()` switches the transport onto the **AudioContext clock** the moment a running
+        context appears, carrying the current time across so the playhead does not jump;
+      · the frame loop READS that clock (`FM.clockNow()`) rather than accumulating into it, so a slow
+        frame cannot make time drift;
+      · the order in `tick()` is explicit — **sound first, picture second and best-effort**. A comp that
+        costs more than its frame budget DROPS frames rather than slowing the clock, which is the thing
+        that used to shred the audio;
+      · and there is a watchdog: an audio clock that stops advancing (an iOS phone call, a route change,
+        a policy suspend) is detected against a TRAILING window and demoted back to the wall clock from
+        exactly where it left off, rather than freezing the transport.
+      Evidence it works rather than merely exists: **seven tests** carry the `audio-clock` tag — the
+      playhead is derived from the audio clock and not the frame loop; a context appearing mid-play is
+      adopted without moving the playhead; a context that stops advancing does not freeze playback; a
+      comp costing 200ms a frame drops frames instead of seeking the audio; the canvas paints once per
+      project frame; the correction is a rate nudge with a hard seek as last resort; and with no
+      AudioContext at all playback still runs and never creates one. All green.
+      Left ticked rather than deleted — the history is half the point of this file. (Note this is
+      DIFFERENT from #195, where the preview cannot exceed unity gain; that one is still open.)
 - [x] **70 — Extracted audio should look like an audio track.** (v7.31) *"it doesn't show it like an
       audio
       file, with the bumps to volume or whatever it's called"* — i.e. a waveform.
