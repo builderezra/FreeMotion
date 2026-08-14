@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><title>#97-update / #165 — the empty band in drawing + text-edit</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}
+pre{padding:12px;white-space:pre-wrap}iframe{border:0;width:390px;height:844px;position:fixed;right:0;top:0}</style>
+</head><body><pre id="out">…</pre><iframe id="a" src="../index.html"></iframe>
+<script>
+/* He has reported this twice: "#97 update" (a band of empty space) and #165 point 1, "I don't like how
+   it puts the screen to the bottom, needs to be in the middle".
+   Suspected single cause: `body.drawing #app { grid-template-rows: 1fr !important }` (and the identical
+   rule for body.text-editing). The phone grid places its children on EXPLICIT lines 1/2/3, so collapsing
+   to one track leaves #main in an implicit auto-sized row — the stage becomes content-sized and the
+   slack is dumped into the track holding the 52px top bar.
+   It is ASPECT-DEPENDENT, which is why it was missed: on a 9:16 comp the canvas nearly fills the screen
+   so the band is a few px. This measures the gap ABOVE the canvas at several aspects. */
+var L=[];function say(s){L.push(s);document.getElementById('out').textContent=L.join('\n');}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+document.getElementById('a').addEventListener('load',function(){
+  var w=document.getElementById('a').contentWindow,d=w.document,n=0;
+  (function wait(){
+    if(!(w.FM&&w.FM.scene&&w.FM.timeline)){if(n++>400)return say('no boot');return setTimeout(wait,50);}
+    (async function(){
+      var FM=w.FM;
+      if(FM.home&&FM.home.isOpen&&FM.home.isOpen())FM.home.close();
+      await sleep(500);
+      say('gap between the top bar and the canvas, and below the canvas (px)');
+      say('');
+      say('aspect        mode          bar h   gap ABOVE   canvas h   gap BELOW');
+      for (const [name,W2,H2] of [['9:16 portrait',1080,1920],['1:1 square',1080,1080],['16:9 landscape',1920,1080]]) {
+        FM.scene.project.width=W2; FM.scene.project.height=H2;
+        if (FM.resizeCanvas) FM.resizeCanvas();
+        for (const mode of ['drawing','text-editing']) {
+          d.body.classList.remove('drawing','text-editing','draw-vector');
+          d.body.classList.add(mode);
+          if (FM.resizeCanvas) FM.resizeCanvas();
+          await sleep(220);
+          var bar=d.getElementById('topbar-m'), wrap=d.getElementById('canvas-wrap');
+          var br=bar.getBoundingClientRect(), cr=wrap.getBoundingClientRect();
+          var vh=w.innerHeight;
+          say(name.padEnd(14)+mode.padEnd(14)+Math.round(br.height).toString().padEnd(8)+
+              Math.round(cr.top-br.bottom).toString().padEnd(12)+
+              Math.round(cr.height).toString().padEnd(11)+Math.round(vh-cr.bottom));
+        }
+      }
+      d.body.classList.remove('drawing','text-editing');
+      window.__done=true;
+    })();
+  })();
+});
+</script></body></html>

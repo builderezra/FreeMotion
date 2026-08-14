@@ -13396,6 +13396,57 @@
     }
   });
 
+  /* #97-update and #165 point 1 — the SAME bug, reported twice: "I don't like how it puts the screen
+     to the bottom, needs to be in the middle."
+     The phone grid places its children on explicit rows, so `grid-template-rows: 1fr` for the drawing
+     and text-editing screens left #main in an implicit auto-sized row: the stage went content-sized and
+     the slack landed in the track holding the top bar, shoving the canvas to the bottom.
+     ASPECT-DEPENDENT, which is why it survived so long — measured gap above the canvas before the fix:
+     9:16 portrait 22px, 1:1 square 314px, 16:9 landscape 477px. This test uses LANDSCAPE deliberately;
+     on portrait it would pass either way. */
+  test('the drawing and text screens centre the canvas instead of dropping it to the bottom', { item: 'draw-band' }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test needs to own its viewport and has no frameElement');
+    const hadW = frame.style.width, hadH = frame.style.height;
+    const P = FM.scene.project, wasW = P.width, wasH = P.height;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      P.width = 1920; P.height = 1080;                      // landscape: where the band is worst
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      await sleep(220);
+      for (const mode of ['drawing', 'text-editing']) {
+        document.body.classList.remove('drawing', 'text-editing');
+        document.body.classList.add(mode);
+        if (FM.resizeCanvas) FM.resizeCanvas();
+        await sleep(220);
+        const bar = document.getElementById('topbar-m');
+        const wrap = document.getElementById('canvas-wrap');
+        if (!bar || !wrap) throw new Error('no top bar / canvas to measure');
+        const b = bar.getBoundingClientRect(), c = wrap.getBoundingClientRect();
+        if (c.height < 40) throw new Error(mode + ': the canvas is ' + c.height.toFixed(0) + 'px tall — nothing to judge');
+        /* Measured against the SCREEN below the top bar, not against #stage. Comparing the canvas to
+           its own stage is circular: with the bug the stage is content-sized, so it shrinks to fit the
+           canvas and the two centres always agree — the first version of this test passed against its
+           own mutation for exactly that reason. */
+        const availTop = b.bottom, availBottom = window.innerHeight;
+        const off = Math.abs((c.top + c.height / 2) - (availTop + availBottom) / 2);
+        if (off > 80) {
+          throw new Error(mode + ': the canvas centre sits ' + off.toFixed(0) + 'px from the middle of the screen (gap above ' +
+            (c.top - availTop).toFixed(0) + 'px, below ' + (availBottom - c.bottom).toFixed(0) + 'px) — it is shoved to one end, which is "it puts the screen to the bottom"');
+        }
+      }
+    } finally {
+      document.body.classList.remove('drawing', 'text-editing');
+      P.width = wasW; P.height = wasH;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      frame.style.width = hadW; frame.style.height = hadH;
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(160);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -989,7 +989,7 @@ better still, keep working inside the turn rather than parking work for a later 
       silently selected with no UI, which is the worse bug of the two. Related to #58 (hold a clip to
       drag it without selecting first, shipped) — so this is a REGRESSION or that fix only covered the
       hold path and not the plain drag.
-- [ ] **97 update — the freehand "dead band" did NOT reproduce on a clean load, and my first fix was
+- [x] **97 update — the freehand "dead band" did NOT reproduce on a clean load, and my first fix was
       inert.** I found a 303px empty band above the drawing area and shipped a CSS rule to collapse it —
       then mutation-checked it and the rule changed nothing: with it deleted before entering drawing
       mode on a fresh load, the grid rows are `52px 792px` and the canvas is 374x666 either way, byte
@@ -1000,6 +1000,24 @@ better still, keep working inside the turn rather than parking work for a later 
       FM.startDraw() directly, whereas he goes Add sheet -> Freehand Drawing, and the sheet closing may
       be what leaves the grid stale. Reproduce via the add sheet, not the API.
 
+      **FOUND AND FIXED (v7.35) — and it is ONE CSS RULE, reported twice under two numbers.**
+      `body.drawing #app { grid-template-rows: 1fr !important }` (and the identical rule for
+      `body.text-editing`). The phone grid places its children on EXPLICIT lines — `#topbar-m` on row 1,
+      `#main` on row 2 — so collapsing to a single track left `#main` in an implicit, auto-sized row:
+      the stage became content-sized and every spare pixel piled into the track holding the 52px top
+      bar, pushing the canvas to the bottom.
+      **It survived this long because it is ASPECT-DEPENDENT, and everyone tests portrait.** Measured
+      gap above the canvas: **9:16 portrait 22px** (invisible), **1:1 square 314px**, **16:9 landscape
+      477px**. A previous mutation check came back inert for exactly this reason — it was run on a 9:16
+      project.
+      Fixed to `auto 1fr`: the bar takes what it needs and the stage takes the rest. After, at 16:9:
+      244 above / 338 below, and the below figure includes the 104px tool strip, so the real gaps match
+      within ~10px — centred.
+      **This is also #165 point 1** (*"I don't like how it puts the screen to the bottom, needs to be in
+      the middle"*), which is therefore fixed by the same change.
+      The test needed a second pass: comparing the canvas to its own STAGE is circular, because with the
+      bug the stage is content-sized and shrinks to fit the canvas, so the two centres always agree — it
+      passed against its own mutation. It measures against the screen below the top bar now.
 - [x] **99 — Rotate dial should snap every 45 degrees.** **DONE v6.63.** His words: *"The spin tool should have snapping
       every 45 degrees."* i.e. the rotation control catches at 0/45/90/135/180/225/270/315. Needs a pull
       threshold so you can still land on an arbitrary angle by dragging past the notch — a hard snap that
@@ -2095,6 +2113,9 @@ better still, keep working inside the turn rather than parking work for a later 
       Good sign in the same message: *"The free hand drawing is usable on mobile now"* — so this is
       polish on something that finally works, not another repair.
 
+      **Point 1 ("puts the screen to the bottom") is FIXED in v7.35** — same single CSS rule as the
+      "#97 update" band; see that entry for the measurements. The other points here (erase, pan/zoom,
+      undo-redo icons) are still open.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just

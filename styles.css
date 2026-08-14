@@ -2199,9 +2199,17 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
    * block up by the .te-* rules and leaves the app layout alone entirely. */
   body.text-editing #inspector-panel,
   body.text-editing #timeline-panel { display: none !important; }
-  body.text-editing #app { grid-template-rows: 1fr !important; grid-template-columns: minmax(0, 1fr) 0 !important; }
+  /* `auto 1fr`, NOT `1fr` (queue 97-update / 165). The phone grid above places its children on EXPLICIT
+     lines — #topbar-m on row 1, #main on row 2 — so collapsing this to a SINGLE track left #main in an
+     implicit, auto-sized row: the stage became content-sized and every spare pixel was dumped into the
+     1fr track holding the 52px top bar. The canvas ended up shoved against the bottom with a band of
+     nothing above it, which is his "it puts the screen to the bottom, needs to be in the middle".
+     It hid for months because it is ASPECT-DEPENDENT — measured gap above the canvas: 9:16 portrait
+     22px (invisible), 1:1 square 314px, 16:9 landscape 477px. Everyone tests portrait.
+     Two tracks: the bar takes what it needs, the stage takes the rest. */
+  body.text-editing #app { grid-template-rows: auto 1fr !important; grid-template-columns: minmax(0, 1fr) 0 !important; }
   body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
-  body.drawing #app { grid-template-rows: 1fr !important; }   /* full-screen canvas while drawing (see body.drawing above) */
+  body.drawing #app { grid-template-rows: auto 1fr !important; }   /* same defect, same fix — see the note above */
   #canvas-wrap { max-width: 98%; max-height: 95%; }   /* contain in the stage with a small float margin (AM) */
   #stage { box-shadow: inset 0 -1px 0 var(--line); }
   #topbar { overflow-x: auto; overflow-y: hidden; gap: 8px; padding: 7px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
