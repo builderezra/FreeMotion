@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="../"><title>#195 — what happens above 100% volume</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body><pre id="out">…</pre>
+<script src="js/settings.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script>
+<script>
+/* Ezra (#195): "I want to be able adjust the volume up to like 1000%."
+   Before widening any slider: what do the two audio paths actually DO past unity? They are different
+   mechanisms and the answer is not the same for both, which decides whether this is a control change
+   or an audio-engine change. */
+(function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+
+  // 1. The PREVIEW path: js/app.js writes m.el.volume, an HTMLMediaElement property.
+  const el = document.createElement('audio');
+  const tries = [0.5, 1, 2, 4, 10];
+  say('PREVIEW path — HTMLMediaElement.volume (js/app.js:1139, :1212)');
+  tries.forEach(v => {
+    let err = '';
+    try { el.volume = v; } catch (e) { err = ' → THREW ' + e.name; }
+    say('   set ' + String(v).padEnd(5) + ' → reads back ' + el.volume + err);
+  });
+  say('   …and app.js clamps it itself first: Math.max(0, Math.min(1, vol)).');
+
+  // 2. The EXPORT path: js/exporter.js uses a Web Audio GainNode.
+  say('');
+  say('EXPORT path — GainNode.gain (js/exporter.js:242+)');
+  try {
+    const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const oac = new AC(1, 4410, 44100);
+    const g = oac.createGain();
+    tries.forEach(v => { g.gain.value = v; say('   set ' + String(v).padEnd(5) + ' → reads back ' + g.gain.value); });
+  } catch (e) { say('   could not build an OfflineAudioContext: ' + e.message); }
+
+  say('');
+  say('So a volume above 100% is SILENT in the preview and LOUD in the export — you would hear no');
+  say('change while dragging, then get a distorted file. That is the thing to fix first, and it is an');
+  say('audio-routing change, not a slider change.');
+  window.__done = true;
+})();
+</script></body></html>

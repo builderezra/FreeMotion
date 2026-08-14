@@ -2167,6 +2167,30 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       Before building: gain above 1 clips, so check what the audio path does past unity (a hard clip
       sounds broken and he will report that next). If it needs a limiter or a soft knee, say so rather
       than shipping a slider that distorts at 300%.
+      **CHECKED FIRST, and it is not a slider job — the two audio paths disagree above 100%**
+      (`tests/_volclamp.html`, measured rather than read):
+      | path | above 100% |
+      |---|---|
+      | **Preview** — `m.el.volume`, an HTMLMediaElement property (js/app.js:1139, :1212) | **impossible.** Setting 2 THROWS IndexSizeError and the value stays 1. app.js also clamps it itself. |
+      | **Export** — a Web Audio `GainNode` (js/exporter.js:242+) | accepts 10 without complaint and amplifies |
+      So if the slider were simply widened today: **you would hear no change at all while dragging, and
+      then get a distorted file.** Silent in the preview, loud in the export. That is exactly the kind of
+      half-working feature that gets reported the day after it ships.
+      **What it actually needs, in order:**
+      1. **A gain stage in the preview** — route each media element through `createMediaElementSource` →
+         `GainNode` → destination, so the preview can exceed unity and agrees with the export. This is
+         the real work, and it carries a real risk worth naming: on iOS Safari, creating a
+         MediaElementSource while the AudioContext is suspended can silence the element outright, and it
+         cannot be undone for that element once created. Getting this wrong silences ALL audio on his
+         phone, so it wants its own careful pass — not a tick that also does three other things.
+      2. **Then** the control: a drag-to-scrub field like the effect params, which is the half he asked
+         for by name.
+      3. **Then** the range, with a limiter or soft knee. At 1000% anything already near full scale
+         clips hard, and hard clipping sounds like a broken file rather than a loud one.
+      **Question for him, since the honest options differ a lot in size:** do the gain stage properly so
+      1000% really works everywhere (bigger, touches audio routing), or ship the scrub-field control
+      first at today's range so at least the control feels right? My recommendation is the gain stage —
+      the control alone would still leave the slider lying above 100%.
 - [ ] **196 — A Sound Effects button in the Audio tab, with a library of effects.** His words: *"in the
       audio tab we will add a button that is sound effects and you will be able to use that to add sound
       effects to the project, we will have a sound effects menu with a bunch of our own sound effects and
