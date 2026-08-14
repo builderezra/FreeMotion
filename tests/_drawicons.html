@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#163 — drawing icon candidates, for judging</title>
+<style>
+  html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.4 system-ui,sans-serif}
+  h2{font:600 13px system-ui;margin:16px 0 6px 14px;color:#9fb4bd;letter-spacing:.04em;text-transform:uppercase}
+  .grid{display:flex;flex-wrap:wrap;gap:18px;padding:0 14px 10px}
+  .cand{background:#16232a;border:1px solid #243a44;border-radius:12px;padding:10px 12px 8px;text-align:center}
+  .sizes{display:flex;gap:14px;align-items:flex-end;justify-content:center;margin-bottom:6px}
+  .s{display:flex;flex-direction:column;align-items:center;gap:3px}
+  .s span{font-size:9px;color:#7d949e}
+  .name{font-size:11px;color:#cfe0e6;font-weight:600}
+  svg{display:block;color:#5ce0c8;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+</style></head><body>
+<div id="out"></div>
+<script>
+/* Ezra (#163): "Make the logos for the pencil drawing and freehand drawing better, get multiple agents
+   with really high standards to not accept it until it's perfect."
+   Candidates are rendered at 96 / 48 / 24px against the app's real panel colour and accent, because a
+   24px icon judged on a white page at 200px is not being judged at all — 24 is the shape-picker cell,
+   and it is where every previous icon change in this app has actually failed. */
+const PENCIL = [
+  ['P1 current (v7.04)', '<path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/><path d="M14.2 7.3l2.5 2.5"/><path d="M5.1 16.4l2.5 2.5"/>'],
+  ['P2 wider body, real nib', '<path d="M3.4 20.6l1.3-4.6L15.1 5.6a2 2 0 0 1 2.9 0l1.4 1.4a2 2 0 0 1 0 2.9L8.9 20.4z"/><path d="M13.6 7.1l3.3 3.3"/><path d="M4.7 16l3.3 3.3"/><path d="M3.4 20.6l2.6-.7-1.9-1.9z" fill="currentColor" stroke="none"/>'],
+  ['P3 pencil + drawn stroke', '<path d="M6.6 17.9l.8-2.9L15.9 6.5a1.6 1.6 0 0 1 2.3 0l1 1a1.6 1.6 0 0 1 0 2.3l-8.5 8.5-2.9.8z"/><path d="M14.4 8l3.1 3.1"/><path d="M3.2 21.2c2.6.6 5.2.6 7.8 0"/>'],
+  ['P4 upright, chunky', '<path d="M9 21V9.4a3 3 0 0 1 6 0V21l-3 2z"/><path d="M9 12.4h6"/><path d="M9 18.2h6"/>'],
+];
+const VECTOR = [
+  ['V1 current (v7.04)', '<path d="M4.6 17.6c5.4 0 5.6-11 10.8-11"/><rect x="2.1" y="15.6" width="4" height="4" rx=".7"/><rect x="17.9" y="4.6" width="4" height="4" rx=".7"/>'],
+  ['V2 s-curve, filled nodes', '<path d="M5 18.5C5 11 11 13 11 9.5S15 5 19 5.5"/><rect x="2.6" y="16.1" width="4.8" height="4.8" rx=".8" fill="currentColor" stroke="none"/><rect x="16.6" y="3.1" width="4.8" height="4.8" rx=".8" fill="currentColor" stroke="none"/>'],
+  ['V3 node + handles', '<path d="M4 19c0-8 6.5-8.5 8-11.5"/><path d="M8.8 9.6l6.2-2.6" opacity=".55"/><circle cx="12" cy="7.5" r="2.1"/><rect x="2.2" y="17.2" width="3.6" height="3.6" rx=".6" fill="currentColor" stroke="none"/><rect x="14.6" y="5.4" width="3.2" height="3.2" rx=".6" fill="currentColor" stroke="none"/>'],
+  ['V4 pen nib on path', '<path d="M3.5 20.5c3-9 8-11 10-11.4"/><path d="M15.2 3.2l5.3 2.1-2.1 5.3-3.9-3.5z"/>'],
+];
+function cell(inner, n) {
+  return '<div class="s"><svg viewBox="0 0 24 24" width="' + n + '" height="' + n + '">' + inner + '</svg><span>' + n + 'px</span></div>';
+}
+function block(title, list) {
+  let h = '<h2>' + title + '</h2><div class="grid">';
+  list.forEach(([name, inner]) => {
+    h += '<div class="cand"><div class="sizes">' + [96, 48, 24].map(n => cell(inner, n)).join('') + '</div><div class="name">' + name + '</div></div>';
+  });
+  return h + '</div>';
+}
+document.getElementById('out').innerHTML =
+  block('Freehand Drawing — pencil candidates', PENCIL) + block('Vector Drawing — candidates', VECTOR);
+window.__done = true;
+</script></body></html>

@@ -1522,7 +1522,17 @@ window.FM = window.FM || {};
       layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
     } else {
       layer.fill = opt.color || '#ffffff';   // open path is stroked with fill-as-colour (matches 'line')
-      layer.stroke = { enabled: true, width: opt.stroke || 6, color: opt.color || '#ffffff' };
+      /* The border is OFF (queue 164). Ezra: "When I do freehand drawing and finish a stroke it will for
+       * some reason make the stroke thicker when I let go of drawing."
+       * Exactly double, and here is why. An open path is drawn twice by the compositor: a border
+       * under-stroke at `lw * 2` — so half of it shows on each side of the line — and then the line
+       * itself at `lw` in layer.fill. This used to hand it a border that was ENABLED and the SAME
+       * COLOUR as the line, so the "outline" was invisible as an outline and simply made the mark
+       * 2×lw wide. The live preview strokes at lw, so the stroke doubled at the instant of release.
+       * The width still comes from here — the compositor reads stk.width whether or not the border is
+       * enabled — so this only removes the doubling. Turning the border ON in Border & Shadow now does
+       * what it says: an outline around the line, in whatever colour you pick. */
+      layer.stroke = { enabled: false, width: opt.stroke || 6, color: opt.color || '#ffffff' };
     }
     FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;

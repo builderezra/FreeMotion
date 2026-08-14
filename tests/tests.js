@@ -12145,6 +12145,45 @@
     if (bow < 0.002) throw new Error('the spiral\'s final segment bows only ' + bow.toFixed(5) + ' off its chord — it is drawing straight');
   });
 
+  /* #164 — Ezra: "When I do freehand drawing and finish a stroke it will for some reason make the
+     stroke thicker when I let go of drawing."
+     The compositor draws an open path twice: a border under-stroke at lw*2, then the line at lw. The
+     freehand tool was handing it a border that was enabled AND the same colour as the line, so the
+     outline was invisible as an outline and just made the mark double width — while the live preview
+     strokes at lw. Measured as RENDERED THICKNESS, because the bug is a factor of two in pixels and
+     nothing about the stored numbers looked wrong. */
+  test('freehand: the committed stroke is the width you drew, not double it', { item: 'freehand-width' }, function () {
+    const W = 400, H = 200, WANT = 12;
+    // A straight horizontal stroke across the middle, exactly as the tool would hand it over.
+    const pts = [[60, 100], [140, 100], [220, 100], [300, 100], [340, 100]];
+    const layer = FM.addPathLayer(pts, { closed: false, name: 'Freehand', color: '#ffffff', stroke: WANT });
+    if (!layer) throw new Error('addPathLayer returned nothing');
+    try {
+      const sc = scene([layer], { project: { width: W, height: H, fps: 30, duration: 2, background: null, markers: [] } });
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      FM.renderScene(cv.getContext('2d'), sc, 0);
+      const d = cv.getContext('2d').getImageData(0, 0, W, H).data;
+      // Thickest vertical ink run anywhere along the line — the drawn width.
+      let best = 0;
+      for (let x = 80; x < 320; x += 8) {
+        let run = 0, longest = 0;
+        for (let y = 0; y < H; y++) {
+          if (d[(y * W + x) * 4 + 3] > 60) { run++; if (run > longest) longest = run; } else run = 0;
+        }
+        if (longest > best) best = longest;
+      }
+      if (best < 2) throw new Error('the stroke did not render at all (' + best + 'px of ink)');
+      // Allow generous slack for antialiasing and the round cap, but a 2x doubling is far outside it.
+      if (best > WANT * 1.5) {
+        throw new Error('a ' + WANT + 'px stroke rendered ' + best + 'px thick (' + (best / WANT).toFixed(2) +
+          'x) — the border under-stroke is doubling it, which is the thickening on release');
+      }
+      if (best < WANT * 0.6) throw new Error('a ' + WANT + 'px stroke rendered only ' + best + 'px thick');
+    } finally {
+      const i = FM.scene.layers.indexOf(layer); if (i >= 0) FM.scene.layers.splice(i, 1);
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

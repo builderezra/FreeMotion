@@ -323,6 +323,35 @@ better still, keep working inside the turn rather than parking work for a later 
       compare them, the same way #114's bounds were checked across all 54 at once. That also answers
       whether this is one broken path or fifty-four small drift bugs.
 
+- [ ] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo.**
+      (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:
+      1. *"I don't like how it puts the screen to the bottom, needs to be in the middle."* His shot shows
+         the canvas shoved down against the tool bar with a large empty band above it — the drawing
+         surface should be centred in the space it has.
+      2. *"you should add an option to switch from drawing to erasing"* — a draw/erase toggle in the
+         drawing bar. Worth settling: does erase remove whole strokes, or rub out parts of one? Rubbing
+         out part of a stroke means splitting a path, which is real work; removing the stroke you touch
+         is a tenth of the effort and is what most simple editors do.
+      3. *"another option that lets you grab the screen and zoom in or out so you can do more detailed
+         drawing"* — pan and pinch-zoom the drawing surface. Note this collides with the drawing gesture
+         itself, so it needs to be a MODE (a grab/hand toggle) rather than a second meaning for one
+         finger.
+      4. *"instead of an undo button just add the undo and redo icons that we have in the normal menu so
+         you can go back or forwards"* — the bar has a text "Undo" today; it should carry the same two
+         glyphs the transport row uses, and redo must actually work inside drawing mode.
+      Good sign in the same message: *"The free hand drawing is usable on mobile now"* — so this is
+      polish on something that finally works, not another repair.
+
+- [ ] **164 — A freehand stroke gets THICKER the moment you let go.** (14 Aug.) His words: *"When I do
+      freehand drawing and finish a stroke it will for some reason make the stroke thicker when I let go
+      of drawing, stop that from happening."*
+      So the live preview and the committed layer disagree about width — you draw at one weight and get
+      another. Almost certainly a coordinate-space mismatch: the preview strokes in SCREEN px on the
+      overlay while the committed path is a shape layer whose stroke is in PROJECT px and then scaled by
+      the canvas fit, or the committed path picks up a default width instead of the drawing one.
+      **Measure both numbers before changing either** — the width used while drawing and the width stored
+      on the layer — rather than nudging a constant until it looks close.
+
 - [ ] **163 — Make the pencil and vector drawing icons genuinely good, judged to a high bar.** (14 Aug.)
       His words: *"Make the logos for the pencil drawing and freehand drawing better, get multiple agents
       with really high standards to not accept it until it's perfect."*
