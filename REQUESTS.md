@@ -2324,6 +2324,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
       only while something is pending and stops itself, because an always-on interval on the heaviest
       screen is exactly the sort of thing this project has had to hunt down before.
+- [ ] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words.**
+      *"The shapes colours are fine, but the rest aren't. They're generic and copy paste. They need to
+      look quality."* Four screenshots, one per tab. Shape is the one to leave alone — it is the
+      reference for "done right".
+      · **Elements** — *"choose more subtle background colours, the main icon can stay bright but the
+        backdrop more subtle, and also just change the colours up in general and pic better stuff, we
+        don't want it the exact same as the shape menu."* So: keep the icons bright, drop the backdrop
+        intensity, and pick a palette that is deliberately NOT Shape's.
+      · **Media** — AI Scene: *"just a yellow colour for the background that isn't obnoxious."* Sample
+        clip: *"a pinky red colour and blue gradient."* Import: *"a basic grey."*
+      · **Audio** — Import audio: *"basic grey."* Sound effects: *"a rainbow 🏳️‍🌈."* Record voice:
+        *"a strong red."*
+      · **Template** — *"it shouldn't even colour it should show the hero image of whatever the template
+        is (still keeping the text)."* So the card becomes a thumbnail of the template with its label
+        over it. Note the empty state ("No templates yet") still needs to look like something.
+      The greys are worth reading as a system rather than as three separate asks: **Import and Import
+      audio are both plain grey on purpose** — the neutral, everyday action — while the things that
+      MAKE something (AI Scene, Sound effects, Record voice) carry colour. That is a real hierarchy and
+      it should survive whatever palette gets chosen.
 - [ ] **209 — The × and search buttons in the effects header are off-centre and colourless.** His words:
       *"The search and x buttons in this menu look shit, make them actually centred inside their own
       circle. Make the x button red and the search one a nice blue."* Screenshot: the Add Effect header,
