@@ -1,0 +1,87 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#107 — the byte-identical case, pixel by pixel</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}
+canvas{image-rendering:pixelated;border:1px solid #234;margin:4px}</style>
+</head><body><pre id="out">…</pre><div id="pix"></div>
+<script src="js/settings.js"></script><script src="js/screen.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* #107, the one configuration where blur 0 and blur 60 came out byte-identical: a 640x360 project
+   rendered at 0.28 preview scale, landscape subject at 92% of frame width.
+   The previous probe measured a SUMMARY (mean difference). Zero can mean "the blur did nothing" or
+   "the thing the blur changed is not on screen", and those need different fixes — so this looks at
+   the actual pixels and at FM._fbLast, which the effect already publishes for exactly this purpose. */
+(function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+  const PW = 640, PH = 360, SCALE = 0.28;
+
+  const art = document.createElement('canvas'); art.width = 160; art.height = 120;
+  (function () {
+    const a = art.getContext('2d');
+    for (let y = 0; y < 120; y += 10) for (let x = 0; x < 160; x += 10) {
+      a.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff';
+      a.fillRect(x, y, 10, 10);
+    }
+    a.fillStyle = '#fff'; a.fillRect(0, 55, 160, 10);
+  })();
+
+  function render(blur) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(PW * SCALE); cv.height = Math.round(PH * SCALE);
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    FM.media.set('_fbArt', { kind: 'image', el: art, width: 160, height: 120, duration: 0 });
+    const l = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 5 });
+    l.id = '_fbArt';
+    l.transform.scale = (PW * 0.92) / 160;
+    l.effects = [{ type: 'fillbehind', enabled: true, params: { blur: blur, zoom: 1.15, dim: 0 } }];
+    FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 5, background: null }, layers: [l] }, 1.0);
+    document.getElementById('pix').appendChild(cv);
+    return { cv: cv, data: g.getImageData(0, 0, cv.width, cv.height).data, last: FM._fbLast ? JSON.parse(JSON.stringify(FM._fbLast)) : null };
+  }
+
+  const a = render(0), b = render(60);
+  const W = a.cv.width, H = a.cv.height;
+  say('canvas ' + W + 'x' + H + '  (project ' + PW + 'x' + PH + ' at ' + SCALE + ')');
+  say('');
+  say('blur 0  _fbLast: ' + JSON.stringify(a.last));
+  say('');
+  say('blur 60 _fbLast: ' + JSON.stringify(b.last));
+  say('');
+
+  let diffs = 0, maxd = 0, x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    const d = Math.abs(a.data[i] - b.data[i]) + Math.abs(a.data[i + 1] - b.data[i + 1]) + Math.abs(a.data[i + 2] - b.data[i + 2]) + Math.abs(a.data[i + 3] - b.data[i + 3]);
+    if (d) { diffs++; if (d > maxd) maxd = d; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  say('pixels differing between blur 0 and blur 60: ' + diffs + ' of ' + (W * H) +
+      (diffs ? '   box ' + x0 + '..' + x1 + ' x ' + y0 + '..' + y1 + '  max delta ' + maxd : ''));
+
+  // Where is the SUBJECT, and where is there any fill at all? A row through the middle tells both.
+  const row = Math.floor(H / 2);
+  const line = [];
+  for (let x = 0; x < W; x += Math.max(1, Math.floor(W / 24))) {
+    const i = (row * W + x) * 4;
+    line.push(x + ':' + a.data[i] + ',' + a.data[i + 1] + ',' + a.data[i + 2] + '/' + a.data[i + 3]);
+  }
+  say('');
+  say('blur 0, row ' + row + ' (x:r,g,b/a): ' + line.join('  '));
+  const line2 = [];
+  for (let x = 0; x < W; x += Math.max(1, Math.floor(W / 24))) {
+    const i = (row * W + x) * 4;
+    line2.push(x + ':' + b.data[i] + ',' + b.data[i + 1] + ',' + b.data[i + 2] + '/' + b.data[i + 3]);
+  }
+  say('blur 60, row ' + row + ': ' + line2.join('  '));
+
+  // Is any pixel in the frame NOT covered by the subject? That is where a fill would ever be visible.
+  let transparent = 0;
+  for (let i = 3; i < a.data.length; i += 4) if (a.data[i] < 250) transparent++;
+  say('');
+  say('pixels not fully opaque in the blur-0 frame: ' + transparent + ' of ' + (W * H));
+  window.__done = true;
+})();
+</script></body></html>

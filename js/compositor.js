@@ -7952,9 +7952,8 @@ window.FM = window.FM || {};
       const core = { ok: false, x: 0, y: 0, w: 0, h: 0 };
       let bb = null; try { bb = alphaBBoxFast(pA, W, H, core); } catch (e) { bb = null; core.ok = false; }   // tainted-canvas guard
       if (!bb || bb.w < 2 || bb.h < 2) return false;                                  // nothing drew
-      // The layer really does reach every edge (a rotated/odd-shaped one the cheap test above
-      // declined to judge). Same answer, same reason: fall through, don't blit.
-      if (bb.x <= 0 && bb.y <= 0 && bb.x + bb.w >= W && bb.y + bb.h >= H) return false;
+      /* (The "reaches every edge" test used to sit HERE, on `bb` — see the block below, where it now
+       * runs on the inset rect instead. It was reading LOOSE bounds as if they were exact.) */
       /* alphaBBoxFast deliberately reports LOOSE bounds — it scans a 1/4-scale copy and then pads a
        * whole scan cell outward on every side, so the rect it returns carries 4-8 transparent device
        * pixels of border. Multiplied by the cover scale below that border becomes 20-30px of
@@ -7970,6 +7969,24 @@ window.FM = window.FM || {};
       let sx = bb.x, sy = bb.y, sw = bb.w, sh = bb.h;
       if (sw > 4 * SLACK) { sx += SLACK; sw -= 2 * SLACK; }
       if (sh > 4 * SLACK) { sy += SLACK; sh -= 2 * SLACK; }
+      /* "DOES THIS LAYER ALREADY REACH EVERY EDGE?" — and bb ALONE CANNOT ANSWER IT (queue 107).
+       * Ezra: "The blur on fill behind still does not work, it just zooms in."
+       * This test used to run on bb, which alphaBBoxFast pads OUTWARD by up to a whole scan cell per
+       * side. A layer leaving a small real margin therefore reported a box touching all four edges,
+       * the effect declared the frame covered, and it returned without drawing any fill — after paying
+       * for the plate. Scale-dependent by construction: the margin is in DEVICE pixels, so it shrinks
+       * with the preview quality tier until the padding swallows it. Measured at 640x360 with a
+       * landscape subject at 92% of frame width — at 1:1 the fill draws; at 0.28 preview scale blur 0
+       * and blur 60 render BYTE-IDENTICALLY, because neither draws anything at all. Both existing
+       * tests for this blur render at 1:1, which is why they never saw it.
+       * The OPAQUE CORE is the exact measurement bb is not, so it decides whenever it exists, to 1px.
+       * When there is no core — a half-transparent layer, which genuinely can cover the frame while
+       * being see-through — fall back to the loose box, which is the behaviour that case always had. */
+      const looseCovers = bb.x <= 0 && bb.y <= 0 && bb.x + bb.w >= W && bb.y + bb.h >= H;
+      if (looseCovers) {
+        if (!core.ok) return false;                                     // nothing exact to check with
+        if (core.x <= 1 && core.y <= 1 && core.x + core.w >= W - 1 && core.y + core.h >= H - 1) return false;
+      }
       /* …and when the scan found a genuinely OPAQUE core, use that instead: it is exact where the
        * inset above is a guess. Measured on the 100x180 test layer (true content 110..210): the loose
        * box is 100..224, minus SLACK it is 108..216 — still 2 transparent px on the left and 6 on the

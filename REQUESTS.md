@@ -842,7 +842,7 @@ better still, keep working inside the turn rather than parking work for a later 
       see. Note the thumbnail is generated from the effect itself, so it should follow automatically
       once the default or the pictured params use Round — worth confirming rather than assuming.
 
-- [ ] **107 — Fill Behind's Blur does nothing; it only zooms.** His words: *"The blur on fill behind
+- [x] **107 — Fill Behind's Blur does nothing; it only zooms.** (v7.21) His words: *"The blur on fill behind
       still does not work, it just zooms in."* "Still" — so a previous pass did not fix it. IMPORTANT:
       the suite has two tests that measure this blur and both PASS, so whatever is wrong does not
       reproduce in headless Chrome — same shape as the text-editing bug (#41), where synthetic checks
@@ -870,9 +870,25 @@ better still, keep working inside the turn rather than parking work for a later 
       growing the frame produced a 39x cover scale in portrait, which measured my own setup rather than
       the effect. The numbers above use a landscape clip at 92% of frame width — the case Fill Behind
       exists for.
-      **Next:** find why the blurred plate makes no difference at 0.28 in that geometry — the fill is
-      built (plate counter says so) but nothing it draws survives to the frame. Do NOT tune the radius
-      until that is understood.
+      **CAUSE FOUND AND FIXED (v7.21). The blur was never the problem — the fill was not being drawn
+      at all.** Dumping the pixels for that one configuration showed `FM._fbLast` unset for both blur
+      values, i.e. `paintFillBehind` returned before it drew anything, having already paid for the
+      plate. It bails at a "this layer already reaches every edge, so there is nothing to fill" test —
+      and that test was reading `alphaBBoxFast`'s box as if it were exact. **It is not: that function
+      pads its box OUTWARD by up to a whole scan cell on every side, and says so in its own comment.**
+      A layer leaving a small genuine margin therefore reported edge-to-edge coverage. Measured here:
+      the padded box read 0..179 of a 179px frame while the real content ran 8..171.
+      **It is scale-dependent because the margin is in DEVICE pixels** — it shrinks with the preview
+      quality tier until the padding swallows it. At 1:1 an 8px margin survives and the fill draws; at
+      0.28 it does not, and blur 0 vs blur 60 come out byte-identical. Both existing tests for this
+      blur render at 1:1, which is exactly why neither ever saw it.
+      **The fix** uses the OPAQUE CORE, which the same scan already computes and which is exact, to
+      decide coverage to within 1px, falling back to the loose box only when there is no core — a
+      half-transparent layer really can cover the frame while being see-through, and that case keeps
+      the behaviour it always had. (A first attempt tested the inset rect instead and broke exactly
+      that case: the suite caught it immediately.)
+      New test renders at 0.28 preview scale with a subject that leaves a real margin; mutation-checked
+      against the old test.
 - [ ] **108 — What do the buttons on the canvas view rail do?** Answered in chat (loop / onion skin /
       snapping / guides / export marks / timeline zoom). Keeping it here because a control that has to
       be explained is a design note, not just a question — the row is icon-only with no labels, and he

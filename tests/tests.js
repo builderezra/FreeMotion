@@ -12756,6 +12756,56 @@
     }
   });
 
+  /* #107 — Ezra: "The blur on fill behind still does not work, it just zooms in."
+     Two tests already measured this blur and both passed, because both render at 1:1. The failure is
+     scale-dependent: alphaBBoxFast pads its box OUTWARD by up to a scan cell per side, and the
+     "this layer already covers the frame, do nothing" test read that padded box as exact. A layer
+     leaving a small real margin therefore reported edge-to-edge coverage and the effect returned
+     without drawing any fill — and the margin is in DEVICE pixels, so it shrinks with the preview
+     quality tier until the padding eats it.
+     So this renders at a REDUCED preview scale, which is what a phone does, with a subject that leaves
+     a genuine margin. */
+  test('fill behind still fills, and still blurs, at a reduced preview scale', { item: 'fillbehind-scale' }, async function () {
+    const PW = 640, PH = 360, SCALE = 0.28;
+    const art = document.createElement('canvas'); art.width = 160; art.height = 120;
+    const actx = art.getContext('2d');
+    for (let y = 0; y < 120; y += 10) for (let x = 0; x < 160; x += 10) {
+      actx.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff';
+      actx.fillRect(x, y, 10, 10);
+    }
+    const had = FM.media.get('_fbTestArt');
+    const render = (blur) => {
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(PW * SCALE); cv.height = Math.round(PH * SCALE);
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      FM.media.set('_fbTestArt', { kind: 'image', el: art, width: 160, height: 120, duration: 0 });
+      const l = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 5 });
+      l.id = '_fbTestArt';
+      l.transform.scale = (PW * 0.92) / 160;      // wide enough to leave a real margin, tall enough to overflow
+      l.effects = [{ type: 'fillbehind', enabled: true, params: { blur: blur, zoom: 1.15, dim: 0 } }];
+      FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 5, background: null }, layers: [l] }, 1.0);
+      return { cv: cv, data: g.getImageData(0, 0, cv.width, cv.height).data };
+    };
+    try {
+      const a = render(0), b = render(60);
+      let diff = 0;
+      for (let i = 0; i < a.data.length; i += 4) {
+        if (a.data[i] !== b.data[i] || a.data[i + 1] !== b.data[i + 1] || a.data[i + 2] !== b.data[i + 2]) diff++;
+      }
+      if (!diff) {
+        throw new Error('blur 0 and blur 60 rendered BYTE-IDENTICALLY at ' + SCALE + ' preview scale — the effect is bailing out before it draws a fill, which is "it just zooms in"');
+      }
+      // …and the point of the effect: the margin it was skipping must actually be filled.
+      let clear = 0;
+      for (let i = 3; i < b.data.length; i += 4) if (b.data[i] < 250) clear++;
+      if (clear > b.data.length / 4 * 0.02) {
+        throw new Error(clear + ' pixels are still transparent with the fill applied — the frame is not being filled');
+      }
+    } finally {
+      if (had) FM.media.set('_fbTestArt', had); else if (FM.media.remove) FM.media.remove('_fbTestArt');
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {
