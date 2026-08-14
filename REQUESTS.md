@@ -1060,6 +1060,39 @@ better still, keep working inside the turn rather than parking work for a later 
       instead of moving. RELATED to 31b (transform blur can't smear effect- or camera-driven motion) —
       same underlying gap, that effect-driven motion isn't visible to the things that should react to it.
       Worth checking whether one fix serves both.
+      **MEASURED 2026-08-14 (`tests/_wiggle93.html`), and the two halves came out differently.**
+      **(a) does NOT reproduce — wiggle survives every mover I could test.** Measured as how far the
+      layer's ink centre moves when Wiggle is ADDED, at identical times:
+      | with | displacement | vs wiggle alone |
+      |---|---|---|
+      | nothing else (baseline) | 9.7px mean, 24.0 max | — |
+      | Orbit effect | 9.7px mean, 24.0 max | **100%** |
+      | inside a moving group | 9.3px | 96% |
+      | under a moving camera | 7.0px | 73% |
+      So wiggle is not being dropped. The camera case is weaker only because the camera scales the
+      composite, so the same pixel displacement covers less screen — arguably correct.
+      **My first instrument said the opposite and was wrong**, which is worth recording: it scored
+      "jitter" as the second difference of the ink centre, which a fast circular Orbit produces plenty
+      of by itself (44.7 against wiggle's 37), so the two were indistinguishable and it reported
+      "wiggle is lost" from noise. Comparing the same times with and against is the clean question.
+      **So (a) needs one line from him: what were you doing when wiggle stopped working?** A different
+      effect, a parent's parent, a behaviour rather than an effect? As written, I cannot reproduce it.
+      **(b) IS real, and gets much worse with amount.** A 60×60 layer, ink lost against no wiggle:
+      | position | at amount 30 | at amount 90 |
+      |---|---|---|
+      | middle | ~0% | ~0% |
+      | left edge | 2.5% | **15.3%** |
+      | top-left corner | 7.6% | **23.6%** |
+      Cause is exactly as guessed: wiggle translates the frame-sized plate, so at an edge it pulls EMPTY
+      SPACE in behind the layer instead of moving it.
+      **Attempted the fix and backed it out** rather than ship it half-understood. The intended shape is
+      right — `drawCanvasEffect` already hands effects an `expand()` callback that re-renders the layer
+      on a larger plate, so wiggle can source real pixels from outside the frame — and `expand` is
+      genuinely reachable from wiggle (proved by making it early-return: the layer vanished). But the
+      expanded draw produced pixel-identical output to the cheap path, which I have not explained yet,
+      and `renderExpandedPlate` sizes its margin from the LAYER's overflow rather than from how far the
+      EFFECT reaches, so it needs a minimum-margin argument as well. Next session: find out why the
+      expanded blit is a no-op before changing anything else.
 
 - [x] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** **DONE v6.61.** His words:
       *"With the faves section I want it to be really easy to open, remove the feature of swiping right

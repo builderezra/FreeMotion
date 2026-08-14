@@ -1,0 +1,142 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#93 — does Wiggle survive другие effects, and what happens in a corner?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body><pre id="out">…</pre>
+<script src="js/settings.js"></script><script src="js/screen.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* #93, his words: "I want the wiggle effect to also work when you have other effects that make it
+ * move, and also it should work in corners better."
+ * Wiggle is a plate effect — it draws the layer's rendered plate back translated by noise. So both
+ * halves are measurable rather than arguable:
+ *   (a) WITH ANOTHER MOVER. Does the layer still move frame-to-frame when Orbit is also on it? If
+ *       wiggle survives, the position should keep changing beyond what Orbit alone does.
+ *   (b) IN A CORNER. Translating a frame-sized plate pulls empty space in behind the content, so a
+ *       layer against an edge should LOSE ink. Measured as ink count near the edge vs in the middle.
+ */
+(function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+  const W = 300, H = 200;
+
+  function render(opts, t) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const l = FM.makeLayer('shape', { shape: 'rect', x: opts.x, y: opts.y, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 6 });
+    l.effects = opts.fx || [];
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 6, background: '#000000', markers: [] } , layers: [l] }, t);
+    const d = g.getImageData(0, 0, W, H).data;
+    let lit = 0, sx = 0, sy = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (d[i] > 40) { lit++; sx += x; sy += y; }
+    }
+    return { lit: lit, cx: lit ? sx / lit : 0, cy: lit ? sy / lit : 0 };
+  }
+
+  const WIG = { type: 'wiggle', enabled: true, params: { amount: 30, speed: 3 } };
+  const ORB = { type: 'orbit', enabled: true, params: { radius: 50, speed: 0.8 } };
+
+  /* ---- (a) does wiggle still act when another effect is also moving the layer? -----------------
+     FIRST ATTEMPT WAS A BAD INSTRUMENT and is recorded here so nobody repeats it: it scored "jitter"
+     as the mean second-difference of the ink centre, which a fast circular Orbit produces plenty of
+     all by itself — orbit alone measured 44.7 against wiggle's 37, so the two were indistinguishable
+     and the probe concluded "wiggle is lost" from noise.
+     The clean question is DIRECT: render the same times twice, once with Orbit and once with Orbit +
+     Wiggle, and measure how far apart the two centres are. If wiggle is acting, the pair differ by
+     roughly its amplitude at every frame; if it is being dropped, they are identical. */
+  function pairDiff(baseFx, withFx) {
+    let sum = 0, n = 0, maxD = 0;
+    for (let i = 0; i < 14; i++) {
+      const tt = 0.3 + i * 0.17;
+      const a = render({ x: W / 2, y: H / 2, fx: baseFx }, tt);
+      const b = render({ x: W / 2, y: H / 2, fx: withFx }, tt);
+      const d = Math.hypot(a.cx - b.cx, a.cy - b.cy);
+      sum += d; n++; if (d > maxD) maxD = d;
+    }
+    return { mean: sum / n, max: maxD };
+  }
+  /* Orbit is an EFFECT, and it turns out wiggle survives it fine. The movers worth checking are the
+     ones #31b showed are invisible to layer-space machinery: a CAMERA (applied to the whole composite)
+     and a PARENT GROUP (applied up the chain). If wiggle is lost anywhere, it is there. */
+  function pairDiffScene(build, withWiggle) {
+    let sum = 0, n = 0;
+    for (let i = 0; i < 12; i++) {
+      const tt = 0.3 + i * 0.17;
+      const a = renderScene2(build(false), tt), b = renderScene2(build(true), tt);
+      sum += Math.hypot(a.cx - b.cx, a.cy - b.cy); n++;
+    }
+    return sum / n;
+  }
+  function renderScene2(sc, t) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, sc, t);
+    const d = g.getImageData(0, 0, W, H).data;
+    let lit = 0, sx = 0, sy = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (d[i] > 40) { lit++; sx += x; sy += y; }
+    }
+    return { lit: lit, cx: lit ? sx / lit : 0, cy: lit ? sy / lit : 0 };
+  }
+  const P = { width: W, height: H, fps: 30, duration: 6, background: '#000000', markers: [] };
+  const camBuild = (wig) => {
+    const l = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 6 });
+    if (wig) l.effects = [WIG];
+    const cam = FM.makeLayer('camera', { start: 0, duration: 6 });
+    cam.transform.x = { kf: [{ t: 0, v: W / 2 - 60, e: 'linear' }, { t: 4, v: W / 2 + 60, e: 'linear' }] };
+    return { project: P, layers: [l, cam] };
+  };
+  const grpBuild = (wig) => {
+    const g0 = FM.makeLayer('group', { name: 'G', x: 0, y: 0, start: 0, duration: 6 });
+    g0.transform.x = { kf: [{ t: 0, v: -50, e: 'linear' }, { t: 4, v: 50, e: 'linear' }] };
+    const l = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 6 });
+    l.parent = g0.id;
+    if (wig) l.effects = [WIG];
+    return { project: P, layers: [g0, l] };
+  };
+
+  const alone = pairDiff([], [WIG]);
+  const overOrbit = pairDiff([ORB], [ORB, WIG]);
+  say('(a) DOES WIGGLE SURVIVE ANOTHER MOVER?');
+  say('    how far the ink centre moves when Wiggle is ADDED (px), amount 30');
+  say('    on a still layer        mean ' + alone.mean.toFixed(1) + '   max ' + alone.max.toFixed(1));
+  say('    on top of Orbit         mean ' + overOrbit.mean.toFixed(1) + '   max ' + overOrbit.max.toFixed(1));
+  const overCam = pairDiffScene(camBuild, true);
+  const overGrp = pairDiffScene(grpBuild, true);
+  say('    under a moving CAMERA   mean ' + overCam.toFixed(1));
+  say('    inside a moving GROUP   mean ' + overGrp.toFixed(1));
+  const verdict = (v, name) => '    ' + name.padEnd(22) +
+    (v > alone.mean * 0.5 ? 'wiggle survives (' + (100 * v / alone.mean).toFixed(0) + '% of solo)' : 'WIGGLE LOST or much weakened');
+  say('');
+  say(verdict(overOrbit.mean, 'with Orbit'));
+  say(verdict(overCam, 'with a camera'));
+  say(verdict(overGrp, 'inside a group'));
+
+  // ---- (b) the corner ---------------------------------------------------------------------------
+  say('');
+  say('(b) IN A CORNER — a 60x60 layer, wiggle amount 30 then 90');
+  say('    position            ink no wiggle   at amt 30    lost         lost at amt 90');
+  [['middle', W / 2, H / 2], ['left edge', 34, H / 2], ['top-left corner', 34, 34]].forEach(([name, x, y]) => {
+    let a = 0, b = 0, big = 0;
+    for (let i = 0; i < 10; i++) {
+      const tt = 0.3 + i * 0.19;
+      a += render({ x: x, y: y, fx: [] }, tt).lit;
+      b += render({ x: x, y: y, fx: [WIG] }, tt).lit;
+      big += render({ x: x, y: y, fx: [{ type: 'wiggle', enabled: true, params: { amount: 90, speed: 3 } }] }, tt).lit;
+    }
+    a /= 10; b /= 10; big /= 10;
+    const lost = a > 0 ? (100 * (1 - b / a)) : 0;
+    const lostBig = a > 0 ? (100 * (1 - big / a)) : 0;
+    say('    ' + name.padEnd(20) + a.toFixed(0).padEnd(16) + b.toFixed(0).padEnd(13) + lost.toFixed(1) + '%'.padEnd(8) + '   at 90: ' + lostBig.toFixed(1) + '%');
+  });
+  say('');
+  say('If the corner loses much more ink than the middle, wiggle is pulling empty space in behind the');
+  say('layer rather than moving it — which is the "should work in corners better" half.');
+  window.__done = true;
+})();
+</script></body></html>
