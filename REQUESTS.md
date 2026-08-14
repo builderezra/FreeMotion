@@ -323,6 +323,21 @@ better still, keep working inside the turn rather than parking work for a later 
       compare them, the same way #114's bounds were checked across all 54 at once. That also answers
       whether this is one broken path or fifty-four small drift bugs.
 
+- [ ] **166 — You cannot swipe the timeline up and down when clips fill it.** (14 Aug, screenshot at
+      v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
+      can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
+      free hand drawing layers."*
+      **That second message confirms the diagnosis** — it is not freehand-specific at all. It is that he
+      had NINE rows, so every touch lands on a clip. `.track-lane` carries `touch-action: none`, so the browser never scrolls it natively, and the
+      clip's own touch handler treats any movement past the threshold as a horizontal SCRUB:
+      `scrubIntent = adx > 6 && adx > ady` is computed but a vertical drag still falls through to
+      `FM.scrubTime(...)`. With few layers you can start a swipe on empty lane and it works; fill the
+      timeline with clips and there is nowhere left to start one.
+      Fix direction: a vertical-dominant drag that begins on a clip should scroll the track list, which
+      has to be done programmatically because touch-action has already opted out of the native scroll.
+      **Check the empty-lane path still scrolls too**, and that this does not break the hold-to-move
+      gesture — a hold is stationary, so it should be unaffected, but measure rather than assume.
+
 - [ ] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo.**
       (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:
       1. *"I don't like how it puts the screen to the bottom, needs to be in the middle."* His shot shows
