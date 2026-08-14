@@ -40,8 +40,13 @@ window.FM = window.FM || {};
   }
 
   function badge() {
-    const b = document.getElementById('btn-notes-dot');
-    if (b) b.classList.toggle('on', pending().length > 0);
+    const due = pending().length > 0;
+    // Two dots now (queue 171): the desktop bar's and the phone bar's. Only one is ever on screen, but
+    // the phone's was added later and a badge that lights on one device only is worse than none.
+    ['btn-notes-dot', 'm-notes-dot'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.classList.toggle('on', due);
+    });
   }
 
   // ---- the panel -------------------------------------------------------------------------------
@@ -54,7 +59,7 @@ window.FM = window.FM || {};
     card.setAttribute('aria-label', 'Project notes');
 
     const head = el('div', 'np-head');
-    head.appendChild(el('div', 'np-title', 'Notes'));
+    head.appendChild(el('div', 'np-title', 'Notes'));   // .np-head is the pad's yellow glued edge now (queue 181)
     const hint = el('div', 'np-hint', 'Tick a note to be reminded of it when you export.');
     const body = el('div', 'np-list');
 
@@ -101,7 +106,7 @@ window.FM = window.FM || {};
     });
 
     const actions = el('div', 'np-actions');
-    const done = el('button', 'btn btn-accent np-done', 'Done');
+    const done = el('button', 'btn np-done', 'Done');   // NOT btn-accent: that is the app's blue, and this sheet is paper (queue 181)
     done.addEventListener('click', close);
     actions.appendChild(done);
 
@@ -132,23 +137,58 @@ window.FM = window.FM || {};
       const card = el('div', 'np-card np-card--remind');
       card.setAttribute('role', 'dialog');
       card.setAttribute('aria-modal', 'true');
-      card.appendChild(el('div', 'np-title', due.length === 1 ? 'Before you export' : 'Before you export — ' + due.length + ' reminders'));
+      const head = el('div', 'np-head');
+      const title = el('div', 'np-title', '');
+      head.appendChild(title);
+      card.appendChild(head);
       const ul = el('div', 'np-remind-list');
+      const actions = el('div', 'np-actions');
+      const back = el('button', 'btn np-back', 'Back');
+      const go = el('button', 'btn np-anyway', '');
+
+      /* TICKING OFF, RIGHT HERE (queue 176). Ezra: "put an option in that menu to tick off the notes."
+       * Until now this card was read-only, so dealing with a reminder meant Back → notepad → untick →
+       * export again, which is three screens to say "yes, done that".
+       * The row STAYS once ticked, struck through, rather than disappearing: the list must not jump
+       * under the finger at the moment you are deciding whether to export, and a wrong tap has to be
+       * undoable without leaving. The snapshot `due` is what gets rendered for the same reason — the
+       * card shows the notes it opened with, whatever you do to them while it is up. */
+      const refresh = () => {
+        const left = due.filter(n => n.remind).length;
+        title.textContent = left === 0 ? 'All clear' :
+          left === 1 ? 'Before you export' : 'Before you export — ' + left + ' reminders';
+        // "Export anyway" is the quiet button while something is outstanding; once nothing is, it is
+        // just Export, and there is no longer anything to be quiet about.
+        go.textContent = left === 0 ? 'Export' : 'Export anyway';
+        go.classList.toggle('np-anyway', left > 0);
+        go.classList.toggle('np-back', left === 0);
+      };
+
       due.forEach(n => {
         const r = el('div', 'np-remind-row');
-        r.appendChild(el('span', 'np-remind-dot', '•'));
+        const tick = el('button', 'np-remind-tick');
+        tick.type = 'button';
+        tick.setAttribute('role', 'checkbox');
+        tick.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
+        const paint = () => {
+          const done = !n.remind;
+          r.classList.toggle('done', done);
+          tick.setAttribute('aria-checked', done ? 'true' : 'false');
+          tick.title = done ? 'Still outstanding? Tap to put it back' : 'Tick this off';
+        };
+        tick.addEventListener('click', () => { n.remind = !n.remind; save(); paint(); refresh(); badge(); });
+        r.appendChild(tick);
         r.appendChild(el('span', 'np-remind-text', String(n.text || '').trim()));
+        paint();
         ul.appendChild(r);
       });
       card.appendChild(ul);
-      const actions = el('div', 'np-actions');
-      const back = el('button', 'btn np-back', 'Back');
-      const go = el('button', 'btn np-anyway', 'Export anyway');
-      const finish = (v) => { scrim.remove(); resolve(v); };
+      const finish = (v) => { scrim.remove(); badge(); resolve(v); };
       back.addEventListener('click', () => finish(false));
       go.addEventListener('click', () => finish(true));
       actions.append(back, go);
       card.appendChild(actions);
+      refresh();
       scrim.appendChild(card);
       document.body.appendChild(scrim);
       scrim.addEventListener('pointerdown', e => { if (e.target === scrim) finish(false); });

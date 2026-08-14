@@ -478,7 +478,7 @@ better still, keep working inside the turn rather than parking work for a later 
       keeps its number and simply stops squishing.
       The test measures the drawn ink: it fails if a copy comes out narrower than the original, which is
       the actual complaint, and separately if it draws only one copy.
-- [ ] **124 — Faves gesture: threshold + cancel, better animation, and rename to "Faves".** His words:
+- [x] **124 — Faves gesture: threshold + cancel, better animation, and rename to "Faves".** (v7.12) His words:
       *"you start by swiping up on the recents menu, when your swipe reaches a certain level and you let
       go it opens the faves menu, since people may start swiping and not want to go in that menu … you
       can just swipe back up and cancel the swipe to opening the menu, kinda like how swiping an effect
@@ -491,6 +491,16 @@ better still, keep working inside the turn rather than parking work for a later 
       What is definitely new regardless of direction: reversing mid-swipe must actively CANCEL (today it
       only cancels by releasing short of the threshold), the animation wants real work, and the strip
       label becomes "Faves".
+      **Shipped as pull-DOWN to open, reverse to cancel.** Releasing short of the commit point already
+      did nothing, so the real gap was the case that rule cannot reach: you are past the commit point,
+      at full stretch, and you change your mind — from there the old position-only rule needed about
+      220px of return travel before it disarmed. Cancel is now measured back from the PEAK (12 damped px,
+      ~40–50px of finger), so it works wherever you reversed from, and it STICKS — shoving back down
+      cannot silently re-arm what you just called off, because a gesture that flip-flops under the finger
+      leaves you unsure what you chose at the moment you let go. The hint now says which of the three
+      things will happen — Faves / Release to open / Cancelled — and the block glides home under your
+      finger on a cancel, so it is something you see rather than something you find out on release.
+      Everything user-facing says "Faves" now, including the audio effects browser.
 - [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
       not fixing it.** His words: *"Still getting major lag when scrolling through the timeline; with not
       many layers added at all. I know I tell you about lag a lot but nothing much ever gets resolved,
@@ -1840,6 +1850,98 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
 - [x] **66 — Ezra's own photos are the effect thumbnails**
 - [x] **62 — Effects can be favourited, including from the ⋯ menu**
 - [x] **61 — Hovering a benchmark turns the highlighted section yellow**
+
+## Newest requests (2026-08-14)
+
+- [x] **171 — Move the notes button, and hide it when a layer is selected.** (v7.12) *He marked this one "do this
+      asap", so it jumps the queue.* His words: *"Put the notes button to the left of the settings cog,
+      pushing the refresh button to the left, and you will have to make the editable area for the name
+      smaller (mobile) when you have a layer selected and the delete button is there, the note button
+      shouldn't even be there, it should only be there when you don't have anything selected."*
+      Two things: the ORDER becomes … refresh · notes · cog, and on mobile the notes button is present
+      only while nothing is selected — the moment a layer is selected the delete button needs that room,
+      and the project-name field gives up width for it.
+      **Done.** The phone bar now reads back · name · version · notes · cog · export, and notes is in
+      exactly the two hide-lists the cog is in, so it leaves whenever a selection owns the bar. Measured
+      at 380px: the name field keeps 128px unselected, and 124px with a layer selected (unchanged, since
+      notes is gone by then). On desktop the notes button moved to the cog's left; the refresh chip takes
+      the slot left of it when #168/#169 lands.
+- [ ] **172 — Export resolution needs a "Same as project" option.** So you can export at exactly the
+      canvas size without hunting for the number that matches. (Pairs with #121, which just made the cog
+      the source of truth for resolution — this is the option that says "whatever the cog says".)
+- [ ] **173 — Export quality should default to High.**
+- [ ] **174 — "Export just this clip" should say LAYER, and be a picker, not a tick.** His words: *"With
+      the export just this clip tick at the bottom, make it say export just this layer, and also make it
+      so when you press it, it isn't a tick but it's a button and it lets you select what layer."* So:
+      relabel, and replace the checkbox with a button that opens a layer chooser.
+- [ ] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap.** Three parts,
+      from one message (AM screenshot attached showing the four buttons above the 1.00x slider):
+      1. *"the speed menu needs the crop buttons… let's say your clip is slightly too short for what you
+         need, then you can go on the timeline to exactly where you want it to last to, then press a
+         button and it will change the speed to go exactly to that point."* So: park the playhead, press
+         the button, and the speed is SOLVED for so the clip ends exactly there. AM has four of them —
+         the same left-edge/right-edge × from/to pairs as our existing extend-and-crop buttons.
+      2. *"it seems alight motion lets you speed up and slow down unlimitedly, you can have something
+         1000x speed for example."* — so the slider's range stops being the limit; find our current cap.
+      3. *"it should be able to speed up stuff to your pointer, kinda like how we have the extend and
+         crop buttons already, but instead of extending it, it just makes it faster or slower."* — the
+         same gesture vocabulary as trimming, applied to speed.
+- [ ] **183 — Canvas settings needs "Save project as preset".** His words: *"This settings menu shall
+      have an option that says save project as preset"* — screenshot is the **Canvas settings** dialog
+      (aspect · Resolution · Frame rate · Background · Size · App settings / Cancel / Apply), so it is
+      that dialog, not App settings. Presumably saves the canvas setup — ratio, resolution, fps,
+      background — as a named preset you can start a project from. Ask what it should capture if it is
+      not obvious when its turn comes.
+- [ ] **182 — "Save as preset…" should say "Save layer's effects as preset…".** His words: *"Where it
+      says save as preset, make it say save layers effects as preset."* It is in the layer ⋯ menu, one
+      line above "Save selection as element…", and on its own "Save as preset" does not say what it
+      captures.
+- [ ] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** His words: *"When
+      you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
+      the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
+      thirds of the screen empty black below them, no canvas, no timeline. So on finishing a vector
+      drawing the inspector opens in its full-height/editing state instead of the normal docked one, and
+      the only way out is a swipe down. Related to #165's "puts the screen to the bottom" complaint about
+      freehand drawing — check whether both come from the same place before fixing either.
+- [ ] **180 — Lots of effects don't work on text.** His words exactly. Needs the same treatment #110 got:
+      enumerate which effects do nothing on a TEXT layer, find out whether it's one shared cause (e.g.
+      effects that sample the layer's pixel buffer vs. ones that transform it) or a list of separate
+      bugs, and report the measurement before changing anything.
+- [ ] **178 — Get rid of the Classic theme option.** Careful one: "Classic" is a name this app uses for
+      TWO different things — the Classic/Studio *layout* toggle and a Classic *theme*. Check which is on
+      screen in Settings before deleting anything. **Checked — it is the theme, and he said "theme", so
+      there is no ambiguity to resolve:** Settings → Appearance is `Liquid | Classic` (js/settings.js:328)
+      and that is the one to lose, leaving Liquid as the only look. The separate `Classic | Studio`
+      LAYOUT row (js/settings.js:373) stays exactly as it is. Delete the option, make glass unconditional,
+      and remove the CSS only the classic theme used.
+- [x] **181 — Theme the notepad like Apple Notes.** (v7.12) His words: *"I want the notes area to be themed like
+      a note pad, similar colours to apples notes app, yellow with white background, I feel this will look
+      cool."* So the notes panel stops being another dark app surface and becomes a light paper one —
+      yellow accent, white sheet. It is the one place in the app that is a *document* rather than a
+      control surface, so it can afford to look unlike the rest.
+      **Done.** Both the notepad and the pre-export card are paper now: a yellow glued top edge, a warm
+      white sheet, ruled feint lines under the rows, and the writing sitting ON the paper instead of in
+      dark boxes. Deliberately single-look — paper does not have a dark mode. The Done button had to stop
+      being `btn-accent`: the app's blue outranked the paper styling and came out as a blue button on a
+      white sheet.
+- [ ] **177 — Delete "Reset project" entirely.** His words: *"Completely remove the reset project
+      button, it doesn't need to exist anymore, someone can just delete it and make a new project."*
+      It lives in the Settings panel (it moved there in v6.13 when the ⋯ menu was dismantled). Remove
+      the button, its handler and its confirm — and check nothing else calls the reset path before
+      deleting it, rather than leaving an orphan.
+- [x] **176 — Tick notes off from the pre-export reminder card.** (v7.12) His words: *"When you press export and
+      the notes show up, put an option in that menu to tick off the notes."* At the moment that card is
+      read-only — it lists what you ticked and offers Back / Export anyway. He wants to deal with a
+      reminder on the spot instead of going back into the notepad to untick it.
+      **Done.** Every row has a tick now, and it really unticks the note rather than just crossing out a
+      line. The row STAYS once ticked, struck through — a row that vanished would make the list jump
+      under your finger at the exact moment you are deciding whether to export, and a wrong tap has to be
+      undoable without leaving. Once nothing is outstanding the title becomes "All clear" and the quiet
+      "Export anyway" becomes a plain "Export".
+- [ ] **175 — Loop playback does not belong in Settings.** His words: *"Get rid of loop play back out of
+      the settings menu, it should only be in view options."* Same reasoning as #122 (onion skin): one
+      control, one home.
+
 
 Everything before this is in POLISH-LOG.md from v2.31 onward — roughly 90 more shipped items,
 including the camera, captions, speed ramping, the easing editor, the shape library, the Studio

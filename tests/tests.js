@@ -12377,6 +12377,145 @@
     }
   });
 
+  /* #124 — Ezra: "since people may start swiping and not want to go in that menu … you can just swipe
+     back up and cancel the swipe to opening the menu."
+     Releasing short of the commit point already did nothing, so this is about the case that rule cannot
+     reach: you are PAST the commit point, at full stretch, and you change your mind. Cancel has to be a
+     decision you make by reversing — and it has to stick, so pushing back down cannot silently re-arm
+     the thing you just called off. Driven with real pointer events, because the whole feature is the
+     event handling. */
+  test('pulling back up cancels the faves gesture, and the cancel sticks', { item: 'faves-cancel' }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // the gesture is deliberately not armed there
+    if (!FM.scene.layers.length) { FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', start: 0, duration: 2 })); FM.timeline.rebuild(); }
+    FM.selectLayer(FM.scene.layers[0].id);
+    FM.fxBrowser.open();
+    await sleep(90);
+    const sec = document.querySelector('.fxb-recents');
+    const body = sec && sec.querySelector('.fxb-recents-body');
+    const hint = sec && sec.querySelector('.fxb-pullhint');
+    if (!body || !hint) throw new Error('the Recents block or its pull hint is missing');
+
+    const pt = (type, y) => body.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', clientX: 40, clientY: y,
+    }));
+    const win = (type, y) => window.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', clientX: 40, clientY: y,
+    }));
+    const pulled = () => {
+      const t = getComputedStyle(body).transform;
+      return t && t !== 'none' ? Math.abs(parseFloat(t.split(',')[5]) || 0) : 0;
+    };
+    const openView = () => document.querySelector('.fxb-favview');
+    try {
+      // 1) Pull well past the commit point — the hint must say so before the finger lifts.
+      pt('pointerdown', 100); win('pointermove', 130); win('pointermove', 300);
+      if (!hint.classList.contains('armed')) throw new Error('a 200px pull did not arm the gesture');
+      if (pulled() < 20) throw new Error('the block did not follow the finger (moved ' + pulled().toFixed(1) + 'px)');
+
+      // 2) Now change your mind. A modest pull BACK must cancel — from here the old position-only rule
+      //    would have needed ~220px of return travel to disarm.
+      win('pointermove', 230);
+      if (hint.classList.contains('armed')) throw new Error('pulling back up left the gesture armed');
+      if (!hint.classList.contains('cancelled')) throw new Error('reversing did not show a cancelled state — dim alone also means "not far enough", which is a different answer');
+
+      // 3) …and it sticks: shoving back down must NOT re-arm it.
+      win('pointermove', 360);
+      if (hint.classList.contains('armed')) throw new Error('pushing back down re-armed a cancelled gesture — you could not know what letting go would do');
+      win('pointerup', 360);
+      await sleep(60);
+      if (openView()) throw new Error('the faves screen opened anyway after the gesture was cancelled');
+
+      // 4) Positive control — an uncancelled pull still opens it, or this test proves nothing.
+      pt('pointerdown', 100); win('pointermove', 130); win('pointermove', 300); win('pointerup', 300);
+      await sleep(80);
+      if (!openView()) throw new Error('a clean pull past the commit point no longer opens the faves screen');
+    } finally {
+      const back = document.querySelector('.fxb-favview .fxb-catview-back, .fxb-favview .fxb-back');
+      if (back) back.click();
+      FM.fxBrowser.close && FM.fxBrowser.close();
+      document.querySelectorAll('.fxb-favview').forEach(n => n.remove());
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* #176 — Ezra: "When you press export and the notes show up, put an option in that menu to tick off
+     the notes." The card was read-only, so dealing with a reminder meant Back → notepad → untick →
+     export again. Ticking here must actually change the note, not just cross out a line on screen. */
+  test('the pre-export card can tick a reminder off, and it sticks', { item: 'notes-tickoff' }, async function () {
+    const P = FM.scene.project, was = P.notes;
+    try {
+      P.notes = [
+        { id: 't1', text: 'Swap the second clip', remind: true },
+        { id: 't2', text: 'Check the music licence', remind: true },
+      ];
+      const promise = FM.notepad.confirmExport();
+      await sleep(60);
+      const card = document.querySelector('.np-card--remind');
+      if (!card) throw new Error('two ticked notes did not raise the pre-export card');
+      const ticks = card.querySelectorAll('.np-remind-tick');
+      if (ticks.length !== 2) throw new Error('expected a tick per reminder, found ' + ticks.length);
+      if (!/2 reminders/.test(card.querySelector('.np-title').textContent)) throw new Error('the card did not say how many reminders there were');
+
+      ticks[0].click();
+      await sleep(20);
+      if (P.notes[0].remind) throw new Error('ticking the row did not untick the underlying note — the strike-through would be a lie');
+      if (FM.notepad.pending().length !== 1) throw new Error('the note is still counted as pending after being ticked off');
+      const row = ticks[0].closest('.np-remind-row');
+      if (!row.classList.contains('done')) throw new Error('the ticked row is not shown as dealt with');
+      if (!row.isConnected) throw new Error('the row vanished — the list must not jump under the finger mid-decision');
+
+      ticks[1].click();
+      await sleep(20);
+      const go = card.querySelector('.np-actions .btn:last-child');
+      if (go.textContent !== 'Export') throw new Error('with nothing outstanding the button still said "' + go.textContent + '" — there is no longer anything to be quiet about');
+      go.click();
+      if (await promise !== true) throw new Error('pressing Export did not let the export through');
+      if (document.querySelector('.np-card--remind')) throw new Error('the card stayed up after Export');
+    } finally {
+      P.notes = was;
+      document.querySelectorAll('.np-scrim').forEach(n => n.remove());
+      if (FM.notepad.sync) FM.notepad.sync();
+    }
+  });
+
+  /* #171 — "the note button shouldn't even be there, it should only be there when you don't have
+     anything selected".
+     Asserted against the STYLE RULES, not computed styles: those rules live inside the phone media
+     query, so a computed-display check silently passes (or fails) purely on how wide the suite happens
+     to be running. The real invariant is width-independent and is the design in one sentence — the
+     notes button is in exactly the hide-lists the cog is in. That is what makes the phone bar safe:
+     when a selection takes the bar, every project control leaves together, so the delete bin can never
+     land on a slot a thumb learned as something else. */
+  test('the phone notes button hides in exactly the states the cog does', { item: 'notes-bar' }, async function () {
+    if (!document.getElementById('m-notes')) throw new Error('the phone bar has no notes button');
+    const missing = [];
+    let cogRules = 0;
+    [].forEach.call(document.styleSheets, sheet => {
+      let rules; try { rules = sheet.cssRules; } catch (e) { return; }   // cross-origin sheets throw
+      /* NOT `if (r.cssRules) recurse` — that is the obvious version and it is wrong on any current
+         Chrome. Since CSS nesting shipped, an ordinary style rule ALSO exposes .cssRules (an empty
+         list, which is still an object, which is still truthy), so that test treats every rule as a
+         group and never reads a single selector. Measured on this very stylesheet: 1724 "groups" and
+         64 leaves, and the scan quietly found nothing. Recurse on LENGTH, and check the rule itself
+         either way, since a nested rule is both. */
+      const walk = list => [].forEach.call(list, r => {
+        const sel = r.selectorText || '';
+        if (/#m-settings/.test(sel) && /display\s*:\s*none/.test((r.style && r.style.cssText) || '')) {
+          cogRules++;
+          if (!/#m-notes/.test(sel)) missing.push(sel.slice(0, 120));
+        }
+        if (r.cssRules && r.cssRules.length) walk(r.cssRules);            // @media, @supports, nesting
+      });
+      walk(rules);
+    });
+    if (!cogRules) throw new Error('found no rule that hides the phone cog — this test has stopped testing anything');
+    if (missing.length) {
+      throw new Error('the cog is hidden by ' + missing.length + ' rule(s) that leave the notes button on the bar: ' + missing.join(' | '));
+    }
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

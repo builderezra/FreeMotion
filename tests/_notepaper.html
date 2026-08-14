@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#181/#176 — the notepad as paper, and the tick-off card</title></head>
+<body style="margin:0;background:#111;display:flex;gap:10px">
+<iframe id="a" src="../index.html" style="width:380px;height:800px;border:0"></iframe>
+<iframe id="b" src="../index.html" style="width:380px;height:800px;border:0"></iframe>
+<script>
+/* Two phones side by side: the notepad itself (left) and the pre-export reminder card with one note
+   already ticked off (right). Both at 380px, which is the width that matters.
+   Judged by eye, not by assertion: "yellow with white background… I feel this will look cool" is a
+   look, and a getComputedStyle check would pass on a sheet that reads as a jaundiced dialog. */
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.scene && w.FM.notepad) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+function boot(id, fn) {
+  var f = document.getElementById(id);
+  f.addEventListener('load', function () {
+    var w = f.contentWindow;
+    waitFM(w).then(async function (FM) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(450);
+      await fn(FM, w.document);
+      window['__done_' + id] = true;
+    });
+  });
+}
+boot('a', async function (FM, d) {
+  FM.scene.project.notes = [
+    { id: 'n1', text: 'Swap the second clip for the wider take', remind: true },
+    { id: 'n2', text: 'Colour grade is too green', remind: false },
+    { id: 'n3', text: 'Ask Dan about the music licence before this goes out', remind: true },
+  ];
+  FM.notepad.open();
+});
+boot('b', async function (FM, d) {
+  FM.scene.project.notes = [
+    { id: 'n1', text: 'Swap the second clip for the wider take', remind: true },
+    { id: 'n2', text: 'Ask Dan about the music licence before this goes out', remind: true },
+  ];
+  FM.notepad.confirmExport();
+  await sleep(200);
+  var first = d.querySelector('.np-remind-tick');   // tick one off, so both states show in one shot
+  if (first) first.click();
+});
+</script></body></html>

@@ -2952,8 +2952,10 @@ window.FM = window.FM || {};
       sampleBtn.disabled = false; sampleBtn.textContent = 'Sample clip';
     });
     document.getElementById('btn-export').addEventListener('click', showExportDialog);
-    const notesBtn = document.getElementById('btn-notes');
-    if (notesBtn) notesBtn.addEventListener('click', () => { if (FM.notepad) FM.notepad.open(); });
+    ['btn-notes', 'm-notes'].forEach(id => {   // the desktop bar's and the phone's (queue 171) — same panel, same handler
+      const b = document.getElementById(id);
+      if (b) b.addEventListener('click', () => { if (FM.notepad) FM.notepad.open(); });
+    });
     // Home's project ⋯ opens this same dialog, so it can't stay private to this module.
     FM.showExportDialog = showExportDialog;
     const helpBtn = document.getElementById('btn-help');

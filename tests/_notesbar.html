@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#171 — the phone bar with the notes button</title></head>
+<body style="margin:0;background:#111">
+<pre id="out" style="color:#ccc;font:12px monospace;position:fixed;right:0;top:0;width:470px;z-index:9;white-space:pre-wrap">running…</pre>
+<iframe id="app" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+/* Ezra (#171): "Put the notes button to the left of the settings cog… you will have to make the
+   editable area for the name smaller (mobile) when you have a layer selected and the delete button is
+   there, the note button shouldn't even be there, it should only be there when you don't have anything
+   selected."
+   The thing worth measuring is not "does the button exist" — it is what adding a 42px control does to
+   the NAME FIELD at 380px, and whether the button really leaves in both selected states. So this reads
+   real rects out of the live bar in three states. */
+var L = []; function say(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function waitFM(w) { return new Promise(function (res, rej) { var n = 0; (function p() { if (w.FM && w.FM.scene && w.FM.timeline) return res(w.FM); if (n++ > 300) return rej(new Error('no FM')); setTimeout(p, 50); })(); }); }
+document.getElementById('app').addEventListener('load', function () {
+  var w = document.getElementById('app').contentWindow, d = w.document;
+  waitFM(w).then(async function (FM) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await sleep(500);
+    var g = id => d.getElementById(id);
+    var vis = el => !!(el && el.offsetParent !== null);
+    var box = el => { var r = el.getBoundingClientRect(); return Math.round(r.left) + '..' + Math.round(r.right) + ' (' + Math.round(r.width) + 'px)'; };
+
+    function row(tag) {
+      var bar = g('topbar-m');
+      var kids = [].slice.call(bar.children).filter(vis)
+        .map(el => (el.id || el.className) + ' ' + box(el));
+      say('--- ' + tag + ' ---');
+      kids.forEach(k => say('   ' + k));
+      var name = g('proj-name-m'), clip = g('clip-name-m');
+      var field = vis(name) ? name : (vis(clip) ? clip : null);
+      say('   NAME FIELD: ' + (field ? field.id + ' ' + box(field) : 'none visible'));
+      say('   notes visible: ' + vis(g('m-notes')));
+      return { notes: vis(g('m-notes')), width: field ? Math.round(field.getBoundingClientRect().width) : 0 };
+    }
+
+    FM.scene.layers.length = 0;
+    FM.timeline.rebuild();
+    await sleep(250);
+    var a = row('NOTHING SELECTED — notes must be present');
+
+    FM.addTextLayer && FM.addTextLayer();
+    if (!FM.scene.layers.length) { FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', start: 0, duration: 2 })); FM.timeline.rebuild(); }
+    FM.selectLayer(FM.scene.layers[0].id);
+    FM.timeline.rebuild();
+    await sleep(400);
+    var b = row('LAYER SELECTED — notes must be gone, delete bin present');
+
+    d.body.classList.add('sel-mode');
+    await sleep(200);
+    var c = row('SELECT MODE — notes must be gone');
+    d.body.classList.remove('sel-mode');
+
+    say('');
+    say(a.notes ? 'PASS  notes present when nothing is selected' : 'FAIL  notes missing in the one state it should be in');
+    say(!b.notes ? 'PASS  notes gone once a layer is selected' : 'FAIL  notes still on the bar with a layer selected');
+    say(!c.notes ? 'PASS  notes gone in select mode' : 'FAIL  notes still on the bar in select mode');
+    say('name field: ' + a.width + 'px unselected' + (a.width >= 90 ? '  (OK)' : '  ← TOO NARROW, the name is unreadable'));
+    window.__done = true;
+  }).catch(function (e) { say('ERROR ' + e.message); window.__done = true; });
+});
+</script></body></html>

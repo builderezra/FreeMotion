@@ -440,7 +440,7 @@ window.FM = window.FM || {};
      * block (negative margin, so it takes no layout space) and is uncovered rather than animated in,
      * which is what makes the gesture read as pulling a drawer open instead of nudging a box. */
     const hint = el('div', 'fxb-pullhint');
-    hint.innerHTML = '<span class="fxb-pullhint-ico">★</span><span class="fxb-pullhint-txt">Favourites</span>';
+    hint.innerHTML = '<span class="fxb-pullhint-ico">★</span><span class="fxb-pullhint-txt">Faves</span>';
     sec.appendChild(hint);
 
     const body = el('div', 'fxb-recents-body');   // the part that MOVES; the hint must stay put
@@ -453,9 +453,11 @@ window.FM = window.FM || {};
 
     const grab = el('button', 'fxb-favmore');
     grab.type = 'button';
-    grab.innerHTML = '<span class="fxb-favmore-bar"></span><span class="fxb-favmore-txt">All favourites' +
+    // "Don't name it all faves, just faves" (#124) — it was "All favourites", and the "All" was doing
+    // no work: there is only one faves screen, so the word only ever added length to a 11px caps label.
+    grab.innerHTML = '<span class="fxb-favmore-bar"></span><span class="fxb-favmore-txt">Faves' +
       (favs.length ? ' \u00b7 ' + favs.length : '') + ' \u25be</span>';
-    grab.title = 'Pull down (or tap) for all your favourites, with sorting';
+    grab.title = 'Pull down (or tap) for your faves, with sorting';
     grab.addEventListener('click', () => openFavourites());   // a drag that ended here never reaches this: attachFavPull swallows that click in the capture phase
     body.appendChild(grab);
     sec.appendChild(body);
@@ -489,18 +491,45 @@ window.FM = window.FM || {};
   let _unbindPull = null;
   const PULL_MAX = 88, PULL_COMMIT = 34;
   const FLICK_VY = 0.5, FLICK_MIN = PULL_COMMIT * 0.45;
+  /* REVERSING CANCELS, AND THE CANCEL STICKS (queue 124). Ezra: "since people may start swiping and not
+   * want to go in that menu … you can just swipe back up and cancel the swipe to opening the menu."
+   * Releasing short of the commit point already did nothing, so a reversal all the way back was already
+   * harmless — but that is a POSITION rule, and at full stretch it is a useless one: from PULL_MAX you
+   * would have to haul the finger ~220px back up before the gesture disarmed. What he is describing is a
+   * DECISION: change your mind, pull back a bit, and it is off — wherever you happened to be.
+   * So the trigger is distance back from the PEAK, not absolute position, and once it fires the drag is
+   * dead for good; pushing back down cannot re-arm it. A gesture that could flip-flop under the finger
+   * would leave you unsure what you had chosen at the exact moment you let go, which is the whole
+   * anxiety the request is about.
+   * 12 damped px is 39–52px of real finger travel depending where you reversed from (the damping curve
+   * squashes the top end) — far beyond hand jitter, well short of a hauling motion. */
+  const REVERSE_BY = 12, REVERSE_FROM = PULL_COMMIT * 0.5;
   function reducedMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function attachFavPull(sec, body, hint) {
     if (reducedMotion()) return;
     let sy = 0, sx = 0, lastY = 0, lastT = 0, vy = 0, id = null, live = false, claimed = false, px = 0;
+    let peak = 0, dead = false;
     const scroller = () => sec.closest('.fxb-scroll');
+    const txt = hint.querySelector('.fxb-pullhint-txt'), ico = hint.querySelector('.fxb-pullhint-ico');
+    /* The hint says which of the three things is about to happen, because "nothing visibly different"
+     * is not an answer to "what will letting go do?". Written on state CHANGE only — this runs inside
+     * pointermove, and rewriting identical text every frame is layout the gesture does not need. */
+    let shown = '';
+    const say = state => {
+      if (state === shown) return;
+      shown = state;
+      hint.classList.toggle('armed', state === 'armed');
+      hint.classList.toggle('cancelled', state === 'cancelled');
+      if (ico) ico.textContent = state === 'cancelled' ? '↑' : '★';
+      if (txt) txt.textContent = state === 'armed' ? 'Release to open' : state === 'cancelled' ? 'Cancelled' : 'Faves';
+    };
     const set = (v, ease) => {
       body.style.transition = ease || '';
       body.style.transform = v ? 'translate3d(0,' + v.toFixed(1) + 'px,0)' : '';
       // The hint brightens with the pull and goes accent once you are past the commit point, so the
       // finger knows it has done enough BEFORE it lifts — the one thing a pull gesture must tell you.
       hint.style.opacity = v ? Math.min(1, v / (PULL_COMMIT * 0.75)).toFixed(2) : '';   // fully lit just before it arms, so the accent flip is the last thing that happens
-      hint.classList.toggle('armed', v >= PULL_COMMIT);
+      if (!dead) say(v >= PULL_COMMIT ? 'armed' : 'pulling');
     };
     let eating = null;
     const disarmEat = () => { if (eating) { sec.removeEventListener('click', eating, true); eating = null; } };
@@ -515,7 +544,8 @@ window.FM = window.FM || {};
       const sc = scroller();
       if (!sc || sc.scrollTop > 0) return;                       // only from a browser already at the top
       if (e.target.closest('input, textarea, select')) return;
-      live = true; claimed = false; px = 0; id = e.pointerId;
+      live = true; claimed = false; px = 0; peak = 0; dead = false; id = e.pointerId;
+      say('pulling');   // reset on the NEXT gesture, not on release — letting go is exactly when you still want to be reading "Cancelled"; by then the hint is fading out anyway
       sy = lastY = e.clientY; sx = e.clientX; lastT = e.timeStamp; vy = 0;
     };
     const move = e => {
@@ -532,13 +562,23 @@ window.FM = window.FM || {};
       const now = e.timeStamp, dt = now - lastT;
       if (dt > 0) vy = (e.clientY - lastY) / dt;
       lastY = e.clientY; lastT = now;
+      if (dead) return;                                          // cancelled: hold the block home, but keep eating the scroll until the finger leaves
       px = Math.min(PULL_MAX, Math.pow(Math.max(0, dy), 0.78));
+      if (px > peak) peak = px;
+      if (peak >= REVERSE_FROM && peak - px >= REVERSE_BY) {      // pulled back → decided against it
+        dead = true; px = 0;
+        say('cancelled');
+        set(0, 'transform 200ms cubic-bezier(.22,.8,.3,1)');      // glides home under the finger, so the cancel is something you SEE, not something you find out on release
+        hint.style.opacity = '1';                                 // …and the word stays lit while it does, then fades with the section
+        setTimeout(() => { if (hint) hint.style.opacity = ''; }, 320);
+        return;
+      }
       set(px);
     };
     const settle = (e, aborted) => {
       if (!live || (e && e.pointerId !== id)) return;
-      const was = claimed, amt = px;
-      live = false; claimed = false; px = 0;
+      const was = claimed, amt = dead ? 0 : px, killed = dead;
+      live = false; claimed = false; px = 0; peak = 0; dead = false;
       if (_unbindPull) _unbindPull();
       try { body.releasePointerCapture(id); } catch (_) {}
       if (!was) return;
@@ -556,7 +596,7 @@ window.FM = window.FM || {};
        * the effect-row swipe uses (js/inspector.js:816). Velocity alone let a 28px nudge open the
        * whole favourites screen, which is exactly the kind of thing you hit by accident while
        * scrolling and cannot explain afterwards. */
-      if (!aborted && (amt >= PULL_COMMIT || (vy > FLICK_VY && amt > FLICK_MIN))) {
+      if (!aborted && !killed && (amt >= PULL_COMMIT || (vy > FLICK_VY && amt > FLICK_MIN))) {
         if (navigator.vibrate) { try { navigator.vibrate(9); } catch (_) {} }
         set(0, 'transform 190ms cubic-bezier(0,0,.2,1)');
         openFavourites(true);
@@ -653,7 +693,7 @@ window.FM = window.FM || {};
     const top = el('div', 'fxb-catview-top');
     const back = el('button', 'fxb-back', '‹ Back'); back.addEventListener('click', closeView);
     top.appendChild(back);
-    const title = el('div', 'fxb-catview-title', 'Favourites');
+    const title = el('div', 'fxb-catview-title', 'Faves');
     top.appendChild(title);
     view.appendChild(top);
 
@@ -665,7 +705,7 @@ window.FM = window.FM || {};
     function paint() {
       const sort = favSortRead();
       const ids = readList(FAV_KEY);
-      title.textContent = 'Favourites' + (ids.length ? ' · ' + ids.length : '');
+      title.textContent = 'Faves' + (ids.length ? ' · ' + ids.length : '');
       bar.innerHTML = '';
       FAV_SORTS.forEach(s => {
         const b = el('button', 'fxb-sortbtn' + (s.key === sort.key ? ' on' : ''), s.label);

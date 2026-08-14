@@ -1372,9 +1372,16 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   height: 34px; margin-bottom: -34px; opacity: 0; pointer-events: none;
   font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim);   /* --dim does not exist in this file; using it meant the hint silently inherited full-brightness body text and never read as a resting state */
   transition: color .12s ease; }
-.fxb-pullhint-ico { font-size: 13px; line-height: 1; }
+.fxb-pullhint-ico { font-size: 13px; line-height: 1; transition: transform .14s cubic-bezier(.34,1.56,.64,1); }
 .fxb-pullhint.armed { color: var(--accent); }
-.fxb-pullhint.armed .fxb-pullhint-ico { transform: scale(1.15); }
+.fxb-pullhint.armed .fxb-pullhint-ico { transform: scale(1.28); }
+/* Cancelled (queue 124): pull back and the drawer shuts under your finger. It gets its own colour and
+   an UP arrow rather than just going dim, because dim is also what "not pulled far enough" looks like,
+   and those are two different answers to "what happens if I let go now?". The fade is on the class, so
+   it only applies to this one moment — the opacity is written per-frame during a live pull, and a
+   transition there would make the hint lag the finger. */
+.fxb-pullhint.cancelled { color: var(--text-dim); transition: color .12s ease, opacity .26s ease; }
+.fxb-pullhint.cancelled .fxb-pullhint-ico { transform: translateY(-2px); }
 /* The body is what moves. will-change only while it can move, not permanently — a promoted layer on
    a grid of live effect thumbnails is not free. */
 .fxb-recents-body { will-change: transform; }
@@ -1393,7 +1400,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fxb-favview-fade { animation: fxb-fav-fade 200ms linear both; }
 @media (prefers-reduced-motion: reduce) {
   .fxb-favview-in, .fxb-favview-pull { animation: fxb-fav-fade 200ms linear both; }
-  .fxb-pullhint { transition: none; }
+  .fxb-pullhint, .fxb-pullhint-ico, .fxb-pullhint.cancelled { transition: none; }
 }
 .fxb-cats { display: flex; flex-direction: column; gap: 9px; }
 .fxb-banner { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px; border: 1px solid var(--line); border-radius: 12px; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; background: linear-gradient(120deg, var(--panel-3), var(--panel-2)); }
@@ -2285,7 +2292,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 
   /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
   #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-more { display: none; }
-  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more { display: none; }
+  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more, body.m-editing #m-notes { display: none; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
   body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
 
@@ -2305,7 +2312,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
      One source of truth: these are body classes, set only by app.js syncSelectionChrome. No JS writes
      display on these buttons. */
   body.sel-mode #proj-name-m, body.sel-mode #clip-name-m, body.sel-mode #ver-m,
-  body.sel-mode #m-proj-more, body.sel-mode #m-settings, body.sel-mode #m-export,
+  body.sel-mode #m-proj-more, body.sel-mode #m-settings, body.sel-mode #m-export, body.sel-mode #m-notes,
   body.sel-mode #m-dup, body.sel-mode #m-more { display: none; }
   body.sel-mode #m-selcount { display: block; }
   body.sel-mode #m-group, body.sel-mode #m-del { display: flex; }
@@ -4530,39 +4537,66 @@ body.fm-pushing #toast { z-index: 213; }
 }
 
 /* ---------- Project notepad (queue 139) ---------- */
-.tb-notes { position: relative; }
+.tb-notes, #m-notes { position: relative; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--panel); display: none;
 }
 .tb-notes-dot.on, .m-notes-dot.on { display: block; }
 #m-notes { position: relative; }
+/* THE NOTEPAD IS PAPER (queue 181). Ezra: "I want the notes area to be themed like a note pad, similar
+   colours to apples notes app, yellow with white background, I feel this will look cool."
+   It is the only surface in FreeMotion that holds a DOCUMENT rather than controls, so it is the one that
+   can afford to look unlike everything else — and looking unlike everything else is the point: you can
+   tell at a glance that what is on screen is your writing, not the app's.
+   Deliberately single-look. The rest of the app follows the theme; a sheet of paper does not have a dark
+   mode, and a "dark paper" version would just be the panel colour with extra steps. Every colour here is
+   literal rather than a token for that reason — these must not drift when the app's palette does. */
 .np-scrim { position: fixed; inset: 0; z-index: 3000; background: rgba(2,6,9,.62); display: flex; align-items: center; justify-content: center; padding: 18px; }
-.np-card { display: flex; flex-direction: column; gap: 10px; width: min(420px, 94vw); max-height: min(86vh, 86dvh);
-  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.55); }
-.np-head { display: flex; align-items: baseline; justify-content: space-between; }
-.np-title { font-weight: 800; font-size: 16px; }
-.np-hint { font-size: 12px; color: var(--text-dim); margin-top: -4px; }
-.np-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
-.np-empty { color: var(--text-faint); font-size: 13px; padding: 14px 2px; }
-.np-row { display: flex; align-items: flex-start; gap: 8px; }
-/* The tick is the whole feature — it is what separates "a note" from "stop me before I export" — so
-   it gets a real 34px target rather than a checkbox glyph. */
-.np-tick { flex: none; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: transparent; display: grid; place-items: center; cursor: pointer; }
-.np-tick svg { width: 17px; height: 17px; }
-.np-tick.on { background: rgba(41,217,187,.16); border-color: var(--accent); color: var(--accent); }
-.np-text { flex: 1 1 auto; min-width: 0; resize: none; overflow: hidden; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13.5px; line-height: 1.35; }
-.np-text:focus { outline: none; border-color: var(--accent); background: var(--panel-3); }
-.np-del { flex: none; width: 30px; height: 34px; background: none; border: 0; color: var(--text-faint); font-size: 15px; cursor: pointer; border-radius: 8px; }
-.np-del:hover { color: #ff6b6b; }
-.np-add { flex: none; }
-.np-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; }
-/* The pre-export card. "Export anyway" is the quieter of the two on purpose: a reminder exists
-   because you probably meant to do the thing first. */
+.np-card { display: flex; flex-direction: column; gap: 0; width: min(420px, 94vw); max-height: min(86vh, 86dvh);
+  background: #fffdf7; border: 1px solid #e6dfc9; border-radius: 14px; padding: 0; overflow: hidden;
+  color: #23211a; box-shadow: 0 24px 60px rgba(0,0,0,.55); }
+/* The yellow band is the note pad's glued top edge — Apple's notes yellow, and the only saturated thing
+   on the sheet. Everything below it stays paper so the writing is what you look at. */
+.np-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #ffcf47; padding: 13px 16px 12px; border-bottom: 1px solid #e8bd33; }
+.np-title { font-weight: 800; font-size: 16px; color: #3a2f05; letter-spacing: .2px; }
+.np-hint { font-size: 12px; color: #7a6f52; padding: 10px 16px 2px; margin: 0; }
+.np-list { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; padding: 6px 12px 2px; }
+.np-empty { color: #9a8f74; font-size: 13px; padding: 16px 4px; }
+/* Ruled paper: one feint line per row, drawn as the row's own bottom border rather than a background
+   stripe, so the rules always land under the text however tall a note has grown. */
+.np-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 2px; border-bottom: 1px solid #efe7d2; }
+.np-row:last-child { border-bottom: 0; }
+.np-tick { flex: none; width: 32px; height: 32px; border-radius: 8px; border: 1px solid #ddd3b8; background: #fffdf7; color: transparent; display: grid; place-items: center; cursor: pointer; }
+.np-tick svg { width: 16px; height: 16px; }
+.np-tick.on { background: #ffcf47; border-color: #e0ab1d; color: #3a2f05; }
+/* The field is transparent so the writing sits ON the paper, not in a box on top of it. */
+.np-text { flex: 1 1 auto; min-width: 0; resize: none; overflow: hidden; background: transparent; color: #23211a;
+  border: 1px solid transparent; border-radius: 7px; padding: 7px 8px; font: inherit; font-size: 14px; line-height: 1.4; }
+.np-text::placeholder { color: #b3a888; }
+.np-text:focus { outline: none; background: #fffbe8; border-color: #edcd6a; }
+.np-del { flex: none; width: 30px; height: 32px; background: none; border: 0; color: #b3a888; font-size: 15px; cursor: pointer; border-radius: 8px; }
+.np-del:hover { color: #d1453b; }
+.np-add { flex: none; margin: 8px 14px 0; background: #fffdf7; border: 1px dashed #ddd3b8; color: #6b6144; font-weight: 600; }
+.np-add:hover { background: #fff8e2; border-color: #e0ab1d; color: #3a2f05; }
+.np-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; padding: 12px 14px 14px; }
+/* Two-class selectors deliberately. `.np-actions .btn` is (0,2,0), so a bare `.np-done` (0,1,0) lost to
+   it and the primary button came out paper-white — the same specificity trap the glass theme has sprung
+   three times in this file. Matching the parent's weight is the fix; raising it further is not needed. */
+.np-actions .btn { border: 1px solid #ddd3b8; background: #fffdf7; color: #4a4232; }
+.np-actions .np-done, .np-actions .np-back { background: #ffcf47; border-color: #e0ab1d; color: #3a2f05; font-weight: 700; }
+.np-actions .np-anyway { color: #7a6f52; }
+/* ---- the pre-export reminder card ---- */
 .np-card--remind { width: min(440px, 94vw); }
-.np-remind-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
-.np-remind-row { display: flex; gap: 8px; align-items: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-.np-remind-dot { color: var(--accent); font-size: 16px; line-height: 1.2; }
-.np-remind-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
-.np-back { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }
-.np-anyway { color: var(--text-dim); }
+.np-remind-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; padding: 12px 14px 2px; }
+.np-remind-row { display: flex; gap: 10px; align-items: flex-start; background: #fffbe8; border: 1px solid #efe0b4; border-radius: 10px; padding: 10px 12px; }
+.np-remind-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; color: #23211a; flex: 1 1 auto; min-width: 0; }
+/* Ticked off right here (queue 176): the row does not vanish — it stays, struck through, so you can see
+   what you just dealt with and undo it if you were wrong. A row that disappeared would make the list
+   jump under your finger at the exact moment you are deciding whether to export. */
+.np-remind-row.done { background: #f7f4ea; border-color: #e6dfc9; }
+.np-remind-row.done .np-remind-text { color: #9a8f74; text-decoration: line-through; }
+.np-remind-tick { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid #ddd3b8; background: #fffdf7; color: transparent; display: grid; place-items: center; cursor: pointer; }
+.np-remind-tick svg { width: 16px; height: 16px; }
+.np-remind-row.done .np-remind-tick { background: #ffcf47; border-color: #e0ab1d; color: #3a2f05; }
