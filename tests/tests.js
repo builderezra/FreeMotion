@@ -13120,6 +13120,42 @@
     }
   });
 
+  /* #196 — a sound-effects menu, synthesised rather than sampled (his "good ideas btw").
+     Three things are worth locking, and "it makes a noise" is only one of them. */
+  test('every sound effect renders, at a deliberate level, and lands as a real clip', { item: 'sfx' }, async function () {
+    if (!FM.sfx) throw new Error('FM.sfx is missing');
+    const list = FM.sfx.list();
+    if (list.length < 8) throw new Error('only ' + list.length + ' effects — the menu is meant to be a starter SET');
+    const ids = list.map(d => d.id);
+    if (new Set(ids).size !== ids.length) throw new Error('duplicate effect ids: ' + ids.join(', '));
+
+    /* One per failure mode rather than all sixteen, which would put ~15s of offline rendering in the
+       suite: a noise sweep (silent if its envelope is mis-scheduled), a loop-built effect (the ticking
+       build hung the renderer outright with a geometric gap that never reached its duration), and a
+       deliberately quiet one (proves `level` is honoured rather than everything being slammed to the
+       same peak). tests/_sfxrender.html measures all sixteen. */
+    for (const id of ['whoosh', 'build-tick', 'click']) {
+      const def = FM.sfx.byId(id);
+      if (!def) throw new Error('effect "' + id + '" is gone from the catalogue');
+      const buf = await Promise.race([
+        FM.sfx.renderBuffer(def),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('render never finished — a recipe is looping')), 8000)),
+      ]);
+      const d = buf.getChannelData(0);
+      let peak = 0, lastLoud = 0;
+      for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; if (a > 0.01) lastLoud = i; }
+      if (peak < 0.05) throw new Error(id + ' renders silence');
+      if (peak > 0.999) throw new Error(id + ' clips at ' + peak.toFixed(3) + ' — it will distort on export');
+      const want = 0.89 * (def.level == null ? 1 : def.level);
+      if (Math.abs(peak - want) > 0.02) throw new Error(id + ' peaks at ' + peak.toFixed(2) + ' but its level asks for ' + want.toFixed(2) + ' — the set will not be balanced');
+      if (lastLoud / buf.sampleRate < def.dur * 0.3) throw new Error(id + ' stops in the first third of its own clip length');
+    }
+
+    // It has to arrive as a real audio file, or the timeline cannot trim, fade or export it.
+    const wav = FM.sfx.encodeWav(await FM.sfx.renderBuffer(FM.sfx.byId('click')));
+    if (!wav || wav.type !== 'audio/wav' || wav.size < 512) throw new Error('the WAV encoder produced ' + (wav && wav.size) + ' bytes of ' + (wav && wav.type));
+  });
+
   async function run() {
     var results = [];
     for (var i = 0; i < T.length; i++) {

@@ -310,6 +310,18 @@ window.FM = window.FM || {};
            top-right exactly like fm-ic-au above), so the new entry reads as belonging to this tab
            rather than as a stray. The gradient id is namespaced — a duplicate id silently steals the
            fill from whichever element asked for it second. */
+        /* Sound effects (queue 196). Sits after Import and before Record voice: importing a track is
+           still the commonest move, and the tile you have always tapped must not shift under your
+           finger. The mark is a speaker throwing two arcs, in the Audio tab's own pink ramp so it reads
+           as belonging here — and the gradient id is namespaced, because a duplicate id silently steals
+           the fill from whichever element asked for it second. */
+        { label: 'Sound effects', icon: icoMulti(
+          '<defs><linearGradient id="fm-ic-sfx" x1="20" y1="4" x2="6" y2="20" gradientUnits="userSpaceOnUse">'
+          + '<stop offset="0" stop-color="#FBC2E7"/><stop offset="1" stop-color="#E8438F"/></linearGradient></defs>'
+          + '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z" stroke="url(#fm-ic-sfx)" stroke-linejoin="round"/>'
+          + '<path d="M15.4 9.2a4 4 0 0 1 0 5.6" stroke="url(#fm-ic-sfx)" stroke-linecap="round"/>'
+          + '<path d="M18.1 6.6a7.7 7.7 0 0 1 0 10.8" stroke="url(#fm-ic-sfx)" stroke-linecap="round"/>'),
+          add: function () { if (FM.sfx) FM.sfx.open(); else if (FM.toast) FM.toast('Sound effects aren’t available'); } },
         { label: 'Record voice…', icon: icoMulti(
           '<defs><linearGradient id="fm-ic-mic" x1="20" y1="4" x2="6" y2="20" gradientUnits="userSpaceOnUse">'
           + '<stop offset="0" stop-color="#FBC2E7"/><stop offset="1" stop-color="#E8438F"/></linearGradient></defs>'

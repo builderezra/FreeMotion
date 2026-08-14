@@ -4737,3 +4737,30 @@ body.fm-pushing #toast { z-index: 213; }
    It has to come after the shared glass block for #hm-new/#add-fab (same specificity, later wins), and
    it deliberately does NOT touch #hm-new, which has no aura and still needs its refraction. */
 #add-fab { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---------- Sound effects panel (queue 196) ----------
+   Same scrim-and-card shape as the notepad, which already works on a phone, rather than a second
+   full-screen browser: this is a short list you pick one thing from. Every row can be HEARD before it
+   is added, because the one real difficulty with sound effects is that a name tells you nothing. */
+.sfx-scrim { position: fixed; inset: 0; z-index: 3000; background: rgba(2,6,9,.62); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.sfx-card { display: flex; flex-direction: column; width: min(420px, 94vw); max-height: min(86vh, 86dvh);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55); }
+.sfx-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.sfx-title { font-weight: 800; font-size: 16px; }
+.sfx-hint { font-size: 12px; color: var(--text-dim); padding: 10px 16px 4px; }
+.sfx-list { overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
+.sfx-cat { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint);
+  padding: 12px 6px 5px; }
+.sfx-row { display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 10px; }
+.sfx-row.playing { background: rgba(41,217,187,.12); }
+.sfx-play { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text-dim); display: grid; place-items: center; cursor: pointer; }
+.sfx-play svg { width: 13px; height: 13px; margin-left: 1px; }
+.sfx-row.playing .sfx-play { color: var(--accent); border-color: var(--accent); }
+.sfx-name { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: 0; color: var(--text);
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 6px 0; }
+.sfx-dur { flex: none; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.sfx-add { flex: none; padding: 6px 12px; }
+.sfx-actions { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { .sfx-row { transition: none; } }

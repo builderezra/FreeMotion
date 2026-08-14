@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>#196 — the sound effects panel on a phone</title>
+<style>html,body{margin:0;background:#0b1017}iframe{border:0;width:390px;height:844px}</style></head>
+<body><iframe id="a" src="../index.html"></iframe>
+<script>
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.sfx)) { if (n++ > 300) return; return setTimeout(wait, 50); }
+    if (w.FM.home && w.FM.home.isOpen && w.FM.home.isOpen()) w.FM.home.close();
+    setTimeout(function () { w.FM.sfx.open(); setTimeout(function () { window.__done = true; }, 500); }, 500);
+  })();
+});
+</script></body></html>

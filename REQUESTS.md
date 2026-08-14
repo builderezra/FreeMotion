@@ -2191,7 +2191,59 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       1000% really works everywhere (bigger, touches audio routing), or ship the scrub-field control
       first at today's range so at least the control feels right? My recommendation is the gain stage —
       the control alone would still leave the slider lying above 100%.
-- [ ] **196 — A Sound Effects button in the Audio tab, with a library of effects.** His words: *"in the
+- [ ] **203 — An "Improve quality" action in a clip's ⋯ menu.** His words: *"We should add a button in
+      the three dot menu when tapping on a clip to improve quality, so if your video or photo is low
+      quality then you can add pixels or whatever to enhance it."*
+      Be straight with him about what is possible before building anything: nothing in a browser invents
+      detail that is not in the file. What CAN be done, and is worth having, is a proper upscale —
+      resampling to a larger raster with a good kernel plus a little unsharp mask and grain, which does
+      make a soft phone clip look meaningfully better on a big canvas. What cannot be done is
+      film-and-TV "enhance". Name it for what it does (Sharpen & upscale, say) rather than promising
+      pixels it cannot create, or the feature will read as broken.
+- [ ] **204 — Swiping UP on Recents should open Faves — he has now said UP twice.** His words: *"Idk if
+      you've done it but it still needs to be added that swiping up on the recents menu in effects opens
+      the faves menu."*
+      **This resolves the ambiguity flagged in #124.** That entry recorded the conflict honestly — he
+      said swipe UP to open and also "swipe back up and cancel" — and it was built as pull-DOWN because
+      down was self-consistent with the cancel. He has now said UP plainly and unprompted, so the
+      gesture flips: **up opens, and reversing (down) cancels.** The mechanics from #124 all carry over
+      unchanged — the commit threshold, the sticky reversal-cancel, the hint wording. Note the reason
+      down was chosen originally, from the code comment: the browser is itself a vertical scroller, and
+      up IS the scroll direction, so an up-gesture has to be claimed carefully — gate it on the scroller
+      being at the BOTTOM, the mirror of the current `scrollTop <= 0` gate, or it will fight scrolling.
+- [ ] **205 — Move & Transform should hide the outline and show the anchor point instead.** His words:
+      *"Make it so when you open move and transform it gets rid of the outline on the shape or layer, and
+      instead just shows the anchor point as a circle depending on where it is."*
+      Sensible: while you are moving something, the selection box is the one thing you do not need, and
+      the anchor is the thing you cannot currently see at all — which matters because everything rotates
+      and scales around it. So: entering Move & Transform hides `#select-box` and draws a circle at the
+      layer's real anchor, in canvas space, following it as anchorX/anchorY change. Check it survives
+      rotation and scale (the anchor is in the layer's own space, so it has to go through the same
+      matrix the handles use), and that leaving the section brings the box back.
+      **And the same for Edit Points** — his follow-up: *"Same with when opening edit points."* That one
+      already draws its own point handles, so the selection box on top of them is pure clutter. Do both
+      in one pass: a single rule for "this section owns the canvas overlay, so the selection box stands
+      down", rather than two special cases that will drift apart.
+- [ ] **201 — Show that a layer is LOADING, with a spinner bottom-left.** His words: *"I think the issue
+      with layers I add being invisible is because they're just loading, so make the app identify this
+      loading and put a nice smooth loading circle that moves in the bottom left corner."*
+      His diagnosis is worth taking seriously — a just-added video has to decode before it can draw, and
+      an empty canvas with no explanation is indistinguishable from a broken import. Needs: a real signal
+      that a layer's media is not ready yet (not a timer), a smooth indicator bottom-left, and it must
+      disappear the moment the frame is available. Pairs with #202, which is probably the same media not
+      being ready.
+- [ ] **202 — One simple video layer lags badly, and the video does not load properly.** His words:
+      *"when I add just one Simple video layer even on smooth settings in FreeMotion the project still
+      lags, no effects or anything, really laggy, and also the video is seemingly broken and not loading
+      properly."*
+      **This is the most serious thing open.** One clip, no effects, quality set to smooth, and it still
+      lags — that is the core experience being wrong, not an edge case, and it sits with #125/#130 (the
+      long-running lag) and #128. The second half — "seemingly broken and not loading properly" — may be
+      the same root cause as #201: the media not being decoded/ready while the timeline already thinks it
+      should draw. Measure both together: what the frame budget is spent on with exactly one video layer,
+      and what state the media element is in during the period he calls broken. Do NOT tune anything
+      before that measurement — this area has already produced three plausible-but-wrong causes.
+- [x] **196 — A Sound Effects button in the Audio tab, with a library of effects.** (v7.29) His words: *"in the
       audio tab we will add a button that is sound effects and you will be able to use that to add sound
       effects to the project, we will have a sound effects menu with a bunch of our own sound effects and
       some royalty free ones we find online, that we can legally use for free."*
@@ -2207,9 +2259,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       **Worth a decision from you: synthesised set first, or sourced files?** My recommendation is to
       build the browser plus a synthesised starter set — it ships immediately, is legally clean, and the
       same menu can take real files later.
-      **His reply: "Good ideas btw for the sound effects menu."** Taking that as agreement with the
-      approach, so when this comes up the plan is: the browser + a synthesised starter set, with room
-      for real files later. Confirm before spending time on sourcing audio.
+      **His reply: "Good ideas btw for the sound effects menu."** So that is what shipped.
+      **Done (v7.29): sixteen effects across Movement / Impact / Build / Interface / Texture**, every one
+      SYNTHESISED — no licence question, nothing to download, and re-tunable by changing a number rather
+      than by finding another file. Each row plays on tap (the one real difficulty with sound effects is
+      that a name tells you nothing) and adds as an ordinary audio clip: it renders to a WAV and goes
+      through the same path the voice recorder already uses, so it trims, fades and exports like any
+      import. Nothing downstream knows it was generated.
+      **Three faults the measuring caught that code review would not have:**
+      · Handing recipes a proxy context with `destination` overridden throws "Illegal invocation" on the
+        first `createGain()` — a native method refuses a plain object as `this`. All sixteen failed
+        identically. They are passed their output node explicitly now.
+      · The ticking build **hung the renderer outright**: its gap shrank geometrically, so the intervals
+        summed to 1.33s and `t` could never reach a 2s duration. Infinite loop, no output, no error. The
+        gap has a floor now, which also sounds better — below ~45ms ticks stop being countable.
+      · Levels were eleven-fold apart (Reverse whoosh 0.08 peak against Impact 0.90), so a whoosh after
+        an impact would have sounded like nothing happened. Every effect is normalised to a common peak
+        now, with a per-effect `level` for the ones that SHOULD sit lower — a click ought to be quieter
+        than a boom. That makes relative loudness a decision rather than a side effect.
+      Real files can still be added later; the browser does not care where a buffer came from.
 - [x] **197 — Drop the "…" from the Import buttons in Media and Audio.** (v7.24) His words: *"On both the
       import buttons in the media and audio menus on mobile it has three dots on the text for those two
       buttons, get rid of that."*

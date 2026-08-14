@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="../"><title>#196 — does every sound effect actually make a sound?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body><pre id="out">rendering…</pre>
+<script src="js/sfx.js"></script>
+<script>
+/* Every recipe is rendered offline and measured. A synthesised effect can fail in two silent ways —
+   it makes nothing at all (a mis-scheduled envelope), or it slams into 0 dBFS and will clip on export
+   — and neither is visible in code review. This also checks each one fills its declared duration, so a
+   clip does not land in the timeline longer than the sound inside it. */
+(async function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+  const list = FM.sfx.list();
+  say('name              cat         dur     peak     rms      ends at    verdict');
+  let bad = 0;
+  for (const def of list) {
+    let buf;
+    try { buf = await FM.sfx.renderBuffer(def); }
+    catch (e) { say(def.name + '  RENDER FAILED: ' + e.message); bad++; continue; }
+    const d = buf.getChannelData(0);
+    let peak = 0, sum = 0, lastLoud = 0;
+    for (let i = 0; i < d.length; i++) {
+      const a = Math.abs(d[i]);
+      if (a > peak) peak = a;
+      sum += d[i] * d[i];
+      if (a > 0.01) lastLoud = i;
+    }
+    const rms = Math.sqrt(sum / d.length);
+    const ends = lastLoud / buf.sampleRate;
+    const fill = ends / def.dur;
+    /* "makes a sound" is too weak a bar. The set as first written ran 0.08 to 0.90 peak — adding a
+       whoosh after an impact sounded like nothing happened — so this checks the LEVELS are deliberate:
+       every effect lands on its intended peak (the common target times its own `level`). */
+    const want = 0.89 * (def.level == null ? 1 : def.level);
+    let verdict = 'ok';
+    if (peak < 0.05) { verdict = 'SILENT'; bad++; }
+    else if (peak > 0.999) { verdict = 'CLIPPING'; bad++; }
+    else if (Math.abs(peak - want) > 0.02) { verdict = 'level ' + peak.toFixed(2) + ' but wants ' + want.toFixed(2); bad++; }
+    else if (fill < 0.35) { verdict = 'stops early (' + Math.round(fill * 100) + '% of its clip)'; bad++; }
+    say(def.name.padEnd(18) + def.cat.padEnd(12) + def.dur.toFixed(2).padEnd(8) +
+        peak.toFixed(3).padEnd(9) + rms.toFixed(4).padEnd(9) + ends.toFixed(2).padEnd(11) + verdict);
+  }
+  say('');
+  say(bad ? bad + ' of ' + list.length + ' need work' : 'all ' + list.length + ' produce sound, none clips, each fills its clip');
+  window.__done = true;
+})();
+</script></body></html>
