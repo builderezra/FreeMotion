@@ -4248,6 +4248,19 @@ wait for them to report back."*
       i.e. the cog sits above the backdrop layer rather than under it. His trace runs from the cog down
       and around the area the panel should occupy.
 
+      **(a) DONE v7.88** — a quarter turn over 280ms, eased out. A quarter rather than a full rotation
+      because a cog has radial symmetry, so 90° reads as complete in half the time. The restart is done
+      by hand (remove class → reflow → add) because a class that is already present will not replay its
+      animation, and without that a second press does nothing.
+      **(b) and (c) are still open, and here is the thing to know before starting.** Inside a project the
+      cog does NOT open App settings: `#btn-settings`'s handler forwards the click to `#btn-canvas`
+      (js/app.js, the `if (inProject && cv) { cv.click(); return; }` line). So the panel you are
+      describing is the **Canvas settings dialog**, not the `.set-panel` left drawer the same cog opens
+      from the home screen. Anchoring the wrong one would look like nothing changed.
+      They were left out of v7.88 on purpose: re-anchoring a dialog to its button and lifting that button
+      out of the dialog's own backdrop blur is a layout change, and it deserves a clean run rather than
+      being tacked onto a 280ms flourish.
+
 - [ ] **242 — The three layer buttons need a different background so they read as a group apart.** (15
       Aug, with the trio circled in red.) His words: *"make these three buttons have a different
       background to signify their difference."* The three are the SELECTION-dependent controls in the

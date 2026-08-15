@@ -5295,3 +5295,12 @@ body.fm-pushing #toast { z-index: 213; }
      field simply would not be there. A decoration that is present or absent depending on where you came
      from is worse than one that does not exist; the gradients are the part that always works. */
 }
+
+/* The cog's quarter turn on press (v7.88, queue 241). Ezra: "Make the cog do a little turn animation
+   when you click it." A quarter turn rather than a full one: a cog has radial symmetry, so 90deg reads
+   as a complete, deliberate movement while taking half the time a full rotation would, and the panel it
+   opens is already on its way in. Eased out so it arrives rather than stops.
+   prefers-reduced-motion turns it off — it is decoration on a control that works without it. */
+.ico.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
+@keyframes cog-turn { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
+@media (prefers-reduced-motion: reduce) { .ico.cog-turn { animation: none; } }

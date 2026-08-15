@@ -3354,6 +3354,11 @@ window.FM = window.FM || {};
     // On the HOME screen the cog is still FM.settings — there is no canvas there to configure.
     const setBtn = document.getElementById('btn-settings');
     if (setBtn) setBtn.addEventListener('click', () => {
+      /* A quarter turn on press (queue 241). Ezra: "Make the cog do a little turn animation when you
+       * click it." Restarted by hand — remove, force a reflow, add — because a class that is already
+       * present does not replay its animation, so a second click would do nothing at all. */
+      const ic = setBtn.querySelector('.ico');
+      if (ic) { ic.classList.remove('cog-turn'); void ic.offsetWidth; ic.classList.add('cog-turn'); }
       const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
       const cv = document.getElementById('btn-canvas');
       if (inProject && cv) { cv.click(); return; }
