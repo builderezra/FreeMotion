@@ -14561,6 +14561,44 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #150: let me choose what the detector scans ----------------
+   * "it should have a choice between only detecting where the captions are added in the project or
+   * detecting the whole project or detecting a specific audio layer then let you select it."
+   * The detector always reads the whole source clip, so the first two choices are about which of its
+   * findings survive — which is pure arithmetic and can be tested without decoding a single sample.
+   * The case that matters and is easy to get wrong is speech that starts BEFORE the caption clip: the
+   * clip has to move back to meet it, and every cue has to re-base by the same amount or they all
+   * slide by however far it moved. */
+  test('captions: "whole project" keeps speech that falls outside the caption clip, and re-bases it', { item: 'cap-scope' }, function () {
+    var C = FM.captions;
+    if (!C || typeof C.fitCues !== 'function') throw new Error('FM.captions.fitCues is missing — the scope choice has no testable seam');
+    // A caption clip at 10s lasting 4s. Speech at −2s (before it starts), inside, and past the end.
+    var cap = { start: 10, duration: 4 };
+    var raw = [{ a: -2, b: -1 }, { a: 1, b: 2 }, { a: 5, b: 6 }];
+
+    var clip = C.fitCues(cap, raw, 'clip');
+    // THE CONTROL: the default must still be the old behaviour, or this "choice" silently changes what
+    // every existing project does the next time someone presses the button.
+    if (clip.start !== 10 || clip.duration !== 4) throw new Error('"just this clip" moved the caption layer to ' + clip.start + '/' + clip.duration + ' — that mode must not touch it');
+    var inside = clip.cues.filter(function (c) { return c.a >= 0 && c.b <= 4.001; });
+    if (inside.length !== clip.cues.length) throw new Error('"just this clip" kept a cue outside the clip: ' + JSON.stringify(clip.cues));
+    if (clip.cues.length !== 1) throw new Error('"just this clip" kept ' + clip.cues.length + ' cues, expected only the one that falls inside');
+
+    var whole = C.fitCues(cap, raw, 'project');
+    if (whole.cues.length !== 3) throw new Error('"the whole project" dropped ' + (3 - whole.cues.length) + ' of 3 findings — that is the mode that exists to keep them');
+    // The clip moved back by 2s to meet the earliest speech…
+    if (Math.abs(whole.start - 8) > 1e-6) throw new Error('the caption clip should have moved back to 8s to cover speech at −2s, it went to ' + whole.start);
+    // …so every cue re-bases by the same 2s, and none may be negative.
+    if (whole.cues.some(function (c) { return c.a < -1e-9; })) throw new Error('a cue is still at a negative local time after the clip moved: ' + JSON.stringify(whole.cues));
+    if (Math.abs(whole.cues[0].a - 0) > 1e-6) throw new Error('the earliest cue should re-base to 0, it is at ' + whole.cues[0].a);
+    if (Math.abs(whole.cues[1].a - 3) > 1e-6) throw new Error('the middle cue should re-base from 1 to 3, it is at ' + whole.cues[1].a + ' — the shift was applied to some cues and not others, so they no longer line up with the audio');
+    // …and the clip is long enough to contain the last of them.
+    if (whole.duration < whole.cues[2].b - 1e-6) throw new Error('the clip is ' + whole.duration + 's but the last cue ends at ' + whole.cues[2].b + ' — cues outside their own clip do not show');
+    if (Math.abs(whole.duration - 8) > 1e-6) throw new Error('expected the clip to grow to 8s (6s of speech + the 2s it moved back), got ' + whole.duration);
+
+    if (C.fitCues(cap, [], 'project').cues.length !== 0) throw new Error('no findings should produce no cues');
+  });
+
   /* ---------------- #148: the edges of a clip stop clicking ----------------
    * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears."
    * Measured first (tests/_pops.html): the sync controller is NOT the cause — under real load it makes

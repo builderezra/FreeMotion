@@ -1966,7 +1966,10 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .cap-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
 .cap-add, .cap-make { margin-top: 9px; width: 100%; justify-content: center; }
 .cap-detect { display: flex; gap: 6px; align-items: center; margin-top: 9px; }
-.cap-src { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+/* Both pickers share one shape — the scope choice and the clip choice are the same kind of question,
+   and giving them different furniture would suggest they are not. (queue 150) */
+.cap-src, .cap-scope { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+.cap-src.hidden { display: none; }
 .cap-detect-btn { flex: 1 1 auto; justify-content: center; }
 .cap-detect-btn[disabled] { opacity: .5; cursor: default; }
 @media (max-width: 420px) { .cap-detect { flex-direction: column; align-items: stretch; } }

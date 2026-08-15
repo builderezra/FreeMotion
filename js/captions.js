@@ -131,11 +131,53 @@ window.FM = window.FM || {};
       return projT - (capLayer.start || 0);
     },
 
+    /* WHERE THE DETECTED CUES ARE ALLOWED TO LAND (queue 150).
+     *
+     * Ezra asked for "a choice between only detecting where the captions are added in the project or
+     * detecting the whole project or detecting a specific audio layer then let you select it". The
+     * first two are this function: the detector always reads the whole source clip, so the choice is
+     * about which of its findings survive.
+     *   'clip'    — keep only what falls inside the caption clip you already placed. What it has always
+     *               done, and right when you have deliberately put the captions over one section.
+     *   'project' — keep everything, and MOVE AND GROW the caption clip to cover it. Speech before the
+     *               caption clip's start would otherwise be silently thrown away, which is the case
+     *               "detect the whole project" exists for.
+     * Pure and exported so the arithmetic can be tested without decoding audio — the same reasoning as
+     * the exporter's fit rect. Returns the cues in the layer's NEW local time, plus where that layer
+     * has to move and how long it has to be. */
+    fitCues(capLayer, raw, mode) {
+      const out = { cues: [], start: capLayer.start || 0, duration: capLayer.duration || 0 };
+      if (!raw || !raw.length) return out;
+      if (mode !== 'project') {
+        const dur = capLayer.duration > 0 ? capLayer.duration : Infinity;
+        raw.forEach(c => {
+          let a = c.a, b = c.b;
+          if (isFinite(dur)) { a = clamp(a, 0, dur); b = clamp(b, 0, dur); }
+          else a = Math.max(0, a);
+          if (b - a >= MIN_CUE) out.cues.push({ a: a, b: b, text: c.text });
+        });
+        return out;
+      }
+      /* Whole project. A cue at a negative local time means the speech starts BEFORE the caption clip
+       * does, so the clip has to move back to meet it — and every cue re-bases by the same shift, or
+       * they all slide by however far it moved. */
+      let minA = 0, maxB = 0;
+      raw.forEach(c => { if (c.a < minA) minA = c.a; if (c.b > maxB) maxB = c.b; });
+      const shift = minA < 0 ? -minA : 0;
+      raw.forEach(c => {
+        const a = c.a + shift, b = c.b + shift;
+        if (b - a >= MIN_CUE) out.cues.push({ a: a, b: b, text: c.text });
+      });
+      out.start = (capLayer.start || 0) - shift;
+      out.duration = Math.max(capLayer.duration || 0, maxB + shift);
+      return out;
+    },
+
     /* Run the detector over a source clip's audio and lay down EMPTY cues at every stretch of speech.
      * Existing cue text is carried onto whichever new cue overlaps it most, so re-running the
      * detector after typing does not throw the words away.
      * Returns { count, stats } or throws. */
-    async detect(capLayer, srcLayer, onProgress) {
+    async detect(capLayer, srcLayer, onProgress, mode) {
       if (!FM.decodeAudio || !FM.detectSpeech) throw new Error('speech detection unavailable');
       const m = FM.media.get(srcLayer.id);
       if (!m || !m.file) throw new Error('that clip has no media file');
@@ -150,19 +192,21 @@ window.FM = window.FM || {};
       // Detecting on a PLAIN text layer converts it. Its existing string is real user work, so it
       // rides along as a whole-clip pseudo-cue and lands on the first detected cue.
       if (!old.length && (capLayer.text || '').trim()) old.push({ start: 0, end: isFinite(dur) ? dur : 1e9, text: capLayer.text });
+      // Every finding in the caption layer's local time, before any decision about what to keep.
+      const raw = res.segments.map(s => ({
+        a: C.sourceToLocal(capLayer, srcLayer, s.start),
+        b: C.sourceToLocal(capLayer, srcLayer, s.end),
+      }));
+      const fit = C.fitCues(capLayer, raw, mode);
       const used = new Set();
       const cues = [];
-      res.segments.forEach(s => {
-        let a = C.sourceToLocal(capLayer, srcLayer, s.start);
-        let b = C.sourceToLocal(capLayer, srcLayer, s.end);
-        if (isFinite(dur)) { a = clamp(a, 0, dur); b = clamp(b, 0, dur); }
-        else a = Math.max(0, a);
-        if (b - a < MIN_CUE) return;                       // fell outside the caption clip
+      fit.cues.forEach(c => {
+        const a = c.a, b = c.b;
         // carry over the best-overlapping old text
         let bestI = -1, bestOv = 0;
-        old.forEach((c, i) => {
+        old.forEach((o, i) => {
           if (used.has(i)) return;
-          const ov = Math.min(b, c.end) - Math.max(a, c.start);
+          const ov = Math.min(b, o.end) - Math.max(a, o.start);
           if (ov > bestOv) { bestOv = ov; bestI = i; }
         });
         let text = '';
@@ -170,6 +214,8 @@ window.FM = window.FM || {};
         cues.push({ start: +a.toFixed(3), end: +b.toFixed(3), text: text });
       });
       if (!cues.length) return { count: 0, stats: res.stats };
+      capLayer.start = fit.start;
+      capLayer.duration = fit.duration;
       capLayer.captions = cues;
       capLayer.text = '';
       C.normalize(capLayer);
@@ -250,26 +296,68 @@ window.FM = window.FM || {};
     detectRow(layer, rerender) {
       const wrap = el('div', 'cap-detect');
       const sources = C.audioSources();
+      /* THE SCOPE PICKER (queue 150). Ezra: "it should have a choice between only detecting where the
+       * captions are added in the project or detecting the whole project or detecting a specific audio
+       * layer then let you select it."
+       * The third is not a convenience, it is the FIX, and #152's measurement is what says so: the
+       * detector holds up against a music bed 18 dB down and collapses once music comes within 12 dB
+       * of the voice — 2 of 3 utterances at −12 dB, none at −6. Pointing it at the voice track instead
+       * of the finished mix is the difference between three cues and zero. So it is a listed choice
+       * rather than a dropdown you have to notice. */
+      const scope = document.createElement('select');
+      scope.className = 'cap-scope';
+      [['clip', 'Just this caption clip'], ['project', 'The whole project'], ['source', 'One audio clip…']]
+        .forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v === (FM._capScope || 'clip')) o.selected = true; scope.appendChild(o); });
+      wrap.appendChild(scope);
+
       let sel = null;
-      if (sources.length > 1) {
+      if (sources.length) {
         sel = document.createElement('select');
         sel.className = 'cap-src';
         sources.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name || 'Clip'; if (l.id === FM._capSrcId) o.selected = true; sel.appendChild(o); });
         sel.addEventListener('change', () => { FM._capSrcId = sel.value; });   // transient: never serialized with the project
         wrap.appendChild(sel);
       }
+      // The clip picker belongs to the third choice only — showing it beside the other two would ask
+      // you to answer a question those modes do not have.
+      const syncScope = () => {
+        FM._capScope = scope.value;
+        if (sel) sel.classList.toggle('hidden', scope.value !== 'source');
+      };
+      scope.addEventListener('change', syncScope);
+      syncScope();
       const btn = el('button', 'btn cap-detect-btn', '🎙 Detect speech');
       btn.title = 'Find where someone is talking and lay down empty cues at those times — all on this device';
       if (!sources.length) { btn.disabled = true; btn.title = 'Import a video or audio clip first — detection reads that clip’s audio'; }
       btn.addEventListener('click', async () => {
-        const src = sources.find(l => l.id === (sel ? sel.value : (FM._capSrcId || sources[0].id))) || sources[0];
+        const mode = scope.value;
+        const chosen = (mode === 'source' && sel) ? sel.value : (FM._capSrcId || (sources[0] && sources[0].id));
+        const src = sources.find(l => l.id === chosen) || sources[0];
         if (!src) return;
+        /* WHICH CLIPS TO TRY, and why the order is what it is. On the two whole-scope modes, a clip
+         * that turns up nothing is not the end of the answer — the next clip might be the voice track.
+         * #150's note asks for the source to "default to the most voice-like", and the honest way to
+         * know that is the level distribution the detector already returns... which means decoding.
+         * Decoding every clip up front is the expensive half of the whole operation, so instead the
+         * fallback is LAZY: try the chosen clip, and only if it finds nothing walk the rest. It costs
+         * extra exactly when the user would otherwise be stuck with "no speech found" and no idea that
+         * another clip was an option. On 'source' he has named the clip, so his choice is respected
+         * and nothing else is touched. */
+        const queue = (mode === 'source') ? [src] : [src].concat(sources.filter(l => l.id !== src.id));
         btn.disabled = true;
         const label = btn.textContent;
         btn.textContent = 'Decoding…';
         try {
-          const r = await C.detect(layer, src, p => { btn.textContent = 'Listening… ' + Math.round(p * 100) + '%'; });
+          let r = null, used = src, tried = 0;
+          for (const cand of queue) {
+            tried++;
+            const tag = queue.length > 1 ? ' (' + tried + '/' + queue.length + ')' : '';
+            r = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
+            used = cand;
+            if (r.count) break;
+          }
           btn.textContent = label; btn.disabled = false;
+          const src2 = used;
           if (!r.count) {
             /* WHY it found nothing, not just that it did (queue 152). Ezra: "im pretty sure the auto
                detect speaking and auto make the captions doesnt work… would be better to not add it
@@ -283,7 +371,7 @@ window.FM = window.FM || {};
                exactly which case it is — a voice makes the level swing (clipDbStd 100 on clean speech),
                a music bed does not (0.18 with no voice, 0.95 at −6 dB, against 4.5 at −18 dB where
                detection still worked). Under 3 is music with a wide margin either side. */
-            const nm = String(src.name || 'that clip');
+            const nm = String(src2.name || 'that clip');
             const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
             const st = r.stats || {};
             const musicLike = typeof st.clipDbStd === 'number' && st.clipDbStd < 3;
@@ -295,7 +383,7 @@ window.FM = window.FM || {};
             try { console.info('FreeMotion speech detection found nothing in “' + nm + '”:', st); } catch (e) {}
           } else {
             commitH();
-            if (FM.toast) FM.toast(r.count + ' cue' + (r.count === 1 ? '' : 's') + ' from “' + (src.name || 'clip') + '” — tap one to type');
+            if (FM.toast) FM.toast(r.count + ' cue' + (r.count === 1 ? '' : 's') + ' from “' + (src2.name || 'clip') + '” — tap one to type');
           }
           if (rerender) rerender(); else FM.requestRender();
           if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();

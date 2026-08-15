@@ -2439,6 +2439,24 @@ better still, keep working inside the turn rather than parking work for a later 
       between 3 cues and 0. Build the scope picker with that framing, and default to the most voice-like
       source rather than to whatever clip happens to be first.
 
+      **PART 2 SHIPPED v7.67.** Three choices above the button — **Just this caption clip · The whole
+      project · One audio clip…** — with the clip picker appearing only for the third, since showing it
+      beside the other two asks you to answer a question those modes do not have.
+      *"The whole project"* is the one with real arithmetic in it: speech starting BEFORE the caption
+      clip used to be thrown away silently, and now the clip moves back to meet it — which means every
+      cue re-bases by that same shift, or they all slide by however far it moved. Pure maths, so it is a
+      pure exported function with its own test; you should not have to decode audio to check where a cue
+      lands. Three mutations caught, including the one that keeps the cues and forgets to re-base them.
+      **On "default to the most voice-like source":** the honest way to know which clip that is, is the
+      level distribution the detector returns — which means decoding, and decoding every clip up front
+      is the expensive half of the whole operation. So the fallback is LAZY instead: try the clip you
+      chose, and only if it finds nothing walk the rest. Same outcome where it matters, paid for only
+      when you would otherwise be stuck on "no speech found" with no idea another clip was an option.
+      **PART 1 IS STILL OPEN — the button is no easier to reach.** It is still inside the Aa sheet, so
+      it is text layer → text editor → Aa → scroll. The natural home is a tile of its own on the
+      property grid beside Colouring and Effects, which is a new tile rather than a moved control, and
+      that is the next pass on this entry.
+
 - [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
       *"Also when editing a caption layer you should be able to chose somehow between adding effects to
       each section or adding effects that effect the whole layer."* So a caption track carries one
@@ -3600,3 +3618,12 @@ layout, motion blur, the elements browser and the effects browser.
       poster image carry the first moment.
       **Not doing any of that unasked** — it is your intro and how it looks is your call, not a number
       I should quietly optimise away. Say which and it is quick.
+
+- [ ] **224 — A second flaky test: the microphone one.** Caught on 15 Aug while working #150 — the suite
+      came back 350/351 with *"voice: the microphone is handed back on EVERY exit path — timed out
+      waiting for the mic to be acquired"*, and two immediate re-runs were both fully green. Headless
+      Chrome's fake microphone takes a variable time to come up, so the test's wait is racing it.
+      Same family as **#222** (the `key/cold-actually-shrinks` flake, ~1 in 5). Two intermittent tests is
+      the point at which a red run stops meaning anything, which is worse than having neither test — so
+      they are worth fixing together: wait for the real signal rather than a timeout, or give the wait a
+      budget that a slow acquisition cannot exceed.
