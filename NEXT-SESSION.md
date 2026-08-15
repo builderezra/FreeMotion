@@ -1,4 +1,4 @@
-# Where things are — written at v8.02, 16 Aug
+# Where things are — written at v8.05, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -28,7 +28,7 @@ it, still oldest-first.
 5. Commit, `git push ssh main`, then verify `git rev-parse HEAD` == `git rev-parse ssh/main`.
    `origin` is HTTPS with no stored credentials and will fail; `ssh` is the same repo and works.
 
-## What shipped this run — v7.73 → v8.02
+## What shipped this run — v7.73 → v8.05
 
 | | |
 |---|---|
@@ -62,38 +62,61 @@ it, still oldest-first.
 | 8.00 | The drawing overlay moves into the wrapper's space, so it survives a zoomed canvas |
 | 8.01 | …so the reset on entry is gone: your zoom is kept while you draw |
 | 8.02 | Two-finger scroll pans the canvas while drawing — **#165 is complete** |
+| 8.03 | The pan is clamped — it could push the canvas entirely off screen with no way back |
+| 8.04 | Subtle shading on the notes button (**#225**, which had been missed for 17 releases) |
+| 8.05 | "Export just this layer" is a picker, not a tick (**#174**) |
 
-Suite: **368/368** at v8.02, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+Suite: **371/371** at v8.05, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
 green run finally means something again.
 
 **His PC-layout block (#230–#247) is FINISHED except #244**, so the queue-jump exception above has
 almost expired: do #244 when it is reached, and otherwise work the older items oldest-first.
 
-## What is open, in the order to do it
+## #215 — the most serious item, and it needs his next export
 
-1. **#215 — export with no audio.** The most serious item in the file: the app produces silently wrong
-   output. He gave the first reproduction on 15 Aug (fresh project + sound effects + default settings).
-   v7.90–v7.92 did **not** fix it — they made all three silent failure paths *speak*, so the next
-   occurrence identifies itself. **Four outcomes are now distinguishable:** a toast naming a clip = the
-   mixer; the AAC toast = the browser has no encoder; "soundtrack failed to encode" = the encode threw;
-   **no toast and still silent = none of the three, which would be genuinely new information.** A dead
-   lead is recorded in the entry (library re-adds take the identical path as imports) — do not re-derive
-   it. **It cannot close without his next export**, so it does not hold the queue.
-2. **#244 — the add-menu drag.** Designed but not started, deliberately: five behaviours in one and
-   groundwork for his effects browser. **Read the entry — the design was corrected by measurement on
-   16 Aug, and the correction matters.** In Studio the add menu and the timeline are the SAME grid row
-   (measured: both top 616, height 264; `#app` rows are `616px 264px`), so they cannot have different
-   heights within the grid at all. That makes his *"go over the canvas rather than shrink it"* a
-   **structural requirement, not a preference** — the menu can only be taller than the timeline by
-   leaving the grid and floating over the stage. The rest of the design stands: mirror `#tl-resizer`'s
-   *structure*, clamp against `--tl-h`, sticky snap plus a divider flash. Do not re-research it.
-
+**#215 — export with no audio.** The most serious item in the file: the app produces silently wrong
+output. He gave the first reproduction on 15 Aug (fresh project + sound effects + default settings).
+v7.90–v7.92 did **not** fix it — they made all three silent failure paths *speak*, so the next
+occurrence identifies itself. **Four outcomes are now distinguishable:** a toast naming a clip = the
+mixer; the AAC toast = the browser has no encoder; "soundtrack failed to encode" = the encode threw;
+**no toast and still silent = none of the three, which would be genuinely new information.** A dead
+lead is recorded in the entry (library re-adds take the identical path as imports) — do not re-derive
+it. **It cannot close without his next export**, so it does not hold the queue.
 *(#165 is DONE — centring v7.35, undo/redo v7.77, erase v7.78, zoom v8.01, pan v8.02.)*
 
 
 Then the older queue, oldest-first. Everything below #148 is currently blocked on him.
 
-## Still waiting on a word from him
+## What an AUDIT of the list turned up — do this again
+
+Working forwards found the numbered items; **sweeping the ticks found six more things**, and none of
+them were visible from "what is next". This is worth repeating periodically, not just working forwards:
+
+- **#225 was never done.** Logged first thing that session, then his PC message jumped the queue and ran
+  for seventeen releases. I twice reported "everything done except #244" — wrong both times. Shipped v8.04.
+- **#172 and #173 were already built and never ticked** — the sixth and seventh stale entries. Both were
+  done as part of a NEIGHBOURING request (#173 alongside #121's prefs work, #172 alongside #141's
+  frame-rate list) while the entry that asked for them was never revisited.
+- **#174 was genuinely missing** and is now built (v8.05).
+- **#179 does not reproduce** — almost certainly fixed by v7.35, exactly as its own entry predicted.
+- **#187's "creeps in"** is explained by v7.87: the black bar rode a 420ms animation, which is why every
+  earlier round screenshotted the end state and found a plausible-but-wrong static cause.
+- **Two number collisions** were hiding real requests: his "? for keyboard shortcuts" and "THREE layouts
+  exist" shared numbers with other entries and are now **#248** and **#249**.
+
+## Next builds, in order
+
+1. **#204 — flip the Faves gesture to swipe UP** (he has asked twice). Well specified in the entry, and
+   the risk is named there: the down-pull is gated on `scrollTop <= 0`, and flipping to up needs the
+   MIRROR gate (at the end of the scroller), not a negated one — get it wrong and the effects browser
+   stops scrolling. Mirror the reversal-cancel and damping too, and do not re-tune the constants in the
+   same pass.
+2. **#244 — the add-menu drag.** Design corrected by measurement: the add menu and timeline are the SAME
+   grid row, so "float over the canvas" is structural, not a preference.
+3. **#248 / #249** — his two requests that were invisible behind number collisions.
+
+
+## Also waiting on a word from him
 
 **#148** (does the audio pop at a clip edge or mid-clip?), **#152** (keep or delete speech detection),
 **#160** (person icons, four options — my read is (c)), **#114**, **#98**, **#129**. None of these hold
