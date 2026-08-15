@@ -530,7 +530,23 @@ window.FM = window.FM || {};
             audioOK = !!(s && s.supported);
           }
         } catch (e) { audioOK = false; }
-        if (!audioOK) { console.warn('AAC audio encoding unavailable — exporting video only'); mix = null; }
+        /* THIS IS A SILENT AUDIO LOSS AND IT NOW SPEAKS (queue 215, v7.91). Until this release the whole
+         * of it was a console.warn: if the AAC probe failed the export quietly became video-only, with
+         * nothing on screen to say so. That is Ezra's report word for word — "pressed export with some
+         * pretty normal export settings and got an audioless clip" — and it is a DIFFERENT failure from
+         * the one v7.90 made visible: there the mixer could not read a clip, here the mix was built
+         * perfectly and is then thrown away wholesale because the encoder cannot take it. v7.90's
+         * reporting stays quiet in this case, which is exactly what he described.
+         * Worth being precise about the cause, because the comment above is easy to misread as "old
+         * iOS": AudioEncoder support is a property of the BROWSER, so the same project exports with
+         * sound in one and without it in another, on the same machine, with no setting changed. That is
+         * why this has been so hard to pin down from a description. */
+        if (!audioOK) {
+          console.warn('AAC audio encoding unavailable in this browser — exporting video only');
+          FM._audioTrackDropped = 'aac-unavailable';
+          if (FM.toast) FM.toast('This browser cannot encode AAC — exporting WITHOUT SOUND', 6000);
+          mix = null;
+        } else FM._audioTrackDropped = null;
       }
 
       /* CRASH-RESUME (#47, the second half). The codec has to be picked BEFORE the muxer now, because

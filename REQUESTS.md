@@ -3522,6 +3522,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       mixer dropped them and the reason is named; if no toast appears at all and the file is still
       silent, the mix was built fine and the loss is downstream.
 
+      **WENT DOWNSTREAM AND FOUND A SECOND SILENT LOSS — v7.91, and this one fits your report better
+      than the first.** Before declaring an audio track the exporter probes whether the browser can
+      encode AAC, which is right: a muxer that commits an empty audio track to the moov makes a file
+      strict players reject. But if the probe failed it threw the ENTIRE mix away and said so only in a
+      `console.warn`. Nothing on screen at all.
+      **And at that point the mix was built perfectly** — every clip read, every sample in place — so
+      v7.90's reporting stays silent here. Normal settings, no warning, no sound. That is your sentence.
+      It now toasts *"This browser cannot encode AAC — exporting WITHOUT SOUND."*
+      **The bit that explains five rounds of failing to pin this down:** `AudioEncoder` support is a
+      property of the BROWSER, not of your project or your settings. The same project exports with sound
+      in one browser and without it in another, on the same machine, with nothing changed — which is
+      unfalsifiable from a description alone.
+      **Three outcomes are now distinguishable from the outside**, which is what this entry has always
+      lacked: a toast naming a clip = the mixer; the AAC toast = the encoder; NEITHER toast and still a
+      silent file = the muxer, and that is the last place left to look.
+      *Known gap, stated rather than papered over: the AAC path has no direct test. It sits mid-`run()`
+      behind a real `isConfigSupported` probe, so covering it needs a full export with a stubbed encoder
+      — a bigger rig than this change earned today.*
+
 - [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
