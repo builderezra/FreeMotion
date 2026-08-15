@@ -3306,7 +3306,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
 - [ ] **172 — Export resolution needs a "Same as project" option.** So you can export at exactly the
       canvas size without hunting for the number that matches. (Pairs with #121, which just made the cog
       the source of truth for resolution — this is the option that says "whatever the cog says".)
-- [ ] **173 — Export quality should default to High.**
+- [x] **173 — Export quality should default to High. ALREADY DONE — implemented and never ticked; verified 16 Aug.**
+      Found by sweeping the middle of the list after #225 turned up undone — the **sixth** stale entry
+      this file has produced (after #37, #147's first half, #155, #93's headline and #164).
+      **And whoever did it thought harder than the request did**, which is why it is worth reading rather
+      than just ticking: changing the `<option selected>` alone would have been a fix that only worked on
+      a device which had never exported. Since #121 the quality IS remembered, so your own browser would
+      have restored the Medium it saved months ago and you would have reported the identical thing again.
+      So the prefs carry a schema version, and prefs written before the change drop their remembered
+      quality exactly once — letting the new default win — after which a quality you choose is kept.
+      **Verified rather than assumed:** seeded `localStorage` with a stale `{quality: "medium"}` from the
+      old schema, opened the dialog, and it came up on **0.18 — the highest of the three options**.
 - [ ] **174 — "Export just this clip" should say LAYER, and be a picker, not a tick.** His words: *"With
       the export just this clip tick at the bottom, make it say export just this layer, and also make it
       so when you press it, it isn't a tick but it's a button and it lets you select what layer."* So:
