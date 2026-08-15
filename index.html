@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=397">
+<link rel="stylesheet" href="styles.css?v=398">
 <link rel="stylesheet" href="theme-glass.css?v=25">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.70</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.71</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -430,6 +430,13 @@
 
   <!-- Home screen (AM): all projects at a glance + Templates tab. Built by home.js. -->
   <div id="home-screen" class="hidden">
+    <!-- The home background's film grain (queue 157). Ezra: "I want to try removing the film grain from
+         the projects and instead move it to the background, it might be better if the projects are
+         smooth and shiny with a rough textured background instead of".
+         It is a real element rather than a pseudo-element because #home-screen's ::before and ::after
+         are BOTH already the drifting light, and it carries its own two so the grain can cross-fade
+         between tiles the same way it did on the cards — the same keyframes, not a second copy. -->
+    <div id="hm-grain" aria-hidden="true"></div>
     <div class="hm-top">
       <!-- The wordmark is Ezra's own glass render, keyed off its black background to RGBA so it sits
            ON the chrome rather than in a black box. The ▶ mark stays as text beside it: it is the one
@@ -754,7 +761,7 @@
   <script src="js/storage.js?v=100"></script>
   <script src="js/export-resume.js?v=3"></script>
   <script src="js/medialib.js?v=4"></script>
-  <script src="js/home.js?v=130"></script>
+  <script src="js/home.js?v=131"></script>
   <script src="js/graph-editor.js?v=14"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

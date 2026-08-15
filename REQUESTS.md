@@ -2663,6 +2663,21 @@ better still, keep working inside the turn rather than parking work for a later 
       so the grain needs its own layer rather than a third pseudo-element — and it should reuse the same
       keyframes rather than gaining a second copy (see #116 and #155 for why).
 
+      **DONE v7.71 — and it is on the screen now, so the next move is yours.** The cards are smooth: they
+      keep the glass edge, the light and the OPEN glint, and lose only the texture over the face. The
+      whole background behind them is the rough surface instead.
+      It went exactly as the note above said it had to: a real element (`#hm-grain`), because
+      #home-screen's two pseudo-elements are both the drifting light already; and the SAME keyframes,
+      not a copy — the linear curve in there was the fourth attempt at *"I want a constant flow, not a
+      noticeable start and stop"*, and a fork would have thrown that away without anyone noticing.
+      The per-card phase offset and tile pair are gone, along with the problem they existed for: with one
+      field there is nothing left to de-synchronise.
+      **The dial, so you can just tell me a direction:** it is at **.05** (`--hm-grain-alpha` on
+      `#hm-grain`), up from the .032 it used on a card, because a card is a small bright surface and the
+      background is the whole screen. Both keyframes read that one variable.
+      **Three answers are all cheap: rougher, subtler, or put it back.** Say which — this is the
+      experiment you asked for, not a decision I have made for you.
+
 - [x] **158 — The spiral's last stretch is straight instead of curved.** (v7.03) (14 Aug, screenshot of a Spiral
       layer at v7.00.) His words: *"Spiral shapes last little bit is straight instead of round."*
       Visible in his shot: the outer end of the spiral runs off in a straight tail at the upper-left

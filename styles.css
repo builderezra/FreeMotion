@@ -3069,6 +3069,14 @@ body.hm-selecting .hm-card { touch-action: none; }
    and a different phase, so no two cards dissolve together. With animations off (reduced motion) the
    two settle at .032 and 0, i.e. a plain static grain — texture without any movement at all, which is
    the substitute-don't-delete rule the rest of this file follows. */
+/* MOVED TO THE BACKGROUND (queue 157). Ezra: "I want to try removing the film grain from the projects
+   and instead move it to the background, it might be better if the projects are smooth and shiny with a
+   rough textured background instead of" — the message ends there, but the instruction does not need the
+   rest of it. The cards keep their glass edge, their light and the OPEN glint; what they lose is the
+   texture over the face, which is what "smooth" means here. Every word of tuning below still applies —
+   it now applies to #hm-grain, because the FIELD moved, not the technique. */
+#hm-grain { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+#hm-grain::before, #hm-grain::after,
 .hm-card::before, .hm-card::after {
   content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   border-radius: 16px;   /* the background is clipped to this box, so the corners round on their own */
@@ -3092,13 +3100,20 @@ body.hm-selecting .hm-card { touch-action: none; }
   animation-iteration-count: infinite;
   animation-delay: var(--hm-static-delay, 0s);   /* home.js gives every card its own phase */
 }
-.hm-card::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: .032; animation-name: hm-grain-a; }
-.hm-card::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;    animation-name: hm-grain-b; }
-@keyframes hm-grain-a { 0%, 100% { opacity: .032; } 50% { opacity: 0; } }
-@keyframes hm-grain-b { 0%, 100% { opacity: 0; } 50% { opacity: .032; } }
+/* THE CARDS ARE SMOOTH NOW. The two layers stay declared above (they are shared with #hm-grain) but
+   draw nothing on a card — no image, so no texture, and the animation has nothing to fade. */
+.hm-card::before, .hm-card::after { background-image: none; opacity: 0; animation-name: none; }
+#hm-grain { --hm-grain-alpha: .05; }
+#hm-grain::before, #hm-grain::after { border-radius: 0; }   /* full bleed — it is the whole screen, not a card */
+#hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a; }
+#hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b; }
+/* The pair still sums to a constant, which is what stops the field pulsing — it is just read from a
+   variable now so the strength is one number to turn rather than four. */
+@keyframes hm-grain-a { 0%, 100% { opacity: var(--hm-grain-alpha, .032); } 50% { opacity: 0; } }
+@keyframes hm-grain-b { 0%, 100% { opacity: 0; } 50% { opacity: var(--hm-grain-alpha, .032); } }
 /* A card being pressed or dragged is already telling you something; grain on top of that is noise in
    the other sense. And reduced motion gets the texture without the dissolve. */
-@media (prefers-reduced-motion: reduce) { .hm-card::before, .hm-card::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hm-card::before, .hm-card::after, #hm-grain::before, #hm-grain::after { animation: none; } }
 
 /* The overpull slam (v6.25). Ezra: pull the home list down past the top and keep pulling, and "the
    project will just slam back up really hard and shake the screen". home.js animates the list itself;

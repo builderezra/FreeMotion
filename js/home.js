@@ -898,16 +898,9 @@ window.FM = window.FM || {};
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
     const isOpen = p.id === FM.projects.currentId();
     const card = el('div', 'hm-card' + (isOpen ? ' hm-open' : '') + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
-    /* Each card starts at its own point in the grain cycle, so they boil independently instead of
-       flickering in unison — "I want it to be each one having its own things" (queue 105). A negative
-       delay starts an animation mid-way rather than waiting, so nothing is held back. */
-    card.style.setProperty('--hm-static-delay', (-(Math.random() * 0.36)).toFixed(3) + 's');   // spread across the NEW .36s period (queue 133), or every card would sit at the same point in it
-    /* …and its own PAIR of noise fields to dissolve between, drawn from the six, so two cards side by
-       side are not showing the same grain even at the same point in the cycle. */
-    const gi = (Math.random() * STATIC_TILES) | 0;
-    let gj = (gi + 1 + ((Math.random() * (STATIC_TILES - 1)) | 0)) % STATIC_TILES;   // never the same tile twice
-    card.style.setProperty('--hm-grain-a', 'var(--hm-static-' + gi + ')');
-    card.style.setProperty('--hm-grain-b', 'var(--hm-static-' + gj + ')');
+    /* NO PER-CARD GRAIN ANY MORE (queue 157) — the four rounds of tuning that produced the phase
+       offset and the per-card tile pair moved to the background with the field itself, where there is
+       one surface and so nothing to de-synchronise. The cards are smooth now; see #hm-grain. */
     card.setAttribute('role', 'button'); card.tabIndex = 0; card.dataset.pid = p.id;
     card.setAttribute('aria-label', (p.name || 'Untitled') + ' — open project');
     const th = el('div', 'hm-thumb');
@@ -1473,7 +1466,17 @@ window.FM = window.FM || {};
   }
   function render() {
     if (!grid) return;
-    ensureStaticTile();   // one-time; the CSS var it sets is what .hm-card::after draws
+    ensureStaticTile();   // one-time; the CSS vars it sets are what #hm-grain draws
+    /* Give the background its pair of fields to dissolve between (queue 157). Two DIFFERENT tiles, or
+       the cross-fade has nothing to cross to and the grain sits perfectly still. */
+    const gEl = document.getElementById('hm-grain');
+    if (gEl && !gEl._tiled && staticURL) {
+      gEl._tiled = 1;
+      const gi = (Math.random() * STATIC_TILES) | 0;
+      const gj = (gi + 1 + ((Math.random() * (STATIC_TILES - 1)) | 0)) % STATIC_TILES;
+      gEl.style.setProperty('--hm-grain-a', 'var(--hm-static-' + gi + ')');
+      gEl.style.setProperty('--hm-grain-b', 'var(--hm-static-' + gj + ')');
+    }
     // Select works on EVERY tab now (v5.04). What does NOT survive a tab change is the SELECTION —
     // ids are only meaningful within their own list, and carrying three ticked project ids into the
     // Templates tab is how "delete 3" ends up deleting the wrong three things. The tab handler

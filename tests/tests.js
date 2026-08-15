@@ -14561,6 +14561,50 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #157: the grain moved off the cards and onto the background ----------------
+   * "I want to try removing the film grain from the projects and instead move it to the background, it
+   * might be better if the projects are smooth and shiny with a rough textured background instead of"
+   * — an experiment, so what is tested is that the MOVE actually happened in both directions. Half a
+   * move is the bad outcome: grain on both surfaces is busier than before, and grain on neither is a
+   * feature quietly deleted. */
+  test('home: the film grain is on the background and the cards are smooth', { item: 'home-grain-moved' }, async function () {
+    var home = document.getElementById('home-screen');
+    if (!home) throw new Error('#home-screen is missing');
+    var wasHidden = home.classList.contains('hidden');
+    var view = null; try { view = localStorage.getItem('fm.view'); } catch (e) {}
+    try {
+      FM.home.open();
+      await new Promise(function (r) { setTimeout(r, 260); });
+      var g = document.getElementById('hm-grain');
+      if (!g) throw new Error('there is no #hm-grain layer — the grain has nowhere to live now the cards do not carry it');
+
+      var ga = getComputedStyle(g, '::after');
+      if (ga.backgroundImage === 'none') throw new Error('the background grain layer draws no image, so the texture was removed from the cards and never arrived anywhere');
+      if (Math.round(g.getBoundingClientRect().width) < window.innerWidth - 1) throw new Error('the grain layer is ' + Math.round(g.getBoundingClientRect().width) + 'px wide in a ' + window.innerWidth + 'px window — it is not the background, it is a patch of it');
+
+      // Two DIFFERENT tiles, or there is nothing to cross-fade to and the "boil" is a still image.
+      var ta = g.style.getPropertyValue('--hm-grain-a'), tb = g.style.getPropertyValue('--hm-grain-b');
+      if (ta && tb && ta === tb) throw new Error('both grain layers point at the same tile, so the field cannot dissolve and the grain sits perfectly still');
+
+      /* SAME KEYFRAMES, not a second copy — the rule #116 and #155 were both written about. The four
+       * rounds of tuning that produced this animation (the linear curve especially) are the thing that
+       * would be quietly lost to a fork. */
+      if (ga.animationName !== 'hm-grain-a') throw new Error('the background grain runs "' + ga.animationName + '" instead of the tuned hm-grain-a — a forked copy loses the linear curve that four rounds went into');
+
+      // …and the other half of the move: the cards are smooth.
+      var card = document.querySelector('.hm-card');
+      if (card) {
+        var ca = getComputedStyle(card, '::after'), cb = getComputedStyle(card, '::before');
+        if (ca.backgroundImage !== 'none' || cb.backgroundImage !== 'none') {
+          throw new Error('a project card is still drawing grain — the texture is now on BOTH surfaces, which is busier than it was before the move');
+        }
+      }
+    } finally {
+      if (wasHidden) FM.home.close();
+      try { if (view != null) localStorage.setItem('fm.view', view); } catch (e) {}
+    }
+  });
+
   /* ---------------- #155: the open-project glint marks the open add-menu tab ----------------
    * "I want the effect that you have on the open project, like with the shiny line going around it,
    * also on whatever you have selected… the main button that opens the menu."
