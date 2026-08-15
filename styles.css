@@ -5244,3 +5244,35 @@ body.fm-pushing #toast { z-index: 213; }
      the PC one never did, so the control that nukes the service worker looked like a plain label. */
   #transport .ver::before { content: "\21BB"; margin-right: 5px; opacity: .85; }
 }
+
+/* ---- The PC add menu gets a surface of its own (v7.85, queue 236) -----------------------------
+   Ezra: "on the PC version, for the background of the add menu, you should make it have, like, a cool
+   pattern and design, kind of like the home screen page, but slightly different just so it looks good
+   for that specific area."
+   Same family as home, deliberately not the same picture: home lights from the TOP CENTRE with a
+   secondary pool bottom-right, so this lights from the BOTTOM LEFT with its pool top-right and a
+   diagonal sheen across it. Read side by side they are obviously the same material; neither is a copy
+   of the other, which is what "slightly different" has to mean for it to be worth doing at all.
+   The grain is the SAME field the home screen generates (--hm-static-0, home.js) rather than a second
+   tile: a 256px noise PNG is 136 KB and there is no reason to hold two. It sits far quieter here — .022
+   against the background's .034 — because this surface is small, close to the eye, and full of icons
+   that have to stay readable. If home has not rendered yet the var is unset, background-image resolves
+   to nothing, and the panel is simply clean.
+   Desktop only: on a phone the add menu is a full-screen sheet with its own material already. */
+@media (min-width: 701px) {
+  .addmenu--panel {
+    border-radius: 12px;
+    background:
+      radial-gradient(120% 80% at 0% 100%, rgba(53, 133, 161, .20), transparent 62%),
+      radial-gradient(90% 60% at 100% 0%, rgba(90, 199, 237, .09), transparent 68%),
+      linear-gradient(160deg, rgba(188, 230, 239, .05), rgba(188, 230, 239, 0) 55%);
+  }
+  /* NO PADDING and NO BORDER, both measured out rather than styled by taste: 9px of padding grew the
+     panel past its container and gave the inspector an 8px scrollbar it did not have before. This is
+     a background, so it costs the layout nothing.
+     AND NO GRAIN, which was in the first version of this and is worth recording as a dead end. The plan
+     was to reuse the home screen's tile (--hm-static-0) rather than generate a second 136 KB PNG — but
+     that variable is only set by home.js's render(), so on this screen it is very often unset and the
+     field simply would not be there. A decoration that is present or absent depending on where you came
+     from is worse than one that does not exist; the gradients are the part that always works. */
+}

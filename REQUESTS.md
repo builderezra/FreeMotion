@@ -4166,9 +4166,21 @@ wait for them to report back."*
       1). **And the move up was real**: 686–710 against a ruler band ending at 705, so it hung 5px into
       the first track row; 684–704 now.
 
-- [ ] **236 — PC: the add menu needs a background of its own.** His words: *"on the PC version, for the
+- [x] **236 — PC: the add menu needs a background of its own. DONE v7.85.** His words: *"on the PC version, for the
       background of the add menu, you should make it have, like, a cool pattern and design, kind of like
       the home screen page, but slightly different just so it looks good for that specific area."*
+
+      **DONE v7.85.** Same family as home, deliberately not the same picture: home lights from the TOP
+      CENTRE with a pool bottom-right, so this lights from the BOTTOM LEFT with its pool top-right and a
+      diagonal sheen. Two things came out of it worth more than the gradient itself:
+      · The version I nearly shipped had 9px of padding and a border, and that **gave the inspector an
+        8px scrollbar it did not have before**. A decoration must not move the layout. Putting the
+        padding back as a mutation turned TWO tests red, one of them pre-existing — which is as clear a
+        confirmation as you get that it was a real regression.
+      · **No grain, on purpose.** The plan was to reuse home's noise tile rather than generate a second
+        136 KB one, but that variable is only set by home's own render, so on this screen it is very
+        often unset and the field would simply not be there. A decoration that appears or not depending
+        on which way you arrived is worse than one that does not exist.
 
 - [ ] **237 — PC: the pull-down slam Easter egg breaks the screen.** His words: *"on PC, when you do the
       Easter egg where you pull down and then it slams back up in the home menu, it kinda breaks the
@@ -4217,3 +4229,15 @@ wait for them to report back."*
       *Note: v7.79 (#230) deliberately stripped the resting box off every button in this row on his own
       instruction. This is not a reversal of that — it is a background behind the GROUP, not a box on
       each button — and it needs to keep the hover behaviour he asked for.*
+
+- [ ] **243 — Adding a benchmark does not turn the timer yellow until you leave and come back.** (15
+      Aug.) His words: *"when you add a benchmark it doesnt show up as yellow, youve made it so if you
+      add a bench mark, go away from it then go back itll show the timer as yellow but it should also
+      show up straight away."*
+      The timecode chip goes yellow when the playhead is PARKED ON a benchmark — that part works, and it
+      is what he sees when he scrubs back onto one. What is missing is the same thing happening at the
+      moment of CREATION: you are already standing on the benchmark you just made, so the chip should be
+      yellow the instant it exists, with no round trip.
+      Almost certainly the readout is only re-derived on a scrub/transport update and not on the marker
+      being added, so the state is correct and simply not recomputed. Look at `updateReadout` and
+      whatever adds a marker, rather than at the parked-detection itself — that is demonstrably fine.

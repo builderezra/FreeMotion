@@ -3111,6 +3111,30 @@
     }
   });
 
+  test('PC add menu: it has a surface of its own, and it costs the panel no scrollbar', { item: 'addmenu-bg' }, async function () {
+    /* Queue 236. Ezra: "on the PC version, for the background of the add menu, you should make it have,
+     * like, a cool pattern and design, kind of like the home screen page, but slightly different."
+     * The second assertion is the one with teeth, and it is here because the first version of this
+     * FAILED it: 9px of padding on the panel grew it past its container and gave the inspector an 8px
+     * scrollbar it did not have before. A decoration is not allowed to move the layout. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const sel0 = FM.scene.selectedId;
+    try {
+      FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+      const am = document.querySelector('.addmenu--panel');
+      if (!am) throw new Error('the PC add menu is not on screen with nothing selected — this test is looking at the wrong state');
+      const bg = getComputedStyle(am).backgroundImage;
+      const layers = (bg.match(/gradient/g) || []).length;
+      if (layers < 2) throw new Error('the add menu has ' + layers + ' gradient layer(s) — it is back to a flat/transparent panel');
+      const p = document.getElementById('inspector-panel');
+      const over = p.scrollHeight - p.clientHeight;
+      if (over > 0) throw new Error('the add menu makes the inspector panel scroll by ' + over + 'px — the background is changing the layout, which it must not');
+    } finally {
+      FM.scene.selectedId = sel0;
+      FM.refreshAll();
+    }
+  });
+
   test('transport row: nothing on it is bigger than the row, in EITHER desktop layout', { item: 'transport-fit' }, async function () {
     /* Queue 240. Ezra: "The export buttons border is too big so it goes over the divider line, make it
      * fit abit better."
