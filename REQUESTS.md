@@ -240,7 +240,7 @@ better still, keep working inside the turn rather than parking work for a later 
       the new toast, the diagnosis is confirmed and the answer is transcoding. If you see NO toast and
       the clip is still blank, it is something else and I have been looking in the wrong place** —
       which is worth knowing just as much.
-- [ ] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop.** His
+- [x] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop. THE TIER HALF IS DONE (v7.57, verified 15 Aug). The lag itself lives on in #125.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
       two seconds long, and the project lags from just that, it also still doesn't compress the quality
       in the canvas playback, even though just for this one thing it shouldn't need to do that anyway."*
@@ -288,6 +288,29 @@ better still, keep working inside the turn rather than parking work for a later 
       **Not doing that unsupervised**: it changes playback behaviour globally, and you have asked for
       opposite things here twice (#54 "stop lowering the quality on one simple video" vs this one), so
       the threshold is a taste call as much as a technical one.
+
+      **SHIPPED v7.57, AND THE #54 CONFLICT TURNED OUT NOT TO BE ONE.** The ladder now also watches the
+      wall-clock gap between frames, so GPU filter work and video decode — the two costs it was blind to
+      — finally register. Deliberately narrow: the scrub path only (playback skips frames on purpose, so
+      its gaps mean something different), and only above a sustained ~24fps floor, because an earlier
+      cut treated ordinary jitter as evidence and walked a single small shape down two rungs.
+      **The reason it does not re-break #54 is the payoff latch, and that is now MEASURED rather than
+      argued** (`tests/_q125tier.html?video=1` and the same page without it, both at 6× CPU throttle):
+
+      | scene | what the ladder did |
+      |---|---|
+      | one plain video clip, no effects (#54's case) | probed down to tier 2, **gave it all back**, full resolution for the last 30 frames |
+      | blurs + glows (#130's case) | dropped to tier 2 and **stayed** |
+
+      So the two requests were never actually opposite. Seeing the cost and acting on the cost are
+      different things: the ladder now SEES a decode stall, tries a smaller canvas, finds it bought
+      nothing, and hands the picture straight back — which is exactly what you asked for in #54. Where
+      resolution genuinely is the bottleneck it drops and holds, which is what you asked for here.
+      **Ticked for the tier half only.** Your first sentence — *"the project lags from just that"* — is
+      still the open question, and it is #125's, where four real costs have been removed and the last
+      step needs numbers from your actual phone. This entry's own conclusion stands: the quality drop
+      was only ever a way of hiding the lag, and you were right that for one short clip it should not
+      have needed to.
 - [x] **131 — The overpull Easter egg freezes if you drag really far.** (v6.77) His words: *"there's a glitch now
       when you swipe down really far and then the Easter egg happens where it slams the screen, if you try
       dragging really far down it just freezes, you should still be able to drag it down as freely as you

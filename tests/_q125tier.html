@@ -51,6 +51,7 @@ async function go(w) {
      * comfortably hitting 60fps as "late", and an app that softens its own preview for no reason would
      * be a worse bug than the one being fixed. */
     var LIGHT = new URLSearchParams(location.search).get('light') === '1';
+    var VIDEO = new URLSearchParams(location.search).get('video') === '1';
     FM.scene.layers.length = 0;
     FM.scene.project.width = LIGHT ? 320 : 1080; FM.scene.project.height = LIGHT ? 240 : 1920;
     FM.scene.project.duration = 20;
@@ -59,6 +60,31 @@ async function go(w) {
                                       fill: ['#ffcc00', '#29d9bb', '#ff7a85', '#8f7dff', '#5ad', '#fa6'][i], start: 0, duration: 20 });
       if (!LIGHT) L.effects = [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('glow')];
       FM.scene.layers.push(L);
+    }
+    /* ?video=1 — the #54 / #130 case, and the one that decides whether the v7.57 signal is safe.
+     * A plain video clip with NO effects is DECODE-bound, and decode costs the same whatever size
+     * canvas the frame lands in: the older measurement in REQUESTS found thirteen times fewer pixels
+     * bought only 32% less frame time. So shedding resolution here achieves nothing, and #54 was Ezra
+     * asking for exactly that to stop happening — "its having to lower the quality when i do something
+     * as simple as just have one simple video". #130 then asked for the opposite. The payoff latch is
+     * what reconciles them, and this is the probe that proves it still does now the ladder can finally
+     * SEE the cost it was blind to. */
+    if (VIDEO) {
+      FM.scene.layers.length = 0;
+      FM.scene.project.width = 1080; FM.scene.project.height = 1920; FM.scene.project.duration = 20;
+      /* A throwaway shape FIRST, so the clip is not layer zero. addMediaLayer adopts the first clip's
+       * dimensions as the project's, and splash.mp4 is 2048² — which silently resized the comp mid-probe
+       * and made the canvas-pixel column meaningless: it grew while the tier fell. Caught by the numbers
+       * disagreeing with themselves, which is the only reason to print them. */
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#111', start: 0, duration: 20 }));
+      var blob = await (await fetch('../splash.mp4')).blob();
+      var file = new w.File([blob], 'tier-probe.mp4', { type: 'video/mp4' });
+      var rec = await FM.loadVideoFile(file);
+      FM.addMediaLayer(rec);
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 20; });
+      if (FM.scene.project.width !== 1080) return say('harness: the probe comp was resized to ' +
+        FM.scene.project.width + 'x' + FM.scene.project.height + ' by the import, so the canvas column is not comparable', false, '');
+      await sleep(900);   // let the first frame actually decode, or this measures a blank clip
     }
     FM.timeline.rebuild();
     await sleep(400);
@@ -83,6 +109,29 @@ async function go(w) {
     }
     var maxTier = Math.max.apply(null, tiers);
 
+    if (VIDEO) {
+      /* The question is not "did it drop" — one exploratory probe is the ladder working as designed.
+         It is whether it WALKS, rung after rung, softening the picture for a cost resolution cannot
+         touch. That walk is what #54 complained about, and the latch is what stops it. */
+      /* The assertion has to match the reasoning above, and the first version of it did not: it
+         demanded the ladder never reach tier 2, which forbids the exploratory probe that IS the design.
+         What matters is where it ENDS UP. An unhelpful drop must be undone and the picture handed back,
+         not held low for the rest of the session. */
+      var lastT = tiers[tiers.length - 1];
+      var tail = tiers.slice(60), lowTail = tail.filter(function (t) { return t > 0; }).length;
+      say('an unhelpful drop on a plain video clip is GIVEN BACK (probed to tier ' + maxTier + ', ended at ' + lastT + ')',
+          lastT === 0,
+          'the ladder shed ' + maxTier + ' rungs on ONE plain video clip with no effects and stayed at ' + lastT +
+          '. Decode costs the same whatever size the canvas is — thirteen times fewer pixels bought only 32% less frame time — so this softens the picture and fixes nothing, which is exactly what #54 asked to stop happening.');
+      say('and it stays given back — full resolution for ' + (tail.length - lowTail) + ' of the last ' + tail.length + ' frames',
+          lowTail === 0,
+          'the picture went back to full and then dropped again ' + lowTail + ' times in the last ' + tail.length +
+          ' frames — the latch is not holding, so the preview pumps between resolutions for the whole session');
+      say('and it settles instead of hunting (' + tierChanges + ' tier changes across 90 frames)',
+          tierChanges <= 3,
+          'the tier changed ' + tierChanges + ' times in 90 frames — the picture is pumping between resolutions, which reads worse than being one rung low');
+      return;
+    }
     if (LIGHT) {
       /* One small shape, no effects, no throttle. Nothing here is slow, so the ladder must leave the
        * picture alone — if the interval signal fires on this, it fires on everything. */
