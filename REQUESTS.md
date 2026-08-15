@@ -3984,8 +3984,8 @@ layout, motion blur, the elements browser and the effects browser.
       `stampIntro` re-stamps every card in the grid whenever the list is re-entered — so a card that has
       already begun a push gets `hm-in`, and its delay, put straight back on. The element itself is the
       thing that must not be re-stamped, so it carries a flag now and `stampIntro` skips it.
-      **Evidence, stated precisely: three consecutive clean runs plus an understood mechanism.** Three
-      passes is not proof against a 1-in-5 flake — roughly a coin toss on chance alone — so the reason to
+      **Evidence, stated precisely: SIX consecutive clean runs plus an understood mechanism.** Six passes
+      is still not proof against a 1-in-5 flake — about a 26% outcome on chance alone — so the reason to
       believe it is the diagnosis, not the count. If it returns, that is the assumption to re-check.
       **Both flaky tests are now closed** (#226 in v7.98, this in v7.99), which matters more than either
       alone: a suite that is red one run in five stops meaning anything, and it cost this session real
