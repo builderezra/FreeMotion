@@ -3162,6 +3162,51 @@
     }
   });
 
+  test('drawing: panning cannot push the canvas off the screen', { item: 'draw-pan-clamp' }, async function () {
+    /* v8.03, fixing a trap v8.02 shipped. The two-finger pan had no limit: measured, twenty-five flicks
+     * put the canvas at top -5025, bottom -4377 — entirely gone — and while drawing there is no way back,
+     * because the view bar that owns zoom and fit is hidden in that mode. The only escape was Done or
+     * Cancel: commit or lose the drawing blind.
+     * Nobody hit it and the suite could not see it — 368 green tests, none of which knew a user could
+     * pan into nothing. That is why this test exists: the clamp is exactly the kind of guard a later
+     * refactor removes without noticing, recreating a trap that costs someone their work. */
+    if (!FM.startDraw || !FM.viewport) throw new Error('the draw tool or the viewport is missing');
+    const layers0 = FM.scene.layers.slice();
+    const vx = FM.viewport.x, vy = FM.viewport.y, vs = FM.viewport.scale;
+    try {
+      FM.scene.layers.length = 0;
+      FM.startDraw('freehand');
+      await sleep(120);
+      const pv = document.getElementById('preview');
+      if (!pv || pv.getBoundingClientRect().width < 10) throw new Error('the preview canvas is not on screen, so there is nothing to pan');
+      // CONTROL: the pan must actually do something, or "it stayed on screen" is true of a dead handler.
+      const y0 = FM.viewport.y;
+      window.dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true }));
+      await sleep(40);
+      if (FM.viewport.y === y0) throw new Error('a wheel while drawing moved nothing — the pan is not running, so this test cannot prove it is clamped');
+
+      // …now shove it as hard as a few real flicks would, in every direction.
+      const shove = (opts) => { for (let i = 0; i < 30; i++) window.dispatchEvent(new WheelEvent('wheel', Object.assign({ bubbles: true, cancelable: true }, opts))); };
+      for (const [name, opts] of [['down', { deltaY: 200 }], ['up', { deltaY: -200 }], ['sideways', { deltaY: 200, shiftKey: true }]]) {
+        shove(opts);
+        await sleep(60);
+        const r = pv.getBoundingClientRect();
+        const visX = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+        const visY = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+        if (!(visX > 20 && visY > 20)) {
+          throw new Error('panning ' + name + ' pushed the canvas off screen (' + Math.round(visX) + ' x ' + Math.round(visY) +
+            'px still visible, rect ' + Math.round(r.top) + '..' + Math.round(r.bottom) + ') — while drawing there is no way to bring it back');
+        }
+      }
+    } finally {
+      try { FM.drawTool._stop(); } catch (e) {}
+      FM.viewport.x = vx; FM.viewport.y = vy; FM.viewport.scale = vs; FM.viewport.apply();
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll();
+    }
+  });
+
   test('opening the export dialog stops the transport', { item: 'export-pauses' }, async function () {
     /* Queue 247. Ezra: "when you open the export menu playback should pause."
      * The pause goes in BEFORE the notepad confirm, which is itself a modal — leaving the transport
