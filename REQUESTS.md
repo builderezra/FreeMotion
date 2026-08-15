@@ -1549,6 +1549,29 @@ better still, keep working inside the turn rather than parking work for a later 
       agent's measurements, and #202's separate measurement put renderScene at a 4.4ms median against a
       16.7ms budget. That half needs the numbers from HIS device, which is the "what is slow" readout
       argued for in #202.
+
+      **RE-MEASURED 15 Aug (`tests/_tlcost.html`, in a real 390px app frame) — and all three numbers
+      above are STALE. Two of the three costs are already gone.** They were true on 14 Aug and were
+      fixed by work done for other entries, which is exactly how a list like this quietly starts lying.
+      | cost | recorded here | today |
+      |---|---|---|
+      | rebuild() by timeline LENGTH | 1.6ms @10s → 9.5 @120s → **14.8ms @300s** | **0.6 → 0.8 → 0.8ms, and 0.8ms at 900s — flat** |
+      | ruler nodes at 300s | 901 notch + 151 tick | **61 total, and still 61 at 900s** |
+      | updatePlayhead() at 61 clips | **1.42ms**, every frame | **0.30ms** = 1.8% of a 60fps frame |
+      | rebuild() at 61 layers | 18.2ms | 7.2ms — and **1.0ms at 8 layers**, which is his case |
+      **Why:** queue 101 windowed the ruler to the visible stretch, so both its node count and its cost
+      follow the SCREEN rather than the project. That killed the length term outright and took most of
+      updatePlayhead with it. Also confirmed today: selecting a layer costs exactly **1** rebuild (the
+      double-rebuild fix has held), and twenty scrub steps cost **0** — scrubbing does not rebuild.
+      **So on this machine there is no timeline cost left to remove at the layer counts he describes**
+      (*"with not many layers added at all"* — 1.0ms). The one term still scaling is rebuild() by layer
+      count, and it is paid once per tap, not per frame.
+      *I started to add a test locking the ruler's node count down and found queue 101 had already
+      written one (`ruler notches do not thin out just because the project is long`) — and mine was
+      dead anyway: `rebuild()` calls `autoFitDuration()`, so setting `project.duration` without a clip
+      that long has the ruler measure a 4-second project twice. Only the mutation check caught that.
+      Deleted rather than shipped; the instrument (`tests/_tlcost.html`) is committed.*
+      **What this half needs is still a number from HIS phone, not another pass here.**
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame

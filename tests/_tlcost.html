@@ -1,0 +1,106 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#95 — what does the timeline actually cost now?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.6 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:390px;height:820px;border:0}
+#out{padding:14px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* #95's timeline half, re-measured before anything is optimised. The entry lists three costs found by
+ * an agent on 14 Aug and they are the only concrete leads left in it:
+ *   · rebuild() linear in LAYER COUNT      — 1.5ms at 1, 5.2 at 13, 18.2ms at 61
+ *   · rebuild() linear in TIMELINE LENGTH  — 1.6ms at 10s, 9.5 at 120s, 14.8ms at 300s, via the ruler
+ *   · updatePlayhead() linear in CLIPS     — 0.117ms at 1 vs 1.42ms at 61, and it runs EVERY frame
+ * Reading the code first says one of those three should already be gone: queue 101 windowed the ruler,
+ * so its node count follows the SCREEN and not the project. If that is right the length row is flat now
+ * and the entry is carrying a stale number — which is worth knowing before spending a morning on it.
+ * Measured at PHONE width inside a real app frame, because that is the device the report came from,
+ * and with the frame at 380px the layout under test is the one he uses. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done() { out.textContent = L.join('\n'); window.__tlcost = L.join('\n'); window.__done = true; }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.makeLayer || !w.FM.timeline || !w.FM.timeline.rebuild) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 800);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      // A median over N runs, not a mean: one GC pause in the middle of a timing loop moves a mean a
+      // long way and tells you nothing about the frame you actually feel.
+      function timeIt(fn, n) {
+        var xs = [];
+        for (var i = 0; i < n; i++) { var t = w.performance.now(); fn(); xs.push(w.performance.now() - t); }
+        xs.sort(function (a, b) { return a - b; });
+        return xs[xs.length >> 1];
+      }
+      function build(nLayers, dur) {
+        FM.scene.layers.length = 0;
+        for (var i = 0; i < nLayers; i++) {
+          FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 200, y: 300 + i * 10, shapeW: 120, shapeH: 120,
+                                                       fill: '#ffcc00', start: (i % 5) * (dur / 10), duration: Math.max(1, dur / 4) }));
+        }
+        FM.scene.project.duration = dur;
+        FM.timeline.rebuild();
+      }
+
+      L.push('THE APP FRAME IS ' + w.innerWidth + 'x' + w.innerHeight + ' — the phone layout, which is where the report came from');
+      L.push('');
+      L.push('rebuild() BY LAYER COUNT   (project 30s)');
+      var counts = [1, 8, 20, 40, 61];
+      for (var ci = 0; ci < counts.length; ci++) {
+        build(counts[ci], 30);
+        await sleep(60);
+        var ms = timeIt(function () { FM.timeline.rebuild(); }, 9);
+        L.push('  ' + String(counts[ci]).padStart(3) + ' layers   ' + ms.toFixed(2).padStart(7) + ' ms');
+      }
+      L.push('');
+      L.push('rebuild() BY TIMELINE LENGTH   (8 layers) — the entry says 1.6 / 9.5 / 14.8ms at 10 / 120 / 300s.');
+      L.push('  If queue 101 really windowed the ruler these are flat, and that number is stale.');
+      var durs = [10, 30, 120, 300, 900];
+      for (var di = 0; di < durs.length; di++) {
+        build(8, durs[di]);
+        await sleep(60);
+        var ms2 = timeIt(function () { FM.timeline.rebuild(); }, 9);
+        var nodes = (w.document.querySelectorAll('.notch').length + w.document.querySelectorAll('.tick').length);
+        L.push('  ' + String(durs[di]).padStart(4) + 's       ' + ms2.toFixed(2).padStart(7) + ' ms    ruler nodes ' + nodes);
+      }
+      L.push('');
+      L.push('updatePlayhead() BY CLIP COUNT — this one runs on EVERY animation frame while playing');
+      for (var pi = 0; pi < counts.length; pi++) {
+        build(counts[pi], 30);
+        await sleep(60);
+        var k = 0;
+        var ms3 = timeIt(function () { FM.time = (k = (k + 0.037) % 20); FM.timeline.updatePlayhead(); }, 51);
+        var budget = (ms3 / 16.7 * 100);
+        L.push('  ' + String(counts[pi]).padStart(3) + ' layers   ' + ms3.toFixed(3).padStart(7) + ' ms   = ' + budget.toFixed(1) + '% of a 60fps frame');
+      }
+      L.push('');
+      L.push('WHAT A REBUILD COSTS IS ONLY HALF THE QUESTION — how OFTEN is the other half.');
+      var rebuilds = 0, orig = FM.timeline.rebuild;
+      FM.timeline.rebuild = function () { rebuilds++; return orig.apply(this, arguments); };
+      build(12, 60);
+      rebuilds = 0;
+      var l0 = FM.scene.layers[0];
+      FM.selectLayer(l0.id);
+      await sleep(300);
+      L.push('  selecting a layer          ' + rebuilds + ' rebuild(s)');
+      rebuilds = 0;
+      for (var s = 0; s < 20; s++) { FM.scrubTime ? FM.scrubTime(s * 0.25) : (FM.time = s * 0.25); }
+      await sleep(300);
+      L.push('  20 scrub steps             ' + rebuilds + ' rebuild(s)   (should be 0 — scrubbing must not rebuild)');
+      FM.timeline.rebuild = orig;
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));
+    }
+    try { FM.scene.layers.length = 0; FM.timeline.rebuild(); } catch (e) {}
+    done();
+  }
+})();
+</script></body></html>
