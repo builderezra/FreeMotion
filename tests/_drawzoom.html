@@ -1,0 +1,117 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#165.3 — does the draw overlay survive a zoomed viewport?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.6 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
+#out{padding:14px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* #165 point 3. Ezra: "another option that lets you grab the screen and zoom in or out so you can do
+ * more detailed drawing."
+ *
+ * MEASURE BEFORE BUILDING. Reading the code says pan/zoom already exists (FM.viewport in
+ * canvas-edit.js) and that js/draw-tool.js REFUSES to run alongside it:
+ *
+ *     if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();
+ *     // overlay lays out in screen px — a zoomed viewport double-scales it
+ *
+ * So the feature is not "build pan and zoom", it is "make the draw overlay survive one". That comment
+ * is a claim, and it is the claim the whole job rests on, so it gets measured rather than inherited —
+ * this file has been wrong about its own recorded conclusions enough times to earn the rule (#93's
+ * "not bit-exact", #47's "segmented export", #215's library re-add).
+ *
+ * The test is the only one that matters for a drawing tool: aim at a known screen point, inject the
+ * gesture, and ask where the stroke actually landed in PROJECT coordinates. #97 spent four rounds on
+ * exactly this class of bug, so the number is the deliverable. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done() { out.textContent = L.join('\n'); window.__drawzoom = L.join('\n'); window.__done = true; }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.startDraw || !w.FM.drawTool) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 800);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, d = w.document;
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      if (w.innerWidth <= 700) { L.push('this probe is about the DESKTOP drawing surface; the frame is ' + w.innerWidth + 'px'); return done(); }
+      FM.scene.layers.length = 0;
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(300);
+
+      L.push('WHAT THE CODE CLAIMS');
+      L.push('  js/draw-tool.js resets the viewport on entry, commenting:');
+      L.push('  "overlay lays out in screen px — a zoomed viewport double-scales it"');
+      L.push('');
+      L.push('DOES FM.viewport EXIST, AND WHAT CAN IT DO?');
+      var vp = FM.viewport;
+      L.push('  FM.viewport            ' + (vp ? 'present' : 'MISSING — the whole plan below is wrong'));
+      if (vp) {
+        L.push('  .scale / .apply()      ' + (typeof vp.scale) + ' / ' + (typeof vp.apply));
+        L.push('  .reset() / .isDefault()' + ' ' + (typeof vp.reset) + ' / ' + (typeof vp.isDefault));
+      }
+      L.push('');
+
+      /* Aim at a fixed point on the CANVAS and see where the tool thinks it is. toProject() is the
+         function every stroke sample goes through, so measuring it measures the strokes. */
+      var pv = d.getElementById('preview');
+      function aimAt(fracX, fracY) {
+        var r = pv.getBoundingClientRect();
+        return { cx: r.left + r.width * fracX, cy: r.top + r.height * fracY };
+      }
+      function projectOf(cx, cy) {
+        // Mirror of draw-tool's own toProject, read off the live canvas — if this drifts from the tool
+        // the drift IS the bug, so it is computed from the same three stamps the tool reads.
+        var c = pv, r = c.getBoundingClientRect(), sc = c.__fmRS || 1;
+        return [ (c.__fmOX || 0) + ((cx - r.left) / r.width) * (c.width / sc),
+                 (c.__fmOY || 0) + ((cy - r.top) / r.height) * (c.height / sc) ];
+      }
+
+      FM.startDraw('freehand');
+      await sleep(400);
+      var P = FM.scene.project;
+      L.push('UNZOOMED (the control) — project ' + P.width + 'x' + P.height);
+      var a = aimAt(0.5, 0.5), p0 = projectOf(a.cx, a.cy);
+      L.push('  aimed at the canvas centre → project ' + p0[0].toFixed(1) + ', ' + p0[1].toFixed(1) +
+             '   (want ' + (P.width / 2) + ', ' + (P.height / 2) + ')');
+      var err0 = Math.hypot(p0[0] - P.width / 2, p0[1] - P.height / 2);
+      L.push('  error                  ' + err0.toFixed(1) + 'px');
+      L.push('');
+
+      /* Now zoom the viewport WITHOUT letting startDraw reset it — which is precisely the state the
+         feature has to work in, and precisely the state the tool currently refuses to enter. */
+      if (vp && typeof vp.apply === 'function') {
+        vp.scale = 2;
+        vp.apply();
+        await sleep(300);
+        var b = aimAt(0.5, 0.5), p1 = projectOf(b.cx, b.cy);
+        var err1 = Math.hypot(p1[0] - P.width / 2, p1[1] - P.height / 2);
+        L.push('ZOOMED TO 2x — the state the feature has to work in');
+        L.push('  overlay rect           ' + JSON.stringify((function () { var o = d.getElementById('draw-overlay'); if (!o) return 'no overlay'; var r = o.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; })()));
+        L.push('  canvas rect            ' + JSON.stringify((function () { var r = pv.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; })()));
+        L.push('  canvas stamps          __fmRS ' + (pv.__fmRS || 1) + '  __fmOX ' + (pv.__fmOX || 0) + '  __fmOY ' + (pv.__fmOY || 0));
+        L.push('  aimed at the canvas centre → project ' + p1[0].toFixed(1) + ', ' + p1[1].toFixed(1));
+        L.push('  error                  ' + err1.toFixed(1) + 'px   <-- if this is large, the comment is right');
+        L.push('');
+        L.push('READ IT: an error that stays near zero means the coordinate maths ALREADY survives a zoom,');
+        L.push('and the reset on entry is the only thing standing between him and the feature — in which');
+        L.push('case point 3 is a toggle plus deleting one line. A large error means the overlay really');
+        L.push('does double-scale and the coordinates have to be fixed first, before any UI.');
+        vp.scale = 1; vp.apply();
+      } else {
+        L.push('FM.viewport has no apply() — cannot put the app into the state under test');
+      }
+      try { FM.drawTool._stop(); } catch (e) {}
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));
+    }
+    done();
+  }
+})();
+</script></body></html>

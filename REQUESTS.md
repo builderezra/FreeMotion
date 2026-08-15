@@ -3046,6 +3046,25 @@ better still, keep working inside the turn rather than parking work for a later 
       cropped preview is the honest way to express it, since `toProject()` already reads those. Doing it
       in that order means the risky half (coordinates) is done and testable before any UI is added — and
       a stroke landing in the wrong place is exactly the bug #97 spent four rounds on.
+
+      **MEASURED 16 Aug (`tests/_drawzoom.html`) — the comment in the code is RIGHT, and now it has a
+      number.** Aiming at the centre of the canvas and asking where the tool thinks you aimed:
+      | state | where a centre-aim lands | error |
+      |---|---|---|
+      | unzoomed (the control) | 540.0, 960.8 against a wanted 540, 960 | **0.8px** |
+      | viewport at 2× | 540.0, **1062.8** | **102.8px** |
+      And the cause is visible in the same run: at 2× the **overlay rect is 984×1501 while the canvas
+      rect is 492×751** — the overlay is exactly twice the canvas, which is the "double-scales" the
+      comment names. The canvas is also cropped by then (`__fmOX 0, __fmOY 240.3`), and the vertical
+      error tracks that crop rather than the horizontal, which is why the miss is 103px down and 0
+      across.
+      **So the plan above stands and the order is not negotiable:** `syncOverlay` sizes and places the
+      overlay from the canvas's screen rect without honouring `__fmOY`/`__fmRS`, so it must be taught the
+      crop before anything else happens. Do NOT add the hand toggle first — a 103px miss is invisible in
+      a screenshot and unmistakable to the hand, and #97 is four rounds of proof that this is the bug
+      that gets shipped by accident.
+      *(The probe is committed. It measures the coordinate maths directly rather than driving the UI, so
+      it stays valid while the toggle is being built and can be re-run to prove the fix.)*
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
