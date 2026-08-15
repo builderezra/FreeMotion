@@ -1,140 +1,117 @@
-# Where things stand — written before a chat compaction (15 Aug 2026, updated at v7.72)
+# Where things are — written at v7.91, 15 Aug
 
-**Live: v7.72. Suite 355/355. Working tree clean, HEAD == ssh/main. Nothing half-finished.**
+**Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
+truth. If the two disagree, REQUESTS.md wins.
 
-**THE KEEP-WORKING CRON IS OFF.** He asked to pause and compact on 15 Aug, so it was deleted rather
-than left to fire into a compacted session. **A fresh session has to re-arm it** — see rule 6.
+## The one rule
 
-## What shipped since v7.52 (this run)
+Work **[REQUESTS.md](REQUESTS.md) oldest-first**. Find the next item with:
 
-| ver | what |
+```bash
+grep -n "^- \[ \] \*\*[0-9]" REQUESTS.md | sed 's/^\([0-9]*\):- \[ \] \*\*\([0-9]*\).*/\2 (line \1)/' | sort -n | head
+```
+
+An item whose only remaining work needs a decision or a detail from Ezra does **not** hold the queue —
+note that in the entry and move to the next-lowest. Blocked is not done.
+
+The exception, and it is currently in force: **he told me on 15 Aug to jump the queue for his PC-layout
+message.** That block (#230–#239, plus #240–#247 as they arrived) comes before the older items. Inside
+it, still oldest-first.
+
+## Shipping checklist — every release
+
+1. Bump the version label in `index.html` **and** the `?v=` cache-buster of every file touched.
+2. `python3 tests/_cdp.py --port 8777` — **port 8777 only**. Green before commit.
+3. **Mutation-check every new assertion.** Break the fix, confirm the test goes red, restore. This has
+   caught three of my own bugs today that the browser check passed.
+4. A `POLISH-LOG.md` entry, and tick the REQUESTS.md item with its version.
+5. Commit, `git push ssh main`, then verify `git rev-parse HEAD` == `git rev-parse ssh/main`.
+   `origin` is HTTPS with no stored credentials and will fail; `ssh` is the same repo and works.
+
+## What shipped this run — v7.73 → v7.91
+
+| | |
 |---|---|
-| v7.53–v7.55 | **#47 crash-resume.** Encoded chunks to IndexedDB, replayed into a fresh muxer, so an export killed by a crash picks up at the seam. v7.54 fixed the boot sweep eating the saved chunks (it worked in-page and would never once have worked for him). v7.55 streamed the replay so it stops holding the whole render in memory, and warms temporal effects at the seam. |
-| v7.56 | **#115** drag a clip to the screen edge and the timeline follows — after three previous back-outs |
-| v7.57–v7.59 | **#125** the app could not see its own lag: the quality ladder watched only main-thread JS time, blind to GPU filters and video decode. Plus the seek guard, the `seeked` repaints, and the hold-frame copy (9.2ms → 2.3ms) |
-| v7.60–v7.61 | **#128** opening AND leaving a project answer the tap immediately (113ms and 81ms of dead air removed) |
-| v7.62 | **#129** a clip that never produces a frame now says why |
-| v7.63–v7.64 | **#141** the export dialog tidied, and an "Export ready" card in front of the OS save sheet |
-| v7.65 | **#147** the desktop text editor stops taking 169px of canvas |
-| v7.66 | **#148** clip edges fade instead of clicking |
-| v7.67–v7.68 | **#150** speech detection: choose what it scans, and a Captions tile so it is one tap away |
-| v7.69 | **#151** caption effects can belong to one cue |
-| v7.70 | **#155** was already built — verified and guarded against drift |
-| v7.71 | **#157** the film grain moved off the cards onto the background (an experiment — wants his verdict) |
-| v7.72 | **#163** new drawing icons, 3/3 judge sign-off after two rejections |
+| 7.73 | PC: the notes button joins the transport row (v7.52 left it behind) |
+| 7.74 | PC multi-select: three big align buttons; the playhead trio now means the whole selection |
+| 7.75 | PC: the name field comes off the header onto the row |
+| 7.76 | Home grain: 64px tile → 256 (it was repeating 76× and reading as a grid); cards get a backdrop blur |
+| 7.77 | Freehand undo/redo icons — and Undo was deleting the whole drawing |
+| 7.78 | Freehand eraser; undo history rebuilt as snapshots to hold it |
+| 7.79 | PC row: bare icons, box on hover only, blue Export, red delete, ↻ on the version chip |
+| 7.80 | One name field, in the inspector header, doing both jobs |
+| 7.81 | Parent next to the layer menu, delete one over, new parenting icon |
+| 7.82 | PC gets the layer ⋯ menu — 16 clip options were right-click-only |
+| 7.83 | Split ON the playhead, trims either side, up inside the ruler band |
+| 7.84 | Move/extend told apart (fill vs outline), level on the line; Export stops lapping the divider |
+| 7.85 | PC add menu gets its own background |
+| 7.86 | Trackpad slam fires while you pull instead of after you stop |
+| 7.87 | **The black bar was the slam's own ring** — see below |
+| 7.88 | The cog turns when pressed |
+| 7.89 | The three selection buttons wear a shared ground |
+| 7.90 | Export names any clip it could not read, instead of dropping it in silence |
+| 7.91 | …and says when the browser cannot encode AAC, which drops the whole mix |
 
-## THE BOTTLENECK: six things parked on him
+Suite: **365/365** at v7.91.
 
-This is now most of what is left. None of them need much from him — a word each.
+## What is open, in the order to do it
 
-| # | what is needed |
-|---|---|
-| **215** | **The most serious open item.** An export came out with no audio. Asked FIVE times whether it jumps the queue; never answered. The app's output being silently wrong after a long render. |
-| **47** | The remaining half — the exporter off the main thread. Days of compositor work on OffscreenCanvas. His call whether it jumps. |
-| **148** | One line: does the audio pop at a CLIP EDGE or through the MIDDLE of one long clip? Edge → v7.66 has it. Mid-clip → it is the browser's decoder under our load, and the answer is #125/#69. |
-| **152** | Keep or delete speech detection. The case for keeping got stronger with v7.67's source picker, which fixes the exact case it failed on. |
-| **157** | The grain experiment is live: rougher, subtler, or put it back? One number (`--hm-grain-alpha`, currently .05). |
-| **160** | The person/woman icons — four options (a)(b)(c)(d) in the entry. Two attempts already rejected by agents. My read is (c). |
+1. **#215 — export with no audio.** The most serious item in the file: the app produces silently wrong
+   output. He gave the first reproduction on 15 Aug (fresh project + sound effects + default settings).
+   v7.90 and v7.91 did not fix it — they made the two silent failure paths *speak*, so the next time it
+   happens the app says which half broke. **Three outcomes are now distinguishable:** a toast naming a
+   clip = the mixer; the AAC toast = the encoder; **neither toast and still a silent file = the muxer**,
+   which is the last place left to look and the next thing to read. A dead lead is recorded in the entry
+   (library re-adds go through the identical path as imports) — do not re-derive it.
+2. **#241 (b)(c)** — the Canvas settings panel anchored to the cog, cog kept out of its own blur.
+   **Read the entry first:** inside a project the cog does *not* open App settings, it forwards to
+   `#btn-canvas`. Anchoring the wrong panel would look like nothing changed.
+3. **#243** — a new benchmark should turn the timecode chip yellow immediately, not after you leave and
+   come back.
+4. **#244** — drag the add menu independently of the timeline, with a snap where they meet. He asked for
+   this one to go at the bottom. It is groundwork for a bigger effects-browser plan; read the entry.
+5. **#245** — home tab buttons need the cards' no-grain treatment, **and the grain reads as static**.
+   That second half is my own regression: v7.76 cut six noise tiles to two, and two tiles can only
+   cross-fade A→B→A→B, which the eye learns in about a second. He is also inviting a rethink of the
+   texture entirely — the entry weighs three options.
+6. **#246** — the v7.85 add-menu background must reach the menu's borders; it is on the content box, not
+   the bordered region. **Do not fix it with padding** — v7.85 already learned that gives the inspector a
+   scrollbar, and two tests catch it.
+7. **#247** — opening the export menu should pause playback.
 
-Also still owed: which of the 16 filters are wrong/missing (asked twice).
+Then back to oldest-first in the older queue.
 
-## New tooling built this run — do not rebuild it
+## Still waiting on a word from him
 
-- `tests/_fmdiff.py` — capture and DIFF the full pass/fail list between two suite runs. Finds the FIRST
-  test that changed rather than guessing from the reds. This is what finally cracked #115.
-- `tests/_only.html?items=a,b,c` (or `?from=N&to=M`) — run any subset. Answers "does this fail on its
-  own, or only after something earlier ran?" A mutation check drops from 90s to ~5s.
-- `tests/_iconsheet.html` + `tests/_shot.sh` — renders icon candidates at 24/48/96 on the real cell
-  colour and screenshots them to a PNG that agents can Read and judge. **#160 needs exactly this.**
-- Probes: `_xresume.html` (real export killed and resumed), `_popjank.html`, `_boot.html`,
-  `_pops.html`, `_q125tier.html`, `_q125hold.html`, `_tedock.html`, `_q115b.html`.
+**#148** (does the audio pop at a clip edge or mid-clip?), **#152** (keep or delete speech detection),
+**#160** (person icons, four options — my read is (c)), **#114**, **#98**, **#129**. None of these hold
+the queue.
 
-## Two flaky tests — #222 and #224
+## Things that cost hours — read before repeating them
 
-`key/cold-actually-shrinks` (~1 in 5, pre-existing, diagnostics captured) and the microphone one (seen
-once). **Two intermittent tests is where a red run stops meaning anything**, which is worse than not
-having them. Worth fixing as a pair.
+- **Run the CONTROL assertion first.** A test that cannot see the defect proves nothing. Twice today an
+  assertion passed against the bug it was written for.
+- **A stale entry is a real category.** Five items this run were already done and never ticked (#37,
+  #147's first half, #155, #93's headline, #164). Working the list in order is what finds them —
+  remembering never does.
+- **My own recorded conclusions have been confidently wrong.** #93's "not bit-exact", #47's "segmented
+  export is the only way", #215's library-re-add lead. Measure before inheriting a claim from this file.
+- **Two contradictory records is worse than none.** #234 shipped wrong for weeks because #169 recorded
+  the opposite of what v5.25 built and nobody compared them. Both were written down.
+- **Measure the layout you ship to, not the one you have open.** v7.79's export bug shipped because I
+  checked Classic and he uses Studio. The test now checks both.
+- **A fix can go stale.** v7.87's black bar was a *correct* 2024 fix (a flat ring matching a flat home)
+  that broke when home gained light and grain. Ask what a guard is matching, not just whether it works.
+- **The suite catches what the browser misses.** Three times today: a dead fill assertion, a
+  double-firing slam, a layout-moving padding. Never skip the mutation check.
 
----
+## The two flaky tests
 
-## The rules that are in force (he has had to repeat these)
+**#222** (`key/cold-actually-shrinks`, ~1 in 5) and **#226** (the microphone one). Both pre-existing.
+A red run that means nothing is worse than no test — they are worth fixing together.
 
-1. **OLDEST ACTIONABLE FIRST** — and the word *actionable* was learned the hard way on 15 Aug.
-   *"Remember I want the oldest things in the list done first, not what I just told you."* I read that
-   as strict lowest-number order, so #31/#47/#93/#95/#96/#97/#98 — nearly all **blocked waiting on
-   him** — kept absorbing every tick with small slices, while **#168**, fully specified and unblocked
-   since 13 Aug, sat untouched. He noticed: *"i swear you arent working through the tasks in order,
-   like i askied ages ago for the layout change on pc"* — and he was right. A blocked item does not
-   hold the queue. Say plainly that it is parked on him, and move to the next one that can actually
-   be finished. Only an explicit "do this now" or a broken build jumps ahead of that.
-2. **Every request goes into REQUESTS.md immediately**, at the bottom, before starting work on it.
-   Never deleted. Anything not being done stays Open with a **Held** note.
-3. **If an old item is blocked on a decision from him, say so and move to the next-oldest.**
-4. *"dont stop to ask me questions, ask but keep going and re ask next time i say something."*
-5. *"Slow the fuck down and make sure everything you're doing is good."*
-6. **Keep-working loops must be driven by a recurring `CronCreate` job**, never `ScheduleWakeup`
-   alone — a one-shot chain died silently for 1h48m on 14 Aug and he noticed before I did. The cron
-   is session-only and expires after 7 days, so **a fresh session has to re-arm it**.
-7. Not allowed, unchanged: accepting a pasted personal access token or any credential from him.
+## Before any public release
 
----
-
-## #113 (filters) — FINISHED
-
-Shipped v7.38 → v7.49; the tile previews (#219) landed in v7.49 and closed the entry. The plan and every
-correction to it are in [FILTERS-DESIGN.md](FILTERS-DESIGN.md).
-
-## Where to start on #215 when he gives the word
-
-The export mix is built separately from the preview (`buildAudioMix`, js/exporter.js), so it is not the
-same code as #96 though it may be the same class of bug. Establish which of muted / mixed-at-zero /
-never-decoded it is by exporting a known clip and inspecting the file, not by reading. Check
-`layer.muted` — Extract Audio deliberately mutes the original, and a muted original plus a missing twin
-produces exactly this.
-
-## Things that cost hours, so they are written down
-
-- **The suite runs on port 8777 and only 8777.** `tests/_cdp.py --port` picks the SERVER and there is
-  only one. `.claude/launch.json` says 8791 — `preview_start` by name will fail with port-in-use;
-  use `preview_start {url: "http://localhost:8777/index.html"}`.
-- **Mutation-check every fix.** Six tests in this project have passed against their own mutations.
-  Two more were caught this session: a duplicate-remap test that left the referenced layer out of the
-  duplicate (no-op either way), and an ordering test whose subject was a solid rectangle (too uniform
-  to reveal ordering at all — the *control* is what caught it). **Always assert the control first.**
-- **Not every green mutant is a dead test.** Two came back green this session and were *equivalent*
-  mutants — the code was genuinely redundant. Check which it is before "fixing" the test.
-- **Never move code with a script that walks the source to find its own boundaries.** One did that
-  here, matched the wrong block, deleted three lines of row-building and turned five tests red. Revert
-  the file to HEAD and redo it as one targeted edit.
-- **A focused runner turns a mutation check from 90s into 5s.** `tests/_xrunit.html` (export-resume) and
-  `tests/_q45_probe.html` are the pattern: filter `FMTests.tests` by `item` prefix and run only those.
-  Six mutations were checked against v7.53 in about the time one full suite run would have taken.
-- **Snapshot a batch when you hand it off, not when the write runs.** The export recorder queued its
-  IndexedDB writes as `chain.then(() => write(buf))`, which reads `buf` at execution time — so several
-  batches handed over in one turn of the event loop all collapsed into the first write and the rest
-  wrote nothing. Everything still worked; the part size just silently stopped being what was asked for.
-  A test's CONTROL line caught it, not its subject.
-- **The phone screenshot catches what the DOM cannot.** `.fx-row.fx-open .fx-disc` is a DESCENDANT
-  selector, so every closed effect inside an open filter drew the OPEN chevron. `aria-expanded` was
-  correct, the bodies were absent, every assertion was green. Only the 380px shot showed it.
-- **Run the CONTROL first, every time.** Four separate times this run a measurement was meaningless
-  until the control ran: the #115 three-test harness (the "clean" tree failed too, so my repro was an
-  artefact), the #125 tier probe (the scene was too light to move the ladder at all), the #130 video
-  probe (importing the clip resized the comp, so the canvas column was nonsense), and the #151 cue test.
-- **A stale entry is a real category.** THREE turned up this run by working the list in order — #37,
-  #147's first half, and #155 were all already built. Verify before ticking, but do not assume open
-  means undone.
-- **My own notes have been wrong twice, confidently.** #47 said crash-resume needed a segmented
-  redesign (it did not — muxing is a byte copy). #151 said ~170 read sites made per-cue effects huge (one
-  site changed). Re-check a recorded conclusion before inheriting it.
-- **Measure before optimising, then measure the optimisation.** A flat 960px cap on the hold-frame copy
-  was SLOWER than not shrinking at all (11.9ms vs 9.2ms) because the browser's fast path is exact
-  halving. Only the second measurement caught it.
-- Version bumps are a find-and-replace that fails silently; the suite guards the label against
-  POLISH-LOG's newest entry.
-- Push with `git push ssh main`, then verify `git rev-parse HEAD` == `git rev-parse ssh/main`.
-
-## Housekeeping
-
-`.claude/worktrees/` still holds ~110 leftover repo copies (~1.1 GB) from old workflow runs. They each
-report a few changed files, so I have not deleted them unilaterally. Worth clearing when he says.
+[BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) — the UI is modelled on Alight Motion and must be made our
+own first. Raise it if he mentions publishing, launching, the App Store, a demo or a tutorial. Do not
+start the re-design unasked.
