@@ -98,32 +98,89 @@ window.FM = window.FM || {};
     return { codec: dc.codec, codedWidth: dc.codedWidth, codedHeight: dc.codedHeight, description: desc };
   }
 
-  /* Which frame the export should pick up from, read off the LAST CHUNK'S TIMESTAMP rather than off a
-   * count of chunks. The count would be the obvious choice and is the wrong one: it silently assumes
-   * one chunk per submitted frame, which holds for H.264 in WebCodecs today but is not something the
-   * spec owes us. The timestamp was written as `f * frameDurUs` by the frame loop, so inverting it
-   * recovers f whatever the encoder did in between. */
-  function nextFrameAfter(records, frameDurUs) {
-    if (!records || !records.length || !(frameDurUs > 0)) return 0;
-    let maxTs = -1;
-    for (const r of records) if (r && r.ts > maxTs) maxTs = r.ts;
-    if (maxTs < 0) return 0;
-    return Math.round(maxTs / frameDurUs) + 1;
+  /* Which frame the export should pick up from, inverted from the LAST CHUNK'S TIMESTAMP rather than
+   * from a count of chunks. The count would be the obvious choice and is the wrong one: it silently
+   * assumes one chunk per submitted frame, which holds for H.264 in WebCodecs today but is not
+   * something the spec owes us. The timestamp was written as `f * frameDurUs` by the frame loop, so
+   * inverting it recovers f whatever the encoder did in between. */
+  function nextFrameForTs(lastTs, frameDurUs) {
+    if (!(frameDurUs > 0) || !(lastTs >= 0)) return 0;
+    return Math.round(lastTs / frameDurUs) + 1;
   }
 
-  /* Push saved chunks back through a fresh muxer. The decoder config rides on the FIRST chunk only —
-   * exactly as it did on the original run, because that is the call mp4-muxer builds its sample
-   * description from. Returns how many were replayed. */
-  function replay(muxer, saved) {
-    const recs = (saved && saved.records) || [];
-    let n = 0;
-    for (let i = 0; i < recs.length; i++) {
-      const r = recs[i];
-      const chunk = new EncodedVideoChunk({ type: r.k, timestamp: r.ts, duration: r.du || undefined, data: r.d });
-      muxer.addVideoChunk(chunk, i === 0 && saved.config ? { decoderConfig: saved.config } : undefined);
-      n++;
+  /* THE EFFECTS THAT MAKE A SEAM VISIBLE, and why the exporter has to know about them.
+   *
+   * These four keep state from the PREVIOUS frame: the content-aware motion blur and its echo trails,
+   * the frame-stutter hold, the temporal denoiser and the time warp (js/compositor.js — they share the
+   * `_mfRec` LRU). Frame N's pixels are then a function of frame N-1, or in the echo case of the whole
+   * preceding run, which decays over roughly 25 frames.
+   *
+   * A resume starts the frame loop in the middle with all of that state freshly wiped, so without help
+   * the first frame after the seam renders COLD — a built-up echo trail vanishes for a frame and ramps
+   * back in, which is a visible flash in the middle of the finished file. The compositor already
+   * documents this exact hazard for a different reason (an export must not inherit preview history),
+   * which is why `resetMotionFlowCache()` runs before every export. That reset is right; what a resume
+   * additionally needs is to warm the state back up before it starts recording again. */
+  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp'];
+  function prerollFrames(scene) {
+    if (!scene || !FM.eachFx) return 0;
+    let found = false;
+    for (const layer of (scene.layers || [])) {
+      if (found) break;
+      FM.eachFx(layer, fx => {
+        if (fx && fx.enabled !== false && TEMPORAL_FX.indexOf(fx.type) >= 0) found = true;
+      });
     }
-    return n;
+    // 25 frames is the echo accumulator's memory at its longest decay (persist 0.96). Nothing here
+    // needs more, and a scene with no temporal effect at all needs none — a pre-roll is real render
+    // work, and paying 25 heavy frames on a phone for a project that cannot see the difference is
+    // exactly the kind of tax that makes a feature not worth having.
+    return found ? 25 : 0;
+  }
+
+  /* Push the saved chunks back through a fresh muxer, ONE PART AT A TIME.
+   *
+   * The obvious version reads every part into one array first and replays that. It also, on a long
+   * export, puts up to MAX_BYTES of encoded video on the heap and keeps it there for the rest of the
+   * render — an out-of-memory risk inside the feature whose entire purpose is surviving an
+   * out-of-memory kill, which is about the worst place to put one. Every retry would be likelier to
+   * die than the attempt before it. Streaming holds one ~3 MB batch at a time instead, whatever the
+   * length of the render.
+   *
+   * ALL-OR-NOTHING PER PART. Every chunk in a part is constructed before any of it is handed to the
+   * muxer, so a part that cannot be read is skipped entirely rather than half-fed. Half-feeding is
+   * the subtle disaster: the frames fed from a doomed part would count towards the resume point, the
+   * recorder would then overwrite that part's slot with different chunks, and the next resume would
+   * replay a file with a hole in the middle of it.
+   *
+   * Returns what was ACTUALLY fed, which is the authoritative resume point — not what the job record
+   * claimed, because a torn write makes those two different. */
+  async function replayInto(muxer, saved) {
+    const st = FM.storage;
+    let fed = 0, lastTs = -1, parts = 0, bytes = 0, first = true;
+    for (let i = 0; i < (saved.parts || 0); i++) {
+      let part = null;
+      try { part = await st.readMedia(PART_PREFIX + i); } catch (e) { part = null; }
+      if (!part || !part.chunks || !part.chunks.length) break;   // torn write → stop at the last good part
+      let built = [], n = 0, hi = -1;
+      try {
+        for (const r of part.chunks) {
+          built.push(new EncodedVideoChunk({ type: r.k, timestamp: r.ts, duration: r.du || undefined, data: r.d }));
+          n += (r.d && r.d.byteLength) || 0;
+          if (r.ts > hi) hi = r.ts;
+        }
+      } catch (e) { break; }        // a corrupt record — the parts before it are still a valid prefix
+      for (const c of built) {
+        // The decoder config rides on the FIRST chunk only, exactly as it did on the original run:
+        // that is the single call mp4-muxer builds its sample description from.
+        muxer.addVideoChunk(c, first && saved.config ? { decoderConfig: saved.config } : undefined);
+        first = false; fed++;
+      }
+      built = null; part = null;    // and this is the point of the whole shape: the batch is releasable
+      parts = i + 1; bytes += n;
+      if (hi > lastTs) lastTs = hi;
+    }
+    return { chunks: fed, lastTs: lastTs, parts: parts, bytes: bytes };
   }
 
   async function clear() {
@@ -182,23 +239,19 @@ window.FM = window.FM || {};
     if (!job || job.v !== FORMAT || job.sig !== sig || job.capped) return null;
     if (!(job.parts > 0)) return null;
     if (!job.updatedAt || (Date.now() - job.updatedAt) > MAX_AGE_MS) return null;
-    const records = [];
-    let partsRead = 0;
-    for (let i = 0; i < job.parts; i++) {
-      let part = null;
-      try { part = await st.readMedia(PART_PREFIX + i); } catch (e) { part = null; }
-      /* A missing part TRUNCATES rather than fails. The parts before it are still a valid decodable
-       * prefix, so half a resume beats none — and this is the shape a torn write actually takes. */
-      if (!part || !part.chunks || !part.chunks.length) break;
-      for (const c of part.chunks) records.push(c);
-      partsRead++;
-    }
-    if (!records.length) return null;
-    if (records[0].k !== 'key') return null;   // a prefix that does not open on a keyframe is not decodable
-    /* `parts` is reported as the number actually READ, not the number the job claimed. They differ
-     * exactly when a part was torn, and the recorder must then append at the first free index — using
-     * the claimed count would leave a permanent hole that every later load() truncates at. */
-    return { records: records, config: job.config || null, bytes: job.bytes || 0, parts: partsRead };
+    /* Read part 0 and nothing else. This used to concatenate every part into one array so the caller
+     * could inspect it; that made load() cost the whole render in memory before a single frame was
+     * re-encoded. Its only real job is to answer "is there a usable render here?", and part 0 answers
+     * it: a prefix that does not open on a keyframe is not decodable, and there is nothing to resume.
+     * How much is usable is settled by replayInto(), which finds out by actually feeding it. */
+    let first = null;
+    try { first = await st.readMedia(PART_PREFIX + '0'); } catch (e) { first = null; }
+    if (!first || !first.chunks || !first.chunks.length) return null;
+    if (first.chunks[0].k !== 'key') return null;
+    return {
+      parts: job.parts, config: job.config || null, bytes: job.bytes || 0,
+      lastTs: (job.lastTs == null) ? -1 : job.lastTs,   // what the job CLAIMS; replayInto is the authority
+    };
   }
 
   /* The write side. Owns its own batching so the frame loop only has to say "here is a chunk".
@@ -225,13 +278,16 @@ window.FM = window.FM || {};
     let nextIdx = o.parts || 0, written = o.parts || 0;
     let bytes = o.bytes || 0;
     let config = o.config || null;
+    // The highest timestamp confirmed on disk. Recorded so load() can report a resume point without
+    // reading the whole render back — the reason the probe can check the seam without replaying it.
+    let lastTs = (o.lastTs == null) ? -1 : o.lastTs;
     let capped = false, dead = !st || !st.writeMedia;
     let chain = Promise.resolve();         // serialises writes so parts land in order
 
     async function writeJob() {
       const ok = await st.writeMedia(JOB_KEY, {
         v: FORMAT, sig: sig, parts: written, bytes: bytes, config: config,
-        capped: capped, updatedAt: Date.now(),
+        lastTs: lastTs, capped: capped, updatedAt: Date.now(),
       });
       if (!ok) dead = true;
     }
@@ -245,12 +301,15 @@ window.FM = window.FM || {};
     function handOff() {
       if (dead || !buf.length) return;
       const chunks = buf, n = bufBytes, idx = nextIdx;
+      let hi = -1;
+      for (const r of chunks) if (r.ts > hi) hi = r.ts;
       buf = []; bufBytes = 0; nextIdx++;
       chain = chain.then(async () => {
         if (dead) return;
         const ok = await st.writeMedia(PART_PREFIX + idx, { chunks: chunks });
         if (!ok) { dead = true; return; }  // quota or worse — stop recording, let the export finish
         written = idx + 1; bytes += n;
+        if (hi > lastTs) lastTs = hi;      // only after the part is CONFIRMED on disk
         if (bytes >= maxBytes) capped = true;
         await writeJob();
       }, () => {});
@@ -279,6 +338,7 @@ window.FM = window.FM || {};
       settle() { return this.flush(); },
       get parts() { return written; },
       get bytes() { return bytes; },
+      get lastTs() { return lastTs; },
       get capped() { return capped; },
       get recording() { return !dead && !capped; },
     };
@@ -289,8 +349,10 @@ window.FM = window.FM || {};
     signature: signature,
     chunkRecord: chunkRecord,
     configRecord: configRecord,
-    nextFrameAfter: nextFrameAfter,
-    replay: replay,
+    nextFrameForTs: nextFrameForTs,
+    replayInto: replayInto,
+    prerollFrames: prerollFrames,
+    TEMPORAL_FX: TEMPORAL_FX,
     createRecorder: createRecorder,
     load: load,
     clear: clear,

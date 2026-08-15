@@ -523,15 +523,26 @@ window.FM = window.FM || {};
 
       /* Replay whatever survived the crash into the fresh muxer, then start the frame loop where it
        * left off. Re-muxing is a byte copy, not an encode, so this is milliseconds however long the
-       * saved run was. If the replay throws — a corrupt record, a muxer that rejects a chunk — the
-       * saved work is written off and the export starts from frame 0 rather than dying, because a
-       * slow correct export beats a fast broken one. */
-      let resumeFrom = 0;
+       * saved run was, and replayInto streams it one batch at a time so the heap never holds more
+       * than one.
+       *
+       * The authority on where to pick up is what was ACTUALLY fed, not what the job record claimed —
+       * a torn write makes those two different, and trusting the claim would leave a gap.
+       *
+       * A throw here can only come from the muxer rejecting a chunk, and by then chunks are already in
+       * it, so there is no clean way to carry on. Bin the saved render and fail this one export: the
+       * next attempt then starts from zero and works, which beats a resume that fails forever. */
+      let resumeFrom = 0, replayed = null;
       if (saved) {
         try {
-          XR.replay(muxer, saved);
-          resumeFrom = Math.max(0, Math.min(totalFrames, XR.nextFrameAfter(saved.records, frameDurUs)));
-        } catch (e) { console.warn('resume replay failed — starting over', e); saved = null; resumeFrom = 0; }
+          replayed = await XR.replayInto(muxer, saved);
+        } catch (e) {
+          console.warn('resume replay failed — discarding the saved render', e);
+          try { await XR.clear(); } catch (e2) {}
+          throw e;
+        }
+        if (replayed.chunks > 0) resumeFrom = Math.max(0, Math.min(totalFrames, XR.nextFrameForTs(replayed.lastTs, frameDurUs)));
+        else { saved = null; replayed = null; }
       }
       if (resumeFrom > 0) {
         if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'picking up where the last render stopped');
@@ -542,7 +553,8 @@ window.FM = window.FM || {};
       }
 
       recorder = (XR && sig)
-        ? XR.createRecorder(sig, { parts: saved ? saved.parts : 0, bytes: saved ? saved.bytes : 0,
+        ? XR.createRecorder(sig, { parts: replayed ? replayed.parts : 0, bytes: replayed ? replayed.bytes : 0,
+                                   lastTs: replayed ? replayed.lastTs : -1,
                                    config: saved ? saved.config : null })
         : null;
 
@@ -551,6 +563,32 @@ window.FM = window.FM || {};
         error: e => console.error('video encode', e),
       });
       encoder.configure({ codec, width: outW, height: outH, bitrate, framerate: fps });
+
+      /* WARM THE TEMPORAL EFFECTS BACK UP BEFORE RECORDING AGAIN.
+       *
+       * Motion Blur (Content), Frame Stutter, the temporal denoiser and the time warp each render
+       * frame N from frame N-1 — and the echo-trail style from the whole preceding run. prepareCaches
+       * wipes that state before every export, which is right (an export must not inherit whatever was
+       * on screen during preview). But a resume then starts the loop in the MIDDLE with the state
+       * cleared, so the frame at the seam renders cold: a built-up echo trail vanishes for a frame and
+       * ramps back in over the next second. That is a visible flash in the middle of the finished file,
+       * and it would only ever appear in a resumed export — the hardest kind of bug to be told about.
+       *
+       * So re-render the frames leading up to the seam WITHOUT encoding them, purely to rebuild the
+       * history. Nothing is emitted, so the output is unaffected; it just costs a few frames of render
+       * time, and only for a project that actually carries one of those effects. */
+      const preroll = XR ? XR.prerollFrames(scene) : 0;
+      if (resumeFrom > 0 && preroll > 0) {
+        const warmFrom = Math.max(0, resumeFrom - preroll);
+        if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'warming up the effects at the join');
+        for (let f = warmFrom; f < resumeFrom; f++) {
+          if (FM._exportCancel) { encoder.close(); throw new Error('CANCELLED'); }
+          const t = start + f / fps;
+          await seekAllVideos(scene, t);
+          FM.renderScene(projCtx, scene, t);   // rendered for its side effect on the temporal caches only
+          await nextTick();
+        }
+      }
 
       for (let f = resumeFrom; f < totalFrames; f++) {
         if (FM._exportCancel) { encoder.close(); throw new Error('CANCELLED'); }

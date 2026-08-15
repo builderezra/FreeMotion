@@ -14588,13 +14588,14 @@
 
       var saved = await XR.load(sig);
       if (!saved) throw new Error('nothing came back from the store — a crash right here would have lost the whole render');
-      if (saved.records.length !== 7) throw new Error('expected 7 saved chunks, got ' + saved.records.length + (saved.records.length === 6 ? ' — the last partial batch was never flushed' : ''));
       if (!saved.config || !saved.config.description) throw new Error('the decoder config (avcC) was not saved — the muxer cannot write a sample description without it, so the replayed file would be undecodable');
 
       var got = [];
       var fake = { addVideoChunk: function (c, m) { got.push({ c: c, m: m }); } };
-      XR.replay(fake, saved);
+      var rep = await XR.replayInto(fake, saved);
+      if (rep.chunks !== 7) throw new Error('expected 7 saved chunks, got ' + rep.chunks + (rep.chunks === 6 ? ' — the last partial batch was never flushed' : ''));
       if (got.length !== 7) throw new Error('replayed ' + got.length + ' chunks, not 7');
+      if (rep.lastTs !== 6 * 33333) throw new Error('the replay reported its last timestamp as ' + rep.lastTs + ', not ' + (6 * 33333) + ' — the resume point is computed from this');
       for (var j = 0; j < 7; j++) {
         var c = got[j].c;
         if (c.type !== (j === 0 ? 'key' : 'delta')) throw new Error('chunk ' + j + ' came back as a ' + c.type);
@@ -14607,17 +14608,55 @@
     } finally { await XR.clear(); }
   });
 
-  test('export resume: the pick-up frame is read off the timestamps, not off a count of chunks', { item: 'export-resume-frame' }, function () {
+  test('export resume: the pick-up frame is read off the timestamps, not off a count of chunks', { item: 'export-resume-frame' }, async function () {
     var XR = FM.exportResume, dur = 1e6 / 30;
-    if (XR.nextFrameAfter([], dur) !== 0) throw new Error('an empty run should start at frame 0');
-    var recs = [];
-    for (var i = 0; i < 15; i++) recs.push({ k: i ? 'delta' : 'key', ts: Math.round(i * dur), du: dur });
-    if (XR.nextFrameAfter(recs, dur) !== 15) throw new Error('15 saved frames should resume at frame 15, got ' + XR.nextFrameAfter(recs, dur));
-    // Decode order is not presentation order the moment an encoder uses B-frames. Reading the LAST
-    // element rather than the largest timestamp would rewind the export and duplicate frames.
-    var shuffled = recs.slice(); var t = shuffled[14]; shuffled[14] = shuffled[9]; shuffled[9] = t;
-    if (XR.nextFrameAfter(shuffled, dur) !== 15) throw new Error('chunks arriving out of presentation order rewound the resume point to ' + XR.nextFrameAfter(shuffled, dur) + ' — frames would be encoded twice');
-    if (XR.nextFrameAfter(recs, 0) !== 0) throw new Error('a zero frame duration must not divide by zero into NaN');
+    if (XR.nextFrameForTs(-1, dur) !== 0) throw new Error('an empty run should start at frame 0');
+    if (XR.nextFrameForTs(Math.round(14 * dur), dur) !== 15) throw new Error('a run ending at frame 14 should resume at 15, got ' + XR.nextFrameForTs(Math.round(14 * dur), dur));
+    if (XR.nextFrameForTs(Math.round(14 * dur), 0) !== 0) throw new Error('a zero frame duration must not divide by zero into NaN');
+
+    /* And the timestamp the recorder reports has to be the HIGHEST it saved, not the last one handed
+     * to it. Decode order stops being presentation order the moment an encoder uses B-frames, and
+     * taking the last arrival would rewind the resume point and re-encode frames that are already in
+     * the file. Driven through the recorder rather than a helper, because that is where it is read. */
+    var sig = XR.signature(xrBaseSig()) + '|ts';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 4 });
+      var order = [0, 1, 3, 2];   // the pair that arrives the wrong way round
+      for (var i = 0; i < 4; i++) {
+        rec.add(xrChunk(i === 0 ? 'key' : 'delta', Math.round(order[i] * dur), dur, [i]),
+                i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
+      }
+      await rec.settle();
+      if (rec.lastTs !== Math.round(3 * dur)) throw new Error('the recorder reported ' + rec.lastTs + ' as its last timestamp instead of frame 3 (' + Math.round(3 * dur) + ') — it took the last arrival rather than the furthest one, so a resume would re-encode a frame that is already in the file');
+      if (XR.nextFrameForTs(rec.lastTs, dur) !== 4) throw new Error('that should resume at frame 4');
+    } finally { await XR.clear(); }
+  });
+
+  /* The seam is invisible for most projects and very visible for a few, and the exporter has to know
+   * which is which — a pre-roll is real render work, so paying it on every resume would be a tax on
+   * projects that cannot see the difference, and skipping it on the ones that can is a flash in the
+   * middle of the finished file. (Raised by review, not by a report: a bug only a resumed export can
+   * produce is one nobody would ever be able to describe.) */
+  test('export resume: the join warms up the effects that need it, and only those', { item: 'export-resume-preroll' }, function () {
+    var XR = FM.exportResume;
+    function sceneWith(types) {
+      var l = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: 0, duration: 2 });
+      l.effects = types.map(function (ty) { return FM.fxRegistry.makeInstance(ty); });
+      return { layers: [l], project: { width: 64, height: 48, fps: 30, duration: 2 } };
+    }
+    if (XR.prerollFrames(sceneWith([])) !== 0) throw new Error('a project with no effects at all asked for a pre-roll — that is render time spent for nothing on every resume');
+    if (XR.prerollFrames(sceneWith(['blur', 'orbit'])) !== 0) throw new Error('plain per-frame effects asked for a pre-roll; they render frame N from time alone and cannot tell the difference');
+    if (!XR.TEMPORAL_FX.length) throw new Error('the temporal effect list is empty');
+    XR.TEMPORAL_FX.forEach(function (ty) {
+      if (!(XR.prerollFrames(sceneWith([ty])) > 0)) {
+        throw new Error('"' + ty + '" keeps state from the previous frame but asked for no pre-roll — a resume renders its first frame cold, so a built-up trail vanishes for a frame and ramps back in, mid-file');
+      }
+    });
+    // Disabled effects do not render, so they cannot need warming.
+    var off = sceneWith([XR.TEMPORAL_FX[0]]);
+    off.layers[0].effects[0].enabled = false;
+    if (XR.prerollFrames(off) !== 0) throw new Error('a DISABLED temporal effect still asked for a pre-roll');
   });
 
   test('export resume: a half-written part truncates the resume instead of corrupting it', { item: 'export-resume-torn' }, async function () {
@@ -14628,16 +14667,21 @@
       var rec = XR.createRecorder(sig, { batchChunks: 2 });
       for (var i = 0; i < 6; i++) rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, [i]), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
       await rec.settle();
-      var whole = await XR.load(sig);
-      if (!whole || whole.records.length !== 6) throw new Error('control failed: 6 chunks did not survive an ordinary save (' + (whole ? whole.records.length : 'nothing') + ')');
-      if (whole.parts !== 3) throw new Error('control failed: expected 3 parts, got ' + whole.parts);
+      function drain() { var got = []; return { got: got, addVideoChunk: function (c) { got.push(c); } }; }
+      var whole = await XR.load(sig), m1 = drain();
+      if (!whole) throw new Error('control failed: nothing survived an ordinary save');
+      var r1 = await XR.replayInto(m1, whole);
+      if (r1.chunks !== 6 || m1.got.length !== 6) throw new Error('control failed: 6 chunks did not survive an ordinary save (' + r1.chunks + ' replayed, ' + m1.got.length + ' reached the muxer)');
+      if (r1.parts !== 3) throw new Error('control failed: expected 3 parts, got ' + r1.parts);
 
       // Simulate the torn write: part 1 never made it to disk, but the job counts it.
       await FM.storage.removeMedia(XR.PART_PREFIX + '1');
-      var torn = await XR.load(sig);
+      var torn = await XR.load(sig), m2 = drain();
       if (!torn) throw new Error('a single torn part threw the ENTIRE render away — the surviving prefix is still perfectly good frames');
-      if (torn.records.length !== 2) throw new Error('expected the 2 chunks before the hole, got ' + torn.records.length + ' — reading past a hole splices non-consecutive frames together');
-      if (torn.parts !== 1) throw new Error('parts came back as ' + torn.parts + ', not the 1 actually read — the recorder would then append past the hole and leave it there permanently');
+      var r2 = await XR.replayInto(m2, torn);
+      if (r2.chunks !== 2 || m2.got.length !== 2) throw new Error('expected the 2 chunks before the hole, got ' + r2.chunks + ' — reading past a hole splices non-consecutive frames together');
+      if (r2.parts !== 1) throw new Error('parts came back as ' + r2.parts + ', not the 1 actually fed — the recorder would then append past the hole and leave it there permanently');
+      if (r2.lastTs !== 1000) throw new Error('the resume point after a tear came back as timestamp ' + r2.lastTs + ' instead of 1000 — it counted frames it never actually fed to the muxer, which leaves a gap');
     } finally { await XR.clear(); }
   });
 
@@ -14713,7 +14757,8 @@
 
       var after = await XR.load(sig);
       if (!after) throw new Error('the boot sweep deleted the saved render — a crash is ALWAYS followed by a boot, so resume would never once have worked outside a test');
-      if (after.records.length !== 4) throw new Error('the boot sweep took ' + (4 - after.records.length) + ' of the 4 saved chunks');
+      var m = { got: [], addVideoChunk: function (c) { this.got.push(c); } };
+      if ((await XR.replayInto(m, after)).chunks !== 4) throw new Error('the boot sweep took some of the 4 saved chunks (' + m.got.length + ' left)');
     } finally { await XR.clear(); }
   });
 
@@ -14732,7 +14777,9 @@
       await XR.sweep();
       if (await FM.storage.readMedia(XR.PART_PREFIX + '9')) throw new Error('an orphaned part left by a torn write survived the sweep and can never be read again — dead bytes on the device');
       var still = await XR.load(sig);
-      if (!still || still.records.length !== 4) throw new Error('the sweep took the live parts along with the orphan (' + (still ? still.records.length : 0) + ' of 4 left)');
+      var m2 = { got: [], addVideoChunk: function (c) { this.got.push(c); } };
+      var left4 = still ? (await XR.replayInto(m2, still)).chunks : 0;
+      if (left4 !== 4) throw new Error('the sweep took the live parts along with the orphan (' + left4 + ' of 4 left)');
 
       // Now age it past the point where load() would touch it. Exempting these keys from the generic
       // orphan sweep is what makes this necessary: nothing else is looking after them any more.

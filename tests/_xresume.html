@@ -147,10 +147,10 @@ async function main(w) {
 
     await sleep(400);   // the crash skipped settle(), so let the last queued IndexedDB write land
     var saved = await savedRun();
-    var resumeAt = saved ? XR.nextFrameAfter(saved.records, 1e6 / FPS) : -1;
+    var resumeAt = saved ? XR.nextFrameForTs(saved.lastTs, 1e6 / FPS) : -1;
     say('the frames rendered before the crash are still on the device afterwards',
-        !!saved && saved.records.length >= 60,
-        saved ? ('only ' + saved.records.length + ' chunks survived') : 'NOTHING survived — the entire render was lost, which is the bug this is meant to fix');
+        !!saved && resumeAt >= 60,
+        saved ? ('only ' + resumeAt + ' frames survived') : 'NOTHING survived — the entire render was lost, which is the bug this is meant to fix');
     say('the saved run stops short of the crash rather than overrunning it',
         resumeAt >= 60 && resumeAt <= KILL_AT,
         'the resume point came out at frame ' + resumeAt + ', expected between 60 and ' + KILL_AT);

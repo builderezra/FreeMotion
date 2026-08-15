@@ -1623,8 +1623,25 @@ better still, keep working inside the turn rather than parking work for a later 
       any more, they now get reaped on their own terms instead (abandoned after three days, capped, or
       left behind by a torn write). Two new tests, one calling the real boot sweep rather than a
       stand-in; reverting the exemption reproduces the original bug exactly.
-      **STILL OPEN: the second half — off the main thread.** Much larger again: a worker means the whole
-      compositor (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Not started.
+      **v7.55 — the last two things that review found, both of which only bite the people this was
+      built for.** Neither would ever have produced a bug report, which is why they are worth naming:
+      1. **It was loading the whole saved render into memory to resume it** — up to 512 MB, held for the
+         rest of the export. That is an out-of-memory risk inside the one feature whose job is surviving
+         an out-of-memory kill, and the nastier shape of it is that every retry after a crash would have
+         been likelier to die than the attempt before. It now replays one ~3 MB batch at a time, so
+         memory stays flat however long the render.
+      2. **The join flashed on projects with time-based effects.** Motion Blur (Content), Frame Stutter,
+         the temporal denoiser and the time warp each build each frame out of the one before it — the
+         echo trail out of the whole preceding second. A resume started in the middle with that history
+         wiped, so a built-up trail would vanish for a single frame and ramp back in, mid-file, in a
+         file you would have had no way of knowing was different from an uninterrupted one. A resume now
+         re-renders the 25 frames before the join without encoding them, purely to rebuild that history
+         — and only when the project actually carries one of those four effects.
+      **STILL OPEN (b): the second half — off the main thread.** Much larger again: a worker means the
+      whole compositor (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Not started, and unlike
+      the resume half there is no shortcut hiding in it — **this one is a genuine decision for you**,
+      because it is days of work and it risks the most load-bearing file in the app. Say the word and
+      it goes to the front; otherwise I will keep it behind the smaller items.
       It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on
       your word to jump the queue — asked three times now, and I still rate it the most serious open item.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
