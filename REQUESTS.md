@@ -581,11 +581,21 @@ better still, keep working inside the turn rather than parking work for a later 
       this time is that the app's own regulator can now see the cost it was blind to — so if it is still
       laggy, the numbers it reports will finally mean something. **Tell me if it is still bad and the
       next step is reading those numbers off your actual phone rather than guessing here.**
-      **One more real finding, NOT yet fixed, recorded so it is not lost:** every preview render of a
-      video layer also copies the whole frame at FULL SOURCE resolution into `m._lastFrame`
-      (js/compositor.js, the hold-frame fallback) — about 3 megapixels for a phone screen recording,
-      on top of the composite draw, and untouched by the quality ladder. On a Mac that is a fast blit;
-      on a phone it is real milliseconds every frame. Worth doing next on this entry.
+      **A FOURTH FIX, v7.58 — and this one is measured, not estimated.** Every preview render of a video
+      layer also copies the whole frame at FULL SOURCE resolution into a spare canvas, so that if the
+      next frame is still decoding the clip holds its last good picture instead of flashing black.
+      Worth having. But it was paid on EVERY render, including the many showing an identical picture.
+      `tests/_q125hold.html` puts a number on it: on a 2048×2048 clip at 6× CPU throttle one copy is
+      **9.7ms — 58% of a whole frame's budget** (2.2ms at half size, 0.6ms at quarter). It now skips the
+      copy when the video has not moved. A finger held still on the timeline re-renders continuously at
+      one source time — and since v7.57 stopped the pointless re-seeking, the element really does stay
+      put there — so that case was re-copying four megapixels a frame for a byte-identical result.
+      **What is left of this, honestly:** during PLAYBACK every frame is genuinely new, so the copy is
+      still paid per frame. Shrinking it is the real win (half size is 4.4× cheaper) and it is NOT a
+      one-liner: the composite samples that canvas in SOURCE pixel coordinates for the crop rect, so a
+      smaller canvas would crop the wrong part of the picture. Every consumer that indexes it in source
+      pixels has to be found and scaled with it. Recorded with the payoff and the obstacle so the next
+      pass is a build rather than a hunt.
 - [x] **119 + 120 — The EXPORT frame-rate list is unordered, and should match the canvas one.** (v6.74) His
       words: *"This menu is all over the shop, needs to be ordered"* (screenshot: 30, 24, 25, 60, 50, 12
       — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas

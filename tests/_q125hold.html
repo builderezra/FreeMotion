@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>queue 125 — what does the hold-frame copy actually cost?</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, monospace; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 16px; }
+  table { border-collapse: collapse; margin: 10px 0; }
+  td, th { border: 1px solid #2a2f3a; padding: 4px 10px; text-align: right; }
+  th { color: #9fb; } td:first-child, th:first-child { text-align: left; }
+</style>
+</head>
+<body>
+  <h3>queue 125 — the per-render full-resolution hold-frame copy</h3>
+  <p style="color:#98a">Every preview render of a video layer also copies the whole frame at FULL SOURCE
+  resolution into <code>m._lastFrame</code>, so a mid-seek dip can hold the last good picture instead of
+  going black. On a Mac that is a fast blit. This measures it, rather than assuming — because the point
+  of #125 is that assuming has been wrong three times.</p>
+  <div id="out">running…</div>
+<script>
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function main() {
+  var el = document.createElement('video');
+  el.src = '../splash.mp4'; el.muted = true; el.playsInline = true; el.preload = 'auto';
+  await new Promise(function (res, rej) {
+    el.addEventListener('loadeddata', res, { once: true });
+    el.addEventListener('error', function () { rej(new Error('splash.mp4 would not load')); }, { once: true });
+    setTimeout(function () { rej(new Error('splash.mp4 timed out')); }, 20000);
+  });
+  el.currentTime = 0.5;
+  await new Promise(function (r) { el.addEventListener('seeked', r, { once: true }); setTimeout(r, 2000); });
+
+  var w = el.videoWidth, h = el.videoHeight;
+  var rows = [];
+
+  function timeCopy(cw, ch, n) {
+    var cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+    var cx = cv.getContext('2d');
+    cx.drawImage(el, 0, 0, cw, ch);            // warm up — the first blit pays for allocation
+    var t0 = performance.now();
+    for (var i = 0; i < n; i++) { cx.clearRect(0, 0, cw, ch); cx.drawImage(el, 0, 0, cw, ch); }
+    var per = (performance.now() - t0) / n;
+    return per;
+  }
+
+  var N = 40;
+  rows.push(['full source (what the app does)', w + '×' + h, +(w * h / 1e6).toFixed(2), +timeCopy(w, h, N).toFixed(3)]);
+  rows.push(['half', (w >> 1) + '×' + (h >> 1), +((w >> 1) * (h >> 1) / 1e6).toFixed(2), +timeCopy(w >> 1, h >> 1, N).toFixed(3)]);
+  rows.push(['quarter', (w >> 2) + '×' + (h >> 2), +((w >> 2) * (h >> 2) / 1e6).toFixed(2), +timeCopy(w >> 2, h >> 2, N).toFixed(3)]);
+
+  /* And the question that actually decides whether this is worth changing: is a repeat copy of the SAME
+   * frame any cheaper? If not, then skipping repeats (the safe fix — the unsafe one is shrinking the
+   * canvas, because every downstream consumer samples it in SOURCE pixel coordinates) is worth exactly
+   * one full copy per repeated frame, which is what a held finger produces. */
+  var budget = (1000 / 60).toFixed(2);
+  window.__q125hold = { w: w, h: h, mp: +(w * h / 1e6).toFixed(2), rows: rows };
+  document.getElementById('out').innerHTML =
+    '<p>source: <b>' + w + '×' + h + '</b> (' + (w * h / 1e6).toFixed(2) + ' MP) · one frame of budget at 60fps = ' + budget + 'ms</p>' +
+    '<table><tr><th>copy size</th><th>pixels</th><th>MP</th><th>ms per copy</th></tr>' +
+    rows.map(function (r) {
+      var pct = (r[3] / (1000 / 60) * 100).toFixed(1);
+      return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + ' <span style="color:#98a">(' + pct + '% of a frame)</span></td></tr>';
+    }).join('') + '</table>';
+  window.__done = true;
+}
+main().catch(function (e) {
+  document.getElementById('out').textContent = 'Error: ' + (e && e.message || e);
+  window.__q125hold = { error: String(e && e.message || e) };
+  window.__done = true;
+});
+</script>
+</body>
+</html>

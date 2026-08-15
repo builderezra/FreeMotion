@@ -8834,10 +8834,26 @@ window.FM = window.FM || {};
             src = m.el;
             // Stash this good frame so the next mid-seek dip can hold it (forward clips only; preview
             // only — capturing every export frame is pure churn the exporter never uses). (#22)
+            /* …but NOT the same frame twice (queue 125). This copy is the full SOURCE resolution, and
+             * it is not cheap where it matters: measured on a 2048×2048 clip at 6× CPU throttle it is
+             * **9.7 ms, 58% of a whole frame's budget** (`tests/_q125hold.html`). It was being paid on
+             * every single render, including the many renders that show an identical picture — a finger
+             * held still on the timeline re-renders continuously at one source time, and since v7.57's
+             * seek guard the element genuinely stays put, so every one of those was re-copying four
+             * megapixels to produce a byte-identical result.
+             * Keyed on the source time, which is what decides the picture. No behaviour changes: when
+             * the frame really is new the copy happens exactly as before. */
             if (!FM._exporting && m.kind === 'video' && w > 0 && h > 0) {
-              if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
-              if (m._lastFrame.width !== w || m._lastFrame.height !== h) { m._lastFrame.width = w; m._lastFrame.height = h; }
-              try { const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, w, h); lx.drawImage(m.el, 0, 0, w, h); } catch (e) {}
+              const srcT = m.el.currentTime || 0;
+              const stale = !m._lastFrame || m._lastFrame.width !== w || m._lastFrame.height !== h || m._lastFrameT !== srcT;
+              if (stale) {
+                if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
+                if (m._lastFrame.width !== w || m._lastFrame.height !== h) { m._lastFrame.width = w; m._lastFrame.height = h; }
+                try {
+                  const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, w, h); lx.drawImage(m.el, 0, 0, w, h);
+                  m._lastFrameT = srcT;
+                } catch (e) { m._lastFrameT = -1; }   // a failed copy must not be remembered as done
+              }
             }
           }
         }

@@ -14527,6 +14527,70 @@
     if (!('avgGapMs' in FM.playbackQualityInfo())) throw new Error('playbackQualityInfo does not report the frame interval, so there is no way to tell a GPU-bound stall from a healthy frame');
   });
 
+  /* The hold-frame copy is the biggest single per-render cost on a video layer and the easiest to
+   * forget is there, because it produces nothing visible — it exists only so a mid-seek dip holds the
+   * last good picture instead of going black. Measured at 2048×2048 under 6× CPU throttle: 9.7ms, 58%
+   * of a whole frame's budget (tests/_q125hold.html). Paying it twice for the same picture is the part
+   * that is simply waste, and a held finger on the timeline does exactly that. */
+  test('perf: the hold-frame is not re-copied when the video has not moved', { item: 'perf-holdframe' }, function () {
+    var keep = FM.scene.layers.slice(), keepT = FM.time;
+    try {
+      var draws = 0;
+      var W = 48, H = 32;
+      // A canvas standing in for the decoded element: renderScene only ever drawImage()s it, and
+      // counting those is exactly the question. readyState 2 keeps it off the hold path.
+      var fake = document.createElement('canvas'); fake.width = W; fake.height = H;
+      fake.getContext('2d').fillRect(0, 0, W, H);
+      fake.readyState = 2; fake.currentTime = 0.4;
+      var rec = { kind: 'video', el: fake, width: W, height: H, duration: 5 };
+
+      var L = FM.makeLayer('video', { start: 0, duration: 5 });
+      L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, rec);
+
+      /* Count the COPIES, not the bookkeeping. The first version of this test watched _lastFrameT and
+       * whether the canvas object was replaced — and passed against a mutation that copied on every
+       * single render, because the pre-fix code reuses the same canvas and records the same time
+       * either way. The only thing that distinguishes the fix from the bug is how many times pixels
+       * actually move, so count drawImage on the hold canvas's own context. */
+      var lf = document.createElement('canvas'); lf.width = W; lf.height = H;
+      var realGet = lf.getContext.bind(lf);
+      lf.getContext = function (k) {
+        var c = realGet(k);
+        if (!c._counted) { var rd = c.drawImage.bind(c); c.drawImage = function () { draws++; return rd.apply(null, arguments); }; c._counted = true; }
+        return c;
+      };
+      rec._lastFrame = lf; rec._lastFrameT = -999;   // -999 so the first render must capture
+
+      var cv = offscreen(120, 90), cx = cv.getContext('2d');
+      var draw = function () { FM.renderScene(cx, FM.scene, 1); };
+
+      draw();
+      if (draws !== 1) throw new Error('control failed: the first render made ' + draws + ' hold-frame copies, expected exactly 1 — this test cannot tell the fix from the bug');
+      if (rec._lastFrameT !== 0.4) throw new Error('control failed: the capture recorded source time ' + rec._lastFrameT + ', not 0.4');
+
+      // Same source time, several more renders: the picture is identical, so nothing should be re-copied.
+      draw(); draw(); draw();
+      if (draws !== 1) {
+        throw new Error('three renders of an unchanged picture made ' + (draws - 1) + ' extra full-resolution copies. Measured at 2048x2048 under 6x CPU throttle that is 9.7ms each — 58% of a frame budget — spent producing a byte-identical result, which is exactly what a finger held still on the timeline does.');
+      }
+
+      // …and a genuinely new frame must still be captured, or the hold would show a stale picture.
+      fake.currentTime = 0.9;
+      draw();
+      if (draws !== 2) throw new Error('a genuinely new frame was not captured (' + draws + ' copies total) — the hold would show a stale picture');
+      if (rec._lastFrameT !== 0.9) {
+        throw new Error('the video moved to 0.9 but the hold frame is still recorded at ' + rec._lastFrameT +
+                        ' — the next mid-seek dip would hold a stale picture, which is worse than the cost this saves');
+      }
+    } finally {
+      FM.scene.layers.forEach(function (l) { FM.media.remove(l.id); });
+      FM.scene.layers = keep; FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
