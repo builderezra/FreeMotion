@@ -3853,3 +3853,29 @@ layout, motion blur, the elements browser and the effects browser.
       · **"pretty un usable"** is the part that matters most and is not covered by either. Before
         rearranging anything, look at the whole PC layout with a selection live and find out what makes
         it unusable, rather than shipping the two named fixes and declaring it done.
+
+      **MEASURED, and then he corrected my answer to it — both worth keeping.**
+      At **1280×800 with a layer selected**, an entirely ordinary laptop: the canvas is **264×469, which
+      is 24% of the stage**, with 730px of dead space either side of it, and **290px of the 800px window
+      is chrome** (header 50 · transport 40 · timeline 240). The canvas is HEIGHT-limited — a 9:16 comp
+      on a 16:9 screen — so only vertical space can ever help it. Of the three bands, the timeline is
+      drag-resizable and the transport row is working controls; the 50px header was the only pure
+      overhead, and after v7.73 its entire visible contents were a wordmark and a name field the
+      inspector header already duplicates. Removing it measures **21% more canvas area** (290×515 against
+      264×469) — the exact gain the Studio layout already takes, because Studio deleted that row at v7.52.
+      **I started doing it and he said no:** *"no dont reclaim the top bar, i just want you to move the
+      nescesary buttons to the bottoms one so its all there."* Reverted. **v7.75 does what he did ask
+      for**: the name field — the last working control up there — moved down beside Back, so the whole
+      chrome is one row and the header is a wordmark only. The field appears only when a layer is
+      selected, because that is the case where it does something nothing else does (rename the layer);
+      with nothing selected it was showing the project name a second time.
+      **The 21% is written down here, not argued.** It is his layout, and the number will still be true
+      whenever he wants it. One other route to the same space, which needs no layout change at all:
+      **Studio, in the cog** — same canvas gain, inspector moves to a band under the stage.
+      **What is still open in this entry:** whether anything else about PC is unusable. Two named things
+      and the header are done, and the honest position is that I do not know what else he means. The
+      remaining measured facts, none of them acted on: 730px of horizontal dead space around a portrait
+      canvas (unavoidable for 9:16 unless the stage hosts panels), and the timeline's track heads at
+      104px. **No horizontal overflow anywhere, and no unreachable or undersized controls** — so it is
+      not broken, it is cramped. One sentence from him about what he was trying to DO when it felt
+      unusable would aim the next pass.

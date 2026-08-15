@@ -273,6 +273,15 @@
         // to collect: refresh · notes · cog · export · view options.
         if (kids.indexOf('btn-notes') < 0) throw new Error('Studio: the notes button is not in the far-right cluster at all — cluster reads [' + kids.join(', ') + ']');
         if (kids.indexOf('btn-notes') > kids.indexOf('btn-settings')) throw new Error('Studio: notes should sit to the LEFT of the cog — cluster reads [' + kids.join(', ') + ']');
+        /* The name field came down at v7.75 (queue 229). Ezra: "i just want you to move the nescesary
+           buttons to the bottoms one so its all there." It was the last working control left in the
+           header after v7.73 took notes down, and a lone control a band away from every other control
+           is the complaint itself. Asserted as PARENTAGE rather than position, because with nothing
+           selected the field is legitimately hidden (.is-dupe — the inspector header carries the
+           project name) and a geometry check would read that as the field having gone missing. */
+        var pn = document.getElementById('proj-name');
+        if (!pn) throw new Error('#proj-name has vanished entirely');
+        if (!t.contains(pn)) throw new Error('the project/layer name field is still in the header instead of the transport row');
         if (!(ip.left < 2)) throw new Error('Studio: the bottom band should reach the window edge, inspector left=' + Math.round(ip.left));
         // …and the rail must never spill its controls over the panel below. The rail is only as tall as
         // the canvas now, and on a short window its buttons genuinely need more room than that (measured

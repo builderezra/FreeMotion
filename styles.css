@@ -5107,4 +5107,26 @@ body.fm-pushing #toast { z-index: 213; }
      the variable leaves every rule that derives from it correct, including the ones I did not touch. */
   body.layout-studio { --rail-w: 0px; }
   body.layout-studio #topbar { display: none; }
+
+  /* ---- the LAST control comes down off the header (v7.75, queue 229) -------------------------
+     Ezra: "no dont reclaim the top bar, i just want you to move the nescesary buttons to the bottoms
+     one so its all there." So the header stays exactly where it is; what leaves it is the one working
+     control still sitting up there. After v7.73 took the notes button down, #proj-name was the only
+     thing left in that bar with a job, and having a single control stranded a band away from every
+     other control is the whole complaint.
+     (I had started removing the header outright — measured: 21% more canvas area at 1280x800, the same
+     gain Studio got at v7.52 — and he said no. Recorded in REQUESTS #229 rather than argued: it is his
+     layout. The measurement is written down there in case he ever wants it.)
+     The field is a layer-renamer now and nothing else. `.is-dupe` means "nothing is selected, so this
+     is showing the PROJECT name" — which #proj-name-s in the inspector header already shows, in BOTH
+     layouts. It used to be scoped to Studio on the belief that classic had no such header; it does
+     (index.html:332), so the scope was wrong and the field was a duplicate in classic all along. */
+  .proj-name.is-dupe { display: none; }
+  #t-home .proj-name {
+    width: 168px; margin-left: 10px; height: 28px;
+    background: transparent; border: 1px solid transparent; border-radius: 8px;
+    color: var(--text); font-size: 13px; padding: 0 8px;
+  }
+  #t-home .proj-name:hover { border-color: var(--line); }
+  #t-home .proj-name:focus { outline: none; border-color: var(--accent); background: var(--panel-3); }
 }

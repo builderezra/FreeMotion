@@ -3537,9 +3537,15 @@ window.FM = window.FM || {};
     const grab = id => document.getElementById(id);
     if (!right || !menu) return;
 
-    // far left — the one thing on that end, so leaving a project is where it was on the rail
+    /* far left — leaving a project is where it was on the rail, and from v7.75 the name field sits
+     * beside it. That field came down for the same reason the header it lived in went away (queue 229):
+     * once the notes button left, the header's only remaining contents were a wordmark and this, and
+     * this is the one with a job — with a layer selected it renames THAT LAYER, which nothing else in
+     * the PC chrome does. With nothing selected it is the project name, which the inspector header
+     * already shows, and CSS drops it then (.proj-name.is-dupe). */
     const home = document.createElement('div'); home.id = 't-home';
     const back = grab('btn-back'); if (back) home.appendChild(back);
+    const pname = grab('proj-name'); if (pname) home.appendChild(pname);
     if (home.childNodes.length) t.appendChild(home);
 
     // …after the duplicate button, the three that depend on what is selected
