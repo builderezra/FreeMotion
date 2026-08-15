@@ -1,4 +1,4 @@
-# Where things are — written at v8.07, 16 Aug
+# Where things are — written at v8.08, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -67,8 +67,9 @@ it, still oldest-first.
 | 8.05 | "Export just this layer" is a picker, not a tick (**#174**) |
 | 8.06 | Swipe **UP** on Recents opens Faves (**#204**) — the gate mirrored, not negated |
 | 8.07 | The app says when an effect **cannot do anything** to a layer (**#180**) |
+| 8.08 | **Save project as preset** in Canvas settings, spent on the New project screen (**#183**) |
 
-Suite: **371/371** at v8.06, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+Suite: **378/378** at v8.08, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
 green run finally means something again.
 
 **His PC-layout block (#230–#247) is FINISHED except #244**, so the queue-jump exception above has

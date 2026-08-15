@@ -3995,6 +3995,75 @@ window.FM = window.FM || {};
       }
       cvAspect = 'custom';
     }
+    /* ---- Canvas presets (queue 183) ----------------------------------------------------------
+     * "This settings menu shall have an option that says save project as preset." Saves what THIS
+     * dialog holds — aspect, size, frame rate, background — and nothing else. Applying one writes
+     * the controls rather than the project: you still press Apply, so a mis-tap on a preset is
+     * undone by Cancel exactly like any other change made in here. Making it apply straight to the
+     * project would give this dialog a second, hidden Apply button.
+     *
+     * The names are user text. Every one of them goes in via textContent, never innerHTML — a
+     * project called <img onerror=...> must not be able to run anything when you open a dialog. */
+    function cvCurrentCfg(name) {
+      const s = cvCompute();
+      const fpsSel = document.getElementById('cv-fps'), fpsNum = document.getElementById('cv-fps-num');
+      const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
+      return {
+        name: name, w: s.w, h: s.h,
+        fps: Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30)),
+        bg: cvBg, aspect: cvAspect, res: (document.getElementById('cv-res') || {}).value || '',
+      };
+    }
+    function cvApplyPreset(p) {
+      cvAspect = (p.aspect === 'custom' || ['16:9', '9:16', '4:5', '1:1', '4:3'].indexOf(p.aspect) >= 0) ? p.aspect : 'custom';
+      const resSel = document.getElementById('cv-res');
+      if (resSel && p.res) { for (let i = 0; i < resSel.options.length; i++) if (resSel.options[i].value === String(p.res)) resSel.value = String(p.res); }
+      // Write the custom boxes even for a named aspect: if the aspect+res do not reproduce the saved
+      // size (an old preset, a resolution list that has since changed), Custom still lands on the
+      // exact pixels that were saved rather than on something near them.
+      const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
+      if (cw) cw.value = p.w; if (ch) ch.value = p.h;
+      const fpsSel = document.getElementById('cv-fps'), fpsNum = document.getElementById('cv-fps-num');
+      const row = document.getElementById('cv-custom-fps');
+      let listed = false;
+      if (fpsSel) { for (let i = 0; i < fpsSel.options.length; i++) if (fpsSel.options[i].value === String(p.fps)) listed = true; }
+      if (fpsSel && listed) { fpsSel.value = String(p.fps); }
+      else if (fpsSel) { fpsSel.value = 'custom'; if (fpsNum) fpsNum.value = p.fps; }
+      if (row) row.classList.toggle('hidden', !(fpsSel && fpsSel.value === 'custom'));
+      cvBg = p.bg; cvBgSync();
+      cvUpdate();
+      if (cvAspect !== 'custom') {
+        // The named aspect must actually reproduce the saved pixels; if it does not, fall to Custom
+        // rather than silently resizing someone's preset.
+        const got = cvCompute();
+        if (got.w !== p.w || got.h !== p.h) { cvAspect = 'custom'; cvUpdate(); }
+      }
+      if (FM.toast) FM.toast('Preset “' + p.name + '” loaded — press Apply to use it', 2200);
+    }
+    function cvRenderPresets() {
+      const box = document.getElementById('cv-preset-list');
+      if (!box || !FM.canvasPresets) return;
+      const all = FM.canvasPresets.list();
+      box.textContent = '';
+      box.classList.toggle('hidden', all.length === 0);
+      all.forEach(p => {
+        const row = document.createElement('div'); row.className = 'cvp-row'; row.setAttribute('role', 'listitem');
+        const use = document.createElement('button'); use.type = 'button'; use.className = 'cvp-use';
+        const nm = document.createElement('span'); nm.className = 'cvp-name'; nm.textContent = p.name;
+        const meta = document.createElement('span'); meta.className = 'cvp-meta';
+        meta.textContent = p.w + '×' + p.h + ' · ' + p.fps + ' fps';
+        use.appendChild(nm); use.appendChild(meta);
+        use.title = 'Load these canvas settings';
+        use.addEventListener('click', () => cvApplyPreset(p));
+        const del = document.createElement('button'); del.type = 'button'; del.className = 'cvp-del';
+        del.textContent = '×'; del.title = 'Delete this preset';
+        del.setAttribute('aria-label', 'Delete preset ' + p.name);
+        del.addEventListener('click', () => { FM.canvasPresets.remove(p.id); cvRenderPresets(); });
+        row.appendChild(use); row.appendChild(del);
+        box.appendChild(row);
+      });
+    }
+
     const canvasBtn = document.getElementById('btn-canvas');
     if (canvasBtn && cvDialog) {
       const fpsSel = document.getElementById('cv-fps');
@@ -4038,6 +4107,7 @@ window.FM = window.FM || {};
           cvDialog.style.removeProperty('--cv-anchor-top');
           document.body.classList.remove('cv-anchored');
         }
+        cvRenderPresets();          // (queue 183) rebuilt on every open — another tab may have saved one
         cvDialog.classList.remove('hidden');
       });
       document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => b.addEventListener('click', () => { cvBg = b.dataset.bg; cvBgSync(); }));
@@ -4046,6 +4116,19 @@ window.FM = window.FM || {};
       document.getElementById('cv-res').addEventListener('change', cvUpdate);
       ['cv-cw', 'cv-ch'].forEach(id => { const inp = document.getElementById(id); if (inp) inp.addEventListener('input', cvUpdate); });
       if (fpsSel) fpsSel.addEventListener('change', () => { if (fpsCustomRow) fpsCustomRow.classList.toggle('hidden', fpsSel.value !== 'custom'); });
+      /* Save project as preset (queue 183). Named after the PROJECT by default, because that is
+         what he asked for — "save project as preset" — and the project's name is nearly always the
+         reason this setup is worth keeping ("Reels", "YouTube"). Saving does NOT close the dialog:
+         you are usually saving settings you are also about to apply. */
+      { const sp = document.getElementById('cv-save-preset'); if (sp) sp.addEventListener('click', () => {
+          const suggested = ((FM.scene && FM.scene.project && FM.scene.project.name) || '').trim() || 'My preset';
+          const name = prompt('Save these canvas settings as a preset called:', suggested);
+          if (name == null) return;                                  // Cancel — not an empty name
+          const rec = FM.canvasPresets && FM.canvasPresets.save(cvCurrentCfg(name));
+          if (!rec) { if (FM.toast) FM.toast('Those canvas settings could not be saved', 2200); return; }
+          cvRenderPresets();
+          if (FM.toast) FM.toast('Saved “' + rec.name + '” — it is on the New project screen too', 2600);
+        }); }
       document.getElementById('cv-cancel').addEventListener('click', () => (document.body.classList.remove('cv-anchored'), cvDialog.classList.add('hidden')));
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();

@@ -14779,6 +14779,80 @@
     }
   });
 
+  /* ---------------- queue 183: "save project as preset" ----------------
+   * The preset is the CANVAS SETTINGS dialog's own contents — aspect, size, fps, background. The
+   * store is user-editable text on disk and the names are user text on screen, so both directions
+   * are guarded: junk on the way out cannot make a project 0px wide, and a name cannot carry markup
+   * into a dialog. */
+
+  test('a canvas preset round-trips, and a repeated name replaces rather than duplicates', { item: 'canvas-presets' }, function () {
+    if (!FM.canvasPresets) throw new Error('FM.canvasPresets is not exported');
+    var key = 'fm.canvasPresets', keep = localStorage.getItem(key);
+    try {
+      localStorage.removeItem(key);
+      var rec = FM.canvasPresets.save({ name: 'Reels', w: 1080, h: 1920, fps: 30, bg: '#000000', aspect: '9:16', res: '1080' });
+      if (!rec) throw new Error('a valid preset would not save');
+      var got = FM.canvasPresets.list();
+      if (got.length !== 1) throw new Error('expected one preset, got ' + got.length);
+      if (got[0].w !== 1080 || got[0].h !== 1920 || got[0].fps !== 30 || got[0].bg !== '#000000' || got[0].aspect !== '9:16') {
+        throw new Error('the saved settings came back changed: ' + JSON.stringify(got[0]));
+      }
+      FM.canvasPresets.save({ name: 'reels', w: 720, h: 1280, fps: 60, bg: '#ffffff', aspect: '9:16', res: '720' });
+      var after = FM.canvasPresets.list();
+      if (after.length !== 1) throw new Error('saving the same name twice left ' + after.length + ' rows you cannot tell apart');
+      if (after[0].fps !== 60) throw new Error('the repeat did not replace the original');
+      FM.canvasPresets.remove(after[0].id);
+      if (FM.canvasPresets.list().length !== 0) throw new Error('remove() did not remove it');
+    } finally { if (keep == null) localStorage.removeItem(key); else localStorage.setItem(key, keep); }
+  });
+
+  test('a corrupt preset store cannot produce an impossible project', { item: 'canvas-presets' }, function () {
+    var key = 'fm.canvasPresets', keep = localStorage.getItem(key);
+    try {
+      // Hand-edited / half-written / hostile — every one of these must be dropped, not repaired into
+      // something that then gets handed to FM.projects.create as a real size.
+      localStorage.setItem(key, JSON.stringify([
+        { name: 'zero', w: 0, h: 1920, fps: 30 },
+        { name: 'huge', w: 999999, h: 1080, fps: 30 },
+        { name: 'nofps', w: 1080, h: 1920, fps: 0 },
+        { name: 'fastfps', w: 1080, h: 1920, fps: 100000 },
+        { name: 'junk', w: 'abc', h: 'def', fps: 'x' },
+        null, 7, 'not an object',
+        { name: 'ok', w: 1080, h: 1920, fps: 30, bg: 'javascript:alert(1)' }
+      ]));
+      var got = FM.canvasPresets.list();
+      if (got.length !== 1) throw new Error('expected only the one usable preset to survive, got ' + got.length + ': ' + JSON.stringify(got.map(function (p) { return p.name; })));
+      if (got[0].name !== 'ok') throw new Error('the wrong record survived: ' + got[0].name);
+      if (got[0].bg !== '#000000') throw new Error('a junk background was kept instead of being replaced: ' + got[0].bg);
+      // and total garbage in the slot must not throw on the way to the New project dialog
+      localStorage.setItem(key, '{{{not json');
+      if (FM.canvasPresets.list().length !== 0) throw new Error('unparseable storage did not come back as an empty list');
+    } finally { if (keep == null) localStorage.removeItem(key); else localStorage.setItem(key, keep); }
+  });
+
+  test('a preset name cannot carry markup into a dialog', { item: 'canvas-presets' }, async function () {
+    var key = 'fm.canvasPresets', keep = localStorage.getItem(key);
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    try {
+      var evil = '<img src=x onerror="window.__fmPresetXSS=1">';
+      window.__fmPresetXSS = 0;
+      localStorage.setItem(key, JSON.stringify([{ id: 'x1', name: evil, w: 1080, h: 1920, fps: 30, bg: '#000000', aspect: '9:16', res: '1080' }]));
+      var btn = document.getElementById('btn-canvas');
+      if (!btn) throw new Error('no canvas settings button');
+      btn.click();
+      await frame();
+      var list = document.getElementById('cv-preset-list');
+      if (!list || list.classList.contains('hidden')) throw new Error('the saved preset did not appear in Canvas settings');
+      var nameEl = list.querySelector('.cvp-name');
+      if (!nameEl) throw new Error('no preset name rendered');
+      if (nameEl.querySelector('img')) throw new Error('the name was parsed as HTML — an <img> element exists in the dialog');
+      if (nameEl.textContent !== evil) throw new Error('the name was not rendered verbatim as text: ' + nameEl.textContent);
+      await frame();
+      if (window.__fmPresetXSS) throw new Error('a preset name executed script when the dialog opened');
+      var cancel = document.getElementById('cv-cancel'); if (cancel) cancel.click();
+    } finally { if (keep == null) localStorage.removeItem(key); else localStorage.setItem(key, keep); }
+  });
+
   /* ---------------- queue 180: "lots of effects don't work on text" ----------------
    * They all work. The layer is WHITE. The app now SAYS so, and these lock down both halves of that
    * claim — that it fires on the layers where the effect is genuinely dead, and (the half that

@@ -5429,3 +5429,51 @@ body.fm-pushing #toast { z-index: 213; }
 @media (prefers-reduced-motion: reduce) {
   body.cv-anchored #canvas-dialog .export-card { animation: none; }
 }
+
+/* ---- Canvas presets (queue 183) --------------------------------------------------------------
+   "This settings menu shall have an option that says save project as preset." Two surfaces: the row
+   in Canvas settings that saves and lists them, and the chips on the New project dialog that spend
+   them. Styled as QUIET furniture in both — they are a shortcut, not a decision, and the aspect
+   chips underneath are still the main way anyone sets a canvas up. */
+.cv-preset-save {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 7px 11px; font-size: 13px; cursor: pointer;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cv-preset-save:hover { background: var(--panel-3); border-color: var(--accent); }
+.cv-preset-list { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 8px; }
+.cvp-row { display: flex; align-items: stretch; gap: 5px; }
+.cvp-use {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; cursor: pointer; text-align: left;
+}
+.cvp-use:hover { border-color: var(--accent); background: var(--panel-3); }
+/* The NAME can be any length someone types; it truncates and the size never does. Reversed, a long
+   name would push "1080×1920 · 30 fps" out of the row and the preset would be unidentifiable. */
+.cvp-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cvp-meta { flex: 0 0 auto; color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+.cvp-del {
+  flex: 0 0 auto; width: 30px; background: transparent; color: var(--text-dim);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.cvp-del:hover { color: #ff6b6b; border-color: #ff6b6b; }
+
+/* New project: the same presets as chips. A ROW that scrolls sideways rather than a wrapping grid —
+   on a 380px phone the dialog is already tall enough to scroll, and letting eight presets add eight
+   rows to it would push Create off the bottom. */
+.hm-np-presets { margin: 0 0 10px; }
+.hm-np-preset-row {
+  display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden;
+  padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+}
+.hm-np-chip {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  max-width: 190px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 7px 11px; font-size: 13px; cursor: pointer; text-align: left;
+}
+.hm-np-chip:hover { border-color: var(--accent); }
+.hm-np-chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.hm-np-chip-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-np-chip-meta { color: var(--text-dim); font-size: 11px; white-space: nowrap; }

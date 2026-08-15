@@ -1328,6 +1328,61 @@ window.FM = window.FM || {};
     },
   };
 
+  /* ---- Canvas presets (queue 183) ----------------------------------------------------------
+   * His words: "This settings menu shall have an option that says save project as preset", with a
+   * screenshot of the CANVAS SETTINGS dialog — so a preset here is that dialog's own contents: the
+   * aspect, the size, the frame rate and the background. Nothing else. Deliberately not the layers,
+   * not the duration, not the effects: the dialog he pointed at sets up an empty canvas, and a
+   * "preset" that quietly dragged a copy of the project along would be a different feature wearing
+   * the same word.
+   *
+   * localStorage rather than IndexedDB — this is a handful of small records, and the new-project
+   * dialog needs them SYNCHRONOUSLY as it opens; an await there would have the chips pop in after
+   * the card is already on screen. Everything here is validated on the way OUT as well as in: the
+   * store is user-editable text on disk, and a preset with a junk width should not be able to make a
+   * project 0 pixels wide. */
+  const CVP_KEY = 'fm.canvasPresets';
+  const CVP_MAX = 24;
+
+  function cvpClean(p) {
+    if (!p || typeof p !== 'object') return null;
+    const w = Math.round(+p.w), h = Math.round(+p.h), fps = Math.round(+p.fps);
+    if (!(w >= 16 && w <= 7680) || !(h >= 16 && h <= 7680) || !(fps >= 1 && fps <= 120)) return null;
+    const bg = (p.bg === 'none' || /^#[0-9a-f]{6}$/i.test(String(p.bg || ''))) ? p.bg : '#000000';
+    const name = String(p.name == null ? '' : p.name).trim().slice(0, 60) || 'Preset';
+    return {
+      id: String(p.id || ('cvp' + Math.random().toString(36).slice(2, 10))),
+      name: name, w: w, h: h, fps: fps, bg: bg,
+      aspect: String(p.aspect || 'custom').slice(0, 12),
+      res: String(p.res == null ? '' : p.res).slice(0, 8),
+    };
+  }
+
+  FM.canvasPresets = {
+    list() {
+      let raw = [];
+      try { raw = JSON.parse(localStorage.getItem(CVP_KEY)) || []; } catch (e) { raw = []; }
+      if (!Array.isArray(raw)) return [];
+      return raw.map(cvpClean).filter(Boolean);
+    },
+    // Returns the saved record, or null if the settings were not usable. Same NAME overwrites, so
+    // saving "TikTok" twice tidies the earlier one instead of leaving two rows you cannot tell apart.
+    save(cfg) {
+      const rec = cvpClean(cfg);
+      if (!rec) return null;
+      const all = this.list().filter(p => p.name.toLowerCase() !== rec.name.toLowerCase());
+      all.unshift(rec);
+      try { localStorage.setItem(CVP_KEY, JSON.stringify(all.slice(0, CVP_MAX))); } catch (e) { return null; }
+      return rec;
+    },
+    remove(id) {
+      const all = this.list().filter(p => p.id !== id);
+      try { localStorage.setItem(CVP_KEY, JSON.stringify(all)); } catch (e) {}
+      return all;
+    },
+    get(id) { return this.list().find(p => p.id === id) || null; },
+  };
+
   // Flush the pending (debounced) save when the tab is hidden/closed so the last edit isn't lost.
   window.addEventListener('pagehide', () => { if (FM.scene) FM.storage.flushSync(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && FM.scene) FM.storage.flushSync(); });

@@ -4136,12 +4136,32 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       3. *"it should be able to speed up stuff to your pointer, kinda like how we have the extend and
          crop buttons already, but instead of extending it, it just makes it faster or slower."* — the
          same gesture vocabulary as trimming, applied to speed.
-- [ ] **183 — Canvas settings needs "Save project as preset".** His words: *"This settings menu shall
+- [x] **183 — Canvas settings needs "Save project as preset". DONE v8.08.** His words: *"This settings menu shall
       have an option that says save project as preset"* — screenshot is the **Canvas settings** dialog
       (aspect · Resolution · Frame rate · Background · Size · App settings / Cancel / Apply), so it is
       that dialog, not App settings. Presumably saves the canvas setup — ratio, resolution, fps,
       background — as a named preset you can start a project from. Ask what it should capture if it is
       not obvious when its turn comes.
+
+      **DONE v8.08 — and it WAS obvious, so nothing was held up asking.** A preset here is the dialog's
+      own contents: aspect, size, frame rate, background. Not the layers, not the duration, not the
+      effects — the dialog you pointed at sets up an empty canvas, and a "preset" that quietly carried a
+      copy of the project would be a different feature using the same word. Say so if you wanted the
+      second thing and it is a separate, bigger job.
+      **Two places, because saving one is pointless without somewhere to spend it.** Canvas settings
+      saves it and lists your saved ones underneath (size and fps on each, × to delete); the **New
+      project** screen shows them as chips under the name, which is the actual reason to keep a canvas
+      setup — starting the next project from it.
+      **Picking one writes the controls, not the project** — you still press Apply or Create, so a
+      mis-tap is undone by Cancel like anything else in there. A preset whose named aspect no longer
+      reproduces its saved pixels falls back to Custom on the exact saved size rather than quietly
+      resizing it, and saving under a name you have used replaces it instead of leaving two rows you
+      cannot tell apart.
+      **The saved list is treated as hostile**, because it is text on disk you could edit: a width of 0,
+      of 999999, a junk fps, a `javascript:` background and unparseable storage are all dropped or
+      replaced rather than reaching a real project. Names go on screen as TEXT, never as HTML, and the
+      test for that saves a name containing an `<img onerror>` and asserts nothing is created and
+      nothing runs. Three tests, two mutations red, checked at 380px on both screens.
 - [x] **182 — "Save as preset…" should say "Save layer's effects as preset…".** (v7.15) His words: *"Where it
       says save as preset, make it say save layers effects as preset."* It is in the layer ⋯ menu, one
       line above "Save selection as element…", and on its own "Save as preset" does not say what it

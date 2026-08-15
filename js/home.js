@@ -1775,6 +1775,50 @@ window.FM = window.FM || {};
     const s = npCompute();
     npEl('hm-new-size').textContent = s.w + ' × ' + s.h + '  ·  ' + npFps() + ' fps';
   }
+  /* Canvas presets saved in the editor (queue 183) offered here, which is the only place they are
+     actually worth anything — the point of saving a canvas setup is starting the NEXT project from
+     it. Picking one writes the controls below and leaves you on the dialog, so you still name the
+     project and still press Create; nothing is created behind your back.
+     Names are user text and go in by textContent, never innerHTML. */
+  function npApplyPreset(p) {
+    npAspect = (p.aspect === 'custom' || NP_ASPECTS.indexOf(p.aspect) >= 0) ? p.aspect : 'custom';
+    if (p.res) { const rs = npEl('hm-new-res'); if (rs) { for (let i = 0; i < rs.options.length; i++) if (rs.options[i].value === String(p.res)) rs.value = String(p.res); } }
+    npEl('hm-new-w').value = p.w; npEl('hm-new-h').value = p.h;
+    const fsel = npEl('hm-new-fps'), fnum = npEl('hm-new-fps-num');
+    let listed = false;
+    if (fsel) { for (let i = 0; i < fsel.options.length; i++) if (fsel.options[i].value === String(p.fps)) listed = true; }
+    if (fsel && listed) fsel.value = String(p.fps); else if (fsel) { fsel.value = 'custom'; if (fnum) fnum.value = p.fps; }
+    npBg = p.bg;
+    if (/^#[0-9a-f]{6}$/i.test(npBg)) npEl('hm-new-bg').value = npBg;
+    npUpdate();
+    // A named aspect that does not reproduce the saved pixels falls back to Custom, rather than
+    // quietly starting the project at a size the preset never held.
+    if (npAspect !== 'custom') { const got = npCompute(); if (got.w !== p.w || got.h !== p.h) { npAspect = 'custom'; npUpdate(); } }
+    const row = npEl('hm-np-preset-row');
+    if (row) row.querySelectorAll('.hm-np-chip').forEach(c => {
+      const on = c.dataset.cvp === p.id;
+      c.classList.toggle('on', on); c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  function npRenderPresets() {
+    const wrap = npEl('hm-np-presets'), row = npEl('hm-np-preset-row');
+    if (!wrap || !row) return;
+    const all = (FM.canvasPresets ? FM.canvasPresets.list() : []);
+    row.textContent = '';
+    wrap.classList.toggle('hidden', all.length === 0);
+    all.forEach(p => {
+      const c = document.createElement('button');
+      c.type = 'button'; c.className = 'hm-np-chip'; c.dataset.cvp = p.id;
+      c.setAttribute('role', 'listitem'); c.setAttribute('aria-pressed', 'false');
+      const nm = document.createElement('span'); nm.className = 'hm-np-chip-name'; nm.textContent = p.name;
+      const mt = document.createElement('span'); mt.className = 'hm-np-chip-meta';
+      mt.textContent = p.w + '×' + p.h + ' · ' + p.fps + ' fps';
+      c.appendChild(nm); c.appendChild(mt);
+      c.addEventListener('click', () => npApplyPreset(p));
+      row.appendChild(c);
+    });
+  }
+
   function newProjectDialog() {
     const dlg = document.getElementById('hm-dialog');
     let saved = {};
@@ -1795,6 +1839,7 @@ window.FM = window.FM || {};
     if (/^#[0-9a-f]{6}$/i.test(npBg)) npEl('hm-new-bg').value = npBg;
     const input = npEl('hm-new-name');
     input.value = 'Project ' + (FM.projects.list().length + 1);
+    npRenderPresets();                 // (queue 183) rebuilt each open — one may have been saved since
     npUpdate();
     dlg.classList.remove('hidden');
     // Focus the name field on a real keyboard only. On a phone, auto-focus throws the software
