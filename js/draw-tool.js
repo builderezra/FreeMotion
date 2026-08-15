@@ -568,7 +568,17 @@ window.FM = window.FM || {};
   // tests downstream — which is how this hook came to exist.
   FM.drawTool._stop = stop;
   FM.startDraw = function (mode) {
-    if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
+    /* THE RESET IS GONE (v8.01, queue 165.3). Ezra: "another option that lets you grab the screen and
+     * zoom in or out so you can do more detailed drawing."
+     * This line used to throw your zoom away the moment you picked up the pencil, and it was RIGHT to
+     * while it stood: the overlay laid out in screen pixels inside a wrapper the viewport scales, so a
+     * zoomed canvas doubled it — measured at 2x, an overlay of 984x1501 over a 492x751 canvas. v8.00
+     * places the overlay in the wrapper's own space, so the overlay now tracks the canvas exactly
+     * (492x751 against 492x751) and there is nothing left to protect you from.
+     * What this buys immediately: the zoom you already set is kept, and the ⛶ view bar's zoom controls
+     * keep working while you draw — which is the "zoom in or out" half of his request, using the
+     * controls that were already there rather than a second set inside the drawing bar.
+     * The "grab the screen" half — panning — still needs its gesture chosen; see REQUESTS #165. */
     if (!overlay) FM.drawTools && FM.drawTools.init();
     if (!overlay) return;
     FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false; erasing = false; FM.drawTool.erasing = false;

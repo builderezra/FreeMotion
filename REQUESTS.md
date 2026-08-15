@@ -3126,6 +3126,20 @@ better still, keep working inside the turn rather than parking work for a later 
       It lands exactly. **Derive the scale from the wrapper (`rect.width / offsetWidth`), not from
       `FM.viewport.scale`** — that way it stays right whatever applies the transform, and it cannot drift
       from a second source of truth.
+      **SHIPPED: v8.00 fixed the overlay's space, v8.01 removed the reset.** Entering the tool at 2× now
+      reports `scale 2` (it reported 1 before), and a stroke drawn through project y=700, x 300…700 lands
+      as a layer centred at **500, 702** against a wanted 500, 700 — a **2.0px** difference that is the
+      freehand curve-smoothing rounding a three-point line, not a coordinate error. **Verified on ink,
+      not on maths**, since where the line appears is the only thing that matters here.
+      **So the ZOOM half of your request is done**, using the ⛶ view bar's existing zoom controls, which
+      keep working while you draw — no second set of buttons inside the drawing bar.
+      **STILL OPEN: the "grab the screen" half — panning.** It is trivially available now (`FM.viewport`
+      has `x`, `y` and `apply()`), but it needs its GESTURE decided rather than guessed, and that is a
+      real design call: one finger already means draw; the drawing bar is already full at 380px (measured
+      347px of content in a 355px box, so an eighth button overflows it); and two-finger drag is probably
+      right on touch with something else again on desktop. **Left for a decision rather than settled
+      overnight.**
+
       **What is left is genuinely small.** `redraw()` and `dispScale()` derive from the canvas's SCREEN
       rect as well, so they want checking in the same pass — if the box moves to local space and the ink
       does not follow, the preview stroke and the surface part company. That is a PREVIEW bug rather than

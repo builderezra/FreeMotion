@@ -165,7 +165,32 @@ iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
       } else {
         L.push('FM.viewport has no apply() — cannot put the app into the state under test');
       }
+      /* THE REAL TEST, now that the reset is gone: enter drawing WITH a zoom already set, commit a
+         stroke at known project coordinates, and check the layer landed there. Everything above measures
+         maths; this measures ink. */
       try { FM.drawTool._stop(); } catch (e) {}
+      await sleep(150);
+      if (vp) { vp.scale = 2; vp.apply(); }
+      await sleep(250);
+      FM.scene.layers.length = 0;
+      FM.startDraw('freehand');
+      await sleep(350);
+      L.push('DRAWING AT 2x — does the zoom survive being picked up, and does the ink land right?');
+      L.push('  viewport scale on entry ' + (vp ? vp.scale : 'n/a') + '   (1 would mean the reset is still there)');
+      FM.drawTool.points = [[300, 700], [500, 700], [700, 700]];
+      FM.drawTool._commit();
+      await sleep(250);
+      var lay = FM.scene.layers.filter(function (l) { return l.name === 'Freehand'; }).pop();
+      if (!lay) L.push('  the stroke did not commit at all');
+      else {
+        var t = lay.transform || {};
+        var cx = FM.evalProp ? FM.evalProp(t.x, 0) : t.x, cy = FM.evalProp ? FM.evalProp(t.y, 0) : t.y;
+        L.push('  stroke drawn through project y=700, x 300..700 → layer centre ' + Math.round(cx) + ', ' + Math.round(cy));
+        L.push('  wanted centre           500, 700');
+        L.push('  ink error               ' + Math.hypot(cx - 500, cy - 700).toFixed(1) + 'px   <-- the number that actually matters');
+      }
+      try { FM.drawTool._stop(); } catch (e) {}
+      if (vp) { vp.scale = 1; vp.apply(); }
     } catch (e) {
       L.push('THREW: ' + (e && e.message || e));
       L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));
