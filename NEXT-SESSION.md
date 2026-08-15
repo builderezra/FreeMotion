@@ -1,4 +1,4 @@
-# Where things are — written at v7.99, 16 Aug
+# Where things are — written at v8.02, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -28,7 +28,7 @@ it, still oldest-first.
 5. Commit, `git push ssh main`, then verify `git rev-parse HEAD` == `git rev-parse ssh/main`.
    `origin` is HTTPS with no stored credentials and will fail; `ssh` is the same repo and works.
 
-## What shipped this run — v7.73 → v7.99
+## What shipped this run — v7.73 → v8.02
 
 | | |
 |---|---|
@@ -59,8 +59,11 @@ it, still oldest-first.
 | 7.97 | Opening the export dialog stops the transport |
 | 7.98 | The flaky mic test waits on the real signal |
 | 7.99 | The flaky push test — `unstampIntro` now stays unstamped |
+| 8.00 | The drawing overlay moves into the wrapper's space, so it survives a zoomed canvas |
+| 8.01 | …so the reset on entry is gone: your zoom is kept while you draw |
+| 8.02 | Two-finger scroll pans the canvas while drawing — **#165 is complete** |
 
-Suite: **368/368** at v7.99, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+Suite: **368/368** at v8.02, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
 green run finally means something again.
 
 **His PC-layout block (#230–#247) is FINISHED except #244**, so the queue-jump exception above has
@@ -76,16 +79,17 @@ almost expired: do #244 when it is reached, and otherwise work the older items o
    **no toast and still silent = none of the three, which would be genuinely new information.** A dead
    lead is recorded in the entry (library re-adds take the identical path as imports) — do not re-derive
    it. **It cannot close without his next export**, so it does not hold the queue.
-2. **#165 point 3** — pan/zoom while drawing. **Smaller than it looks:** `FM.viewport` already does pan
-   and zoom; `FM.startDraw` throws it away on entry because the draw overlay lays out in screen pixels
-   and double-scales under a zoom. Fix the overlay's coordinates first (`syncOverlay`/`dispScale`, using
-   the `__fmOX/__fmOY/__fmRS` machinery `toProject` already reads), then remove the reset and add a hand
-   toggle. Coordinates before UI — a stroke landing in the wrong place is the bug #97 spent four rounds
-   on.
-3. **#244 — the add-menu drag.** Designed but not started, deliberately: five behaviours in one and
-   groundwork for his effects browser. The full design is in the entry — mirror `#tl-resizer`'s
-   *structure*, clamp against `--tl-h`, sticky snap plus a divider flash, and the panel must leave the
-   grid while dragged or every drag reflows the canvas. Build from that; do not re-research it.
+2. **#244 — the add-menu drag.** Designed but not started, deliberately: five behaviours in one and
+   groundwork for his effects browser. **Read the entry — the design was corrected by measurement on
+   16 Aug, and the correction matters.** In Studio the add menu and the timeline are the SAME grid row
+   (measured: both top 616, height 264; `#app` rows are `616px 264px`), so they cannot have different
+   heights within the grid at all. That makes his *"go over the canvas rather than shrink it"* a
+   **structural requirement, not a preference** — the menu can only be taller than the timeline by
+   leaving the grid and floating over the stage. The rest of the design stands: mirror `#tl-resizer`'s
+   *structure*, clamp against `--tl-h`, sticky snap plus a divider flash. Do not re-research it.
+
+*(#165 is DONE — centring v7.35, undo/redo v7.77, erase v7.78, zoom v8.01, pan v8.02.)*
+
 
 Then the older queue, oldest-first. Everything below #148 is currently blocked on him.
 
