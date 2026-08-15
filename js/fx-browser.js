@@ -93,6 +93,15 @@ window.FM = window.FM || {};
     dest.forEach(e => { e._expanded = false; });          // accordion: the newcomer is the one open editor
     inst._expanded = true;                                    // land with the new effect's controls ready to tweak
     dest.push(inst);                      // <- exactly one entry
+    /* If it provably cannot do anything to this layer, say so NOW (queue 180). This is the moment the
+       confusion happens: you tap Saturation on white text, the picture does not change, and without
+       this the app's only answer is silence. It still gets ADDED — the effect is not wrong, the layer
+       has no colour yet, and deleting someone's choice for them would be the ruder half of being
+       right. The inspector row carries the same sentence for when you come back later. */
+    if (FM.fxDeadOnLayer && FM.toast) {
+      const why = FM.fxDeadOnLayer(inst, layer, FM.time);
+      if (why) FM.toast(why, 3600);
+    }
     pushRecent(id);
     FM.fxBrowser.close();
     // Land ON the new effect's controls. inst._expanded above only decides which row is open —

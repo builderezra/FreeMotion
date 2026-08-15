@@ -1128,6 +1128,95 @@ window.FM = window.FM || {};
   }
   FM.effectFilter = effectFilter;
 
+  /* ---- "this effect cannot change this layer" — answered by MEASUREMENT, not by arithmetic ----
+   *
+   * queue 180, his words: "lots of effects don't work on text". They all work. The layer is WHITE.
+   * Saturation, Grayscale and Hue Shift can do nothing to a colour that has no hue, and Brightness
+   * and Contrast default to 1.3 — i.e. UP — which can do nothing to a colour already at the ceiling.
+   * So five of the eight colour effects appear dead on the most ordinary text layer there is, two of
+   * them at their own default value, and nothing in the app said why. Measured 16 Aug: on COLOURED
+   * text every one of them works, which is what rules out a second, real bug hiding behind this.
+   *
+   * The check runs the SHIPPED filter string over one pixel of the layer's own flat colour instead of
+   * reimplementing the arithmetic. That matters for two reasons: it cannot drift from what the
+   * compositor actually does, and it stays correct if a default or a formula changes later. It also
+   * asks the question the right way round — not "is white special?" but "does adding this to what is
+   * already there change the pixel?", so a hue-rotate sitting UNDER a saturate is accounted for.
+   *
+   * Only layers whose content is one flat colour can be judged (text, and shapes with a plain hex
+   * fill); everything else returns null, meaning NO CLAIM. And only the per-pixel colour functions
+   * are testable — blur and glow read NEIGHBOURING pixels, so a single pixel can say nothing about
+   * them, and claiming otherwise would be worse than staying quiet. */
+  const FLAT_TESTABLE = Object.assign(Object.create(null), {
+    brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1,
+  });
+  const FX_LABEL = Object.assign(Object.create(null), {
+    brightness: 'Brightness', contrast: 'Contrast', saturate: 'Saturation', hue: 'Hue Shift',
+    grayscale: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
+  });
+
+  function flatColorOf(layer) {
+    if (!layer) return null;
+    const c = layer.type === 'text' ? layer.color : (layer.type === 'shape' ? layer.fill : null);
+    if (typeof c !== 'string') return null;                       // gradient / media fill — no claim
+    const s = c.trim();
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) ? s : null;
+  }
+
+  let _fcA = null, _fcB = null;
+  function throughFilter(hex, filter) {
+    if (!_fcA) {
+      _fcA = document.createElement('canvas'); _fcA.width = _fcA.height = 1;
+      _fcB = document.createElement('canvas'); _fcB.width = _fcB.height = 1;
+    }
+    const a = _fcA.getContext('2d', { willReadFrequently: true });
+    a.filter = 'none'; a.clearRect(0, 0, 1, 1); a.fillStyle = hex; a.fillRect(0, 0, 1, 1);
+    const b = _fcB.getContext('2d', { willReadFrequently: true });
+    b.filter = filter || 'none'; b.clearRect(0, 0, 1, 1); b.drawImage(_fcA, 0, 0); b.filter = 'none';
+    return b.getImageData(0, 0, 1, 1).data;
+  }
+
+  // Why it is dead, in words worth putting on screen. Reads the colour AS THE EFFECT SEES IT (after
+  // everything below it), so the sentence stays true inside a stack rather than describing the fill.
+  function deadWhy(type, rgb) {
+    const label = FX_LABEL[type] || type;
+    const grey = Math.abs(rgb[0] - rgb[1]) <= 2 && Math.abs(rgb[1] - rgb[2]) <= 2;
+    if (type === 'saturate' || type === 'hue' || type === 'grayscale') {
+      return grey
+        ? label + ' can’t change this layer — it has no colour to work on. Give the layer a colour first.'
+        : label + ' can’t change this layer at this value.';
+    }
+    if (type === 'brightness' || type === 'contrast') {
+      if (rgb[0] > 250 && rgb[1] > 250 && rgb[2] > 250) {
+        return label + ' is turned UP and this layer is already pure white — drag it below 1 to see anything.';
+      }
+      if (rgb[0] < 5 && rgb[1] < 5 && rgb[2] < 5) {
+        return label + ' can’t change pure black at this value — drag it the other way.';
+      }
+    }
+    return label + ' can’t change this layer at this value.';
+  }
+
+  /* null = no claim (it works, or this layer cannot be judged). A string = this effect provably
+   * cannot change this layer, explained. */
+  FM.fxDeadOnLayer = function (inst, layer, t) {
+    if (!inst || inst.enabled === false || !FLAT_TESTABLE[inst.type]) return null;
+    const hex = flatColorOf(layer);
+    if (!hex) return null;
+    const time = (typeof t === 'number' && isFinite(t)) ? t : 0;
+    const list = (layer.effects || []);
+    const at = list.indexOf(inst);
+    // Everything BELOW it in the stack, which is what it is actually being handed.
+    const under = (at < 0 ? list : list.slice(0, at)).filter(e => e && e !== inst && e.enabled !== false);
+    let before, after;
+    try {
+      before = throughFilter(hex, effectFilter({ effects: under }, time, 1));
+      after = throughFilter(hex, effectFilter({ effects: under.concat([inst]) }, time, 1));
+    } catch (e) { return null; }                                   // never break a render over a hint
+    for (let i = 0; i < 4; i++) if (Math.abs(before[i] - after[i]) > 1) return null;   // it does something
+    return deadWhy(inst.type, before);
+  };
+
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
   // #rrggbb (or #rgb) + 0..1 alpha → rgba() string, for keyframeable shadow opacity.

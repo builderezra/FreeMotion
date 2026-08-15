@@ -14779,6 +14779,105 @@
     }
   });
 
+  /* ---------------- queue 180: "lots of effects don't work on text" ----------------
+   * They all work. The layer is WHITE. The app now SAYS so, and these lock down both halves of that
+   * claim — that it fires on the layers where the effect is genuinely dead, and (the half that
+   * actually matters) that it stays silent everywhere else. A hint that cries wolf on a working
+   * effect would be worse than the silence it replaces. */
+
+  test('a dead effect on white text is called out — and a live one is not', { item: 'fx-dead-hint' }, function () {
+    if (!FM.fxDeadOnLayer) throw new Error('FM.fxDeadOnLayer is not exported');
+    function txt(color) { return FM.makeLayer('text', { text: 'ABC', color: color, size: 80, start: 0, duration: 5 }); }
+
+    // CONTROL FIRST: on white text these five are provably dead, and the app must say each one.
+    ['saturate', 'grayscale', 'hue', 'brightness', 'contrast'].forEach(function (t) {
+      var L = txt('#ffffff'); var inst = FM.fxRegistry.makeInstance(t); L.effects = [inst];
+      var why = FM.fxDeadOnLayer(inst, L, 0);
+      if (!why) throw new Error(t + ' does nothing to white text at its default, and the app said nothing');
+      if (!/can’t change|drag it/.test(why)) throw new Error(t + ': unhelpful message — ' + why);
+    });
+
+    // …and the two that DO work on white must stay silent, or the hint is noise.
+    ['invert', 'sepia'].forEach(function (t) {
+      var L = txt('#ffffff'); var inst = FM.fxRegistry.makeInstance(t); L.effects = [inst];
+      var why = FM.fxDeadOnLayer(inst, L, 0);
+      if (why) throw new Error(t + ' DOES change white text, but was flagged as dead: ' + why);
+    });
+
+    // The whole point of the entry: on COLOURED text nothing is dead. Measured 16 Aug — every one of
+    // the five works on red, which is what rules out a second real bug behind his report.
+    ['saturate', 'grayscale', 'hue', 'brightness', 'contrast', 'invert', 'sepia'].forEach(function (t) {
+      var L = txt('#ff0044'); var inst = FM.fxRegistry.makeInstance(t); L.effects = [inst];
+      var why = FM.fxDeadOnLayer(inst, L, 0);
+      if (why) throw new Error(t + ' works on RED text, but the app claimed it does nothing: ' + why);
+    });
+  });
+
+  test('the dead-effect hint never costs you the eye button', { item: 'fx-dead-hint' }, async function () {
+    /* Found in a 380px SCREENSHOT, not by a DOM check — the tag itself fitted, and the thing being
+       shoved off the right edge was the button beside it. Two tags on one row ("always first" plus
+       "does nothing here") pushed the enable/disable eye out of the panel, on exactly the row you
+       would want to switch off. So the assertion is about the EYE, not the tag. */
+    await atPhoneWidth(async function () {
+      // setTimeout, not rAF: this suite runs in an offscreen iframe where rAF is throttled and a
+      // promise waiting on it never settles, hanging the whole run instead of failing one test.
+      var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+      var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+      var L = FM.makeLayer('text', { text: 'ABC', color: '#ffffff', size: 80, start: 0, duration: 5 });
+      L.effects = [FM.fxRegistry.makeInstance('saturate')];
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      await frame();
+      var row = document.querySelector('.fx-row');
+      if (!row) throw new Error('no effect row rendered');
+      if (!row.querySelector('.fx-dead-tag')) throw new Error('the dead hint is not on the row at 380px');
+      if (row.querySelector('.fx-first-tag')) throw new Error('both tags on one row — this is what pushed the eye off screen');
+      var eye = row.querySelector('.fx-eye');
+      if (!eye) throw new Error('no eye button on the row');
+      var er = eye.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      if (er.right > rr.right + 0.5) throw new Error('the eye is pushed past the row edge by ' + (er.right - rr.right).toFixed(1) + 'px — you cannot switch the effect off');
+      if (er.right > window.innerWidth) throw new Error('the eye is off the right of the screen at 380px');
+      if (!(er.width > 0 && er.height > 0)) throw new Error('the eye has collapsed to nothing');
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.scene.selectedId = sel0;
+    }, 380);
+  });
+
+  test('the dead-effect hint reads the stack under it, not the layer fill', { item: 'fx-dead-hint' }, function () {
+    // Saturation is dead on white — unless something below it has already given the pixel a colour.
+    // Judging by the layer's FILL instead of by what the effect is actually handed would get this
+    // backwards and flag a saturate that is doing real work.
+    var L = FM.makeLayer('text', { text: 'ABC', color: '#ffffff', size: 80, start: 0, duration: 5 });
+    var sep = FM.fxRegistry.makeInstance('sepia');        // white -> a warm tint, i.e. a real hue
+    var sat = FM.fxRegistry.makeInstance('saturate');
+    L.effects = [sep, sat];
+    var why = FM.fxDeadOnLayer(sat, L, 0);
+    if (why) throw new Error('saturate above a sepia has a colour to work on, but was flagged dead: ' + why);
+
+    // Order is the whole argument: with the saturate UNDERNEATH, it sees plain white and is dead.
+    var L2 = FM.makeLayer('text', { text: 'ABC', color: '#ffffff', size: 80, start: 0, duration: 5 });
+    var sat2 = FM.fxRegistry.makeInstance('saturate'), sep2 = FM.fxRegistry.makeInstance('sepia');
+    L2.effects = [sat2, sep2];
+    if (!FM.fxDeadOnLayer(sat2, L2, 0)) throw new Error('a saturate below the sepia sees pure white and is dead — not flagged');
+  });
+
+  test('the dead-effect hint makes no claim it cannot prove', { item: 'fx-dead-hint' }, function () {
+    // Blur and glow read NEIGHBOURING pixels, so one pixel of flat colour says nothing about them.
+    ['blur', 'glow'].forEach(function (t) {
+      var L = FM.makeLayer('text', { text: 'ABC', color: '#ffffff', size: 80, start: 0, duration: 5 });
+      var inst = FM.fxRegistry.makeInstance(t); L.effects = [inst];
+      if (FM.fxDeadOnLayer(inst, L, 0)) throw new Error(t + ' cannot be judged from one pixel, but a claim was made about it');
+    });
+    // A media layer has no flat colour to test — no claim, whatever the effect.
+    var vid = FM.makeLayer('video', { name: 'V', start: 0, duration: 5 });
+    var sat = FM.fxRegistry.makeInstance('saturate'); vid.effects = [sat];
+    if (FM.fxDeadOnLayer(sat, vid, 0)) throw new Error('a video layers pixels are unknown — the app must not claim an effect is dead on it');
+    // A disabled effect is already doing nothing for an obvious reason; the eye says so.
+    var L = FM.makeLayer('text', { text: 'ABC', color: '#ffffff', size: 80, start: 0, duration: 5 });
+    var off = FM.fxRegistry.makeInstance('saturate'); off.enabled = false; L.effects = [off];
+    if (FM.fxDeadOnLayer(off, L, 0)) throw new Error('a switched-off effect got a redundant "does nothing" hint');
+  });
+
   /* ---------------- #113 step 2: one walker over the effect stack ----------------
    * Seven places walked layer.effects exactly one level deep, and with a filter container in the
    * stack each of them fails SILENTLY — no diamonds, undeletable keyframes, copy/paste landing on the

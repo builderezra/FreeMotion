@@ -1435,7 +1435,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Transform trackpad (snaps) vs the canvas drag (free), so match that feel, and give it the same
       haptic tick the other snaps use.
 
-- [ ] **97 — Freehand drawing is STILL broken (4th report), with a phone screenshot at v6.60.** His words:
+- [x] **97 — Freehand drawing is STILL broken (4th report), with a phone screenshot at v6.60. CLOSED — see below.** His words:
       *"Freehand drawing is still broken."* The screenshot is the useful part: the drawing surface is a
       SEPARATE black rectangle that does not line up with the comp preview above it — the comp is a
       partial strip at the top, and the draw area is a second, differently-placed black box below it. So
@@ -1453,6 +1453,13 @@ better still, keep working inside the turn rather than parking work for a later 
       in v7.35 — the canvas was shoved to the bottom of the screen, which makes drawing feel wrong in a
       way that is easy to describe as "broken". Marking this half as not-reproduced rather than fixed,
       because that is what the evidence says.
+      **TICKED 16 Aug, for the same reason as #93 — resolved in its own text and never ticked.** The
+      report had two possible causes and the evidence settled both: the coordinate misalignment does
+      **not** reproduce (`#draw-overlay` and `#preview` agree to 0.00px by his own entry route), and the
+      thing that WAS real — the canvas shoved into the bottom of the screen — was fixed in v7.35. Since
+      then freehand has also gained undo/redo (v7.77), an eraser (v7.78), a zoom that survives entry
+      (v8.00–8.01) and a clamped two-finger pan (v8.02–8.03), so if it feels broken again it will be a
+      new report with new evidence rather than this one.
 - [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
       better."* From the screenshot: (a) TWO separate confirm buttons on screen at once — the blue ✓ in
       the top bar and another ✓ in the bar above the keyboard; (b) that second bar also carries ^ and v
@@ -1598,7 +1605,7 @@ better still, keep working inside the turn rather than parking work for a later 
       grain drifts. Likely this is the moving static over the home project cards from #76, so check that
       first, and confirm with him which screen he means if there is more than one grain in the menus.
 
-- [ ] **93 — Wiggle should see OTHER effects' motion, and behave in corners.** His words: *"I want the
+- [x] **93 — Wiggle should see OTHER effects' motion, and behave in corners. CLOSED — see below.** His words: *"I want the
       wiggle effect to also work when you have other effects that make it move, and also it should work
       in corners better."* Two parts. (a) Wiggle currently jitters the layer's own transform, so a layer
       being moved by something else — Drift, Orbit, Spin, a camera, a parent group — doesn't get wiggled
@@ -1683,6 +1690,14 @@ better still, keep working inside the turn rather than parking work for a later 
       the expanded-plate fix, so at a frame edge they pull in empty space exactly as wiggle used to. A
       quarter of the frame wrong (worst 255 = solid content against solid nothing), not a rounding
       difference. **That is now #228** rather than being smuggled into a wiggle entry.
+      **TICKED 16 Aug — both halves of what he asked for are answered, and this entry was left open by
+      accident.** Found by sweeping the ticks rather than by working forwards, which is the second time
+      that sweep has paid for itself. (a) *"work when you have other effects that make it move"* does
+      **not reproduce** — wiggle survives every mover tested. (b) *"work in corners better"* was real,
+      was the worse half (23.6% of the ink lost at a corner), and was **fixed in v7.32**; the table above
+      shows the content coming back. Nothing here is waiting on anyone. **The live bug this entry
+      produced is #228** — `drift` and `orbit` still have the pre-v7.32 code and still eat a quarter of
+      the frame at an edge — and that is where the remaining work lives, under its own number.
 
 - [x] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** **DONE v6.61.** His words:
       *"With the faves section I want it to be really easy to open, remove the feature of swiping right
@@ -4162,7 +4177,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       and I do not have your exact route — you may have reached it from somewhere I did not. **If you
       finish a vector drawing and still land in a full-height panel, say so and it is live again**;
       otherwise it closes with v7.35.
-- [ ] **180 — Lots of effects don't work on text.** His words exactly.
+- [x] **180 — Lots of effects don't work on text. ANSWERED v8.07** — the effects work, the layer is white; the app now says so.
       **MEASURED, 2026-08-14 — he is right about what he sees, and the cause is arithmetic, not a bug.**
       Text defaults to pure WHITE (`js/scene.js`: `base.color = props.color || '#ffffff'`), and on pure
       white:
@@ -4183,6 +4198,38 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       enumerate which effects do nothing on a TEXT layer, find out whether it's one shared cause (e.g.
       effects that sample the layer's pixel buffer vs. ones that transform it) or a list of separate
       bugs, and report the measurement before changing anything.
+
+      **DONE v8.07 — and the open question in this entry got ANSWERED by measuring rather than by
+      asking you.** The entry said: *"Worth asking whether his own case was white text — if he saw it on
+      COLOURED text there is still a real bug to find."* Measured 16 Aug on red and teal text: **every
+      one of the seven works.** So there is no second defect hiding behind your report, and the
+      arithmetic above is the whole story. That is the half that was blocking, and it is closed.
+
+      **What shipped: the app saying so.** Same answer #31b's effects half got in v7.50, for the same
+      reason — nothing is broken, the app was just silent about arithmetic you cannot see. A **toast
+      when you add it** (the moment the confusion happens) and a **"does nothing here" tag on the
+      inspector row** (for reopening the project next week and finding a Saturation sitting there doing
+      nothing). Hover the tag for the reason: *"Saturation can't change this layer — it has no colour to
+      work on. Give the layer a colour first."* The effect is still added — it is not wrong, your layer
+      just has no colour yet, and deleting your choice for you would be the ruder half of being right.
+
+      **It measures instead of hardcoding the arithmetic:** one pixel of the layer's own flat colour is
+      run through the SHIPPED filter string, so the hint cannot drift from what the compositor really
+      does and stays right if a default changes. It also asks the question the right way round — not
+      "is white special" but "does adding this to what is already there change the pixel" — so a
+      Saturation stacked ABOVE a Sepia is correctly left alone, while the same Saturation underneath it
+      is flagged. And it makes **no claim it cannot prove**: blur and glow read neighbouring pixels, so
+      one pixel cannot judge them; a video layer's pixels are unknown; a switched-off effect already has
+      the eye to explain it. Five tests, four mutations red.
+
+      *(A 380px screenshot caught what the DOM check missed: two tags on one row pushed the EYE button
+      off the right edge, so you could not switch the effect off. One tag now — the dead hint wins,
+      "always first" is trivia by comparison. The test asserts the eye, not the tag.)*
+
+      **STILL YOUR CALL, and deliberately not done:** whether text should stop defaulting to WHITE.
+      That is the one option here that changes existing projects — every text layer you have already
+      made would render differently — so it is not something to decide on your behalf while you are
+      asleep. Say the word and it is a small change. The warning above is useful either way.
 - [x] **178 — Get rid of the Classic theme option.** (v7.15) Careful one: "Classic" is a name this app uses for
       TWO different things — the Classic/Studio *layout* toggle and a Classic *theme*. Check which is on
       screen in Settings before deleting anything. **Checked — it is the theme, and he said "theme", so

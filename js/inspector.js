@@ -979,7 +979,20 @@ window.FM = window.FM || {};
        AFTER the name, deliberately: appended any earlier it lands between the grip and the chevron,
        so the row reads "⠿ always first › Gaussian Blur" — the tag arriving before the thing it is
        talking about. A filter row never gets it; where a filter sits decides where its children land. */
-    if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
+    /* Say when an effect cannot possibly do anything to THIS layer (queue 180). The toast at add time
+       answers the moment of confusion; this answers reopening the project a week later and finding a
+       Saturation sitting there doing nothing. Only ever shown when the app can PROVE it — see
+       FM.fxDeadOnLayer, which measures one pixel through the shipped filter string.
+       ONE tag, never two. Both together overflowed the row at 380px and pushed the eye button off the
+       right edge — the control for switching the effect off became unreachable, on the row most likely
+       to make someone want to switch it off. Caught in a screenshot; the DOM check for the tag itself
+       said it fitted, because the thing being shoved out was the button next to it. So the dead hint
+       takes the slot: "always first" is trivia about reordering, this is the answer to "why is nothing
+       happening", and if only one of them can be on screen it is not a close call. */
+    const deadWhy = FM.fxDeadOnLayer ? FM.fxDeadOnLayer(fx, layer, FM.time) : null;
+    if (deadWhy) {
+      const dt = el('span', 'fx-dead-tag', 'does nothing here'); dt.title = deadWhy; head.appendChild(dt);
+    } else if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
       const tag = el('span', 'fx-first-tag', 'always first');
       tag.title = 'Blur, brightness, contrast, saturation, hue, greyscale, sepia, invert and glow are applied together before everything else — moving them up or down does not change the picture.';
       head.appendChild(tag);

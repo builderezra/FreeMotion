@@ -5134,6 +5134,23 @@ body.fm-pushing #toast { z-index: 213; }
   margin-left: 6px; flex: 0 0 auto;
 }
 
+/* "does nothing here" (queue 180) — the same pill as "always first", deliberately, because they are
+   the same KIND of thing: a quiet note about the effect rather than a control. The colour is the
+   difference. "always first" is muted, because it is trivia; this one is warm, because it is the
+   answer to "why is nothing happening", and a reader scanning the stack should be able to find it
+   without reading. Not red: nothing is broken and nothing needs fixing — the layer just has no
+   colour yet. Shown only when the app has MEASURED that it cannot do anything.
+   Deliberately NOT --kf (#ffce4a): that yellow means "this property is keyframed" everywhere else in
+   the inspector, and borrowing it here would have this pill read as an animation marker on the one
+   row where the whole point is that nothing is happening. A duller amber, its own meaning. */
+.fx-dead-tag {
+  font-size: 10px; line-height: 1; letter-spacing: 0.02em;
+  padding: 3px 6px; border-radius: 999px; white-space: nowrap;
+  color: #d9a05b;
+  background: color-mix(in srgb, #d9a05b 16%, transparent);
+  margin-left: 6px; flex: 0 0 auto; cursor: help;
+}
+
 /* The filters shortcut at the top of Colouring (queue 113). Distinct from the plain "+ Add Effect"
    buttons — it leads somewhere rather than adding one thing — but still quiet enough not to compete
    with the fill selector directly under it. */

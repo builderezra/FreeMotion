@@ -1,4 +1,4 @@
-# Where things are — written at v8.06, 16 Aug
+# Where things are — written at v8.07, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -66,6 +66,7 @@ it, still oldest-first.
 | 8.04 | Subtle shading on the notes button (**#225**, which had been missed for 17 releases) |
 | 8.05 | "Export just this layer" is a picker, not a tick (**#174**) |
 | 8.06 | Swipe **UP** on Recents opens Faves (**#204**) — the gate mirrored, not negated |
+| 8.07 | The app says when an effect **cannot do anything** to a layer (**#180**) |
 
 Suite: **371/371** at v8.06, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
 green run finally means something again.
@@ -104,13 +105,27 @@ them were visible from "what is next". This is worth repeating periodically, not
   earlier round screenshotted the end state and found a plausible-but-wrong static cause.
 - **Two number collisions** were hiding real requests: his "? for keyboard shortcuts" and "THREE layouts
   exist" shared numbers with other entries and are now **#248** and **#249**.
+- **A SECOND sweep on 16 Aug found three more, so do this every session, not once.** #93 and #97 were
+  both fully resolved in their own text and never ticked (#93: (a) did not reproduce, (b) was fixed in
+  v7.32; #97: the coordinate half did not reproduce, the band was fixed in v7.35). And **#180's blocking
+  question answered itself by measurement** — it had been waiting on him to say whether he saw it on
+  COLOURED text, and measuring showed every effect works there, which closed the question without him.
+  **The lesson: an entry that is "waiting on a word from him" is worth re-reading, because some of those
+  words can be measured instead of asked for.**
+- **The handover file itself was wrong about the queue.** It said "everything below #148 is blocked on
+  him" and listed three next builds; the real open list runs #179, #180, #183, #184, #187, #195, #202,
+  #203, #205, #207–#218, #221, #223, #224, #228, #244, #248, #249. Get the queue from the grep, never
+  from this file.
 
 ## Next builds, in order
 
-1. ~~#204 — flip the Faves gesture to swipe UP~~ **— DONE v8.06.** The risk named here was the real one:
-   the gate is mirrored (`scrollTop + clientHeight >= scrollHeight - 1`), not negated, and the mutation
-   that negated it reports "scroller at 602/602" — at the end, rejected anyway. Verified at 380px that
-   the browser still scrolls.
+**#204 (v8.06) and #180 (v8.07) are done.** The next builds are:
+
+1. **#228 — `drift` and `orbit` eat a quarter of the frame at an edge.** Found by #93's own probe. They
+   are the same three lines wiggle was before v7.32 (translate the finished plate, blit) and never got
+   the expanded-plate fix, so at a frame edge they pull in empty space: worst 255, i.e. solid content
+   against solid nothing, not a rounding difference. **The fix already exists and is proven** — it is
+   what v7.32 did to wiggle. This is the most valuable open item that is not waiting on him.
 2. **#244 — the add-menu drag.** Design corrected by measurement: the add menu and timeline are the SAME
    grid row, so "float over the canvas" is structural, not a preference.
 3. **#248 / #249** — his two requests that were invisible behind number collisions.
