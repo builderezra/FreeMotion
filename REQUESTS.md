@@ -3149,6 +3149,19 @@ better still, keep working inside the turn rather than parking work for a later 
       **#165 IS NOW COMPLETE** — centring (v7.35), erase (v7.78), undo/redo (v7.77), zoom (v8.01),
       pan (v8.02).
 
+      **VERIFIED AT 380px AFTER THE FACT, and it closed a gap in my own process.** v8.00–v8.02 changed
+      the draw overlay and added a global wheel handler, and I had checked all three at desktop width
+      only — which is exactly the mistake that shipped v7.79's export bug (measured Classic, he uses
+      Studio). On the phone layout: overlay 365×649 against a canvas of 365×649 (**exact**), a stroke
+      aimed at project 500,700 lands at 500,702, and the drawing bar has **0px** of overflow with all
+      seven controls on it.
+      **One thing that surfaced and is worth your word: the two-finger pan is live on mobile too.** A
+      dispatched wheel moved the viewport by 90px there. That is probably right — it is the same
+      capability, and nothing on that screen scrolls behind the drawing surface — but it has only been
+      tested with a synthetic event, never with real fingers on a real phone. **If panning ever feels
+      wrong or fights you while drawing on the phone, say so and it becomes desktop-only in one line**
+      (the nudge and trim pairs are already gated that way for their own reasons).
+
       **What is left is genuinely small.** `redraw()` and `dispScale()` derive from the canvas's SCREEN
       rect as well, so they want checking in the same pass — if the box moves to local space and the ink
       does not follow, the preview stroke and the surface part company. That is a PREVIEW bug rather than
