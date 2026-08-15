@@ -2910,11 +2910,46 @@ window.FM = window.FM || {};
       if (clipOpt) clipOpt.disabled = !selLayer;
       if (!selLayer && rangeSel.value === 'clip') rangeSel.value = 'whole';
     }
-    const soloCb = document.getElementById('exp-solo-clip');
-    if (soloCb) { if (!selLayer) soloCb.checked = false; soloCb.disabled = !selLayer; }
+    /* The layer picker (queue 174). It opens on "All layers" every time rather than remembering a
+     * choice: soloing one layer is a deliberate, one-off thing to do to an export, and an export that
+     * silently repeats last week's solo would produce a file with most of the project missing and no
+     * clue why. Deliberately NOT in the remembered prefs for the same reason. */
+    expSoloId = null;
+    bindSoloBtn();   // the dialog's markup exists from the start, but bind lazily so this is the only entry point
+    syncSoloBtn();
     expPrefsApply();   // after the resolution list is rebuilt for THIS project, so the match can land
     syncExportFormat();
     document.getElementById('export-dialog').classList.remove('hidden');
+  }
+  /* WHICH layer the export should isolate — null means all of them (queue 174). Held here rather than
+   * read off the selection, because the whole point of the change is that you can pick a layer without
+   * first selecting it. The hidden #exp-solo-clip mirrors it so the export path below, and anything
+   * else that reads that field, keeps one thing to look at. */
+  let expSoloId = null;
+  function syncSoloBtn() {
+    const btn = document.getElementById('exp-solo-btn');
+    const L = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
+    if (!L) expSoloId = null;
+    if (!btn) return;
+    btn.textContent = L ? (L.name || L.type || 'Layer') : 'All layers';
+    btn.classList.toggle('btn-accent', !!L);
+    btn.title = L ? 'Exporting only "' + (L.name || L.type) + '" — press to change' : 'Export every layer — press to isolate one';
+  }
+  function bindSoloBtn() {
+    const btn = document.getElementById('exp-solo-btn');
+    if (!btn || btn._bound) return;
+    btn._bound = 1;
+    btn.addEventListener('click', () => {
+      if (!FM.contextMenu) return;
+      const r = btn.getBoundingClientRect();
+      const items = [{ label: 'All layers', action: () => { expSoloId = null; syncSoloBtn(); } }, { sep: true }];
+      // Top-down, the order they read on the timeline, so the list matches what he is looking at.
+      FM.scene.layers.slice().reverse().forEach(l => {
+        items.push({ label: (l.name || l.type || 'Layer'), action: () => { expSoloId = l.id; syncSoloBtn(); } });
+      });
+      if (items.length <= 2) { if (FM.toast) FM.toast('This project has no layers to isolate', 1800); return; }
+      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, items);
+    });
   }
   function hideExportDialog() { document.getElementById('export-dialog').classList.add('hidden'); }
 
@@ -2997,12 +3032,14 @@ window.FM = window.FM || {};
     if (FM.playing) FM.pause();
     // 'Hide other layers' — temporarily solo the selected clip (solo already isolates picture AND
     // audio at render/export/preview). Restored in finally even on error/cancel; no history commit.
-    const soloCb = document.getElementById('exp-solo-clip');
+    // Solo the layer the PICKER chose (queue 174). One source of truth — the old checkbox is gone, so
+    // there is no second way to ask for this and nothing to keep in step.
+    const soloTarget = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
     let soloRestore = null;
-    if (soloCb && soloCb.checked && selLayer) {
+    if (soloTarget) {
       soloRestore = FM.scene.layers.map(l => [l, l.solo]);
-      selLayer.solo = true;
-      if (selLayer.type === 'group' && FM.groupDescendants) FM.groupDescendants(selLayer.id).forEach(l => { l.solo = true; });
+      soloTarget.solo = true;
+      if (soloTarget.type === 'group' && FM.groupDescendants) FM.groupDescendants(soloTarget.id).forEach(l => { l.solo = true; });
     }
     const fmt = (document.getElementById('exp-format') || {}).value || 'mp4';
     const tCb = document.getElementById('exp-transparent');

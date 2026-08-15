@@ -2223,7 +2223,17 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   gap: 12px;
 }
 #export-dialog .field select,
+#export-dialog .field #exp-solo-btn,
 #export-dialog .field .exp-custom { width: 100%; min-width: 0; }
+/* The layer picker sits in the SAME column as the selects (queue 174) — it replaced a checkbox, which
+   was a different shape and deliberately exempt from that column, so without this it shrink-wrapped its
+   label and sat adrift. Caught by the dialog's own alignment test, not by eye: measured, it ended at
+   x=499 against x=590 for everything above it. Sized and shaped like a select because it does a
+   select's job — you press it and choose one of a list. */
+#export-dialog .field #exp-solo-btn {
+  height: 34px; justify-content: space-between; text-align: left;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
 /* Room for the native chevron. A shrink-wrapped select sized itself around its longest option and
    the arrow came free; in a fixed column the two collide — measured, "Same as project — 64×48" ran
    under the arrow at 375px. The padding reserves the arrow's lane and the ellipsis makes a long

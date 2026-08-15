@@ -3327,10 +3327,23 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       quality exactly once — letting the new default win — after which a quality you choose is kept.
       **Verified rather than assumed:** seeded `localStorage` with a stale `{quality: "medium"}` from the
       old schema, opened the dialog, and it came up on **0.18 — the highest of the three options**.
-- [ ] **174 — "Export just this clip" should say LAYER, and be a picker, not a tick.** His words: *"With
+- [x] **174 — "Export just this clip" should say LAYER, and be a picker, not a tick. DONE v8.05.** His words: *"With
       the export just this clip tick at the bottom, make it say export just this layer, and also make it
       so when you press it, it isn't a tick but it's a button and it lets you select what layer."* So:
       relabel, and replace the checkbox with a button that opens a layer chooser.
+
+      **DONE v8.05.** The button opens on **All layers**, lists the project's layers top-down in timeline
+      order, and once you pick one it wears that layer's name and takes the accent — so the dialog cannot
+      quietly be set to export a fraction of your project without saying so.
+      **The second half was the real change:** the tick could only isolate whatever was SELECTED, so
+      exporting a different layer meant closing the dialog, selecting it and reopening. The button holds
+      the choice, which is why it also had to stop reading the selection.
+      **It opens on "All layers" every time rather than remembering, on purpose** — a solo that silently
+      repeated last week's choice would hand you a file with most of the project missing and no clue why,
+      so it is also deliberately kept out of the remembered export prefs.
+      *The old checkbox is deleted rather than hidden: a hidden one still got laid out (a stylesheet rule
+      outranks `hidden` here) and sat adrift of the column, which the dialog's own alignment test caught
+      — x=499 against x=590. Deleting it left one source of truth as well.*
 - [x] **185 — The notes button sits too close to the version chip.** (v7.13) His words: *"The spacing for
       the notes button in regards to the ones around it is off, it's too far to the left."* Measured at
       380px and he is right: the version pill is a bordered chip with no air inside its right edge, while
