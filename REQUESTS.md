@@ -2739,6 +2739,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
          The card is Effects; the three things inside it are Visual, Filters, Audio. Obvious in hindsight
          — "Effects → Effects" was always a bit odd.
       *(2), (3) and (4) shipped in v7.48; (1) is the remaining piece.*
+      **Scouted for (1), so the next go is a build rather than a hunt.** The tile itself is easy: the
+      generator's `sceneFor(type, inst, span)` already takes a ready-made effect INSTANCE and skips its
+      per-effect demo tweaks when you pass one — so a filter tile is
+      `sceneFor(firstChildType, FM.filters.makeInstance(id), 0)` plus one `renderFrame`, static, no
+      per-effect tuning needed at all (the authored settings ARE the look). Using the first child's type
+      as the subject hint is right, not a bodge: a filter of colour effects then gets the same photo
+      subject a colour effect gets.
+      **The cost is the plumbing, not the picture.** The thumbnail pipeline forks on "is this a preset or
+      an effect" in four places (`syntheticFor`, `layerStep`, the mount key, and the window/duration
+      helper), and a filter is a third kind. That is a contained job but not a small one, and it is why
+      it did not go in with v7.48.
 - [ ] **222 — A "?" in the top bar that opens the keyboard shortcuts.** (15 Aug.) His words: *"Put a
       question mark in the top right corner to the left of note pad that quickly opens the keyboard
       shortcuts menu."* and *"On pc it can go on the play button row along side everything else when you
