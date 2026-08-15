@@ -3085,6 +3085,91 @@
     }
   });
 
+  test('freehand: Undo takes back ONE stroke, and Redo puts it back', { item: 'freehand-undo' }, function () {
+    /* Queue 165.4. Ezra: "instead of an undo button just add the undo and redo icons that we have in
+     * the normal menu so you can go back or forwards."
+     *
+     * Building redo turned up a real bug in going BACK. Queue 167 made a freehand session build ONE
+     * layer out of many strokes ("it should all be inside the one drawing you just made"), and Undo was
+     * never updated: it popped an id off `strokes` and spliced that LAYER out of the scene. Only the
+     * FIRST stroke ever pushes an id, so one press of Undo deleted the entire drawing — every stroke of
+     * it — and left the session pointing at a layer that no longer existed, so the next stroke re-fitted
+     * a ghost. Three strokes in, one Undo, and you lost all three.
+     *
+     * Counted in SUBPATHS on the layer rather than in layers, because "one layer either way" is exactly
+     * what made the bug invisible: the timeline looked identical whether you had lost one stroke or all
+     * of them. */
+    if (!FM.startDraw || !FM.drawTool._commit || !FM.drawTool._undo) throw new Error('the draw tool has no test hooks — _commit/_undo/_redo are missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const stroke = (y) => { FM.drawTool.points = [[80, y], [140, y], [200, y], [260, y]]; FM.drawTool._commit(); };
+    const subs = () => {
+      const l = FM.scene.layers.filter(x => x.name === 'Freehand').pop();
+      return l ? (l.subs ? l.subs.length : (l.points ? 1 : 0)) : 0;
+    };
+    try {
+      FM.scene.layers.length = 0;
+      FM.startDraw('freehand');
+      stroke(60); stroke(100); stroke(140);
+      if (subs() !== 3) throw new Error('three strokes should be three subpaths on one layer, got ' + subs() + ' across ' + FM.scene.layers.length + ' layer(s)');
+
+      FM.drawTool._undo();
+      // THE BUG: this used to be 0, because Undo removed the layer instead of the stroke.
+      if (subs() !== 2) throw new Error('after one Undo the drawing has ' + subs() + ' strokes, expected 2' + (subs() === 0 ? ' — Undo deleted the whole drawing, not the last stroke' : ''));
+
+      FM.drawTool._redo();
+      if (subs() !== 3) throw new Error('Redo should have put the third stroke back, got ' + subs());
+
+      // …all the way down and all the way back, because the interesting edges are the empty one (the
+      // layer has to go) and the first one back (the layer has to be rebuilt).
+      FM.drawTool._undo(); FM.drawTool._undo(); FM.drawTool._undo();
+      if (subs() !== 0) throw new Error('after undoing every stroke there are still ' + subs() + ' left');
+      if (FM.scene.layers.some(l => l.name === 'Freehand')) throw new Error('every stroke is undone but an empty Freehand layer is still on the timeline');
+      FM.drawTool._redo();
+      if (subs() !== 1) throw new Error('redoing the first stroke should rebuild the layer with one stroke, got ' + subs() + ' across ' + FM.scene.layers.length + ' layer(s)');
+
+      // A new stroke ends the branch you undid away from — otherwise Redo would splice an old stroke
+      // into a drawing it no longer belongs to.
+      stroke(180);
+      if (FM.drawTool._counts().redo !== 0) throw new Error('drawing after an undo left ' + FM.drawTool._counts().redo + ' stroke(s) on the redo stack');
+
+      /* …AND THE BAR STILL FITS. Adding a second icon button pushed this over on a phone: measured at
+         380px, 378px of content in a 355px box, with Cancel's right edge at 391 against a 369 bar —
+         partly off the screen and unpressable. It was already ~12px over before the icons went in, so
+         they did not cause it, they reached Cancel with it. Asserted here rather than in a layout sweep
+         because this bar is only built while the draw tool is running, which is why no existing sweep
+         had ever seen it. */
+      const bar = document.getElementById('draw-bar');
+      if (!bar) throw new Error('the drawing bar was never built');
+      if (bar.classList.contains('hidden') || bar.getBoundingClientRect().width < 10) {
+        throw new Error('the drawing bar is not on screen (hidden=' + bar.classList.contains('hidden') + ', width=' + Math.round(bar.getBoundingClientRect().width) + ') — the overflow check below would be measuring nothing');
+      }
+      /* PINNED to the phone's real box rather than trusting the runner's viewport. The bar is
+         `max-width: 94vw`, which on a 380px phone is 355 — but the suite window is whatever the runner
+         happens to be, and at desktop width there is acres of room, so a plain measurement here passes
+         on a machine that will never see the bug. First attempt did exactly that: the mutation that
+         restores the overflow sailed straight through. 355px is the number the phone actually gets. */
+      const PHONE_BOX = 355;
+      const wasMax = bar.style.maxWidth, wasW = bar.style.width;
+      try {
+        bar.style.maxWidth = PHONE_BOX + 'px'; bar.style.width = PHONE_BOX + 'px';
+        void bar.offsetWidth;
+        const over = bar.scrollWidth - bar.clientWidth;
+        if (over > 1) throw new Error('in a phone-width bar (' + PHONE_BOX + 'px) the controls need ' + bar.scrollWidth + 'px — ' + over + 'px of overflow, so the last one on the row is partly off screen and unpressable');
+      } finally {
+        bar.style.maxWidth = wasMax; bar.style.width = wasW;
+      }
+    } finally {
+      // The REAL exit — it clears body.drawing and the session state. Anything less leaves the app in
+      // drawing mode for the rest of the run with a collapsed layout, which fails eight unrelated
+      // tests downstream and points at all the wrong places.
+      try { FM.drawTool._stop(); } catch (e) {}
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0;
+      FM.timeline.rebuild(); FM.inspector.refresh();
+    }
+  });
+
   test('home: the grain field does not tile into a grid, and the cards do not show it through', { item: 'home-grain' }, function () {
     /* Queue 157 + 227, and they are one job. Ezra: "The background film grain looks shit" and "the
      * project layers are clear so you can see the film grain behind, i want them clear still but not

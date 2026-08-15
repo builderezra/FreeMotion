@@ -3608,6 +3608,31 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 #draw-bar button { padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 12.5px; cursor: pointer; }
 #draw-bar .db-done { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 #draw-bar .db-cancel { color: var(--text-dim); }
+/* Undo / redo are ICONS now (queue 165.4). Ezra: "instead of an undo button just add the undo and redo
+   icons that we have in the normal menu so you can go back or forwards." Square, so the pair reads as
+   one control with two directions rather than as two words of different lengths, and 34px because this
+   bar is used with a thumb. .db-dim is "there is nothing that way" — dimmed rather than disabled, so
+   the pair never changes width and nothing under your thumb moves as you step back and forth. */
+/* flex: 0 0 34px, not width: 34px — the bar is a flex row on a 380px phone and it SHRANK them to 20px
+   wide, which measured under the 24px this app holds itself to for a thumb. Caught by measuring the
+   rendered box rather than by reading the rule back. */
+#draw-bar .db-undo, #draw-bar .db-redo { padding: 0; flex: 0 0 34px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; }
+#draw-bar .db-undo svg, #draw-bar .db-redo svg { width: 18px; height: 18px; display: block; }
+#draw-bar .db-undo.db-dim, #draw-bar .db-redo.db-dim { opacity: .35; }
+/* …and the bar has to FIT. Measured at 380px with the icons in: content 378px in a 355px box — 23px of
+   overflow, with Cancel's right edge at 391 against a 369 bar, i.e. partly off screen and unpressable.
+   It already overflowed by about 12px before this change (a text "Undo" is ~66px, the two icons are 77),
+   so the icons did not cause it, they reached Cancel with it.
+   The brush slider is the only element on this bar with slack — everything else is a control already at
+   its minimum — so it gives the space up. `flex: 0 1 92px` with a real `min-width` rather than a
+   breakpoint: it stays 92px wherever there is room and shrinks only when there is not, at any width, on
+   any device. A `@media (max-width: 700px)` version of this shipped first and was replaced, because it
+   cannot be verified from a desktop-width test runner — the media query simply does not fire there, so
+   the assertion that was supposed to guard it passed against the bug.
+   Wrapping was the other option and was rejected: a taller bar takes canvas, and queue 165's FIRST
+   point was about the drawing surface being squeezed. */
+#draw-bar .db-width { flex: 0 1 92px; min-width: 52px; }
+#draw-bar .db-width input { width: 100%; min-width: 0; }
 /* Vector mode grows a second row: the precision trackpad spans the bar, the controls sit under it. */
 #draw-bar.db-vector { flex-wrap: wrap; width: min(94vw, 420px); }
 #draw-bar .db-pad {

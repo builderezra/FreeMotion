@@ -178,6 +178,7 @@ window.FM = window.FM || {};
      * been a multi-subpath field all along; nothing was ever writing more than one into it. */
     var sub = smoothFreehand(t.points);
     sessionSubs.push(sub);
+    sessionRedo.length = 0;   // drawing something new is the end of the branch you undid away from
     var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
     if (!layer) {
       layer = FM.addPathLayer(sub, { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
@@ -266,6 +267,64 @@ window.FM = window.FM || {};
   // Queue 167: the ONE layer a freehand session is building, and every stroke that has gone into it
   // (kept in PROJECT pixels, because the layer's box is re-fitted around their union on every stroke).
   var sessionLayerId = null, sessionSubs = [];
+  var sessionRedo = [];                          // strokes taken back by Undo, newest last (queue 165.4)
+
+  /* UNDO IS A STROKE, AND SO IS REDO (queue 165.4). Ezra asked for the transport row's two glyphs
+   * "so you can go back or forwards"; going forwards needed building, and going BACK turned out to be
+   * broken in a way worth naming.
+   * Queue 167 made a freehand session build ONE layer out of many strokes ("it should all be inside
+   * the one drawing you just made"). Undo was never updated: it still popped an id off `strokes` and
+   * spliced that LAYER out of the scene — and since only the FIRST stroke ever pushes an id, one press
+   * of Undo deleted the entire drawing, every stroke of it. It also left sessionLayerId pointing at a
+   * layer that no longer existed, so the next stroke re-fitted a ghost.
+   * The unit of work is the stroke, so both directions move one subpath between sessionSubs and
+   * sessionRedo and re-fit. The layer itself is only removed when the last stroke leaves it, and
+   * recreated when the first one comes back. */
+  function applySubs() {
+    var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
+    if (!sessionSubs.length) {
+      if (layer) {
+        var i = FM.scene.layers.indexOf(layer);
+        if (i >= 0) FM.scene.layers.splice(i, 1);
+      }
+      sessionLayerId = null;
+      strokes.length = 0;
+    } else if (!layer) {
+      // Every stroke was undone and now one is coming back: the layer has to be built again, with the
+      // FIRST surviving stroke, and the rest re-fitted on top of it.
+      layer = FM.addPathLayer(sessionSubs[0], { closed: false, name: 'Freehand', color: FM.drawTool.color, stroke: FM.drawTool.stroke });
+      if (layer) {
+        sessionLayerId = layer.id; strokes.length = 0; strokes.push(layer.id);
+        if (sessionSubs.length > 1 && FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+      }
+    } else if (FM.refitPathLayer) {
+      FM.refitPathLayer(layer, sessionSubs);
+    }
+    if (FM.selectLayer) FM.selectLayer(null);   // same rule as commitStroke: no inspector sheet mid-drawing
+    if (FM.refreshAll) FM.refreshAll();
+    if (FM.history) FM.history.commit();
+    if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
+    redraw(); updateBar(); FM.requestRender && FM.requestRender();
+  }
+  function undoStep() {
+    var t = FM.drawTool;
+    if (t.mode !== 'freehand') { t.points.pop(); redraw(); updateBar(); return; }
+    // A half-drawn stroke under the finger goes first — it is the most recent thing you did, and
+    // throwing it away is not something to put on the redo stack.
+    if (t.points.length) { t.points = []; if (octx) octx.clearRect(0, 0, overlay.width, overlay.height); redraw(); updateBar(); return; }
+    if (!sessionSubs.length) return;
+    sessionRedo.push(sessionSubs.pop());
+    applySubs();
+  }
+  function redoStep() {
+    var t = FM.drawTool;
+    if (t.mode !== 'freehand' || !sessionRedo.length) return;
+    sessionSubs.push(sessionRedo.pop());
+    applySubs();
+  }
+  FM.drawTool._undo = undoStep;   // the suite drives the real handlers, not copies of them
+  FM.drawTool._redo = redoStep;
+  FM.drawTool._counts = function () { return { subs: sessionSubs.length, redo: sessionRedo.length }; };
 
   // Exposed so the suite can measure the smoothing directly. Driving the whole tool just to check
   // the shape of a curve makes the test about the UI instead of about the maths.
@@ -305,7 +364,7 @@ window.FM = window.FM || {};
 
   function stop() {
     strokes = [];
-    sessionLayerId = null; sessionSubs = [];       // a new drawing starts a new layer (queue 167)
+    sessionLayerId = null; sessionSubs = []; sessionRedo = [];   // a new drawing starts a new layer (queue 167) and a fresh redo stack
     FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false;
     FM.drawTool.cursor = null; FM.drawTool.snapX = FM.drawTool.snapY = null;
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
@@ -327,11 +386,23 @@ window.FM = window.FM || {};
     ['.db-undo', '.db-done'].forEach(function (sel) {
       var elx = bar.querySelector(sel); if (elx) elx.style.display = '';
     });
+    // Redo is FREEHAND ONLY: in vector mode a "step" is a point on a shape you have not committed yet,
+    // and offering a forward arrow that does nothing is worse than not offering one.
+    var rd = bar.querySelector('.db-redo');
+    if (rd) {
+      rd.style.display = vec ? 'none' : '';
+      rd.classList.toggle('db-dim', !sessionRedo.length);
+    }
+    var ud = bar.querySelector('.db-undo');
+    if (ud) ud.classList.toggle('db-dim', vec ? !FM.drawTool.points.length : !(FM.drawTool.points.length || sessionSubs.length));
     bar.classList.toggle('db-vector', vec);
     var n = FM.drawTool.points.length;
     var hint = bar.querySelector('.db-hint');
+    // sessionSubs, not `strokes` — since queue 167 the whole session is ONE layer, so `strokes` holds
+    // exactly one id however much you draw and this counter was frozen at "1 stroke".
+    var ns = sessionSubs.length;
     if (hint) hint.textContent = FM.drawTool.mode === 'freehand'
-      ? (strokes.length ? ('Draw again, or Done (' + strokes.length + ' stroke' + (strokes.length === 1 ? '' : 's') + ')') : 'Draw on the canvas — keep drawing, then Done')
+      ? (ns ? ('Draw again, or Done (' + ns + ' stroke' + (ns === 1 ? '' : 's') + ')') : 'Draw on the canvas — keep drawing, then Done')
       : (n < 3 ? 'Tap the canvas or use the pad, then + Add point (' + n + ')' : 'Done / Enter to finish, or land on the first point (' + n + ')');
   }
 
@@ -344,28 +415,19 @@ window.FM = window.FM || {};
       '<span class="db-hint"></span>' +
       '<label class="db-color" title="Colour"><input type="color" value="#ffffff"></label>' +
       '<label class="db-width" title="Brush width"><input type="range" min="1" max="40" value="8"></label>' +
-      '<button class="db-undo" type="button">Undo</button>' +
+      /* The two glyphs from the transport row, not the word "Undo" (queue 165.4). Ezra: "instead of an
+         undo button just add the undo and redo icons that we have in the normal menu so you can go back
+         or forwards." Same paths as #btn-undo / #btn-redo in index.html, so one mark means one thing
+         wherever you meet it. */
+      '<button class="db-undo" type="button" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-4-4 4-4"/><path d="M5 10h9a5 5 0 0 1 0 10h-3"/></svg></button>' +
+      '<button class="db-redo" type="button" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l4-4-4-4"/><path d="M19 10h-9a5 5 0 0 0 0 10h3"/></svg></button>' +
       '<button class="db-done" type="button">Done</button>' +
       '<button class="db-cancel" type="button">Cancel</button>';
     document.body.appendChild(bar);
     bar.querySelector('.db-color input').addEventListener('input', function (e) { FM.drawTool.color = e.target.value; redraw(); });
     bar.querySelector('.db-width input').addEventListener('input', function (e) { FM.drawTool.stroke = +e.target.value; redraw(); });
-    bar.querySelector('.db-undo').addEventListener('click', function () {
-      // In freehand the unit of work is a STROKE, so Undo takes the last one back rather than
-      // nibbling a single sample off a buffer the user cannot see.
-      if (FM.drawTool.mode === 'freehand') {
-        if (FM.drawTool.points.length) { FM.drawTool.points = []; }
-        else if (strokes.length) {
-          var id = strokes.pop();
-          var i = FM.scene.layers.findIndex(function (l) { return l.id === id; });
-          if (i >= 0) { FM.scene.layers.splice(i, 1); FM.refreshAll && FM.refreshAll(); if (FM.history) FM.history.commit(); }
-        }
-        if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
-        redraw(); updateBar(); FM.requestRender && FM.requestRender();
-        return;
-      }
-      FM.drawTool.points.pop(); redraw(); updateBar();
-    });
+    bar.querySelector('.db-undo').addEventListener('click', undoStep);
+    bar.querySelector('.db-redo').addEventListener('click', redoStep);
     bar.querySelector('.db-done').addEventListener('click', finish);
     bar.querySelector('.db-cancel').addEventListener('click', stop);
     bar.querySelector('.db-add').addEventListener('click', function () {
@@ -405,6 +467,14 @@ window.FM = window.FM || {};
   // Exposed for the suite (queue 179): the Done BUTTON is the only other door, and driving a click on
   // a bar that may be mid-layout tests the bar, not the finish path this covers.
   FM.drawTool.finish = finish;
+  // …and the same argument for the commit path (queue 165.4): the undo/redo test is about what one
+  // stroke does to the session, and synthesising a pointer drag to produce one would be testing the
+  // event plumbing instead. This is the function the finger really calls.
+  FM.drawTool._commit = commitStroke;
+  // …and the way OUT, which the test needs in a finally. Without it a test that starts the tool leaves
+  // body.drawing on for the rest of the run, and the collapsed layout it causes fails eight unrelated
+  // tests downstream — which is how this hook came to exist.
+  FM.drawTool._stop = stop;
   FM.startDraw = function (mode) {
     if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
     if (!overlay) FM.drawTools && FM.drawTools.init();
@@ -414,7 +484,7 @@ window.FM = window.FM || {};
     /* A NEW drawing starts a new layer (queue 167). stop() clears these too, but not every exit runs
        through it — and without the reset here a second drawing would silently append its strokes to
        the layer the FIRST one built, which is a worse bug than the one being fixed. */
-    sessionLayerId = null; sessionSubs = [];
+    sessionLayerId = null; sessionSubs = []; sessionRedo = [];
     // Vector starts with the cursor parked in the middle of the frame, so the pad has something to
     // move from the moment the tool opens rather than only after a first tap.
     FM.drawTool.cursor = mode === 'vector' ? [FM.scene.project.width / 2, FM.scene.project.height / 2] : null;

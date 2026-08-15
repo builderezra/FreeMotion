@@ -2935,7 +2935,7 @@ better still, keep working inside the turn rather than parking work for a later 
       `tests/_iconsheet.html` renders every candidate at 24/48/96 on the real cell colour and is
       committed — the next icon argument should not begin by rebuilding the rig.
 
-- [ ] **164 — A freehand stroke gets THICKER the moment you let go.** (14 Aug.) His words: *"When I do
+- [x] **164 — A freehand stroke gets THICKER the moment you let go. ALREADY DONE — v7.06, same day you reported it; the entry was never ticked.** (14 Aug.) His words: *"When I do
       freehand drawing and finish a stroke it will for some reason make the stroke thicker when I let go
       of drawing, stop that from happening."*
       So the live preview and the committed layer disagree about width — you draw at one weight and get
@@ -2944,6 +2944,21 @@ better still, keep working inside the turn rather than parking work for a later 
       the canvas fit, or the committed path picks up a default width instead of the drawing one.
       **Measure both numbers before changing either** — the width used while drawing and the width stored
       on the layer — rather than nudging a constant until it looks close.
+
+      **It was fixed on 14 Aug in v7.06 and this entry simply never got its tick** — found 15 Aug while
+      working the list in order. That is the FIFTH stale entry (after #37, #147's first half, #155 and
+      #93's "not bit-exact" claim), which is an argument for working the list rather than against it:
+      every one of them was found by reaching it in turn, not by remembering.
+      **The cause, since it is a good one.** The compositor draws an open path TWICE: a border
+      under-stroke at `lw × 2`, so half shows either side of the line, and then the line itself at `lw`.
+      The freehand tool was handing the new layer a border that was **enabled and the same colour as the
+      line**, so the outline was invisible *as* an outline and simply made the mark double width — while
+      the live preview strokes at `lw`. Exactly 2×, at the instant of release. The border is off by
+      default now; turning it on in Border & Shadow does what it says.
+      **Verified rather than assumed before ticking**, which is the rule these stale entries earned: the
+      suite's `freehand-width` test renders a real 12px stroke and measures the thickest run of ink
+      through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
+      of two in the picture while every stored number looked correct.
 
 - [ ] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo.**
       (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:
@@ -2965,8 +2980,36 @@ better still, keep working inside the turn rather than parking work for a later 
       polish on something that finally works, not another repair.
 
       **Point 1 ("puts the screen to the bottom") is FIXED in v7.35** — same single CSS rule as the
-      "#97 update" band; see that entry for the measurements. The other points here (erase, pan/zoom,
-      undo-redo icons) are still open.
+      "#97 update" band; see that entry for the measurements.
+
+      **Point 4 (the undo/redo icons) is DONE — v7.77, and building it turned up a real bug.** The bar
+      carries the two glyphs from the transport row now, same paths, so one mark means one thing
+      wherever you meet it.
+      **The bug: Undo was deleting your whole drawing.** Queue 167 made a freehand session build ONE
+      layer out of many strokes — *"it should all be inside the one drawing you just made"* — and Undo
+      was never updated for it. It popped an id off the session's list and spliced that LAYER out of the
+      scene, and only the FIRST stroke ever pushes an id. So three strokes in, one press of Undo took
+      **all three**, and left the session pointing at a layer that no longer existed so the next stroke
+      re-fitted a ghost. The unit of work is the stroke in both directions now; the layer is removed only
+      when the last stroke leaves it and rebuilt when the first one comes back; drawing something new
+      clears the redo stack. A half-drawn stroke still under your finger is thrown away first and does
+      not go on the stack — it is the most recent thing you did and not something you would want back.
+      Redo is freehand-only: in vector mode a "step" is a point on a shape you have not committed yet.
+      **Two smaller things fell out of the same queue-167 change.** The bar's counter read off that same
+      one-id list, so it had been stuck at "1 stroke" however much you drew; it counts subpaths now. And
+      the bar **overflowed a phone** — measured at 380px: 378px of content in a 355px box, with Cancel's
+      right edge 22px past the bar and off the screen. It was already ~12px over before this (a text
+      "Undo" is ~66px, two icons are 77), so the icons did not cause it, they reached Cancel with it. The
+      brush slider gives the space up now — `flex: 0 1 92px` with a real minimum, so it stays full width
+      wherever there is room and shrinks only where there is not.
+      *Worth recording: the first fix for that was a `@media (max-width: 700px)` rule, and the test
+      written to guard it **passed against the bug** — a media query does not fire in a desktop-width
+      test runner. The flexible version is verifiable at any width, which is why it replaced it. Three
+      mutations red: whole-layer undo, a no-op redo, and a slider that refuses to shrink.*
+
+      **Still open here: point 2 (erase) and point 3 (pan/zoom).** On erase, my recommendation stands and
+      is recorded above — remove the whole stroke you touch rather than rubbing out part of one; with
+      strokes now individually undoable that is a small change, and splitting a path is not.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
