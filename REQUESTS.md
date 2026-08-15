@@ -1758,10 +1758,19 @@ better still, keep working inside the turn rather than parking work for a later 
       in the EFFECTS BROWSER. The inspector category card literally named **Presets** is a different,
       older system (saved effect stacks, no tiles, empty on a fresh install) and is untouched. If the
       menu you meant was that one, say so and I will move it — merging the two is queue 37's real job.
-- [ ] **A documented conflict, your call.** `NEXT-SESSION.md:183-192` says in bold *"Supersedes the old
-      thumbnail spec — do not build preset thumbnails"* and specs a full-screen preview player instead.
-      I built the thumbnails because that is what you asked for tonight. The engine behind them is
+- [ ] **A documented conflict, your call.** An older `NEXT-SESSION.md` said in bold *"Supersedes the old
+      thumbnail spec — do not build preset thumbnails"* and specced a full-screen preview player instead.
+      I built the thumbnails because that is what you asked for that night. The engine behind them is
       exactly what that player would need, so nothing is wasted either way.
+      **The citation used to be `NEXT-SESSION.md:183-192` and is corrected here (16 Aug): that file has
+      since been rewritten — it is 125 lines now — and neither the line range nor the quoted sentence
+      survives anywhere in it.** The quote is kept above because REQUESTS.md is the durable record and
+      NEXT-SESSION.md is a working handover that gets replaced; citing a line number in a file that is
+      rewritten every few days was always going to rot, and this is the file that exists to stop things
+      rotting. **Anything worth keeping belongs here, quoted, not linked.**
+      *(Related: **#37** — "merging the two is queue 37's real job" — turned out to be already DONE and
+      merely un-ticked, found on 14 Aug. So that half of this entry has resolved itself; what is left is
+      only the thumbnails-versus-player question, which is still yours.)*
 - [x] **68 — Speed should retime keyframes.** **DONE v6.39.** Changing Speed already re-timed the
       clip but left every keyframe where it was, so a 2x speed-up halved the bar and left the
       animation running past the end of it. Now the whole animation stretches with the clip. And
