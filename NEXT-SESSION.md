@@ -28,14 +28,14 @@ it, still oldest-first.
 5. Commit, `git push ssh main`, then verify `git rev-parse HEAD` == `git rev-parse ssh/main`.
    `origin` is HTTPS with no stored credentials and will fail; `ssh` is the same repo and works.
 
-## What shipped this run — v7.73 → v7.91
+## What shipped this run — v7.73 → v7.99
 
 | | |
 |---|---|
 | 7.73 | PC: the notes button joins the transport row (v7.52 left it behind) |
 | 7.74 | PC multi-select: three big align buttons; the playhead trio now means the whole selection |
 | 7.75 | PC: the name field comes off the header onto the row |
-| 7.76 | Home grain: 64px tile → 256 (it was repeating 76× and reading as a grid); cards get a backdrop blur |
+| 7.76 | Home grain: 64px tile → 256 (it repeated 76× and read as a grid); cards get a backdrop blur |
 | 7.77 | Freehand undo/redo icons — and Undo was deleting the whole drawing |
 | 7.78 | Freehand eraser; undo history rebuilt as snapshots to hold it |
 | 7.79 | PC row: bare icons, box on hover only, blue Export, red delete, ↻ on the version chip |
@@ -46,17 +46,9 @@ it, still oldest-first.
 | 7.84 | Move/extend told apart (fill vs outline), level on the line; Export stops lapping the divider |
 | 7.85 | PC add menu gets its own background |
 | 7.86 | Trackpad slam fires while you pull instead of after you stop |
-| 7.87 | **The black bar was the slam's own ring** — see below |
+| 7.87 | **The black bar was the slam's own ring** — see the lessons below |
 | 7.88 | The cog turns when pressed |
 | 7.89 | The three selection buttons wear a shared ground |
-| 7.90 | Export names any clip it could not read, instead of dropping it in silence |
-| 7.91 | …and says when the browser cannot encode AAC, which drops the whole mix |
-
-Suite: **368/368** at v7.99, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
-green run finally means something again.
-
-| | |
-|---|---|
 | 7.90 | Export names any clip the mixer could not read, instead of dropping it in silence |
 | 7.91 | …and says when the browser cannot encode AAC, which throws the whole mix away |
 | 7.92 | …and when the encode itself fails after the track was already declared |
@@ -66,39 +58,36 @@ green run finally means something again.
 | 7.96 | The add-menu background reaches its borders |
 | 7.97 | Opening the export dialog stops the transport |
 | 7.98 | The flaky mic test waits on the real signal |
-| 7.99 | The flaky push test — unstampIntro now stays unstamped |
+| 7.99 | The flaky push test — `unstampIntro` now stays unstamped |
+
+Suite: **368/368** at v7.99, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+green run finally means something again.
+
+**His PC-layout block (#230–#247) is FINISHED except #244**, so the queue-jump exception above has
+almost expired: do #244 when it is reached, and otherwise work the older items oldest-first.
 
 ## What is open, in the order to do it
 
-0. **#244 — the add-menu drag.** Designed but NOT started, deliberately: five behaviours in one and
-   groundwork for his effects browser. The full design is in the entry — mirror `#tl-resizer`'s
-   structure, clamp against `--tl-h`, sticky snap plus a divider flash, and the panel must leave the
-   grid while dragged or every drag reflows the canvas. Build from that; do not re-research it.
-
 1. **#215 — export with no audio.** The most serious item in the file: the app produces silently wrong
    output. He gave the first reproduction on 15 Aug (fresh project + sound effects + default settings).
-   v7.90 and v7.91 did not fix it — they made the two silent failure paths *speak*, so the next time it
-   happens the app says which half broke. **Three outcomes are now distinguishable:** a toast naming a
-   clip = the mixer; the AAC toast = the encoder; **neither toast and still a silent file = the muxer**,
-   which is the last place left to look and the next thing to read. A dead lead is recorded in the entry
-   (library re-adds go through the identical path as imports) — do not re-derive it.
-2. **#165 point 3** — pan/zoom while drawing. **Smaller than it looks:** `FM.viewport` already does
-   pan and zoom; `FM.startDraw` throws it away on entry because the draw overlay lays out in screen
-   pixels and double-scales under a zoom. Fix the overlay's coordinates first, then remove the reset and
-   add a hand toggle — coordinates before UI, because a stroke landing in the wrong place is the bug #97
-   spent four rounds on.
-4. **#244** — drag the add menu independently of the timeline, with a snap where they meet. He asked for
-   this one to go at the bottom. It is groundwork for a bigger effects-browser plan; read the entry.
-5. **#245** — home tab buttons need the cards' no-grain treatment, **and the grain reads as static**.
-   That second half is my own regression: v7.76 cut six noise tiles to two, and two tiles can only
-   cross-fade A→B→A→B, which the eye learns in about a second. He is also inviting a rethink of the
-   texture entirely — the entry weighs three options.
-6. **#246** — the v7.85 add-menu background must reach the menu's borders; it is on the content box, not
-   the bordered region. **Do not fix it with padding** — v7.85 already learned that gives the inspector a
-   scrollbar, and two tests catch it.
-7. **#247** — opening the export menu should pause playback.
+   v7.90–v7.92 did **not** fix it — they made all three silent failure paths *speak*, so the next
+   occurrence identifies itself. **Four outcomes are now distinguishable:** a toast naming a clip = the
+   mixer; the AAC toast = the browser has no encoder; "soundtrack failed to encode" = the encode threw;
+   **no toast and still silent = none of the three, which would be genuinely new information.** A dead
+   lead is recorded in the entry (library re-adds take the identical path as imports) — do not re-derive
+   it. **It cannot close without his next export**, so it does not hold the queue.
+2. **#165 point 3** — pan/zoom while drawing. **Smaller than it looks:** `FM.viewport` already does pan
+   and zoom; `FM.startDraw` throws it away on entry because the draw overlay lays out in screen pixels
+   and double-scales under a zoom. Fix the overlay's coordinates first (`syncOverlay`/`dispScale`, using
+   the `__fmOX/__fmOY/__fmRS` machinery `toProject` already reads), then remove the reset and add a hand
+   toggle. Coordinates before UI — a stroke landing in the wrong place is the bug #97 spent four rounds
+   on.
+3. **#244 — the add-menu drag.** Designed but not started, deliberately: five behaviours in one and
+   groundwork for his effects browser. The full design is in the entry — mirror `#tl-resizer`'s
+   *structure*, clamp against `--tl-h`, sticky snap plus a divider flash, and the panel must leave the
+   grid while dragged or every drag reflows the canvas. Build from that; do not re-research it.
 
-Then back to oldest-first in the older queue.
+Then the older queue, oldest-first. Everything below #148 is currently blocked on him.
 
 ## Still waiting on a word from him
 
