@@ -3374,6 +3374,30 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       So the next attempt starts by CAPTURING it over several frames rather than screenshotting the end
       state — the previous rounds all measured the finished picture, which is exactly why they kept
       finding a plausible-but-wrong static cause. Related history: #157/#166 and the v6.85 note.
+
+      **A CONFIRMED BLACK-BAR MECHANISM WAS FOUND AND FIXED IN v7.87 (#239), AND IT MATCHES THIS
+      DESCRIPTION — including the "creeps in" that nobody could explain.** #239 gave the reproduction
+      this entry never had: *"it seems to happen when you, like, do the easter egg thing where you're
+      slamming the screen."* The cause was the slam's OWN ring — `#home-screen.hm-slam` carried a 140px
+      `box-shadow` of flat `--bg`, added in #144 so the shake could not reveal the editor behind home.
+      That was correct while home was a flat surface. Home is not flat any more (its own drifting light,
+      and a grain field since v7.76), so every slam painted a band of dead `#060c0f` against a lit,
+      textured screen.
+      **And it explains the word this entry is built around.** You said it *creeps* in, and this entry
+      rightly concluded that a band which animates is not a painted background — it is something moving.
+      It was: the ring is attached to a 420ms shake animation, so the band arrives WITH that movement
+      rather than appearing at once. Every earlier round screenshotted the end state, by which time the
+      animation had finished and the band was gone — which is exactly why they kept finding
+      plausible-but-wrong static causes, as this entry predicted.
+      **The frame capture this entry asked for was done, and it is what proved the fix:** home's box was
+      sampled 24 times across the whole 420ms with the editor painted bright red behind it, and the
+      largest uncovered edge is **0px** — nothing can appear at any frame. The ring is gone; the shake
+      now overscans by 6% so home's own surface fills the edges.
+      **This is NOT ticked, deliberately, and it needs one word from you.** I cannot prove your original
+      sighting was this mechanism — you reported it long before the slam was implicated, and there have
+      been three plausible-but-wrong causes already, so declaring it closed on a match of symptoms would
+      be the fourth. **Next time you would have expected the bar: does it still happen?** If yes, it is a
+      second cause and this entry is still live; if no, this closes with v7.87.
 - [x] **188 — The notes button still does not sit right.** (v7.17) His words, after v7.13 evened the gaps: *"The
       notes still has two much space from the buttons next to it, make it look good spacing wise."*
       #185 evened the GEOMETRIC gaps at 24px optical each side, and he is still seeing too much air — so
