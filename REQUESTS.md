@@ -2750,6 +2750,30 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       an effect" in four places (`syntheticFor`, `layerStep`, the mount key, and the window/duration
       helper), and a filter is a third kind. That is a contained job but not a small one, and it is why
       it did not go in with v7.48.
+- [ ] **223 — THREE layouts exist; there should be two.** (15 Aug, with two ultrawide photos.) His
+      words: *"For some reason the new layout i had you make only shows up on certain display sizes like
+      my laptop, but then an amalgamation of the old one shows when I flip my phone or use a wide
+      monitor, I don't want this, I just want two layouts not three"*
+      So on his laptop he gets the Studio layout he asked for; on an ultrawide monitor — and on his phone
+      held sideways — he gets something in between, which is the old layout partly restyled. Two layouts
+      only: phone, and everything else.
+      **CAUSE FOUND (15 Aug), and it is not the screen size.** There are two DESKTOP layouts, chosen by a
+      saved setting: `classic` (the old one — inspector down the right) and `studio` (the one you asked
+      me to build). Classic is still the DEFAULT. The setting lives in that browser's own storage, so your
+      laptop has studio saved from when we built it, while the ultrawide — a different machine — still has
+      the classic default, and a landscape phone is over 700px wide so it takes the desktop layout too and
+      shows classic as well. Three layouts in practice, exactly as you said.
+      **The fix is one line — make studio the only one — and I tried it, and it is NOT one line.** With
+      studio as the default, two suite tests go red immediately, because the whole suite has only ever run
+      in classic:
+      · the desktop text editor's "Aa" options cover **99.5% of the canvas** — you would be typing blind.
+        That is your own #147 ("the text editor covers the text you are editing"), and it turns out to be
+        much worse in studio than in classic;
+      · a timeline geometry check is off by 14px at rest, because in studio the timeline starts after the
+        left rail rather than at the window edge.
+      So retiring classic means fixing #147 first, and re-checking the suite's desktop assumptions.
+      Reverted for now rather than shipping a desktop that is worse than the one you have. **Doing #147
+      and this together is the right shape.**
 - [ ] **222 — A "?" in the top bar that opens the keyboard shortcuts.** (15 Aug.) His words: *"Put a
       question mark in the top right corner to the left of note pad that quickly opens the keyboard
       shortcuts menu."* and *"On pc it can go on the play button row along side everything else when you
