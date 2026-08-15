@@ -4114,6 +4114,24 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       drawing the inspector opens in its full-height/editing state instead of the normal docked one, and
       the only way out is a swipe down. Related to #165's "puts the screen to the bottom" complaint about
       freehand drawing — check whether both come from the same place before fixing either.
+
+      **NOT REPRODUCED, 16 Aug — and the entry's own hypothesis looks right.** Driven the way you do it
+      at 380×820: `startDraw('vector')`, three points, finish. Measured immediately after:
+      | | |
+      |---|---|
+      | inspector panel | **281px of an 820px screen (34%)**, docked at the bottom |
+      | canvas | **visible**, 312px |
+      | timeline | **visible**, 440px |
+      Your screenshot showed the nine cards at the top with roughly two thirds of the screen empty black
+      below them, no canvas and no timeline. What is there now is the ordinary docked layout with the new
+      shape selected on a visible canvas — the opposite picture.
+      **Almost certainly fixed by v7.35**, exactly as this entry guessed: it said to check whether this
+      and #165's "puts the screen to the bottom" come from the same place, and #165 point 1 was fixed by
+      a single CSS rule in v7.35 (the same one as the "#97 update" band). Two symptoms, one rule.
+      **Left OPEN rather than ticked**, because "I cannot reproduce it" is not the same as "it is fixed",
+      and I do not have your exact route — you may have reached it from somewhere I did not. **If you
+      finish a vector drawing and still land in a full-height panel, say so and it is live again**;
+      otherwise it closes with v7.35.
 - [ ] **180 — Lots of effects don't work on text.** His words exactly.
       **MEASURED, 2026-08-14 — he is right about what he sees, and the cause is arithmetic, not a bug.**
       Text defaults to pure WHITE (`js/scene.js`: `base.color = props.color || '#ffffff'`), and on pure
