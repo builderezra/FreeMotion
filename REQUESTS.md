@@ -2758,6 +2758,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       not the top bar. Note the top-bar spacing there has been got wrong twice already (#189), so measure
       the gaps rather than eyeballing them, and remember the notepad only appears when nothing is
       selected — the "?" must not shuffle position depending on selection.
+      **Scouted 15 Aug, and half of it already exists.** There IS a `#btn-help` "?" button, wired to the
+      shortcuts overlay (`js/shortcuts.js`) and to the `?` key — but it lives in `.topbar-extra`, the
+      DESKTOP-only group, so on a phone it is simply never shown. So the phone half is a genuine addition
+      to `.topbar-m` (the mobile bar that holds the notepad, refresh, duplicate, bin and ⋯), and the PC
+      half is mostly a MOVE — from the desktop top bar down to the transport row, which is where you
+      asked for it.
+      **Deliberately not started at the tail of a session**, because that mobile bar's spacing is the
+      thing that went wrong twice and got the "why are you so bad at aligning the top buttons" reply. The
+      current gaps are hand-tuned (18.0 / 24.1 / 18.0) and inserting a button next to the notepad — which
+      itself appears only when nothing is selected — has to be measured, not eyeballed.
 - [ ] **221 — Get rid of Delete from the layer ⋯ menu.** (15 Aug, with a phone screenshot.) His words:
       *"Get rid of the delete button in this menu"* — the long ⋯ menu on a selected layer, which ends in
       a red Delete under the colour tags. The bin icon is already in the top bar two inches away, so the
