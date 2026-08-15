@@ -5311,12 +5311,24 @@ body.fm-pushing #toast { z-index: 213; }
    to nothing, and the panel is simply clean.
    Desktop only: on a phone the add menu is a full-screen sheet with its own material already. */
 @media (min-width: 701px) {
-  .addmenu--panel {
-    border-radius: 12px;
+  /* ON THE BORDERED REGION, not on the content box (v7.96, queue 246). Ezra: "the background you added
+     behind everything on the add menu on pc looks whack, it needs to fully go to the borders on that
+     menu."
+     v7.85 put it on `.addmenu--panel`, which is only the content — measured 307x210 inside an inspector
+     panel far taller than that — so it read as a floating rectangle of light sitting inside the menu
+     rather than as the menu's surface. He is describing exactly that.
+     `:has()` rather than a body class: the add menu appears when nothing is selected, and there is no
+     existing marker for that state. A class would mean a second writer for something the DOM already
+     says plainly, and this app has paid for duplicated state before. The panel keeps its own border and
+     radius, so "to the borders" is literal — the gradient now ends where the border is.
+     Still no padding anywhere: v7.85 already proved that costs the inspector a scrollbar, and two tests
+     catch it. */
+  #inspector-panel:has(.addmenu--panel) {
     background:
-      radial-gradient(120% 80% at 0% 100%, rgba(53, 133, 161, .20), transparent 62%),
-      radial-gradient(90% 60% at 100% 0%, rgba(90, 199, 237, .09), transparent 68%),
-      linear-gradient(160deg, rgba(188, 230, 239, .05), rgba(188, 230, 239, 0) 55%);
+      radial-gradient(120% 60% at 0% 100%, rgba(53, 133, 161, .20), transparent 62%),
+      radial-gradient(90% 45% at 100% 0%, rgba(90, 199, 237, .09), transparent 68%),
+      linear-gradient(160deg, rgba(188, 230, 239, .05), rgba(188, 230, 239, 0) 55%),
+      var(--panel);
   }
   /* NO PADDING and NO BORDER, both measured out rather than styled by taste: 9px of padding grew the
      panel past its container and gave the inspector an 8px scrollbar it did not have before. This is

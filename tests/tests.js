@@ -3310,10 +3310,18 @@
       FM.selectLayer(null); FM.refreshAll(); await sleep(60);
       const am = document.querySelector('.addmenu--panel');
       if (!am) throw new Error('the PC add menu is not on screen with nothing selected — this test is looking at the wrong state');
-      const bg = getComputedStyle(am).backgroundImage;
-      const layers = (bg.match(/gradient/g) || []).length;
-      if (layers < 2) throw new Error('the add menu has ' + layers + ' gradient layer(s) — it is back to a flat/transparent panel');
+      /* The surface belongs to the BORDERED REGION, not the content box (queue 246). v7.85 painted the
+         content box, which is far smaller than the panel, so it read as a floating rectangle of light
+         inside the menu — "it needs to fully go to the borders on that menu". Measuring the panel is
+         also what makes this assertion mean something: a gradient on the inner box would satisfy "there
+         is a gradient" while looking exactly like the thing he complained about. */
       const p = document.getElementById('inspector-panel');
+      const bg = getComputedStyle(p).backgroundImage;
+      const layers = (bg.match(/gradient/g) || []).length;
+      if (layers < 2) throw new Error('the add-menu panel has ' + layers + ' gradient layer(s) — it is back to a flat/transparent panel');
+      // …and it must reach: the painted region is the panel, so it is as tall as the panel by definition.
+      const pr = p.getBoundingClientRect(), ar = am.getBoundingClientRect();
+      if (ar.height >= pr.height - 4) throw new Error('the add menu now fills the panel, so this test can no longer tell the two apart — re-anchor it');
       const over = p.scrollHeight - p.clientHeight;
       if (over > 0) throw new Error('the add menu makes the inspector panel scroll by ' + over + 'px — the background is changing the layout, which it must not');
     } finally {
