@@ -699,8 +699,22 @@ window.FM = window.FM || {};
     // renames the selected layer when there is one — and a second field that silently changed meaning
     // depending on the selection would be a trap, especially where it sits: directly above a panel that
     // is all about the selected layer.
+    /* THE ONE NAME FIELD ON DESKTOP (v7.80, queue 231). Ezra: "when you click on a layer, it goes from
+     * showing the name of the project to showing the name of the layer, and you can then edit the
+     * layers name. I think that'd be a lot cleaner and make a lot more sense."
+     * The note this replaces argued the opposite — that a field which silently changed meaning with the
+     * selection would be a trap, "especially where it sits: directly above a panel that is all about the
+     * selected layer". He has looked at both and disagreed, and on reflection the panel below is the
+     * argument FOR it rather than against: everything under this header is already about the selected
+     * layer, so its name belongs at the top of that, and the label says which it is. */
     const pns = document.getElementById('proj-name-s');
-    if (pns && document.activeElement !== pns) pns.value = FM.scene.project.name || 'Untitled';
+    if (pns && document.activeElement !== pns) {
+      pns.value = sel ? (sel.name || '') : (FM.scene.project.name || 'Untitled');
+      pns.title = sel ? 'Layer name' : 'Project name';
+      pns.setAttribute('aria-label', pns.title);
+    }
+    const pnsLbl = document.querySelector('#inspector-panel .panel-title-label');
+    if (pnsLbl) pnsLbl.textContent = sel ? 'Layer' : 'Inspector';
     const delBtn = document.getElementById('btn-del-layer');
     if (delBtn) delBtn.style.display = sel ? '' : 'none';
     const parBtn = document.getElementById('btn-parent');
@@ -3537,15 +3551,16 @@ window.FM = window.FM || {};
     const grab = id => document.getElementById(id);
     if (!right || !menu) return;
 
-    /* far left — leaving a project is where it was on the rail, and from v7.75 the name field sits
-     * beside it. That field came down for the same reason the header it lived in went away (queue 229):
-     * once the notes button left, the header's only remaining contents were a wordmark and this, and
-     * this is the one with a job — with a layer selected it renames THAT LAYER, which nothing else in
-     * the PC chrome does. With nothing selected it is the project name, which the inspector header
-     * already shows, and CSS drops it then (.proj-name.is-dupe). */
+    /* far left — leaving a project is where it was on the rail, and nothing else.
+     * v7.75 put the name field here too; v7.80 took it back out (queue 231). His words: "on the left
+     * side, for some reason, that layers text edit box pops up, and it's really messy. Instead, that
+     * layers text edit button that pops up should instead be replacing the projects text edit button."
+     * So there is ONE name field on desktop and it lives in the inspector header, where the project
+     * name already was — it shows the layer's name while one is selected and the project's otherwise.
+     * A field that appears and disappears beside the back button was the "messy" part, and a second
+     * copy of the project name was the reason it had to appear and disappear. */
     const home = document.createElement('div'); home.id = 't-home';
     const back = grab('btn-back'); if (back) home.appendChild(back);
-    const pname = grab('proj-name'); if (pname) home.appendChild(pname);
     if (home.childNodes.length) t.appendChild(home);
 
     // …after the duplicate button, the three that depend on what is selected
@@ -3810,16 +3825,19 @@ window.FM = window.FM || {};
       });
       pn.addEventListener('change', () => { if (FM.history) FM.history.commit(); });
     }
-    // …and its copy in the inspector/Add panel header (v6.13). Writes the PROJECT name only, and pushes
-    // the new value into the other two fields so all three never disagree.
+    /* The inspector/Add panel header field (v6.13), and since v7.80 the ONLY name field on desktop
+     * (queue 231). It writes whichever name it is currently SHOWING — the selected layer's, or the
+     * project's — and pushes a project rename into the other two copies so none of them can disagree. */
     const pns = document.getElementById('proj-name-s');
     if (pns) {
       pns.value = FM.scene.project.name || 'Untitled';
       pns.addEventListener('input', () => {
+        const sel = FM.selectedLayer(FM.scene);
+        if (sel) { sel.name = pns.value; if (FM.timeline) FM.timeline.rebuild(); return; }
         FM.scene.project.name = pns.value;
         const pnm = document.getElementById('proj-name-m');
         if (pnm && document.activeElement !== pnm) pnm.value = pns.value;
-        if (pn && document.activeElement !== pn && !FM.selectedLayer(FM.scene)) pn.value = pns.value;
+        if (pn && document.activeElement !== pn) pn.value = pns.value;
       });
       pns.addEventListener('change', () => { if (FM.history) FM.history.commit(); });
     }

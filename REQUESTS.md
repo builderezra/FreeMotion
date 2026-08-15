@@ -4048,17 +4048,30 @@ wait for them to report back."*
       *(The red delete from **#232** shipped here too, since it is the same rule — the rest of #232, the
       re-ordering and the parenting icon, is still open.)*
 
-- [ ] **231 — PC: the layer-name field should REPLACE the project-name field, not pop up on the left.**
+- [x] **231 — PC: the layer-name field should REPLACE the project-name field, not pop up on the left. DONE v7.80.**
       His words: *"on the left side, for some reason, that layers text edit box pops up, and it's really
       messy. Instead, that layers text edit button that pops up should instead be replacing the projects
       text edit button. So then, like, when you click on a layer, it goes from showing the name of the
       project to showing the name of the layer, and you can then edit the layers name. I think that'd be
       a lot cleaner and make a lot more sense."*
-      *Note for whoever picks this up: v7.75 moved `#proj-name` into the transport row and made it appear
-      only when a layer is selected — which is half of this and is why it now reads as "pops up". What he
-      wants is the OTHER half: the field is always there, showing the PROJECT name, and swaps to the
-      LAYER name when one is selected. The field is already dual-purpose in the code; what changed at
-      v7.75 was hiding it in the project case, and that is the bit to undo.*
+      **DONE v7.80, and the pop-up turned out to be a compromise coming apart rather than a bug.** The
+      field has always been dual-purpose — layer name when one is selected, project name otherwise — and
+      the desktop had TWO of them, so #146 hid the top one in the case where it duplicated the inspector
+      header and kept it in the case where it was the only layer renamer. Appearing and disappearing WAS
+      the compromise.
+      Now there is one field, the inspector header's: **"Inspector · Untitled"** with nothing selected,
+      **"Layer · Yellow box"** with a layer selected, editable either way, and the label says which so it
+      cannot change meaning on you silently. `#proj-name` stays in the DOM with its handlers wired (a
+      project rename is still pushed through it so the phone copy cannot disagree) and is never shown on
+      desktop. v7.75's version beside the Back button is reverted — that was the messy part.
+      **I read your sentence as "one field, in the inspector, that swaps"** rather than "keep the
+      transport-row field and make it always visible", because the second reading leaves the project name
+      on screen twice whenever nothing is selected, which is the duplication #146 asked to end. Say if
+      you meant the other one.
+      The #146 test is rewritten rather than deleted, with your words in it so nobody reinstates the old
+      shape by "fixing" the test, and it now writes THROUGH the field — showing the right value and
+      writing to the right place are two different bugs, and the mutation that makes it always rename the
+      project is caught by the second check, not the first.
 
 - [ ] **232 — PC: the delete and parenting buttons look bad, are in the wrong order, and the parenting
       icon is a twin of its neighbour.** His words: *"the delete button, like the trash icon and the

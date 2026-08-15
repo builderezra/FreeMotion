@@ -5154,14 +5154,11 @@ body.fm-pushing #toast { z-index: 213; }
      is showing the PROJECT name" — which #proj-name-s in the inspector header already shows, in BOTH
      layouts. It used to be scoped to Studio on the belief that classic had no such header; it does
      (index.html:332), so the scope was wrong and the field was a duplicate in classic all along. */
-  .proj-name.is-dupe { display: none; }
-  #t-home .proj-name {
-    width: 168px; margin-left: 10px; height: 28px;
-    background: transparent; border: 1px solid transparent; border-radius: 8px;
-    color: var(--text); font-size: 13px; padding: 0 8px;
-  }
-  #t-home .proj-name:hover { border-color: var(--line); }
-  #t-home .proj-name:focus { outline: none; border-color: var(--accent); background: var(--panel-3); }
+  /* v7.80 (queue 231): there is ONE name field on desktop and it is the inspector header's. This one
+     stays in the DOM — app.js keeps its handlers wired and pushes renames through it so the phone copy
+     can never disagree — but it is never shown here. It was the field that "pops up… and it's really
+     messy". */
+  .proj-name { display: none; }
 }
 
 /* The eraser toggle on the drawing bar (queue 165.2). Ezra: "you should add an option to switch from

@@ -273,15 +273,20 @@
         // to collect: refresh · notes · cog · export · view options.
         if (kids.indexOf('btn-notes') < 0) throw new Error('Studio: the notes button is not in the far-right cluster at all — cluster reads [' + kids.join(', ') + ']');
         if (kids.indexOf('btn-notes') > kids.indexOf('btn-settings')) throw new Error('Studio: notes should sit to the LEFT of the cog — cluster reads [' + kids.join(', ') + ']');
-        /* The name field came down at v7.75 (queue 229). Ezra: "i just want you to move the nescesary
-           buttons to the bottoms one so its all there." It was the last working control left in the
-           header after v7.73 took notes down, and a lone control a band away from every other control
-           is the complaint itself. Asserted as PARENTAGE rather than position, because with nothing
-           selected the field is legitimately hidden (.is-dupe — the inspector header carries the
-           project name) and a geometry check would read that as the field having gone missing. */
+        /* THE NAME FIELD IS THE INSPECTOR'S, and there is only one of it (v7.80, queue 231). It came
+           down into this row at v7.75 and he sent it back: "on the left side, for some reason, that
+           layers text edit box pops up, and it's really messy. Instead, that layers text edit button
+           that pops up should instead be replacing the projects text edit button. So then, when you
+           click on a layer, it goes from showing the name of the project to showing the name of the
+           layer, and you can then edit the layers name."
+           So the assertion inverts: nothing in the row, and the inspector's own field does both jobs.
+           Both halves matter — one field that swaps is the request; two fields, or a field that
+           appears and disappears, is what he called messy. */
         var pn = document.getElementById('proj-name');
-        if (!pn) throw new Error('#proj-name has vanished entirely');
-        if (!t.contains(pn)) throw new Error('the project/layer name field is still in the header instead of the transport row');
+        if (pn && pn.getBoundingClientRect().width > 1) throw new Error('a second name field is visible in the transport row — there should be exactly one, in the inspector header');
+        var pns = document.getElementById('proj-name-s');
+        if (!pns) throw new Error('#proj-name-s (the inspector header name field) is missing');
+        if (pns.getBoundingClientRect().width < 10) throw new Error('the inspector header name field is not on screen (' + Math.round(pns.getBoundingClientRect().width) + 'px wide)');
         if (!(ip.left < 2)) throw new Error('Studio: the bottom band should reach the window edge, inspector left=' + Math.round(ip.left));
         // …and the rail must never spill its controls over the panel below. The rail is only as tall as
         // the canvas now, and on a short window its buttons genuinely need more room than that (measured
@@ -12070,12 +12075,21 @@
   });
 
   /* #146 — Ezra: "on pc get rid of the project name editor thats at the top, its already at the
-     bottom." The subtlety worth guarding is that #proj-name is DUAL-PURPOSE — it renames the selected
-     LAYER when there is one, and only shows the project name when there is not. So it duplicates the
-     inspector header exactly in the nothing-selected case, and in the other case it is the only rename
-     control in the top strip. Hiding it outright would have silently removed layer renaming from the
-     PC top bar, which he did not ask for. Both halves are asserted. */
-  test('studio: the top project-name field hides only while it duplicates the inspector header', { item: 'studio-projname' }, async function () {
+     bottom." This test used to guard the COMPROMISE that answer produced: #proj-name is dual-purpose, so
+     it was hidden only in the nothing-selected case where it duplicated the inspector header, and kept
+     in the other case because it was then the only rename control in the top strip.
+     **SUPERSEDED at v7.80 by queue 231**, and his own words are kept here so nobody reinstates the old
+     shape by "fixing" this test: "on the left side, for some reason, that layers text edit box pops up,
+     and it's really messy. Instead, that layers text edit button that pops up should instead be
+     replacing the projects text edit button. So then, when you click on a layer, it goes from showing
+     the name of the project to showing the name of the layer, and you can then edit the layers name."
+     So the compromise is gone in the direction he asked for: ONE field, in the inspector header, doing
+     both jobs. #proj-name stays in the DOM (app.js keeps its handlers wired and pushes renames through
+     it so the phone copy can never disagree) and is never shown on desktop. What this test guards now is
+     that the surviving field really does both jobs — a single field that only ever showed the project
+     name would satisfy "there is one field" while quietly losing layer renaming, which is exactly the
+     failure the old compromise existed to prevent. */
+  test('studio: one name field, in the inspector header, and it does both jobs', { item: 'studio-projname' }, async function () {
     const pn = document.getElementById('proj-name');
     if (!pn) throw new Error('#proj-name is missing');
     const hadSel = FM.scene.selectedId, hadIds = (FM.scene.selectedIds || []).slice();
@@ -12088,16 +12102,21 @@
       FM.scene = scene([FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 })]);
       // Nothing selected → it is the second copy of the project name, and must be gone.
       FM.selectLayer(null); FM.refreshAll(); await sleep(40);
-      if (!pn.classList.contains('is-dupe')) throw new Error('with nothing selected the top field is not marked as a duplicate');
-      if (getComputedStyle(pn).display !== 'none') throw new Error('with nothing selected the top field still shows (display ' + getComputedStyle(pn).display + ') — it is repeating the name already in the inspector header');
+      if (getComputedStyle(pn).display !== 'none') throw new Error('the old top-strip name field is showing again (display ' + getComputedStyle(pn).display + ') — there should be exactly one name field on desktop');
       const pns = document.getElementById('proj-name-s');
-      if (!pns || getComputedStyle(pns).display === 'none') throw new Error('the inspector header field is not showing — hiding the top one would leave NO project-name editor at all');
+      if (!pns || getComputedStyle(pns).display === 'none') throw new Error('the inspector header field is not showing — with the top one gone that would leave NO name editor at all');
+      if (pns.value !== (FM.scene.project.name || 'Untitled')) throw new Error('with nothing selected the field shows "' + pns.value + '" instead of the project name');
 
-      // A layer selected → it is the layer renamer, and must stay.
+      // …and with a layer selected the SAME field becomes the layer renamer. Editing it must rename the
+      // layer, not the project — asserted by writing through it, because showing the right value and
+      // writing to the right place are two different bugs.
       FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll(); await sleep(40);
-      if (pn.classList.contains('is-dupe')) throw new Error('with a layer selected the top field is still marked a duplicate — it is the layer renamer now');
-      if (getComputedStyle(pn).display === 'none') throw new Error('with a layer selected the top field is hidden — that is the only rename control in the PC top strip');
-      if (pn.value !== 'Box') throw new Error('the top field shows "' + pn.value + '" instead of the selected layer name');
+      if (pns.value !== 'Box') throw new Error('with a layer selected the inspector field shows "' + pns.value + '" instead of the layer name');
+      const projWas = FM.scene.project.name;
+      pns.value = 'Renamed'; pns.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(20);
+      if (FM.scene.layers[0].name !== 'Renamed') throw new Error('typing in the field did not rename the layer (it is still "' + FM.scene.layers[0].name + '")');
+      if (FM.scene.project.name !== projWas) throw new Error('typing a LAYER name overwrote the PROJECT name — it is writing to the wrong place');
     } finally {
       FM.settings.set('layout', hadLayout);
       FM.scene.selectedIds = hadIds; FM.selectLayer(hadSel || null);
