@@ -3065,6 +3065,24 @@ better still, keep working inside the turn rather than parking work for a later 
       that gets shipped by accident.
       *(The probe is committed. It measures the coordinate maths directly rather than driving the UI, so
       it stays valid while the toggle is being built and can be re-run to prove the fix.)*
+
+      **A SECOND, CHEAPER HYPOTHESIS — TESTED AND DISPROVED, which is worth as much as the measurement.**
+      `syncOverlay()` sizes the overlay from the CANVAS's own `getBoundingClientRect()`, so it cannot be
+      computing a wrong number — only running at the wrong TIME. A viewport zoom changes the canvas's box
+      without firing a window resize, and a resize is the only thing that re-runs `syncOverlay`. If that
+      were it, the overlay would merely be STALE and the fix would be one extra call.
+      **It is not.** Forcing a resize at 2× changes nothing: the overlay stays 984×1501 against a 492×751
+      canvas and the error stays at 102.8px. **Do not spend a morning on that idea.**
+      **What the two results together actually say** — and this is the mechanism, stated so nobody has to
+      re-derive it: `#draw-overlay` lives INSIDE `#canvas-wrap`, which is the element the viewport
+      transform is applied to. So its CSS width/left are in the wrapper's LOCAL coordinates, while
+      `getBoundingClientRect()` returns SCREEN coordinates. Feeding a screen rect back in as a local box
+      applies the zoom a second time — exactly 2× at 2×, which is what the numbers show. It is not a
+      timing bug and not a crop bug; it is a coordinate-space mismatch, and the ~103px vertical component
+      is the crop (`__fmOY 240.3`) riding on top of it.
+      **So the fix is: size and place the overlay in the wrapper's own space** (`offsetWidth`/`offsetLeft`,
+      or the screen rect divided by the live viewport scale) rather than from the screen rect. Re-run
+      `tests/_drawzoom.html` afterwards — the 2× error should fall to the control's 0.8px.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just

@@ -98,6 +98,24 @@ iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
         L.push('  aimed at the canvas centre → project ' + p1[0].toFixed(1) + ', ' + p1[1].toFixed(1));
         L.push('  error                  ' + err1.toFixed(1) + 'px   <-- if this is large, the comment is right');
         L.push('');
+        /* A BETTER HYPOTHESIS, tested here rather than assumed. syncOverlay() already sizes the overlay
+           from the CANVAS's own getBoundingClientRect, so it cannot be computing the wrong number — it
+           can only be running at the wrong TIME. A viewport zoom changes the canvas's CSS box without
+           firing a window resize, and draw-tool only re-syncs on resize. If that is it, the overlay is
+           STALE rather than mis-computed, and the fix is a call, not a rewrite. */
+        w.dispatchEvent(new w.Event('resize'));
+        await sleep(320);
+        var o2 = d.getElementById('draw-overlay');
+        var or2 = o2 ? o2.getBoundingClientRect() : null;
+        var cr2 = pv.getBoundingClientRect();
+        var c2 = aimAt(0.5, 0.5), p2 = projectOf(c2.cx, c2.cy);
+        var err2 = Math.hypot(p2[0] - P.width / 2, p2[1] - P.height / 2);
+        L.push('AFTER FORCING A RE-SYNC (a window resize, which is the only thing that re-runs syncOverlay)');
+        L.push('  overlay rect           ' + (or2 ? JSON.stringify({ x: Math.round(or2.x), y: Math.round(or2.y), w: Math.round(or2.width), h: Math.round(or2.height) }) : 'none'));
+        L.push('  canvas rect            ' + JSON.stringify({ x: Math.round(cr2.x), y: Math.round(cr2.y), w: Math.round(cr2.width), h: Math.round(cr2.height) }));
+        L.push('  overlay matches canvas ' + (or2 && Math.abs(or2.width - cr2.width) < 2 && Math.abs(or2.height - cr2.height) < 2 ? 'YES' : 'NO'));
+        L.push('  error                  ' + err2.toFixed(1) + 'px   <-- if this collapses, the overlay was STALE, not wrong');
+        L.push('');
         L.push('READ IT: an error that stays near zero means the coordinate maths ALREADY survives a zoom,');
         L.push('and the reset on entry is the only thing standing between him and the feature — in which');
         L.push('case point 3 is a toggle plus deleting one line. A large error means the overlay really');
