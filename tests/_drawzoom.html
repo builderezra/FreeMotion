@@ -189,8 +189,30 @@ iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
         L.push('  wanted centre           500, 700');
         L.push('  ink error               ' + Math.hypot(cx - 500, cy - 700).toFixed(1) + 'px   <-- the number that actually matters');
       }
+      /* PANNING (v8.02): a two-finger scroll must move the canvas and the overlay must come with it,
+         or you would pan away from your own drawing surface. */
+      if (vp) {
+        var x0 = vp.x, y0 = vp.y;
+        var ov = d.getElementById('draw-overlay');
+        var ob = ov ? ov.getBoundingClientRect().top : 0;
+        w.dispatchEvent(new w.WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
+        await sleep(200);
+        var oa = ov ? ov.getBoundingClientRect().top : 0;
+        var cb = pv.getBoundingClientRect().top;
+        L.push('');
+        L.push('TWO-FINGER SCROLL WHILE DRAWING (queue 165.3, the "grab the screen" half)');
+        L.push('  viewport moved          ' + (vp.x - x0).toFixed(0) + ', ' + (vp.y - y0).toFixed(0) + '   (0,0 would mean the gesture did nothing)');
+        /* This line was originally asserted as if syncOverlay() were what kept the overlay with the
+           canvas during a pan. It is not, and the mutation proved it: removing the re-sync changed
+           nothing. #draw-overlay is a CHILD of #canvas-wrap, and the viewport transforms the wrapper —
+           so a pure translate carries the overlay along for free, with no JavaScript involved at all.
+           Kept as a REPORT rather than a claim, because it is still worth seeing, and stated honestly
+           so nobody later reads it as evidence for a call that does nothing. */
+        L.push('  overlay followed        ' + (Math.abs(oa - cb) < 2 ? 'YES' : 'NO — ' + Math.round(oa - cb) + 'px off') +
+               '   (automatic: the overlay is a CHILD of the wrapper the viewport transforms)');
+      }
       try { FM.drawTool._stop(); } catch (e) {}
-      if (vp) { vp.scale = 1; vp.apply(); }
+      if (vp) { vp.scale = 1; vp.x = 0; vp.y = 0; vp.apply(); }
     } catch (e) {
       L.push('THREW: ' + (e && e.message || e));
       L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));

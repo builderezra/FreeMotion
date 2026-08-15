@@ -2969,7 +2969,7 @@ better still, keep working inside the turn rather than parking work for a later 
       through it, and it is green at HEAD. It measures RENDERED PIXELS on purpose — the bug was a factor
       of two in the picture while every stored number looked correct.
 
-- [ ] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo.**
+- [x] **165 — Freehand drawing mode: centre the canvas, add erase, add pan/zoom, and real undo/redo. DONE — v7.35, v7.77, v7.78, v8.01, v8.02.**
       (14 Aug, with a phone screenshot at v7.05.) Four things, in his words:
       1. *"I don't like how it puts the screen to the bottom, needs to be in the middle."* His shot shows
          the canvas shoved down against the tool bar with a large empty band above it — the drawing
@@ -3133,12 +3133,21 @@ better still, keep working inside the turn rather than parking work for a later 
       not on maths**, since where the line appears is the only thing that matters here.
       **So the ZOOM half of your request is done**, using the ⛶ view bar's existing zoom controls, which
       keep working while you draw — no second set of buttons inside the drawing bar.
-      **STILL OPEN: the "grab the screen" half — panning.** It is trivially available now (`FM.viewport`
-      has `x`, `y` and `apply()`), but it needs its GESTURE decided rather than guessed, and that is a
-      real design call: one finger already means draw; the drawing bar is already full at 380px (measured
-      347px of content in a 355px box, so an eighth button overflows it); and two-finger drag is probably
-      right on touch with something else again on desktop. **Left for a decision rather than settled
-      overnight.**
+      **AND THE PAN — DONE v8.02.** I wrote above that the gesture was a decision for you; on writing the
+      constraints down it turned out to decide itself, so it did not need to wait. One finger already
+      means DRAW and cannot be reassigned. The drawing bar is already full at 380px (347px of content in
+      a 355px box), so an eighth toggle overflows it. And a mode you must switch into is worse than one
+      you simply do. **A two-finger scroll satisfies all three**: it is what people already use to move a
+      canvas everywhere else, it needs no control at all, and it cannot collide with drawing because a
+      wheel event is not a pointer. Shift+wheel pans horizontally so a one-wheel mouse is not stuck.
+      Measured: a scroll while drawing moves the viewport 120px and the surface stays on the canvas.
+      *One honest correction: I first claimed the overlay stays with the canvas because the code re-syncs
+      it. The mutation disproved that — removing the re-sync changed nothing, because `#draw-overlay` is
+      a CHILD of the wrapper the viewport transforms, so a translate carries it for free. The call is
+      kept for a SCALE change, which does alter the local box, and the comment now says so.*
+
+      **#165 IS NOW COMPLETE** — centring (v7.35), erase (v7.78), undo/redo (v7.77), zoom (v8.01),
+      pan (v8.02).
 
       **What is left is genuinely small.** `redraw()` and `dispScale()` derive from the canvas's SCREEN
       rect as well, so they want checking in the same pass — if the box moves to local space and the ink

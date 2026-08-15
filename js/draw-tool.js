@@ -621,6 +621,33 @@ window.FM = window.FM || {};
       window.addEventListener('pointermove', onMove, true);
       window.addEventListener('pointerup', onUp, true);
       window.addEventListener('pointercancel', onUp, true);   // OS-cancelled stroke finalizes like a normal release instead of being silently lost
+      /* PANNING, WITH NO BUTTON (v8.02, queue 165.3). Ezra: "another option that lets you grab the
+       * screen and zoom in or out so you can do more detailed drawing."
+       * The gesture chose itself once the constraints were written down: one finger already means DRAW
+       * and cannot be reassigned; the drawing bar is already full at 380px (measured 347px of content in
+       * a 355px box, so an eighth toggle overflows it); and a mode you have to switch into is a worse
+       * answer than one you simply do. A two-finger scroll — the trackpad and mouse-wheel gesture people
+       * already use to move a canvas around in every other tool — needs no control at all and cannot
+       * collide with drawing, because a wheel event is not a pointer.
+       * Shift+wheel pans horizontally, which is the convention everywhere else, so a mouse with one
+       * wheel is not stuck on one axis.
+       * `passive: false` because it must preventDefault — otherwise the page scrolls underneath and the
+       * canvas appears to fight you. */
+      window.addEventListener('wheel', function (e) {
+        if (!FM.drawTool.active || !FM.viewport) return;
+        if (!overlay || overlay.style.display === 'none') return;
+        e.preventDefault();
+        var dx = e.shiftKey ? -e.deltaY : -e.deltaX;
+        var dy = e.shiftKey ? 0 : -e.deltaY;
+        FM.viewport.x += dx;
+        FM.viewport.y += dy;
+        FM.viewport.apply();
+        /* Kept for a SCALE change, not for the pan: the overlay is a child of the wrapper the viewport
+         * transforms, so a pure translate carries it along with no JavaScript at all — verified by
+         * mutation, which removed this line and changed nothing. A zoom does change the wrapper's scale
+         * and therefore the local box, and that is what this is here for. */
+        syncOverlay(); redraw();
+      }, { passive: false });
       window.addEventListener('resize', function () { if (FM.drawTool.active) syncOverlay(), redraw(); });
       // The preview canvas can also be re-sized WITHOUT a window resize — the adaptive quality tier
       // re-allocates it the moment a drag starts, which is exactly when you are drawing. The overlay
