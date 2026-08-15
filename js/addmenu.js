@@ -138,14 +138,42 @@ window.FM = window.FM || {};
        nib, which reads as "a wavy line" rather than as the tool you draw with. Drawn as body + ferrule
        band + tip band, because a bare angled rectangle at 22px is a stick — the two cross-strokes are
        what make it legible as a pencil at this size. */
-    { label: 'Freehand Drawing', icon: ico('<path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/><path d="M14.2 7.3l2.5 2.5"/><path d="M5.1 16.4l2.5 2.5"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
+    /* QUEUE 163, and the shape of it is worth keeping. Ezra: "get multiple agents with really high
+       standards to not accept it until it's perfect." Three judges — an icon designer, a first-time
+       user and a pixel engineer — rejected the v7.04 pencil 0/3 at 24px, which is the only size that
+       decides anything here (it is the add-menu cell). Their converging faults:
+         · a HOLLOW outline whose ~1.5px counter turns to mush at 24px — "reads as a paperclip or pill"
+         · both details that make it a pencil (the ferrule band, the nib line) die at that size, so what
+           survives is a capsule with a dark nick in it
+         · and the concept fault, which is the one that mattered: a bare pencil is the universal EDIT
+           glyph. Nothing in it said "draw by hand".
+       So the body is FILLED — no counter left to lose — and a stroke trails from the tip, which is what
+       turns an edit pencil into a drawing tool. The geometry is the OLD pencil's, deliberately: my first
+       attempt redrew the body from scratch to make it solid and lost the pencil entirely (it read as a
+       marker at 96px). Filling the shape that already worked fixed the fault without inventing a new
+       problem. The stroke is one deep S rather than a ripple, because a shallow one flattened to a dash
+       at 24px, and it starts under the nib rather than beside it so it reads as a line coming OUT of the
+       pencil. See tests/_iconsheet.html — it renders both icons at 24/48/96 on the real cell colour. */
+    { label: 'Freehand Drawing', icon: ico('<g transform="translate(2.4,-2.6) scale(0.9)" fill="currentColor" stroke="none"><path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/></g><path d="M6.2 18.7c1.7-2.7 3.4 2.7 5.1 0"/>'), add: function () { FM.startDraw && FM.startDraw('freehand'); } },
     /* …and Vector stops being a pencil too, which is not scope creep but the other half of the same
        change: its old mark was ALSO a pencil silhouette (with two anchor dots), so giving Freehand the
        pencil would have left two pencils side by side in one list. That is the fault the Elements cube
        note records — "at 22px the two were nearly the same mark and neither told you what it opened".
        A curve between two anchor squares is what vector drawing IS, and it shares nothing with a pencil
        at any size. */
-    { label: 'Vector Drawing', icon: ico('<path d="M4.6 17.6c5.4 0 5.6-11 10.8-11"/><rect x="2.1" y="15.6" width="4" height="4" rx=".7"/><rect x="17.9" y="4.6" width="4" height="4" rx=".7"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
+    /* …and the same three judges on the vector mark (queue 163). Two construction faults and one that
+       is really about this app:
+         · the curve entered the lower anchor at its CORNER and ate the counter, so that anchor rendered
+           as a "G"; and the two anchors did not match each other in size or weight
+         · at 24px a 4px square with a 1px counter fills in and reads as dirt
+         · and: in a VIDEO editor, a curve between two square nodes is the standard easing / keyframe
+           graph icon. The first-time-user judge's first guess was "speed curve", not "drawing tool".
+       So: 5.2px anchors that survive, the curve BUTT-CAPPED so it stops flat at each anchor's edge
+       instead of fusing into it with a fillet, and a control handle with a solid knob. The handle is the
+       part that says pen tool rather than graph — an easing curve never has one hanging off it. The knob
+       is solid because as a 1px ring its counter half-closed at 24px into a grey blob beside two crisp
+       square counters. */
+    { label: 'Vector Drawing', icon: ico('<path d="M5 16.6c0-5.6 8-3.2 8-8.8" stroke-linecap="butt"/><rect x="2.4" y="16.6" width="5.2" height="5.2" rx=".9"/><rect x="10.4" y="2.6" width="5.2" height="5.2" rx=".9"/><path d="M15.6 5.2h3.4" stroke-linecap="butt"/><circle cx="20.5" cy="5.2" r="1.5" fill="currentColor" stroke="none"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [

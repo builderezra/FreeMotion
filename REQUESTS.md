@@ -2803,7 +2803,7 @@ better still, keep working inside the turn rather than parking work for a later 
       the safe area. So the boot script marks the document while the splash shows and both go black
       together, and the mark is dropped when the splash is removed, restoring the themed light.
 
-- [ ] **163 — Make the pencil and vector drawing icons genuinely good, judged to a high bar.** (14 Aug.)
+- [x] **163 — Make the pencil and vector drawing icons genuinely good, judged to a high bar. DONE v7.72 — 3/3 sign-off after three rounds.** (14 Aug.)
       His words: *"Make the logos for the pencil drawing and freehand drawing better, get multiple agents
       with really high standards to not accept it until it's perfect."*
       So the two icons v7.04 just changed (#161) are a starting point, not the finish. The verification is
@@ -2813,6 +2813,33 @@ better still, keep working inside the turn rather than parking work for a later 
       rounds and a dry-round counter, never an open loop on a judge's own answer. Each round renders the
       candidates at 24 / 48 / 96px (24 is the size that actually matters — it is the shape-picker cell)
       and hands the sheet to judges who score and critique; I revise and re-render.
+
+      **DONE v7.72. Three rounds, hard-capped, and the judges rejected me twice before signing off 3/3.**
+
+      | round | verdict |
+      |---|---|
+      | 1 — the shipped v7.04 pair | **0/3 accept**, and 2 of 3 said the two could not be told apart at 24px |
+      | 2 — first revisions | 1/3, pair chosen 2–1, new vector unanimous |
+      | 3 — their three nits fixed | **3/3 ship, no blocking faults** |
+
+      **What they found that I would not have.** The pencil was a hollow outline whose counter turns to
+      mush at 24px — "reads as a paperclip" — and both details that make it a pencil (ferrule band, nib
+      line) die at that size. But the real one is the concept: **a bare pencil is the universal EDIT
+      glyph**, so it said "rename this", not "draw by hand". And on the vector: in a VIDEO editor a curve
+      between two square nodes is the standard easing / keyframe-graph icon — the first-time-user judge's
+      first guess was *"speed curve"*. Neither of those is a thing I would have got to alone, which is
+      the whole point of the arrangement you asked for.
+      **What shipped.** The pencil keeps its old geometry but FILLED (no counter left to lose) with a deep
+      S-stroke trailing from under the nib — that stroke is the difference between an edit pencil and a
+      drawing tool. The vector is a pen tool: 5.2px anchors that survive, the curve butt-capped so it
+      stops flat at each edge instead of fusing into it, and a control handle with a solid knob, which is
+      the part that says pen rather than graph.
+      **Two dead ends, recorded because they were mine.** My first "solid" pencil redrew the body from
+      scratch and lost the pencil — at 96px it read as a marker. My first trailing stroke flattened to a
+      dash at 24px because its amplitude was too small for its weight. Both caught by the judges, not by
+      me.
+      `tests/_iconsheet.html` renders every candidate at 24/48/96 on the real cell colour and is
+      committed — the next icon argument should not begin by rebuilding the rig.
 
 - [ ] **164 — A freehand stroke gets THICKER the moment you let go.** (14 Aug.) His words: *"When I do
       freehand drawing and finish a stroke it will for some reason make the stroke thicker when I let go

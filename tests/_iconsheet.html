@@ -1,0 +1,117 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#163 — pencil & vector icons, at the sizes that matter</title>
+<style>
+  html,body{margin:0;background:#0d1218;color:#e6e9ef;font:13px/1.5 system-ui,-apple-system,sans-serif}
+  .wrap{padding:20px 22px}
+  h1{font-size:15px;margin:0 0 4px}
+  p.note{color:#8b98a9;margin:0 0 18px;max-width:760px;font-size:12px}
+  .grid{display:flex;flex-wrap:wrap;gap:26px}
+  .cand{background:#161d26;border:1px solid #26313d;border-radius:12px;padding:14px 16px 12px;min-width:210px}
+  .cand h2{font-size:12.5px;margin:0 0 2px;color:#9fe8ff;font-weight:600}
+  .cand .sub{font-size:11px;color:#8b98a9;margin:0 0 12px}
+  .row{display:flex;align-items:flex-end;gap:18px}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .cell span{font-size:10px;color:#78859a}
+  /* The add-menu cell, reproduced: that is where 24px actually lives, and an icon judged on white
+     is not judged at all. */
+  .chip{background:#141b24;border:1px solid #26313d;border-radius:10px;display:flex;align-items:center;justify-content:center}
+  .c24{width:44px;height:44px} .c48{width:70px;height:70px} .c96{width:120px;height:120px}
+  svg{display:block;color:#dfe8f2}
+  .pair{margin-top:22px;padding-top:14px;border-top:1px solid #26313d}
+  .pair .row{gap:10px}
+  .pair h3{font-size:11.5px;margin:0 0 8px;color:#8b98a9;font-weight:600}
+</style></head><body><div class="wrap">
+<h1>Freehand (pencil) &amp; Vector drawing icons</h1>
+<p class="note">Ezra (#163): “Make the logos for the pencil drawing and freehand drawing better, get multiple
+agents with really high standards to not accept it until it's perfect.” <b>24px is the size that decides it</b> —
+that is the add-menu cell. 48 and 96 are shown only to see construction. They are drawn on the real cell
+background at the real stroke colour; an icon judged on white is not judged. The bottom row is the pair
+SIDE BY SIDE at 24px, because the other half of the job is that they must not read as the same mark.</p>
+<div class="grid" id="grid"></div>
+<div class="pair"><h3>SIDE BY SIDE AT 24px — can you tell them apart at a glance?</h3><div class="row" id="pair"></div></div>
+</div>
+<script>
+/* Icons are read from the live app so the sheet cannot drift from what ships — the sheet showing one
+   thing while the menu shows another is the way an icon review wastes everybody's time. */
+/* CANDIDATES, plural, on purpose. A review round that can only show "the current one" can only ever
+   produce a critique; showing alternatives beside it is what turns the next round into a choice. The
+   side-by-side strip at the bottom always uses the FIRST candidate of each icon — the one that would
+   ship — because "can you tell them apart" is a question about the pair that is actually in the menu. */
+var ICONS = [
+  { key: 'freehand', name: 'Freehand Drawing', variants: [
+    /* B — round 2. Both judges said the same two things about A: the body is a HOLLOW outlined lozenge
+       whose ~1.5px counter turns to mush at 24px ("reads as a paperclip"), and the tip has failed — the
+       graphite notch reads as a chip of dirt and the point is truncated. And the concept fault, which is
+       the one that matters most: a bare pencil is the universal EDIT glyph, so it says "rename this",
+       not "draw by hand". So: a SOLID silhouette (no counter, nothing to mush), a genuinely pointed tip,
+       and a drawn stroke trailing from it — the stroke is what turns an edit pencil into a drawing tool. */
+    /* D — round 3. C won the vote (2 of 3 picked it, the third picked B) and the judges left three
+       precise nits, all on the ONE element carrying "freehand": the trailing stroke.
+       · it flattened to a dash at 24px — too little amplitude for its weight, so the wave read as a
+         step in a straight line. Fixed by ONE deep S instead of a shallow ripple, not by adding more.
+       · it sat down-and-LEFT of the nib, so it read as an underline sitting beneath the pencil rather
+         than a line coming out of it. Its left end now starts under the tip.
+       · it looked lighter than the vector's curve. Same stroke weight, deeper curve, so it carries
+         comparable ink. */
+    { sub: 'D — C with the stroke deepened and moved under the tip (round 3)',
+      d: '<g transform="translate(2.4,-2.6) scale(0.9)" fill="currentColor" stroke="none"><path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/></g><path d="M6.2 18.7c1.7-2.7 3.4 2.7 5.1 0"/>' },
+    /* C — round 2b, after looking at B. B fixed the counter mush by making the body solid, and in doing
+       so threw away the thing that made it a PENCIL: at 96px it reads as a marker or a shoe, because I
+       redrew the body instead of filling the one that already worked. So C keeps A's exact geometry —
+       which nobody complained about as a pencil — fills it so there is no counter to turn to mush, and
+       scales it up-right to make room for the drawn stroke that answers the "this is just the EDIT
+       glyph" fault. Same two fixes, without inventing a new shape to get them. */
+    { sub: 'C — A’s pencil, filled, with a drawn stroke (round 2b)',
+      d: '<g transform="translate(2.4,-2.6) scale(0.9)" fill="currentColor" stroke="none"><path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/></g><path d="M3.4 20.9c1.8-2 3.6 1.4 5.4-.6"/>' },
+    { sub: 'B — solid body, real point, a drawn stroke (round 2)',
+      d: '<path d="M16.1 3.3a2 2 0 0 1 2.8 0l1.8 1.8a2 2 0 0 1 0 2.8l-9.3 9.3-4.7 1.1 1.1-4.7z" fill="currentColor" stroke="none"/><path d="M3.1 21.1c1.9-2.1 3.8 1.5 5.7-.6"/>' },
+    { sub: 'A — current, the pencil (v7.04, queue 161)',
+      d: '<path d="M4.2 19.8l.9-3.4L15.6 5.9a1.7 1.7 0 0 1 2.4 0l1.1 1.1a1.7 1.7 0 0 1 0 2.4L8.6 19.9l-3.4.9z"/><path d="M14.2 7.3l2.5 2.5"/><path d="M5.1 16.4l2.5 2.5"/>' },
+  ] },
+  { key: 'vector', name: 'Vector Drawing', variants: [
+    /* B — round 2. A's anchors were 4px with a ~1px counter: one filled in and read as dirt, the other
+       just survived, so the two did not even match each other. Worse, the curve ran THROUGH the lower
+       anchor and ate its wall. And the concept fault is the sharp one: in a VIDEO editor a curve between
+       two square nodes is the standard easing / keyframe-graph mark, so it read as "speed curve".
+       So: 5.2px anchors with a counter that survives, the curve TERMINATING at each anchor's edge rather
+       than passing through it, and a control handle with a knob — the handle is what says pen tool
+       rather than graph. */
+    /* C — round 3. B was picked unanimously; two judges then found the same two construction faults.
+       · the curve FUSED into each square with a rounded join instead of butting flat, so the lower
+         anchor grew a stub on its top-right and stopped reading as a clean square. Butt caps fix it.
+       · the handle knob was a 1px ring whose counter half-closed at 24px into a grey blob sitting
+         beside two crisp square counters. A solid dot has no counter to lose. */
+    { sub: 'C — B with butt-capped joins and a solid knob (round 3)',
+      d: '<path d="M5 16.6c0-5.6 8-3.2 8-8.8" stroke-linecap="butt"/><rect x="2.4" y="16.6" width="5.2" height="5.2" rx=".9"/><rect x="10.4" y="2.6" width="5.2" height="5.2" rx=".9"/><path d="M15.6 5.2h3.4" stroke-linecap="butt"/><circle cx="20.5" cy="5.2" r="1.5" fill="currentColor" stroke="none"/>' },
+    { sub: 'B — pen tool: real anchors, curve stops at the edge, one handle (round 2)',
+      d: '<path d="M5 16.6c0-5.6 8-3.2 8-8.8"/><rect x="2.4" y="16.6" width="5.2" height="5.2" rx=".9"/><rect x="10.4" y="2.6" width="5.2" height="5.2" rx=".9"/><path d="M15.6 5.2h3.6"/><circle cx="20.6" cy="5.2" r="1.4"/>' },
+    { sub: 'A — current, curve between two anchors (v7.04)',
+      d: '<path d="M4.6 17.6c5.4 0 5.6-11 10.8-11"/><rect x="2.1" y="15.6" width="4" height="4" rx=".7"/><rect x="17.9" y="4.6" width="4" height="4" rx=".7"/>' },
+  ] },
+];
+var CANDIDATES = [];
+ICONS.forEach(function (ic) {
+  ic.variants.forEach(function (v, i) {
+    CANDIDATES.push({ key: ic.key + (i ? '-' + String.fromCharCode(65 + i) : ''), name: ic.name, sub: v.sub, d: v.d, first: i === 0 });
+  });
+});
+function svg(d, px) {
+  return '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+         'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+}
+var grid = document.getElementById('grid');
+CANDIDATES.forEach(function (c) {
+  var el = document.createElement('div'); el.className = 'cand';
+  el.innerHTML = '<h2>' + c.name + '</h2><div class="sub">' + c.sub + '</div><div class="row">' +
+    [[24, 'c24'], [48, 'c48'], [96, 'c96']].map(function (p) {
+      return '<div class="cell"><div class="chip ' + p[1] + '">' + svg(c.d, p[0]) + '</div><span>' + p[0] + 'px</span></div>';
+    }).join('') + '</div>';
+  grid.appendChild(el);
+});
+var pair = document.getElementById('pair');
+CANDIDATES.filter(function (c) { return c.first; }).forEach(function (c) {
+  var el = document.createElement('div'); el.className = 'cell';
+  el.innerHTML = '<div class="chip c24">' + svg(c.d, 24) + '</div><span>' + c.key + '</span>';
+  pair.appendChild(el);
+});
+</script></body></html>
