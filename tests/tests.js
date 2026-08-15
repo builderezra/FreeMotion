@@ -14561,6 +14561,46 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #148: the edges of a clip stop clicking ----------------
+   * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears."
+   * Measured first (tests/_pops.html): the sync controller is NOT the cause — under real load it makes
+   * zero seeks and zero trims. What that probe could not test is a clip BOUNDARY, because six seconds
+   * of continuous playback never crosses one. The element was paused and resumed with no ramp, cutting
+   * the waveform dead at whatever sample it was on, which is the textbook way to make a click.
+   * This is NOT claimed to be his bug — I cannot hear a click from here. It is a defect on its own
+   * terms, and these are the properties that make the cure safe rather than a new bug. */
+  test('audio: a clip fades its own edges instead of cutting the waveform dead', { item: 'audio-declick' }, function () {
+    if (typeof FM._declickGain !== 'function') throw new Error('FM._declickGain is missing — the edge envelope has no testable seam');
+    var g = FM._declickGain;
+    var L = { start: 10, duration: 4 };   // 10s → 14s
+    var now = 1000;
+
+    // THE CONTROL: the middle of a clip must be untouched. An envelope that is not 1.0 in the body of
+    // the clip is not a de-click, it is a volume bug — and every assertion below would still pass.
+    if (g(L, 12, null, now) !== 1) throw new Error('control failed: the middle of the clip is being attenuated to ' + g(L, 12, null, now) + ' — that is not an edge fade, that is a volume bug');
+
+    // Silent AT the boundary, both ends — that is the whole point.
+    if (g(L, 10, null, now) !== 0) throw new Error('the clip opens at full volume on its first sample (' + g(L, 10, null, now) + ') — an instant start mid-waveform is a click');
+    if (g(L, 14, null, now) !== 0) throw new Error('the clip is still at ' + g(L, 14, null, now) + ' at the instant it ends — cutting there is the click');
+
+    // …and it must reach silence BY the end, not after it. Fading once the boundary arrives would
+    // bleed the source audio past the clip, which is exactly what #1/#8 fixed.
+    if (!(g(L, 13.99, null, now) < 0.5)) throw new Error('10ms before the end the clip is still at ' + g(L, 13.99, null, now) + ' — the fade is not anticipatory, so it either clicks or bleeds past the clip');
+    if (!(g(L, 10.01, null, now) < 0.5)) throw new Error('10ms after the start the clip is already at ' + g(L, 10.01, null, now));
+
+    // The ramp has to be long enough to survive coarse sampling. Under load the sync tick was measured
+    // 100ms apart; a 5ms ramp would be stepped straight over on exactly the machine that needs it.
+    var mid = g(L, 10.03, null, now);
+    if (!(mid > 0.4 && mid < 1)) throw new Error('30ms in the envelope reads ' + mid + ' — the ramp is too short to be sampled at all by a tick that can be 100ms apart');
+
+    // Starting playback MID-CLIP is the same click in the place you notice it most.
+    var m = { _resumedAt: now };
+    if (g(L, 12, m, now) !== 0) throw new Error('pressing play in the middle of a clip opens the element at ' + g(L, 12, m, now) + ' — full volume on an arbitrary sample');
+    if (!(g(L, 12, m, now + 30) > 0.4)) throw new Error('the resume fade has not lifted 30ms in');
+    if (g(L, 12, m, now + 500) !== 1) throw new Error('the resume fade never finishes — playback would stay quiet for the rest of the clip');
+    if (m._resumedAt !== 0) throw new Error('the resume marker was not cleared, so the fade would re-run every tick forever');
+  });
+
   /* ---------------- #147 second half: the text editor stops charging the canvas rent ----------------
    * Ezra: "the text edit stuff on pc for some reason covers up the canvas, making it smaller when you
    * could just put it in the add menu, so it doesnt take up real estate on the screen."

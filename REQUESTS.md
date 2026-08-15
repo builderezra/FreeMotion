@@ -2345,10 +2345,18 @@ better still, keep working inside the turn rather than parking work for a later 
       **Why it is not done in this pass:** the entry's own instruction is to measure before changing, and
       I can measure a seek count but I cannot hear a click from here. Shipping a de-click on the strength
       of a code read would be the same move that made the film-grain fix wrong four times.
-      **One line from you settles it: does the popping happen on a LOOP or at a clip edge, or right
-      through the middle of one long clip?** If it is the boundary, the fix above is half an hour. If it
-      is mid-clip, then it is the browser's own decoder struggling under our main-thread load, and the
-      real answer is #125/#69 rather than anything in this entry.
+      **THE BOUNDARY FADE IS DONE (v7.66)** — built without waiting for your answer, because an abrupt
+      cut of a playing waveform is a defect whether or not it is *your* pop. Every clip edge now fades
+      over 45ms: anticipatory, so it reaches zero AT the boundary rather than bleeding past it, and
+      45ms rather than the textbook 5ms because this is evaluated once per sync tick and those ticks
+      were measured 100ms apart under load — a 5ms ramp would be stepped straight over on exactly the
+      struggling machine that needs it. Pressing play mid-clip gets the same fade, which is the same
+      click in the place you notice it most.
+      **I am NOT claiming this fixes your report.** I cannot hear a click from here.
+      **One line from you still settles it: does the popping happen on a LOOP or at a clip edge, or
+      right through the middle of one long clip?** If the edges were it, v7.66 has it. If it is mid-clip,
+      it is the browser's own decoder struggling under our main-thread load and the real answer is
+      #125/#69 — and this entry can be closed as a red herring with a useful fix attached.
       **FOUND AND FIXED, v6.91 — and you were right that it is tied to the lag, though not by the route
       I expected.** Five independent readings of the audio path found nothing that survived a skeptic
       (no ScriptProcessor anywhere, so lag cannot starve the audio thread; no double-connect; no

@@ -1079,6 +1079,45 @@ window.FM = window.FM || {};
     return { action: 'hold', rate: base };
   };
   // Playback instrumentation — what the picture gave up so the sound could keep going.
+  /* DE-CLICK THE EDGES (queue 148) -----------------------------------------------------------------
+   * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears."
+   * Measured (tests/_pops.html) that the sync controller is NOT the cause — under real load it makes
+   * zero seeks and zero trims. What it did not test, because six seconds of continuous playback never
+   * crosses one, is a clip BOUNDARY: the element was paused and resumed with no ramp at all, cutting
+   * the waveform dead at whatever sample it happened to be on. That is the textbook way to make a
+   * click, and a loop crosses one every lap.
+   *
+   * ANTICIPATORY, not a fade-on-pause. Easing down only once the boundary has arrived would bleed the
+   * source audio past the end of the clip — which is exactly what #1/#8 fixed and what the comment on
+   * the pause line defends. So the envelope is computed from the transport clock and reaches zero AT
+   * the boundary, not after it.
+   *
+   * 45ms because it has to survive coarse sampling: this is evaluated once per sync tick, and under
+   * the load in that same measurement the ticks were 100ms apart. A 5ms ramp — enough in a sample-
+   * accurate graph — would be stepped straight over and do nothing at all on exactly the struggling
+   * machine that needs it. 45ms is inaudible as a fade and cannot be skipped.
+   *
+   * It MULTIPLIES the user's own fades rather than replacing them, so a clip that already fades out
+   * over a second is unaffected: it is at zero long before this envelope starts. */
+  const DECLICK_S = 0.045;
+  function declickGain(layer, t, m, now) {
+    let k = 1;
+    const into = t - layer.start;
+    const left = (layer.start + layer.duration) - t;
+    if (into < DECLICK_S) k = Math.min(k, Math.max(0, into) / DECLICK_S);
+    if (left < DECLICK_S) k = Math.min(k, Math.max(0, left) / DECLICK_S);
+    /* …and the same courtesy when playback STARTS mid-clip, which the clip-relative terms above cannot
+     * see. Scrubbing into the middle of a song and pressing play used to open the element at full
+     * volume on an arbitrary sample — the same click, in the one place you notice it most. */
+    if (m && m._resumedAt) {
+      const since = (now - m._resumedAt) / 1000;
+      if (since < DECLICK_S) k = Math.min(k, Math.max(0, since) / DECLICK_S);
+      else m._resumedAt = 0;
+    }
+    return Math.max(0, Math.min(1, k));
+  }
+  FM._declickGain = declickGain;   // exposed for the suite
+
   FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0 };
 
   // Jump the playhead to t and resync video/audio (used by loop + loop-region wrap).
@@ -1169,6 +1208,10 @@ window.FM = window.FM || {};
             const decEnd = (isFinite(m.duration) && m.duration > 0) ? m.duration : 0;
             const srcEnd = Math.max(elEnd, decEnd) || Infinity;
             if (local >= srcEnd) { try { m.el.muted = true; } catch (e) {} return; }
+            // Open SILENT and let declickGain bring it up: play() on an arbitrary sample at full volume
+            // is the same click as pausing on one, and this is the path a loop takes every lap. (#148)
+            try { m.el.volume = 0; } catch (e) {}
+            m._resumedAt = now;
             m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {});   // re-entered the window → resume
           }
           else {
@@ -1222,7 +1265,8 @@ window.FM = window.FM || {};
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
-          const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);   // keyframed volume animates on forward clips
+          const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration)
+                    * declickGain(layer, FM.time, m, now);   // keyframed volume animates on forward clips; the last term is the edge de-click (#148)
           // A soloed layer silences the others' AUDIO too, matching the picture (compositor) and the
           // exported soundtrack (exporter buildAudioMix). Mute rather than pause so un-soloing resumes
           // instantly without a re-seek.
@@ -1326,7 +1370,10 @@ window.FM = window.FM || {};
         m._errBias = null; m._rateAt = 0; m._baseRate = null;
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
-        m.el.volume = Math.max(0, Math.min(1, FM.layerVolume(layer, FM.time)));
+        // Pressing PLAY is the other place a waveform gets opened at an arbitrary sample — and the one
+        // you hear most often. Start at zero; the sync tick's declickGain lifts it over 45ms. (#148)
+        m._resumedAt = performance.now();
+        m.el.volume = 0;
         m.el.play().catch(() => {});
       }
     });
