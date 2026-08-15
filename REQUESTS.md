@@ -4182,7 +4182,7 @@ wait for them to report back."*
         often unset and the field would simply not be there. A decoration that appears or not depending
         on which way you arrived is worse than one that does not exist.
 
-- [ ] **237 — PC: the pull-down slam Easter egg breaks the screen.** His words: *"on PC, when you do the
+- [x] **237 — PC: the pull-down slam Easter egg breaks the screen. DONE v7.87 — same cause as #239.** His words: *"on PC, when you do the
       Easter egg where you pull down and then it slams back up in the home menu, it kinda breaks the
       screen when you do it. Might need to fix that a bit. It kinda looks a bit tacky."*
 
@@ -4203,7 +4203,7 @@ wait for them to report back."*
       flick length depends on the machine. It is now spent-until-the-gesture-ends, re-arming on the same
       130ms silence the release path already uses, so one gesture is exactly one slam at any speed.
 
-- [ ] **239 — The black bar is STILL there, and it happens during the slam.** His words: *"the black bar
+- [x] **239 — The black bar is STILL there, and it happens during the slam. DONE v7.87 — and it was the slam's OWN ring.** His words: *"the black bar
       glitch where the black bar comes up onto the side of the screen still happens, and it seems to
       happen when you, like, do the easter egg thing where you're slamming the screen and stuff."*
       **This is the lead the earlier black-bar entries never had** — see #187 and the queue-154 work,
@@ -4211,6 +4211,23 @@ wait for them to report back."*
       happens when you slam" is a reproduction step, and the slam is exactly the moment the screen is
       TRANSFORMED (translate + rotate) with a 140px box-shadow ring standing in for the surround. Start
       there rather than re-reading the background rules.
+
+      **FOUND, and it was the ring itself.** Not something showing through from behind — the fix for a
+      DIFFERENT bug, gone stale. #144 gave the slam a `box-shadow: 0 0 0 140px var(--bg)` so the shake
+      could not reveal the editor behind home. At the time home was a FLAT surface, so a flat ring
+      matched it exactly and that fix was right. Home is not flat any more: it carries the drifting light
+      on its own pseudo-elements and, since v7.76, a grain field. The ring stayed flat. So every slam
+      painted a band of dead `#060c0f` hard against a lit, textured surface — a black bar, at the edge,
+      during the slam, exactly as you said.
+      **Your "it happens when you do the easter egg" is what cracked it** after three passes chased it as
+      a paint problem behind the page.
+      A box-shadow cannot carry a gradient, so the ring is gone and the shake runs with a **6% scale**
+      that tapers back to 1: home's own surface fills the edges and nothing behind it can appear, which
+      is the same guarantee without a second surface to keep in step. The overscan is arithmetic and my
+      first attempt was wrong — 1.03 gives 13.2px against a 13px travel, 0.2px of margin before the twist
+      takes ~8px at the corners; 1.06 gives 26px against a worst case near 21.
+      **Verified** by painting the editor bright red and sampling home's box 24 times across the whole
+      420ms: largest uncovered edge **0px**.
 
 - [x] **240 — PC: the export button's border is too big and crosses the divider line. DONE v7.84.** (15 Aug, with a
       screenshot at v7.83.) His words: *"The export buttons border is too big so it goes over the divider

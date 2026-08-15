@@ -3184,17 +3184,36 @@ body.hm-selecting .hm-card { touch-action: none; }
    costs one solid rect and no layout.
    Only while .hm-slam is on — an always-on 140px shadow would be paint work for a state that lasts
    420ms and happens almost never. */
-#home-screen.hm-slam { box-shadow: 0 0 0 140px var(--bg, #0b0e14); }
+/* THE RING IS GONE (v7.87, queue 237 + 239), and it turns out the ring WAS the black bar.
+   Queue 144 added `box-shadow: 0 0 0 140px var(--bg)` so the shake could not reveal the editor behind
+   home, and at the time home was a flat surface so a flat ring matched it exactly. Home is not flat any
+   more: it carries the drifting light on its own ::before/::after and, since v7.76, a grain field. The
+   ring stayed flat. So every slam painted a band of dead #060c0f right up against a lit, textured
+   surface — which is precisely what Ezra has been reporting: "the black bar glitch where the black bar
+   comes up onto the side of the screen still happens, and it seems to happen when you, like, do the
+   easter egg thing where you're slamming the screen". It was not a paint bug behind the page. It was
+   the fix for a different bug, gone stale because the thing it was matching changed.
+   A shadow cannot carry a gradient, so the answer is to stop uncovering anything: the shake now runs
+   with a 3% scale, which more than covers its own 13px of travel and .34deg of twist, so home's OWN
+   surface — light, grain and all — is what fills the edges. Nothing behind it can show, which is the
+   guarantee the ring existed to give, without a second surface that has to be kept in step with the
+   first. The scale also reads as part of the impact rather than as compensation. */
 #home-screen.hm-slam { animation: hm-slam 420ms cubic-bezier(.25,.6,.3,1) both; }
+/* THE OVERSCAN IS ARITHMETIC, not a look. A scale of S on a viewport of height H pushes each edge out
+   by H*(S-1)/2, and that has to beat the frame's own travel plus what the rotation swings at the
+   corners. My first pass used 1.03 and it was wrong by inspection: on an 880px window that is 13.2px of
+   overscan against a 13px translate — 0.2px of margin, before the .34deg twist takes ~8px at the
+   corners of a 1400px width. 1.06 gives 26px against a worst case near 21, which holds on short windows
+   too. It tapers with the shake and lands exactly at 1, so the screen finishes where it started. */
 @keyframes hm-slam {
-  0%   { transform: translate3d(0, 13px, 0) rotate(0deg); }
-  12%  { transform: translate3d(0, -11px, 0) rotate(-.34deg); }
-  26%  { transform: translate3d(3px, 8px, 0) rotate(.26deg); }
-  40%  { transform: translate3d(-3px, -6px, 0) rotate(-.19deg); }
-  55%  { transform: translate3d(2px, 4px, 0) rotate(.12deg); }
-  70%  { transform: translate3d(-1px, -2.5px, 0) rotate(-.07deg); }
-  85%  { transform: translate3d(0, 1px, 0) rotate(0deg); }
-  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  0%   { transform: translate3d(0, 13px, 0) rotate(0deg) scale(1.06); }
+  12%  { transform: translate3d(0, -11px, 0) rotate(-.34deg) scale(1.06); }
+  26%  { transform: translate3d(3px, 8px, 0) rotate(.26deg) scale(1.05); }
+  40%  { transform: translate3d(-3px, -6px, 0) rotate(-.19deg) scale(1.04); }
+  55%  { transform: translate3d(2px, 4px, 0) rotate(.12deg) scale(1.03); }
+  70%  { transform: translate3d(-1px, -2.5px, 0) rotate(-.07deg) scale(1.018); }
+  85%  { transform: translate3d(0, 1px, 0) rotate(0deg) scale(1.008); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
 }
 .hm-thumb { position: relative; flex: 0 0 86px; width: 86px; height: 86px; border-radius: 11px; background: #05070b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
