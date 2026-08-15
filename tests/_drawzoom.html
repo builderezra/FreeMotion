@@ -116,6 +116,28 @@ iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
         L.push('  overlay matches canvas ' + (or2 && Math.abs(or2.width - cr2.width) < 2 && Math.abs(or2.height - cr2.height) < 2 ? 'YES' : 'NO'));
         L.push('  error                  ' + err2.toFixed(1) + 'px   <-- if this collapses, the overlay was STALE, not wrong');
         L.push('');
+        /* VALIDATE THE PROPOSED FIX WITHOUT WRITING IT. The overlay lives inside #canvas-wrap, which is
+           what the viewport transforms, so its CSS box is in the WRAPPER'S LOCAL space while
+           getBoundingClientRect() is in SCREEN space — feeding one into the other applies the zoom
+           twice. The proposed fix divides the screen delta by the wrapper's applied scale. That scale
+           is derived from the wrapper itself (rect width vs offsetWidth) rather than read from
+           FM.viewport, so it stays correct whatever applies the transform.
+           Computing it here proves the arithmetic before anyone edits the tool — a wrong stroke position
+           is the bug #97 spent four rounds on, and it is invisible in a screenshot. */
+        var wrap = d.getElementById('canvas-wrap');
+        if (wrap) {
+          var wr2 = wrap.getBoundingClientRect();
+          var k = (wrap.offsetWidth && wr2.width) ? (wr2.width / wrap.offsetWidth) : 1;
+          var wantW = cr2.width / k, wantH = cr2.height / k;
+          L.push('THE PROPOSED FIX, CHECKED ON PAPER (nothing edited)');
+          L.push('  wrapper applied scale  ' + k.toFixed(3) + '   (rect ' + Math.round(wr2.width) + ' / offset ' + wrap.offsetWidth + ')');
+          L.push('  overlay box today      ' + Math.round(or2.width) + ' x ' + Math.round(or2.height) + '  (screen rect fed in as a local box)');
+          L.push('  overlay box under fix  ' + Math.round(wantW) + ' x ' + Math.round(wantH) + '  (screen rect / applied scale)');
+          L.push('  canvas LOCAL box       ' + pv.offsetWidth + ' x ' + pv.offsetHeight + '   <-- the target');
+          var ok = Math.abs(wantW - pv.offsetWidth) < 2 && Math.abs(wantH - pv.offsetHeight) < 2;
+          L.push('  fix lands on target    ' + (ok ? 'YES — the arithmetic holds, this is the change to make' : 'NO — the mechanism is still not fully understood, do not write it yet'));
+          L.push('');
+        }
         L.push('READ IT: an error that stays near zero means the coordinate maths ALREADY survives a zoom,');
         L.push('and the reset on entry is the only thing standing between him and the feature — in which');
         L.push('case point 3 is a toggle plus deleting one line. A large error means the overlay really');

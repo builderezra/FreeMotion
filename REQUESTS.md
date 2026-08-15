@@ -3083,6 +3083,22 @@ better still, keep working inside the turn rather than parking work for a later 
       **So the fix is: size and place the overlay in the wrapper's own space** (`offsetWidth`/`offsetLeft`,
       or the screen rect divided by the live viewport scale) rather than from the screen rect. Re-run
       `tests/_drawzoom.html` afterwards — the 2× error should fall to the control's 0.8px.
+
+      **THE ARITHMETIC IS ALREADY CHECKED — on paper, in the probe, with nothing edited.** At 2×:
+      | | |
+      |---|---|
+      | wrapper's applied scale | **2.000** (rect 492 / offsetWidth 246) — derived from the wrapper itself |
+      | overlay box today | 984 × 1501 (a screen rect fed in as a local box) |
+      | overlay box under the fix | **246 × 375** |
+      | canvas LOCAL box — the target | **246 × 375** |
+      It lands exactly. **Derive the scale from the wrapper (`rect.width / offsetWidth`), not from
+      `FM.viewport.scale`** — that way it stays right whatever applies the transform, and it cannot drift
+      from a second source of truth.
+      **What is left is genuinely small, and here is the one trap in it:** `redraw()` and `dispScale()`
+      compute stroke coordinates from the canvas's SCREEN rect too, so they need the same treatment in
+      the same pass. Changing the box without them would move the overlay and leave the ink behind —
+      which is a WORSE bug than the one being fixed, and invisible in a screenshot. The probe's error
+      figure is the check: it must fall to the control's 0.8px, and it measures exactly that path.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
