@@ -3696,6 +3696,15 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       This entry had no evidence attached for five rounds of asking precisely because every one of these
       was a bare `console.warn`. **The next occurrence answers itself.**
 
+      **CHECKED END TO END, 16 Aug — the toast really does reach the screen**, which was worth proving
+      rather than assuming: a diagnostic that only exists in a unit test is no use at the moment you
+      need it. Building the scene his report describes (a clip whose audio cannot be read) produces, on
+      screen and visible: **"Exporting with NO SOUND — 1 audio clip could not be read (see the console)"**,
+      with the console naming it: *"Boom SFX (no file on its media record — a bundled or URL-backed
+      clip?)"*.
+      **So when it happens to you again, read the toast and the console line and send me those** — that
+      is the whole answer, and it takes one screenshot.
+
 - [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
