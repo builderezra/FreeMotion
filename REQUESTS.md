@@ -590,12 +590,26 @@ better still, keep working inside the turn rather than parking work for a later 
       copy when the video has not moved. A finger held still on the timeline re-renders continuously at
       one source time — and since v7.57 stopped the pointless re-seeking, the element really does stay
       put there — so that case was re-copying four megapixels a frame for a byte-identical result.
-      **What is left of this, honestly:** during PLAYBACK every frame is genuinely new, so the copy is
-      still paid per frame. Shrinking it is the real win (half size is 4.4× cheaper) and it is NOT a
-      one-liner: the composite samples that canvas in SOURCE pixel coordinates for the crop rect, so a
-      smaller canvas would crop the wrong part of the picture. Every consumer that indexes it in source
-      pixels has to be found and scaled with it. Recorded with the payoff and the obstacle so the next
-      pass is a build rather than a hunt.
+      **AND THE SHRINK IS DONE TOO, v7.59 — with two corrections to what I wrote above.**
+      · **The obstacle I recorded did not exist.** I said the composite samples that canvas in source
+        pixel coordinates so a smaller one would crop wrongly. It does sample in source coordinates —
+        and it has always RESCALED them by the source's real size, because the frame cache has produced
+        downscaled bitmaps for years. Grade and key likewise draw the source into their own output box.
+        The composite was already built for exactly this. Reading it beat assuming, again.
+      · **My first implementation was a PESSIMISATION and only measuring caught it.** Capping the
+        longest side at a flat 960 made the copy cost **11.9ms — slower than not shrinking at all**
+        (9.2ms), because 2048→960 is a 2.133:1 resample and the browser's fast path is exact halving.
+        Halved to 1024 the same copy is **2.3ms**. So the rule halves while the result stays at or above
+        640. There is now a test asserting the ratio is a power of two, because a later tidy-up to a
+        "cleaner" flat cap would be a silent 5× regression with nothing to catch it.
+      **Net for you: the most expensive single thing a video layer did per frame is four times cheaper**,
+      and it is paid once per new frame instead of once per render. The only cost is that the held frame
+      is slightly softer for the fraction of a second it shows during a seek, when the preview is
+      deliberately soft anyway. A cropped clip is tested to still show the right part of the picture.
+      **This entry stays OPEN on purpose**, because none of it is proof about YOUR phone — it is all
+      measured under CPU throttle on this Mac. Four real costs have been found and removed and the app's
+      own regulator can now see what it was blind to. **If it is still laggy, say so and the next step is
+      reading the numbers off your actual device instead of a stand-in.**
 - [x] **119 + 120 — The EXPORT frame-rate list is unordered, and should match the canvas one.** (v6.74) His
       words: *"This menu is all over the shop, needs to be ordered"* (screenshot: 30, 24, 25, 60, 50, 12
       — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas

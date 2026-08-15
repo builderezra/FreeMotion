@@ -48,6 +48,16 @@ async function main() {
   rows.push(['full source (what the app does)', w + '×' + h, +(w * h / 1e6).toFixed(2), +timeCopy(w, h, N).toFixed(3)]);
   rows.push(['half', (w >> 1) + '×' + (h >> 1), +((w >> 1) * (h >> 1) / 1e6).toFixed(2), +timeCopy(w >> 1, h >> 1, N).toFixed(3)]);
   rows.push(['quarter', (w >> 2) + '×' + (h >> 2), +((w >> 2) * (h >> 2) / 1e6).toFixed(2), +timeCopy(w >> 2, h >> 2, N).toFixed(3)]);
+  /* The flat cap was the obvious idea and it is a PESSIMISATION: 2048→960 is a 2.133:1 resample and
+   * the browser's fast path is exact halving, so it measured slower than not shrinking at all. Kept as
+   * a row because a number that surprising should stay on the page. */
+  var ck = Math.min(1, 960 / Math.max(w, h));
+  rows.push(['flat cap at 960 (rejected — see the comment)', Math.round(w * ck) + '×' + Math.round(h * ck),
+             +(Math.round(w * ck) * Math.round(h * ck) / 1e6).toFixed(2), +timeCopy(Math.round(w * ck), Math.round(h * ck), N).toFixed(3)]);
+  // What the app ACTUALLY does: halve while the longest side stays at or above 640.
+  var hw = w, hh = h;
+  while (Math.max(hw, hh) >= 1280 && hw > 1 && hh > 1) { hw = hw >> 1; hh = hh >> 1; }
+  rows.push(['HALVED to >=640 (what the app does now)', hw + '×' + hh, +(hw * hh / 1e6).toFixed(2), +timeCopy(hw, hh, N).toFixed(3)]);
 
   /* And the question that actually decides whether this is worth changing: is a repeat copy of the SAME
    * frame any cheaper? If not, then skipping repeats (the safe fix — the unsafe one is shrinking the

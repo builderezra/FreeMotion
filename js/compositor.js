@@ -7,6 +7,18 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
+  /* How small a held video frame is captured (queue 125), and why it HALVES rather than scaling to a
+   * flat cap. Measuring the obvious version is what saved this from being a pessimisation: capping the
+   * longest side at 960 made a 2048² source cost **12.4ms — MORE than the 9.7ms of not shrinking at
+   * all**, because 2048→960 is a 2.133:1 resample and the browser's fast path is exact halving. The
+   * same source scaled to 1024 costs 2.3ms. So the rule is "halve while the result stays at or above
+   * HOLD_MIN", which only ever asks for ratios of 2, 4, 8…
+   * HOLD_MIN is 640 because that is the cap the frame cache already uses for its own decoded frames on
+   * mobile — and reusing a density the composite is already proven to handle is what makes this safe.
+   * The crop path rescales its sample rect by the source's real size, and grade/key draw the source
+   * into their own output box, both precisely so a cache bitmap at this density works. */
+  const HOLD_MIN = 640;
+
   // Alight-Motion-style blend modes -> canvas globalCompositeOperation.
   const BLEND = {
     normal: 'source-over',
@@ -8844,13 +8856,25 @@ window.FM = window.FM || {};
              * Keyed on the source time, which is what decides the picture. No behaviour changes: when
              * the frame really is new the copy happens exactly as before. */
             if (!FM._exporting && m.kind === 'video' && w > 0 && h > 0) {
+              /* …and not at full source resolution either. This is a stand-in shown for a fraction of a
+               * second while a seek lands, and at full size it is the single most expensive thing a
+               * video layer does per frame: 9.7ms on a 2048² clip at 6× CPU throttle, 58% of a whole
+               * frame's budget (tests/_q125hold.html). Capped it is ~2ms.
+               * 960 is not a guess — it is the cap the frame cache already uses for its own decoded
+               * frames, so the composite is ALREADY proven to handle a source at that density: the crop
+               * path a few lines below rescales the sample rect by src's real size for exactly that
+               * reason, and grade/key both draw the source into their own w×h output. Never upscales.
+               * The cost is that a held frame is slightly softer than the live one for the moment it is
+               * on screen — during a scrub, when the preview is deliberately soft anyway. */
+              let hw = w, hh = h;
+              while (Math.max(hw, hh) >= HOLD_MIN * 2 && hw > 1 && hh > 1) { hw = hw >> 1; hh = hh >> 1; }
               const srcT = m.el.currentTime || 0;
-              const stale = !m._lastFrame || m._lastFrame.width !== w || m._lastFrame.height !== h || m._lastFrameT !== srcT;
+              const stale = !m._lastFrame || m._lastFrame.width !== hw || m._lastFrame.height !== hh || m._lastFrameT !== srcT;
               if (stale) {
                 if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
-                if (m._lastFrame.width !== w || m._lastFrame.height !== h) { m._lastFrame.width = w; m._lastFrame.height = h; }
+                if (m._lastFrame.width !== hw || m._lastFrame.height !== hh) { m._lastFrame.width = hw; m._lastFrame.height = hh; }
                 try {
-                  const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, w, h); lx.drawImage(m.el, 0, 0, w, h);
+                  const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, hw, hh); lx.drawImage(m.el, 0, 0, hw, hh);
                   m._lastFrameT = srcT;
                 } catch (e) { m._lastFrameT = -1; }   // a failed copy must not be remembered as done
               }

@@ -14591,6 +14591,68 @@
     }
   });
 
+  /* Capping the held frame's size is only safe because the composite already rescales a crop rect by
+   * the source's REAL density — it has to, because the frame cache has always produced downscaled
+   * bitmaps. That is a load-bearing assumption and it is invisible: get it wrong and a cropped clip
+   * shows the wrong part of the picture, but ONLY during the fraction of a second a seek is in flight,
+   * which is close to unreportable. So it is asserted rather than trusted. */
+  test('perf: a held frame is capped in size, and a cropped clip still shows the right part of it', { item: 'perf-holdframe-crop' }, function () {
+    var keep = FM.scene.layers.slice(), keepT = FM.time;
+    try {
+      // A wide source, well past the cap, with a red LEFT half and a blue RIGHT half.
+      var W = 2400, H = 400;
+      var srcCv = document.createElement('canvas'); srcCv.width = W; srcCv.height = H;
+      var sx = srcCv.getContext('2d');
+      sx.fillStyle = '#ff0000'; sx.fillRect(0, 0, W / 2, H);
+      sx.fillStyle = '#0000ff'; sx.fillRect(W / 2, 0, W / 2, H);
+      srcCv.readyState = 2; srcCv.currentTime = 0.25;
+      var rec = { kind: 'video', el: srcCv, width: W, height: H, duration: 5 };
+
+      var L = FM.makeLayer('video', { start: 0, duration: 5 });
+      L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      // Crop to the RIGHT half only — in FULL SOURCE pixels, which is the coordinate space at issue.
+      L.crop = { x: W / 2, y: 0, w: W / 2, h: H };
+      FM.scene.layers = [L];
+      FM.media.set(L.id, rec);
+      FM.scene.project.width = 400; FM.scene.project.height = 300;
+
+      var cv = offscreen(400, 300), cx = cv.getContext('2d');
+      FM.renderScene(cx, FM.scene, 1);
+
+      if (!rec._lastFrame) throw new Error('control failed: nothing was captured, so nothing below is being tested');
+      var hw = rec._lastFrame.width, hh = rec._lastFrame.height;
+      if (hw >= W) throw new Error('the held frame was captured at full source size (' + hw + 'x' + hh + ') — a phone pays that multi-megapixel copy every frame');
+      if (Math.max(hw, hh) >= 1280) throw new Error('the held frame is still ' + hw + 'x' + hh + ' — the shrink rule did not bring it under its bound');
+      if (hw <= 1 || hh <= 1) throw new Error('the held frame collapsed to ' + hw + 'x' + hh);
+      /* The RATIO has to be an exact power of two, and this is the assertion that would be easiest to
+       * drop as pedantry. It is the whole reason the rule halves instead of scaling to a flat cap:
+       * measured, capping a 2048² source at 960 costs 11.9ms against 9.2ms for not shrinking at all,
+       * because a 2.133:1 resample loses the browser's fast path. Exactly halved, the same source is
+       * 2.3ms. A "tidier" flat cap here would be a silent 5× pessimisation. */
+      var ratio = W / hw;
+      if (ratio !== Math.pow(2, Math.round(Math.log2(ratio)))) {
+        throw new Error('the held frame was scaled by ' + ratio.toFixed(3) + ':1, which is not an exact halving — a non-power-of-two resample is SLOWER than not shrinking at all (measured: 11.9ms vs 9.2ms vs 2.3ms)');
+      }
+      if (hh !== H / ratio) throw new Error('the held frame lost its aspect ratio: ' + hw + 'x' + hh + ' from ' + W + 'x' + H);
+
+      // Now force the HOLD path — the frame is mid-seek — and read what actually lands on the canvas.
+      srcCv.readyState = 0;
+      cx.clearRect(0, 0, 400, 300);
+      FM.renderScene(cx, FM.scene, 1);
+      var mid = px(cx, 200, 150);
+      var blue = mid[2] > 120 && mid[0] < 90;
+      if (!blue) {
+        throw new Error('while holding a downscaled frame, the cropped clip painted rgb(' + mid[0] + ',' + mid[1] + ',' + mid[2] +
+                        ') where the blue right-hand half of the source should be — the crop rect is being applied in full-source ' +
+                        'pixels to a smaller bitmap, so a cropped clip shows the wrong region every time a seek is in flight');
+      }
+    } finally {
+      FM.scene.layers.forEach(function (l) { FM.media.remove(l.id); });
+      FM.scene.layers = keep; FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
