@@ -98,7 +98,7 @@ better still, keep working inside the turn rather than parking work for a later 
       serif-T glyph the Edit Text card shows. Off tiles are desaturated instead of recoloured, since a
       self-coloured icon cannot show on/off by changing its colour. The suite compares every tile's
       markup against the inspector's own, so a third table cannot grow back quietly.
-- [ ] **128 — Opening/closing a project feels janky.** His words: *"the animation when opening a project
+- [x] **128 — Opening/closing a project feels janky. DONE v7.60 (the opening half).** His words: *"the animation when opening a project
       feels janky, the fix is make it so the animation of the project layer moving to the left happens
       instantly, so it feels responsive, make sure it's smooth, then smoothly the project should swoop in
       too. Needs to be smoother and less janky when leaving a project also."* Note he has prescribed the
@@ -177,6 +177,23 @@ better still, keep working inside the turn rather than parking work for a later 
         as the click, so the press is never painted and the COLD keyframe is correct there.
       · and the new half: the editor must NOT arrive early, or the previous project slides in and gets
         swapped underneath the user.
+
+      **SHIPPED v7.60.** The rewrite went the way the note above said it would — read the whole section
+      first, re-specify it as a unit, and it converged. Tapping a project now moves it on the frame you
+      touch it; the editor arrives when the project is ready.
+      **A third defect turned up during the rewrite, and it is the one worth remembering:** an open that
+      never settles used to strand a PRESSED CARD, and holdPress had a backstop for that. With the split
+      it strands the whole transition instead — home dimmed and shoved aside, the editor parked
+      off-screen, nothing arriving, no way out — and nothing guarded that. The waiting phase now carries
+      its own deadline. The test asserts the home screen actually comes back.
+      **And a correction to my own note above:** the claim that `100%` parked the editor only 247px was
+      WRONG. That 247px was the lingering `fm-pop-out` animation beating the park's plain declaration,
+      not the unit. #app is width:100%, so `100%` and `100vw` are identical here — and `100%` is what
+      shipped, because it is the unit `fm-push-in` animates from, so phase 1 parks exactly where phase 2
+      begins. Measuring the mutation is what caught the bad reasoning: swapping the unit changed nothing.
+      **The CLOSING half of this entry is still open** — his words included *"needs to be smoother and
+      less janky when leaving a project also"*, and only the opening half has been measured and fixed.
+      The pop (project → home) has not been profiled at all yet; that is the next pass on this item.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO.** His words: *"Added a screen
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
@@ -3352,3 +3369,15 @@ layout, motion blur, the elements browser and the effects browser.
       row for the PC layout; the phone's own copy was presumably never hidden once the row gained one.
       Small, cosmetic, and the fix is likely one CSS rule — but two version labels disagreeing after a
       partial update is exactly the confusion the tap-to-force-update label exists to prevent.
+
+- [ ] **222 — A test in the suite is flaky, about 1 run in 5.** Found while working #128, and it is
+      PRE-EXISTING — measured on a clean tree at HEAD, five runs, one red, so it is not something a
+      recent change introduced. The assertion is `key/cold-actually-shrinks` in the `home-push` section:
+      after a keyboard Enter, the cold lead animation is paused and scrubbed to 280ms of its 380ms and
+      the card's scale is read. On a bad run the transform is still the identity matrix.
+      **The diagnostic is captured, so this is a build not a hunt:** at the moment of failure the
+      animation reports `dur=0.38s state=paused ct=280 name=fm-push-lead-cold`, and the card still
+      carries `hm-in` — its entrance class. So the likeliest cause is that the lead animation has
+      inherited an entrance DELAY and at ct=280 has not actually begun, which is exactly what
+      `unstampIntro` exists to prevent and is intermittently not preventing.
+      A test that is red one run in five is worse than no test: it trains you to re-run instead of read.

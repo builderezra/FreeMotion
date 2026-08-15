@@ -52,6 +52,15 @@ window.FM = window.FM || {};
   //   stuck   — an open that never settled at all (see holdPress and openAbandoned)
   const WAIT = { release: 600, stuck: 8000 };
   let pushTimer = 0, pushLead = null, pressEl = null, pressTimer = 0, closing = false;
+  // The waiting phase's own backstop (queue 128) — see startPush. It replaces the press backstop on
+  // the split path: the press is handed to the push on the tap, so an open that never settles no
+  // longer strands a pressed card, it strands the whole transition.
+  let waitTimer = 0;
+  /* True for the whole of a two-phase push. #home-screen is the honest end-of-push signal for a
+   * one-shot push because both motion modes animate it — but when the editor waits for a load, home
+   * finishes FIRST and its animationend would end the push with the editor barely into its entrance.
+   * On this path the arriving editor owns the ending instead (onAppPushEnd). (queue 128) */
+  let splitRun = false;
   // Who owns the press, and has it actually been seen. Both are load-bearing:
   //   pressHeld    — an async open (project / template / element) has taken the press for the length
   //                  of its wait. While it is set NOTHING else may move or drop the press: not a
@@ -175,6 +184,8 @@ window.FM = window.FM || {};
   // what open() needs when you come back before the 280ms is up.
   function endPush(hide) {
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = 0; }
+    if (waitTimer) { clearTimeout(waitTimer); waitTimer = 0; }
+    splitRun = false;
     // A pop and a push are mutually exclusive, and fm-pop-out is `animation-fill-mode: both` — so if a
     // pop is still classed on when a push begins or ends, its FINAL frame stays applied to #app. Even
     // at the identity matrix that is fatal: any transform on #app makes it the containing block for
@@ -183,7 +194,7 @@ window.FM = window.FM || {};
     endPop();
     const app = document.getElementById('app');
     if (root) { root.classList.remove('fm-push-out'); if (hide) root.classList.add('hidden'); }
-    if (app) app.classList.remove('fm-push-in');
+    if (app) { app.classList.remove('fm-push-in', 'fm-push-wait'); app.removeEventListener('animationend', onAppPushEnd); }
     document.body.classList.remove('fm-pushing');
     if (pushLead) {
       pushLead.classList.remove('fm-card-lead', 'fm-lead-cold');
@@ -233,6 +244,11 @@ window.FM = window.FM || {};
     // two backdrop drifts all bubble their animationend through this same node.
     if (e.target !== root || e.pseudoElement) return;
     if (e.animationName !== 'fm-push-out' && e.animationName !== 'fm-push-fade') return;
+    /* …unless the editor has not arrived yet. On the two-phase path (queue 128) the home screen leaves
+     * on the tap while the project is still loading, so its animation routinely finishes FIRST — and
+     * ending the push here would hide home, unpark the editor and drop the whole transition on the
+     * floor mid-load. While #app is parked, the push is not over; onAppPushEnd finishes it instead. */
+    if (splitRun) return;   // the editor ends this one — see splitRun
     endPush(true);
   }
   // Returns whether a push actually started — close() uses that as the value of `closing`, so a page
@@ -248,7 +264,57 @@ window.FM = window.FM || {};
 
   try { document.documentElement.style.setProperty('--fm-push-ms', PUSH_MS + 'ms'); } catch (e) {}
 
-  function startPush(lead) {
+  /* TWO-PHASE PUSH (queue 128). Ezra: "make it so the animation of the project layer moving to the
+   * left happens instantly, so it feels responsive, then smoothly the project should swoop in too."
+   *
+   * That is a description of a split, and the measurement backs it: openProject awaits the project
+   * load and only THEN starts the push, so nothing on screen can move until the load resolves — 28ms
+   * on this desktop, **113ms at 6× CPU throttle on a four-layer project**, and it grows with the
+   * project. The animation itself was measured smooth at 6× (worst frame 18ms, no frame over 50), so
+   * there was never any stutter to fix; the whole complaint is that dead time.
+   *
+   * Phase 1 runs on the tap: the card and the home screen leave immediately. Phase 2 runs when the
+   * load resolves: the editor swoops in.
+   *
+   * The reason this is a split and not simply "start the push earlier" is the artefact that would
+   * cause — #app still holds the PREVIOUS project, so an early push would slide the old project in
+   * for 113ms and then swap it underneath the user, which is worse than the wait. So phase 1 also
+   * PARKS #app off the right edge (fm-push-wait, a static transform, no animation), which is where
+   * fm-push-in would have started it from anyway. What the vacated space shows meanwhile is the theme
+   * background that body.fm-pushing already gives #app, not the old project. */
+  /* The end-of-push signal for the two-phase path. #home-screen is the honest signal for a one-shot
+   * push because it animates on both the slide and the reduced-motion fade — but when the editor waits
+   * for a load, home has long since finished, so the arriving editor is the thing that says "done". */
+  function onAppPushEnd(e) {
+    if (e.pseudoElement || e.animationName !== 'fm-push-in') return;
+    const app = document.getElementById('app');
+    if (e.target !== app) return;
+    endPush(true);
+  }
+
+  function armPushIn() {
+    const app = document.getElementById('app');
+    if (!app || !app.classList.contains('fm-push-wait')) return false;
+    if (waitTimer) { clearTimeout(waitTimer); waitTimer = 0; }
+    app.classList.remove('fm-push-wait');
+    app.classList.add('fm-push-in');
+    app.addEventListener('animationend', onAppPushEnd);   // same ref every time, so this registers once
+    // The backstop starts HERE, not at the tap: it guards the incoming animation, and during phase 1
+    // there is no incoming animation to guard. Armed at the tap it could fire mid-load and tear the
+    // push down with the editor still parked off-screen.
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => { pushTimer = 0; endPush(true); }, PUSH_MS + 140);
+    return true;
+  }
+  // The load failed, or there is nothing to arm phase 2 with. Put the home screen back rather than
+  // leave it dimmed at -24% with the editor parked off-screen and nothing coming.
+  function abortPush() {
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('fm-push-wait');
+    endPush(false);
+  }
+
+  function startPush(lead, wait) {
     const app = document.getElementById('app');
     if (!root || !app) { if (root) root.classList.add('hidden'); return false; }
     // PHONE ONLY, and gated HERE rather than in the stylesheet on purpose. Every rule in the push
@@ -268,6 +334,13 @@ window.FM = window.FM || {};
       return false;
     }
     if (pushTimer) endPush(false);           // a second push on top of a running one: restart it
+    /* A pop still classed on #app would BEAT the park. fm-pop-out has animation-fill-mode:both, and a
+     * running animation always wins over a plain declaration — so `fm-push-wait`'s static transform is
+     * silently ignored and the editor sits wherever the pop's last frame left it, part-way on screen
+     * with the previous project showing. endPush has guarded this for the same reason since the suite
+     * caught a stranded matrix on #app; the entry side never did, because until the two-phase push
+     * everything here was an animation too and could compete on equal terms. (queue 128) */
+    endPop();
     // WARM = this card is pressed and that press has been painted, so fm-push-lead can start from the
     // pressed scale and the release into the push is continuous. COLD = it has not: keyboard Enter
     // (no finger, and click runs in the same task as the keydown), an open that resolved without a
@@ -290,11 +363,20 @@ window.FM = window.FM || {};
     clearPress();                            // instant, not eased — fm-push-lead owns the transform from this frame
     document.body.classList.add('fm-pushing');
     root.classList.add('fm-push-out');
-    app.classList.add('fm-push-in');
+    // Phase 1 parks the editor where fm-push-in would have begun; phase 2 (armPushIn) starts it moving.
+    app.classList.add(wait ? 'fm-push-wait' : 'fm-push-in');
     root.addEventListener('animationend', onPushEnd);   // same function ref every time, so this registers once
     // Backstop. animationend does not fire if the tab is hidden mid-push, and a stranded transform
-    // on #app is a permanent bug — so the timer always finishes the job.
-    pushTimer = setTimeout(() => { pushTimer = 0; endPush(true); }, PUSH_MS + 140);
+    // on #app is a permanent bug — so the timer always finishes the job. On the waiting path it is
+    // armed by armPushIn instead, because there is nothing to back up until the editor is moving.
+    if (!wait) pushTimer = setTimeout(() => { pushTimer = 0; endPush(true); }, PUSH_MS + 140);
+    /* AN OPEN THAT NEVER SETTLES MUST NOT STRAND THE TRANSITION. Before the split, a hung open left a
+     * card pressed and holdPress's WAIT.stuck timer let it go. On this path the press was handed to
+     * the push on the tap, so what a hung open strands now is the push itself — home dimmed at -24%,
+     * the editor parked off-screen, and nothing ever arriving. Same deadline, same reasoning, applied
+     * to the thing that is actually at risk. (queue 128) */
+    if (wait) waitTimer = setTimeout(() => { waitTimer = 0; abortPush(); }, WAIT.stuck);
+    splitRun = !!wait;
     return true;
   }
 
@@ -1304,13 +1386,38 @@ window.FM = window.FM || {};
     if (_opening && !openAbandoned()) return false;
     _opening = true; _openingAt = Date.now();
     holdPress();   // this open now owns the press — no release timer, and no other card, may take it
+    /* THE CARD LEAVES ON THE TAP (queue 128). Everything below used to happen after `await open(id)`,
+     * so nothing on screen could move until the project had loaded: 113ms of dead time at phone speed
+     * on a four-layer project, growing with the project. Phase 1 goes first and phase 2 waits for the
+     * load — see armPushIn.
+     * Only when a push is actually going to play. On desktop close() hides home instantly, and
+     * starting THAT before the load would show the previous project for the whole load, which is the
+     * artefact this split exists to avoid rather than cause. */
+    const needsLoad = id !== FM.projects.currentId();
+    const split = !keepOpen && needsLoad && FM.home.pushWillRun && FM.home.pushWillRun();
+    let phase1 = false;
+    if (split) {
+      FM.home.close({ push: true, lead: lead, wait: true });
+      // close() reports nothing, and startPush can decline (no #app, a reduced-motion path, the gate).
+      // The class is the honest answer to "did phase 1 actually happen?".
+      const _a = document.getElementById('app');
+      phase1 = !!(_a && _a.classList.contains('fm-push-wait'));
+    }
     try {
-      if (id !== FM.projects.currentId()) await FM.projects.open(id);
+      if (needsLoad) await FM.projects.open(id);
       // Opening a project restores its media from IndexedDB, so the same not-yet-decoded window applies
       // — arguably more so, since it is every clip at once rather than one (queue 201).
       if (FM.loadingDot) FM.loadingDot.check();
-      if (!keepOpen) FM.home.close({ push: true, lead: lead });
+      // Phase 2, or the ordinary one-shot close when there was no phase 1 (desktop, keepOpen, or a
+      // push that declined to start). armPushIn reports false if there is nothing waiting, so a
+      // phase 1 that quietly did not happen still gets a real close rather than being stranded.
+      if (!keepOpen && !(phase1 && FM.home.armPushIn())) FM.home.close({ push: true, lead: lead });
       return true;   // callers (e.g. Export) need to know the switch actually happened, not got skipped
+    } catch (e) {
+      // The load failed with the home screen already half-way out. Put it back, rather than leave it
+      // dimmed at -24% with the editor parked off-screen and nothing ever arriving.
+      if (phase1) { try { FM.home.abortPush(); } catch (e2) {} }
+      throw e;
     } finally {
       _opening = false;
       // Every way out: the push started (startPush already took the press, so this is a no-op), or
@@ -1739,7 +1846,7 @@ window.FM = window.FM || {};
         // `closing` makes isOpen() report false for the length of the push, so nothing downstream can
         // tell an animating close from a finished one and try to close it a second time. Assigned
         // AFTER the call: startPush may unwind a push already in flight, and that resets the flag.
-        closing = startPush(opts.lead);
+        closing = startPush(opts.lead, !!(opts && opts.wait));
       } else {
         endPush(false);
         root.classList.add('hidden');
@@ -1747,6 +1854,14 @@ window.FM = window.FM || {};
       if (FM.requestRender) FM.requestRender();
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
     },
+    // Phase 2 of the two-phase push (queue 128) — see armPushIn. Returns false when there was no
+    // phase 1 to complete, so a caller can fall back to the ordinary one-shot close.
+    armPushIn() { return armPushIn(); },
+    abortPush() { abortPush(); },
+    // Whether a push would actually run for this close. openProject needs to know BEFORE it starts,
+    // because the two-phase split is only correct when the push is going to play: on desktop close()
+    // hides home instantly, and splitting that would show the previous project for the whole load.
+    pushWillRun() { return pushAllowed(); },
     isOpen() { return !!root && !root.classList.contains('hidden') && !closing; },
     _splashIsUp: splashIsUp,   // exposed for the regression test — see armIntro
     _waits: WAIT,              // ditto: the suite shortens WAIT.stuck rather than sleeping 8s for it

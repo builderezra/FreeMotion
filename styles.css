@@ -4284,6 +4284,20 @@ body.fm-pushing #add-fab { will-change: transform, opacity; }
    without this the home screen would show through the seams while the two overlap. */
 body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; background: var(--bg); }
 #app.fm-push-in { animation: fm-push-in var(--fm-push-ms, 380ms) cubic-bezier(0, 0, .2, 1) both; }
+/* Phase 1 of the two-phase push (queue 128): the editor waits exactly where fm-push-in's `from` frame
+   would have put it, with no animation, while the project loads. A STATIC transform on purpose — the
+   point of the split is that the card leaves on the tap while this side stands still, so anything that
+   moved here would be the artefact rather than the fix. It shares body.fm-pushing's position:fixed and
+   its opaque background, so the space the home screen vacates shows the theme colour, never the
+   previous project.
+   100%, the SAME unit fm-push-in animates from, so phase 1 parks exactly where phase 2 begins and the
+   join cannot have a seam. (An earlier version of this rule used 100vw on the strength of a measurement
+   that turned out to be misread: a park computing to only 247px in a 900px frame looked like a
+   percentage resolving against a shrink-to-fit box, and was actually a leftover fm-pop-out animation
+   beating this declaration outright — an animation always wins over a plain one. startPush calls
+   endPop() for that now. #app is width:100% under body.fm-pushing, so the two units agree anyway, and
+   matching fm-push-in is the property worth keeping.) */
+#app.fm-push-wait { transform: translate3d(100%, 0, 0); }
 /* The + orb lives OUTSIDE #app (body-level, z-index 61), so without this it would sit still in the
    middle of the vacated screen while everything else moved. It rides in on the SAME CURVE for the
    SAME DISTANCE, one step above #app so it is not buried by its backdrop — but NOT on the same
@@ -4356,6 +4370,7 @@ body.fm-pushing #toast { z-index: 213; }
   #home-screen.fm-push-out .hm-card.fm-card-lead.fm-lead-cold { animation: none; }
   body.fm-pushing #app { position: static; left: auto; top: auto; z-index: auto; background: none; }
   #app.fm-push-in { animation: none; }
+  #app.fm-push-wait { transform: none; }   /* reduced motion: nothing slides, so nothing waits off-screen */
   /* back to the value the base rule gives it (61) — `auto` would drop the orb out of its own layer
      and let the fading home screen paint underneath it for the length of the fade. */
   body.fm-pushing #add-fab { animation: none; z-index: 61; }

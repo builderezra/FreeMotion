@@ -6648,6 +6648,15 @@
     // "Is the press on screen?" is a different question in each mode: a scale under motion, a dim
     // under reduced motion. Both are read off the REAL computed style, never off the class.
     function pressShows(el) { return reduced ? opacityOf(el) < 0.9 : scaleOf(el) < 0.99; }
+    /* WHICH CLASS CARRIES THE ACKNOWLEDGEMENT CHANGED IN v7.60, and the contract did not (queue 128).
+       The press used to be the only thing on screen for the whole load, because the push waited for
+       it. Now the push starts on the tap, so a card that is loading is LEADING, not pressed. What must
+       still be true — and is what every "the card goes dead mid-load" measurement in this section was
+       really about — is that the tapped card is visibly acknowledged continuously, and that no other
+       tap can steal or move that. So the checks below ask "is this card acknowledged", not "does it
+       carry one specific class". */
+    function acked(el) { return el.classList.contains('fm-card-press') || el.classList.contains('fm-card-lead'); }
+    function ackShows(el) { return pressShows(el) || el.classList.contains('fm-card-lead'); }
     async function cards() {
       FM.home.open();                       // also unwinds any push still running (endPush)
       home.classList.remove('hm-preintro'); // the splash's business, not the push's
@@ -6708,28 +6717,58 @@
            '.hm-in is still on the tapped card, so the entrance can restart on it');
       }
 
-      /* Every frame of the wait, not just the first: the press must stay put and nothing may step.
-         The stub is LONGER THAN WAIT.release (600ms) on purpose — that timer is the release path for
-         a tap that opened nothing, and an open routinely outlasts it because the project's media has
-         to decode. With a 400ms stub the whole pressHeld ownership mechanism is unreachable and
-         mutating it away leaves the suite green; with this it goes red. */
+      /* ---- THE WAIT, RE-SPECIFIED FOR THE TWO-PHASE PUSH (queue 128) ----
+         This section used to assert that the pressed card held steady for every frame of a long gap
+         between the finger and the push. That gap was the defect Ezra reported — "make it so the
+         animation of the project layer moving to the left happens instantly, so it feels responsive"
+         — and v7.60 removed it: the card now leaves on the tap and only the editor waits for the load.
+         So the old assertions are not weakened here, they are obsolete by request, and the contract
+         that replaces them is stricter: the push must start immediately, AND the editor must not
+         arrive early, because sliding the previous project in for the length of the load would be a
+         worse artefact than the wait it replaced. The stub is still longer than WAIT.release (600ms)
+         so the load genuinely outlasts the animation. */
       openMs = 700; cur = null;
       release(c[0]);
-      var frames = [], t0 = performance.now();
-      while (!document.body.classList.contains('fm-pushing') && performance.now() - t0 < 3000) {
-        frames.push({ s: scaleOf(c[0]), o: opacityOf(c[0]), on: c[0].classList.contains('fm-card-press'), shows: pressShows(c[0]) });
+      var t0 = performance.now(), startedIn = -1;
+      for (var w = 0; w < 6; w++) {
+        if (document.body.classList.contains('fm-pushing')) { startedIn = w; break; }
         await rAF();
       }
-      ck('wait/enough-frames-to-mean-anything', frames.length >= 8,
-         'only ' + frames.length + ' frame(s) elapsed between the finger and the push — the wait this section measures did not happen, so its assertions are decorative');
-      ck('wait/press-held-for-every-frame', frames.every(function (f) { return f.on; }),
-         'the press was dropped ' + frames.filter(function (f) { return !f.on; }).length + ' of ' + frames.length + ' frames into the wait — the card the user is waiting on goes dead mid-load');
-      ck('wait/press-VISIBLE-for-every-frame', frames.every(function (f) { return f.shows; }),
-         'the press was on the card but invisible for ' + frames.filter(function (f) { return !f.shows; }).length + ' of ' + frames.length + ' frames of the wait');
-      var worstStep = 0;
-      for (var i = 1; i < frames.length; i++) worstStep = Math.max(worstStep, Math.abs(frames[i].s - frames[i - 1].s));
-      ck('wait/no-step-mid-wait', worstStep < 0.003,
-         'the card stepped ' + worstStep.toFixed(4) + ' in scale during the wait — the press is supposed to land once and hold, not move again');
+      ck('wait/push-starts-on-the-tap', startedIn >= 0,
+         'the push had not started ' + Math.round(performance.now() - t0) + 'ms after the finger lifted — the card is supposed to leave immediately and let the editor wait for the load, not the other way round');
+      ck('wait/editor-has-NOT-arrived-yet', !app.classList.contains('fm-push-in'),
+         'the editor started sliding in while the project was still loading — it is still showing the PREVIOUS project, so it would slide that in and then swap it underneath the user');
+      if (!reduced) {
+        ck('wait/editor-is-parked-off-screen', app.classList.contains('fm-push-wait'),
+           'the editor is neither waiting nor arriving during the load — with body.fm-pushing lifting it over the home screen, that means the previous project is on show');
+        /* Parked exactly ONE SELF-WIDTH right, which is where fm-push-in's `from` frame begins — so
+           phase 2 starts from where phase 1 left it and there is no jump at the join. Measured
+           against #app's own box rather than the viewport on purpose: `translate3d(100%)` resolves
+           against the animated element, and this runner's frame is not phone-shaped, so a
+           viewport-based assertion would be testing the harness rather than the app. */
+        /* Ask where the box actually IS, not what the transform says. getBoundingClientRect includes
+           the transform, so this is the visual question — is any of the editor on screen while the
+           home screen is leaving — and it cannot be satisfied by a translate that only looks big.
+           This is what caught the real defect: a leftover fm-pop-out animation beating the park's plain
+           declaration, which left the editor sitting 247px in with the old project beside it. */
+        var arect = app.getBoundingClientRect();
+        ck('wait/parked-transform-is-real', arect.left >= innerWidth - 1,
+           'the parked editor sits at x=' + Math.round(arect.left) + ' in a ' + innerWidth + 'px viewport (transform ' +
+           getComputedStyle(app).transform + ', classes "' + app.className + '") — part of it is on screen, so the PREVIOUS project ' +
+           'shows beside the leaving home screen. A leftover fm-pop-out is the way this breaks: it is an animation with fill-mode both, ' +
+           'and a running animation beats the park\'s plain declaration.');
+        ck('wait/lead-card-is-animating-out', getComputedStyle(c[0]).animationName.indexOf('fm-push-lead') === 0,
+           'the tapped card is not running a lead animation (' + getComputedStyle(c[0]).animationName + ') — "the project layer moving to the left" is the whole request');
+      }
+      // …and the editor arrives when, and only when, the load resolves.
+      var t1 = performance.now();
+      while (!app.classList.contains('fm-push-in') && performance.now() - t1 < 3000) await rAF();
+      ck('wait/editor-arrives-when-the-load-does', app.classList.contains('fm-push-in'),
+         'the editor never started its entrance after the load finished — the push is stranded half-way with the home screen dimmed and nothing coming');
+      ck('wait/editor-waited-for-the-load', performance.now() - t1 > 120,
+         'the editor arrived ' + Math.round(performance.now() - t1) + 'ms into a 700ms load — it cannot have been waiting for it, so this is not the two-phase push and the previous project was on screen');
+      ck('wait/park-class-released', !app.classList.contains('fm-push-wait'),
+         'the parking transform is still on the editor while it animates in — two transforms on one element, and the static one wins');
 
       /* ---- 1b. THE HAND-OFF, on the frame it happens ----
          Reachable only by making the push land in the same task as the click (the project is already
@@ -6803,17 +6842,17 @@
       c = await cards();
       openMs = 750; cur = null; opens = 0;   // > WAIT.release, or the repeat tap's own release timer never gets the chance to be wrong
       tap(c[0]);
-      ck('repeat/pressed-on-the-first-tap', c[0].classList.contains('fm-card-press'),
-         'the card is not pressed on the frame the finger lands — the tap has no acknowledgement at all until the project loads');
+      ck('repeat/acknowledged-on-the-first-tap', acked(c[0]),
+         'the card is neither pressed nor leading on the frame the finger lands — the tap has no acknowledgement at all until the project loads');
       await rAF();
       tap(c[0]);
-      ck('repeat/press-survives-the-second-tap', c[0].classList.contains('fm-card-press'),
-         'tapping the SAME card again while it is still opening dropped its press — the card the user is waiting on goes dead, and the push then snaps it back to the pressed scale in one frame');
+      ck('repeat/ack-survives-the-second-tap', acked(c[0]),
+         'tapping the SAME card again while it is still opening dropped its acknowledgement — the card the user is waiting on goes dead mid-load');
       await rAF(); await rAF();
-      ck('repeat/press-survives-a-frame-later', c[0].classList.contains('fm-card-press'),
-         'the press was dropped a frame after the second tap (a release timer re-armed by the tap that was supposed to be ignored)');
-      ck('repeat/press-still-VISIBLE', pressShows(c[0]),
-         'the press class survived the repeat tap but the card is back to looking untouched (transform ' + getComputedStyle(c[0]).transform + ', opacity ' + getComputedStyle(c[0]).opacity + ')');
+      ck('repeat/ack-survives-a-frame-later', acked(c[0]),
+         'the acknowledgement was dropped a frame after the second tap (a release timer re-armed by the tap that was supposed to be ignored)');
+      ck('repeat/ack-still-VISIBLE', ackShows(c[0]),
+         'the class survived the repeat tap but the card is back to looking untouched (transform ' + getComputedStyle(c[0]).transform + ', opacity ' + getComputedStyle(c[0]).opacity + ')');
       // The reason the second tap is ignored at all, and the thing the abandoned-open escape hatch
       // (section 6) must not have loosened: two overlapping open() loads leaked media and raced
       // refreshAll. Inside the window the guard has to be exactly as strict as it always was.
@@ -6826,33 +6865,37 @@
       tap(c[1]);
       ck('cross/other-card-not-pressed', !c[1].classList.contains('fm-card-press'),
          'tapping a DIFFERENT card mid-open pressed it — that card is not loading and never will be (the tap is ignored), so the acknowledgement is a lie');
-      ck('cross/loading-card-keeps-its-press', c[0].classList.contains('fm-card-press'),
-         'tapping a different card mid-open stole the press from the card that IS loading');
+      ck('cross/loading-card-keeps-its-ack', acked(c[0]),
+         'tapping a different card mid-open stole the acknowledgement from the card that IS loading');
       await rAF();
-      ck('cross/still-right-a-frame-later', c[0].classList.contains('fm-card-press') && !c[1].classList.contains('fm-card-press'),
-         'a frame after the cross tap the press had moved anyway (press on A: ' + c[0].classList.contains('fm-card-press') + ', on B: ' + c[1].classList.contains('fm-card-press') + ')');
+      ck('cross/still-right-a-frame-later', acked(c[0]) && !c[1].classList.contains('fm-card-press'),
+         'a frame after the cross tap the acknowledgement had moved anyway (A acknowledged: ' + acked(c[0]) + ', B pressed: ' + c[1].classList.contains('fm-card-press') + ')');
       // "That turned out not to be a tap" arriving AFTER the tap already started a load — the browser
       // handing the pointer stream to the scroller is the common way. The gesture is over; the project
       // is not, so the card that is loading keeps its acknowledgement.
       press(c[0], 'pointercancel');
-      ck('cross/cancel-cannot-take-a-loading-press', c[0].classList.contains('fm-card-press'),
-         'a pointercancel arriving while the project is still loading dropped the press — the card goes dead mid-load and the push then snaps it back to the pressed scale in one frame');
-      // and when the push finally arrives it continues from the pressed state, it does not jump to it
-      var beforeCross = scaleOf(c[0]), beforeCrossO = opacityOf(c[0]);
-      await sleep(820);
-      ck('cross/push-arrived', document.body.classList.contains('fm-pushing'),
-         'the push never started after the stubbed 750ms open');
-      ck('cross/lead-is-warm', !c[0].classList.contains('fm-lead-cold'),
-         'the lead went cold after a press that was on screen for the whole wait — it would start from rest and jump backwards to the pressed scale');
+      ck('cross/cancel-cannot-take-a-loading-ack', acked(c[0]),
+         'a pointercancel arriving while the project is still loading dropped the acknowledgement — the card goes dead mid-load');
+      /* THE WARM HAND-OFF MOVED, it did not disappear (queue 128). It is the frame where a PAINTED
+         press gives way to the lead animation, and on the two-phase path that frame cannot exist:
+         the push starts in the same task as the click, so the press has never been painted and the
+         lead correctly takes the COLD keyframe, which begins at rest. Section 1b above still drives
+         and asserts the warm hand-off — it opens the already-current project, so there is no load to
+         split and the one-shot push runs exactly as it always did. What belongs HERE is only what is
+         specific to a load being in flight. */
+      ck('cross/lead-is-cold-when-the-push-beat-the-paint', c[0].classList.contains('fm-lead-cold'),
+         'the lead claimed to be warm on a push that started in the same task as the click — the press cannot have been painted yet, so fm-push-lead would start it at scale(.965) and pop 3.5% on the first frame');
       if (!reduced) {
         var wa = c[0].getAnimations().filter(function (a) { return /^fm-push-lead/.test(a.animationName); });
         ck('cross/lead-animation-attached', wa.length > 0, 'no lead animation on the card the push is leading with');
-        wa[0].pause(); wa[0].currentTime = 0;   // the hand-off frame, which is not reachable by waiting for one
+        wa[0].pause(); wa[0].currentTime = 0;
+        ck('cross/cold-lead-starts-at-rest', Math.abs(scaleOf(c[0]) - 1) < 0.004,
+           'the cold lead starts at scale ' + scaleOf(c[0]).toFixed(4) + ' instead of 1 — that is the 3.5% pop on the push\'s first frame that the warm/cold split exists to remove');
+        wa[0].play();
       }
-      ck('cross/no-pop-at-the-hand-off', Math.abs(scaleOf(c[0]) - beforeCross) < 0.004,
-         'the card jumped from scale ' + beforeCross.toFixed(4) + ' to ' + scaleOf(c[0]).toFixed(4) + ' on the frame the push took over — the hand-off is exactly the frame this design exists to remove');
-      ck('cross/no-opacity-pop-at-the-hand-off', Math.abs(opacityOf(c[0]) - beforeCrossO) < 0.02,
-         'the card jumped from opacity ' + beforeCrossO.toFixed(4) + ' to ' + opacityOf(c[0]).toFixed(4) + ' on the frame the push took over');
+      await sleep(820);
+      ck('cross/push-still-running-through-the-load', document.body.classList.contains('fm-pushing') || app.classList.contains('fm-push-in') || !FM.home.isOpen(),
+         'the push had vanished 820ms into a stubbed 750ms open — it neither completed nor is still running, so it was torn down mid-load');
 
       /* ---- 3b. THE APP CLEANS UP AFTER ITSELF ----
          Not the test cleaning up and then admiring its own work: this lets a REAL push run to its end
@@ -6908,7 +6951,9 @@
            'the cold lead starts at scale ' + scaleOf(c[0]).toFixed(4) + ' — from a card sitting at rest that is a one-frame pop of ' + Math.abs(1 - scaleOf(c[0])).toFixed(4));
         ka[0].currentTime = 280;
         ck('key/cold-actually-shrinks', scaleOf(c[0]) < 0.94,
-           'the cold lead does not actually shrink away (ends at ' + scaleOf(c[0]).toFixed(4) + ')');
+           'the cold lead does not actually shrink away (ends at ' + scaleOf(c[0]).toFixed(4) + ') [DIAG dur=' +
+           getComputedStyle(c[0]).animationDuration + ' state=' + ka[0].playState + ' ct=' + ka[0].currentTime +
+           ' name=' + getComputedStyle(c[0]).animationName + ' cls=' + c[0].className + ' tf=' + getComputedStyle(c[0]).transform + ']');
       } else {
         // Two checks, because they are not the same claim. The first is the one a user feels; the
         // second is the one that keeps the reduced-motion block honest. `animation: none` in that
@@ -6930,13 +6975,13 @@
       openMs = 300; cur = null;
       c[1].focus();
       c[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      ck('key/press-on-keydown', c[1].classList.contains('fm-card-press'),
-         'Enter on a focused card gives it no press — a keyboard user gets no acknowledgement at all until the project has finished loading');
-      ck('key/press-VISIBLE-on-keydown', pressShows(c[1]),
-         'the keyboard press is on the card but the card looks untouched (transform ' + getComputedStyle(c[1]).transform + ', opacity ' + getComputedStyle(c[1]).opacity + ')');
+      ck('key/acknowledged-on-keydown', acked(c[1]),
+         'Enter on a focused card gives it neither a press nor a lead — a keyboard user gets no acknowledgement at all until the project has finished loading');
+      ck('key/ack-VISIBLE-on-keydown', ackShows(c[1]),
+         'the keyboard acknowledgement is classed on the card but the card looks untouched (transform ' + getComputedStyle(c[1]).transform + ', opacity ' + getComputedStyle(c[1]).opacity + ')');
       await rAF(); await rAF();
-      ck('key/press-survives-the-load', c[1].classList.contains('fm-card-press'),
-         'the keyboard press was dropped while the project was still loading (keyup released it even though the open owns it)');
+      ck('key/ack-survives-the-load', acked(c[1]),
+         'the keyboard acknowledgement was dropped while the project was still loading (keyup released it even though the open owns it)');
       // NOT ASSERTED HERE: the blur half of the same rule (keyActivate cancels the press when focus
       // moves on, unless an open owns it). It cannot be tested from this runner — the suite's frame is
       // parked off-screen and never holds system focus, so element.focus() sets document.activeElement
@@ -6978,11 +7023,20 @@
       c = await cards();
       openMs = 0; cur = null;
       tap(c[0]);
-      ck('stuck/press-taken-by-the-open', c[0].classList.contains('fm-card-press'),
-         'the hung open did not take the press at all');
+      ck('stuck/ack-taken-by-the-open', acked(c[0]),
+         'the hung open did not acknowledge the tap at all');
       await sleep(260);
-      ck('stuck/press-let-go-by-the-backstop', !c[0].classList.contains('fm-card-press'),
-         'a load that never settles left the card pressed forever');
+      /* WHAT A HUNG OPEN STRANDS CHANGED WITH THE SPLIT (queue 128), and this is the assertion that
+         caught it. It used to strand a PRESSED CARD, which holdPress's WAIT.stuck timer let go. Now
+         the press is handed to the push on the tap, so what hangs is the whole transition: home dimmed
+         at -24%, the editor parked off-screen, nothing ever arriving, and no way back. startPush arms
+         its own deadline on the waiting phase for exactly this. */
+      ck('stuck/ack-let-go-by-the-backstop', !acked(c[0]),
+         'a load that never settles left the card acknowledged forever');
+      ck('stuck/transition-not-stranded', !document.body.classList.contains('fm-pushing') && !app.classList.contains('fm-push-wait'),
+         'a load that never settles left the push half-way: the home screen is dimmed and pushed aside, the editor is parked off-screen, and nothing is ever going to arrive. There is no way out of that state.');
+      ck('stuck/home-came-back', FM.home.isOpen(),
+         'the home screen never came back after a hung open — the app is stuck on a screen the user cannot leave');
       c = await cards();
       press(c[1], 'pointerdown');
       ck('stuck/presses-work-again', c[1].classList.contains('fm-card-press'),
