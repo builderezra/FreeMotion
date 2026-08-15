@@ -2719,7 +2719,41 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
       hide themselves when it is chosen, rather than sitting there meaning nothing.
-- [ ] **219 — Filter tiles need picture previews.** *(Found by me on 15 Aug finishing #113 step 5.)*
+- [ ] **220 — The filters section isn't what I asked for. Three corrections.** (15 Aug.) His words:
+      *"With the filters I wanted them to have a section like how effects and audio does, not how it
+      currently is, idk if this is just the base state while you work on it. Also there should be an add
+      filter button in the effect tab, you should have to go over to filters tab, and also I wanted a
+      shortcut button to go to filters inside the colouring tab"*
+      1. **The Filters tab should look like the Effects and Audio BROWSERS** — section banners and a grid
+         of tiles with previews — not the list of text rows I built. This swallows #219, because tiles
+         without pictures would be worse than the list, not better.
+      2. **No "+ Add Filter" button in the Effects tab.** Going to the Filters tab is how you add one.
+         (Reading his sentence as a dropped "n't" — the second half, "you should have to go over to
+         filters tab", only makes sense that way, and it is the tidier design: one door, not two.)
+      3. **The Colouring shortcut should NAVIGATE to the Filters tab**, not open a picker menu where it
+         stands. He asked for "a shortcut button to go to filters" and I built a shortcut that adds a
+         filter — a different thing.
+      4. **Rename the "Effects" sub-tab to "Visual"** (said 15 Aug, right after the above): *"In the
+         effects tab, change the effects sub tab to visual, because I want all the tabs to be classified
+         as effects, so you go into the effects tab, then you have, visual, filters, and then audio."*
+         The card is Effects; the three things inside it are Visual, Filters, Audio. Obvious in hindsight
+         — "Effects → Effects" was always a bit odd.
+      *(2), (3) and (4) shipped in v7.48; (1) is the remaining piece.*
+- [ ] **222 — A "?" in the top bar that opens the keyboard shortcuts.** (15 Aug.) His words: *"Put a
+      question mark in the top right corner to the left of note pad that quickly opens the keyboard
+      shortcuts menu."* and *"On pc it can go on the play button row along side everything else when you
+      get to that stage."*
+      So: phone → top bar, immediately LEFT of the notepad icon. PC → the transport row with the rest,
+      not the top bar. Note the top-bar spacing there has been got wrong twice already (#189), so measure
+      the gaps rather than eyeballing them, and remember the notepad only appears when nothing is
+      selected — the "?" must not shuffle position depending on selection.
+- [ ] **221 — Get rid of Delete from the layer ⋯ menu.** (15 Aug, with a phone screenshot.) His words:
+      *"Get rid of the delete button in this menu"* — the long ⋯ menu on a selected layer, which ends in
+      a red Delete under the colour tags. The bin icon is already in the top bar two inches away, so the
+      menu entry is a second door to the most destructive action in the app, at the end of a list you
+      scroll past. Nothing else in that menu is irreversible.
+- [ ] **219 — Filter tiles need picture previews.** *(Folded into #220 point 1 — he has now asked for the
+      whole tab to match the effects browser, and tiles are half of that.)* *(Found by me on 15 Aug finishing #113 step 5.)*
       The Filters subsection lists each look with words — its name, what it does, and the effects it is
       made of. What it does NOT have is a little preview picture the way the effects grid does, and for
       choosing a LOOK a picture is worth more than a sentence.

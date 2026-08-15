@@ -5960,7 +5960,7 @@
     } finally { q45Restore(saved); }
   });
 
-  test('Add Effect browser: a Visual/Audio toggle above Featured switches the whole browser', { item: 'q45-fx-toggle' }, async function () {
+  test('Add Effect browser: a Visual/Filters/Audio toggle above Featured switches the whole browser', { item: 'q45-fx-toggle' }, async function () {
     const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
     try {
       const f = q45Fixture(); saved.media.push(f.vid.id);
@@ -5983,8 +5983,8 @@
       if (scroll.firstElementChild !== mode()) throw new Error('the toggle is not the first thing in the browser — it has to sit ABOVE Featured');
       const feat = scroll.querySelector('.fxb-sec-title');
       if (!feat || !(mode().compareDocumentPosition(feat) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('“' + (feat && feat.textContent) + '” is not below the toggle');
-      if (!btn('Audio') || !btn('Effects')) throw new Error('the toggle does not offer both sides: ' + Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).map(function (b) { return b.textContent; }).join('/'));
-      if (!btn('Effects').classList.contains('on')) throw new Error('the visual side is not the selected one on a layer with no audio');
+      if (!btn('Audio') || !btn('Visual')) throw new Error('the toggle does not offer both sides: ' + Array.prototype.slice.call(scroll.querySelectorAll('.fxmode-btn')).map(function (b) { return b.textContent; }).join('/'));
+      if (!btn('Visual').classList.contains('on')) throw new Error('the visual side is not the selected one on a layer with no audio');
       // A control you cannot press is not a control: BOTH halves have to be a real thumb target and
       // sit fully inside the browser's own box — greyed or not, the dim one still has to be tappable
       // to say why it is dim.
@@ -6022,7 +6022,7 @@
       const wantCats = FM.audioFxRegistry.categories().map(function (c) { return c.label; });
       if (audioCats.join(',') !== wantCats.join(',')) throw new Error('the CATEGORIES did not switch with the toggle: ' + audioCats.join(',') + ' vs ' + wantCats.join(','));
       // …and back again.
-      const aVisBtn = Array.prototype.slice.call(aScroll.querySelectorAll('.fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === 'Effects'; });
+      const aVisBtn = Array.prototype.slice.call(aScroll.querySelectorAll('.fxmode-btn')).find(function (b) { return (b.textContent || '').trim() === 'Visual'; });
       aVisBtn.click();
       if (!document.getElementById('afx-browser').classList.contains('hidden') || document.getElementById('fx-browser').classList.contains('hidden')) throw new Error('the toggle is one-way — Effects did not bring the visual browser back');
     } finally {
@@ -6032,7 +6032,7 @@
     }
   });
 
-  test('Effects panel: the same Visual/Audio toggle, so an added audio effect still has an editor', { item: 'q45-fx-toggle' }, async function () {
+  test('Effects panel: the same Visual/Filters/Audio toggle, so an added audio effect still has an editor', { item: 'q45-fx-toggle' }, async function () {
     const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
     try {
       const f = q45Fixture(); saved.media.push(f.vid.id);
@@ -6046,7 +6046,7 @@
       };
       FM.selectLayer(loud.id); FM.inspector.openCategory('effects');
       if (!document.querySelector('#inspector .fxmode')) throw new Error('the Effects panel has no Visual/Audio toggle — an added audio effect would have no editor to live in');
-      if (!panelBtn('Effects').classList.contains('on')) throw new Error('the Effects panel does not open on the visual stack');
+      if (!panelBtn('Visual').classList.contains('on')) throw new Error('the Effects panel does not open on the visual stack');
       const addLabel = function () {
         const b = document.querySelector('#inspector .fx-add-btn');
         return b ? (b.textContent || '').trim() : '(no add button)';
@@ -6082,7 +6082,7 @@
       if (songCards.join(' | ') !== 'Speed | Volume | Effects') throw new Error('a song’s cards are “' + songCards.join(' | ') + '” — expected Speed | Volume | Effects');
       FM.inspector.openCategory('effects');
       if (addLabel() !== '+ Add Audio Effect') throw new Error('a song’s Effects card did not open on the audio side — its add button reads “' + addLabel() + '”');
-      if (!panelBtn('Effects').classList.contains('off')) throw new Error('the visual side is selectable on a song — a 0×0 layer has no picture for an effect to change');
+      if (!panelBtn('Visual').classList.contains('off')) throw new Error('the visual side is selectable on a song — a 0×0 layer has no picture for an effect to change');
     } finally { q45Restore(saved); }
   });
 
@@ -14052,12 +14052,17 @@
 
   test('filter row: Add Filter drops an empty filter into the stack, opened', { item: 'fx-filter-ui' }, async function () {
     await withFilterLayer(async function (L) {
-      clickText('.fx-add-btn', /add filter/i);
-      await sleep(80);
-      // It opens a picker now — the ready-made looks, plus "Empty filter" for building your own.
-      clickText('#context-menu button, .ctx-item, .cm-item', /empty filter/i);
-      await sleep(80);
-      if (!(L.effects || []).length || !FM.isFxContainer(L.effects[0])) throw new Error('Add Filter → Empty filter did not add a filter to the stack');
+      /* One door (queue 220): the Visual tab has no Add Filter button at all, and building your own
+         starts from "Empty filter" in the Filters subsection. */
+      if (Array.prototype.slice.call(document.querySelectorAll('.fx-add-btn'))
+            .some(function (b) { return /add filter/i.test(b.textContent || ''); })) {
+        throw new Error('the Visual tab still has an Add Filter button — "you should have to go over to filters tab"');
+      }
+      visibleFxPill(/^Filters$/).click();
+      await sleep(160);
+      clickText('.flt-row', /empty filter/i);
+      await sleep(120);
+      if (!(L.effects || []).length || !FM.isFxContainer(L.effects[0])) throw new Error('Empty filter did not add a filter to the stack');
       if (!L.effects[0]._expanded) throw new Error('the new filter landed closed — you cannot see there is anything to put in it');
       if (!document.querySelector('.fx-kids')) throw new Error('the open filter shows no area for the effects it holds');
       if (!document.querySelector('.fx-add-kid')) throw new Error('there is no way to add an effect INTO the filter');
@@ -14159,30 +14164,9 @@
     });
   });
 
-  test('filter library: the picker lands a ready-made look as an ordinary, editable filter', { item: 'fx-library' }, async function () {
-    await withFilterLayer(async function (L) {
-      clickText('.fx-add-btn', /add filter/i);
-      await sleep(80);
-      var sec = FM.filters.sections()[0];
-      clickText('#context-menu button, .ctx-item, .cm-item', new RegExp(sec.label.split(' ')[0], 'i'));
-      await sleep(80);
-      var first = FM.filters.bySection(sec.key)[0];
-      clickText('#context-menu button, .ctx-item, .cm-item', new RegExp(first.name.split(' ')[0].replace(/[^\w]/g, ''), 'i'));
-      await sleep(100);
-      var box = (L.effects || [])[0];
-      if (!box || !FM.isFxContainer(box)) throw new Error('picking "' + first.name + '" did not land a filter');
-      if (box.name !== first.name) throw new Error('it landed called "' + box.name + '" instead of "' + first.name + '"');
-      if (!box.effects.length) throw new Error('it landed empty');
-      // Editable, not locked — the whole point of it being an ordinary container.
-      var before = box.effects.length;
-      box.effects.pop();
-      FM.inspector.refresh(); await sleep(60);
-      if (box.effects.length !== before - 1) throw new Error('a library filter refused an edit');
-    });
-  });
-
-  // The visible toggle's pill by label — see the note in the first filters-tab test about why a bare
-  // document query is wrong here.
+  // The visible toggle's pill by label. A bare document query is wrong here: the same control is built
+  // by the inspector, the effects browser and the audio effects browser, and a browser opened once
+  // leaves its copy in the DOM, hidden, after close.
   function visibleFxPill(re) {
     var w = Array.prototype.slice.call(document.querySelectorAll('.fxmode'))
       .filter(function (x) { return x.getClientRects().length > 0; })[0];
@@ -14193,8 +14177,7 @@
     return b;
   }
 
-  /* His words: "now I want a third subsection for filters. It'll work the same as the others." */
-  test('filters tab: a third subsection sits beside Effects and Audio', { item: 'fx-library' }, async function () {
+  test('filters tab: a third subsection sits beside Visual and Audio', { item: 'fx-library' }, async function () {
     await withFilterLayer(async function (L) {
       /* Scoped to the VISIBLE toggle. A bare document query returned 9 buttons when run inside the
          suite, which looked like stale panels piling up. MEASURED, and it is not: the toggle
@@ -14212,7 +14195,8 @@
       if (pills.length !== 3) throw new Error('expected three subsections, found ' + pills.length + ': ' + pills.join(', '));
       if (pills.indexOf('Filters') < 0) throw new Error('no Filters subsection: ' + pills.join(', '));
       // Beside them, not instead of them.
-      if (pills.indexOf('Effects') < 0 || pills.indexOf('Audio') < 0) throw new Error('a subsection went missing: ' + pills.join(', '));
+      if (pills.indexOf('Visual') < 0 || pills.indexOf('Audio') < 0) throw new Error('a subsection went missing: ' + pills.join(', '));
+      if (pills.indexOf('Effects') >= 0) throw new Error('the visual subsection is still called Effects — the CARD is Effects, these three are what is inside it');
     });
   });
 
@@ -14221,6 +14205,7 @@
       visibleFxPill(/^Filters$/).click();
       await sleep(140);
       var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-row'));
+      rows = rows.filter(function (r) { return !r.classList.contains('flt-empty'); });   // the build-your-own door is not one of the 16
       if (rows.length !== FM.filters.all().length) throw new Error('the tab lists ' + rows.length + ' filters, the library has ' + FM.filters.all().length);
       FM.filters.sections().forEach(function (sec) {
         var found = Array.prototype.slice.call(document.querySelectorAll('.insp-sub-label'))
@@ -14274,16 +14259,13 @@
       // "at the top" — nothing of the panel's own content may precede it.
       var prev = btn.previousElementSibling;
       if (prev) throw new Error('the shortcut is not first in the panel; "' + (prev.textContent || prev.className).slice(0, 40) + '" is above it');
-      btn.click(); await sleep(140);
-      var items = Array.prototype.slice.call(document.querySelectorAll('.ctx-item')).map(function (n) { return n.textContent.trim(); });
-      if (!items.length) throw new Error('the shortcut opened nothing');
-      if (!items.some(function (t) { return /empty filter/i.test(t); })) throw new Error('the menu it opened is not the filter picker: ' + items.join(', '));
-      // …and it is the SAME picker, not a second one that will drift: every section is offered.
-      FM.filters.sections().forEach(function (s) {
-        if (!items.some(function (t) { return t.indexOf(s.label) === 0; })) throw new Error('the shortcut menu is missing the ' + s.label + ' section');
-      });
-      if (FM.contextMenu) FM.contextMenu.hide();
-      await sleep(60);
+      /* It GOES to the Filters subsection (queue 220) — he asked for "a shortcut button to go to
+         filters", a place to look, not a menu that adds one where it stands. */
+      btn.click(); await sleep(220);
+      var on = Array.prototype.slice.call(document.querySelectorAll('.fxmode-btn'))
+        .filter(function (x) { return x.classList.contains('on'); })[0];
+      if (!on || !/^Filters$/.test(on.textContent.trim())) throw new Error('the shortcut did not land on the Filters subsection (on: ' + (on && on.textContent.trim()) + ')');
+      if (!document.querySelector('.flt-row')) throw new Error('it landed somewhere with no filters listed');
     });
   });
 

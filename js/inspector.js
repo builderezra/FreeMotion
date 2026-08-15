@@ -1050,54 +1050,6 @@ window.FM = window.FM || {};
     return row;
   }
 
-  /* The filter picker — the one place a filter gets added, wherever you start from.
-   *
-   * Landing a look and landing an empty container are the SAME operation, because a filter from the
-   * library is not a special locked thing: it is exactly what "+ Add Filter → Empty filter" gives you,
-   * so it can be opened, retuned, part-deleted, added to and faded with Strength.
-   *
-   * Module-level rather than a closure inside effectsSection because Ezra asked for a second way in —
-   * "have a button at the top of the colouring section as a shortcut to it" — and two copies of a menu
-   * this fiddly would drift apart within a release. */
-  function openFilterPicker(layer, anchorEl) {
-    const landFilter = (box) => {
-      if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }
-      if (!layer.effects) layer.effects = [];
-      layer.effects.forEach(e => { e._expanded = false; });
-      box._expanded = true;
-      layer.effects.push(box);
-      afterFx();
-    };
-    const empty = () => { const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); if (box) box.effects = []; landFilter(box); };
-    const secs = (FM.filters && FM.filters.sections()) || [];
-    if (!FM.contextMenu || !secs.length) { empty(); return; }   // no library / no menu → an empty one
-    const r = anchorEl.getBoundingClientRect();
-    const at = (items) => FM.contextMenu.show(Math.max(8, r.left), r.bottom + 4, items);
-    // Two shallow levels rather than one long list: 16 looks in a single menu is a scroll on a phone,
-    // and the sections are the thing that makes them findable — his words, "section them, so that
-    // people can find stuff organised, like how the effects are organised".
-    const items = secs.map(s => ({
-      label: s.label + ' ›',
-      action: () => at(FM.filters.bySection(s.key).map(f => ({
-        label: f.name,
-        action: () => {
-          const box = FM.filters.makeInstance(f.id);
-          if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
-          // Drop anything inside it that cannot run on THIS layer, keeping the rest — the same rule
-          // Paste follows. A text-only ingredient on a shape would otherwise sit there doing nothing.
-          const fitted = FM.fxRegistry.fitToLayer(box, layer);
-          if (!fitted) { if (FM.toast) FM.toast('Nothing in “' + f.name + '” works on this layer'); return; }
-          landFilter(fitted);
-          if (FM.toast && fitted.effects.length < box.effects.length) {
-            FM.toast('Added “' + f.name + '” — ' + (box.effects.length - fitted.effects.length) + ' part(s) didn’t suit this layer');
-          }
-        },
-      }))),
-    }));
-    items.push({ label: 'Empty filter', action: empty });
-    at(items);
-  }
-
   /* The Filters subsection (queue 113, step 5). His words: "now I want a third subsection for filters.
    * It'll work the same as the others" and "You will make a Bunch of filters and section them, so that
    * people can find stuff organised, like how the effects are organised."
@@ -1115,6 +1067,24 @@ window.FM = window.FM || {};
     const s = section('Filters');
     const h4 = s.querySelector('h4'); if (h4) h4.remove();
     s.appendChild(el('div', 'insp-hint', 'A filter is a group of effects that act as one, with a single Strength. Add one and you can open it up and change anything inside.'));
+    /* Build-your-own lives here now (queue 220). "+ Add Filter" is gone from the Effects tab because he
+       wants one door — so this door has to carry BOTH things people arrive for, a ready-made look and an
+       empty one to fill yourself, or removing that button would have removed the feature. */
+    const mkEmpty = el('button', 'flt-row flt-empty');
+    mkEmpty.appendChild(el('div', 'flt-name', 'Empty filter'));
+    mkEmpty.appendChild(el('div', 'flt-desc', 'Start with nothing in it and add your own effects.'));
+    mkEmpty.addEventListener('click', () => {
+      const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+      if (!box) { if (FM.toast) FM.toast('Filters aren’t available'); return; }
+      box.effects = [];
+      if (!layer.effects) layer.effects = [];
+      layer.effects.forEach(e => { e._expanded = false; });
+      box._expanded = true;
+      layer.effects.push(box);
+      fxTab = 'visual';
+      afterFx();
+    });
+    s.appendChild(mkEmpty);
     (FM.filters.sections() || []).forEach(sec => {
       const list = FM.filters.bySection(sec.key);
       if (!list.length) return;
@@ -1165,19 +1135,10 @@ window.FM = window.FM || {};
     const add = el('button', 'fx-add-btn', '+ Add Effect');
     add.addEventListener('click', () => { if (FM.fxBrowser) FM.fxBrowser.open(layer); });
     s.appendChild(add);
-    /* An empty filter to put effects into (queue 113). Deliberately NOT a "group the effects you
-       already have" action: there is no multi-select in this stack, so the only unambiguous meaning
-       of that would be "all of them", which is rarely what someone wants. Add an empty one, then use
-       the button inside it. The ready-made filters people can pick from arrive with the library. */
-    const addF = el('button', 'fx-add-btn fx-add-filter', '+ Add Filter');
-    addF.title = 'A group of effects that act as one, with a single Strength';
-    /* Land a container — either an empty one to fill yourself, or a ready-made look from the library.
-       Both end up as the SAME object: a filter from the list is not a special locked thing, it is
-       exactly what you could have built by hand, so you can open it, retune any effect inside, throw
-       one out or add your own. That is the point of Ezra's "it should show up in the effects menu and
-       actually be grouped as one thing". */
-    addF.addEventListener('click', (ev) => openFilterPicker(layer, ev.currentTarget));
-    s.appendChild(addF);
+    /* NO "+ Add Filter" here (queue 220). It used to sit under Add Effect and open a picker, and he
+       ruled that out: "there should[n't] be an add filter button in the effect tab, you should have to
+       go over to filters tab." One door, and the door is the Filters subsection — which now carries the
+       empty-filter option too, so building your own was moved rather than taken away. */
     // secondary stack tools — copy / paste / save-as-preset (demoted below the add button)
     const tools = el('div', 'fx-stack-tools');
     /* Both buttons speak to FM.fxClipboard now (v6.32) — see the note on it. They used to use a
@@ -2015,7 +1976,10 @@ window.FM = window.FM || {};
        work the same as the others." Its gate is the VISUAL gate — a filter is a group of visual
        effects, so it needs a picture for the same reason Effects does — plus a library to browse. */
     const okFilters = okVisual && !!(FM.filters && FM.filters.all().length);
-    [['visual', 'Effects', okVisual], ['filters', 'Filters', okFilters], ['audio', 'Audio', okAudio]].forEach(([key, label, ok]) => {
+    // 'Visual', not 'Effects' (queue 220): the CARD is Effects, and these three are what is inside it.
+    // "I want all the tabs to be classified as effects, so you go into the effects tab, then you have,
+    // visual, filters, and then audio." Effects → Effects was always a bit odd.
+    [['visual', 'Visual', okVisual], ['filters', 'Filters', okFilters], ['audio', 'Audio', okAudio]].forEach(([key, label, ok]) => {
       const b = el('button', 'fxmode-btn' + (current === key ? ' on' : '') + (ok ? '' : ' off'), label);
       b.title = ok ? (key === 'audio' ? 'Audio effects for this clip’s sound'
                     : key === 'filters' ? 'Ready-made looks — a group of effects that act as one'
@@ -3750,9 +3714,12 @@ window.FM = window.FM || {};
          clip needs a look rather than a slider. Same picker as "+ Add Effect"'s neighbour, so there is
          one filter menu in the app rather than two that drift apart. */
       if (FM.filters && FM.filters.all().length) {
-        const fb = el('button', 'fx-add-btn insp-filter-shortcut', '✦ Add a Filter');
+        const fb = el('button', 'fx-add-btn insp-filter-shortcut', '✦ Filters →');
         fb.title = 'Ready-made looks — Cinematic, Retro, Glow, Stylised';
-        fb.addEventListener('click', (ev) => openFilterPicker(layer, ev.currentTarget));
+        // GOES to the Filters subsection rather than adding one from here (queue 220). He asked for
+        // "a shortcut button to go to filters" and got a button that added one, which is a different
+        // thing: a shortcut takes you somewhere to look before you choose.
+        fb.addEventListener('click', () => FM.inspector.openCategory('filters'));
         body.appendChild(fb);
       }
       // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
@@ -4076,7 +4043,7 @@ window.FM = window.FM || {};
     // 'audiofx' is no longer a view of its own (queue 45) — it is the Effects card's audio TAB. The
     // key is still accepted because it is what the Volume panel's "Audio effects…" button and the
     // audio browser ask for, and because a project/session could have persisted it.
-    openCategory(key) { if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
+    openCategory(key) { if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._fxEasing = null; FM._cropEasing = false; this.refresh(); },
     // The quick row's middle buttons depend on which SIDE of the clip the playhead is sitting on, and
     // the panel deliberately does NOT rebuild while you scrub (it would rebuild 60-120 times a second).
     // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on

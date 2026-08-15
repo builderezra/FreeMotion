@@ -2510,7 +2510,10 @@ window.FM = window.FM || {};
     // the layer extras (Flip/Fit/Clipping Mask/Outline/Extract Audio/Media Info/colour tag) used to
     // live ONLY in the desktop top-bar ⋯ — merged here so every surface shows one identical menu
     if (FM.layerMoreItems) { items.push({ sep: true }); FM.layerMoreItems(layer).forEach(it => items.push(it)); }
-    items.push({ sep: true }, { label: 'Delete', danger: true, action: () => FM.deleteLayer(layer.id) });
+    /* NO Delete here (queue 221). His words, with a screenshot of this menu: "Get rid of the delete
+       button in this menu." The bin icon sits in the top bar two inches away, so this was a second door
+       to the most destructive action in the app — at the END of a long scrolling list, under the colour
+       swatches, where a mis-tap lands. Nothing else in this menu is irreversible; that is the point. */
     return items;
   };
 
