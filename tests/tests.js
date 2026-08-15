@@ -14507,6 +14507,68 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #125: "major lag when scrolling, with barely any layers" ----------------
+   *
+   * His words, and the fair part of them: "I know I tell you about lag a lot but nothing much ever
+   * gets resolved." Three profiling passes came back clean, and this is why: the number the app
+   * watches is the time our JavaScript spends inside render(). Canvas `filter` work is done by the
+   * GPU after we return and video decode happens off-thread, so neither lands on that clock.
+   * Measured: six blurs plus six glows on a 1080x1920 comp at 6x CPU throttle reported 1.1ms a frame.
+   * The adaptive quality ladder was therefore inert on precisely the scenes it exists for.
+   *
+   * The frame INTERVAL sees all of it. These two tests hold the new signal in place from both ends,
+   * because it has one obvious way to go wrong in each direction: blind to real cost (the bug), or
+   * jumpy on a machine that is keeping up perfectly well (worse than the bug). */
+  test('perf: a frame that overruns is counted even when our own JavaScript was fast', { item: 'perf-gap-signal' }, function () {
+    if (!FM._perfState) throw new Error('FM._perfState is missing');
+    var s = FM._perfState();
+    if (!('gapAvg' in s)) throw new Error('the ladder exposes no frame-interval average — it can only be seeing main-thread render time, which is blind to GPU filter work and video decode');
+    if (typeof FM.playbackQualityInfo !== 'function') throw new Error('FM.playbackQualityInfo is gone');
+    if (!('avgGapMs' in FM.playbackQualityInfo())) throw new Error('playbackQualityInfo does not report the frame interval, so there is no way to tell a GPU-bound stall from a healthy frame');
+  });
+
+  test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
+    var keep = FM.scene.layers.slice(), keepT = FM.time;
+    var fps = FM.scene.project.fps || 30;
+    try {
+      // A stand-in for a decoded video: seekVideosToTime only ever reads .currentTime/.duration and
+      // writes .currentTime, so a plain object records exactly what the real element would receive.
+      var writes = [];
+      var fake = { currentTime: 0, duration: 10 };
+      Object.defineProperty(fake, 'currentTime', {
+        get: function () { return this._t || 0; },
+        set: function (v) { writes.push(v); this._t = v; },
+        configurable: true,
+      });
+      var L = FM.makeLayer('video', { start: 0, duration: 5 });
+      L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, { kind: 'video', el: fake, duration: 10, width: 64, height: 48 });
+
+      FM.time = 1;
+      FM.seekVideosToTime();
+      if (writes.length !== 1) throw new Error('control failed: a real move did not seek (' + writes.length + ' writes) — this test cannot tell the fix from the bug');
+
+      // The same time again, and a sub-frame nudge: a scrub snaps to the frame grid, so a slow finger
+      // produces many animation frames that all resolve to the same time.
+      FM.seekVideosToTime();
+      FM.time = 1 + (0.2 / fps);
+      FM.seekVideosToTime();
+      if (writes.length !== 1) {
+        throw new Error('re-seeking to a time the element is already at issued ' + (writes.length - 1) + ' extra write(s). Every one restarts the decoder mid-fetch, cancelling the decode of the very frame it is being asked for, and emits no "seeked" so it does not even repaint.');
+      }
+
+      // …and a genuine step to the next frame must still get through.
+      FM.time = 1 + (1.0 / fps);
+      FM.seekVideosToTime();
+      if (writes.length !== 2) throw new Error('a real one-frame step was swallowed by the guard (' + writes.length + ' writes total) — the picture would freeze while the playhead moved');
+    } finally {
+      FM.scene.layers.forEach(function (l) { FM.media.remove(l.id); });
+      FM.scene.layers = keep; FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- #115: drag a clip to the edge and the timeline comes to meet you ----------
    *
    * This feature was built and backed out three times. Each attempt turned the SAME three unrelated

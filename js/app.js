@@ -124,14 +124,21 @@ window.FM = window.FM || {};
    * Snapshot, not live refs: nothing outside may steer the ladder. */
   FM._perfState = function () {
     return { tier: _playTier, tiers: PLAY_TIERS.length, factor: PLAY_TIERS[Math.min(PLAY_TIERS.length - 1, _playTier)],
-             renderAvg: _renderAvg, locked: !!_locked, lockAt: _lockAt, dropFrom: _dropFrom,
+             renderAvg: _renderAvg, gapAvg: _gapAvg, locked: !!_locked, lockAt: _lockAt, dropFrom: _dropFrom,
              cooldown: _tierCooldown, ctx: _costCtx,
              canvasPx: (typeof canvas !== 'undefined' && canvas) ? canvas.width * canvas.height : 0 };
   };
   // A tier drop has to EARN its place — see the payoff test in notePlaybackCost.
   const DROP_PAYOFF = 0.85;   // a drop must cut the average by 15%+ to be worth the softer picture
   const LOCK_ESCAPE = 1.35;   // once locked, only a cost this much higher re-opens the question
+  // How late a frame INTERVAL has to be before it counts as evidence at all: 2.5 display intervals,
+  // i.e. a sustained rate under ~24fps. Below that it is jitter, and reacting to jitter softens the
+  // preview on machines that are keeping up perfectly well. (queue 125)
+  const LATE_FACTOR = 2.5;
   let _dropFrom = 0, _dropPx = 0, _locked = 0, _lockAt = 0, _skipCost = 0, _costCtx = '';
+  // The frame INTERVAL average, alongside the JS-time one. See the note in notePlaybackCost: it is
+  // the only one of the two that can see GPU filter work or video decode. (queue 125)
+  let _gapAvg = 0;
   let _noLowerPx = 0;   // backing store at which we already learned no lower tier changes a pixel — see nextUsefulTier
 
   /* Playback is not the only time the picture is MOVING. Dragging the playhead, a layer on the
@@ -154,11 +161,16 @@ window.FM = window.FM || {};
   function noteMotion(ms) {
     if (FM.playing) return;                       // playback has its own measurement below
     const now = performance.now();
+    const gap = _mLast ? (now - _mLast) : 0;
     if (now - _mLast > MOTION_GAP) _mFrames = 0;
     _mLast = now;
     _mFrames++;
     if (!_inMotion && _mFrames >= MOTION_FRAMES) { _inMotion = true; resizeCanvas(); }
-    if (_inMotion) notePlaybackCost(ms);           // the same adaptive ladder, so a fast machine never drops at all
+    /* The gap between CONSECUTIVE renders is a real frame interval and is handed to the ladder as the
+     * one signal that can see GPU filter cost — see the long note in notePlaybackCost. Only when the
+     * two renders were genuinely back to back: a gap wider than MOTION_GAP means the user paused, and
+     * feeding idle time to a cost estimator would read a still hand as a struggling machine. (queue 125) */
+    if (_inMotion) notePlaybackCost(ms, (gap > 0 && gap <= MOTION_GAP) ? gap : 0);
     clearTimeout(_mIdle);
     _mIdle = setTimeout(() => {
       _mFrames = 0;
@@ -195,7 +207,7 @@ window.FM = window.FM || {};
     return found;
   }
   // Called once per rendered frame with the measured cost of that frame.
-  function notePlaybackCost(ms) {
+  function notePlaybackCost(ms, gapMs) {
     if (!FM.playing && !_inMotion) return;
     const mode = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
     // 'detail' never trades sharpness, so the ladder controls nothing at all. Park it at the top
@@ -207,15 +219,46 @@ window.FM = window.FM || {};
     // other — a cost-to-beat carried out of a drag made playback undo a drop that was helping, then
     // locked adaptation out while it stuttered. The bookkeeping starts fresh when the regime changes.
     const ctx = FM.playing ? 'play' : 'drag';
-    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0; }
+    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _gapAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0; }
     // The frame straight after a tier change repaints into a freshly allocated backing store and is
     // the dearest one in the run. Letting it seed the average makes every drop look like it made
     // things worse — which is exactly the judgement the payoff test below has to get right.
     if (_skipCost) { _skipCost = 0; return; }
     _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
+    if (gapMs > 0) _gapAvg = _gapAvg ? (_gapAvg * 0.8 + gapMs * 0.2) : gapMs;
     if (_tierCooldown > 0) { _tierCooldown--; return; }
     const budget = 1000 / 60;                       // a frame's worth of time at display rate
     const before = _playTier;
+    /* WHAT A FRAME REALLY COST US — and the reason queue 125 ("major lag with barely any layers")
+     * survived three profiling passes that all came back clean.
+     *
+     * `ms` is the time our JavaScript spent inside render(). It is blind to the two costs most likely
+     * to be behind the lag: canvas `filter` effects, which are done by the GPU after we return, and
+     * video decode, which happens off-thread. MEASURED: six Gaussian blurs plus six glows on a
+     * 1080x1920 comp at 6x CPU throttle reported **1.1 ms a frame**, so `_renderAvg` sat at a tenth of
+     * budget, no rung was ever shed, and the app cheerfully reported itself healthy while stuttering.
+     * The adaptive quality ladder was inert on exactly the scenes it exists for.
+     *
+     * The FRAME INTERVAL sees all of it, because a frame that the GPU cannot finish delays the next
+     * rAF. But the raw interval is not a cost: a perfectly healthy 60fps frame is 16.7ms apart, almost
+     * all of it idle waiting for the display. Subtracting one display interval turns it into "how far
+     * we OVERRAN" — zero while we are keeping up, and growing precisely when we are not.
+     *
+     * Taking the max means every existing behaviour is untouched whenever frames arrive on time, and
+     * the payoff test below now judges a drop by the same signal that asked for it. That matters: a
+     * GPU-bound drop judged on the JS clock would always read "no improvement" and be undone, which
+     * would have made this fix do nothing at all.
+     *
+     * THE THRESHOLD IS THE WHOLE DIFFICULTY, and the first cut got it wrong in the dangerous
+     * direction. Simply taking `gap - budget` as the overrun means a 28.7ms frame — ONE dropped frame,
+     * which is ordinary jitter on any machine — already reads as 12ms of overrun and trips the drop.
+     * Measured: a single small shape with no effects and no throttle walked down two rungs. An app
+     * that softens its own preview for no reason is a worse bug than the lag this is here to fix.
+     * So the interval is only admitted as evidence once it is UNAMBIGUOUS: a sustained average below
+     * about 24fps, which no amount of vsync jitter produces and which is squarely what "major lag"
+     * means. Under that bar the ladder behaves exactly as it always did, on the JS clock alone. */
+    const late = _gapAvg > budget * LATE_FACTOR ? Math.max(0, _gapAvg - budget) : 0;
+    const cost = Math.max(_renderAvg, late);
     /* DID THE LAST DROP ACTUALLY HELP? Only part of a frame's cost is the pixels we control.
      * Decoding a video frame and handing it to the GPU costs the same whether it lands in a
      * 1.2-megapixel canvas or a 0.09-megapixel one: measured on one plain 2048x2048 clip with no
@@ -229,7 +272,7 @@ window.FM = window.FM || {};
     // so the question only re-opens when the scene gets materially heavier (a blur added, a second
     // clip). An expiring lock re-probed forever — it softened the preview for a moment every ten
     // seconds on exactly the plain video this was written to fix.
-    if (_locked && _renderAvg > _lockAt * LOCK_ESCAPE) _locked = 0;
+    if (_locked && cost > _lockAt * LOCK_ESCAPE) _locked = 0;
     /* A probe that did not actually change the rendered resolution proves nothing, so don't judge it
      * — just carry on down the ladder. Ask the CANVAS rather than the tier, because there are two
      * separate ways a tier step can move no pixels at all:
@@ -239,9 +282,9 @@ window.FM = window.FM || {};
      *     the same backing store on a big comp (a 2048² project clamps every tier below 0.735).
      * The backing-store size is the one thing that is true in both cases. */
     if (_dropFrom && canvas.width * canvas.height === _dropPx) _dropFrom = 0;
-    if (_dropFrom && _renderAvg > _dropFrom * DROP_PAYOFF) {
+    if (_dropFrom && cost > _dropFrom * DROP_PAYOFF) {
       _playTier--; _locked = 1; _lockAt = _dropFrom; _dropFrom = 0;   // didn't pay — undo, and remember the cost at the tier we came BACK to
-    } else if (_renderAvg > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_locked) {
+    } else if (cost > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_locked) {
       /* Step to the next tier that actually MOVES PIXELS, not merely the next tier. The guard above
        * stops a no-op probe being JUDGED; nothing stopped one being MADE, and on a dpr-1 PC
        * previewScale()'s 0.25 floor collapses the bottom of the ladder into one backing store.
@@ -250,22 +293,22 @@ window.FM = window.FM || {};
        * resizeCanvas() calls (forced reflow + re-render) and three wipes of the cost average, over
        * 3.1s→6.9s, for zero pixel change. */
       const nt = nextUsefulTier();
-      if (nt > _playTier) { _dropFrom = _renderAvg; _dropPx = canvas.width * canvas.height; _playTier = nt; }   // struggling → shed pixels, remembering the cost AND the backing store to beat
-    } else if (_renderAvg < budget * 0.30 && _playTier > 0) {
+      if (nt > _playTier) { _dropFrom = cost; _dropPx = canvas.width * canvas.height; _playTier = nt; }   // struggling → shed pixels, remembering the cost AND the backing store to beat
+    } else if (cost < budget * 0.30 && _playTier > 0) {
       _dropFrom = 0; _playTier--;                                     // lots of headroom → give detail back
-    } else if (_renderAvg <= budget * 0.72) {
+    } else if (cost <= budget * 0.72) {
       _dropFrom = 0;                                                  // inside budget: the last drop did its job, stop judging it
     }
     // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
     // A drag is short and you're watching position, not detail, so it may find its level quickly.
-    if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _skipCost = 1; resizeCanvas(); }
+    if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _gapAvg = 0; _skipCost = 1; resizeCanvas(); }
   }
   FM.playbackQualityInfo = function () {
     // `factor` is the tier's own value; `effective` is what previewScale() actually applies — the two
     // differ in 'smooth' (floored at tier 2) and 'detail' (always 1), and it was reading the tier
     // instead of the effective factor that hid a dead-ended ladder in smooth mode.
     return { tier: _playTier, factor: PLAY_TIERS[_playTier], effective: playQualityFactor(),
-      avgFrameMs: +_renderAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto',
+      avgFrameMs: +_renderAvg.toFixed(2), avgGapMs: +_gapAvg.toFixed(2), inMotion: _inMotion, mode: (FM.settings && FM.settings.get('playbackQuality')) || 'auto',
       // the payoff test's working: what the last drop had to beat, and whether probing is latched off
       dropFrom: +_dropFrom.toFixed(2), locked: !!_locked, lockAt: +_lockAt.toFixed(2), costCtx: _costCtx };
   };
@@ -721,7 +764,19 @@ window.FM = window.FM || {};
       if (layer.reversed && m.frameCache) return; // the cache renders this synchronously
       const local = FM.layerLocalTime(layer, FM.time);
       if (local == null) return;
-      try { m.el.currentTime = Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001)); } catch (e) {}
+      const target = Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
+      /* DON'T RE-SEEK TO WHERE WE ALREADY ARE (queue 125). This write was unconditional, and writing
+       * currentTime restarts the element's seek algorithm — which means CANCELLING a decode that was
+       * already in flight. It matters because scrubTime snaps to the frame grid first, so a slow
+       * finger produces many animation frames that all resolve to the SAME time, and every one of them
+       * re-issued an identical seek. The decoder was therefore being interrupted and restarted for a
+       * frame it was already fetching, over and over, for no picture change at all: a no-op seek emits
+       * no 'seeked' either (js/media.js:125), so it does not even repaint.
+       * The exporter has had exactly this guard since #15 (js/exporter.js) — the preview never did.
+       * Half a frame at 30fps, so a genuine step to the next frame always passes. */
+      const cur = m.el.currentTime || 0;
+      if (Math.abs(cur - target) < (0.5 / (FM.scene.project.fps || 30))) return;
+      try { m.el.currentTime = target; } catch (e) {}
     });
   };
 
@@ -1233,7 +1288,14 @@ window.FM = window.FM || {};
       FM.playbackStats.renders++;
       const _t0 = performance.now();
       render();
-      notePlaybackCost(performance.now() - _t0);   // measures the RENDER, not the rAF gap — that's the part we can actually control
+      /* No frame-interval signal here, deliberately, unlike the scrub path (queue 125). Playback
+       * SKIPS frames on purpose — the `fno !== _lastDrawnFrame` gate above means a 30fps comp on a
+       * 60Hz screen renders every other rAF by design — so the gap between renders is 33ms when
+       * everything is perfectly healthy. Handing that to a cost estimator calibrated on the display
+       * interval would report a flawless playback as permanently late. Getting the interval signal
+       * onto playback means measuring against the PROJECT frame time instead, which is a separate
+       * change and is not this one. */
+      notePlaybackCost(performance.now() - _t0);
     }
     FM.timeline.updatePlayhead();
     updateReadout();
@@ -1434,7 +1496,16 @@ window.FM = window.FM || {};
     if (rec.kind === 'video') {
       // Always re-render when a seek completes — including during playback, so reversed
       // clips (which we drive by seeking each frame) actually update while playing.
-      rec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });   // never repaint the PREVIEW mid-export: the exporter seeks every video every frame (#47)
+      /* requestRender, NOT the bare synchronous render() this used to call (queue 125). Two reasons,
+       * and the second is the one that mattered. It COALESCES: a scrub lands a 'seeked' per frame and
+       * each one was forcing a whole extra out-of-band render on top of the scrub's own, so a scrub of
+       * a video layer was paying for two full renders a frame. And it is MEASURED: FM.requestRender
+       * times the render and feeds noteMotion, while a bare render() is invisible to it — so roughly
+       * half of a video scrub's real cost never reached the adaptive quality ladder at all, which is a
+       * direct part of why "measure the render path" kept coming back clean.
+       * (js/storage.js already wired its three copies of this listener the right way; these four were
+       * the odd ones out.) */
+      rec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // never repaint the PREVIEW mid-export: the exporter seeks every video every frame (#47)
       FM.wireVideoRepaint(rec);   // …and when the FIRST FRAME finally decodes, which no seek announces
     }
     /* The playhead follows the import, so you are looking AT the clip you just added rather than at
@@ -2018,7 +2089,7 @@ window.FM = window.FM || {};
     try { nrec = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file); } catch (e) { nrec = null; }
     if (nrec && nrec !== rec) {
       FM.media.set(dstId, nrec);
-      if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });
+      if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // coalesced AND measured — see the note at the first of these (queue 125)
     }
   }
 
@@ -2177,7 +2248,7 @@ window.FM = window.FM || {};
         } catch (e) { nrec = null; }
         if (nrec) {
           FM.media.set(copy.id, nrec);
-          if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); });
+          if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // coalesced AND measured — see the note at the first of these (queue 125)
         }
       }
       // Single-camera invariant. FM.duplicateLayer enforces it; paste did not, so Cmd-C then Cmd-V
@@ -2208,7 +2279,8 @@ window.FM = window.FM || {};
     dropAudioGraph(old);   // the new rec brings a new element, so the old source node has nothing left to feed
     FM.media.set(id, nrec);
     layer.type = nrec.kind;                          // video ↔ image as needed
-    if (nrec.kind === 'video' && nrec.el) { nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; render(); }); FM.wireVideoRepaint(nrec); }
+    // coalesced AND measured — see the note at the first of these (queue 125)
+    if (nrec.kind === 'video' && nrec.el) { nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); }); FM.wireVideoRepaint(nrec); }
     // Re-clamp timing to the NEW source so a long clip doesn't freeze on the last frame (and audio
     // length doesn't diverge from the visible duration). Keeps transform/keyframes/effects/masks.
     if (nrec.kind === 'video' && nrec.duration) {

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>queue 125 — does the quality ladder keep adapting mid-gesture?</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, monospace; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 16px; }
+  table { border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+  td, th { border: 1px solid #2a2f3a; padding: 3px 9px; text-align: right; }
+  th { color: #9fb; }
+  .row { padding: 6px 10px; border-radius: 6px; margin: 4px 0; }
+  .ok { background: #11251a; } .fail { background: #2a1416; }
+  .tag { font-weight: 700; } .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+</style>
+</head>
+<body>
+  <h3>queue 125 — the ladder mid-gesture</h3>
+  <p style="color:#98a">REQUESTS #125 records this as untested: <em>"the adaptive tier only resizes the
+  canvas when _inMotion FLIPS (app.js:150). If the ladder drops a further rung mid-gesture, nothing
+  appears to call resizeCanvas() again — so the canvas may take one step down and then stop adapting.
+  Verify that before assuming it is a defect."</em> This scrubs a deliberately expensive scene under CPU
+  throttle and watches the tier and the actual backing store, frame by frame.</p>
+  <div id="out">running…</div>
+  <iframe id="app" src="../index.html"></iframe>
+<script>
+var results = [], samples = [];
+function say(n, ok, err) { results.push({ name: n, ok: !!ok, err: ok ? '' : (err || '') }); }
+var frame = document.getElementById('app');
+var W = parseInt(new URLSearchParams(location.search).get('w') || '0', 10);
+if (W > 0) frame.style.width = W + 'px';
+frame.addEventListener('load', function () {
+  var w = frame.contentWindow;
+  setTimeout(function () {
+    go(w).catch(function (e) { say('harness', false, String((e && e.stack) || e)); })
+         .then(function () { render(); window.__q125tier = { results: results, samples: samples }; window.__done = true; });
+  }, 1500);
+});
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function go(w) {
+  var FM = w.FM;
+  if (!FM._perfState) throw new Error('FM._perfState is missing — nothing to measure');
+  var keep = FM.scene.layers.slice(), keepDur = FM.scene.project.duration, keepT = FM.time;
+  try {
+    /* Heavy enough that the ladder has a reason to move. Gaussian blur is the effect #130 measured as
+     * invisible to the main-thread clock, so stack several — if the ladder cannot be made to move even
+     * here, the measurement below proves nothing and says so. */
+    /* ?light=1 builds a trivial scene instead. This is the negative half and it matters more than the
+     * positive one: a cost signal built on the frame INTERVAL could easily read a machine that is
+     * comfortably hitting 60fps as "late", and an app that softens its own preview for no reason would
+     * be a worse bug than the one being fixed. */
+    var LIGHT = new URLSearchParams(location.search).get('light') === '1';
+    FM.scene.layers.length = 0;
+    FM.scene.project.width = LIGHT ? 320 : 1080; FM.scene.project.height = LIGHT ? 240 : 1920;
+    FM.scene.project.duration = 20;
+    for (var i = 0; i < (LIGHT ? 1 : 6); i++) {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 200 + i * 90, y: 400 + i * 140, shapeW: 420, shapeH: 420,
+                                      fill: ['#ffcc00', '#29d9bb', '#ff7a85', '#8f7dff', '#5ad', '#fa6'][i], start: 0, duration: 20 });
+      if (!LIGHT) L.effects = [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('glow')];
+      FM.scene.layers.push(L);
+    }
+    FM.timeline.rebuild();
+    await sleep(400);
+
+    // Scrub by hand through the render funnel: 90 frames of moving playhead, one render each.
+    var seen = [];
+    for (var f = 0; f < 90; f++) {
+      FM.time = (f / 90) * 18;
+      FM.requestRender();
+      await new Promise(function (r) { requestAnimationFrame(r); });
+      var s = FM._perfState();
+      seen.push({ f: f, tier: s.tier, px: s.canvasPx, avg: +s.renderAvg.toFixed(2), locked: s.locked, ctx: s.ctx });
+    }
+    samples = seen;
+
+    var tiers = seen.map(function (s) { return s.tier; });
+    var pxs = seen.map(function (s) { return s.px; });
+    var tierChanges = 0, pxChanges = 0;
+    for (var k = 1; k < seen.length; k++) {
+      if (tiers[k] !== tiers[k - 1]) tierChanges++;
+      if (pxs[k] !== pxs[k - 1]) pxChanges++;
+    }
+    var maxTier = Math.max.apply(null, tiers);
+
+    if (LIGHT) {
+      /* One small shape, no effects, no throttle. Nothing here is slow, so the ladder must leave the
+       * picture alone — if the interval signal fires on this, it fires on everything. */
+      /* Measured over the STEADY state, not from frame 0: this probe resizes the project on the way in,
+       * so the first resizeCanvas() after that legitimately changes the backing store and has nothing
+       * to do with the ladder. Counting it read as a false failure the first time. */
+      var tail = seen.slice(8), tailPx = 0;
+      for (var q = 1; q < tail.length; q++) if (tail[q].px !== tail[q - 1].px) tailPx++;
+      say('a trivial scene keeps full resolution throughout (tier reached ' + maxTier + ', ' + tailPx + ' resizes once settled)',
+          maxTier === 0 && tailPx === 0,
+          'the ladder shed quality on a scene with one small shape and no effects — the frame-interval signal is reading a healthy machine as a struggling one, which is worse than the lag it was added to fix');
+      return;
+    }
+    say('control: the ladder moved at all during the scrub (tier reached ' + maxTier + ', ' + tierChanges + ' changes)',
+        tierChanges > 0,
+        'the tier never moved off ' + tiers[0] + ' — this scene is not heavy enough on this machine, so the claim below cannot be tested here');
+    if (!tierChanges) return;
+
+    /* THE CLAIM UNDER TEST. If resizeCanvas() were only called when _inMotion flips, the backing store
+     * would change once and then sit still while the tier walked on. So: every tier change should be
+     * accompanied by a backing-store change, unless the two tiers genuinely clamp to the same size
+     * (which previewScale() can do, and nextUsefulTier() exists to skip). */
+    say('every tier change actually resized the canvas (' + tierChanges + ' tier changes, ' + pxChanges + ' backing-store changes)',
+        pxChanges >= tierChanges,
+        'the tier moved ' + tierChanges + ' times but the canvas only ' + pxChanges + ' — the ladder is adapting on paper while the pixels stay put');
+
+    var lastTierAt = 0, lastPxAt = 0;
+    for (var j = 1; j < seen.length; j++) {
+      if (tiers[j] !== tiers[j - 1]) lastTierAt = j;
+      if (pxs[j] !== pxs[j - 1]) lastPxAt = j;
+    }
+    say('the ladder was still able to move late in the gesture, not only at the start',
+        lastTierAt > 5,
+        'the last tier change was at frame ' + lastTierAt + ' of ' + seen.length + ' — it took one step and stopped');
+  } finally {
+    FM.scene.layers = keep; FM.scene.project.duration = keepDur; FM.time = keepT;
+    if (FM.refreshAll) FM.refreshAll();
+  }
+}
+
+function render() {
+  var rows = samples.filter(function (s, i) { return i % 6 === 0 || (i && samples[i - 1].tier !== s.tier); });
+  document.getElementById('out').innerHTML =
+    '<div style="margin:8px 0;font-weight:700">' + results.filter(function (r) { return r.ok; }).length + '/' + results.length + ' green</div>' +
+    results.map(function (r) {
+      return '<div class="row ' + (r.ok ? 'ok' : 'fail') + '"><span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span> ' +
+        r.name + (r.err ? '<br><span style="color:#c98">— ' + r.err + '</span>' : '') + '</div>';
+    }).join('') +
+    '<table><tr><th>frame</th><th>tier</th><th>canvas px</th><th>avg ms</th><th>locked</th></tr>' +
+    rows.map(function (s) {
+      return '<tr><td>' + s.f + '</td><td>' + s.tier + '</td><td>' + s.px.toLocaleString() + '</td><td>' + s.avg + '</td><td>' + (s.locked ? 'yes' : '') + '</td></tr>';
+    }).join('') + '</table>';
+}
+</script>
+</body>
+</html>

@@ -552,6 +552,40 @@ better still, keep working inside the turn rather than parking work for a later 
         (app.js:150). If the ladder drops a further rung mid-gesture, nothing appears to call
         resizeCanvas() again — so the canvas may take one step down and then stop adapting. Verify that
         before assuming it is a defect.
+
+      **THREE FIXES SHIPPED, v7.57 — and the first one is why every previous pass came back clean.**
+      · **That last hypothesis was WRONG, and is corrected rather than left to mislead.** The ladder
+        DOES call resizeCanvas on every tier change, not only when motion starts (js/app.js, the
+        `if (_playTier !== before)` line). Measured as well as read. Dead end, closed.
+      · **The real one: the app could not see its own lag.** The ladder decides whether to soften the
+        preview from ONE number — how long our JavaScript spends rendering. Canvas filter effects are
+        done by the GPU after we return, and video decode happens off-thread, so neither ever lands on
+        that clock. Six blurs plus six glows on a 1080×1920 comp at 6× CPU throttle reported **1.1ms a
+        frame**. A tenth of budget. So the quality relief you were owed never once triggered on the
+        scenes it exists for, which is exactly the shape of *"nothing much ever gets resolved"*. It now
+        also watches the gap between frames, which sees all of it, and the same scrub sheds two rungs.
+        The threshold turned out to matter more than the idea: my first cut treated any overrun as
+        evidence, and one dropped frame is ordinary jitter — measured, it walked a single small shape
+        with no effects down two rungs, which would have been a worse bug than your lag. It now only
+        counts a sustained rate under about 24fps, and a trivial scene is verified to stay sharp.
+      · **Half of a video scrub's cost was invisible to the ladder too.** Four `seeked` listeners
+        repainted by calling render directly instead of through `FM.requestRender`, so they were
+        neither coalesced (a video scrub paid for two full renders a frame) nor measured.
+      · **And scrubbing kept re-seeking the video to a time it was already at.** A scrub snaps to the
+        frame grid, so a slow finger makes many frames resolve to the same time, and every one
+        re-issued the same seek — restarting the decoder and cancelling the decode of the very frame it
+        was fetching, while emitting no event and so not even repainting. The exporter has had that
+        guard for ages; the preview never did.
+      **Still open, and honest about it: I have not proven this fixes YOUR phone.** Everything above is
+      measured under CPU throttle on this Mac, which is a stand-in, not your device. What is different
+      this time is that the app's own regulator can now see the cost it was blind to — so if it is still
+      laggy, the numbers it reports will finally mean something. **Tell me if it is still bad and the
+      next step is reading those numbers off your actual phone rather than guessing here.**
+      **One more real finding, NOT yet fixed, recorded so it is not lost:** every preview render of a
+      video layer also copies the whole frame at FULL SOURCE resolution into `m._lastFrame`
+      (js/compositor.js, the hold-frame fallback) — about 3 megapixels for a phone screen recording,
+      on top of the composite draw, and untouched by the quality ladder. On a Mac that is a fast blit;
+      on a phone it is real milliseconds every frame. Worth doing next on this entry.
 - [x] **119 + 120 — The EXPORT frame-rate list is unordered, and should match the canvas one.** (v6.74) His
       words: *"This menu is all over the shop, needs to be ordered"* (screenshot: 30, 24, 25, 60, 50, 12
       — no order at all), then *"Yeah match it"* when I asked whether to bring it in line with the canvas
