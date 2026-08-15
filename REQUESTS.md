@@ -2722,7 +2722,7 @@ better still, keep working inside the turn rather than parking work for a later 
       creation, named "… copy", and takes the next clip colour on its own timeline row — and the test
       asserts those two, because with the offset gone they are the only things left doing that job.
 
-- [ ] **157 — TRY moving the film grain off the project cards and onto the background.** (14 Aug.) His
+- [x] **157 — TRY moving the film grain off the project cards and onto the background. Experiment tried v7.71, he said no, fixed v7.76.** (14 Aug.) His
       words: *"I want to try removing the film grain from the projects and instead move it to the
       background, it might be better if the projects are smooth and shiny with a rough textured
       background instead of"* (message ends there). So: cards go **smooth and shiny**, the home
@@ -2749,6 +2749,20 @@ better still, keep working inside the turn rather than parking work for a later 
       background is the whole screen. Both keyframes read that one variable.
       **Three answers are all cheap: rougher, subtler, or put it back.** Say which — this is the
       experiment you asked for, not a decision I have made for you.
+
+      **ANSWERED AND FIXED — v7.76. The fault was the TILE SIZE, not the strength, and that is worth
+      reading because it explains why four rounds of tuning missed it.** The field is one random-noise
+      PNG repeated, 64px since v6.23. A 64px tile repeats **about 76 times across a 380×820 phone**, and
+      the eye is very good at spotting a repeated random field — so what you were looking at was a grid,
+      not grain. On a CARD the same tile repeated roughly five times, which is invisible. So the texture
+      was never wrong; asking it to cover a whole screen was. **At 256px it repeats 4.8 times.**
+      It is also cheaper: six 64px tiles cost 54 KB and **166 ms** to generate, two 256px tiles cost
+      272 KB and **15 ms** — most of the old cost was six separate `toDataURL` calls, and two tiles is
+      all the cross-fade needs now that the cards use none.
+      Strength came down as well, **.05 → .034**. It went up to .05 when the grain moved off the cards,
+      on the argument that a whole screen can carry more than a small bright panel; with the grid gone
+      that argument does not hold.
+      *Shipped with **#227**, which is the other half — see there for the cards.*
 
       **HE ANSWERED, 15 Aug: *"The background film grain looks shit."*** So the verdict on the experiment
       is in and it is a no. Not blocked any more — this is now a real job with a clear brief, and it
@@ -3824,7 +3838,7 @@ layout, motion blur, the elements browser and the effects browser.
       page, a hint of a shadow under the sheet), not a skeuomorphic redraw, and it must still read at
       24px in the top bar on both layouts.
 
-- [ ] **227 — The project cards should stay see-through, but NOT show the film grain through them.**
+- [x] **227 — The project cards should stay see-through, but NOT show the film grain through them. DONE v7.76.**
       (15 Aug.) His words: *"the project layers are clear so you can see the film grain behind, i want
       them clear still but not showing the film grain, so they look smooth and nice."*
       Pairs with **#157**, where he also said the background grain *"looks shit"* — treat them as one job.
@@ -3834,6 +3848,27 @@ layout, motion blur, the elements browser and the effects browser.
       not merely dimmed — a mask or a clip driven by the card rectangles, or the grain kept above the
       background but below the cards with each card carrying a backdrop of its own that the grain cannot
       reach. Whatever the route, the test is his sentence: still clear, and smooth.
+
+      **DONE v7.76, and he had found a real hole in the theme rather than asked for a preference.**
+      Every other glass surface in `theme-glass.css` — the settings panel, the add sheet, the export
+      card, the context menu, the home top bar — pours its translucent tint over a **backdrop blur**.
+      The project cards were written as "a gentler pour of the same material" and got the tint with **no
+      blur at all**, so at 8.5%→3% alpha they were showing whatever sat behind them essentially raw.
+      Since v7.71 what sits behind them is the grain. So the answer was not a mask or a knock-out: it
+      was giving the card the one ingredient the recipe had skipped.
+      **Blur is the right instrument, not a lucky one.** Grain is high-frequency noise by definition, so
+      a blur destroys it while the low-frequency background — the base colour and the drifting light —
+      passes straight through. The card stays genuinely see-through, which is the half of your sentence
+      a solid backing would have thrown away, and what shows through it is smooth. 14px rather than the
+      panels' 20, because too much blur turns the light behind a small surface into a blob.
+      **Cost measured before shipping, since a backdrop-filter over an ANIMATING backdrop means a
+      readback per grain frame per card:** with **eight cards** on screen, frame times are identical
+      with the blur on and off — 16.7ms median, 18.6ms p95, both. That is this Mac, the usual caveat;
+      the same theme already runs a full-width blur over this same background in `.hm-top`. Devices
+      without backdrop-filter fall through to the `@supports` block that was already in the file.
+      Both halves are tested, and both mutations — shrinking the tile back to 64px, and removing the
+      blur — turn it red. The test builds its own card rather than needing the home screen open, and
+      asserts the glass rules actually reached it first, so "no blur" cannot pass as "no rule".
 
 - [ ] **228 — Drift and Orbit lose content at a frame edge, the way Wiggle used to.** (Found 15 Aug by
       `tests/_wigwin.html` while verifying #93 — not reported by you, but it is the same defect you DID

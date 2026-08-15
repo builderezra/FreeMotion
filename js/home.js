@@ -438,13 +438,29 @@ window.FM = window.FM || {};
    *
    * They are shared across cards, but each card is given its own negative animation-delay by
    * renderCards, so no two cards are showing the same tile at the same moment — "each one having its
-   * own things" without paying for N canvases. */
-  const STATIC_TILES = 6;
+   * own things" without paying for N canvases.
+   *
+   * TWO TILES OF 256, not six of 64 (v7.76, queue 157). Ezra, on the field after it moved to the
+   * background: "The background film grain looks shit." The strength was not the fault — the TILE SIZE
+   * was. A 64px tile repeats about 76 times across a 380x820 phone, and the eye is very good at
+   * spotting a repeated random field: what you see is a grid, not grain. On a card it repeated roughly
+   * five times, which is why four rounds of tuning on the cards never turned this up and why it only
+   * became ugly the moment the same field was asked to cover a screen. At 256 it repeats 4.8 times.
+   * Measured, because the arithmetic is not obvious: six 64px tiles cost 54 KB and about 166 ms to
+   * generate; two 256px tiles cost 272 KB and about 15 ms. So the bigger field is TEN TIMES cheaper to
+   * build as well as far better looking — most of the old cost was six separate toDataURL calls.
+   * Two is enough now that the cards no longer use these at all (v7.71): the background needs exactly
+   * a pair to dissolve between, and the per-card phase offset it had six for is gone. */
+  const STATIC_TILES = 2;
+  /* The tile SIZE is the whole of queue 157's fix, and it is invisible when it regresses: a 64px field
+     looks perfectly fine in a screenshot of one card and reads as a grid across a phone. So it is a
+     named constant the suite can assert on rather than a local nobody can reach. */
+  const STATIC_PX = 256;
   let staticURL = null;
   function ensureStaticTile() {
     if (staticURL) return staticURL;
     try {
-      const N = 64;
+      const N = STATIC_PX;
       for (let k = 0; k < STATIC_TILES; k++) {
         const c = document.createElement('canvas');
         c.width = c.height = N;
@@ -1472,10 +1488,10 @@ window.FM = window.FM || {};
     const gEl = document.getElementById('hm-grain');
     if (gEl && !gEl._tiled && staticURL) {
       gEl._tiled = 1;
-      const gi = (Math.random() * STATIC_TILES) | 0;
-      const gj = (gi + 1 + ((Math.random() * (STATIC_TILES - 1)) | 0)) % STATIC_TILES;
-      gEl.style.setProperty('--hm-grain-a', 'var(--hm-static-' + gi + ')');
-      gEl.style.setProperty('--hm-grain-b', 'var(--hm-static-' + gj + ')');
+      // With exactly two tiles there is nothing to choose between — it is 0 and 1. The random pick
+      // this used to make was for six tiles and would now sometimes have picked the same one twice.
+      gEl.style.setProperty('--hm-grain-a', 'var(--hm-static-0)');
+      gEl.style.setProperty('--hm-grain-b', 'var(--hm-static-1)');
     }
     // Select works on EVERY tab now (v5.04). What does NOT survive a tab change is the SELECTION —
     // ids are only meaningful within their own list, and carrying three ticked project ids into the
@@ -1915,5 +1931,7 @@ window.FM = window.FM || {};
     // that can never be 700px wide, which is exactly the "a test that cannot run is not a test" trap.
     get _pushAllowed() { return pushAllowed; },
     set _pushAllowed(fn) { pushAllowed = fn; },
+    // The grain field's shape, for the suite — see STATIC_PX (queue 157).
+    _grain: { tile: STATIC_PX, tiles: STATIC_TILES },
   };
 })(window.FM);

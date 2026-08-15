@@ -3134,7 +3134,12 @@ body.hm-selecting .hm-card { touch-action: none; }
 /* THE CARDS ARE SMOOTH NOW. The two layers stay declared above (they are shared with #hm-grain) but
    draw nothing on a card — no image, so no texture, and the animation has nothing to fade. */
 .hm-card::before, .hm-card::after { background-image: none; opacity: 0; animation-name: none; }
-#hm-grain { --hm-grain-alpha: .05; }
+/* .05 -> .034 (v7.76, queue 157). "The background film grain looks shit." The main fault was the 64px
+   tile repeating ~76 times across a phone — see home.js, where it is now 256 — but the strength went
+   up to .05 when this moved off the cards on the argument that a whole screen can carry more than a
+   small bright panel, and with the grid gone that argument no longer holds up: at 4.8 repeats you are
+   reading the grain itself rather than a pattern, and it does not need to be that loud to be felt. */
+#hm-grain { --hm-grain-alpha: .034; }
 #hm-grain::before, #hm-grain::after { border-radius: 0; }   /* full bleed — it is the whole screen, not a card */
 #hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a; }
 #hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b; }

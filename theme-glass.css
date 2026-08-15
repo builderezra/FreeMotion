@@ -103,6 +103,24 @@ html[data-theme="glass"] .addmenu-tab {
    strength stops reading as a list and starts reading as a stack of lit panels. */
 html[data-theme="glass"] .hm-card {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 2px 12px rgba(90, 199, 237, .07);
+  /* THE ONE THING THIS CARD NEVER HAD (v7.76, queue 227). Ezra: "the project layers are clear so you
+     can see the film grain behind, i want them clear still but not showing the film grain, so they
+     look smooth and nice."
+     He is describing a real hole in the recipe. Every other glass surface in this file — panels, the
+     add sheet, the export card, the home top bar — pours a translucent tint over a BACKDROP BLUR. The
+     cards were the "gentler pour" and got the tint with no blur at all, so at 8.5%→3% alpha they are
+     showing whatever is behind them essentially raw. Since v7.71 what is behind them is the grain.
+     Blur is the right instrument rather than a coincidence: grain is high-frequency noise by
+     definition, and a blur destroys it while leaving the low-frequency background — the base colour
+     and the drifting light — coming straight through. So the card stays genuinely see-through, which
+     is the half of his sentence that a solid backing would have thrown away, and what it shows is
+     smooth. 14px rather than the panels' 20 because a card is a small surface and too much blur makes
+     the light behind it read as a blob instead of a glow.
+     Cost is real and was measured before shipping (see REQUESTS #227) — a backdrop-filter over an
+     ANIMATING backdrop forces a readback per grain frame, per card, and the grain crossfades every
+     180ms. The @supports fallback at the bottom of this file already covers devices without it. */
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
 }
 html[data-theme="glass"] .hm-card:active,
 html[data-theme="glass"] .addmenu-card:active {

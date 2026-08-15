@@ -3085,6 +3085,54 @@
     }
   });
 
+  test('home: the grain field does not tile into a grid, and the cards do not show it through', { item: 'home-grain' }, function () {
+    /* Queue 157 + 227, and they are one job. Ezra: "The background film grain looks shit" and "the
+     * project layers are clear so you can see the film grain behind, i want them clear still but not
+     * showing the film grain, so they look smooth and nice."
+     *
+     * (a) THE TILE. The field is one random-noise PNG repeated. At 64px it repeats ~76 times across a
+     * 380x820 phone and the eye reads the repetition, not the grain — a grid. At 256 it repeats 4.8
+     * times. This is the kind of regression that is invisible in review: a 64px tile looks completely
+     * correct in a screenshot of a single card, which is exactly how it survived four rounds of
+     * tuning on the cards and only became ugly when the same field was asked to cover a screen.
+     *
+     * (b) THE CARDS. Every other glass surface in theme-glass.css pours its tint over a BACKDROP BLUR;
+     * the cards were the "gentler pour" and had none, so at 8.5%→3% alpha they showed whatever was
+     * behind them essentially raw. Blur is what lets them stay see-through — his "clear still" — while
+     * losing the grain, because grain is high-frequency by definition and a blur eats it.
+     * Asserted on a card built for the test, so it does not depend on the home screen being open or on
+     * the user having any projects. */
+    if (!FM.home || !FM.home._grain) throw new Error('FM.home._grain is missing — the grain tile size is no longer readable, so nothing can guard it');
+    const G = FM.home._grain;
+    if (!(G.tile >= 192)) {
+      throw new Error('the noise tile is ' + G.tile + 'px, so it repeats about ' +
+        Math.round(380 / G.tile * 820 / G.tile) + ' times across a phone — at that density the field reads as a repeating grid rather than as grain');
+    }
+    // …and not so many of them that the fix costs a megabyte of data URL. Each 256px tile is ~136 KB.
+    if (G.tiles > 3) throw new Error(G.tiles + ' tiles at ' + G.tile + 'px is roughly ' + Math.round(G.tiles * 136 / 1024 * 10) / 10 + ' MB of base64 — the cross-fade needs exactly two');
+
+    const root = document.documentElement, theme0 = root.getAttribute('data-theme');
+    const host = document.getElementById('home-screen') || document.body;
+    const probe = document.createElement('div');
+    probe.className = 'hm-card';
+    probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:300px;height:70px';
+    try {
+      root.setAttribute('data-theme', 'glass');
+      host.appendChild(probe);
+      const cs = getComputedStyle(probe);
+      const bf = cs.backdropFilter || cs.webkitBackdropFilter || 'none';
+      // CONTROL: prove the glass rules reached this element at all, or "no blur" below could just mean
+      // the probe never matched the theme selector and the assertion would be worth nothing.
+      if (!/rgba?\(/.test(cs.backgroundImage)) throw new Error('the probe card did not pick up the glass theme at all (background-image = ' + cs.backgroundImage + ') — this test cannot tell a missing blur from a missing rule');
+      if (!/blur\(/.test(bf)) {
+        throw new Error('a glass project card has no backdrop blur (backdrop-filter = ' + bf + '), so the animated grain field behind it shows straight through the 8.5% tint');
+      }
+    } finally {
+      probe.remove();
+      if (theme0 == null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', theme0);
+    }
+  });
+
   test('multi-select: the playhead buttons act on the WHOLE selection, and the panel stops copying them', { item: 'multi-clip-tools' }, function () {
     /* Queue 169, collected by queue 229. Ezra: "in the left massive area where its currently got the
      * six small buttons, just get rid of the buttons that are near the play head and then with the
