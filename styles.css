@@ -5326,3 +5326,35 @@ body.fm-pushing #toast { z-index: 213; }
     box-shadow: inset 0 0 0 1px var(--line-soft);
   }
 }
+
+/* ---- Canvas settings, anchored to the cog it came out of (v7.93, queue 241 b/c) ----------------
+   Ezra: "on pc make the canvas settings row show up next to where the button is instead of the middle
+   and make it kinda of come out of the button like how ive traced in the image, so the settings button
+   wouldnt be blured like everything else."
+   Three things, and the third is the one that is easy to miss. The card stops being centred and hangs
+   from under the cog; it GROWS from that corner rather than fading in the middle of the screen; and the
+   cog itself is lifted above the scrim so it stays sharp while everything else blurs — otherwise the
+   thing the panel is supposed to be coming out of is the one thing you cannot see clearly.
+   The two coordinates come from app.js as variables because the cog's position is only knowable at
+   runtime: its x moves with the layout, its y with however far the timeline has been dragged. */
+@media (min-width: 701px) {
+  body.cv-anchored #canvas-dialog { align-items: flex-start; justify-content: flex-end; }
+  body.cv-anchored #canvas-dialog .export-card {
+    margin: var(--cv-anchor-top, 80px) var(--cv-anchor-right, 16px) 0 0;
+    max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px);
+    overflow-y: auto;
+    transform-origin: top right;
+    animation: cv-grow 160ms cubic-bezier(.2, .8, .3, 1);
+  }
+  /* Above the scrim (z-index 100), so the blur passes under it. The cog is the only thing lifted —
+     lifting the whole row would put the transport controls over a modal that is meant to own the
+     screen. */
+  body.cv-anchored #btn-settings { position: relative; z-index: 101; }
+  @keyframes cv-grow {
+    from { opacity: 0; transform: scale(.82) translate(6px, -10px); }
+    to   { opacity: 1; transform: scale(1) translate(0, 0); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.cv-anchored #canvas-dialog .export-card { animation: none; }
+}

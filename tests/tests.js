@@ -3162,6 +3162,61 @@
     }
   });
 
+  test('PC: canvas settings hangs off the cog, and the cog stays out of its own blur', { item: 'cv-anchored' }, async function () {
+    /* Queue 241 (b) and (c). Ezra: "on pc make the canvas settings row show up next to where the button
+     * is instead of the middle and make it kinda of come out of the button… so the settings button
+     * wouldnt be blured like everything else."
+     * (c) is the half that is easy to drop and hard to notice: the scrim carries a backdrop blur over
+     * the WHOLE screen, so without lifting the cog above it the one thing the panel is supposed to be
+     * growing out of is the one thing you cannot see clearly. Asserted as a real z-order comparison
+     * against the scrim rather than as "the rule exists". */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const cog = document.getElementById('btn-settings');
+    const dlg = document.getElementById('canvas-dialog');
+    if (!cog || !dlg) throw new Error('the cog or the canvas dialog is missing');
+    const wasOpen = !dlg.classList.contains('hidden');
+    /* The cog is dual-purpose: on HOME it opens App settings, and only inside a project does it forward
+       to the canvas dialog. The suite runs with home up, so without closing it this test presses the
+       wrong door — and the App-settings scrim it opened leaked into the next test and failed that one
+       too, which is how this was found. */
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen && FM.home.close) { FM.home.close(); await sleep(60); }
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) throw new Error('could not leave the home screen, so the cog would open App settings instead of the canvas dialog');
+      if (wasOpen) { dlg.classList.add('hidden'); await sleep(20); }
+      const cr = cog.getBoundingClientRect();
+      if (cr.width < 5) throw new Error('the cog is not on screen — this test cannot measure what it anchors to');
+      cog.click();
+      await sleep(80);
+      if (dlg.classList.contains('hidden')) throw new Error('pressing the cog did not open the canvas dialog');
+      if (!document.body.classList.contains('cv-anchored')) throw new Error('the dialog opened un-anchored — it is still the centred modal');
+
+      const card = dlg.querySelector('.export-card');
+      if (!card) throw new Error('the dialog has no card to place');
+      const kr = card.getBoundingClientRect();
+
+      // …it hangs from the cog rather than sitting in the middle of the screen.
+      if (kr.top < cr.bottom - 2) throw new Error('the card starts above the bottom of the cog (' + Math.round(kr.top) + ' vs ' + Math.round(cr.bottom) + ') — it is not hanging from it');
+      if (Math.abs(kr.right - cr.right) > 12) throw new Error('the card\'s right edge is ' + Math.round(Math.abs(kr.right - cr.right)) + 'px from the cog\'s — it should line up under the button');
+      const centreish = Math.abs((kr.left + kr.right) / 2 - window.innerWidth / 2) < 40;
+      if (centreish) throw new Error('the card is still centred on screen — that is the arrangement he asked to change');
+      // …and it must not run off the bottom, which anchoring low on the screen makes easy to do.
+      if (kr.bottom > window.innerHeight + 1) throw new Error('the card runs ' + Math.round(kr.bottom - window.innerHeight) + 'px off the bottom of the screen');
+
+      // (c) the cog outranks the scrim, so the blur passes under it.
+      const cogZ = parseInt(getComputedStyle(cog).zIndex, 10);
+      const scrimZ = parseInt(getComputedStyle(dlg).zIndex, 10);
+      if (!(cogZ > scrimZ)) throw new Error('the cog sits at z-index ' + cogZ + ' under a scrim at ' + scrimZ + ' — it is being blurred along with everything else');
+      if (getComputedStyle(cog).position === 'static') throw new Error('the cog is position:static, so its z-index does nothing');
+    } finally {
+      dlg.classList.add('hidden');
+      document.body.classList.remove('cv-anchored');
+      // Leave nothing open behind us — a stray scrim fails whatever runs next, several tests away.
+      document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('export: a layer that contributes no audio is NAMED, not dropped in silence', { item: 'audio-drop-report' }, async function () {
     /* Queue 215, the most serious open item in REQUESTS.md, and the one thing this test can actually
      * change today. Ezra: "I made a fresh project, added some sound effects, pressed export with some

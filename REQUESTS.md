@@ -4340,8 +4340,8 @@ wait for them to report back."*
       timeline. Visible in his shot as a lit rounded rect around the blue arrow, standing proud of every
       other icon on the row.
 
-- [ ] **241 — The cog should spin when you click it, and on PC the canvas-settings panel should come OUT
-      of the cog rather than open in the middle.** (15 Aug, with a traced screenshot.) His words: *"Make
+- [x] **241 — The cog should spin when you click it, and on PC the canvas-settings panel should come OUT
+      of the cog rather than open in the middle. DONE — (a) v7.88, (b) and (c) v7.93.** (15 Aug, with a traced screenshot.) His words: *"Make
       the cog do a little turn animation when you click it and on pc make the canvas settings row show up
       next to where the button is instead of the middle and make it kinda of come out of the button like
       how ive traced in the image, so the settings button wouldnt be blured like everything else."*
@@ -4355,7 +4355,18 @@ wait for them to report back."*
       because a cog has radial symmetry, so 90° reads as complete in half the time. The restart is done
       by hand (remove class → reflow → add) because a class that is already present will not replay its
       animation, and without that a second press does nothing.
-      **(b) and (c) are still open, and here is the thing to know before starting.** Inside a project the
+      **(b) and (c) DONE v7.93.** The card hangs from directly under the cog, right-aligned to it, and
+      grows from that corner in 160ms instead of fading in the middle of the screen. The cog is lifted
+      above the scrim so it stays sharp while everything else blurs — and only the cog, because lifting
+      the whole row would put the transport controls over a modal meant to own the screen.
+      It anchors to **whichever control was actually pressed**, not to `#btn-settings` by name: on desktop
+      the cog forwards its click here, on the phone this dialog has other doors, and that is correct in
+      both cases with no special-casing. The coordinates go out as CSS variables because the cog's
+      position is only knowable at runtime — its x moves with the layout, its y with the timeline drag.
+      *The test found a bug in itself and it is worth knowing: the cog is dual-purpose, so with home up
+      it opens App settings instead, and the scrim it left behind failed an unrelated test several cases
+      later. It closes home first and cleans up after itself now.*
+      **The note below stays because it is still true and still the trap:** inside a project the
       cog does NOT open App settings: `#btn-settings`'s handler forwards the click to `#btn-canvas`
       (js/app.js, the `if (inProject && cv) { cv.click(); return; }` line). So the panel you are
       describing is the **Canvas settings dialog**, not the `.set-panel` left drawer the same cog opens

@@ -3361,7 +3361,13 @@ window.FM = window.FM || {};
       if (ic) { ic.classList.remove('cog-turn'); void ic.offsetWidth; ic.classList.add('cog-turn'); }
       const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
       const cv = document.getElementById('btn-canvas');
-      if (inProject && cv) { cv.click(); return; }
+      if (inProject && cv) {
+        // Remember which control opened the canvas dialog, so it can anchor to it (queue 241).
+        FM.settings = FM.settings || {};
+        FM.settings.lastCanvasOpener = setBtn;
+        cv.click();
+        return;
+      }
       if (FM.settings && FM.settings.open) FM.settings.open();
       else if (FM.toast) FM.toast('Settings unavailable');
     });
@@ -3946,6 +3952,28 @@ window.FM = window.FM || {};
         cvBg = /^#[0-9a-f]{6}$/i.test(String(pb || '')) ? pb : 'none';
         cvBgSync();
         cvUpdate();
+        /* ANCHOR IT TO THE COG on desktop (queue 241 b/c). Ezra: "on pc make the canvas settings row
+         * show up next to where the button is instead of the middle and make it kinda of come out of
+         * the button… so the settings button wouldnt be blured like everything else."
+         * The cog's position is only knowable at runtime — it lives in the transport row, whose x moves
+         * with the layout and whose y moves with the timeline's drag height — so the two coordinates go
+         * out as CSS variables and the stylesheet does the rest. The button that OPENED the dialog is
+         * used rather than #btn-settings by name, because on desktop the cog forwards its click here
+         * and on the phone this dialog has other doors; anchoring to whichever control was actually
+         * pressed is right in both cases and needs no special-casing.
+         * `cv-anchored` is what lifts the cog out of the scrim's blur, and it goes on <body> because
+         * the button is not inside the dialog. */
+        const src = (FM.settings && FM.settings.lastCanvasOpener) || document.getElementById('btn-settings');
+        const sr = src && src.getBoundingClientRect();
+        if (sr && sr.width > 0 && window.matchMedia('(min-width: 701px)').matches) {
+          cvDialog.style.setProperty('--cv-anchor-right', Math.max(8, Math.round(window.innerWidth - sr.right)) + 'px');
+          cvDialog.style.setProperty('--cv-anchor-top', Math.round(sr.bottom + 8) + 'px');
+          document.body.classList.add('cv-anchored');
+        } else {
+          cvDialog.style.removeProperty('--cv-anchor-right');
+          cvDialog.style.removeProperty('--cv-anchor-top');
+          document.body.classList.remove('cv-anchored');
+        }
         cvDialog.classList.remove('hidden');
       });
       document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => b.addEventListener('click', () => { cvBg = b.dataset.bg; cvBgSync(); }));
@@ -3954,7 +3982,7 @@ window.FM = window.FM || {};
       document.getElementById('cv-res').addEventListener('change', cvUpdate);
       ['cv-cw', 'cv-ch'].forEach(id => { const inp = document.getElementById(id); if (inp) inp.addEventListener('input', cvUpdate); });
       if (fpsSel) fpsSel.addEventListener('change', () => { if (fpsCustomRow) fpsCustomRow.classList.toggle('hidden', fpsSel.value !== 'custom'); });
-      document.getElementById('cv-cancel').addEventListener('click', () => cvDialog.classList.add('hidden'));
+      document.getElementById('cv-cancel').addEventListener('click', () => (document.body.classList.remove('cv-anchored'), cvDialog.classList.add('hidden')));
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
@@ -3963,7 +3991,7 @@ window.FM = window.FM || {};
         FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
-        cvDialog.classList.add('hidden');
+        (document.body.classList.remove('cv-anchored'), cvDialog.classList.add('hidden'));
       });
     }
 
