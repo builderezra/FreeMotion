@@ -649,6 +649,25 @@ better still, keep working inside the turn rather than parking work for a later 
       them. My theory was that an existing test leaves a clip drag un-released. **Checked, and that
       theory is WRONG** — the suite now asserts after every single test that no timeline gesture is
       still live, and it is green, so nothing leaks a drag.
+      **THIRD ATTEMPT, 15 Aug — real progress, still not shipped, and one recorded conclusion above is
+      WRONG.**
+      · **The hang is solved.** An attempt earlier that day hung the whole suite: a headless test starts
+        a drag and never releases, so a loop that only stops on pointerup never stops. Two independent
+        brakes fix it — give up when the scroll DID NOT ACTUALLY MOVE, and a hard frame cap that makes
+        an endless loop structurally impossible. With those, no hang.
+      · **"Bisecting pinned it to the ARMING of the loop" is wrong.** Proved by experiment: arm the loop
+        exactly as before but suppress everything from the scroll line onward, and the suite is
+        **329/329 green**. Arming is innocent. The damage is in what the loop DOES.
+      · **And it is not the scroll position either.** Resetting the timeline's scrollLeft after every
+        test did NOT fix it — the same three tests still failed. So the remaining suspects are the
+        scroller-width growth, and (in this attempt) replaying the placement by dispatching a real
+        `pointermove` on `window` — which every OTHER drag handler in the app also receives, including
+        edit-points and the text editor, which are exactly two of the three that fail. **Start there.**
+      · A synthetic replay is attractive because it reuses the real handler instead of a second copy of
+        the placement maths, but it cannot be dispatched on `window`. It needs to reach the timeline's
+        handler ONLY.
+      Reverted again rather than left red. The two brakes and the origin-shift trick (`startX -= moved`,
+      which makes the existing dx absorb the scroll with no refactor at all) are both worth keeping.
       **That narrows it to the other state the edge-scroll writes, and neither is reset by anything:**
       `timelineEl.scrollLeft` and `innerEl.style.width`. Growing the scroller can add a horizontal
       scrollbar and change the timeline's layout height, which moves **#stage** — and therefore the
