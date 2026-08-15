@@ -41,10 +41,25 @@ window.FM = window.FM || {};
     var c = preview(), w = wrap();
     if (!c || !w || !overlay) return;
     var cr = c.getBoundingClientRect(), wr = w.getBoundingClientRect();
-    overlay.style.left = (cr.left - wr.left) + 'px';
-    overlay.style.top = (cr.top - wr.top) + 'px';
-    overlay.style.width = cr.width + 'px';
-    overlay.style.height = cr.height + 'px';
+    /* THE OVERLAY IS PLACED IN THE WRAPPER'S OWN SPACE, NOT IN SCREEN SPACE (v8.00, queue 165.3).
+     * #draw-overlay lives inside #canvas-wrap, which is the element the viewport transform is applied
+     * to — so its CSS box is in the wrapper's LOCAL coordinates while getBoundingClientRect() answers in
+     * SCREEN coordinates. Feeding one into the other applied the zoom twice, which is the "overlay lays
+     * out in screen px — a zoomed viewport double-scales it" that startDraw's reset was written to dodge.
+     * Measured at 2x before this: overlay 984x1501 against a 492x751 canvas — exactly double.
+     * `k` is read off the WRAPPER (its rendered width against its layout width) rather than from
+     * FM.viewport.scale, so it stays right whatever applies the transform and cannot drift from a second
+     * source of truth.
+     * Nothing else needs touching, and that is worth stating because it is not obvious: the backing
+     * store stays at cr.width * dpr (SCREEN resolution, so it is sharp when zoomed in), and a CSS box of
+     * cr.width/k renders back to exactly cr.width on screen — so one unit under the dpr transform below
+     * is still one SCREEN css pixel, which is the unit dispScale() and redraw() already work in. */
+    var k = (w.offsetWidth && wr.width) ? (wr.width / w.offsetWidth) : 1;
+    if (!(k > 0) || !isFinite(k)) k = 1;
+    overlay.style.left = ((cr.left - wr.left) / k) + 'px';
+    overlay.style.top = ((cr.top - wr.top) / k) + 'px';
+    overlay.style.width = (cr.width / k) + 'px';
+    overlay.style.height = (cr.height / k) + 'px';
     var dpr = window.devicePixelRatio || 1;
     overlay.width = Math.max(1, Math.round(cr.width * dpr));
     overlay.height = Math.max(1, Math.round(cr.height * dpr));
