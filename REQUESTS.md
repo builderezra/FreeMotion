@@ -4499,8 +4499,23 @@ wait for them to report back."*
       fully present — a gradient on the inner box satisfies "there is a gradient" and looks exactly like
       the thing you reported.
 
-- [ ] **247 — Opening the export menu should pause playback.** (15 Aug.) His words: *"when you open the
+- [x] **247 — Opening the export menu should pause playback. DONE v7.97.** (15 Aug.) His words: *"when you open the
       export menu playback should pause."* Straightforward: the export dialog opening is a hard stop for
       the transport. Worth checking the same for the other full-screen doors while in there (settings,
       canvas settings) and saying which ones already do it, rather than fixing one and leaving siblings
       inconsistent.
+
+      **DONE v7.97.** The pause happens BEFORE the notepad confirm, which is itself a modal — running the
+      transport through that would keep the same problem behind one more sheet — and it is guarded on
+      `FM.playing`, because every `FM.pause()` invalidates an in-flight `requestPlay` and firing that for
+      an already-stopped transport is how "I pressed play and nothing happened" gets born.
+      **I measured the siblings as the note asked, with real playback running:**
+      | door | pauses playback? |
+      |---|---|
+      | Export dialog | **yes, from v7.97** |
+      | Canvas settings | no |
+      | App settings | no |
+      **Neither of the other two is changed, on purpose — it is a judgement call and it is yours.** There
+      is an argument each way: Canvas settings changes resolution and fps live, so pausing is arguably
+      right; App settings is appearance, and stopping playback to toggle a theme would be irritating.
+      **One word and either or both get the same treatment.**

@@ -2836,6 +2836,16 @@ window.FM = window.FM || {};
    * It resolves immediately when nothing is ticked, so an ordinary export is not made slower by a
    * feature that has nothing to say. */
   async function showExportDialog() {
+    /* STOP THE TRANSPORT FIRST (queue 247). Ezra: "when you open the export menu playback should pause."
+     * Before the notepad confirm on purpose — that is itself a modal, so leaving the transport running
+     * through it would keep the very thing he is complaining about, just behind one more sheet. And
+     * before the dialog builds, because the resolution presets are read off the project while the
+     * playhead may still be moving.
+     * Guarded on FM.playing so it cannot disturb a paused transport or bump the play generation for
+     * nothing — every FM.pause() invalidates an in-flight requestPlay (see the note at the top of this
+     * file), and calling it unconditionally on a dialog open is exactly the kind of thing that causes a
+     * later "I pressed play and nothing happened". */
+    if (FM.playing) FM.pause();
     if (FM.notepad && FM.notepad.confirmExport) {
       const go = await FM.notepad.confirmExport();
       if (!go) return;

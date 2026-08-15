@@ -3162,6 +3162,37 @@
     }
   });
 
+  test('opening the export dialog stops the transport', { item: 'export-pauses' }, async function () {
+    /* Queue 247. Ezra: "when you open the export menu playback should pause."
+     * The pause goes in BEFORE the notepad confirm, which is itself a modal — leaving the transport
+     * running through that would keep the exact thing he is complaining about, just behind one more
+     * sheet. The test drives the real `showExportDialog`, so it covers both. */
+    if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      FM.scene.layers.push(FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 8 }));
+      FM.time = 0;
+      await FM.requestPlay();
+      await sleep(140);
+      // CONTROL: it must really be playing, or "it is paused afterwards" is true of a transport that
+      // never started and the assertion means nothing.
+      if (!FM.playing) throw new Error('the transport would not start, so this test cannot show that opening the dialog stopped it');
+
+      await FM.showExportDialog();
+      await sleep(60);
+      if (FM.playing) throw new Error('the export dialog is open and playback is still running');
+    } finally {
+      if (FM.playing) FM.pause();
+      const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0;
+      FM.refreshAll();
+    }
+  });
+
   test('the timecode chip goes yellow the INSTANT a benchmark is added', { item: 'benchmark-now' }, async function () {
     /* Queue 243. Ezra: "when you add a benchmark it doesnt show up as yellow, youve made it so if you
      * add a bench mark, go away from it then go back itll show the timer as yellow but it should also
