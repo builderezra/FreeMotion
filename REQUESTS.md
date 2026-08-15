@@ -129,6 +129,54 @@ better still, keep working inside the turn rather than parking work for a later 
       Also added: `tests/_probe.py --cpu N` (CDP CPU throttling), because every perf number in this repo
       is taken on a desktop Mac for an app used on a phone, and this item measured perfectly healthy at
       1x. #125/#130 should be re-measured with it.
+
+      **BUILT AND BACKED OUT (15 Aug). It WORKS — the reason it is not shipped is the test section, and
+      the design below is finished, so the next go is twenty minutes, not an afternoon.**
+      Your own words already answered the question this entry was going to ask you, so I built it:
+      *"the animation of the project layer moving to the left happens instantly… then smoothly the
+      project should swoop in too"* is a description of a two-phase push, and that is what it is.
+
+      **The design that works, in full:**
+      · Phase 1 on the tap — `close({push:true, lead, wait:true})`: the lead card and the home screen
+        leave immediately, and `#app` is PARKED off the right edge instead of animating in.
+      · Phase 2 when the load resolves — `armPushIn()`: swap the park for `fm-push-in`.
+      · `#app.fm-push-wait { transform: translate3d(100vw, 0, 0); }` — **100vw, not 100%**. Measured:
+        `100%` resolves against #app's own border box, and under `body.fm-pushing` #app is
+        position:fixed with no width, so it parked only 247px right and the previous project showed
+        beside the leaving home screen. This is the same trap already written up on `fm-push-in-vw`.
+      · Only split when `pushAllowed()` is true. On desktop `close()` hides home instantly, and
+        splitting THAT would show the previous project for the whole load — the artefact, not the fix.
+      · On a failed load, `abortPush()` — otherwise home is stranded dimmed at -24% with nothing coming.
+
+      **TWO REAL BUGS IT UNCOVERED, both worth keeping whatever happens to this feature:**
+      1. **`startPush` never called `endPop()`.** A leftover `fm-pop-out` on #app is an animation with
+         `animation-fill-mode: both`, and a running animation BEATS a plain declaration — so the park
+         was silently ignored and the editor sat wherever the pop's last frame left it. `endPush` has
+         guarded exactly this for years ("a stranded matrix on #app"); the entry side never did,
+         because until now everything in startPush was an animation too and could compete on equal terms.
+      2. **`onPushEnd` tears the push down mid-load.** It ends the push when #home-screen's animation
+         finishes — which on the split path happens LONG before the load. It has to ignore that while
+         #app is parked, and the arriving editor (`fm-push-in`'s animationend on #app) becomes the
+         honest end signal instead.
+
+      **WHY IT IS NOT SHIPPED: the `home-push` test section, and it is a fair blocker.** That section is
+      a ~40-assertion instrument choreographed end to end around "the push waits for the load" — the
+      press held for every frame of the wait, the warm hand-off, the repeat and cross taps. Removing the
+      wait invalidates its premise, so it has to be re-specified rather than patched, and patching it is
+      exactly what I tried: FOUR different assertions failed in sequence, each one a new surprise. That
+      is the shape of a moving target, so it was backed out rather than shipped red — same call as #115,
+      for the same reason.
+      **What the rewrite has to preserve** (the contract, not the mechanism):
+      · the tapped card is visibly acknowledged CONTINUOUSLY from the finger onward — but by
+        `fm-card-lead` now, not `fm-card-press`, so the assertions want an "is it acknowledged" helper
+        rather than one specific class;
+      · a repeat tap and a cross tap still cannot steal or move that acknowledgement;
+      · the warm hand-off has not disappeared, it has MOVED: it only exists where there is no load to
+        split, which is the already-current-project path that section 1b already drives. Testing it on
+        the loading path is now testing something that cannot happen — the push starts in the same task
+        as the click, so the press is never painted and the COLD keyframe is correct there.
+      · and the new half: the editor must NOT arrive early, or the previous project slides in and gets
+        swapped underneath the user.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO.** His words: *"Added a screen
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
