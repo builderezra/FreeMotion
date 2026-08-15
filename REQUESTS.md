@@ -3583,6 +3583,24 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       unchanged — the commit threshold, the sticky reversal-cancel, the hint wording. Note the reason
       down was chosen originally, from the code comment: the browser is itself a vertical scroller, and
       up IS the scroll direction, so an up-gesture has to be claimed carefully — gate it on the scroller
+
+      **ASSESSED 16 Aug, NOT started, and the reason is specific rather than "it is big".** Read
+      `attachFavPull` (js/fx-browser.js) before touching this: the down-pull is gated on
+      `scrollTop <= 0`, and that gate is the entire reason it can be a bare gesture on the block at all.
+      *"Down at the top of a scroller is different: there is nothing left to scroll to, so the gesture is
+      free. It is the pull-to-refresh bargain."*
+      **Flipping to UP does not flip that gate — it has to become the mirror**, `scrollTop + clientHeight
+      >= scrollHeight - 1` (at the END of the scroller), because only there is an up-gesture free to
+      claim. Get that wrong and the effects browser stops scrolling on the screen you use most, which is
+      a far worse regression than the gesture being the wrong way round.
+      **Also mirror, not merely negate:** the reversal-cancel measures distance back from the PEAK
+      (`REVERSE_BY`, `REVERSE_FROM`), the damping is `Math.pow(dy, 0.78)`, and the commit point is in
+      DAMPED pixels — 34 damped ≈ 92px of finger. All of that carries over with the sign changed, and the
+      constants should not be re-tuned in the same pass or a mis-tune and a mis-claim become
+      indistinguishable.
+      **And the hint strings and `grab.title` say "Pull down"** — they are user-visible and must flip too.
+      This wants a session with room to test the scroll-claim at 380px properly, which is why it is
+      written down rather than half-done.
       being at the BOTTOM, the mirror of the current `scrollTop <= 0` gate, or it will fight scrolling.
 - [ ] **205 — Move & Transform should hide the outline and show the anchor point instead.** His words:
       *"Make it so when you open move and transform it gets rid of the outline on the shape or layer, and
