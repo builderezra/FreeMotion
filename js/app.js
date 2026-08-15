@@ -2926,6 +2926,10 @@ window.FM = window.FM || {};
    * first selecting it. The hidden #exp-solo-clip mirrors it so the export path below, and anything
    * else that reads that field, keeps one thing to look at. */
   let expSoloId = null;
+  // Read by the suite: which layer the export will isolate, null for all of them. Exposed because the
+  // solo itself happens deep inside run(), so without this the picker's EFFECT is untestable and only
+  // its label gets guarded — which is how a control that looks right but does nothing ships.
+  FM._exportSoloId = () => expSoloId;
   function syncSoloBtn() {
     const btn = document.getElementById('exp-solo-btn');
     const L = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;

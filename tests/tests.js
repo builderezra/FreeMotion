@@ -207,7 +207,15 @@
     // Not a feature test — a guard. BACKLOG called the missing button a high-severity regression for a
     // month; it was removed at Ezra's request in v1.75 (69563ae). Soloing lives in the export dialog.
     if (document.querySelector('.th-solo')) throw new Error('a .th-solo button is back — it was removed deliberately in v1.75, do not restore it');
-    if (!document.getElementById('exp-solo-clip')) throw new Error('#exp-solo-clip missing — "Hide other layers" is the solo entry point that IS wanted');
+    /* The export dialog's solo entry point CHANGED SHAPE at v8.05 (queue 174), so this asserts that it
+       still exists rather than that it is still a checkbox. Ezra: "make it say export just this layer,
+       and also make it so when you press it, it isn't a tick but it's a button and it lets you select
+       what layer." #exp-solo-clip was that tick; #exp-solo-btn is the picker that replaced it. What this
+       guard has always been about is that soloing has EXACTLY ONE door and it lives here — that is
+       unchanged, and the old id is checked too so a build that still has the tick also passes. */
+    if (!document.getElementById('exp-solo-btn') && !document.getElementById('exp-solo-clip')) {
+      throw new Error('the export dialog has no solo control at all (neither #exp-solo-btn nor #exp-solo-clip) — isolating one layer is the solo entry point that IS wanted, and it is the only one');
+    }
   });
 
   test('layout: Studio re-places the same panels, and never touches the phone', { item: 'studio-layout' }, function () {
@@ -3245,6 +3253,52 @@
       FM.viewport.x = vx; FM.viewport.y = vy; FM.viewport.scale = vs; FM.viewport.apply();
       FM.scene.layers.length = 0;
       layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll();
+    }
+  });
+
+  test('export: the layer picker actually chooses the layer, and resets between exports', { item: 'export-solo-pick' }, async function () {
+    /* Queue 174. The picker's LABEL is easy to test and its EFFECT is the thing that matters, so this
+     * asserts the state the exporter reads, not the text on the button — a control that looks right and
+     * does nothing is exactly what a label-only test would wave through. (Checked: with the export
+     * ignoring the picker entirely, every other test in the suite still passed.)
+     * The reset is asserted too, and it is not a detail: a solo that silently carried over from a
+     * previous export would handnhim a file with most of his project missing and no clue why. */
+    if (!FM.showExportDialog || !FM._exportSoloId) throw new Error('the export dialog or its solo hook is missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'Box A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 3 });
+      const B = FM.makeLayer('shape', { name: 'Box B', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 3 });
+      FM.scene.layers.push(A, B);
+      FM.selectLayer(null);
+
+      await FM.showExportDialog();
+      await sleep(60);
+      if (FM._exportSoloId() !== null) throw new Error('the dialog opened already isolating a layer — it must start on "All layers"');
+      const btn = document.getElementById('exp-solo-btn');
+      if (!btn) throw new Error('#exp-solo-btn is missing — the picker is gone');
+
+      btn.click(); await sleep(60);
+      const menu = document.getElementById('ctx-menu');
+      if (!menu || menu.getBoundingClientRect().width < 10) throw new Error('pressing the picker opened nothing');
+      const row = [].slice.call(menu.querySelectorAll('*')).filter(function (e) { return !e.children.length && (e.textContent || '').trim() === 'Box A'; })[0];
+      if (!row) throw new Error('the picker does not list the project\'s layers — it offered: ' + (menu.textContent || '').trim().slice(0, 80));
+      row.click(); await sleep(60);
+      if (FM._exportSoloId() !== A.id) throw new Error('picking "Box A" did not select it for export (the export would still render ' + (FM._exportSoloId() === null ? 'every layer' : 'a different one') + ')');
+
+      // …and reopening starts clean, so one export's solo cannot leak into the next.
+      document.getElementById('export-dialog').classList.add('hidden');
+      await FM.showExportDialog();
+      await sleep(60);
+      if (FM._exportSoloId() !== null) throw new Error('a second export opened still isolating the layer chosen for the first — that ships a file with most of the project missing');
+    } finally {
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0;
       FM.refreshAll();
     }
   });
