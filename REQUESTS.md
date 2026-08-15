@@ -98,7 +98,7 @@ better still, keep working inside the turn rather than parking work for a later 
       serif-T glyph the Edit Text card shows. Off tiles are desaturated instead of recoloured, since a
       self-coloured icon cannot show on/off by changing its colour. The suite compares every tile's
       markup against the inspector's own, so a third table cannot grow back quietly.
-- [x] **128 — Opening/closing a project feels janky. DONE v7.60 (the opening half).** His words: *"the animation when opening a project
+- [x] **128 — Opening/closing a project feels janky. DONE — opening v7.60, closing v7.61.** His words: *"the animation when opening a project
       feels janky, the fix is make it so the animation of the project layer moving to the left happens
       instantly, so it feels responsive, make sure it's smooth, then smoothly the project should swoop in
       too. Needs to be smoother and less janky when leaving a project also."* Note he has prescribed the
@@ -191,9 +191,25 @@ better still, keep working inside the turn rather than parking work for a later 
       not the unit. #app is width:100%, so `100%` and `100vw` are identical here — and `100%` is what
       shipped, because it is the unit `fm-push-in` animates from, so phase 1 parks exactly where phase 2
       begins. Measuring the mutation is what caught the bad reasoning: swapping the unit changed nothing.
-      **The CLOSING half of this entry is still open** — his words included *"needs to be smoother and
-      less janky when leaving a project also"*, and only the opening half has been measured and fixed.
-      The pop (project → home) has not been profiled at all yet; that is the next pass on this item.
+      **THE CLOSING HALF IS DONE TOO, v7.61 — and it was the same defect wearing a different hat.**
+      Measured first (`tests/_popjank.html`), because assuming the cause would be the same as the
+      opening half is exactly the trap this item has already sprung twice. It was: `home.open()` runs
+      straight through to `startPop()`, its last line, so **81ms at 6× CPU throttle passes with your
+      finger already lifted and nothing moving** — and **62ms of that 81 was one call**, stopping to
+      take a fresh photograph of the project for its card.
+      That call does two jobs and only one of them is urgent. The card grid needs the METADATA to
+      render — name, size, duration, layer count — and that is nearly free. The PICTURE is the
+      expensive half and nothing needs it until you can see it, while the cards are still sliding in.
+      Split: metadata now, photograph a moment later. **81ms → 14ms.**
+      The photograph waits for idle rather than a plain timer, and that detail was measured too: on a
+      plain timer, two runs in four still put a frame over 50ms right where you land, so you arrive on
+      the grid and it hitches under your thumb. Now it goes in a gap, with a timeout so it cannot be
+      starved forever. The card shows its previous thumbnail until then — a picture of the project you
+      were looking at seconds ago.
+      **Both halves of your original message are now answered**, and neither turned out to be the
+      animation: *"make it so the animation… happens instantly"* was 113ms of dead air on the way in,
+      and *"less janky when leaving"* was 81ms of it on the way out. The animations were smooth all
+      along, which is why "it feels janky" kept not matching anything a profiler pointed at.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO.** His words: *"Added a screen
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific

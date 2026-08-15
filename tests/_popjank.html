@@ -1,0 +1,117 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#128 — the CLOSING half: how long is the dead wait before the pop animates?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.55 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:390px;height:800px;border:0}
+#out{padding:12px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* Ezra (#128), the half v7.60 did NOT do: "Needs to be smoother and less janky when leaving a project
+   also." The opening half turned out not to be a stutter at all — the animation was smooth even at 6x
+   CPU throttle, and the whole complaint was 113ms of dead time before anything moved. So the first
+   question here is the same one, asked of the other direction, and it is NOT safe to assume the answer
+   is the same: this path has different work on it.
+
+   js/home.js open() is synchronous up to its last line, and startPop() IS that last line. Everything
+   above it therefore happens while the finger has already lifted and nothing has moved:
+
+       endPush · FM.pause · exitGroup · viewport.reset · FM.projects.touchCurrent(true)  <-- thumbnail
+       armIntro · toggleSearch · migrateThumbs · render()   <-- the whole project grid
+       root.classList.remove('hidden')
+       startPop()
+
+   touchCurrent(true) captures a fresh thumbnail of the project and render() rebuilds every card, so
+   there are two plausibly-expensive things in front of the animation. This measures the block as a
+   whole and then attributes it, because "it is slow" is not a finding — "this line is slow" is. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done(){ out.textContent = L.join('\n'); window.__done = true; window.__popjank = L.join('\n'); }
+  function stat(a) { var s = a.slice().sort(function (x, y) { return x - y; }); return { med: s[Math.floor(s.length / 2)], worst: s[s.length - 1] }; }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.projects || !w.FM.makeLayer || !w.FM.storage) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 500);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, made = [];
+    try {
+      for (var n = 0; n < 2; n++) {
+        var id = await FM.projects.create({ name: 'PopProbe ' + n, width: 1080, height: 1920 });
+        made.push(id);
+        FM.scene.layers = [
+          FM.makeLayer('shape', { name: 'a', shape: 'rect',  x: 300, y: 300, shapeW: 400, shapeH: 300, fill: '#e33', start: 0, duration: 4 }),
+          FM.makeLayer('text',  { name: 'b', text: 'hello',  x: 300, y: 700, start: 0, duration: 4 }),
+          FM.makeLayer('shape', { name: 'c', shape: 'star',  x: 500, y: 1100, shapeW: 300, shapeH: 300, fill: '#3ce', start: 0, duration: 4 }),
+          FM.makeLayer('shape', { name: 'd', shape: 'heart', x: 500, y: 1500, shapeW: 300, shapeH: 300, fill: '#fc0', start: 0, duration: 4 }),
+        ];
+        await FM.storage.save();
+      }
+      if (FM.home._pushAllowed) FM.home._pushAllowed = function () { return true; };
+
+      // Attribute the block: wrap the two suspects and let them report their own time.
+      var tThumb = [], tRender = [];
+      var realTouch = FM.projects.touchCurrent;
+      FM.projects.touchCurrent = function () { var a = performance.now(); var r = realTouch.apply(this, arguments); tThumb.push(performance.now() - a); return r; };
+
+      var blocks = [], worsts = [], longs = [];
+      for (var i = 0; i < 4; i++) {
+        // Be in a project first, with the grid genuinely stale so open() has real work to do.
+        await FM.projects.open(made[i % 2]);
+        FM.home.close({ push: true });
+        await new Promise(function (r) { setTimeout(r, 900); });
+
+        var frames = [], last = 0, watching = true;
+        (function tick(ts) { if (last) frames.push(ts - last); last = ts; if (watching) w.requestAnimationFrame(tick); })(performance.now());
+        w.requestAnimationFrame(function f(ts) { if (watching) { } });
+        await new Promise(function (r) { setTimeout(r, 200); });
+        frames.length = 0;
+
+        /* THE NUMBER. open() is synchronous through to startPop(), so this IS the gap between the
+           finger and the first frame that can possibly move. */
+        var t0 = performance.now();
+        FM.home.open();
+        blocks.push(performance.now() - t0);
+
+        await new Promise(function (r) { setTimeout(r, 800); });
+        watching = false;
+        var ws = frames.slice().sort(function (a, b) { return b - a; });
+        worsts.push(ws[0] || 0);
+        longs.push(frames.filter(function (f) { return f > 50; }).length);
+        await new Promise(function (r) { setTimeout(r, 250); });
+      }
+
+      var b = stat(blocks), ww = stat(worsts);
+      L.push('LEAVING a project — the synchronous work in front of the pop animation');
+      L.push('');
+      L.push('  FM.home.open() blocks for      median ' + b.med.toFixed(0) + ' ms      worst ' + b.worst.toFixed(0) + ' ms');
+      L.push('     runs: ' + blocks.map(function (x) { return x.toFixed(0); }).join(', ') + ' ms');
+      L.push('     startPop() is the LAST line of open(), so nothing can move for this long.');
+      L.push('');
+      if (tThumb.length) {
+        var th = stat(tThumb);
+        L.push('  of which touchCurrent()        median ' + th.med.toFixed(0) + ' ms      worst ' + th.worst.toFixed(0) + ' ms   (fresh card thumbnail)');
+      }
+      L.push('');
+      L.push('  worst frame during the pop     median ' + ww.med.toFixed(0) + ' ms      worst ' + ww.worst.toFixed(0) + ' ms');
+      L.push('  frames over 50ms during it     ' + longs.join(', '));
+      L.push('');
+      L.push('READ IT LIKE THE OPENING HALF: a big block with clean frames means the animation is fine');
+      L.push('and the fix is to start it before the work, exactly as v7.60 did for opening. A small');
+      L.push('block with long frames means the opposite and reordering would fix nothing.');
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 5).join('\n'));
+    }
+    try {
+      for (var k = 0; k < made.length; k++) { try { await FM.projects.remove(made[k]); } catch (e) {} }
+      L.push('');
+      L.push('cleaned up; library now has ' + FM.projects.list().length + ' project(s)');
+    } catch (e) { L.push('CLEANUP FAILED: ' + e); }
+    done();
+  }
+})();
+</script></body></html>

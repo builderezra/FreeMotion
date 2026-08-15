@@ -14561,6 +14561,51 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #128, the closing half: leaving a project ----------------
+   * His words included "needs to be smoother and less janky when leaving a project also", and the
+   * measurement came out the same shape as the opening half: not a stutter, a stall. `home.open()` is
+   * synchronous through to `startPop()`, its last line, so everything above it happens with the finger
+   * already lifted and nothing moving. At 6x CPU throttle that was 81ms — and 62ms of it was ONE call,
+   * `touchCurrent(true)`, capturing a fresh picture for the project card.
+   * The card grid needs that call's METADATA to render. It does not need the new picture until you can
+   * see it, and the cards are sliding in. So the two were separated. */
+  test('home: leaving a project does not stop to take a photograph first', { item: 'pop-thumb-deferred' }, async function () {
+    var P = FM.projects;
+    var real = P.touchCurrent, calls = [];
+    P.touchCurrent = function (force, noThumb) { calls.push({ force: !!force, noThumb: !!noThumb }); return real.apply(this, arguments); };
+    var wasHidden = document.getElementById('home-screen').classList.contains('hidden');
+    var view = null; try { view = localStorage.getItem('fm.view'); } catch (e) {}
+    try {
+      calls.length = 0;
+      FM.home.open();
+      /* THE CONTROL. If open() stopped calling touchCurrent altogether the card would go stale and the
+         assertion below would pass for the wrong reason — "it didn't capture" is only good news when
+         the metadata still gets updated. */
+      if (!calls.length) throw new Error('control failed: open() no longer refreshes the card metadata at all, so the grid would show stale names, sizes and layer counts');
+      var sync = calls[0];
+      if (!sync.noThumb) {
+        throw new Error('leaving a project still captures a fresh card thumbnail synchronously (force=' + sync.force + ', noThumb=' + sync.noThumb +
+                        '). That is a full-frame render and serialise in front of the animation — measured at 62ms of an 81ms stall at 6x CPU throttle, with the finger already lifted and nothing on screen moving.');
+      }
+
+      // …and the picture still gets taken, or this is not a deferral, it is a deletion.
+      var t0 = performance.now();
+      while (!calls.some(function (c) { return c.force && !c.noThumb; }) && performance.now() - t0 < 3000) {
+        await new Promise(function (r) { setTimeout(r, 50); });
+      }
+      if (!calls.some(function (c) { return c.force && !c.noThumb; })) {
+        throw new Error('the deferred thumbnail capture never happened — the card would keep an old picture indefinitely, which is a worse bug than the stall it replaced');
+      }
+      if (performance.now() - t0 < 60) {
+        throw new Error('the "deferred" capture ran immediately (' + Math.round(performance.now() - t0) + 'ms) — dropping a 60ms capture inside a 380ms animation is the stutter this is meant to remove');
+      }
+    } finally {
+      P.touchCurrent = real;
+      if (wasHidden) FM.home.close();
+      try { if (view != null) localStorage.setItem('fm.view', view); } catch (e) {}
+    }
+  });
+
   /* ---------------- #125: "major lag when scrolling, with barely any layers" ----------------
    *
    * His words, and the fair part of them: "I know I tell you about lag a lot but nothing much ever

@@ -905,7 +905,13 @@ window.FM = window.FM || {};
     },
     // Keep the index card for the current project fresh (called from every autosave — cheap; the
     // thumbnail re-render is throttled and skipped mid-playback).
-    touchCurrent(forceThumb) {
+    /* `noThumb` skips the capture unconditionally (queue 128). makeThumb() renders the current frame
+     * and serialises it, and that is expensive where it matters: measured at 6x CPU throttle it is
+     * **62ms of the 81ms** that js/home.js's open() blocks for before the leaving-a-project animation
+     * can start. The metadata half — name, size, duration, layer count — is what the card grid needs
+     * in order to be rendered, and it is nearly free. So the two are separable, and home.open() takes
+     * the cheap half now and the picture a moment later. */
+    touchCurrent(forceThumb, noThumb) {
       const id = boundId || curId(); if (!id) return;   // THIS tab's project, not the shared fm.currentProject — else a 2nd tab makes us stamp its card/thumbnail with our scene
       const idx = this.list();
       const e = idx.find(p => p.id === id); if (!e) return;
@@ -921,7 +927,7 @@ window.FM = window.FM || {};
       e.layers = FM.scene.layers.length;
       const now = Date.now();
       // A pinned thumbnail (user chose a specific frame) is never auto-overwritten by the periodic capture.
-      if (!P.thumbPinned && (forceThumb || (now - thumbTimer > 12000 && !FM.playing))) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
+      if (!noThumb && !P.thumbPinned && (forceThumb || (now - thumbTimer > 12000 && !FM.playing))) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
       this.saveIndex(idx);
     },
     // Capture the current frame NOW as the card thumbnail (the video is correctly seeked at the playhead

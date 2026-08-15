@@ -56,6 +56,8 @@ window.FM = window.FM || {};
   // the split path: the press is handed to the push on the tap, so an open that never settles no
   // longer strands a pressed card, it strands the whole transition.
   let waitTimer = 0;
+  // Deferred card-thumbnail capture — see the note in open(). (queue 128)
+  let thumbTimer = 0, thumbIdle = 0;
   /* True for the whole of a two-phase push. #home-screen is the honest end-of-push signal for a
    * one-shot push because both motion modes animate it — but when the editor waits for a load, home
    * finishes FIRST and its animationend would end the push with the editor barely into its entrance.
@@ -224,6 +226,34 @@ window.FM = window.FM || {};
     if (root) root.classList.remove('fm-pop-in');
     document.body.classList.remove('fm-popping');
   }
+  /* Take the card's fresh thumbnail once the app has nothing better to do (queue 128).
+   *
+   * WHEN, and why it is not simply "after the animation": the capture is ~60ms at phone speed, and
+   * measured with a plain timer two runs in four still put a frame over 50ms right where you land —
+   * you arrive on the grid and it hitches under your thumb. requestIdleCallback spends that time in a
+   * gap instead, and the timeout means it can never be starved. The setTimeout is the fallback for
+   * browsers without it, and the animation length is the floor either way: dropping a 60ms capture
+   * INSIDE a running 380ms animation would be the stutter this whole item is about.
+   *
+   * The card keeps its previous thumbnail until then, which is a picture of the project you were
+   * looking at seconds ago — a far smaller cost than the 81ms stall it replaces. */
+  function captureThumbSoon() {
+    if (thumbTimer) { clearTimeout(thumbTimer); thumbTimer = 0; }
+    if (thumbIdle && window.cancelIdleCallback) { try { cancelIdleCallback(thumbIdle); } catch (e) {} }
+    thumbIdle = 0;
+    const grab = function () {
+      thumbTimer = 0; thumbIdle = 0;
+      if (!root || root.classList.contains('hidden')) return;   // left again already — nothing to refresh
+      try { FM.projects.touchCurrent(true); } catch (e) {}
+      render();
+    };
+    thumbTimer = setTimeout(function () {
+      thumbTimer = 0;
+      if (window.requestIdleCallback) thumbIdle = requestIdleCallback(grab, { timeout: 1500 });
+      else grab();
+    }, PUSH_MS + 80);
+  }
+
   function startPop() {
     const app = document.getElementById('app');
     if (!app || !root) return;
@@ -1811,7 +1841,13 @@ window.FM = window.FM || {};
       if (FM.pause) FM.pause(); else FM.playing = false;   // silence playback under the overlay (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // home always shows the top-level project
       if (FM.viewport) FM.viewport.reset();   // closing a project resets the preview pan/zoom (view-only)
-      FM.projects.touchCurrent(true);   // fresh thumbnail for the card
+      /* METADATA NOW, PICTURE LATER (queue 128, the closing half). This used to be
+       * `touchCurrent(true)` — a forced thumbnail capture — and startPop() is the LAST line of this
+       * function, so every millisecond here is a millisecond in which the finger has lifted and
+       * nothing on screen has moved. Measured at 6x CPU throttle: open() blocked for 81ms and **62ms
+       * of it was this one call**. The card grid needs the metadata to render; it does not need the
+       * new picture until you can see it, and the cards are sliding in. */
+      FM.projects.touchCurrent(false, true);   // name/size/duration/layer count only — no capture
       if (selectMode) { selectMode = false; selected.clear(); }
       // First open of the session only — this is the arrival, not a screen you keep re-entering.
       const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1829,6 +1865,11 @@ window.FM = window.FM || {};
       // who least want it.
       if (hasOpened) startPop();
       hasOpened = true;
+      /* …and the picture, once the animation it was blocking is over. Deliberately after the pop
+       * rather than one frame into it: the capture is 62ms at phone speed, which dropped inside a
+       * running animation would be the stutter this is supposed to remove. The card keeps its previous
+       * thumbnail for the length of the slide, which is a project you were looking at a moment ago. */
+      captureThumbSoon();
       document.body.classList.add('home-open');
       // Remember which screen the user is on, so a refresh / force-update reload puts them back
       // there instead of always landing on the project browser (the boot path reads this).
