@@ -14204,9 +14204,10 @@
     await withFilterLayer(async function (L) {
       visibleFxPill(/^Filters$/).click();
       await sleep(140);
-      var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-row'));
-      rows = rows.filter(function (r) { return !r.classList.contains('flt-empty'); });   // the build-your-own door is not one of the 16
-      if (rows.length !== FM.filters.all().length) throw new Error('the tab lists ' + rows.length + ' filters, the library has ' + FM.filters.all().length);
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-tile'));
+      if (rows.length !== FM.filters.all().length) throw new Error('the tab shows ' + rows.length + ' filters, the library has ' + FM.filters.all().length);
+      // …as TILES with a picture, like the effects and audio browsers — that is the request.
+      if (!rows[0].querySelector('.flt-thumb-cv')) throw new Error('the filters are listed without previews — "like how effects and audio does" means pictures');
       FM.filters.sections().forEach(function (sec) {
         var found = Array.prototype.slice.call(document.querySelectorAll('.insp-sub-label'))
           .some(function (n) { return n.textContent.trim() === sec.label; });
@@ -14217,10 +14218,36 @@
       var def = FM.filters.all()[0];
       var row = rows.filter(function (r) { return (r.querySelector('.flt-name') || {}).textContent === def.name; })[0];
       if (!row) throw new Error('could not find the row for ' + def.name);
-      var made = row.querySelector('.flt-made');
-      if (!made) throw new Error(def.name + ' does not say what it contains');
+      // What it is MADE of moved to the tile's title — a picture cannot say it, and three lines of text
+      // under a 62px thumbnail at 380px cannot either.
       var firstLabel = FM.fxRegistry.get(def.effects[0].type).label;
-      if (made.textContent.indexOf(firstLabel) < 0) throw new Error('"' + made.textContent + '" does not name ' + firstLabel + ', the first effect in it');
+      if ((row.title || '').indexOf(firstLabel) < 0) throw new Error('the tile for ' + def.name + ' does not name ' + firstLabel + ', the first effect in it (title: "' + row.title + '")');
+      if ((row.title || '').indexOf(def.desc.slice(0, 20)) < 0) throw new Error('the tile does not carry its description either');
+    });
+  });
+
+  /* The failure a screenshot would not catch: sixteen tiles that all show the SAME picture. That is
+     what you get if the preview quietly falls back to the plain sample — it looks like a working grid
+     and tells you nothing about any of the looks. So the assertion is that they DIFFER, with a control
+     proving the comparison can see a difference at all. */
+  test('filters tab: each tile previews its own look, not the same picture sixteen times', { item: 'fx-library' }, async function () {
+    await withFilterLayer(async function () {
+      visibleFxPill(/^Filters$/).click();
+      await sleep(160);
+      var cvs = Array.prototype.slice.call(document.querySelectorAll('.flt-thumb-cv'));
+      if (cvs.length !== FM.filters.all().length) throw new Error('expected one preview per filter, found ' + cvs.length);
+      for (var w = 0; w < 60 && cvs.filter(function (c) { return c.classList.contains('ready'); }).length < cvs.length; w++) await sleep(100);
+      var notReady = cvs.filter(function (c) { return !c.classList.contains('ready'); }).length;
+      if (notReady) throw new Error(notReady + ' of ' + cvs.length + ' previews never painted — empty boxes are worse than the text list they replaced');
+      var sig = function (c) {
+        var d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, a = 0, b = 0, e = 0;
+        for (var i = 0; i < d.length; i += 4 * 97) { a += d[i]; b += d[i + 1]; e += d[i + 2]; }
+        return a + ',' + b + ',' + e;
+      };
+      var sigs = cvs.map(sig), uniq = {};
+      sigs.forEach(function (x) { uniq[x] = 1; });
+      var n = Object.keys(uniq).length;
+      if (n < cvs.length) throw new Error(n + ' distinct pictures across ' + cvs.length + ' filters — the previews are falling back to the plain sample rather than rendering each look');
     });
   });
 
@@ -14228,7 +14255,7 @@
     await withFilterLayer(async function (L) {
       visibleFxPill(/^Filters$/).click();
       await sleep(140);
-      var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-row'));
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.flt-tile'));
       var wanted = (rows[2].querySelector('.flt-name') || {}).textContent;
       rows[2].click();
       await sleep(160);

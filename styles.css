@@ -4868,6 +4868,23 @@ body.fm-pushing #toast { z-index: 213; }
    A browse list, not a grid: each row has to carry a name, a sentence, and the effects the look is
    made of, and three lines of text do not fit in a thumbnail-sized tile at 380px. When filter
    thumbnails exist this becomes a tile grid; until then the words are the preview. */
+/* Tiles, matching .fxb-grid / .fxb-tile in the effects browser (queue 220) — same four columns, same
+   62px picture, same rhythm, so the three subsections read as one place rather than three designs. */
+.flt-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.flt-tile {
+  position: relative; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 11px; padding: 0 0 7px; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; color: inherit; font: inherit; text-align: center;
+  transition: border-color .13s ease, transform .09s ease;
+}
+.flt-tile:hover { border-color: color-mix(in srgb, var(--accent, #4d8bf0) 45%, transparent); }
+.flt-tile:active { transform: scale(0.975); }
+.flt-thumb { width: 100%; height: 62px; background: linear-gradient(135deg, #3a7bd5, #00d2ff); display: flex; align-items: center; justify-content: center; }
+.flt-thumb-cv { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .18s ease; }
+.flt-thumb-cv.ready { opacity: 1; }
+.flt-tile .flt-name { padding: 6px 4px 0; font-size: 10.5px; font-weight: 600; color: var(--text-dim); line-height: 1.2; }
+/* The build-your-own door keeps the old full-width row shape — it is an ACTION, not one of the looks,
+   and giving it a tile would put an empty picture in the middle of a grid of real ones. */
 .flt-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .flt-row {
   display: block; width: 100%; text-align: left;

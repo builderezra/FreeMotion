@@ -1207,7 +1207,10 @@ window.FM = window.FM || {};
     if (key != null) {
       const m = meta.get(key);
       let entry = cache.get(key);
-      if (!entry) entry = (m && m.layerId) ? layerStep(key, m) : (m && m.preset ? generatePreset(m.preset) : generate(key));
+      if (!entry) entry = (m && m.layerId) ? layerStep(key, m)
+                        : (m && m.filter) ? generateFilter(m.filter)
+                        : (m && m.preset) ? generatePreset(m.preset)
+                        : generate(key);
       if (entry) {
         queue.shift();
         cache.set(key, entry);
@@ -1227,6 +1230,27 @@ window.FM = window.FM || {};
     }
     schedule();
   }
+  /* A FILTER's tile (queue 220). Cheaper than an effect's in the one way that matters: a filter's
+   * settings are already chosen by whoever authored it, so none of the ~60 per-effect demo tweaks
+   * apply — sceneFor takes the ready-made container and skips them of its own accord.
+   * STATIC, not animated. Only the grain/noise ingredients in the library vary with time, and paying
+   * an animated strip for 16 tiles on a phone buys a shimmer nobody is choosing a look by.
+   * The SUBJECT comes from the first child's type, which is the same rule effects already follow,
+   * applied to the look's leading ingredient — so a colour filter gets the photo a colour effect gets
+   * rather than a shape. */
+  function generateFilter(id) {
+    try {
+      const box = FM.filters && FM.filters.makeInstance(id);
+      if (!box || !box.effects || !box.effects.length) return fallback();
+      const scene = sceneFor(box.effects[0].type, box, 0);
+      renderFrame(scene, 0.001);
+      return { kind: 'static', frame: snap() };
+    } catch (e) {
+      if (!warned['f:' + id]) { warned['f:' + id] = 1; console.warn('fx-thumbs: filter preview failed for "' + id + '"', e); }
+      return fallback();
+    }
+  }
+
   // Shared mount plumbing: size the canvas, paint from cache or join the generation queue.
   function mountKey(cv, key, m) {
     if (!FM.renderScene || !FM.fxRegistry || !FM.makeLayer) {   // compositor/registry not loaded — nothing to render with
@@ -1258,6 +1282,9 @@ window.FM = window.FM || {};
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
     mount: function (cv, type) { mountKey(cv, type, null); },
+    /* A FILTER's tile, keyed by library id. No layer variant on purpose: the effects GRID it sits
+     * beside uses sample tiles too, and matching that is the whole point of the request. */
+    mountFilter: function (cv, id) { if (id) mountKey(cv, 'f:' + id, { filter: id }); },
     /* A PRESET's live preview. With `layer`, the tile is THAT LAYER in its scene with the preset
      * appended to its effect stack — the picture you are about to get. Without one (or when the
      * layer has nothing to show) it is the sample tile, cache-keyed by preset id as before. */

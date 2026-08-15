@@ -1089,18 +1089,30 @@ window.FM = window.FM || {};
       const list = FM.filters.bySection(sec.key);
       if (!list.length) return;
       s.appendChild(el('div', 'insp-sub-label', sec.label));
-      const wrap = el('div', 'flt-list');
+      const wrap = el('div', 'flt-grid');
       list.forEach(f => {
-        const row = el('button', 'flt-row');
+        /* A TILE, matching the effects and audio browsers (queue 220). He asked for the section to work
+           "like how effects and audio does", and those are grids of pictures — a picture is how you
+           choose a LOOK, which is the one thing a sentence is bad at.
+           The description and the ingredient list stay, as the tile's title, because they are the thing
+           the picture cannot tell you: that a filter is not a black box but a group of ordinary effects
+           you can open and retune. */
+        const row = el('button', 'flt-tile');
+        const th = el('div', 'flt-thumb');
+        const cv = el('canvas', 'flt-thumb-cv');
+        th.appendChild(cv);
+        row.appendChild(th);
+        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id);
         row.appendChild(el('div', 'flt-name', f.name));
-        row.appendChild(el('div', 'flt-desc', f.desc || ''));
         // What it is made of, in the app's own words for those effects — so the names match what you
         // will see inside the filter once it is added, not a second vocabulary invented here.
         const made = (f.effects || []).map(c => {
           const reg = FM.fxRegistry.get(c.type);
           return (reg && reg.label) || c.type;
         }).filter(Boolean);
-        if (made.length) row.appendChild(el('div', 'flt-made', made.join(' · ')));
+        // On the tile itself these would be three lines of text under a 62px picture at 380px wide, so
+        // they move to the title — still there when you want them, not shouting over the grid.
+        row.title = f.name + (f.desc ? ' — ' + f.desc : '') + (made.length ? '\nMade of: ' + made.join(' · ') : '');
         row.addEventListener('click', () => {
           const box = FM.filters.makeInstance(f.id);
           if (!box) { if (FM.toast) FM.toast('That filter isn’t available in this build'); return; }
