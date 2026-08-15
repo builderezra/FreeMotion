@@ -2108,7 +2108,7 @@ better still, keep working inside the turn rather than parking work for a later 
       DARKER than the app. I read that as "an element is missing" when it actually said "something
       behind everything is a different colour". Six rounds could have been one.
 
-- [ ] **169 — PC: trim/split move onto the playhead, and the align buttons get the whole panel.** (13 Aug, *(logged as #144 by mistake — that number was already used by an earlier shipped item, so it is #169 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #144.)*
+- [x] **169 — PC: trim/split move onto the playhead, and the align buttons get the whole panel. DONE — first half back in v5.25, the rest v7.74.** (13 Aug, *(logged as #144 by mistake — that number was already used by an earlier shipped item, so it is #169 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #144.)*
       second screenshot, multi-select state.) His words: *"put the delete left side button to the left of
       the play head and then same for the right button, and put the split button in the middle on top of
       the playhead. Then in the left massive area where its currently got the six small buttons, just get
@@ -2122,6 +2122,36 @@ better still, keep working inside the turn rather than parking work for a later 
       grow to fill the whole area instead of sitting as a small row at the top.
       Note this is the multi-select panel in the screenshot, but the same trim/split row shows for a
       single clip too (screenshot 1) — the playhead move applies to both.
+
+      **DONE v7.74, and the half that was already shipped is worth separating from the half that was not.**
+      · **"put the delete left/right buttons either side of the playhead and split on top of it" — this
+        shipped in v5.25** as `#tl-trim`, and `#tl-nudge` (v5.01) is its complement for when the playhead
+        is off the clip. That is why the entry looked half-familiar; it was never ticked.
+      · **"get rid of the buttons that are near the play head" — done now, and it could not safely have
+        been done before today.** Those floating buttons read `FM.selectedLayer`, the PRIMARY layer. So
+        with three clips selected they appeared over the playhead and edited ONE of the three, while the
+        inspector kept a second, selection-aware copy of the same actions. Delete the copy on its own and
+        "split all" quietly becomes "split one" — a loss you would notice several edits later, in a
+        project you cannot undo your way out of. So the floats read the selection first: trim, split and
+        extend act on every selected clip the playhead is inside, and MOVE takes the selection as a block
+        (near edge to the playhead, each clip keeping its offset), which is the rule the inspector row
+        used — copied from it rather than re-derived, so the two cannot drift apart. The titles carry the
+        count ("Split all 3 at playhead"), because the buttons look identical either way.
+      · **"make them big and fill up the whole section" — done.** With the duplicate gone this panel held
+        nothing else: measured at 1440×900 with three clips selected, **168px of content in a 580px
+        panel**, 412px empty. That is your "left massive area". The three align buttons now fill it as
+        stacked full-width rows with names on them — Start together · One after another · End together —
+        rather than three 88px icon columns stretched tall, because at that size a bare glyph reads as an
+        unfinished button and start-vs-end is exactly the pair a mirrored icon fails to distinguish.
+      **Phone untouched** — verified at 380px: the clip actions stay in the panel and both rows stay
+      36px icon strips, one home per platform, the same arrangement the single-clip row has had since
+      v5.25.
+      **Three mutations, three reds:** making trim act on the primary only (durations came back 3, 6, 6),
+      deleting the fill rule, and leaving the duplicate row on screen. The fill assertion had to be
+      rewritten after the first mutation slipped past it — with the rule gone the buttons still measure
+      47px, comfortably over any "bigger than the phone's 36" bar, while leaving 468px of the panel
+      empty. The gap to the bottom of the panel is the number that tells the two states apart, so that
+      is what the test measures now.
 
 - [x] **144 — The slam shake reveals the editor behind home.** (v6.82) His words: *"When the shake happens it
       shows the editing page behind it, looks weird, just make sure you don't see the page behind it,
@@ -3815,8 +3845,11 @@ layout, motion blur, the elements browser and the effects browser.
         `#t-far` now reads v7.73 · notes · cog · Export · ⛶, which is the order #171 wrote down. The
         suite's Studio-layout test carries the list, so forgetting a button in the next migration is red
         rather than shipped; both mutations (drop it, or put it on the wrong side of the cog) caught it.
-      · **"all the different options when you have a layer selected"** — this is #169, still open: the
-        trim/split row should move onto the playhead and the align buttons should fill the panel.
+      · **"all the different options when you have a layer selected" — DONE v7.74**, as #169. The six
+        small buttons in the multi-select panel are three big named ones filling the panel, and the
+        trim/split trio by the playhead now acts on the whole selection instead of quietly editing one
+        clip of the three. Read #169 for the detail and for the mutation that slipped past the first
+        version of the test.
       · **"pretty un usable"** is the part that matters most and is not covered by either. Before
         rearranging anything, look at the whole PC layout with a selection live and find out what makes
         it unusable, rather than shipping the two named fixes and declaring it done.

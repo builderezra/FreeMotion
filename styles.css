@@ -1948,6 +1948,37 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .qr-btn:disabled:hover { background: var(--panel-2); color: var(--text-dim); }
 .align-row { padding: 0 2px 4px; }
 .align-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin: 2px 0 6px; }
+/* The align buttons' names. Off on the phone, where the row is still three icons in a 36px strip and
+   a word would push them to a size you cannot hit. */
+.qr-cap { display: none; }
+/* The multi-select panel on DESKTOP (queue 169). Ezra: "get rid of the buttons that are near the play
+   head and then with the align buttons just make them big and fill up the whole section."
+   Same arrangement the SINGLE-clip row already has (.qr-trim / .qr-nudge above): the clip actions live
+   by the playhead on desktop and in the panel on a phone, one home per platform, never both. What is
+   new here is the second half — with the duplicated trio gone this panel holds nothing but three align
+   buttons, so they take the room instead of sitting as a 36px strip above 412px of nothing. */
+@media (min-width: 701px) {
+  .align-clipacts { display: none; }
+  /* Reaching the bottom of the panel takes a chain of flex, and it is scoped to body.sel-multi on
+     purpose: #inspector holds every other inspector state too, and turning it into a stretched column
+     for all of them would be a layout change to screens nobody asked about. In THIS state its only
+     child is .align-row, so the chain is unambiguous. min-height:0 at each link or the children refuse
+     to shrink below their content on a short window and the panel grows a scrollbar instead. */
+  body.sel-multi #inspector-panel { display: flex; flex-direction: column; }
+  body.sel-multi #inspector { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  body.sel-multi .align-row { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body.sel-multi .align-big { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  /* STACKED, not three tall slivers. Filling the section by growing an 88px-wide icon button to 170px
+     tall makes three columns nobody can read; one full-width row each is what "big" means for a
+     control with a name on it, and it is the shape every other list in this app already uses. */
+  body.sel-multi .align-big .quick-row { flex: 1; min-height: 0; flex-direction: column; padding-bottom: 4px; }
+  body.sel-multi .align-big .qr-btn {
+    height: auto; max-height: 150px; gap: 12px; justify-content: flex-start;
+    padding: 0 16px; font-size: 13.5px; color: var(--text);
+  }
+  body.sel-multi .align-big .qr-btn svg { width: 24px; height: 24px; flex: 0 0 auto; }
+  body.sel-multi .align-big .qr-cap { display: block; }
+}
 
 .cap-title { font-size: 11px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 7px; }
 .cap-list { display: flex; flex-direction: column; gap: 7px; }

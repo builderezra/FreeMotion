@@ -1900,8 +1900,17 @@ window.FM = window.FM || {};
     // move a clip in time: keyframes are absolute, so they must ride along (same rule as clip-drag v3.01)
     const setStart = (l, ns) => { const d = ns - l.start; if (!d) return; l.start = ns; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); };
 
-    // ---- clip actions on the whole selection (AM bottom-left) ----
-    wrap.appendChild(el('div', 'align-label', 'Edit ' + n + ' clips'));
+    /* ---- clip actions on the whole selection (AM bottom-left) ----
+     * PHONE ONLY from v7.74 (queue 169). Ezra: "in the left massive area where its currently got the
+     * six small buttons, just get rid of the buttons that are near the play head and then with the
+     * align buttons just make them big and fill up the whole section."
+     * These three ARE the buttons near the playhead — #tl-trim / #tl-nudge float over the ruler on
+     * desktop — and as of v7.74 those act on the whole selection rather than on the primary layer, so
+     * removing this copy loses nothing. Wrapped in one element so the LABEL leaves with the buttons;
+     * hiding the buttons alone would strand an "Edit 3 clips" heading over an empty gap. The single-
+     * clip row next door was already handled this way (.qr-trim / .qr-nudge, styles.css). */
+    const acts = el('div', 'align-clipacts');
+    acts.appendChild(el('div', 'align-label', 'Edit ' + n + ' clips'));
     const bar = el('div', 'quick-row');
     function ab(title, icon, opts, fn) { const b = el('button', 'qr-btn' + (opts.danger ? ' qr-danger' : '')); b.title = title; b.innerHTML = svgIcon(icon); if (opts.disabled) b.disabled = true; b.addEventListener('click', fn); bar.appendChild(b); }
     const inside = l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4;
@@ -1955,28 +1964,46 @@ window.FM = window.FM || {};
       done();
     });
     }
-    wrap.appendChild(bar);
+    acts.appendChild(bar);
+    wrap.appendChild(acts);
 
-    // ---- timeline alignment (AM bottom-right): time only, never canvas position ----
-    wrap.appendChild(el('div', 'align-label', 'Align on timeline'));
+    /* ---- timeline alignment (AM bottom-right): time only, never canvas position ----
+     * "with the align buttons just make them big and fill up the whole section" — the .align-big class
+     * is what styles.css hangs that on, desktop only. It is worth being precise about what "the whole
+     * section" is here: with a multi-selection this panel holds NOTHING else. Measured at 1440x900
+     * with three clips selected, before this change: 168px of content in a 580px panel, the other
+     * 412px empty. That is the "left massive area" in his message. */
+    const alg = el('div', 'align-big');
+    alg.appendChild(el('div', 'align-label', 'Align on timeline'));
     const tbar = el('div', 'quick-row');
-    function tb(title, icon, fn) { const b = el('button', 'qr-btn'); b.title = title; b.innerHTML = svgIcon(icon); b.addEventListener('click', fn); tbar.appendChild(b); }
-    tb('Start together — all clips begin at the same time', 'M5 4v16M9 7h10M9 12h7M9 17h11', () => {
+    /* Each one gains a NAME on desktop (`.qr-cap`, hidden by CSS on the phone, where the row stays a
+       compact icon strip). Three unlabelled icons in a 36px row can be a toolbar; three of them grown
+       to fill half a panel cannot — at that size an icon with no word beside it just looks like an
+       unfinished button, and "start together" vs "end together" is exactly the pair a mirrored glyph
+       fails to distinguish. The full sentence stays on the title, so nothing is lost. */
+    function tb(title, cap, icon, fn) {
+      const b = el('button', 'qr-btn'); b.title = title;
+      b.innerHTML = svgIcon(icon) + '<span class="qr-cap"></span>';
+      b.querySelector('.qr-cap').textContent = cap;   // textContent, never interpolated into the HTML above
+      b.addEventListener('click', fn); tbar.appendChild(b);
+    }
+    tb('Start together — all clips begin at the same time', 'Start together', 'M5 4v16M9 7h10M9 12h7M9 17h11', () => {
       const s0 = Math.min.apply(null, layers.map(l => l.start));
       layers.forEach(l => setStart(l, s0));
       done();
     });
-    tb('One after another — each clip starts where the previous ends', 'M3 6h6M9 12h6M15 18h6', () => {
+    tb('One after another — each clip starts where the previous ends', 'One after another', 'M3 6h6M9 12h6M15 18h6', () => {
       let t = Math.min.apply(null, layers.map(l => l.start));
       rowOrder.forEach(l => { setStart(l, t); t += l.duration; });
       done();
     });
-    tb('End together — all clips finish at the same time', 'M19 4v16M5 7h10M8 12h7M4 17h11', () => {
+    tb('End together — all clips finish at the same time', 'End together', 'M19 4v16M5 7h10M8 12h7M4 17h11', () => {
       const e0 = Math.max.apply(null, layers.map(l => l.start + l.duration));
       layers.forEach(l => setStart(l, e0 - l.duration));
       done();
     });
-    wrap.appendChild(tbar);
+    alg.appendChild(tbar);
+    wrap.appendChild(alg);
     return wrap;
   }
 

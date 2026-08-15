@@ -30,6 +30,26 @@ window.FM = window.FM || {};
   let clipScrollRAF = 0;
   const CLIP_SCROLL_MAX = 1200;   // ~20s of continuous edge-hold at 60fps; a real drag never reaches it
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
+  /* WHO THE PLAYHEAD BUTTONS ACT ON (queue 169). The floating nudge pair and trim/split trio used to
+   * read FM.selectedLayer — the PRIMARY layer — so with three clips selected they showed themselves
+   * over the playhead and then quietly edited one of the three. The inspector carried a second,
+   * selection-aware copy of the same six buttons, which is the duplication Ezra asked to end: "get rid
+   * of the buttons that are near the play head". Deleting the inspector copies is only safe once these
+   * mean the same thing, so they read the selection now. With one clip selected the set is [that clip]
+   * and every path below is the one that already shipped. */
+  function clipToolTargets() {
+    const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
+    return ids.map(id => FM.layerById(FM.scene, id)).filter(Boolean);
+  }
+  /* 0 = the playhead is inside at least one selected clip, so trim and split can do something.
+   * ±1 = it is off every one of them, and the sign says which way the block has to travel.
+   * null/0-length = nothing selected. For a single clip this is exactly FM.clipPlayheadSide. */
+  function clipToolSide(layers) {
+    if (!layers || !layers.length || !FM.clipPlayheadSide) return 0;
+    if (layers.some(l => FM.clipPlayheadSide(l) === 0)) return 0;
+    const lastEnd = Math.max.apply(null, layers.map(l => l.start + l.duration));
+    return FM.time >= lastEnd ? 1 : -1;
+  }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
   // The current time sits at TRUE SCREEN CENTRE (v4.97). Ezra: "i meant i want the play head and
@@ -2346,17 +2366,35 @@ window.FM = window.FM || {};
       const nudge = document.getElementById('tl-nudge');
       if (nudge) {
         const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
-        const act = (fn) => () => {
-          const layer = FM.selectedLayer && FM.selectedLayer(FM.scene);
-          if (!layer) return;
-          if (fn(layer, FM.time)) {
+        const act = (one, many) => () => {
+          const targets = clipToolTargets();
+          if (!targets.length) return;
+          if (targets.length === 1 ? one(targets[0], FM.time) : many(targets, FM.time)) {
             FM.requestRender(); FM.timeline.rebuild();
             if (FM.inspector) FM.inspector.refresh();
             if (FM.history) FM.history.commit();
           } else if (FM.toast) FM.toast('No more source to extend into', 1500);
         };
-        L.addEventListener('click', act((l, t) => FM.moveClipTo(l, t)));
-        R.addEventListener('click', act((l, t) => FM.extendClipTo(l, t)));
+        /* MOVE takes the selection as a BLOCK: the near edge of the whole group lands on the playhead
+           and every clip keeps its offset from it. Snapping them all to one start would destroy the
+           timing between them, which is the opposite of what a multi-select is for. Copied from the
+           inspector row this replaces (inspector.js alignRow) rather than re-derived, so the two can
+           never disagree about what the button means. */
+        L.addEventListener('click', act(
+          (l, t) => FM.moveClipTo(l, t),
+          (ls, t) => {
+            const firstStart = Math.min.apply(null, ls.map(l => l.start));
+            const lastEnd = Math.max.apply(null, ls.map(l => l.start + l.duration));
+            const d = t - (t >= lastEnd ? lastEnd : firstStart);
+            if (!d) return false;
+            ls.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
+            return true;
+          }));
+        // EXTEND stays per-clip: each one's nearest edge reaches the playhead, so clips either side of
+        // it grow toward it from their own direction and all meet there.
+        R.addEventListener('click', act(
+          (l, t) => FM.extendClipTo(l, t),
+          (ls, t) => ls.reduce((moved, l) => (FM.extendClipTo(l, t) ? true : moved), false)));
       }
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       let resizeRebuildTimer = 0;
@@ -2418,10 +2456,12 @@ window.FM = window.FM || {};
     syncNudge() {
       const box = document.getElementById('tl-nudge');
       if (!box) return;
-      const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-      const side = layer && FM.clipPlayheadSide ? FM.clipPlayheadSide(layer) : 0;
+      const targets = clipToolTargets();
+      const side = clipToolSide(targets);
       box.classList.toggle('hidden', !side);
       if (!side) return;
+      const layer = targets[0];
+      const n = targets.length;
       const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
       const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
       const ico = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
@@ -2429,8 +2469,13 @@ window.FM = window.FM || {};
       // the ones the inspector used, so the gesture is the one Ezra already knows.
       L.innerHTML = ico(right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16');
       R.innerHTML = ico(right ? 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16' : 'M12 8h8v8h-8M12 12H6M8 10l-2 2 2 2M3 4v16');
-      L.title = right ? 'Move clip right to the playhead' : 'Move clip left to the playhead';
-      R.title = right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead';
+      // The count is in the words because the buttons look identical either way, and "move 3 clips" is
+      // a very different press from "move clip" to have made by accident.
+      const many = n > 1 ? 'all ' + n + ' clips' : 'clip';
+      L.title = right ? 'Move ' + many + ' right to the playhead' : 'Move ' + many + ' left to the playhead';
+      R.title = n > 1
+        ? 'Extend all ' + n + ' clips to the playhead'
+        : (right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead');
       L.setAttribute('aria-label', L.title); R.setAttribute('aria-label', R.title);
     },
 
@@ -2441,38 +2486,55 @@ window.FM = window.FM || {};
     syncTrim() {
       const box = document.getElementById('tl-trim');
       if (!box) return;
-      const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-      const inside = !!layer && FM.clipPlayheadSide && FM.clipPlayheadSide(layer) === 0;
+      const targets = clipToolTargets();
+      // "inside" now means inside ANY selected clip, which is the same question the inspector's copy
+      // asked (`layers.some(inside)`) and, for one clip, the same answer as before.
+      const inside = targets.length > 0 && clipToolSide(targets) === 0;
       box.classList.toggle('hidden', !inside);
       if (!inside) return;
       const L = document.getElementById('tl-trim-l'), R = document.getElementById('tl-trim-r'), S = document.getElementById('tl-trim-s');
-      if (!L || !R || !S || L.innerHTML) return;   // icons are static — build once, not every frame
+      if (!L || !R || !S) return;
+      // The titles carry the count, so they are refreshed every sync even though the icons are static.
+      const n = targets.length;
+      if (n > 1) {
+        L.title = 'Trim ' + n + ' clip starts to playhead (drop everything before it)';
+        R.title = 'Trim ' + n + ' clip ends to playhead (drop everything after it)';
+        S.title = 'Split all ' + n + ' at playhead';
+      } else {
+        L.title = 'Trim start to playhead (drop everything before it)';
+        R.title = 'Trim end to playhead (drop everything after it)';
+        S.title = 'Split at playhead';
+      }
+      [L, R, S].forEach(b => b.setAttribute('aria-label', b.title));
+      if (L.innerHTML) return;   // icons and handlers are static — build once, not every frame
       const ico = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
       L.innerHTML = ico('M6 4v16M6 4h4M6 20h4M14 4v16');    // drop everything BEFORE the playhead
       R.innerHTML = ico('M18 4v16M18 4h-4M18 20h-4M10 4v16'); // drop everything AFTER the playhead
       S.innerHTML = ico('M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4'); // split at the playhead
-      L.title = 'Trim start to playhead (drop everything before it)';
-      R.title = 'Trim end to playhead (drop everything after it)';
-      S.title = 'Split at playhead';
-      [L, R, S].forEach(b => b.setAttribute('aria-label', b.title));
       const after = () => { FM.refreshAll(); if (FM.history) FM.history.commit(); };
+      // Every clip the playhead is actually inside — the ones it is off are skipped rather than
+      // silently mangled, exactly as the inspector row did.
+      const cutTargets = () => clipToolTargets().filter(l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4);
       L.addEventListener('click', () => {
-        const l = FM.selectedLayer(FM.scene); if (!l) return;
-        const cut = FM.time - l.start; if (cut <= 0 || cut >= l.duration) return;
-        l.start = FM.time; l.duration -= cut;
-        // Same source-trim rule the inspector used: forward clips advance trimStart by the dropped
-        // wall-time × speed; a reversed clip anchors its trim to the source tail and keeps it.
-        if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+        const ls = cutTargets(); if (!ls.length) return;
+        ls.forEach(l => {
+          const cut = FM.time - l.start;
+          l.start = FM.time; l.duration -= cut;
+          // Same source-trim rule the inspector used: forward clips advance trimStart by the dropped
+          // wall-time × speed; a reversed clip anchors its trim to the source tail and keeps it.
+          if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+        });
         after();
       });
       R.addEventListener('click', () => {
-        const l = FM.selectedLayer(FM.scene); if (!l) return;
-        const nd = FM.time - l.start; if (nd <= 0 || nd >= l.duration) return;
-        l.duration = nd; after();
+        const ls = cutTargets(); if (!ls.length) return;
+        ls.forEach(l => { l.duration = FM.time - l.start; });
+        after();
       });
-      S.addEventListener('click', () => {
-        const l = FM.selectedLayer(FM.scene); if (!l) return;
-        if (FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4) FM.splitLayer(l.id);
+      S.addEventListener('click', async () => {
+        // Sequential, not Promise.all: splitLayer clones media, and doing several at once is the one
+        // way this can hand two clips the same backing record.
+        for (const l of cutTargets()) await FM.splitLayer(l.id);
       });
     },
 

@@ -3076,6 +3076,82 @@
     }
   });
 
+  test('multi-select: the playhead buttons act on the WHOLE selection, and the panel stops copying them', { item: 'multi-clip-tools' }, function () {
+    /* Queue 169, collected by queue 229. Ezra: "in the left massive area where its currently got the
+     * six small buttons, just get rid of the buttons that are near the play head and then with the
+     * align buttons just make them big and fill up the whole section."
+     *
+     * The deletion is only SAFE because of the other half of the change, and that is what this test is
+     * really guarding. #tl-trim / #tl-nudge used to read FM.selectedLayer — the PRIMARY layer — so with
+     * three clips selected they floated over the playhead and edited one of the three, while the
+     * inspector held a second, selection-aware copy. Delete the copy without fixing the floats and
+     * "split all" silently becomes "split one", which is the kind of loss you only notice much later
+     * in a project you cannot undo your way out of.
+     * So: press the real button, count what it changed. */
+    const desktop = matchMedia('(min-width: 701px)').matches;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, mode0 = FM.selectMode;
+    try {
+      FM.scene.layers.length = 0;
+      const mk = (start) => FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, start: start, duration: 6 });
+      const A = mk(0), B = mk(0), C = mk(0);
+      FM.scene.layers.push(A, B, C);
+      FM.scene.selectedId = A.id;
+      FM.scene.selectedIds = [A.id, B.id, C.id];
+      FM.selectMode = true;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.time = 3;
+      FM.timeline.rebuild();
+      FM.inspector.refresh();
+      FM.timeline.syncTrim();
+
+      const trim = document.getElementById('tl-trim');
+      if (!trim) throw new Error('#tl-trim is missing');
+      if (desktop && trim.classList.contains('hidden')) throw new Error('the playhead is inside all three selected clips and the trim trio is hidden — it is reading one layer, not the selection');
+
+      // CONTROL FIRST: all three are 6s long, so a passing assertion below cannot be one that was
+      // already true. Without this a broken trim that changed nothing would look identical to a fixed
+      // one that changed everything, if the durations happened to start where they end.
+      if (!(A.duration === 6 && B.duration === 6 && C.duration === 6)) throw new Error('setup: the three clips are not all 6s');
+
+      document.getElementById('tl-trim-r').click();     // trim ends to the playhead at t=3
+      const got = [A.duration, B.duration, C.duration].map(d => Math.round(d * 100) / 100);
+      if (got[0] !== 3) throw new Error('the primary clip was not trimmed at all: durations ' + got.join(', '));
+      if (got[1] !== 3 || got[2] !== 3) {
+        throw new Error('trim-end acted on the primary layer only — durations ' + got.join(', ') +
+                        ', so with three clips selected two of them were quietly left alone');
+      }
+
+      if (desktop) {
+        // …and the inspector's duplicate is gone, with its heading, not just its buttons.
+        const acts = document.querySelector('#inspector .align-clipacts');
+        if (acts && acts.getBoundingClientRect().height > 0) throw new Error('the inspector is still showing its own copy of the clip actions on desktop');
+        const big = [].slice.call(document.querySelectorAll('#inspector .align-big .qr-btn'));
+        if (big.length !== 3) throw new Error('expected three align buttons, got ' + big.length);
+        /* "fill up the whole section" is a claim about the SECTION, so measure the section. A height
+           threshold alone is not enough and this is not a guess: with the fill rule deleted the buttons
+           still measure 49px — over any sensible "bigger than the phone's 36" bar — while leaving 468px
+           of the panel empty, which is precisely the state he complained about. The gap to the bottom
+           is the number that tells the two apart. */
+        const pr = document.getElementById('inspector-panel').getBoundingClientRect();
+        const last = big[big.length - 1].getBoundingClientRect();
+        const gap = Math.round(pr.bottom - last.bottom);
+        const h = Math.round(big[0].getBoundingClientRect().height);
+        if (h <= 80) throw new Error('the align buttons are only ' + h + 'px tall — they are supposed to fill the panel, not sit in a strip');
+        if (gap > 60) throw new Error('the align buttons stop ' + gap + 'px short of the bottom of the panel — that empty band IS the "left massive area" this change was supposed to use');
+        if (!big[0].querySelector('.qr-cap') || !big[0].querySelector('.qr-cap').textContent) throw new Error('the big align buttons have no name on them — three unlabelled slabs is worse than the strip was');
+      }
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.selectMode = mode0; FM.time = t0;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      FM.timeline.rebuild();
+      FM.inspector.refresh();
+    }
+  });
+
   test('text: a wrap width breaks the lines, and the picture obeys it', { item: 'text-wrap' }, function () {
     // v5.40. Ezra: "you should be able to drag the border of the text to decide when the text wraps
     // and stops going on to the right." Text had NO wrapping at all before this — four separate places
