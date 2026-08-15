@@ -1622,34 +1622,42 @@ html.splash-on, html.splash-on body { background: #000; }
 @media (max-width: 700px) { #tl-nudge { display: none !important; } }
 @media (min-width: 701px) { .qr-btn.qr-nudge { display: none; } }
 
-/* Trim / split beside the playhead (v5.25). Ezra, with an arrow drawn from the inspector's row of
-   three up to the ruler band: "move these buttons here too, only when you have a layer selected, and
-   also make sure the delete fully left and delete fully right are both on the left side and then the
-   split is on the right side."
-   Same anchor as #tl-nudge so the two never disagree about where the playhead is, and the same
-   straddle: the GAP is the line. Both trims sit in the left group, split alone on the right, which is
-   what he asked for and also reads correctly — the trims act on the material either side, the split
-   acts at the line itself. Shown only while the playhead is INSIDE the selected clip, which is
-   exactly when #tl-nudge is hidden, so only one pair is ever on screen. Desktop only, like the nudge
-   pair: three floating buttons over a 375px timeline would bury the clips. */
+/* Trim / split ON the playhead (v5.25, re-ordered v7.83 — queue 234).
+   v5.25 built this from "make sure the delete fully left and delete fully right are both on the left
+   side and then the split is on the right side", which was the instruction at the time. Queue 169 then
+   recorded the OPPOSITE and nobody reconciled them, so this kept v5.25's shape while an open entry
+   described a layout that did not exist — until he noticed: "those buttons aren't how I told you to
+   change them… you just logged it in your memory and didn't actually write it down."
+   It is trim-left · SPLIT · trim-right now, the split centred on the line. The container is already
+   anchored to the playhead and centred with translateX(-50%), so three equal buttons with equal gaps
+   put the middle one exactly on the line BY CONSTRUCTION rather than by a tuned offset.
+   TOP 67, HEIGHT 20 — measured, not guessed: the ruler band runs 683-705 and these were 686-710, so
+   they hung 5px into the first track row, which is his "they might need to be slightly moved up a bit
+   so they're not going onto the top layer". They now sit 684-704, inside the band, under the counter.
+   Shown only while the playhead is INSIDE the selected clip, which is exactly when #tl-nudge is hidden,
+   so only one group is ever on screen. Desktop only, like the nudge pair: three floating buttons over a
+   375px timeline would bury the clips. */
 #tl-trim {
   position: absolute; z-index: 14;
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: 69px;
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: 67px;
   transform: translateX(-50%);
-  display: flex; align-items: center; gap: 26px;
+  display: flex; align-items: center; gap: 7px;
   pointer-events: none;
 }
 #tl-trim.hidden { display: none; }
-.tl-trim-side { display: flex; align-items: center; gap: 5px; }
 #tl-trim button {
   pointer-events: auto;
-  width: 30px; height: 24px; padding: 0;
+  width: 30px; height: 20px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: var(--panel-3); border: 1px solid var(--line);
   border-radius: 7px; color: var(--text); cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
 }
-#tl-trim button svg { width: 16px; height: 16px; display: block; }
+#tl-trim button svg { width: 15px; height: 15px; display: block; }
+/* The split is the one acting AT the line, so it wears the accent — with three near-identical
+   outline buttons in a row the middle one has to say why it is the middle one. */
+#tl-trim #tl-trim-s { border-color: var(--accent); color: var(--accent); }
+#tl-trim #tl-trim-s:hover { background: rgba(90, 199, 237, .16); }
 #tl-trim button:hover { border-color: var(--accent); color: var(--accent); }
 #tl-trim button:active { transform: translateY(1px); }
 @media (max-width: 700px) { #tl-trim { display: none !important; } }

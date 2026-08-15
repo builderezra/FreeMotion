@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=413">
+<link rel="stylesheet" href="styles.css?v=414">
 <link rel="stylesheet" href="theme-glass.css?v=26">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.82</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.83</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -397,14 +397,21 @@
            appears when the playhead is OUTSIDE the clip (move it / stretch it to here), this appears
            when the playhead is INSIDE it, which is the only time trimming or splitting means anything.
            Ezra put both trims on the left of the line and the split on the right. -->
+      <!-- ORDER REVERSED at v7.83 (queue 234), and the history matters because it has flipped once
+           before. v5.25 built this as "both trims on the left of the line, split on the right", which
+           is what he asked for THEN. Queue 169 then recorded the opposite — "trim-left immediately LEFT
+           of the playhead, trim-right immediately RIGHT, and split centred ON the playhead" — and
+           nobody reconciled the two, so v5.25's arrangement stayed and the queue-169 entry sat open
+           describing a layout that did not exist. He caught it: "those buttons aren't how I told you to
+           change them. You probably forgot because I told you to do it, and you just logged it in your
+           memory and didn't actually write it down."
+           So: trim-left · SPLIT · trim-right, one row, the split centred on the line. Three equal
+           buttons with equal gaps in a container that is already centred on the playhead means the
+           middle one lands on it by construction, not by a magic number. -->
       <div id="tl-trim" class="hidden">
-        <div class="tl-trim-side">
-          <button id="tl-trim-l" type="button"></button>
-          <button id="tl-trim-r" type="button"></button>
-        </div>
-        <div class="tl-trim-side">
-          <button id="tl-trim-s" type="button"></button>
-        </div>
+        <button id="tl-trim-l" type="button"></button>
+        <button id="tl-trim-s" type="button"></button>
+        <button id="tl-trim-r" type="button"></button>
       </div>
       <div id="tl-nudge" class="hidden">
         <button id="tl-nudge-l" type="button"></button>

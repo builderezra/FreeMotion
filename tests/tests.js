@@ -3111,6 +3111,55 @@
     }
   });
 
+  test('timeline: split sits ON the playhead with a trim either side, inside the ruler band', { item: 'trim-on-playhead' }, async function () {
+    /* Queue 234, and this has flipped once before, which is why the geometry is asserted rather than
+     * the class names. v5.25 built "both trims on the left, split on the right" from his instruction at
+     * the time; queue 169 then recorded the opposite and nobody reconciled them, so the shipped layout
+     * and the open entry disagreed for weeks until he noticed: "those buttons aren't how I told you to
+     * change them. You probably forgot because I told you to do it, and you just logged it in your
+     * memory and didn't actually write it down."
+     * Two separate claims, both his, both measured:
+     *   · trim-left · SPLIT · trim-right, with the split centred ON the line;
+     *   · "moved up a bit so they're not going onto the top layer" — measured before: the group ran
+     *     686-710 against a ruler band ending at 705, so it hung 5px into the first track row. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 6 });
+      FM.scene.layers.push(A);
+      FM.selectLayer(A.id);
+      FM.time = 2;                       // inside the clip, which is when the trio shows at all
+      FM.timeline.rebuild(); FM.timeline.updatePlayhead(); await sleep(60);
+
+      const box = document.getElementById('tl-trim');
+      if (!box || box.classList.contains('hidden')) throw new Error('the playhead is inside the selected clip and the trim trio is hidden');
+      const mid = el => { const b = el.getBoundingClientRect(); return b.x + b.width / 2; };
+      const L = document.getElementById('tl-trim-l'), S = document.getElementById('tl-trim-s'), R = document.getElementById('tl-trim-r');
+      const line = document.getElementById('tl-centerline');
+      if (!L || !S || !R || !line) throw new Error('missing one of the trim buttons or the centre line');
+      // CONTROL: all three must actually be on screen, or every comparison below is between zeroes.
+      [['trim-left', L], ['split', S], ['trim-right', R]].forEach(function (p) {
+        if (p[1].getBoundingClientRect().width < 10) throw new Error(p[0] + ' is not on screen');
+      });
+
+      if (!(mid(L) < mid(S) && mid(S) < mid(R))) {
+        throw new Error('the order is wrong — left ' + Math.round(mid(L)) + ', split ' + Math.round(mid(S)) + ', right ' + Math.round(mid(R)) + '; it should read trim · split · trim');
+      }
+      const off = Math.abs(mid(S) - mid(line));
+      if (off > 2) throw new Error('the split button is ' + Math.round(off) + 'px off the playhead — it is supposed to sit ON the line');
+
+      const rr = document.getElementById('tl-rulerrow').getBoundingClientRect();
+      const over = S.getBoundingClientRect().bottom - rr.bottom;
+      if (over > 0) throw new Error('the trim group hangs ' + Math.round(over) + 'px below the ruler band, onto the first track row');
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.time = t0;
+      FM.refreshAll();
+    }
+  });
+
   test('PC: a selected layer gets a three-dot menu, and it is the FULL clip menu', { item: 'pc-layer-more' }, async function () {
     /* Queue 233. Ezra: "when you have a layer selected, it should show the three dot menu. That three
      * dot menu doesn't show up at the moment, so there's no way to go into that and do all those
