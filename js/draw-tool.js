@@ -637,11 +637,28 @@ window.FM = window.FM || {};
         if (!FM.drawTool.active || !FM.viewport) return;
         if (!overlay || overlay.style.display === 'none') return;
         e.preventDefault();
+        var c2 = preview();
+        if (!c2) return;
         var dx = e.shiftKey ? -e.deltaY : -e.deltaX;
         var dy = e.shiftKey ? 0 : -e.deltaY;
         FM.viewport.x += dx;
         FM.viewport.y += dy;
         FM.viewport.apply();
+        /* KEEP THE CANVAS ON SCREEN (v8.03). The first version of this pan shipped without a clamp and
+         * it was a trap: twenty-five flicks put the canvas at top -5025, bottom -4377 — entirely gone —
+         * and while drawing there is no way to bring it back, because the ⛶ view bar that owns the zoom
+         * and fit controls is hidden in that mode. The only escape was Done or Cancel, i.e. commit or
+         * lose your drawing blind. Found by measuring after the fact rather than by anyone hitting it.
+         * The clamp is expressed as "a corner of the canvas must stay within KEEP px of the viewport"
+         * and applied by CORRECTION rather than by pre-computing limits — the canvas rect already knows
+         * where it ended up, whatever the zoom and crop are doing, so there is no second model of the
+         * geometry to keep in step with the first. */
+        var KEEP = 90, r2 = c2.getBoundingClientRect(), fx = 0, fy = 0;
+        if (r2.right < KEEP) fx = KEEP - r2.right;
+        else if (r2.left > window.innerWidth - KEEP) fx = (window.innerWidth - KEEP) - r2.left;
+        if (r2.bottom < KEEP) fy = KEEP - r2.bottom;
+        else if (r2.top > window.innerHeight - KEEP) fy = (window.innerHeight - KEEP) - r2.top;
+        if (fx || fy) { FM.viewport.x += fx; FM.viewport.y += fy; FM.viewport.apply(); }
         /* Kept for a SCALE change, not for the pan: the overlay is a child of the wrapper the viewport
          * transforms, so a pure translate carries it along with no JavaScript at all — verified by
          * mutation, which removed this line and changed nothing. A zoom does change the wrapper's scale
