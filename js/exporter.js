@@ -473,6 +473,8 @@ window.FM = window.FM || {};
       try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
+      // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
+      let delivered = false, recorder = null;
       try {
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
@@ -492,6 +494,22 @@ window.FM = window.FM || {};
         if (!audioOK) { console.warn('AAC audio encoding unavailable — exporting video only'); mix = null; }
       }
 
+      /* CRASH-RESUME (#47, the second half). The codec has to be picked BEFORE the muxer now, because
+       * it is part of the signature that decides whether a saved job belongs to THIS export. Nothing
+       * else about the move matters — pickVideoCodec only probes the encoder. */
+      const codec = await pickVideoCodec(outW, outH, fps, bitrate);
+      const frameDurUs = 1e6 / fps;
+      const XR = FM.exportResume;
+      let sig = null, saved = null;
+      if (XR) {
+        try {
+          sig = XR.signature({ project: P, layers: scene.layers, w: outW, h: outH, fps: fps,
+                               bitrate: bitrate, codec: codec, from: start, to: end,
+                               frames: totalFrames, audio: !!mix });
+          saved = await XR.load(sig);
+        } catch (e) { console.warn('resume lookup failed', e); sig = sig || null; saved = null; }
+      }
+
       // Stream the file out to disk-backed blob storage instead of holding it whole on the JS heap.
       // fastStart:false is what makes that possible — see createMp4Sink for the mechanism and the
       // one cost (the output is no longer progressive-play). (#47)
@@ -503,22 +521,47 @@ window.FM = window.FM || {};
         fastStart: false,
       });
 
-      const codec = await pickVideoCodec(outW, outH, fps, bitrate);
+      /* Replay whatever survived the crash into the fresh muxer, then start the frame loop where it
+       * left off. Re-muxing is a byte copy, not an encode, so this is milliseconds however long the
+       * saved run was. If the replay throws — a corrupt record, a muxer that rejects a chunk — the
+       * saved work is written off and the export starts from frame 0 rather than dying, because a
+       * slow correct export beats a fast broken one. */
+      let resumeFrom = 0;
+      if (saved) {
+        try {
+          XR.replay(muxer, saved);
+          resumeFrom = Math.max(0, Math.min(totalFrames, XR.nextFrameAfter(saved.records, frameDurUs)));
+        } catch (e) { console.warn('resume replay failed — starting over', e); saved = null; resumeFrom = 0; }
+      }
+      if (resumeFrom > 0) {
+        if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'picking up where the last render stopped');
+        if (FM.toast) FM.toast('Picking up the interrupted export at ' + Math.round(resumeFrom / totalFrames * 100) + '%', 3000);
+      } else if (XR && sig) {
+        // Starting fresh: sweep any older job's parts so two exports' leftovers never share the store.
+        try { await XR.clear(); } catch (e) {}
+      }
+
+      recorder = (XR && sig)
+        ? XR.createRecorder(sig, { parts: saved ? saved.parts : 0, bytes: saved ? saved.bytes : 0,
+                                   config: saved ? saved.config : null })
+        : null;
+
       const encoder = new VideoEncoder({
-        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
         error: e => console.error('video encode', e),
       });
       encoder.configure({ codec, width: outW, height: outH, bitrate, framerate: fps });
 
-      const frameDurUs = 1e6 / fps;
-      for (let f = 0; f < totalFrames; f++) {
+      for (let f = resumeFrom; f < totalFrames; f++) {
         if (FM._exportCancel) { encoder.close(); throw new Error('CANCELLED'); }
         const t = start + f / fps;
         await seekAllVideos(scene, t);
         FM.renderScene(projCtx, scene, t);
         blit(outCtx);
         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
-        encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 });
+        // `f === resumeFrom` forces the seam to be an IDR. A fresh encoder would almost certainly open
+        // with one anyway, but "almost certainly" is not a thing to hang a file's decodability on.
+        encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom });
         frame.close();
         while (encoder.encodeQueueSize > 8) await nextTick();
         // ONE unconditional yield per frame. Without it this loop only ever returned to the event
@@ -534,15 +577,29 @@ window.FM = window.FM || {};
 
       await encoder.flush();
       encoder.close();
+      // Save the last partial batch. The export is about to finalize, but finalizing is exactly where a
+      // long render is most likely to be OOM-killed, and a resume should not have to redo the tail.
+      if (recorder) { try { await recorder.settle(); } catch (e) {} }
       if (mix) { try { await encodeAudio(muxer, mix); } catch (e) { console.warn('audio encode failed', e); } }
       muxer.finalize();
       await deliver(sink.finish(), (opts.name || 'freemotion-export') + '.mp4');
+      delivered = true;
       } finally {
         // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
         // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
+        /* Throw the saved chunks away on a finished file and on Cancel — the first has nothing left to
+         * resume, and the second is someone saying they no longer want it. Any OTHER exit keeps them:
+         * an exception on the way out is precisely the case this whole file exists for, and deleting
+         * the render on the way past would be the bug, not the tidy-up. (A real crash never reaches
+         * this block at all, which is the point.) */
+        if (FM.exportResume && (delivered || FM._exportCancel)) {
+          // Drain the recorder BEFORE the delete, or a write still in flight re-creates what we erase.
+          if (recorder) { try { await recorder.stop(); } catch (e) {} }
+          try { await FM.exportResume.clear(); } catch (e) {}
+        }
       }
     },
 

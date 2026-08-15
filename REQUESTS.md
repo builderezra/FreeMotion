@@ -1583,11 +1583,39 @@ better still, keep working inside the turn rather than parking work for a later 
       is not pretending to be: it is the commonest way a render actually dies, which is not a crash but
       a refresh, a back swipe or a closed tab. Both directions are tested — no guard at all, and a
       guard that nags on every ordinary reload, each turn the test red.
-      The second half — off the main thread — is much larger again: a worker means the whole compositor
-      (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Do the first half alone, and only after the
-      design above is settled.
+      **CRASH-RESUME IS NOW DONE — v7.53 (15 Aug).** And the "segmented export" verdict above was wrong,
+      so it is corrected here rather than left to send the next person down a much bigger road than the
+      job needed. The fact was right: you cannot reopen a half-written MP4 and keep muxing into it. The
+      inference from it was wrong. **The muxer never needed to be resumable, because muxing is a byte
+      copy, not an encode.** What costs you minutes is rendering and ENCODING frames. So the answer is to
+      save the encoded CHUNKS as they come out of the encoder, throw the half-written file away, and on
+      the next run build a fresh muxer, replay the saved chunks into it in milliseconds, and carry on
+      from the seam. No MP4 demuxer, no new library, no segment-joining — and the resumed file is
+      assembled from exactly the chunks an uninterrupted run would have contained.
+      **What it means for you:** an export killed by a crash, an out-of-memory kill or a discarded tab
+      no longer starts over. Run it again and it picks up where it stopped, with a message saying so.
+      A crash costs you about two seconds of footage instead of the whole render.
+      **Two things it refuses to do, both on purpose:**
+      · It will not resume a project you have EDITED since. The signature covers the scene document plus
+        output size, fps, bitrate, codec, range and whether there is an audio track; anything different
+        and the saved render is thrown away rather than spliced into a file it does not belong to. That
+        is the one failure here that would be genuinely bad — a silently wrong movie — so the test for
+        it is the longest one in the set.
+      · It stops saving past 512 MB (about nine minutes of 1080p). Past that a crash costs the render as
+        it always did, which is no worse than before, and better than quietly filling your phone with
+        the leftovers of a render nobody is coming back for.
+      **Proof, not assertion.** Seven unit tests cover the pieces, and `tests/_xresume.html` does it for
+      real: it runs a genuine 150-frame export, kills it at frame 100 with a thrown error (not Cancel —
+      Cancel is *meant* to discard), runs it again, and then counts the video samples in the finished
+      MP4. 150. The resumed run re-rendered 90 frames instead of 150. All eleven checks green, and six
+      deliberate mutations of the implementation each turned the right one red.
+      *(Also worth knowing: a finished export leaves nothing behind. The chunks are deleted on success
+      and on Cancel, and kept on any other exit — an exception on the way out is exactly the case this
+      exists for.)*
+      **STILL OPEN: the second half — off the main thread.** Much larger again: a worker means the whole
+      compositor (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Not started.
       It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on
-      your word to jump the queue.
+      your word to jump the queue — asked three times now, and I still rate it the most serious open item.
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

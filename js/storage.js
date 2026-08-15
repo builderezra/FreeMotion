@@ -150,6 +150,15 @@ window.FM = window.FM || {};
     // Reports what actually happened. It used to return a hardcoded true, so callers could not tell a
     // stored clip from one the browser refused on quota.
     async writeMedia(key, val) { try { const db = await openDB(); const ok = await idbPut(db, key, val); db.close(); return ok; } catch (e) { return false; } },
+    // Every key in the store, optionally narrowed to one prefix. Export crash-resume needs it to sweep
+    // its own leftovers (`xr:part:*`) without knowing how many there were — a job that died mid-write
+    // is precisely the case where the count on record is not to be trusted.
+    async listMediaKeys(prefix) {
+      try {
+        const db = await openDB(); const ks = await idbKeys(db); db.close();
+        return prefix ? ks.filter(k => typeof k === 'string' && k.indexOf(prefix) === 0) : ks;
+      } catch (e) { return []; }
+    },
 
     // autosave is invoked ONLY by real-edit paths (history commit/undo/redo, template/element
     // inserts) — the single choke point that marks the project genuinely modified.

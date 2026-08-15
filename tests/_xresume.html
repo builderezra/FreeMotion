@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#47 — export crash-resume, end to end</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 16px; }
+  .row { padding: 6px 10px; border-radius: 6px; margin: 4px 0; }
+  .ok { background: #11251a; } .fail { background: #2a1416; }
+  .tag { font-weight: 700; }
+  .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+</style>
+</head>
+<body>
+  <h3>#47 — a real export, killed mid-render, resumed, and counted</h3>
+  <p style="color:#98a">The unit tests in the suite prove the pieces. This proves the thing: genuine
+  encodes, an export killed halfway by a throw (NOT by Cancel, which is meant to discard), and the
+  finished MP4 asked how many video samples it actually contains.</p>
+  <div id="out">running…</div>
+  <iframe id="app" src="../index.html"></iframe>
+<script>
+var frame = document.getElementById('app');
+var results = [];
+function say(name, ok, err) { results.push({ name: name, ok: !!ok, err: ok ? '' : (err || '') }); render(); }
+
+frame.addEventListener('load', function () {
+  var w = frame.contentWindow;
+  setTimeout(function () {
+    main(w).catch(function (e) { say('harness', false, String((e && e.stack) || e)); }).then(function () {
+      window.__xresume = results; render(); window.__done = true;
+    });
+  }, 1500);
+});
+
+function render() {
+  document.getElementById('out').innerHTML =
+    '<div style="margin:8px 0;font-weight:700">' + results.filter(function (r) { return r.ok; }).length + '/' + results.length + ' green</div>' +
+    results.map(function (r) {
+      return '<div class="row ' + (r.ok ? 'ok' : 'fail') + '"><span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span> ' +
+        r.name + (r.err ? '<br><span style="color:#c98">— ' + r.err + '</span>' : '') + '</div>';
+    }).join('');
+}
+
+/* How many video samples the finished file claims. stsz is the sample-size table; its header is
+ * size(4) 'stsz' version+flags(4) sample_size(4) sample_count(4), so the count sits 12 bytes past the
+ * type string. The probe scene has no audio on purpose, so there is exactly one stsz to find and no
+ * ambiguity about which track is being counted. */
+async function sampleCount(blob) {
+  var u8 = new Uint8Array(await blob.arrayBuffer());
+  for (var i = 0; i + 16 < u8.length; i++) {
+    if (u8[i] === 0x73 && u8[i + 1] === 0x74 && u8[i + 2] === 0x73 && u8[i + 3] === 0x7a) {
+      return (u8[i + 12] << 24 | u8[i + 13] << 16 | u8[i + 14] << 8 | u8[i + 15]) >>> 0;
+    }
+  }
+  return -1;
+}
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function main(w) {
+  var FM = w.FM;
+  if (!FM || !FM.exporter || !FM.exportResume) throw new Error('the app did not finish loading (FM.exportResume missing)');
+  if (typeof w.VideoEncoder === 'undefined') throw new Error('no WebCodecs in this browser — this probe needs a real encoder');
+
+  /* Long enough that the recorder's 60-chunk batch actually flushes before the simulated crash. A
+   * one-second probe would prove nothing: it would die with the whole run still in the buffer, and
+   * "nothing was saved" would be correct behaviour rather than a bug. 160x120 keeps five seconds of
+   * real H.264 down to a couple of seconds of wall clock. */
+  var FPS = 30, FRAMES = 150, KILL_AT = 100;
+  var XR = FM.exportResume;
+
+  var keepProject = FM.scene.project, keepLayers = FM.scene.layers, keepTime = FM.time;
+
+  /* Capture the delivered file instead of downloading it, and keep the share sheet out of the way.
+   * Both are put back in the finally — a probe that leaves the page's own URL.createObjectURL patched
+   * would poison everything that runs after it. */
+  var realCOU = w.URL.createObjectURL, realClick = w.HTMLAnchorElement.prototype.click;
+  var realCanShare = w.navigator.canShare, realRender = FM.renderScene;
+  var caught = null;
+  w.URL.createObjectURL = function (b) { caught = b; return realCOU.call(w.URL, b); };
+  w.HTMLAnchorElement.prototype.click = function () { /* no download during a test */ };
+  try { Object.defineProperty(w.navigator, 'canShare', { value: undefined, configurable: true }); } catch (e) {}
+
+  function useScene() {
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 60, shapeW: 30, shapeH: 30, fill: '#ffcc00', start: 0, duration: 6 });
+    L.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 5, v: 140, e: 'linear' }] };   // moves, so no two frames are identical
+    FM.scene.project = { width: 160, height: 120, fps: FPS, duration: 6, background: '#101820', markers: [] };
+    FM.scene.layers = [L];
+    FM.time = 0;
+    return L;
+  }
+
+  /* Frames actually rendered by the frame loop, counted from OUTSIDE via the progress callback rather
+   * than by patching renderScene. The app is live in this iframe and renders its own preview, so a
+   * counter on renderScene would quietly include work the export never did. onProgress reports
+   * 'video' exactly once per loop iteration; the cache-prep and resume notices use other labels. */
+  function runExport(extra) {
+    var loops = 0, first = -1, notices = [];
+    var o = Object.assign({
+      scale: 1, fps: FPS, bitrate: 400000, name: 'xresume-probe', from: 0, to: 5, outW: 160, outH: 120,
+      onProgress: function (p, what) {
+        if (what === 'video' || what === 'audio + video') { loops++; if (first < 0) first = Math.round(p * FRAMES) - 1; }
+        else notices.push(what);
+      },
+    }, extra || {});
+    return FM.exporter.run(o).then(
+      function () { return { loops: loops, first: first, notices: notices, ok: true }; },
+      function (e) { return { loops: loops, first: first, notices: notices, ok: false, err: String(e && e.message || e) }; }
+    );
+  }
+
+  // The job on disk, read without having to reconstruct the signature (which depends on which codec
+  // the machine's encoder picked). The record carries its own signature; ask it.
+  async function savedRun() {
+    var job = await FM.storage.readMedia(XR.JOB_KEY);
+    if (!job) return null;
+    return await XR.load(job.sig);
+  }
+
+  try {
+    await XR.clear();
+
+    /* ---- 1. the control ---- */
+    useScene();
+    caught = null;
+    var c = await runExport();
+    var controlBlob = caught;
+    var controlN = controlBlob ? await sampleCount(controlBlob) : -1;
+    say('control: a plain export renders ' + FRAMES + ' frames and writes all of them into the file',
+        c.ok && c.loops === FRAMES && controlN === FRAMES,
+        'ran ' + c.loops + ' frames and the file reports ' + controlN + ' samples' + (c.err ? ' (' + c.err + ')' : '') +
+        ' — nothing below means anything until this is right');
+    say('control: a finished export leaves no chunks behind in IndexedDB',
+        !(await FM.storage.readMedia(XR.JOB_KEY)),
+        'a completed export left its resume data on the device');
+    if (!(c.ok && controlN === FRAMES)) return;
+
+    /* ---- 2. the crash. A THROW, not Cancel — Cancel is meant to discard the render. ---- */
+    useScene();
+    caught = null;
+    var n = 0;
+    FM.renderScene = function () { if (++n > KILL_AT) throw new Error('SIMULATED CRASH'); return realRender.apply(this, arguments); };
+    var k = await runExport();
+    FM.renderScene = realRender;
+    say('a render that dies mid-export throws instead of quietly delivering a truncated file',
+        !k.ok && k.loops < FRAMES, 'the simulated crash did not take the export down (ok=' + k.ok + ', ' + k.loops + ' frames)');
+
+    await sleep(400);   // the crash skipped settle(), so let the last queued IndexedDB write land
+    var saved = await savedRun();
+    var resumeAt = saved ? XR.nextFrameAfter(saved.records, 1e6 / FPS) : -1;
+    say('the frames rendered before the crash are still on the device afterwards',
+        !!saved && saved.records.length >= 60,
+        saved ? ('only ' + saved.records.length + ' chunks survived') : 'NOTHING survived — the entire render was lost, which is the bug this is meant to fix');
+    say('the saved run stops short of the crash rather than overrunning it',
+        resumeAt >= 60 && resumeAt <= KILL_AT,
+        'the resume point came out at frame ' + resumeAt + ', expected between 60 and ' + KILL_AT);
+    if (!saved) return;
+
+    /* ---- 3. the resume ---- */
+    caught = null;
+    var r = await runExport();
+    var resumedBlob = caught;
+    var resumedN = resumedBlob ? await sampleCount(resumedBlob) : -1;
+
+    say('the resumed export delivers a file containing all ' + FRAMES + ' frames',
+        r.ok && resumedN === FRAMES,
+        'the resumed file reports ' + resumedN + ' video samples, not ' + FRAMES + ' — the seam dropped or duplicated frames' + (r.err ? ' (' + r.err + ')' : ''));
+    say('the resume genuinely saved the work: ' + r.loops + ' frames re-rendered instead of ' + FRAMES,
+        r.loops > 0 && r.loops <= FRAMES - 55,
+        'it re-rendered ' + r.loops + ' of ' + FRAMES + ' frames — the chunks were replayed but the frame loop started from zero anyway');
+    say('the resume starts at the seam, not somewhere else',
+        r.first === resumeAt,
+        'the first frame of the resumed run was ' + r.first + ' but the saved run ended at ' + resumeAt + ' — a gap duplicates or drops frames at the join');
+    say('the resumed file is a real MP4 of comparable size to the uninterrupted one',
+        resumedBlob && controlBlob && resumedBlob.size > controlBlob.size * 0.5 && resumedBlob.size < controlBlob.size * 2.5,
+        'resumed ' + (resumedBlob && resumedBlob.size) + ' bytes vs control ' + (controlBlob && controlBlob.size));
+    say('a completed resume clears the saved chunks',
+        !(await FM.storage.readMedia(XR.JOB_KEY)),
+        'the resume data survived a completed export');
+
+    /* ---- 4. the dangerous case: saved frames must NOT be spliced into a project that has changed ---- */
+    var L = useScene();
+    caught = null; n = 0;
+    FM.renderScene = function () { if (++n > KILL_AT) throw new Error('SIMULATED CRASH'); return realRender.apply(this, arguments); };
+    await runExport();
+    FM.renderScene = realRender;
+    await sleep(400);
+    var stashed = await savedRun();
+    L.transform.y = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 5, v: 100, e: 'linear' }] };   // the project changes
+    caught = null;
+    var e2 = await runExport();
+    var afterN = caught ? await sampleCount(caught) : -1;
+    say('editing the project throws the saved render away instead of splicing stale frames in',
+        !!stashed && e2.loops === FRAMES && afterN === FRAMES,
+        'after an edit it re-rendered ' + e2.loops + ' frames (expected all ' + FRAMES + ') and produced ' + afterN +
+        ' samples' + (stashed ? '' : ' — and the control failed: nothing was stashed to be tempted by'));
+  } finally {
+    FM.renderScene = realRender;
+    w.URL.createObjectURL = realCOU;
+    w.HTMLAnchorElement.prototype.click = realClick;
+    try { Object.defineProperty(w.navigator, 'canShare', { value: realCanShare, configurable: true }); } catch (e) {}
+    try { await XR.clear(); } catch (e) {}
+    FM.scene.project = keepProject; FM.scene.layers = keepLayers; FM.time = keepTime;
+  }
+}
+</script>
+</body>
+</html>

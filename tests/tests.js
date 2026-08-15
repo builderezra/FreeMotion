@@ -14507,6 +14507,191 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #47 (second half): a render survives an actual crash ----------------
+   *
+   * The guard above stops a HAND from throwing an export away. It cannot stop an OOM kill or a tab
+   * discard, which is the way a long render on a phone actually dies. js/export-resume.js persists the
+   * encoded chunks as they come out of the encoder, so a fresh run can replay them into a new muxer and
+   * carry on from the seam instead of from frame zero.
+   *
+   * These are the pieces that can be proven without spending a minute on a real encode; the end-to-end
+   * proof — interrupt a genuine export, resume it, and count the samples in the finished MP4 — is
+   * tests/_xresume.html, because it costs real encoding time.
+   *
+   * The failure this whole area has to be protected from is not "resume doesn't work". It is resume
+   * working when it SHOULDN'T: splicing one project's frames into another project's file. That is why
+   * the signature test below is the longest of them. */
+
+  // An EncodedVideoChunk stand-in: the recorder only ever asks for these four things.
+  function xrChunk(type, ts, du, bytes) {
+    var d = new Uint8Array(bytes);
+    return {
+      type: type, timestamp: ts, duration: du, byteLength: d.byteLength,
+      copyTo: function (dst) { dst.set(d); },
+    };
+  }
+  function xrBaseSig() {
+    return {
+      project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' },
+      layers: [{ id: 'a', type: 'shape', transform: { x: 10 } }],
+      w: 320, h: 240, fps: 30, bitrate: 1e6, codec: 'avc1.42e01e',
+      from: 0, to: 5, frames: 150, audio: false,
+    };
+  }
+
+  test('export resume: the signature refuses to match anything that would change one output byte', { item: 'export-resume-sig' }, function () {
+    var XR = FM.exportResume;
+    if (!XR) throw new Error('FM.exportResume is not loaded — check the script tag in index.html');
+    var base = xrBaseSig();
+    var s0 = XR.signature(base);
+    // The control FIRST. A signature that never matches would pass every "it differs" case below while
+    // making resume permanently dead — the mutation that looks green and ships a useless feature.
+    if (XR.signature(xrBaseSig()) !== s0) throw new Error('two identical exports produced different signatures — resume can never fire at all');
+
+    var vary = {
+      'the output width': function (o) { o.w = 640; },
+      'the output height': function (o) { o.h = 480; },
+      'the frame rate': function (o) { o.fps = 24; },
+      'the bitrate': function (o) { o.bitrate = 2e6; },
+      'the codec': function (o) { o.codec = 'avc1.640028'; },
+      'the range start': function (o) { o.from = 1; },
+      'the range end': function (o) { o.to = 4; },
+      'the frame count': function (o) { o.frames = 149; },
+      'whether there is an audio track': function (o) { o.audio = true; },
+      'a layer moving': function (o) { o.layers = [{ id: 'a', type: 'shape', transform: { x: 11 } }]; },
+      'a layer being added': function (o) { o.layers = o.layers.concat([{ id: 'b', type: 'shape' }]); },
+      'the project duration': function (o) { o.project = Object.assign({}, o.project, { duration: 6 }); },
+    };
+    for (var k in vary) {
+      var o = xrBaseSig(); vary[k](o);
+      if (XR.signature(o) === s0) {
+        throw new Error('changing ' + k + ' left the export signature unchanged — a saved render from the OLD settings would be spliced into the new file');
+      }
+    }
+  });
+
+  test('export resume: what was saved replays back byte-for-byte, in order, config on the first chunk only', { item: 'export-resume-roundtrip' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|roundtrip';
+    try {
+      await XR.clear();
+      // batchChunks:3 across 7 chunks means three full parts and a partial — the shape settle() exists for.
+      var rec = XR.createRecorder(sig, { batchChunks: 3 });
+      var meta = { decoderConfig: { codec: 'avc1.42e01e', codedWidth: 320, codedHeight: 240, description: new Uint8Array([1, 100, 200]) } };
+      var sent = [];
+      for (var i = 0; i < 7; i++) {
+        var bytes = [i, i + 1, i + 2, 255 - i];
+        sent.push(bytes);
+        rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 33333, 33333, bytes), i === 0 ? meta : undefined);
+      }
+      await rec.settle();
+
+      var saved = await XR.load(sig);
+      if (!saved) throw new Error('nothing came back from the store — a crash right here would have lost the whole render');
+      if (saved.records.length !== 7) throw new Error('expected 7 saved chunks, got ' + saved.records.length + (saved.records.length === 6 ? ' — the last partial batch was never flushed' : ''));
+      if (!saved.config || !saved.config.description) throw new Error('the decoder config (avcC) was not saved — the muxer cannot write a sample description without it, so the replayed file would be undecodable');
+
+      var got = [];
+      var fake = { addVideoChunk: function (c, m) { got.push({ c: c, m: m }); } };
+      XR.replay(fake, saved);
+      if (got.length !== 7) throw new Error('replayed ' + got.length + ' chunks, not 7');
+      for (var j = 0; j < 7; j++) {
+        var c = got[j].c;
+        if (c.type !== (j === 0 ? 'key' : 'delta')) throw new Error('chunk ' + j + ' came back as a ' + c.type);
+        if (c.timestamp !== j * 33333) throw new Error('chunk ' + j + ' came back at timestamp ' + c.timestamp + ' — a shifted timestamp is a stutter at the seam');
+        var u8 = new Uint8Array(c.byteLength); c.copyTo(u8);
+        if (String(Array.from(u8)) !== String(sent[j])) throw new Error('chunk ' + j + ' came back with different bytes: ' + Array.from(u8) + ' vs ' + sent[j]);
+      }
+      if (!got[0].m || !got[0].m.decoderConfig) throw new Error('the first replayed chunk carried no decoderConfig — mp4-muxer takes the sample description from that one call and nowhere else');
+      if (got[1].m) throw new Error('the decoder config was re-sent on a later chunk; the original run only ever sends it once, and the replay has to be indistinguishable from the original run');
+    } finally { await XR.clear(); }
+  });
+
+  test('export resume: the pick-up frame is read off the timestamps, not off a count of chunks', { item: 'export-resume-frame' }, function () {
+    var XR = FM.exportResume, dur = 1e6 / 30;
+    if (XR.nextFrameAfter([], dur) !== 0) throw new Error('an empty run should start at frame 0');
+    var recs = [];
+    for (var i = 0; i < 15; i++) recs.push({ k: i ? 'delta' : 'key', ts: Math.round(i * dur), du: dur });
+    if (XR.nextFrameAfter(recs, dur) !== 15) throw new Error('15 saved frames should resume at frame 15, got ' + XR.nextFrameAfter(recs, dur));
+    // Decode order is not presentation order the moment an encoder uses B-frames. Reading the LAST
+    // element rather than the largest timestamp would rewind the export and duplicate frames.
+    var shuffled = recs.slice(); var t = shuffled[14]; shuffled[14] = shuffled[9]; shuffled[9] = t;
+    if (XR.nextFrameAfter(shuffled, dur) !== 15) throw new Error('chunks arriving out of presentation order rewound the resume point to ' + XR.nextFrameAfter(shuffled, dur) + ' — frames would be encoded twice');
+    if (XR.nextFrameAfter(recs, 0) !== 0) throw new Error('a zero frame duration must not divide by zero into NaN');
+  });
+
+  test('export resume: a half-written part truncates the resume instead of corrupting it', { item: 'export-resume-torn' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|torn';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 2 });
+      for (var i = 0; i < 6; i++) rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, [i]), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
+      await rec.settle();
+      var whole = await XR.load(sig);
+      if (!whole || whole.records.length !== 6) throw new Error('control failed: 6 chunks did not survive an ordinary save (' + (whole ? whole.records.length : 'nothing') + ')');
+      if (whole.parts !== 3) throw new Error('control failed: expected 3 parts, got ' + whole.parts);
+
+      // Simulate the torn write: part 1 never made it to disk, but the job counts it.
+      await FM.storage.removeMedia(XR.PART_PREFIX + '1');
+      var torn = await XR.load(sig);
+      if (!torn) throw new Error('a single torn part threw the ENTIRE render away — the surviving prefix is still perfectly good frames');
+      if (torn.records.length !== 2) throw new Error('expected the 2 chunks before the hole, got ' + torn.records.length + ' — reading past a hole splices non-consecutive frames together');
+      if (torn.parts !== 1) throw new Error('parts came back as ' + torn.parts + ', not the 1 actually read — the recorder would then append past the hole and leave it there permanently');
+    } finally { await XR.clear(); }
+  });
+
+  test('export resume: it stops saving at the size cap rather than filling the phone', { item: 'export-resume-cap' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|cap';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 1, maxBytes: 40 });
+      var big = []; for (var b = 0; b < 30; b++) big.push(b);
+      for (var i = 0; i < 5; i++) { rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, big), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined); await rec.flush(); }
+      if (rec.recording) throw new Error('60 bytes past a 40-byte ceiling and it is still recording — a long export would fill the storage quota with leftovers nobody will resume');
+      if (rec.bytes > 80) throw new Error('it kept writing well past the cap (' + rec.bytes + ' bytes)');
+      // Capped means "this render cannot be resumed", so it must not offer a partial one.
+      var saved = await XR.load(sig);
+      if (saved) throw new Error('a capped job still loaded — resuming from a truncated recording would drop the frames it stopped saving and produce a file with a gap in the middle');
+    } finally { await XR.clear(); }
+  });
+
+  test('export resume: a saved run that does not open on a keyframe is refused', { item: 'export-resume-keyframe' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|nokey';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 4 });
+      for (var i = 0; i < 3; i++) rec.add(xrChunk('delta', i * 1000, 1000, [i]), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
+      await rec.settle();
+      if (await XR.load(sig)) throw new Error('a run beginning on a delta frame was offered for resume — it references frames that are not in the file, so the opening seconds would be garbage');
+    } finally { await XR.clear(); }
+  });
+
+  test('export resume: a finished export leaves nothing behind, and a late write cannot resurrect it', { item: 'export-resume-hygiene' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|hygiene';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 2 });
+      for (var i = 0; i < 4; i++) rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, [i, i]), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
+      await rec.settle();
+      if (!(await XR.load(sig))) throw new Error('control failed: there was nothing saved to clean up');
+
+      // The Cancel race: chunks still buffered, a flush already queued, and then the export is torn down.
+      rec.add(xrChunk('delta', 9000, 1000, [7, 7]));
+      rec.flush();
+      await rec.stop();
+      await XR.clear();
+
+      if (await FM.storage.readMedia(XR.JOB_KEY)) throw new Error('the job record survived the clean-up — the next export would be offered a resume from a cancelled one');
+      var left = await FM.storage.listMediaKeys(XR.PART_PREFIX);
+      if (left.length) throw new Error(left.length + ' chunk part(s) were left in IndexedDB after the export finished — that is the whole render still sitting on the device');
+      if (await XR.load(sig)) throw new Error('a cleared job still loaded');
+    } finally { await XR.clear(); }
+  });
+
   /* ---------------- #31b: which motion blur reads which motion ----------------
    * His report was "transform blur can't smear effect- or camera-driven motion", and that is true and
    * structural — the re-projection blur can only smear motion in the layer's own matrix. The question
