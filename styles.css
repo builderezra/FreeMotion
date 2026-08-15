@@ -5171,3 +5171,54 @@ body.fm-pushing #toast { z-index: 213; }
 #draw-bar .db-erase { padding: 0; flex: 0 0 34px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; }
 #draw-bar .db-erase svg { width: 18px; height: 18px; display: block; }
 #draw-bar .db-erase.db-on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+
+/* ---- PC transport row: bare icons, box on hover only (v7.79, queue 230) ------------------------
+   Ezra, at length, about this row. The through-line is one rule and he stated it himself:
+     "with the play button and all that, when you hover over it, it does show the box outline. But if
+      you're not hovering over it, you don't show it. So I think it should be like that as well for the
+      others… But that box around it should just be the same color as, like, when you hover over the
+      play button and nothing else."
+   So the play button's treatment (.tbtn: transparent, no border, rgba(255,255,255,.07) on hover) is
+   promoted to the rule for the whole row, and every control that was carrying a resting box gives it
+   up: back, notes, the cog, delete, parent, group — and Export, which was a filled accent pill.
+   Scoped to #transport on desktop, so .btn / .icon-btn keep their normal look everywhere else in the
+   app; this is about this row, not a global restyle. */
+@media (min-width: 701px) {
+  #transport .icon-btn,
+  #transport .btn {
+    background: transparent; border: 1px solid transparent; box-shadow: none;
+    color: var(--text); border-radius: 8px;
+    width: 34px; height: 34px; min-width: 34px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  #transport .icon-btn:hover,
+  #transport .btn:hover { background: rgba(255, 255, 255, .07); border-color: transparent; }
+  #transport .icon-btn .ico, #transport .btn .ico { width: 19px; height: 19px; }
+
+  /* EXPORT — "instead of being this big massive button… just the icon with no button around it. And I
+     want the coloring of it, though… the blue colors and stuff so it stands out and looks noticeably
+     different to the other stuff." So it loses the pill and the word and keeps its job by being the
+     one COLOURED mark in a row of white ones. font-size:0 hides the text node without touching the
+     markup, exactly as .tbtn does. */
+  #transport #btn-export {
+    background: transparent; box-shadow: none; font-size: 0; gap: 0;
+    /* border-color explicitly, not inherited from the .btn rule above: something further up the sheet
+       reaches this button by id, and the measured border came back accent-coloured until this was
+       written out. Checked by reading the computed style back, not by reasoning about specificity. */
+    border: 1px solid transparent;
+    color: var(--accent);
+  }
+  #transport #btn-export .ico { width: 21px; height: 21px; filter: drop-shadow(0 0 6px rgba(90, 199, 237, .55)); }
+  #transport #btn-export:hover { background: rgba(90, 199, 237, .14); filter: none; }
+  #transport #btn-export:hover .ico { filter: drop-shadow(0 0 8px rgba(90, 199, 237, .85)); }
+
+  /* DELETE — "the delete button should be, like, red by default. Like, it should just be a red icon.
+     So it's, like, obvious." (queue 232, same family, shipped together.) */
+  #transport #btn-del-layer { color: #ff6b7a; }
+  #transport #btn-del-layer:hover { background: rgba(255, 107, 122, .14); }
+
+  /* The refresh spin, next to the version chip — "put the little refresh spin icon next to the version
+     refresh button." The phone chip has carried this glyph since the tap-to-force-update label existed;
+     the PC one never did, so the control that nukes the service worker looked like a plain label. */
+  #transport .ver::before { content: "\21BB"; margin-right: 5px; opacity: .85; }
+}

@@ -4017,7 +4017,7 @@ because often when you use other agents, they get stuck and go forever… make s
 them for too long and you give up on them after a certain period of time, and just keep going while you
 wait for them to report back."*
 
-- [ ] **230 — PC chrome: the buttons should be bare icons, with the box only on hover.** His words, in
+- [x] **230 — PC chrome: the buttons should be bare icons, with the box only on hover. DONE v7.79.** His words, in
       order:
       · **Export** — *"instead of being this big massive button to be kind of like the others where it's
         just the icon with no button around it. And I want the coloring of it, though. Like, instead of
@@ -4040,6 +4040,14 @@ wait for them to report back."*
       · **The refresh spin icon** — *"put the little refresh spin icon next to the version refresh
         button."*
 
+      **All of it shipped in v7.79.** The play button's treatment is the rule for the whole row now, and
+      back, notes, the cog, delete, parent and group all gave up their resting box. Export lost the pill
+      and the word and keeps its job by being the one COLOURED mark in a row of white ones — accent blue
+      with a soft glow. The version chip has its ↻. Scoped to `#transport` at desktop width, so `.btn`
+      and `.icon-btn` are untouched everywhere else in the app.
+      *(The red delete from **#232** shipped here too, since it is the same rule — the rest of #232, the
+      re-ordering and the parenting icon, is still open.)*
+
 - [ ] **231 — PC: the layer-name field should REPLACE the project-name field, not pop up on the left.**
       His words: *"on the left side, for some reason, that layers text edit box pops up, and it's really
       messy. Instead, that layers text edit button that pops up should instead be replacing the projects
@@ -4057,7 +4065,8 @@ wait for them to report back."*
       parenting button, those are in a good spot, but they just look shitty."*
       · Delete: *"it shouldn't have the box around it except for when you're hovering over it"* (same
         rule as #230) and *"the delete button should be, like, red by default. Like, it should just be a
-        red icon. So it's, like, obvious."*
+        red icon. So it's, like, obvious."* — **both DONE in v7.79**, with #230, because they are the
+        same rule. The rest of this entry is still open.
       · Order: *"instead of it being the first one to the right of the select layers button… it should be
         one over. So the one that's next to the select layers button should be the parenting button."*
         So the run becomes ⧉ layer-menu · parenting · delete.
