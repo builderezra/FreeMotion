@@ -14459,6 +14459,46 @@
     }
   });
 
+  /* ---------------- #31b: which motion blur reads which motion ----------------
+   * His report was "transform blur can't smear effect- or camera-driven motion", and that is true and
+   * structural — the re-projection blur can only smear motion in the layer's own matrix. The question
+   * the entry left open was whether the OTHER blur, the content-aware one, already covers that case.
+   * Measured: it does, and the two are complementary rather than overlapping. Held here so the pairing
+   * cannot quietly invert, because the only symptom would be "why doesn't my orbit smear". */
+  test('motion blur: the two kinds read different motion, and between them cover both', { item: 'motion-blur' }, function () {
+    var W = 320, H = 200, FPS = 30, T = 1.0;
+    var P = { width: W, height: H, fps: FPS, duration: 4, background: '#000000', markers: [] };
+    function build(kind, blur) {
+      var l = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 4 });
+      if (kind === 'transform') l.transform.x = { kf: [{ t: 0, v: 40, e: 'linear' }, { t: 2, v: 280, e: 'linear' }] };
+      if (kind === 'orbit') l.effects = [Object.assign(FM.fxRegistry.makeInstance('orbit'), { params: { radius: 90, speed: 1.2 } })];
+      if (blur === 'object') l.motionBlur = { enabled: true, shutter: 0.9, samples: 24 };
+      if (blur === 'footage') l.effects = (l.effects || []).concat([FM.fxRegistry.makeInstance('motionflow')]);
+      return { layers: [l], project: P };
+    }
+    // The content-aware blur is TEMPORAL — it compares against the previous frame. Rendering one frame
+    // in isolation hands it no history and it correctly does nothing, which reads as "it is broken".
+    // That mistake cost a whole measurement, so the run-up is part of the instrument.
+    function ink(sc) {
+      var cv = offscreen(W, H), g = cv.getContext('2d');
+      if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      for (var i = 8; i >= 1; i--) FM.renderScene(g, sc, T - i / FPS);
+      FM.renderScene(g, sc, T);
+      var d = g.getImageData(0, 0, W, H).data, x0 = W, x1 = -1, soft = 0;
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var k = (y * W + x) * 4, v = Math.max(d[k], d[k + 1], d[k + 2]);
+        if (v > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
+        if (v > 16 && v < 200) soft++;
+      }
+      return { w: x1 - x0 + 1, soft: soft };
+    }
+    var smeared = function (base, blurred) { return (blurred.w - base.w > 3) || (blurred.soft - base.soft > 60); };
+    var tBase = ink(build('transform', null)), oBase = ink(build('orbit', null));
+    if (!smeared(tBase, ink(build('transform', 'object')))) throw new Error('Motion Blur (Object) no longer smears the layer\u2019s own keyframed movement — that is the one thing it is for');
+    if (!smeared(oBase, ink(build('orbit', 'footage')))) throw new Error('Motion Blur (Footage) no longer smears Orbit — effect-driven motion is then covered by NEITHER blur, which is the #31b complaint with no answer left');
+    if (smeared(oBase, ink(build('orbit', 'object')))) throw new Error('Motion Blur (Object) now claims to smear Orbit — it cannot see effect motion, so this is a false positive in the measurement');
+  });
+
   /* ---------------- #113 step 6: the filter library ----------------
    * Hand-authored data. The failure mode is not a crash, it is a filter that quietly renders as
    * something other than its name because a param key was mistyped and silently dropped — so the

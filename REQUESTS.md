@@ -702,7 +702,7 @@ better still, keep working inside the turn rather than parking work for a later 
       the padlock and turned #ff4d4d into brick — `getComputedStyle` reported the bright red the whole
       time. Measured after: rgb(255,77,77) exactly. Covered by a new regression test.
 
-- [ ] **113 — A third subsection: FILTERS, alongside Effects and Audio Effects.** *Big one — read this
+- [x] **113 — A third subsection: FILTERS, alongside Effects and Audio Effects.** *Big one — read this
       whole entry before starting.* His words: *"now I want a third subsection for filters. It'll work
       the same as the others, and have a button at the top of the colouring section as a shortcut to it.
       This will be good because lots of people will not want to spend time making filters themselves."*
@@ -1618,8 +1618,25 @@ better still, keep working inside the turn rather than parking work for a later 
       · **Effects** cannot be done this way at all — Orbit and Wiggle displace pixels INSIDE the layer's
         render, so re-projecting one plate can never reproduce them. That needs either N real renders
         (the expensive path this design exists to avoid) or the content-aware motion blur that already
-        exists in the effect list. **Measure whether that effect already covers this case before
-        building anything** — it may be that the answer is "use that one", plus making the app say so.
+        exists in the effect list.
+        **MEASURED 15 Aug — and the answer IS "use that one". This half is ANSWERED (v7.50).**
+        Motion Blur (Footage) smears effect-driven motion perfectly well: an Orbit at 22px/frame goes
+        from 41px wide to 80px with 1,932 soft pixels. The two blurs are complementary, not overlapping
+        — Object smears the layer's own keyframes and cannot see Orbit; Footage smears Orbit and does
+        nothing for plain keyframed movement. Between them both cases are covered, which the suite now
+        holds in place.
+        **It has a speed limit, and that is worth knowing.** Sweeping Orbit's speed: it smears at 7, 15,
+        22, 37, 56 and 73 px/frame, then stops between 73 and 103. It reads the picture frame to frame,
+        so past roughly 75–100 px/frame there is no correspondence left to find. That is why Wiggle at
+        168 px/frame appeared not to smear at all — nothing to do with Wiggle, it was simply too fast.
+        **So the fix was the app saying so**, which it now does: Motion Blur (Footage)'s description
+        names effect motion and its speed limit, and the Motion Blur (Object) panel says it smears the
+        layer's OWN movement and points at the other one for effect or camera motion.
+        *(My first measurement said Footage smears nothing at all — wrong, because it is TEMPORAL and I
+        rendered one frame in isolation, giving it no previous frame to compare against. The run-up is
+        part of the instrument now, in the test.)*
+        **Still open on 31b: only the CAMERA half**, which needs your call — camera blur belongs at the
+        composite level and means the camera getting its own motion-blur toggle.
 
 ### Work that exists but isn't landed
 - [x] **Every other recovered diff is now landed.** Checked at v6.42, and the answer is that the
@@ -2719,7 +2736,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
       hide themselves when it is chosen, rather than sitting there meaning nothing.
-- [ ] **220 — The filters section isn't what I asked for. Three corrections.** (15 Aug.) His words:
+- [x] **220 — The filters section isn't what I asked for. Three corrections. ALL DONE (v7.48–v7.49).** (15 Aug.) His words:
       *"With the filters I wanted them to have a section like how effects and audio does, not how it
       currently is, idk if this is just the base state while you work on it. Also there should be an add
       filter button in the effect tab, you should have to go over to filters tab, and also I wanted a
@@ -2738,7 +2755,8 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
          as effects, so you go into the effects tab, then you have, visual, filters, and then audio."*
          The card is Effects; the three things inside it are Visual, Filters, Audio. Obvious in hindsight
          — "Effects → Effects" was always a bit odd.
-      *(2), (3) and (4) shipped in v7.48; (1) is the remaining piece.*
+      *(2), (3) and (4) shipped in v7.48. (1) — the tile browser with previews — shipped in v7.49, which
+      also closed #219 and finished #113 outright.*
       **Scouted for (1), so the next go is a build rather than a hunt.** The tile itself is easy: the
       generator's `sceneFor(type, inst, span)` already takes a ready-made effect INSTANCE and skips its
       per-effect demo tweaks when you pass one — so a filter tile is
@@ -2800,12 +2818,12 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       thing that went wrong twice and got the "why are you so bad at aligning the top buttons" reply. The
       current gaps are hand-tuned (18.0 / 24.1 / 18.0) and inserting a button next to the notepad — which
       itself appears only when nothing is selected — has to be measured, not eyeballed.
-- [ ] **221 — Get rid of Delete from the layer ⋯ menu.** (15 Aug, with a phone screenshot.) His words:
+- [x] **221 — Get rid of Delete from the layer ⋯ menu. DONE v7.48.** (15 Aug, with a phone screenshot.) His words:
       *"Get rid of the delete button in this menu"* — the long ⋯ menu on a selected layer, which ends in
       a red Delete under the colour tags. The bin icon is already in the top bar two inches away, so the
       menu entry is a second door to the most destructive action in the app, at the end of a list you
       scroll past. Nothing else in that menu is irreversible.
-- [ ] **219 — Filter tiles need picture previews.** *(Folded into #220 point 1 — he has now asked for the
+- [x] **219 — Filter tiles need picture previews. DONE v7.49.** *(Folded into #220 point 1 — he has now asked for the
       whole tab to match the effects browser, and tiles are half of that.)* *(Found by me on 15 Aug finishing #113 step 5.)*
       The Filters subsection lists each look with words — its name, what it does, and the effects it is
       made of. What it does NOT have is a little preview picture the way the effects grid does, and for

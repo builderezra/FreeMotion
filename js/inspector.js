@@ -3490,7 +3490,7 @@ window.FM = window.FM || {};
       { dp: 0, scrub: 0.08, min: 2, max: 24 });
     mbVals.append(bShut, bSamp);
     wrap.appendChild(mbVals);
-    wrap.appendChild(el('div', 'insp-hint', 'Shutter is how long the shutter stays open — 0.5 is the 180° shutter film uses. Samples is how many slices are averaged: more is smoother and slower. A clip that is not moving costs nothing.'));
+    wrap.appendChild(el('div', 'insp-hint', 'Shutter is how long the shutter stays open — 0.5 is the 180° shutter film uses. Samples is how many slices are averaged: more is smoother and slower. A clip that is not moving costs nothing. This smears the layer\u2019s OWN movement — its position, scale and rotation keyframes. Movement made by an effect (Orbit, Wiggle, Spin\u2026) or by the camera is not its own movement, and needs Motion Blur (Footage) instead.'));
     return wrap;
   }
 

@@ -542,7 +542,7 @@ window.FM = window.FM || {};
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
     // (RSMB/AE Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
-    { type: 'motionflow', label: 'Motion Blur (Footage)', desc: 'Blurs what MOVES INSIDE the clip. Moving, scaling or rotating the clip itself never smears it — for that, use Motion Blur (Object).',
+    { type: 'motionflow', label: 'Motion Blur (Footage)', desc: 'Blurs whatever MOVES on screen — including movement an effect makes, like Orbit or Spin, which Motion Blur (Object) cannot see. It reads the picture frame to frame, so very fast movement outruns it. Moving, scaling or rotating the clip itself never smears it — for that, use Motion Blur (Object).',
       params: [
       { key: 'style', label: 'Style', options: [[0, 'Pixel'], [1, 'Smear'], [2, 'Echo'], [3, 'Blend']], def: 0 },
       { key: 'amount', label: 'Shutter', min: 0, max: 2, step: 0.05, def: 1 },
