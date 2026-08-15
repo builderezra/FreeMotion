@@ -2114,6 +2114,81 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .field select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 10px; }
 
+/* ---- The export dialog's control column (queue 141 part 3) -------------------------------------
+ * Ezra: "I want the export screen to be prettied up… As pristine as possible."
+ *
+ * The single thing making it look unfinished was not a colour or a corner radius, it was ALIGNMENT.
+ * `.field` is space-between and a <select> shrink-wraps to its longest option, so every control was a
+ * different width and started at a different place: measured at 375px, the five dropdowns began at
+ * x=355, 262, 262, 471 and 345. Five ragged left edges down one short column reads as untidy however
+ * nicely each individual control is styled — it is the same complaint he made about the frame-rate
+ * list being "all over the shop", one level up.
+ *
+ * A fixed second column fixes it by construction rather than by hand-tuning widths: label left,
+ * control right, every control the same size, both edges true. Scoped to #export-dialog so the canvas
+ * and home dialogs — which have their own row shapes, including chip grids — are untouched.
+ * The clamp is a real phone fix too: at 320px a 168px column plus a long label used to overflow. */
+#export-dialog .field {
+  display: grid;
+  /* The CONTROL gets the room, not the label. "Format", "Quality" and "Range" are one short word,
+     while the options they hold are things like "Same as project — 1080×1920" — so splitting the row
+     evenly starved the half that carries the information and truncated it to "Same as …", which is
+     worse than the ragged edges this replaced. Measured at 375px: 46% left 129px of control and lost
+     the meaningful word; 64% leaves ~180px and keeps it. */
+  grid-template-columns: minmax(64px, 1fr) clamp(150px, 64%, 200px);
+  align-items: center;
+  gap: 12px;
+}
+#export-dialog .field select,
+#export-dialog .field .exp-custom { width: 100%; min-width: 0; }
+/* Room for the native chevron. A shrink-wrapped select sized itself around its longest option and
+   the arrow came free; in a fixed column the two collide — measured, "Same as project — 64×48" ran
+   under the arrow at 375px. The padding reserves the arrow's lane and the ellipsis makes a long
+   option truncate honestly instead of being clipped mid-glyph. */
+#export-dialog .field select {
+  height: 34px;
+  padding-right: 26px;
+  text-overflow: ellipsis;
+}
+/* The checkbox row is a DIFFERENT SHAPE and must not share the column. Its label is a sentence, not
+   a word — "Hide other layers (export just this clip)" — and squeezing that into the 91px the
+   dropdown column leaves wrapped it onto three lines. Here the text takes the room and the box sits
+   at the right edge, which lines up with the controls above it anyway. */
+#export-dialog .field:has(input[type="checkbox"]) { grid-template-columns: 1fr auto; }
+
+/* The last control the browser was still drawing in its own colours: a stark white square on dark
+   glass, beside five controls that had all been themed. `accent-color` alone is not enough — it only
+   reaches the CHECKED state, and the complaint is about the empty one — so the box is drawn here and
+   the tick is a rotated border, which needs no asset and scales with the box.
+   :focus-visible is not decoration: appearance:none throws away the platform's focus ring with the
+   platform's paint job, and a control you cannot see the keyboard on is a worse dialog than an ugly
+   one. */
+#export-dialog .field input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 22px; height: 22px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel-3);
+  display: grid; place-content: center; transition: background .12s, border-color .12s;
+}
+#export-dialog .field input[type="checkbox"]:checked {
+  background: var(--accent); border-color: var(--accent);
+}
+#export-dialog .field input[type="checkbox"]:checked::after {
+  content: ''; width: 5px; height: 10px; margin-top: -2px;
+  border: solid #06231d; border-width: 0 2px 2px 0; transform: rotate(42deg);
+}
+#export-dialog .field input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+/* The custom width×height pair shares that same column, so it lines up with the dropdowns above it
+   instead of being a third measurement on the row. */
+#export-dialog .exp-custom input { width: 100%; min-width: 0; flex: 1 1 0; }
+/* …and the checkbox sits at the right edge of the control column, not adrift in the middle of it. */
+#export-dialog .field input[type="checkbox"] { justify-self: end; }
+
+/* The card itself: never wider than the phone it is on. 330px + 24px padding either side overflowed
+   a 320px screen, which is the one width where a dialog must not need horizontal scrolling. */
+.export-card { width: min(330px, calc(100vw - 28px)); }
+
 #shortcuts-overlay { position: fixed; inset: 0; z-index: 230; display: flex; align-items: center; justify-content: center; background: rgba(4,7,14,.62); }   /* above the home screen (200) and its chrome, so it can be read without leaving home */
 #shortcuts-overlay.hidden { display: none; }
 /* The list is far taller than a phone, so the card scrolls INSIDE a viewport-bounded box — it used

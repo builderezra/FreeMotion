@@ -370,13 +370,40 @@ better still, keep working inside the turn rather than parking work for a later 
          rate is not one of the fixed rungs — which is precisely your case. A standard 30fps project
          still lands on its own rung, so nothing changed for the ordinary path.
          Resolution already had this covered (the list is built per-project and leads with "Full — W×H").
-         Still open in this entry: **1** (a custom ratio/resolution in the export dialog), **3** (prettied
-         up), **4** (our own save popup instead of the OS sheet).
+         *(That "still open: 1" line was stale the moment part 1 shipped in v7.09 — corrected here rather
+         than left to send someone looking for work that is already done.)*
+         **Still open in this entry: 4 only** — our own save popup instead of the OS sheet. Parts 1, 2
+         and 3 have all shipped (v7.09, v7.08, v7.63).
       3. **Prettied up** — the dialog is functional and plain; he wants it to look finished.
+         **DONE v7.63, and it turned out to be mostly not a taste call.** What made it look unfinished
+         was ALIGNMENT: every row was space-between and a dropdown shrink-wraps to its longest option,
+         so the five controls were five different widths starting in five different places — measured
+         at 375px, x=355, 262, 262, 471 and 345. They share one column now, both edges true.
+         Two corrections on the way, both of which only showed up in a screenshot and neither of which
+         reading the CSS would have caught: narrowing the controls truncated "Same as project —
+         1080×1920" to "Same as …", losing the only word that mattered, so the control column takes the
+         room rather than splitting the row evenly with a one-word label; and the native chevron then
+         overlapped the text until the arrow got a lane of its own.
+         The checkbox is ours now instead of a stark white browser square beside five themed controls,
+         and the card is clamped to the viewport — 330px plus padding overflowed a 320px phone.
+         The alignment is ASSERTED in the suite, not admired: "prettied up" is not usually testable, but
+         "these five controls share one left edge" is, and a column that drifts again will go red.
       4. **Our own save popup instead of the OS one.** The native iOS share/save sheet is "the apple pop
          up". Check what is actually replaceable before promising: the final file hand-off is partly
          OS-owned, so the honest version may be our own dialog for everything UP TO the save, with the
          system sheet only at the last step. Say that plainly rather than claiming it can all be ours.
+         **STILL OPEN, and now with the honest scope, read off the code (js/exporter.js `deliver`).**
+         The share sheet is `navigator.share({files})`, and a browser will only open that from a real
+         user gesture — which is exactly why the exporter already falls back to a plain download when a
+         long render outlives the tap that started it. So the sheet itself cannot be replaced: it is the
+         OS's file hand-off and there is no web API that writes to your camera roll without it.
+         **What CAN be ours is everything around it**, and that is probably what you actually want: a
+         finished-looking "your export is ready" card with the file name, size and duration, a preview
+         of the first frame, and a Save button — so the Apple sheet appears because YOU pressed Save on
+         our card, rather than being flung at you the instant the render ends. That also fixes the
+         transient-activation fallback as a side effect, because the tap that opens the sheet would then
+         always be fresh. **Worth doing, and it is a real piece of design rather than a tidy-up — so it
+         is the next thing on this entry rather than something to bolt on today.**
       Overlaps #121 (settings ↔ export one-way mirror) and #102 (export robustness) — do them as ONE
       piece of work on the export path rather than three passes over the same dialog.
 

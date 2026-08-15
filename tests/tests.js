@@ -14561,6 +14561,56 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #141 part 3: "I want the export screen to be prettied up" ----------------
+   * "Prettied up" sounds like taste and mostly was not. The thing making that dialog look unfinished
+   * was ALIGNMENT: `.field` is space-between and a <select> shrink-wraps to its longest option, so
+   * every control was a different width and began in a different place — measured at 375px, the five
+   * dropdowns started at x=355, 262, 262, 471 and 345. Five ragged left edges down one short column.
+   * That is measurable, so it is tested rather than admired: a column that drifts again will go red
+   * instead of quietly looking cheap. */
+  test('export dialog: the controls line up in one column', { item: 'export-dialog-align' }, async function () {
+    var d = document.getElementById('export-dialog');
+    if (!d) throw new Error('#export-dialog is missing');
+    var hid = d.classList.contains('hidden');
+    try {
+      d.classList.remove('hidden');
+      await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+      var sels = Array.prototype.slice.call(d.querySelectorAll('.field select')).filter(function (s) { return s.offsetParent; });
+      // The control FIRST: with one visible select (or none) "they all align" is true and meaningless.
+      if (sels.length < 4) throw new Error('control failed: only ' + sels.length + ' visible dropdown(s) in the export dialog, so an alignment assertion proves nothing');
+
+      var lefts = {}, widths = {};
+      sels.forEach(function (s) {
+        var r = s.getBoundingClientRect();
+        lefts[Math.round(r.left)] = (lefts[Math.round(r.left)] || 0) + 1;
+        widths[Math.round(r.width)] = 1;
+      });
+      var nLefts = Object.keys(lefts).length, nWidths = Object.keys(widths).length;
+      if (nLefts !== 1) {
+        throw new Error('the ' + sels.length + ' dropdowns start at ' + nLefts + ' different left edges (' + Object.keys(lefts).join(', ') +
+                        ') — a column of controls that each begin somewhere else is the whole of what "not prettied up" meant here');
+      }
+      if (nWidths !== 1) throw new Error('the dropdowns are ' + nWidths + ' different widths (' + Object.keys(widths).join(', ') + ')');
+
+      // The tick box is part of the same column even though its row is shaped differently.
+      var cb = d.querySelector('.field input[type="checkbox"]');
+      if (cb && cb.offsetParent) {
+        var cbR = Math.round(cb.getBoundingClientRect().right);
+        var colR = Math.round(sels[0].getBoundingClientRect().right);
+        if (Math.abs(cbR - colR) > 1) throw new Error('the checkbox ends at x=' + cbR + ' but the controls above it end at x=' + colR + ' — it is adrift of the column it belongs to');
+        if (getComputedStyle(cb).appearance !== 'none') throw new Error('the checkbox is still the browser default — a stark white square on dark glass beside five themed controls');
+      }
+
+      // …and the card must fit the phone it is on. 330px + 24px padding either side overflowed 320px.
+      var card = d.querySelector('.export-card');
+      if (card && Math.round(card.getBoundingClientRect().width) > window.innerWidth) {
+        throw new Error('the export card is ' + Math.round(card.getBoundingClientRect().width) + 'px wide in a ' + window.innerWidth + 'px viewport — a dialog must never need sideways scrolling');
+      }
+    } finally {
+      if (hid) d.classList.add('hidden');
+    }
+  });
+
   /* ---------------- #129: a clip on the timeline that never shows a picture ----------------
    * His words, second report: "it still has the issue of being on the timeline but not actually
    * showing any video." There are two ways that happens and only one was covered. A file whose video
