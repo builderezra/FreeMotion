@@ -3541,6 +3541,24 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       behind a real `isConfigSupported` probe, so covering it needs a full export with a stubbed encoder
       — a bigger rig than this change earned today.*
 
+      **AND THE THIRD PATH — v7.92, the worst of them.** `encodeAudio` throwing was also a bare
+      `console.warn`, and it matters more than the other two because **the muxer has already declared an
+      audio track by then** (`audio: mix ? {…} : undefined` is decided far higher up, while the mix still
+      existed). So a throw there did not just lose the sound — it shipped a file whose moov **promises an
+      audio track that was never fed**. That is exactly the "broken/silent track that strict players
+      reject" the AAC probe was written to prevent, arriving by a route the probe cannot see: it answers
+      "can this browser encode AAC", not "did this encode survive". Such a file can play silently in one
+      player and be refused outright by another.
+      **All three silent losses now report themselves, and the toast alone says which half broke:**
+      | what you see | what broke |
+      |---|---|
+      | a toast naming a clip | the MIXER could not read that layer |
+      | "cannot encode AAC" | the BROWSER has no AAC encoder |
+      | "soundtrack failed to encode" | the encode started and threw |
+      | no toast, still silent | none of the three — and that would be genuinely new information |
+      This entry had no evidence attached for five rounds of asking precisely because every one of these
+      was a bare `console.warn`. **The next occurrence answers itself.**
+
 - [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should

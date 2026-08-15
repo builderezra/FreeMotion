@@ -686,7 +686,24 @@ window.FM = window.FM || {};
       // Save the last partial batch. The export is about to finalize, but finalizing is exactly where a
       // long render is most likely to be OOM-killed, and a resume should not have to redo the tail.
       if (recorder) { try { await recorder.settle(); } catch (e) {} }
-      if (mix) { try { await encodeAudio(muxer, mix); } catch (e) { console.warn('audio encode failed', e); } }
+      /* THE THIRD SILENT WAY TO LOSE THE SOUND (queue 215, v7.92), and the worst of the three, because
+       * by this point the muxer has ALREADY declared an audio track: `audio: mix ? {...} : undefined`
+       * is decided far above, when the mix still existed. So if the encode throws here, the swallow
+       * below does not merely drop the sound — it ships a file whose moov promises an audio track that
+       * was never fed. That is the exact "broken/silent track that strict players reject" the AAC probe
+       * upstream was written to prevent, arriving by a route the probe cannot see: the probe answers
+       * "can this browser encode AAC at all", not "did this particular encode survive".
+       * Kept as a swallow on purpose — a failed soundtrack must not throw away a render that may have
+       * taken minutes — but it says so now, and it distinguishes itself from the other two paths so the
+       * toast alone tells you which half of the pipeline broke. */
+      if (mix) {
+        try { await encodeAudio(muxer, mix); }
+        catch (e) {
+          console.warn('[export] audio encode failed after the track was declared — the file will have a silent audio track', e);
+          FM._audioTrackDropped = 'encode-failed';
+          if (FM.toast) FM.toast('The soundtrack failed to encode — the video is saved but SILENT', 6000);
+        }
+      }
       muxer.finalize();
       /* HAND THE FILE OVER, or hand it to whoever asked to present it (queue 141 part 4).
        * `onReady` lets the caller put its own card in front of the OS save sheet — which is the whole
