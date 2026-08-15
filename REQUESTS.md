@@ -3344,6 +3344,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       *The old checkbox is deleted rather than hidden: a hidden one still got laid out (a stylesheet rule
       outranks `hidden` here) and sat adrift of the column, which the dialog's own alignment test caught
       — x=499 against x=590. Deleting it left one source of truth as well.*
+      **Verified at 380px** (which I had skipped on the first pass and had to come back for): the button
+      is 179px wide ending at x=330, byte-identical to the resolution select above it, inside the card
+      with zero overflow. The same screenshot shows **all three export items at once** — Quality **High**
+      (#173), Resolution **Same as project…** (#172) and **Export just this layer → All layers** (#174),
+      one column, nothing adrift.
+      **And two mistakes of mine on this one, recorded because they are the same mistake twice:** I
+      pushed it with a RED suite (ran the tests and committed in the same breath without reading the
+      output — an older guard checked for the tick by id), and nothing tested that the picker DID
+      anything, so the export could ignore it entirely and all 370 tests still passed. Both fixed; the
+      effect is asserted now, not the label.
 - [x] **185 — The notes button sits too close to the version chip.** (v7.13) His words: *"The spacing for
       the notes button in regards to the ones around it is off, it's too far to the left."* Measured at
       380px and he is right: the version pill is a bordered chip with no air inside its right edge, while
