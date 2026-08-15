@@ -4440,6 +4440,39 @@ wait for them to report back."*
       a tall, resizable browser that must never cover the canvas — build the drag with that in mind.
       *"Feel free to do a demo of this when you get to it as well."*
 
+      **DESIGN, written 16 Aug against the real code — not started, and deliberately so.** This is five
+      behaviours in one (independent drag, a floor, a snap-and-flash, coupled dragging both directions,
+      overlay-not-shrink) and it is groundwork for the effects browser, so it wants a clean run rather
+      than the tail end of a long session. What follows is the research done, so the next session builds
+      instead of reading.
+      · **Mirror `#tl-resizer`** (js/app.js, the `pointerdown`/`pointermove`/`end` trio around line 3120).
+        It is the right shape already: a handle, a clamp function, a CSS variable, and the height
+        persisted to `localStorage` under `fm_tl_h`. Copy the structure, not the code — a second
+        `--tl-h` writer would be a disaster.
+      · **The timeline's height is `--tl-h` on `<html>`,** clamped by `FM.clampTimelineH` (exposed for
+        the suite). The add menu should get its own `--am-h` on the same element, with its own clamp and
+        its own stored key.
+      · **"Cannot go lower than the timeline" is a clamp, not a collision test.** In the Studio layout —
+        which is the one he uses, and the one where this request makes sense — the inspector band and the
+        timeline are side by side under the stage, so the add menu's floor is simply the current `--tl-h`.
+        Read it, do not re-measure the DOM: one source of truth.
+      · **The snap-and-flash** is the interesting bit and the one to get right. Coming DOWN, when the
+        dragged height reaches `--tl-h`, hold it there for a beat (ignore further movement until the
+        pointer has travelled a threshold past it — the same "sticky" idea `snapCursor` in draw-tool.js
+        already uses, ~9px converted to the gesture's units) and flash the divider. The divider is the
+        border between the bottom band and the stage; a short accent-coloured animation on it, off under
+        `prefers-reduced-motion`.
+      · **Coupled dragging** falls out if the floor is `--tl-h`: past the sticky threshold, keep the add
+        menu pinned to the floor and write `--tl-h` instead, so the timeline follows. The reverse
+        (dragging the timeline up into the add menu) is the same rule with the roles swapped, and they
+        re-couple with the same flash.
+      · **Overlay, not shrink.** The band currently sizes the stage through the grid. For the add menu to
+        pass over the canvas it has to leave the grid while dragged — `position: absolute` against the
+        app, with the grid row frozen at its undragged height — otherwise every drag reflows the canvas,
+        which is exactly what he does not want and is also the expensive path.
+      · **His demo request stands**, and a probe page (`tests/_amdrag.html`) would be the honest way to
+        show it: the gesture is hard to judge from a screenshot.
+
 - [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
       looks dead. DONE v7.95.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one
       to open up all your projects or elements or tutorials. Those buttons should also be clear but not
