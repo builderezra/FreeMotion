@@ -4478,7 +4478,7 @@ wait for them to report back."*
       If it still looks cheap to you now that it genuinely moves, that is the conversation to have, and
       the options above still stand. This release fixed the thing that was measurably broken.
 
-- [ ] **246 — PC: the add-menu background must reach the menu's borders.** (15 Aug.) His words: *"the
+- [x] **246 — PC: the add-menu background must reach the menu's borders. DONE v7.96.** (15 Aug.) His words: *"the
       background you added behind everything on the add menu on pc looks whack, it needs to fully go to
       the borders on that menu."*
       A fault in **v7.85** (#236). The gradient went on `.addmenu--panel`, which is only the CONTENT box
@@ -4487,6 +4487,17 @@ wait for them to report back."*
       region that actually has the borders (`#inspector-panel` / `#inspector` while the add menu is up),
       edge to edge. **Do not simply pad the panel to fill** — v7.85 already learned that: 9px of padding
       there gave the inspector a scrollbar it did not have, and two tests catch it.
+
+      **DONE v7.96.** The paint is on the bordered region now: measured after, the painted surface is the
+      whole 264px panel against a 210px content box, so 54px that used to be bare panel is part of the
+      material and the gradient ends where the border is. Anchored with `:has(.addmenu--panel)` rather
+      than a body class — the add menu shows when nothing is selected and there is no marker for that
+      state, so a class would be a second writer for something the DOM already says plainly. No padding,
+      per the warning above.
+      **The test had to be RE-ANCHORED, not just re-run**, and that is the lesson worth keeping: it
+      measured the gradient on the CONTENT box, so it would have gone on passing while your complaint was
+      fully present — a gradient on the inner box satisfies "there is a gradient" and looks exactly like
+      the thing you reported.
 
 - [ ] **247 — Opening the export menu should pause playback.** (15 Aug.) His words: *"when you open the
       export menu playback should pause."* Straightforward: the export dialog opening is a hard stop for
