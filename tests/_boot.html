@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#145 — what does FreeMotion actually load at boot?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.6 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:390px;height:800px;border:0}
+#out{padding:14px;white-space:pre}</style></head><body>
+<iframe id="app" src="../index.html?boot=1"></iframe><div id="out">measuring…</div>
+<script>
+/* Ezra (#145): "alight motion always takes ages to load when you open the app but ours doesn't, idk
+   if that's coz ours is shit and has nothing to load or just loads it well."
+   A fair question that deserves numbers rather than a compliment. This measures OUR side of it
+   honestly — including the parts that flatter us and the parts that do not. What it cannot do is
+   profile Alight Motion, so the comparison in the answer is reasoning about what a mature native app
+   has to do at launch, clearly labelled as such. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done() { out.textContent = L.join('\n'); window.__boot = L.join('\n'); window.__done = true; }
+  function kb(n) { return (n / 1024).toFixed(0) + ' KB'; }
+  function mb(n) { return (n / 1048576).toFixed(2) + ' MB'; }
+
+  fr.addEventListener('load', function () {
+    setTimeout(function () { go(fr.contentWindow); }, 6500);   // outlast the splash, whatever it does
+  });
+
+  function go(w) {
+    try {
+      var p = w.performance, nav = p.getEntriesByType('navigation')[0] || {};
+      var res = p.getEntriesByType('resource');
+      var scripts = res.filter(function (r) { return /\.js(\?|$)/.test(r.name); });
+      var css = res.filter(function (r) { return /\.css(\?|$)/.test(r.name); });
+      var media = res.filter(function (r) { return /\.(png|jpg|mp4|webm|wav|mp3)(\?|$)/.test(r.name); });
+      var sum = function (a, k) { return a.reduce(function (s, r) { return s + (r[k] || 0); }, 0); };
+
+      L.push('WHAT WE LOAD AT BOOT   (measured in a cold profile, 390x800)');
+      L.push('');
+      L.push('  requests           ' + res.length);
+      L.push('    scripts          ' + scripts.length + '   ' + mb(sum(scripts, 'decodedBodySize')) + ' decoded');
+      L.push('    stylesheets      ' + css.length + '   ' + kb(sum(css, 'decodedBodySize')));
+      L.push('    images / media   ' + media.length + '   ' + mb(sum(media, 'decodedBodySize')));
+      L.push('  total decoded      ' + mb(sum(res, 'decodedBodySize')));
+      L.push('');
+      L.push('WHEN THINGS HAPPEN   (ms from the navigation starting)');
+      L.push('  DOM interactive    ' + Math.round(nav.domInteractive || 0));
+      L.push('  DOMContentLoaded   ' + Math.round(nav.domContentLoadedEventEnd || 0));
+      L.push('  load event         ' + Math.round(nav.loadEventEnd || 0));
+      var lastScript = scripts.reduce(function (m, r) { return Math.max(m, r.responseEnd); }, 0);
+      L.push('  last script done   ' + Math.round(lastScript));
+
+      // The honest part: the splash is OURS, and it is on screen whether or not anything is loading.
+      var sp = w.document.getElementById('splash');
+      L.push('');
+      L.push('THE SPLASH — the bit that decides what "loading" FEELS like');
+      L.push('  #splash still in the document after 6.5s: ' + (sp ? 'yes' : 'no (removed)'));
+      var big = scripts.slice().sort(function (a, b) { return b.decodedBodySize - a.decodedBodySize; }).slice(0, 5);
+      L.push('');
+      L.push('THE FIVE BIGGEST SCRIPTS');
+      big.forEach(function (r) {
+        L.push('  ' + kb(r.decodedBodySize).padStart(8) + '   ' + r.name.split('/').pop().split('?')[0]);
+      });
+
+      // What we DON'T load until asked — the part that is genuine architecture rather than luck.
+      L.push('');
+      L.push('DEFERRED — not fetched at boot at all');
+      var names = res.map(function (r) { return r.name; }).join(' ');
+      [['splash.mp4', 'the splash video'], ['fx-art/', 'effect artwork'],
+       ['_fixtures/', 'test fixtures'], ['.woff', 'web fonts']].forEach(function (pair) {
+        L.push('  ' + (names.indexOf(pair[0]) < 0 ? 'not loaded' : 'LOADED   ') + '   ' + pair[1]);
+      });
+      L.push('');
+      L.push('  project media (video/audio) lives in IndexedDB and is only read when a project opens,');
+      L.push('  so an empty home screen fetches none of it however big the library is.');
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+    }
+    done();
+  }
+})();
+</script></body></html>

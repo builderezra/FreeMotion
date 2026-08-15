@@ -2174,12 +2174,53 @@ better still, keep working inside the turn rather than parking work for a later 
       Plus a defect I introduced: **the icons sit off-centre inside the plate** (visible on Text,
       Captions, Camera in his shot). That should die with the plate, but verify it rather than assume.
 
-- [ ] **145 — Why does Alight Motion take ages to load and ours doesn't?** His words: *"alight motion
+- [x] **145 — Why does Alight Motion take ages to load and ours doesn't? ANSWERED 15 Aug, with numbers.** His words: *"alight motion
       always takes ages to load when you open the app but ours doesn't, idk if that's coz ours is shit
       and has nothing to load or just loads it well."* Not a bug — a question that deserves an honest
       answer rather than a flattering one. Answer with actual numbers: what we load at boot, what is
       deferred, and which parts are genuine architecture versus simply having far less to load than a
       mature native app.
+
+      **MEASURED (`tests/_boot.html`, cold profile, 390×800). Short answer: it is not because we have
+      nothing to load. We load plenty. It is because of WHERE it comes from and how little we do with
+      it once it arrives.**
+
+      | | |
+      |---|---|
+      | requests at boot | **72** |
+      | JavaScript | **2.82 MB** across 66 files |
+      | CSS | 398 KB |
+      | images + the splash video | **3.09 MB** |
+      | **total** | **6.30 MB** |
+      | DOM interactive | **119 ms** (220 ms at 6× CPU throttle) |
+      | load event | **193 ms** (395 ms throttled) |
+
+      **So "ours is shit and has nothing to load" is the one explanation the numbers rule out.** Six and
+      a third megabytes is not nothing, and compositor.js alone is 743 KB. We are not winning on size.
+
+      **The three real reasons, in order of how much they matter:**
+      1. **Nothing is fetched over a network.** Everything is on the device already, and after the first
+         visit the service worker serves it from disk. A native app launch usually includes at least one
+         round trip — a licence or subscription check, a sync, an ad or analytics handshake — and one
+         slow round trip costs more than our entire boot.
+      2. **We do almost nothing at startup.** Our 2.82 MB is plain text that a browser parses in tens of
+         milliseconds and then mostly sits there. A mature editor decodes fonts, builds effect
+         thumbnails, scans an asset library, restores an project index and warms a render engine before
+         it will show you anything. That work is not the file size, and it is where the seconds go.
+      3. **Our boot cost does not grow with your library.** Project media lives in IndexedDB and is only
+         read when a project is opened, so an empty home screen fetches none of it whether you have one
+         project or two hundred. **That one IS genuine architecture and is worth protecting** — it is the
+         property most likely to be lost by accident.
+
+      **The honest caveats, because a flattering answer is not what you asked for:**
+      · We are fast *today, at this size*. Nothing here is a moat. Adding web fonts, a downloadable
+        asset library, or a sign-in would cost us most of this and none of them are exotic.
+      · Some of Alight Motion's launch time is genuinely having more stuff than us — a decade of effects,
+        presets and fonts is not free. Some of it is probably avoidable. From the outside I cannot tell
+        you the split, and I am not going to guess at a number to make us look good.
+      · **And one thing we should look at: the splash video is 2.8 MB fetched at boot** — about as much
+        as the entire app's code — for something decorative. It is cached after the first visit, but the
+        first visit on cellular pays for it. Logged as **#223**.
 
 - [x] **146 — PC: drop the project-name editor at the top, it is already at the bottom.** (v6.94) His words:
       *"also on pc get rid of the project name editor thats at the top, its already at the bottom."*
@@ -3483,3 +3524,15 @@ layout, motion blur, the elements browser and the effects browser.
       inherited an entrance DELAY and at ct=280 has not actually begun, which is exactly what
       `unstampIntro` exists to prevent and is intermittently not preventing.
       A test that is red one run in five is worse than no test: it trains you to re-run instead of read.
+
+- [ ] **223 — The splash video is 2.8 MB, about as much as the whole app's code.** Found while
+      answering #145 with real numbers (`tests/_boot.html`): a cold boot pulls 6.30 MB, and 3.09 MB of
+      that is images and video — almost all of it `splash.mp4`, which is decoration. The app's entire
+      JavaScript is 2.82 MB, so the intro costs us more bytes than the editor does.
+      It is cached by the service worker after the first visit, so this is a FIRST-RUN cost only — but
+      first run on a phone on cellular is exactly the moment someone decides whether the app is any
+      good. Options, cheapest first: re-encode it smaller (it is almost certainly nowhere near
+      optimised), drop its resolution to what a phone actually shows, or load it lazily and let the
+      poster image carry the first moment.
+      **Not doing any of that unasked** — it is your intro and how it looks is your call, not a number
+      I should quietly optimise away. Say which and it is quick.
