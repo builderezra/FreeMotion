@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.81</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.82</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -186,6 +186,8 @@
              This is the phone's button, in the desktop bar, opening the same two-item menu — not a
              third way to group things. Same icon as #m-group so it reads as the same control. -->
         <button id="btn-group" class="icon-btn" title="Group selected layers" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
+        <!-- The layer ⋯ menu on PC (queue 233). Ezra: "when you have a layer selected, it should show the three dot menu. That three dot menu doesn't show up at the moment, so there's no way to go into that and do all those settings, which is annoying." He is right, and it is a missing DOOR rather than a style note: #btn-layermenu next to it is the CLIPBOARD menu (select all / duplicate / copy / paste / paste style), while the full clip menu — split, lock, reverse, replace media, reset, loop, blend, parent, onion skin — was reachable on desktop only by RIGHT-CLICKING a clip. The phone has had a ⋯ for it all along (#m-more). Same FM.layerMenuItems set, so this is a second door to one menu, not a second menu. -->
+        <button id="btn-more-layer" class="icon-btn" title="Layer options — split, lock, reverse, loop, blend…" aria-label="Layer options" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
         <button id="btn-del-layer" class="icon-btn" title="Delete selected layer" style="display:none"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
         <!-- Project notes (queue 139). Ezra: "put a little note pad icon and make it so you can add
              notes about the project and reminders". Beside Export on purpose: the reminders it holds
@@ -777,7 +779,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=271"></script>
+  <script src="js/app.js?v=272"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=1"></script>

@@ -3390,6 +3390,17 @@ window.FM = window.FM || {};
     const undoBtn = document.getElementById('btn-undo'), redoBtn = document.getElementById('btn-redo');
     if (undoBtn) undoBtn.addEventListener('click', () => { if (FM.history) FM.history.undo(); });
     if (redoBtn) redoBtn.addEventListener('click', () => { if (FM.history) FM.history.redo(); });
+    /* ⋯ Layer OPTIONS (queue 233) — the full clip menu, which on desktop had no button at all and was
+     * reachable only by right-clicking a clip. Opens exactly FM.layerMenuItems, the same set the phone's
+     * ⋯ opens and the same set the right-click opens, so this is a second DOOR to one menu rather than a
+     * second menu to keep in sync. Anchored under the button and right-aligned, like the phone's. */
+    const moreLayerBtn = document.getElementById('btn-more-layer');
+    if (moreLayerBtn) moreLayerBtn.addEventListener('click', () => {
+      const L = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      if (!L || !FM.contextMenu || !FM.layerMenuItems) return;
+      const r = moreLayerBtn.getBoundingClientRect();
+      FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.layerMenuItems(L));
+    });
     // ⧉ Layer-actions menu (AM): Select All / Duplicate / Copy / Save Preset / Paste / Paste Style.
     const layerMenuBtn = document.getElementById('btn-layermenu');
     if (layerMenuBtn) layerMenuBtn.addEventListener('click', () => {
@@ -3570,7 +3581,7 @@ window.FM = window.FM || {};
      * appears at 2+ selected, and putting it third keeps delete exactly "one over" as asked in both the
      * one-layer and the many-layer case. */
     const sel = document.createElement('span'); sel.id = 't-sel';
-    ['btn-parent', 'btn-del-layer', 'btn-group'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
+    ['btn-parent', 'btn-del-layer', 'btn-group', 'btn-more-layer'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
     if (sel.childNodes.length) menu.parentNode.insertBefore(sel, menu.nextSibling);
 
     // far right — refresh chip, NOTES, cog, export, then view options OUTERMOST (his amendment)
@@ -3605,6 +3616,7 @@ window.FM = window.FM || {};
     const show = (id, on) => { const b = document.getElementById(id); if (b) b.style.display = on ? '' : 'none'; };
     show('btn-del-layer', n >= 1);
     show('btn-parent', n >= 1 && total >= 2);
+    show('btn-more-layer', n >= 1);   // queue 233 — the full clip menu had no button on PC at all
   }
   FM.pcTransportLayout = pcTransportLayout;
   FM.pcTransportSync = pcTransportSync;

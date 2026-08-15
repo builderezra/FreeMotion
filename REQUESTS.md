@@ -4097,10 +4097,24 @@ wait for them to report back."*
       The test compares the icon by SHAPE COUNTS — two rects and no paths is exactly the mark that was
       wrong — so putting the twin back goes red. Both mutations caught.
 
-- [ ] **233 — PC: the three-dot menu does not appear when a layer is selected.** His words: *"when you
+- [x] **233 — PC: the three-dot menu does not appear when a layer is selected. DONE v7.82.** His words: *"when you
       have a layer selected, it should show the three dot menu. That three dot menu doesn't show up at
       the moment, so there's no way to go into that and do all those settings, which is annoying."*
       This is a missing DOOR, not a style note — everything in that menu is currently unreachable on PC.
+
+      **DONE v7.82, and you were right about the consequence.** Worth spelling out because there IS a
+      menu button next to it: `#btn-layermenu` (⧉) is the **clipboard** menu — Select All, Group,
+      Duplicate, Copy, Save Preset, Paste, Paste Style. The **full clip menu** — Lock, Onion skin, Reset
+      transform, Flip H/V, Fit / Fill / Stretch to Composition Area, Create Clipping Mask, Convert to
+      Outline, Media Info, the colour tag strip, **sixteen items** — was reachable on desktop only by
+      RIGHT-CLICKING a clip, which nothing advertises. The phone has had a ⋯ for it all along.
+      The new button opens `FM.layerMenuItems`, the same set the phone's ⋯ and the right-click open, so
+      it is a second DOOR to one menu rather than a second menu to keep in sync — the mistake the old ⋯
+      project menu made and was removed for in v6.13.
+      The test's second assertion is the important one: a button that opened the WRONG menu would satisfy
+      "there is a three-dot button" while leaving all sixteen settings just as unreachable. It checks for
+      Lock / Onion skin / Reset transform and fails explicitly if it finds "Paste Style" instead — and
+      the mutation that points it at the clipboard menu is caught by that, not by the first check.
 
 - [ ] **234 — PC: split sits ON the playhead, the two trims flank it, and all three move up a row.** His
       words: *"the buttons to split the layer or delete the layer all the way to the left or all the way

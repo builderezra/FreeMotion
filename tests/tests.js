@@ -3111,6 +3111,50 @@
     }
   });
 
+  test('PC: a selected layer gets a three-dot menu, and it is the FULL clip menu', { item: 'pc-layer-more' }, async function () {
+    /* Queue 233. Ezra: "when you have a layer selected, it should show the three dot menu. That three
+     * dot menu doesn't show up at the moment, so there's no way to go into that and do all those
+     * settings, which is annoying."
+     * He is right and it was a missing DOOR, not a style note. #btn-layermenu, which sits right next to
+     * it, is the CLIPBOARD menu — select all / duplicate / copy / paste / paste style. The full clip
+     * menu (split, lock, reverse, replace media, reset, loop, blend, parent, onion skin) was reachable
+     * on desktop ONLY by right-clicking a clip, a gesture nothing advertises. The phone has had a ⋯ for
+     * it since forever.
+     * The assertion that matters is the SECOND one: a button that opens the wrong menu would satisfy
+     * "there is a three-dot button" while leaving every one of those settings exactly as unreachable. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 3 });
+      FM.scene.layers.push(A);
+
+      FM.selectLayer(null); FM.refreshAll(); await sleep(40);
+      const btn = document.getElementById('btn-more-layer');
+      if (!btn) throw new Error('#btn-more-layer does not exist — there is no three-dot button on PC at all');
+      if (btn.getBoundingClientRect().width > 1) throw new Error('the layer ⋯ button is showing with nothing selected — it is a layer control');
+
+      FM.selectLayer(A.id); FM.refreshAll(); await sleep(40);
+      if (btn.getBoundingClientRect().width < 10) throw new Error('a layer is selected and the ⋯ button is still not on screen');
+
+      // …and it must open the FULL clip menu, not the clipboard one next door.
+      btn.click(); await sleep(60);
+      const menu = document.getElementById('ctx-menu');
+      if (!menu || menu.getBoundingClientRect().width < 10) throw new Error('pressing ⋯ opened nothing');
+      const text = (menu.textContent || '').toLowerCase();
+      if (!/lock/.test(text) || !/onion/.test(text) || !/reset transform/.test(text)) {
+        throw new Error('the ⋯ menu is missing the clip options — it reads "' + (menu.textContent || '').trim().slice(0, 90) + '", which looks like the clipboard menu, not the layer menu');
+      }
+      if (/paste style/.test(text)) throw new Error('⋯ opened the CLIPBOARD menu — that is the ⧉ button next to it, and the clip options are still unreachable');
+    } finally {
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0;
+      FM.refreshAll();
+    }
+  });
+
   test('freehand: Undo takes back ONE stroke, and Redo puts it back', { item: 'freehand-undo' }, function () {
     /* Queue 165.4. Ezra: "instead of an undo button just add the undo and redo icons that we have in
      * the normal menu so you can go back or forwards."
