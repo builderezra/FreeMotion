@@ -3477,6 +3477,32 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       **This is the most serious open item in the file** and now has a concrete repro, so it should go
       first once the current PC run is finished.
 
+      **FIRST LOOK AT THE EXPORTER, 15 Aug — two lines that can silently drop a layer's sound.**
+      `buildAudioMix` (js/exporter.js) opens its loop with:
+      ```
+      for (const layer of scene.layers) {
+        if (layer.type !== 'video' || ...) continue;      // <- line 250
+        const m = FM.media.get(layer.id);
+        if (!m || !m.file) continue;                       // <- line 252
+      ```
+      Both are `continue`, not an error, so **anything they skip produces a silent export with no
+      warning anywhere** — which is precisely the shape of this report.
+      · **Line 250** mixes only layers whose type is `'video'`. Imported audio rides the video path (an
+        mp3 becomes a `'video'` layer with a 0×0 picture — that is documented in the compositor), so
+        imports are fine. A layer created by any other route with a different `type` is skipped.
+      · **Line 252** also requires `m.file`, a real File object. Audio that arrives as a bundled asset or
+        a URL rather than a picked file may have a decoded buffer and no `.file`, and would be skipped
+        even if its type were right.
+      **What I could not settle before running out of room, and it decides which of the two it is:** I
+      could not find a distinct "sound effects" source in the code — no `sfx`, no `addAudioLayer`, no
+      `type: 'audio'` layer constructor. So either "sound effects" means audio files he imported through
+      the Audio tab (in which case both guards pass and the cause is further down the encoder), or they
+      come from somewhere I did not find.
+      **One line from him settles it: where did the sound effects come from — the Audio tab / his own
+      files, or a built-in library inside the app?** Not blocking: the next session should build the
+      scene both ways and count audio samples in the output, because the two guards above are testable
+      without knowing the answer.
+
 - [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
