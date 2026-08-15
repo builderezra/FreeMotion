@@ -678,6 +678,25 @@ better still, keep working inside the turn rather than parking work for a later 
       things will happen — Faves / Release to open / Cancelled — and the block glides home under your
       finger on a cancel, so it is something you see rather than something you find out on release.
       Everything user-facing says "Faves" now, including the audio effects browser.
+      **CHECKED AFTER TONIGHT'S HOME-SCREEN WORK (16 Aug, `tests/_homecost.html`).** Three releases in
+      one night piled work onto the home screen — v7.76 put a backdrop blur on every project card, v7.95
+      put one on every tab and pill AND made the grain field BOIL, and v7.96 added a gradient surface to
+      the add-menu panel. A backdrop-filter over an ANIMATING backdrop forces a readback per frame per
+      element, and v7.76's blur was measured against a grain that only cross-faded — so the combination
+      was never measured, on the very screen whose lag you have raised more than anything else.
+      **Measured, 8 cards at 380×820, both unthrottled and at 6× CPU:**
+      | | median | p95 |
+      |---|---|---|
+      | everything on, as shipped | **16.7ms** | 18.5ms |
+      | grain boil off | 16.7ms | 18.4ms |
+      | boil and all blur off | 16.7ms | 18.5ms |
+      **Zero measurable cost — 0.0ms/frame, holding 60fps, and identical at 6× throttle.** These are
+      compositor-side effects, so they never touch the main thread's budget, which is exactly the
+      distinction #130 established and #125 has been chasing ever since.
+      **The usual caveat still applies and is not a formality:** this is a throttled Mac, not your phone,
+      and this entry exists because desktop numbers have been mistaken for evidence three times. What
+      this rules out is a *new* regression from tonight — it says nothing about the lag you already had.
+
 - [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
       not fixing it.** His words: *"Still getting major lag when scrolling through the timeline; with not
       many layers added at all. I know I tell you about lag a lot but nothing much ever gets resolved,

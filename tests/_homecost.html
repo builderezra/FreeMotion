@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>What does the home screen cost after tonight?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.6 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:380px;height:820px;border:0}
+#out{padding:14px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* Written after seventeen releases in one night, three of which piled work onto the HOME SCREEN:
+ *   v7.76  a backdrop blur on every project card
+ *   v7.95  a backdrop blur on every tab/pill, AND the grain field made to BOIL (stepped positions)
+ *   v7.96  a gradient surface on the add-menu panel
+ * A backdrop-filter over an ANIMATING backdrop forces a readback per frame per element. v7.76's blur
+ * was measured against a grain that only cross-faded; v7.95 then made that backdrop change far more
+ * often and put more blurred elements over it, and nobody measured the combination.
+ * Lag is the single most persistent complaint in REQUESTS.md, so shipping three of these in one night
+ * without a number afterwards is exactly the mistake this file keeps recording. Measure it. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done() { out.textContent = L.join('\n'); window.__homecost = L.join('\n'); window.__done = true; }
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.home) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 1200);
+    })();
+  });
+  async function go(w) {
+    var d = w.document, sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      if (w.FM.home.open && !(w.FM.home.isOpen && w.FM.home.isOpen())) { w.FM.home.open(); await sleep(500); }
+      if (!d.querySelector('.hm-card')) { L.push('no project cards on the home screen — nothing to measure'); return done(); }
+      // Eight cards is a realistic list, and the number v7.76 was measured at.
+      var grid = d.querySelector('.hm-card').parentElement, proto = d.querySelector('.hm-card');
+      while (d.querySelectorAll('.hm-card').length < 8) grid.appendChild(proto.cloneNode(true));
+      await sleep(600);
+      async function frames(ms) {
+        var gaps = [], last = 0, t0 = w.performance.now();
+        await new Promise(function (res) {
+          (function tick(ts) { if (last) gaps.push(ts - last); last = ts;
+            if (w.performance.now() - t0 < ms) w.requestAnimationFrame(tick); else res(); })(w.performance.now());
+        });
+        if (!gaps.length) return null;
+        gaps.sort(function (a, b) { return a - b; });
+        return { median: gaps[gaps.length >> 1], p95: gaps[Math.floor(gaps.length * 0.95)], n: gaps.length };
+      }
+      function fmt(f) { return f ? f.median.toFixed(1) + 'ms median, ' + f.p95.toFixed(1) + 'ms p95 (' + f.n + ' frames)' : 'no frames'; }
+      var all = await frames(2000);
+      var st = d.createElement('style');
+      st.textContent = '#hm-grain::before,#hm-grain::after{animation:none !important}';
+      d.head.appendChild(st); await sleep(400);
+      var noBoil = await frames(2000);
+      st.textContent += ' html[data-theme="glass"] .hm-card,html[data-theme="glass"] .hm-tab{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}';
+      await sleep(400);
+      var nothing = await frames(2000);
+      st.remove();
+      L.push('HOME SCREEN, 8 cards, ' + w.innerWidth + 'x' + w.innerHeight + ' — 60fps budget is 16.7ms');
+      L.push('  everything on (as shipped)   ' + fmt(all));
+      L.push('  grain boil OFF               ' + fmt(noBoil));
+      L.push('  boil AND all blur OFF        ' + fmt(nothing));
+      L.push('');
+      if (all && nothing) {
+        var cost = all.median - nothing.median;
+        L.push('  cost of tonight\'s work       ' + cost.toFixed(1) + 'ms/frame  (' + (cost / 16.7 * 100).toFixed(0) + '% of a frame)');
+        L.push('  verdict                      ' + (all.median <= 17.5
+          ? 'holding 60fps as shipped — no action'
+          : 'DROPPING FRAMES as shipped — the home screen is now too expensive and something has to give'));
+      }
+    } catch (e) { L.push('THREW: ' + (e && e.message || e)); }
+    done();
+  }
+})();
+</script></body></html>
