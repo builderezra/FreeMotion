@@ -3111,6 +3111,56 @@
     }
   });
 
+  test('home: on a trackpad the slam fires while you are still pulling, and only once', { item: 'slam-wheel' }, async function () {
+    /* Queue 238. Ezra: "when you do it and you swipe down too far on PC, it takes a bit too long before
+     * it snaps back up. It would be nice if when you kept swiping up, it was a bit of a smooth animation
+     * and didn't just freeze for a second before going back up."
+     * The freeze was a 130ms debounce. A trackpad has no pointerup, so the wheel path waited for a GAP
+     * in the events to decide the gesture had ended — so at full stretch the list sat there, visibly
+     * stuck, until you lifted your fingers. The touch path never had this: it slams on release, and
+     * release is a real event.
+     * Both halves are asserted, and the second is not optional: one flick delivers dozens of wheel
+     * events, so firing on threshold without a cooldown re-slams two or three times per gesture, which
+     * is a worse bug than the one being fixed. */
+    if (!FM.home || !FM.home.open) throw new Error('FM.home.open is missing');
+    const wasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(120); }
+      const root = document.getElementById('home-screen');
+      const sc = root && root.querySelector('.hm-scroll');
+      if (!sc) throw new Error('the home scroller is not there — this test cannot drive the gesture');
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('reduced motion is on; the egg is deliberately not armed and this test cannot run');
+      sc.scrollTop = 0;
+      let firstAt = null, fired = 0, had = root.classList.contains('hm-slam');
+      const t0 = performance.now();
+      // Count TRANSITIONS into the class, not "the class is present" — slam() removes and re-adds it to
+      // restart the animation, so a naive count reads one slam as two and the number means nothing.
+      const obs = new MutationObserver(function () {
+        const now = root.classList.contains('hm-slam');
+        if (now && !had) { fired++; if (firstAt === null) firstAt = performance.now() - t0; }
+        had = now;
+      });
+      obs.observe(root, { attributes: true, attributeFilter: ['class'] });
+      // A continuous flick: 40 small wheel events, 8ms apart, ~320ms with NO gap anywhere in it.
+      for (let i = 0; i < 40; i++) {
+        sc.dispatchEvent(new WheelEvent('wheel', { deltaY: -18, bubbles: true, cancelable: true }));
+        await sleep(8);
+      }
+      const flickEnded = performance.now() - t0;
+      await sleep(240);
+      obs.disconnect();
+
+      if (firstAt === null) throw new Error('a full-length pull never fired the slam at all');
+      if (firstAt > flickEnded - 40) {
+        throw new Error('the slam fired ' + Math.round(firstAt) + 'ms in, with the flick ending at ' + Math.round(flickEnded) +
+          'ms — it is still waiting for the gesture to stop, which is the freeze he reported');
+      }
+      if (fired !== 1) throw new Error('the slam fired ' + fired + ' times in one flick — the cooldown is not holding');
+    } finally {
+      if (!wasOpen && FM.home.close) FM.home.close();
+    }
+  });
+
   test('PC add menu: it has a surface of its own, and it costs the panel no scrollbar', { item: 'addmenu-bg' }, async function () {
     /* Queue 236. Ezra: "on the PC version, for the background of the add menu, you should make it have,
      * like, a cool pattern and design, kind of like the home screen page, but slightly different."

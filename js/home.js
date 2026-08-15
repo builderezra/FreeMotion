@@ -596,7 +596,7 @@ window.FM = window.FM || {};
      * running its own overscroll bounce or, on some setups, a back-navigation gesture underneath ours.
      * The accumulator is in the same units as the drag, so the two paths reach the threshold at the
      * same felt effort and share one PULL_MIN. */
-    let wheelAcc = 0, wheelTimer = 0;
+    let wheelAcc = 0, wheelTimer = 0, wheelSpent = 0;
     sc.addEventListener('wheel', (e) => {
       if (selectMode || reduced()) return;
       if (sc.scrollTop > 0 || e.deltaY >= 0) {      // scrolled away from the top, or scrolling down
@@ -606,14 +606,43 @@ window.FM = window.FM || {};
       }
       e.preventDefault();
       wheelAcc += -e.deltaY;
-      setPull(damp(wheelAcc));   // same curve as the drag, so both paths feel identical and share PULL_MIN
+      const px = damp(wheelAcc);
+      /* FIRE THE MOMENT IT IS FAR ENOUGH, not 130ms after you stop (v7.86, queue 238). Ezra: "when you
+       * do it and you swipe down too far on PC, it takes a bit too long before it snaps back up. It
+       * would be nice if when you kept swiping up, it was a bit of a smooth animation and didn't just
+       * freeze for a second before going back up."
+       * That freeze was this debounce. A trackpad has no pointerup, so the wheel path waited for a gap
+       * in the events to decide the gesture was over — which means at full stretch the list SAT there,
+       * fully pulled and visibly stuck, until you took your fingers off. The touch path never had this:
+       * it slams on release, and release is a real event. Crossing the threshold IS the commitment, so
+       * the slam goes now and the rest of the flick is swallowed by a short cooldown.
+       * The cooldown is what makes this safe: one flick delivers dozens of wheel events, and without it
+       * the accumulator would climb back over PULL_MIN and re-slam two or three times per gesture. */
+      if (px >= PULL_MIN && !wheelSpent) {
+        clearTimeout(wheelTimer); wheelTimer = 0;
+        wheelAcc = 0; wheelSpent = 1;
+        slam();
+        return;
+      }
+      /* Once a flick has slammed it is SPENT until the gesture actually ends, and "ends" means a gap in
+       * the events rather than a fixed number of milliseconds. A timed cooldown was the first attempt
+       * and the suite caught it firing twice: a flick that outlasts the timer re-crosses the threshold
+       * and slams again, and how long a flick lasts depends on the machine — mine ran 366ms and the
+       * test runner's ran longer. Re-arming on the same 130ms silence the release path already uses
+       * makes one gesture exactly one slam at any speed. */
+      if (wheelSpent) {
+        wheelAcc = 0;
+        clearTimeout(wheelTimer);
+        wheelTimer = setTimeout(() => { wheelTimer = 0; wheelSpent = 0; }, 130);
+        return;
+      }
+      setPull(px);   // same curve as the drag, so both paths feel identical and share PULL_MIN
       clearTimeout(wheelTimer);
       wheelTimer = setTimeout(() => {
         wheelTimer = 0;
-        const px = damp(wheelAcc);
+        const rest = damp(wheelAcc);
         wheelAcc = 0;
-        if (px >= PULL_MIN) slam();
-        else if (px) setPull(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');
+        if (rest) setPull(0, 'transform 220ms cubic-bezier(.22,.8,.3,1)');
       }, 130);
     }, { passive: false });
   }

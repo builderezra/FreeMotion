@@ -4186,10 +4186,22 @@ wait for them to report back."*
       Easter egg where you pull down and then it slams back up in the home menu, it kinda breaks the
       screen when you do it. Might need to fix that a bit. It kinda looks a bit tacky."*
 
-- [ ] **238 — PC: after over-pulling, it freezes before snapping back.** His words: *"when you do it and
+- [x] **238 — PC: after over-pulling, it freezes before snapping back. DONE v7.86.** His words: *"when you do it and
       you swipe down too far on PC, it takes a bit too long before it snaps back up. It would be nice if
       when you kept swiping up, it was a bit of a smooth animation and didn't just freeze for a second
       before going back up."*
+
+      **DONE v7.86, and the freeze had a specific cause: a 130ms debounce.** A trackpad has no
+      `pointerup`, so the wheel path waited for a GAP in the events to decide your gesture had ended —
+      which is why the list sat at full stretch, visibly stuck, until you lifted your fingers. The touch
+      path never had it, because a finger release is a real event. Crossing the threshold IS the
+      commitment, so the slam goes then: measured, **105ms into a flick that runs 366ms**.
+      **The guard against re-slamming is where the real work was, and the suite is what got it right.**
+      One flick is dozens of wheel events, so firing on threshold without a guard slams two or three
+      times per gesture. My first guard was a fixed 520ms timer; it looked perfect in the browser and
+      **the test caught it firing twice** — a flick that outlasts the timer re-crosses the threshold, and
+      flick length depends on the machine. It is now spent-until-the-gesture-ends, re-arming on the same
+      130ms silence the release path already uses, so one gesture is exactly one slam at any speed.
 
 - [ ] **239 — The black bar is STILL there, and it happens during the slam.** His words: *"the black bar
       glitch where the black bar comes up onto the side of the screen still happens, and it seems to
@@ -4241,3 +4253,27 @@ wait for them to report back."*
       Almost certainly the readout is only re-derived on a scrub/transport update and not on the marker
       being added, so the state is correct and simply not recomputed. Look at `updateReadout` and
       whatever adds a marker, rather than at the parked-detection itself — that is demonstrably fine.
+
+- [ ] **244 — PC: drag the add menu independently of the timeline, with a snap where they meet.** (15
+      Aug. *He asked for this one to go to the BOTTOM: "This can go to the bottom of the list as you have
+      a lot of things to work on still, remember ur doing oldest first."*) His words:
+      *"Make it so you can seperatly drag up and down the add menu, on pc, but you cant drag lower than
+      what the timeline is dragged too, if you start dragging it back down and hit the level of the
+      timeline it should pause and snap for a second, showing a little blue flash that looks nice in the
+      line that seperates the timeline inspector from the canvas. And then if you keep dragging down it
+      drags the timeline down with it. Also dragging the timeline brings the add menu with it unless they
+      arent connected, until you reach to where the add menu is at then it will do the same thing but the
+      other way around by snapping them back together. and also when dragging the add menu seperatly it
+      shouldnt push the canvas to be smaller but just go over the canvas."*
+      So, precisely: the add menu gets its own drag handle; it may not go BELOW the timeline's top; coming
+      back down onto that line it **pauses, snaps, and flashes the divider blue**; pushing further takes
+      the timeline down with it. In the other direction the timeline carries the add menu until they meet
+      and re-couple with the same snap. While dragged independently the add menu **overlays** the canvas
+      rather than shrinking it.
+      **And the reason he wants it, which shapes the design:** *"this will be good for later because im
+      planning on changing how the effects menu works, by making it just appear in the add menu, and also
+      the effects menu will just have the ability to preview what an effect will look like without adding
+      it yet, by hovering ur curser over it. On mobile the effects menu will probably just take up all
+      the space on screen except for the canvas so you can preview."* So the add menu is going to become
+      a tall, resizable browser that must never cover the canvas — build the drag with that in mind.
+      *"Feel free to do a demo of this when you get to it as well."*
