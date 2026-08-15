@@ -4905,3 +4905,33 @@ body.fm-pushing #toast { z-index: 213; }
   color: color-mix(in srgb, var(--muted, #8fa3b0) 78%, transparent);
   letter-spacing: 0.01em;
 }
+
+/* ---- PC: one row, no side rail (queue 168) ----------------------------------------------------
+   His words: "on pc we can lokey remove the side bar, put export on the far left of the row with the
+   play buttons…", amended so the far right reads refresh-chip · cog · export · view options and the
+   back button sits alone at the far left.
+   Both clusters are ABSOLUTE, for the same reason #btn-amfit already was: the transport's centre
+   column is a 1fr/auto/1fr grid, and anything that counts as a grid child shifts play off centre.
+   Absolute means they hang off the ends without touching the balance. */
+@media (min-width: 701px) {
+  #t-home { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; }
+  #t-far  { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+  /* amfit lived here on its own before; inside #t-far it is a normal flex child again. */
+  #t-far #btn-amfit { position: static; transform: none; right: auto; top: auto; }
+  #t-far .ver { margin: 0; }
+  /* The rail set explicit flex `order` on export and the cog to stack them at its bottom. Inside the
+     row that ordering is stale and it visibly REVERSED the far-right cluster — the DOM read
+     ver·cog·export·view-options while the screen read ver·view-options·export·cog. Source order is the
+     contract here, so the leftover ordering is cleared rather than fought with more of it. */
+  body.layout-studio #t-far #btn-export,
+  body.layout-studio #t-far #btn-settings { order: 0; margin: 0; }
+  #t-sel { display: flex; align-items: center; gap: 6px; }
+  /* The rail is gone: #topbar carried it, and everything on it has either moved into the row above or
+     belongs to the phone bars. Hidden rather than deleted so a layout that still wants it can show it.
+     Its COLUMN closes via --rail-w rather than by rewriting grid-template-columns — the drawing mode
+     override (body.layout-studio.drawing #app) sets its own columns off that same variable, and a
+     second hard-coded template here fought it and SHRANK the stage instead of widening it. Changing
+     the variable leaves every rule that derives from it correct, including the ones I did not touch. */
+  body.layout-studio { --rail-w: 0px; }
+  body.layout-studio #topbar { display: none; }
+}

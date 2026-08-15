@@ -1668,7 +1668,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 <!-- Newest requests live BELOW this line, oldest first — see rule 6 in the header. -->
 
-- [ ] **168 — PC: kill the left side rail, move everything into the transport row.** (13 Aug, with two *(logged as #143 by mistake — that number was already used by an earlier shipped item, so it is #168 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #143.)*
+- [x] **168 — PC: kill the left side rail, move everything into the transport row. DONE v7.52.** (13 Aug, with two *(logged as #143 by mistake — that number was already used by an earlier shipped item, so it is #168 from now on; commits and POLISH-LOG entries dated 13–14 Aug refer to it as #143.)*
       Studio screenshots at v6.86.) His words: *"on pc we can lokey remove the side bar, put export on the
       far left of the row with the play buttons then to it's right the settings button then the Version
       refresh, then on the right side of the play button after the copy paste button, put delete and the

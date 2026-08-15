@@ -506,6 +506,8 @@ window.FM = window.FM || {};
     render();
     syncTopBar();
     FM.syncSelectionChrome();
+    // PC: build the one-row transport once, then keep its selection-dependent buttons honest (queue 168)
+    if (FM.pcTransportLayout) { FM.pcTransportLayout(); FM.pcTransportSync(); }
   }
   FM.refreshAll = refreshAll;
 
@@ -667,6 +669,12 @@ window.FM = window.FM || {};
     // display is right. (queue 53)
     const grpBtn = document.getElementById('btn-group');
     if (grpBtn) grpBtn.style.display = (FM.selectionIds ? FM.selectionIds().length : 0) >= 2 ? '' : 'none';
+    // …and the two that moved into the transport row beside it (queue 168). Here rather than only in
+    // refreshAll, because this is the function that runs whenever the selection chrome changes — and
+    // BUILD from here too (it is idempotent), so the row is assembled by the first chrome sync rather
+    // than waiting for a full refreshAll that some paths never make.
+    if (FM.pcTransportLayout) FM.pcTransportLayout();
+    if (FM.pcTransportSync) FM.pcTransportSync();
   }
   FM.syncTopBar = syncTopBar;
 
@@ -3309,7 +3317,76 @@ window.FM = window.FM || {};
       const z = FM.timeline && FM.timeline.getZoom ? FM.timeline.getZoom() : null;
       if (z != null) { if (zi) zi.classList.toggle('dim', z >= 11.99); if (zo) zo.classList.toggle('dim', z <= 0.0201); }
     };
-    FM.syncViewBar = syncViewBar;
+    /* PC: ONE row, no side rail (queue 168). His words: "on pc we can lokey remove the side bar, put
+   * export on the far left of the row with the play buttons…", amended to: back button far left; the
+   * refresh chip, settings cog and export at the far right, in that order, with view options outermost.
+   *
+   * The buttons are MOVED, not duplicated. A second copy would mean two ids, two click handlers and two
+   * things to keep in sync, and this app has already paid for that once — the whole point of the rail
+   * going away is that there is one door to each action, not two.
+   *
+   * Play cannot drift as the row fills, which he specifically warned about: the desktop transport is a
+   * 1fr/auto/1fr grid, so the flanking columns are equal BY CONSTRUCTION and the centre stays centred
+   * however many buttons land on either side.
+   *
+   * "they only show up when they should, not always there" — delete/bind/group are selection-dependent,
+   * so the row grows and shrinks rather than showing three permanently-dimmed buttons. */
+  function pcTransportLayout() {
+    const t = document.getElementById('transport');
+    if (!t) return;
+    const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+    if (!pc) return;                       // phone keeps its own bars untouched
+    if (t._pcBuilt) return;                // idempotent: refreshAll calls this a lot
+    const right = t.querySelector('.t-right');
+    const menu = document.getElementById('btn-layermenu');
+    const grab = id => document.getElementById(id);
+    if (!right || !menu) return;
+
+    // far left — the one thing on that end, so leaving a project is where it was on the rail
+    const home = document.createElement('div'); home.id = 't-home';
+    const back = grab('btn-back'); if (back) home.appendChild(back);
+    if (home.childNodes.length) t.appendChild(home);
+
+    // …after the duplicate button, the three that depend on what is selected
+    const sel = document.createElement('span'); sel.id = 't-sel';
+    ['btn-del-layer', 'btn-parent', 'btn-group'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
+    if (sel.childNodes.length) menu.parentNode.insertBefore(sel, menu.nextSibling);
+
+    // far right — refresh chip, cog, export, then view options OUTERMOST (his amendment)
+    const far = document.createElement('div'); far.id = 't-far';
+    const ver = document.querySelector('.brand .ver'); if (ver) far.appendChild(ver);
+    ['btn-settings', 'btn-export', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
+    if (far.childNodes.length) t.appendChild(far);
+
+    t._pcBuilt = true;
+    pcTransportSync();
+  }
+  /* "they only show up when they should, not always there."
+   *
+   * Delete and Bind ONLY. btn-group already has an owner — syncTopBar has set its display since queue
+   * 53 — and a second writer for the same button is how two authorities end up disagreeing about
+   * whether it is on screen. It cost this change one red test to remember that.
+   * These two had no owner because they lived in #topbar-extra, which is display:none on PC: moving
+   * them into the row is the first time either has ever been visible here, so the rule is new, not
+   * duplicated. The #t-sel wrapper is never hidden itself — flex drops display:none children from
+   * layout, so an empty one is already 0 wide and hiding it would be a third thing to keep in sync. */
+  function pcTransportSync() {
+    if (!document.getElementById('t-sel')) return;
+    const n = FM.selectionIds ? FM.selectionIds().length : ((FM.scene && FM.scene.selectedId) ? 1 : 0);
+    const total = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
+    const show = (id, on) => { const b = document.getElementById(id); if (b) b.style.display = on ? '' : 'none'; };
+    show('btn-del-layer', n >= 1);
+    show('btn-parent', n >= 1 && total >= 2);
+  }
+  FM.pcTransportLayout = pcTransportLayout;
+  FM.pcTransportSync = pcTransportSync;
+  /* Build it at STARTUP, not on the first refresh. The row is part of the app's chrome, so anything
+   * that reads the layout before a render — the suite's layout test does exactly this — must find it
+   * already assembled rather than in whatever state the markup shipped in. Idempotent, so the calls
+   * from refreshAll and syncTopBar remain harmless. */
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pcTransportLayout);
+  else pcTransportLayout();
+  FM.syncViewBar = syncViewBar;
     const bindVb = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', () => { fn(); syncViewBar(); }); return b; };
     bindVb('vb-slower', () => stepViewRate(-1));
     bindVb('vb-faster', () => stepViewRate(1));

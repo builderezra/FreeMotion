@@ -237,20 +237,43 @@
         // Two rows where classic has three IS the feature (the top bar's row handed to the canvas).
         var rows = getComputedStyle(app).gridTemplateRows.split(/\s+/).filter(Boolean);
         if (rows.length !== 2) throw new Error('Studio: #app should have 2 rows (stage + bottom band), got ' + rows.length + ' [' + rows.join(' ') + '] — the Studio grid template is not applying');
-        if (!(bar.width >= 40 && bar.width <= 110)) throw new Error('Studio: #topbar should be a rail about --rail-w wide, got ' + Math.round(bar.width) + 'px');
-        // the rail is chrome for the CANVAS and must stop there — the band below needs its full width
-        if (!(bar.bottom <= ip.top + 2)) throw new Error('Studio: the rail runs down past the canvas into the bottom band (rail bottom ' + Math.round(bar.bottom) + ' vs band top ' + Math.round(ip.top) + ') — it should stop at the stage');
+        /* THE RAIL IS GONE ON PC (queue 168). His words: "on pc we can lokey remove the side bar, put
+           export on the far left of the row with the play buttons…". So the assertion inverts: the rail
+           must be closed, and — the part that actually matters — the controls it used to carry must be
+           REACHABLE somewhere, or "removed the side bar" would just mean "lost the buttons".
+           Checked by measurement, not by class name: a button that is in the DOM but 0x0 is not on
+           screen, which is how the first version of this change shipped a Group button nobody could
+           press. */
+        if (bar.width > 4) throw new Error('Studio: the side rail is still ' + Math.round(bar.width) + 'px wide — it was supposed to go, with its contents moving into the transport row');
+        var t = document.getElementById('transport');
+        if (!t) throw new Error('Studio: no transport row for the rail\'s controls to have moved into');
+        ['btn-back', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (!el) throw new Error('Studio: ' + id + ' has vanished entirely, not moved');
+          if (!t.contains(el)) throw new Error('Studio: ' + id + ' did not move into the transport row');
+          var r = el.getBoundingClientRect();
+          if (!(r.width > 4 && r.height > 4)) throw new Error('Studio: ' + id + ' is in the row but measures ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — in the layout but not on screen');
+        });
+        /* View options stays OUTERMOST, per his amendment — the cog and export sit to its left. Asserted
+           as DOM order within the far cluster rather than by comparing pixel positions: the transport
+           lives inside the timeline panel, which starts at a different x in Studio than in classic, so
+           a raw geometry comparison measures the layout as much as the ordering. Last child IS the
+           contract, and the on-screen check above already proves each one is really visible. */
+        var far = document.getElementById('t-far');
+        if (!far) throw new Error('Studio: the far-right cluster was never built');
+        var kids = Array.prototype.slice.call(far.children).map(function (c) { return c.id || String(c.className); });
+        if (kids[kids.length - 1] !== 'btn-amfit') throw new Error('Studio: view options is not outermost on the right — cluster reads [' + kids.join(', ') + ']');
+        if (kids.indexOf('btn-settings') > kids.indexOf('btn-export')) throw new Error('Studio: the cog should sit to the LEFT of export — cluster reads [' + kids.join(', ') + ']');
         if (!(ip.left < 2)) throw new Error('Studio: the bottom band should reach the window edge, inspector left=' + Math.round(ip.left));
         // …and the rail must never spill its controls over the panel below. The rail is only as tall as
         // the canvas now, and on a short window its buttons genuinely need more room than that (measured
         // 159px of content in a 125px rail), so "does everything fit" is a question about the window, not
         // about the code — asserting the geometry made this test pass or fail purely on viewport height.
-        // What the code actually owes is a CLIPPING rail, which holds at every size.
-        // (Takes BOTH axes to break: overflow-x:hidden alone forces overflow-y:visible to compute as
-        // auto, so mutating only overflow-y cannot fail this — mutation-checked.)
-        var oy = getComputedStyle(document.getElementById('topbar')).overflowY;
-        if (oy === 'visible') throw new Error('Studio: the rail is overflow-y:visible — on a short window its buttons spill over the panel below instead of scrolling');
-        if (!(bar.height > bar.width)) throw new Error('Studio: #topbar should be a vertical rail, got ' + Math.round(bar.width) + 'x' + Math.round(bar.height));
+        /* The rail's own overflow/shape checks went with the rail (queue 168). What replaced them is
+           above: the column is closed and every control it carried is measurably on screen in the
+           transport row. Kept as a note rather than deleted silently, because "the rail must clip its
+           contents" was itself a fix for a real spill and would be worth restoring if a rail ever
+           comes back. */
         if (!(stage.top < 2)) throw new Error('Studio: the stage should start at the top of the window (the top bar row is gone), got top=' + Math.round(stage.top));
       } else {
         // phone: the class must be inert — the inspector stays a fixed sheet
