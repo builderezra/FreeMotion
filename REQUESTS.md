@@ -4116,7 +4116,7 @@ wait for them to report back."*
       Lock / Onion skin / Reset transform and fails explicitly if it finds "Paste Style" instead — and
       the mutation that points it at the clipboard menu is caught by that, not by the first check.
 
-- [ ] **234 — PC: split sits ON the playhead, the two trims flank it, and all three move up a row.** His
+- [x] **234 — PC: split sits ON the playhead, the two trims flank it, and all three move up a row. DONE v7.83.** His
       words: *"the buttons to split the layer or delete the layer all the way to the left or all the way
       to the right — those buttons aren't how I told you to change them. You probably forgot because I
       told you to do it, and you just logged it in your memory and didn't actually write it down."*
@@ -4129,6 +4129,22 @@ wait for them to report back."*
       of it. And they might need to be slightly moved up a bit so they're not going onto the top layer —
       just so they're on that top little row, right underneath the counter button, the button that tells
       you what time you're in the project."*
+
+      **DONE v7.83.** It reads **trim-left · SPLIT · trim-right**, and the split is centred on the line
+      *by construction* rather than by a tuned number: the container was already anchored to the playhead
+      and centred with `translateX(-50%)`, so three equal buttons with equal gaps put the middle one on
+      it. Measured: split centre 700 against a centreline centre of 701.
+      **The move up was real too** — measured before the change, the group ran 686–710 against a ruler
+      band ending at 705, so it genuinely hung 5px into the first track row. It runs 684–704 now, inside
+      the band, under the counter. The split also takes the accent colour, because three near-identical
+      outline buttons in a row need the middle one to say why it is the middle one.
+      **You were right about the cause, but it was worse than forgetting.** v5.25 built this from an
+      EARLIER instruction of yours — *"make sure the delete fully left and delete fully right are both on
+      the left side and then the split is on the right side"* — and #169 later recorded the opposite.
+      Both were written down. Neither was ever compared to the other, so the code kept the old shape
+      while an open entry described the new one for weeks. That is the failure, not a lost note.
+      Two mutations red: the old order, and the old vertical position — and the second fails at a **1px**
+      overhang, which is the sensitivity this needed, since the whole complaint was five pixels.
 
 - [ ] **235 — PC: the move-to-playhead and extend-to-playhead buttons are indistinguishable, and badly
       placed.** His words: *"the two buttons when you have a layer selected that are basically to make
