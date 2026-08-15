@@ -149,13 +149,18 @@ window.FM = window.FM || {};
       const col = document.getElementById('inspector-panel');
       const cr = col && col.getBoundingClientRect();
       if (cr && cr.width >= 200 && cr.height >= 240) {
+        /* …below the CARD when the card is in this column too (#147 second half). They used to be able
+         * to share the column because only one of them was ever in it; now the popover has to start
+         * where the card ends, or the Aa sheet opens straight over the toolbar that summoned it. */
+        const cardBottom = panel.classList.contains('te-docked')
+          ? Math.round(panel.getBoundingClientRect().bottom + 8) : Math.round(cr.top + 8);
         pop.style.bottom = 'auto';
         pop.style.left = Math.round(cr.left + 8) + 'px';
         pop.style.width = Math.round(cr.width - 16) + 'px';
-        pop.style.top = Math.round(cr.top + 8) + 'px';
+        pop.style.top = cardBottom + 'px';
         // Only the Aa sheet gets a cap — same reasoning as the fallback below: it is the one popover
         // with overflow-y:auto, so it is the one a max-height can rescue rather than clip.
-        if (popKind === 'extras') pop.style.maxHeight = Math.round(cr.height - 16) + 'px';
+        if (popKind === 'extras') pop.style.maxHeight = Math.max(140, Math.round(cr.bottom - cardBottom - 8)) + 'px';
         return;
       }
       const r = panel.getBoundingClientRect();
@@ -269,6 +274,17 @@ window.FM = window.FM || {};
    * Same invariant the phone path relies on and documents: #stage's height comes from its GRID TRACK,
    * so writing padding to it never moves the border box `s` this function measured, and the padding
    * cannot feed back on itself pass after pass. */
+  /* Is the side column big enough to hold the whole editor? (#147, the second half.)
+   * Same host and the same spirit as the Aa popover's move in v6.96 — Ezra asked for the text editing
+   * UI to live where Add and the inspector live, "so it doesnt take up real estate on the screen". */
+  function dockRect() {
+    const col = document.getElementById('inspector-panel');
+    const cr = col && col.getBoundingClientRect();
+    // Wide enough for the wrapped toolbar, tall enough to leave the Aa sheet somewhere to open below.
+    if (cr && cr.width >= 240 && cr.height >= 300) return cr;
+    return null;
+  }
+
   function layoutDesktop(m) {
     const stage = document.getElementById('stage');
     if (!panel || !stage) return;
@@ -276,6 +292,28 @@ window.FM = window.FM || {};
     // mid-edit would otherwise leave a stale offset fighting the card's flex column.
     if (bar) bar.style.top = '';
     if (dock) dock.style.bottom = '';
+    /* DOCKED IN THE SIDE COLUMN — the answer to "makes it smaller" (#147).
+     * v6.96 moved the Aa panel here and fixed the half he was looking at; the CARD was still costing
+     * the canvas a band at the bottom of the stage. Measured at 1280x860: 169px of #stage padding out
+     * of a 552px-tall stage, which is where the complaint came from.
+     * The entry deferred this on "the column is 286px and the card's minimum is 320px", and that was
+     * right as far as it went — measured, the toolbar overflows a 270px column by 45px. But the fix is
+     * not a smaller card, it is that a COLUMN has the opposite budget to a bottom bar: width is scarce
+     * and height is not (286x552 here). So the toolbar wraps, and the card stops charging the canvas
+     * anything at all. Falls back to the floating card whenever the column is too small, so a narrow
+     * window is never worse than it was. */
+    const dr = dockRect();
+    panel.classList.toggle('te-docked', !!dr);
+    if (dr) {
+      panel.style.bottom = 'auto';
+      panel.style.left = Math.round(dr.left + 8) + 'px';
+      panel.style.width = Math.round(dr.width - 16) + 'px';
+      panel.style.top = Math.round(dr.top + 8) + 'px';
+      stage.style.paddingTop = '';
+      stage.style.paddingBottom = '';   // the canvas keeps every pixel it had before you started typing
+      return;
+    }
+    panel.style.top = '';
     const s = stage.getBoundingClientRect();
     const w = Math.round(Math.min(CARD_MAX, Math.max(CARD_MIN, s.width - 2 * CARD_GAP)));
     panel.style.width = w + 'px';

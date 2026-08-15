@@ -14561,6 +14561,89 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #147 second half: the text editor stops charging the canvas rent ----------------
+   * Ezra: "the text edit stuff on pc for some reason covers up the canvas, making it smaller when you
+   * could just put it in the add menu, so it doesnt take up real estate on the screen."
+   * v6.96 moved the Aa panel to the side column and fixed the half he was looking at. The CARD was
+   * still reserving a band at the bottom of the stage — measured at 1280x860, 169px of #stage padding
+   * out of a 552px stage. It lives in the column now, and the entry's reason for deferring this turned
+   * out to be right but not fatal: the toolbar really does overflow a 270px column by 45px, and the
+   * answer is that a column has the opposite budget to a bottom bar, so the row wraps. */
+  test('text editor (desktop): docked in the side column, it takes nothing from the canvas', { item: 'text-edit-dock' }, async function () {
+    var fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach a desktop width');
+    var w0 = fe.style.width, h0 = fe.style.height;
+    var settle = function () { return new Promise(function (r) { setTimeout(r, 140); }); };
+    var keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    try {
+      fe.style.width = '1280px'; fe.style.height = '860px';
+      window.dispatchEvent(new Event('resize'));
+      await settle(); await settle();
+      if (window.innerWidth <= 700) throw new Error('the frame did not widen to a desktop width (' + window.innerWidth + 'px)');
+
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('text', { text: 'Hello', x: 200, y: 200, start: 0, duration: 5 });
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      if (FM.refreshAll) FM.refreshAll();
+      await settle();
+      FM.textEdit.start(L.id, { selectAll: true });
+      await settle(); await settle();
+
+      var panel = document.querySelector('.te-panel');
+      var stage = document.getElementById('stage');
+      var col = document.getElementById('inspector-panel');
+      if (!panel) throw new Error('the editor card did not open');
+      var cr = col && col.getBoundingClientRect();
+      var docked = panel.classList.contains('te-docked');
+
+      // The control: this frame has to actually HAVE a column worth docking into, or "it docked" and
+      // "it fell back" are both vacuously fine and the test proves nothing either way.
+      if (!cr || cr.width < 240 || cr.height < 300) {
+        throw new Error('control failed: the side column is ' + (cr ? Math.round(cr.width) + 'x' + Math.round(cr.height) : 'missing') +
+                        ' at ' + window.innerWidth + 'px — too small to dock into, so this test cannot tell the fix from the bug');
+      }
+      if (!docked) throw new Error('the card did not dock into a ' + Math.round(cr.width) + 'x' + Math.round(cr.height) + ' side column');
+
+      var pad = parseFloat(getComputedStyle(stage).paddingBottom) || 0;
+      if (pad > 1) {
+        throw new Error('the stage is still reserving ' + Math.round(pad) + 'px for the editor — that band IS the "makes it smaller" complaint, and docking was supposed to give it back');
+      }
+      var bar = document.querySelector('.te-bar');
+      if (bar && bar.scrollWidth - bar.clientWidth > 1) {
+        throw new Error('the toolbar overflows its column by ' + (bar.scrollWidth - bar.clientWidth) + 'px — the buttons are cut off, which is a worse dialog than the one that cost 169px');
+      }
+      // The card must be IN the column, not merely classed as if it were.
+      var pr = panel.getBoundingClientRect();
+      if (pr.left < cr.left - 1 || pr.right > cr.right + 1) {
+        throw new Error('the "docked" card sits at ' + Math.round(pr.left) + '–' + Math.round(pr.right) + ' but the column is ' + Math.round(cr.left) + '–' + Math.round(cr.right));
+      }
+
+      /* AND THE FALLBACK. A window too narrow for a column must go back to the floating card rather
+       * than dock into something that cannot hold it — that promise is the only reason this change is
+       * safe to make at all, and it is one CSS breakpoint away from silently not being true. */
+      FM.textEdit.stop();
+      fe.style.width = '760px';
+      window.dispatchEvent(new Event('resize'));
+      await settle(); await settle();
+      FM.textEdit.start(L.id, { selectAll: true });
+      await settle(); await settle();
+      var panel2 = document.querySelector('.te-panel');
+      var col2 = document.getElementById('inspector-panel');
+      var cr2 = col2 && col2.getBoundingClientRect();
+      if (cr2 && cr2.width < 240 && panel2 && panel2.classList.contains('te-docked')) {
+        throw new Error('the card docked into a ' + Math.round(cr2.width) + 'px column — too narrow to hold it, so the toolbar would be cut off');
+      }
+    } finally {
+      try { FM.textEdit.stop(); } catch (e) {}
+      fe.style.width = w0; fe.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene.layers = keep; FM.selectLayer(keepSel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      await settle();
+    }
+  });
+
   /* ---------------- #141 part 4: our own card in front of the OS save sheet ----------------
    * "Maybe instead of the apple pop up we should have our own pop up so it looks finished and good."
    * The sheet itself is not replaceable — navigator.share needs a real user gesture and nothing on the

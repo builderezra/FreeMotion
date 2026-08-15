@@ -1,0 +1,90 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>#147 second half — what would it take to dock the card in the side column?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.6 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
+#out{padding:14px;white-space:pre}</style></head><body>
+<iframe id="app" src="../index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* #147, the half v6.96 did not do. Ezra: "the text edit stuff on pc for some reason covers up the
+   canvas, making it smaller when you could just put it in the add menu, so it doesnt take up real
+   estate on the screen."
+   The Aa panel moved to the side column in v6.96 and that fixed the "covers the text" half. What is
+   left is the CARD reserving a band at the bottom of the stage — layoutDesktop pads #stage so the
+   canvas clears it, and that padding is the "makes it smaller".
+   The entry says the blocker is width: the column is 286px, CARD_MIN is 320px. That is a claim worth
+   checking rather than inheriting, because it decides whether this is a constant or a re-layout. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done() { out.textContent = L.join('\n'); window.__tedock = L.join('\n'); window.__done = true; }
+  function px(n) { return Math.round(n) + 'px'; }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.makeLayer || !w.FM.textEdit || !w.FM.textEdit.start) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 700);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, d = w.document;
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      if (w.innerWidth <= 700) { L.push('the frame is ' + w.innerWidth + 'px — this probe is about the DESKTOP layout'); return done(); }
+      // A text layer, then open its editor by the real route.
+      FM.scene.layers.length = 0;
+      var L0 = FM.makeLayer('text', { text: 'Hello', x: 200, y: 200, start: 0, duration: 5 });
+      FM.scene.layers.push(L0);
+      FM.selectLayer(L0.id);
+      FM.refreshAll && FM.refreshAll();
+      await sleep(300);
+      FM.textEdit.start(L0.id, { selectAll: true });
+      await sleep(600);
+
+      var stage = d.getElementById('stage');
+      var panel = d.querySelector('.te-panel');
+      var bar = d.querySelector('.te-bar');
+      var col = d.getElementById('inspector-panel');
+      if (!panel) { L.push('the editor card did not open'); return done(); }
+      var sr = stage.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+      var cr = col && col.getBoundingClientRect();
+
+      L.push('WHAT THE CARD COSTS THE CANVAS TODAY   (window ' + w.innerWidth + 'x' + w.innerHeight + ')');
+      L.push('  #stage padding-bottom      ' + w.getComputedStyle(stage).paddingBottom);
+      L.push('  card size                  ' + px(pr.width) + ' x ' + px(pr.height));
+      L.push('  stage box                  ' + px(sr.width) + ' x ' + px(sr.height));
+      L.push('');
+      L.push('THE SIDE COLUMN, which is where he asked for it');
+      L.push('  #inspector-panel           ' + (cr ? px(cr.width) + ' x ' + px(cr.height) : 'NOT FOUND'));
+      L.push('');
+
+      /* THE CLAIM UNDER TEST: "the column is 286px and the card's minimum is 320px". Rather than trust
+         the constant, squeeze the real card and ask the real toolbar whether it still fits. */
+      if (cr) {
+        var target = Math.round(cr.width - 16);
+        var was = panel.style.width;
+        panel.style.width = target + 'px';
+        await sleep(120);
+        var barOver = bar ? (bar.scrollWidth - bar.clientWidth) : 0;
+        var panelOver = panel.scrollWidth - panel.clientWidth;
+        L.push('SQUEEZED TO THE COLUMN (' + target + 'px) — does the card actually break?');
+        L.push('  toolbar overflow           ' + barOver + 'px  ' + (barOver > 1 ? '<-- the buttons do not fit' : '(fits)'));
+        L.push('  card overflow              ' + panelOver + 'px');
+        var btns = [].slice.call(d.querySelectorAll('.te-bar .te-btn'));
+        L.push('  toolbar buttons            ' + btns.length + ' — ' + btns.map(function (b) { return (b.textContent || '?').trim().slice(0, 8) + ':' + Math.round(b.getBoundingClientRect().width); }).join(', '));
+        L.push('  their total width          ' + px(btns.reduce(function (s, b) { return s + b.getBoundingClientRect().width; }, 0)) + ' + gaps');
+        panel.style.width = was;
+      }
+      L.push('');
+      L.push('READ IT: if the toolbar overflows, docking is a re-layout (the row has to wrap or shed');
+      L.push('labels) and not just a smaller CARD_MIN. If it fits, the 320px minimum is the only thing');
+      L.push('in the way and the entry has been deferring a one-line change.');
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));
+    }
+    done();
+  }
+})();
+</script></body></html>

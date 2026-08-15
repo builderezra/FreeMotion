@@ -2241,7 +2241,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **If you did mean "gone in both states", say so and it is one line.** Renaming a layer would then
       live on the timeline (double-click a track head), which already works.
 
-- [ ] **147 — PC: the text editor covers the text you are editing. Get it off the canvas.** (13 Aug,
+- [x] **147 — PC: the text editor covers the text you are editing. Get it off the canvas. DONE — first half v6.96, second half v7.65.** (13 Aug,
       screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
       text while you edit it, get it off the canvas, also the text edit stuff on pc for some reason
       covers up the canvas, making it smaller when you could just put it in the add menu, so it doesnt
@@ -2275,6 +2275,21 @@ better still, keep working inside the turn rather than parking work for a later 
       the side column too — the column is 286px and the card's minimum is 320px, so it needs a real
       re-layout rather than a reparent, and it lands in the same strip #143/#144 are rebuilding. Left for
       when those are settled, so it is done once rather than twice.
+
+      **DONE v7.65, now that #143 and #144 have both landed and the reason for waiting had expired.**
+      The measurement first, because the deferral above was a claim worth re-checking rather than
+      inheriting: at 1280×860 the card was costing the stage **169px of 552**, nearly a quarter of the
+      picture. And the blocker was real — squeezed into a 270px column, the toolbar overflows by 45px.
+      **But it is the wrong conclusion to draw from it.** A column has the opposite budget to a bottom
+      bar: width is scarce, height is not. 286×552 is a tall thin space, so the toolbar wraps onto two
+      rows and there is nothing left to solve. No re-layout of the strip, no waiting on anything.
+      **169px → 0px.** The canvas is exactly the size it was before you started typing.
+      One thing the move forced, worth knowing: the Aa panel already lived in that column, so it now
+      opens BELOW the card instead of at the top of it — otherwise the sheet opens over the toolbar that
+      summoned it. And the fallback is tested, not promised: shrink the window and the card goes back to
+      floating over the stage, because a column too narrow to hold it would cut the buttons off, which
+      is worse than the 169px this replaces.
+      **Phone is untouched**, as the entry always said it should be.
 
 - [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
       His words: *"the audio i import is making a realy scratchy popping noise that hurts my ears when im
