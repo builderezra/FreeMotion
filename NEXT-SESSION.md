@@ -101,6 +101,10 @@ the queue.
 
 ## Things that cost hours — read before repeating them
 
+- **A probe is not a guard.** Probe pages REPORT; suite tests ASSERT. Twice on 16 Aug a "mutation check"
+  ran through a probe, the probe printed the same thing with the code broken and fixed, and I read that
+  as a pass — once for the pan clamp, once for an overlay claim. If a behaviour matters, it needs a test
+  in `tests/tests.js` that goes red. Use probes to find things out, never to prove them.
 - **Run the CONTROL assertion first.** A test that cannot see the defect proves nothing. Twice today an
   assertion passed against the bug it was written for.
 - **A stale entry is a real category.** Five items this run were already done and never ticked (#37,

@@ -3162,6 +3162,48 @@
     }
   });
 
+  test('drawing: a zoomed canvas survives picking up the pencil, and the overlay tracks it', { item: 'draw-zoom' }, async function () {
+    /* v8.00 and v8.01, which shipped guarded only by tests/_drawzoom.html — a probe, which nothing runs
+     * automatically. That is how the pan clamp came to ship untested too, so the drawing tool's zoom
+     * behaviour gets real coverage here.
+     * Two claims, and the second is the one that was actually broken for years:
+     *   · the tool no longer resets your viewport on entry (v8.01);
+     *   · the overlay tracks the canvas under a zoom (v8.00). #draw-overlay is a CHILD of the wrapper
+     *     the viewport transforms, so its CSS box is in the wrapper's LOCAL space while a screen rect
+     *     is not — feeding one in as the other applied the zoom twice, measured at 2x as an overlay of
+     *     984x1501 over a 492x751 canvas. That mismatch is what the reset existed to hide. */
+    if (!FM.startDraw || !FM.viewport) throw new Error('the draw tool or the viewport is missing');
+    const layers0 = FM.scene.layers.slice();
+    const vx = FM.viewport.x, vy = FM.viewport.y, vs = FM.viewport.scale;
+    try {
+      FM.scene.layers.length = 0;
+      FM.viewport.scale = 2; FM.viewport.apply();
+      await sleep(80);
+      if (FM.viewport.scale !== 2) throw new Error('the viewport would not zoom, so this test cannot show that drawing preserves a zoom');
+
+      FM.startDraw('freehand');
+      await sleep(150);
+      if (FM.viewport.scale !== 2) throw new Error('entering the drawing tool reset the zoom to ' + FM.viewport.scale + ' — v8.01 removed that reset, and without it he cannot zoom in to draw detail');
+
+      const pv = document.getElementById('preview'), ov = document.getElementById('draw-overlay');
+      if (!pv || !ov) throw new Error('no preview canvas or no draw overlay');
+      const pr = pv.getBoundingClientRect(), or = ov.getBoundingClientRect();
+      if (pr.width < 10) throw new Error('the canvas is not on screen, so comparing the overlay to it proves nothing');
+      const dw = Math.abs(or.width - pr.width), dh = Math.abs(or.height - pr.height);
+      if (dw > 2 || dh > 2) {
+        throw new Error('under a 2x zoom the overlay is ' + Math.round(or.width) + 'x' + Math.round(or.height) +
+          ' against a canvas of ' + Math.round(pr.width) + 'x' + Math.round(pr.height) +
+          ' — it is laying out in screen space inside a scaled wrapper, so it double-scales and you draw in the wrong place');
+      }
+    } finally {
+      try { FM.drawTool._stop(); } catch (e) {}
+      FM.viewport.x = vx; FM.viewport.y = vy; FM.viewport.scale = vs; FM.viewport.apply();
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll();
+    }
+  });
+
   test('drawing: panning cannot push the canvas off the screen', { item: 'draw-pan-clamp' }, async function () {
     /* v8.03, fixing a trap v8.02 shipped. The two-finger pan had no limit: measured, twenty-five flicks
      * put the canvas at top -5025, bottom -4377 — entirely gone — and while drawing there is no way back,
