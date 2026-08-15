@@ -14561,6 +14561,68 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #141 part 4: our own card in front of the OS save sheet ----------------
+   * "Maybe instead of the apple pop up we should have our own pop up so it looks finished and good."
+   * The sheet itself is not replaceable — navigator.share needs a real user gesture and nothing on the
+   * web writes to a camera roll without it — so what is being tested is the part that IS ours: the
+   * render ends on a card showing what was made, and the file is handed over only when Save is pressed.
+   *
+   * The reason this is worth a test rather than a screenshot: the exporter AWAITS the card, and its
+   * `finally` frees the export frame caches and drops the crash-resume data. A card that resolved early
+   * would pull the ground out from under a save that had not happened yet, and nothing on screen would
+   * show it. */
+  test('export ready: the file is handed over on Save, not flung at you when the render ends', { item: 'export-ready-card' }, async function () {
+    if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady is missing — the export-ready card has no testable seam');
+    var overlay = document.getElementById('export-ready');
+    if (!overlay) throw new Error('#export-ready is missing from the document');
+    var wasHidden = overlay.classList.contains('hidden');
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); };
+    try {
+      var saves = 0, settled = false;
+      var p = FM._showExportReady({
+        blob: { size: 5 * 1048576 }, name: 'probe-export.mp4', poster: null,
+        width: 1080, height: 1920, fps: 30, seconds: 65,
+        save: function () { saves++; return Promise.resolve('shared'); },
+      });
+      p.then(function () { settled = true; });
+      await rAF(); await rAF();
+
+      if (overlay.classList.contains('hidden')) throw new Error('the card never appeared');
+      // THE CONTROL, and the whole point: nothing may be delivered before the user asks for it.
+      if (saves !== 0) throw new Error('the file was handed to the OS save sheet without anyone pressing Save — that is the "apple pop up flung at you" this replaces');
+      if (settled) throw new Error('the exporter was released before the user had answered — its finally frees the export caches and drops the crash-resume data, so a save after that is standing on nothing');
+
+      // It has to say what was made; a card with no facts on it is just a delay.
+      var meta = document.getElementById('xr-meta').textContent;
+      if (document.getElementById('xr-name').textContent.indexOf('probe-export') < 0) throw new Error('the card does not name the file');
+      ['5.0 MB', '1:05', '1080×1920', '30 fps'].forEach(function (bit) {
+        if (meta.indexOf(bit) < 0) throw new Error('the card does not report ' + bit + ' — it reads "' + meta + '"');
+      });
+
+      document.getElementById('xr-save').click();
+      await p;
+      if (saves !== 1) throw new Error('Save handed the file over ' + saves + ' times');
+      if (!overlay.classList.contains('hidden')) throw new Error('the card stayed up after saving');
+
+      // …and Discard must release the exporter too, or an export that is not wanted hangs forever
+      // holding its caches.
+      var saves2 = 0, done2 = false;
+      var p2 = FM._showExportReady({
+        blob: { size: 1024 }, name: 'x.mp4', poster: null, width: 64, height: 64, fps: 30, seconds: 1,
+        save: function () { saves2++; return Promise.resolve(); },
+      });
+      p2.then(function () { done2 = true; });
+      await rAF(); await rAF();
+      document.getElementById('xr-discard').click();
+      await p2;
+      if (!done2) throw new Error('Discard never released the exporter');
+      if (saves2 !== 0) throw new Error('Discard saved the file anyway');
+      if (!overlay.classList.contains('hidden')) throw new Error('the card stayed up after discarding');
+    } finally {
+      if (wasHidden) overlay.classList.add('hidden');
+    }
+  });
+
   /* ---------------- #141 part 3: "I want the export screen to be prettied up" ----------------
    * "Prettied up" sounds like taste and mostly was not. The thing making that dialog look unfinished
    * was ALIGNMENT: `.field` is space-between and a <select> shrink-wraps to its longest option, so

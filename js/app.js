@@ -2934,10 +2934,19 @@ window.FM = window.FM || {};
       } else if (fmt === 'frames') {
         await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', onProgress });
       } else {
-        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress });
+        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress,
+                                onReady: showExportReady });
       }
-      status.textContent = 'Done — saved to your Downloads.';
-      setTimeout(() => overlay.classList.add('hidden'), 900);
+      /* The MP4 path now ends on its own card, which has already said what happened and hidden the
+       * progress overlay — repeating "saved to your Downloads" behind it would be a second, and often
+       * wrong, answer (it may have gone to Photos, or been discarded). Every other format still
+       * downloads straight away and still gets told so. (queue 141 part 4) */
+      if (fmt !== 'mp4') {
+        status.textContent = 'Done — saved to your Downloads.';
+        setTimeout(() => overlay.classList.add('hidden'), 900);
+      } else {
+        overlay.classList.add('hidden');
+      }
     } catch (e) {
       overlay.classList.add('hidden');
       if (e.message === 'NO_WEBCODECS') alert('Export needs the WebCodecs video encoder. Please open FreeMotion in Google Chrome.');
@@ -2951,6 +2960,73 @@ window.FM = window.FM || {};
       FM.seekVideosToTime();
     }
   }
+
+  /* "Export ready" — our card in front of the OS save sheet (queue 141 part 4).
+   *
+   * Ezra: "Maybe instead of the apple pop up we should have our own pop up so it looks finished and
+   * good." The sheet itself is not ours to replace: navigator.share only opens from a real user
+   * gesture, and nothing on the web writes to a camera roll without it. What WAS ours — and what made
+   * it feel unfinished — is that the sheet arrived unannounced the instant the render stopped, with no
+   * sight of what had been made. Now the render ends on this, and the sheet opens because Save was
+   * pressed.
+   *
+   * It also fixes a real defect rather than just dressing one up. exporter.js's deliver() has always
+   * had to fall back to a plain download when a long render outlived the tap that started it, because
+   * share() needs transient activation and a five-minute export has none left. Save is a fresh tap, so
+   * the sheet can actually open — the fallback stops being the common case on exactly the long exports
+   * where landing the file in Photos matters most.
+   *
+   * Returns a promise the exporter awaits, so `finally` (which frees the export frame caches and drops
+   * the crash-resume data) does not run until the file has been handed over or deliberately discarded. */
+  function showExportReady(out) {
+    return new Promise(function (resolve) {
+      const overlay = document.getElementById('export-ready');
+      const prog = document.getElementById('export-overlay');
+      if (!overlay) { out.save().then(resolve, resolve); return; }   // no card in this document — behave as before
+      if (prog) prog.classList.add('hidden');
+
+      const poster = document.getElementById('xr-poster');
+      if (poster && out.poster) {
+        poster.width = out.poster.width; poster.height = out.poster.height;
+        poster.getContext('2d').drawImage(out.poster, 0, 0);
+        poster.classList.remove('hidden');
+      } else if (poster) { poster.classList.add('hidden'); }
+
+      document.getElementById('xr-name').textContent = out.name;
+      // Size, length and shape — the three things you would check before saving, and the three the OS
+      // sheet does not tell you. MB to one decimal: a file is not interesting to the byte.
+      const mb = (out.blob.size / 1048576);
+      const secs = Math.round(out.seconds || 0);
+      const mmss = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+      document.getElementById('xr-meta').textContent =
+        (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+        ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps';
+
+      const saveBtn = document.getElementById('xr-save');
+      const discardBtn = document.getElementById('xr-discard');
+      let done = false;
+      function finish() {
+        if (done) return; done = true;
+        saveBtn.removeEventListener('click', onSave);
+        discardBtn.removeEventListener('click', onDiscard);
+        overlay.classList.add('hidden');
+        resolve();
+      }
+      function onSave() {
+        // Disabled while the sheet is up: a second tap would open a second share sheet for the same
+        // file, and on iOS that is a sheet that never closes.
+        saveBtn.disabled = true;
+        out.save().then(function () { finish(); }, function () { finish(); });
+      }
+      function onDiscard() { finish(); }
+      saveBtn.disabled = false;
+      saveBtn.addEventListener('click', onSave);
+      discardBtn.addEventListener('click', onDiscard);
+      overlay.classList.remove('hidden');
+      saveBtn.focus();
+    });
+  }
+  FM._showExportReady = showExportReady;   // exposed for the suite; nothing in the app calls it by name
 
   /* ---------- init ---------- */
   // Desktop timeline resizer: drag the top edge of #timeline-panel to trade height between the stage

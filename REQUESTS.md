@@ -341,7 +341,7 @@ better still, keep working inside the turn rather than parking work for a later 
       fillStyle. Mutation-checked by removing the exemption, which reddened this test **and five effects
       tests** — that line is load-bearing well beyond this feature. Verified at 380px in both states.
 
-- [ ] **141 — Export screen: prettier, custom ratios + fps, and our OWN save dialog.** His words: *"idk
+- [x] **141 (DONE — all four parts: v7.08, v7.09, v7.63, v7.64) — Export screen: prettier, custom ratios + fps, and our OWN save dialog.** His words: *"idk
       if you remember me saying this but I want the export screen to be prettied up and there's no way to
       do custom export ratios, or fps. And if you made a custom fps or other things etc there's no way to
       export at that. Maybe instead of the apple pop up we should have our own pop up so it looks
@@ -372,8 +372,7 @@ better still, keep working inside the turn rather than parking work for a later 
          Resolution already had this covered (the list is built per-project and leads with "Full — W×H").
          *(That "still open: 1" line was stale the moment part 1 shipped in v7.09 — corrected here rather
          than left to send someone looking for work that is already done.)*
-         **Still open in this entry: 4 only** — our own save popup instead of the OS sheet. Parts 1, 2
-         and 3 have all shipped (v7.09, v7.08, v7.63).
+         **Every part of this entry has now shipped**: 1 (v7.09), 2 (v7.08), 3 (v7.63), 4 (v7.64).
       3. **Prettied up** — the dialog is functional and plain; he wants it to look finished.
          **DONE v7.63, and it turned out to be mostly not a taste call.** What made it look unfinished
          was ALIGNMENT: every row was space-between and a dropdown shrink-wraps to its longest option,
@@ -392,7 +391,9 @@ better still, keep working inside the turn rather than parking work for a later 
          up". Check what is actually replaceable before promising: the final file hand-off is partly
          OS-owned, so the honest version may be our own dialog for everything UP TO the save, with the
          system sheet only at the last step. Say that plainly rather than claiming it can all be ours.
-         **STILL OPEN, and now with the honest scope, read off the code (js/exporter.js `deliver`).**
+         **DONE v7.64.** The scope below is what shipped, unchanged — worth reading, because what you
+         asked for and what is possible are not quite the same thing and the difference matters.
+         **The honest scope, read off the code (js/exporter.js `deliver`).**
          The share sheet is `navigator.share({files})`, and a browser will only open that from a real
          user gesture — which is exactly why the exporter already falls back to a plain download when a
          long render outlives the tap that started it. So the sheet itself cannot be replaced: it is the
@@ -402,8 +403,19 @@ better still, keep working inside the turn rather than parking work for a later 
          of the first frame, and a Save button — so the Apple sheet appears because YOU pressed Save on
          our card, rather than being flung at you the instant the render ends. That also fixes the
          transient-activation fallback as a side effect, because the tap that opens the sheet would then
-         always be fresh. **Worth doing, and it is a real piece of design rather than a tidy-up — so it
-         is the next thing on this entry rather than something to bolt on today.**
+         always be fresh.
+         **Shipped exactly that.** The render ends on an "Export ready" card with the first frame of
+         your export, the file name, and `17.6 MB · 1:14 · 1080×1920 · 30 fps` — size, length and shape,
+         the three things you would check before committing it anywhere and the three the Apple sheet
+         does not tell you. Save opens the sheet; Discard throws the file away.
+         **The first frame, not the last** — the last frame of a video is very often black, and a card
+         whose picture is a black rectangle tells you nothing about what you made.
+         **And it fixed the transient-activation fallback**, which was a real defect hiding behind a
+         cosmetic one: the exports where landing the file in Photos matters most were precisely the long
+         ones whose share sheet could no longer open.
+         **What is NOT ours and cannot be:** the sheet itself. That is the OS's file hand-off.
+         GIF and PNG-sequence exports still download straight away — the card is opt-in per format, and
+         giving them the same treatment is a small follow-up rather than part of this.
       Overlaps #121 (settings ↔ export one-way mirror) and #102 (export robustness) — do them as ONE
       piece of work on the export path rather than three passes over the same dialog.
 

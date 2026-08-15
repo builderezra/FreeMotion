@@ -474,7 +474,7 @@ window.FM = window.FM || {};
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
-      let delivered = false, recorder = null;
+      let delivered = false, recorder = null, poster = null;
       try {
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
@@ -596,6 +596,19 @@ window.FM = window.FM || {};
         await seekAllVideos(scene, t);
         FM.renderScene(projCtx, scene, t);
         blit(outCtx);
+        /* A small still of the first frame we encode, for the "export ready" card (queue 141 part 4).
+         * Taken from the FIRST frame rather than the last, because the last frame of a video is very
+         * often black — a fade-out, or simply the end — and a card whose picture is a black rectangle
+         * tells you nothing about what you just made. Capped at 320px: it is a thumbnail on a card. */
+        if (!poster && opts.onReady) {
+          try {
+            poster = document.createElement('canvas');
+            const pk = Math.min(1, 320 / Math.max(outW, outH));
+            poster.width = Math.max(1, Math.round(outW * pk));
+            poster.height = Math.max(1, Math.round(outH * pk));
+            poster.getContext('2d').drawImage(outCanvas, 0, 0, poster.width, poster.height);
+          } catch (e) { poster = null; }
+        }
         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
         // `f === resumeFrom` forces the seam to be an IDR. A fresh encoder would almost certainly open
         // with one anyway, but "almost certainly" is not a thing to hang a file's decodability on.
@@ -620,7 +633,25 @@ window.FM = window.FM || {};
       if (recorder) { try { await recorder.settle(); } catch (e) {} }
       if (mix) { try { await encodeAudio(muxer, mix); } catch (e) { console.warn('audio encode failed', e); } }
       muxer.finalize();
-      await deliver(sink.finish(), (opts.name || 'freemotion-export') + '.mp4');
+      /* HAND THE FILE OVER, or hand it to whoever asked to present it (queue 141 part 4).
+       * `onReady` lets the caller put its own card in front of the OS save sheet — which is the whole
+       * of what "our own pop up" can honestly mean, since navigator.share needs a real user gesture and
+       * nothing on the web can write to a camera roll without the sheet. `save` is the same deliver()
+       * this line always called, handed over as a closure so the caller does not need the blob's
+       * plumbing and cannot deliver something else by mistake.
+       * Absent, the behaviour is exactly what it was, which is what keeps the GIF and PNG paths and
+       * every existing test on the old road. */
+      const outBlob = sink.finish();
+      const outName = (opts.name || 'freemotion-export') + '.mp4';
+      if (typeof opts.onReady === 'function') {
+        await opts.onReady({
+          blob: outBlob, name: outName, poster: poster,
+          width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
+          save: () => deliver(outBlob, outName),
+        });
+      } else {
+        await deliver(outBlob, outName);
+      }
       delivered = true;
       } finally {
         // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so

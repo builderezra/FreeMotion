@@ -2114,6 +2114,27 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .field select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 10px; }
 
+/* ---- "Export ready" (queue 141 part 4) --------------------------------------------------------
+ * Same card, same language as the export dialog it follows — it is the last step of the same job, not
+ * a new screen. The poster is the point of it: it is the only place in the app that shows you what you
+ * actually made before you commit it anywhere. */
+#export-ready { position: fixed; inset: 0; z-index: 101; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); backdrop-filter: blur(3px); }
+#export-ready.hidden { display: none; }
+.xr-preview {
+  /* A fixed 16:9-ish letterbox so a tall 9:16 export and a wide 16:9 one give the card the same shape —
+     otherwise the dialog jumps size with the project's aspect, which is the sort of thing that reads as
+     unfinished even when nobody can say why. The poster is CONTAINED, never cropped, for the same
+     reason the export itself is: showing someone three quarters of their frame is not a preview. */
+  display: flex; align-items: center; justify-content: center;
+  height: 150px; margin-bottom: 13px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+#xr-poster { max-width: 100%; max-height: 100%; display: block; border-radius: 3px; }
+#xr-poster.hidden { display: none; }
+.xr-name { font-weight: 600; font-size: 13.5px; word-break: break-all; margin-bottom: 3px; }
+.xr-meta { color: var(--text-dim); font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 16px; }
+#xr-save:disabled { opacity: .55; cursor: default; }
+
 /* ---- The export dialog's control column (queue 141 part 3) -------------------------------------
  * Ezra: "I want the export screen to be prettied up… As pristine as possible."
  *
