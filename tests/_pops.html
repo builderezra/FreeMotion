@@ -1,0 +1,131 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#148 — what is actually making the audio pop?</title>
+<style>html,body{margin:0;background:#05070b;color:#cfd6e4;font:12.5px/1.6 ui-monospace,Menlo,monospace}
+iframe{position:fixed;left:-10000px;top:0;width:390px;height:800px;border:0}
+#out{padding:14px;white-space:pre}</style></head><body>
+<iframe id="app" src="index.html"></iframe><div id="out">measuring…</div>
+<script>
+/* Ezra (#148): "the audio i import is making a realy scratchy popping noise that hurts my ears when
+   im trying to play back stuff, this is related to the long on going lag issues with freemotion."
+   The entry lists four candidates and says to MEASURE which one it is rather than guess from the
+   symptom — the film-grain fix went wrong four times by guessing.
+
+   Reading the code first narrows it, and rules one candidate out on the spot: js/audio-play.js is only
+   for REVERSED clips. An ordinary imported song plays through the media ELEMENT, so there is no Web
+   Audio graph to starve, no gain bus to sum past 1.0, and no sample-rate mismatch to have — the
+   browser owns all three. What the app does own is the SYNC CONTROLLER, which keeps that element level
+   with the transport clock, and it has exactly two corrective moves:
+     · trim  — nudge playbackRate by up to ±10%. Audible as pitch, not as a pop.
+     · SEEK  — write el.currentTime. **A seek on a playing element is a discontinuity, and a
+               discontinuity is a click.** One per seek.
+   Both are already counted in FM.playbackStats, so this does not need new instrumentation, just an
+   honest look. If seeks are ~0 when the machine is idle and climb under load, that is his report
+   exactly — "related to the long ongoing lag issues" — with a mechanism more specific than "underrun":
+   the pops are the app correcting itself. */
+(function () {
+  var out = document.getElementById('out'), fr = document.getElementById('app'), L = [];
+  function done() { out.textContent = L.join('\n'); window.__pops = L.join('\n'); window.__done = true; }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 300) { L.push('FM never initialised'); return done(); }
+      if (!w.FM || !w.FM.loadVideoFile || !w.FM.playbackStats) return setTimeout(wait, 50);
+      setTimeout(function () { go(w); }, 600);
+    })();
+  });
+
+  async function go(w) {
+    var FM = w.FM, sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      var blob = await fetch('tests/_fixtures/control.mp3').then(function (r) { return r.blob(); });
+      var file = new w.File([blob], 'pops-probe.mp3', { type: 'audio/mpeg' });
+      var rec = await FM.loadVideoFile(file);
+      FM.scene.layers.length = 0;
+      FM.addMediaLayer(rec);
+      /* ?load=1 — the case his report is actually about. An audio-only scene is far too light for a CPU
+         throttle to bite (measured: 16.7ms frame gap at 1x AND at 6x, i.e. no difference at all), so a
+         clean result there says nothing about "related to the long ongoing lag issues". Pile on the
+         per-pixel effects that #130 established DO load the main thread, and ask again. */
+      var LOAD = new URLSearchParams(location.search).get('load') === '1';
+      if (LOAD) {
+        FM.scene.project.width = 1080; FM.scene.project.height = 1920;
+        for (var i = 0; i < 6; i++) {
+          var sl = FM.makeLayer('shape', { shape: 'rect', x: 200 + i * 90, y: 300 + i * 150, shapeW: 460, shapeH: 460,
+                                           fill: ['#ffcc00','#29d9bb','#ff7a85','#8f7dff','#5ad','#fa6'][i], start: 0, duration: 26 });
+          sl.effects = [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('glow'),
+                        FM.fxRegistry.makeInstance('posterize')];
+          FM.scene.layers.push(sl);
+        }
+        if (FM.timeline) FM.timeline.rebuild();
+      }
+      await sleep(700);
+      var layer = FM.scene.layers[0];
+      if (!layer) { L.push('the clip did not land on the timeline'); return done(); }
+      L.push('clip: ' + layer.duration.toFixed(2) + 's   (element ' + (rec.width || 0) + 'x' + (rec.height || 0) + ', audio-only as expected)');
+      L.push('');
+      L.push('sync thresholds in force: ' + JSON.stringify(FM.syncTuning));
+      L.push('');
+
+      var PLAY_MS = 6000;
+      FM.time = 0;
+      FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0 };
+
+      /* WATCH THE ACTUAL RATE WRITES. The seek count came back 0, so the pop is not the controller
+         hard-correcting. What is left on this path is the TRIM — 35 writes in six seconds — and "35
+         trims" says nothing about whether that is a gentle 1% lean or the controller slamming between
+         0.9 and 1.1 six times a second. The values are the answer, so take the values: patch the
+         element's playbackRate setter and record every write. */
+      var el = (FM.media.get(layer.id) || {}).el;
+      var rates = [];
+      if (el) {
+        var proto = Object.getPrototypeOf(el);
+        var desc = Object.getOwnPropertyDescriptor(proto, 'playbackRate') ||
+                   Object.getOwnPropertyDescriptor(Object.getPrototypeOf(proto), 'playbackRate');
+        if (desc && desc.set) {
+          Object.defineProperty(el, 'playbackRate', {
+            configurable: true,
+            get: function () { return desc.get.call(this); },
+            set: function (v) { rates.push(+v); desc.set.call(this, v); },
+          });
+        }
+      }
+      var t0 = w.performance.now(), gaps = [], lastRaf = 0;
+      (function tick(ts) { if (lastRaf) gaps.push(ts - lastRaf); lastRaf = ts; if (w.performance.now() - t0 < PLAY_MS) w.requestAnimationFrame(tick); })(w.performance.now());
+
+      FM.play();
+      await sleep(PLAY_MS);
+      var st = Object.assign({}, FM.playbackStats);
+      FM.pause();
+      await sleep(200);
+
+      var secs = PLAY_MS / 1000;
+      L.push('SIX SECONDS OF PLAYBACK');
+      L.push('  sync decisions     ' + st.syncs);
+      L.push('  rate trims         ' + st.trims + '   (pitch wobble — audible, but not a pop)');
+      L.push('  **SEEKS**          ' + st.seeks + '   = ' + (st.seeks / secs).toFixed(1) + ' per second');
+      L.push('  frames rendered    ' + st.renders + '    dropped ' + st.drops);
+      L.push('');
+      var srt = rates.slice().sort(function (a, b) { return a - b; });
+      var swings = 0;
+      for (var i = 1; i < rates.length; i++) if (Math.abs(rates[i] - rates[i - 1]) > 0.03) swings++;
+      L.push('THE RATE WRITES — what the trims actually did to the pitch');
+      L.push('  writes             ' + rates.length);
+      if (rates.length) {
+        L.push('  min / max          ' + srt[0].toFixed(3) + ' / ' + srt[srt.length - 1].toFixed(3));
+        L.push('  swings over 3%     ' + swings + '   <-- each is an audible pitch step');
+        L.push('  first 12           ' + rates.slice(0, 12).map(function (r) { return r.toFixed(3); }).join(' '));
+      }
+      var gs = gaps.slice().sort(function (a, b) { return a - b; });
+      L.push('');
+      L.push('  (frame gap median ' + (gs[gs.length >> 1] || 0).toFixed(1) + 'ms, worst ' + (gs[gs.length - 1] || 0).toFixed(1) +
+             'ms — confirms whether the CPU throttle actually bit)');
+    } catch (e) {
+      L.push('THREW: ' + (e && e.message || e));
+      L.push((e && e.stack || '').split('\n').slice(0, 4).join('\n'));
+    }
+    try { FM.pause(); FM.scene.layers.length = 0; } catch (e) {}
+    done();
+  }
+})();
+</script></body></html>

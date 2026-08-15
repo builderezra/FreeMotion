@@ -2308,6 +2308,47 @@ better still, keep working inside the turn rather than parking work for a later 
       the film-grain fix went wrong four times.
       Pairs with **69** (audio must never lag — make the audio clock the master), which is probably the
       real fix if it is starvation.
+
+      **MEASURED 15 Aug (`tests/_pops.html`), and the leading theory is DISPROVEN. I have not reproduced
+      your popping, and I would rather tell you that than ship a plausible fix for it.**
+
+      **Two of the four candidates are ruled out by architecture, not by measurement.** `js/audio-play.js`
+      — the Web Audio graph — only handles REVERSED clips. An ordinary imported song plays through the
+      media ELEMENT, so there is no graph to starve, no gain bus to sum past 1.0 and no sample-rate
+      mismatch to have: the browser owns all three. That kills "buffer underrun" as stated, which was
+      both your diagnosis and mine.
+      **The third candidate is what the app DOES own, and it measured clean.** The sync controller keeps
+      the element level with the transport and has exactly two moves: trim the playbackRate, or SEEK.
+      A seek on a playing element is a discontinuity, i.e. a click — so it was the obvious culprit.
+
+      | six seconds of playback | seeks | rate trims | frame gap |
+      |---|---|---|---|
+      | one audio clip, idle machine | **0** | 5 writes, 1.00 → 1.096 → 1.00 | 16.7 ms |
+      | audio + 6 heavy layers, 6× CPU throttle | **0** | **0** | 100.7 ms median, 349.6 worst, 128 frames dropped |
+
+      Under real load — the case your report is about — the controller does **nothing at all**: rAF is so
+      starved it only runs 50 times in six seconds, so it never seeks and never trims, while the browser
+      keeps the audio playing off the main thread. **Our sync is not making your pops.**
+      *(The first row is worth keeping too: on an idle machine playback pitches up to +9.6% and back over
+      four audible steps at the start. That is a real artefact and not a pop — noted, not fixed.)*
+
+      **What is left, and it is specific.** At a clip boundary the app does `m.el.pause()` and
+      `m.el.muted = true` with no ramp (js/app.js:1135), and on re-entry `currentTime = local` then
+      `play()` (js/app.js:1172). Both cut the waveform dead at an arbitrary sample, which is the textbook
+      way to make a click — and it is candidate two from the list above, the one I had not tested,
+      because six seconds of continuous playback never crosses a boundary. **Looping playback crosses one
+      every lap.**
+      **The fix, when it is done, is an anticipatory fade rather than a fade-on-pause**: start easing the
+      element's volume down over the last ~40ms of the clip and pause exactly at the end. Fading only
+      once the boundary has arrived would bleed the source audio past the clip, which is precisely what
+      #1/#8 fixed and the comment on that line defends.
+      **Why it is not done in this pass:** the entry's own instruction is to measure before changing, and
+      I can measure a seek count but I cannot hear a click from here. Shipping a de-click on the strength
+      of a code read would be the same move that made the film-grain fix wrong four times.
+      **One line from you settles it: does the popping happen on a LOOP or at a clip edge, or right
+      through the middle of one long clip?** If it is the boundary, the fix above is half an hour. If it
+      is mid-clip, then it is the browser's own decoder struggling under our main-thread load, and the
+      real answer is #125/#69 rather than anything in this entry.
       **FOUND AND FIXED, v6.91 — and you were right that it is tied to the lag, though not by the route
       I expected.** Five independent readings of the audio path found nothing that survived a skeptic
       (no ScriptProcessor anywhere, so lag cannot starve the audio thread; no double-connect; no
