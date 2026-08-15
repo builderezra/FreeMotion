@@ -3162,6 +3162,45 @@
     }
   });
 
+  test('the timecode chip goes yellow the INSTANT a benchmark is added', { item: 'benchmark-now' }, async function () {
+    /* Queue 243. Ezra: "when you add a benchmark it doesnt show up as yellow, youve made it so if you
+     * add a bench mark, go away from it then go back itll show the timer as yellow but it should also
+     * show up straight away."
+     * He read it exactly right, including the workaround. `on-mark` is decided inside updateReadout,
+     * which runs on TIME changes — and adding a benchmark does not change the time, it changes the
+     * markers. So the state was always correct and simply never recomputed: you were already standing
+     * on the thing that should have lit, and scrubbing away and back was the only way to make the app
+     * look again. The test therefore never moves the playhead, because moving it is the bug's own
+     * workaround and would hide the defect completely. */
+    const P = FM.scene.project;
+    const marks0 = (P.markers || []).slice(), t0 = FM.time;
+    const chip = document.getElementById('time-readout');
+    if (!chip) throw new Error('the timecode chip is not in the DOM');
+    try {
+      P.markers = [];
+      FM.time = 1;
+      if (FM.updateReadout) FM.updateReadout();
+      await sleep(20);
+      // CONTROL: it must be OFF first, or "it is yellow" below proves nothing.
+      if (chip.classList.contains('on-mark')) throw new Error('the chip is already lit with no markers at all — this test cannot tell the fix from the bug');
+
+      FM.toggleMarkerAtPlayhead();
+      await sleep(20);
+      if (!P.markers.length) throw new Error('the benchmark was not added, so there is nothing to light for');
+      // NOT moving the playhead is the whole point: that is the workaround, not the fix.
+      if (!chip.classList.contains('on-mark')) throw new Error('a benchmark was added at the playhead and the chip is still not lit — you would have to scrub away and back, which is exactly the report');
+
+      // …and removing it puts the chip out again, without a scrub either.
+      FM.toggleMarkerAtPlayhead();
+      await sleep(20);
+      if (chip.classList.contains('on-mark')) throw new Error('the benchmark was removed and the chip stayed lit — the same staleness, in the other direction');
+    } finally {
+      P.markers = marks0; FM.time = t0;
+      if (FM.updateReadout) FM.updateReadout();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('PC: canvas settings hangs off the cog, and the cog stays out of its own blur', { item: 'cv-anchored' }, async function () {
     /* Queue 241 (b) and (c). Ezra: "on pc make the canvas settings row show up next to where the button
      * is instead of the middle and make it kinda of come out of the button… so the settings button

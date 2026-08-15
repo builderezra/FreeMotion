@@ -809,6 +809,9 @@ window.FM = window.FM || {};
 
   // Benchmarks = timeline markers. Tap the timecode to drop one at the playhead (tap again to remove it).
   // The skip buttons jump between these (and the selected clip's edges).
+  /* Exposed for the timeline's own "Add marker here" (context menu), which adds to the same array from
+     another module and had the identical omission (queue 243). */
+  FM.updateReadout = () => updateReadout();
   FM.toggleMarkerAtPlayhead = function () {
     const P = FM.scene.project; if (!P.markers) P.markers = [];
     const t = FM.time;
@@ -818,6 +821,15 @@ window.FM = window.FM || {};
     if (near) { P.markers = P.markers.filter(m => m !== near); if (FM.toast) FM.toast('Benchmark removed', 1000); }
     else { P.markers.push({ t: FM.snapFrame(t), label: 'Benchmark' }); if (FM.toast) FM.toast('Benchmark added', 1000); }   // markers live on exact frames
     if (FM.timeline) FM.timeline.rebuild();
+    /* RE-DERIVE THE CHIP (queue 243). Ezra: "when you add a benchmark it doesnt show up as yellow,
+     * youve made it so if you add a bench mark, go away from it then go back itll show the timer as
+     * yellow but it should also show up straight away."
+     * He read the behaviour exactly right. `on-mark` is decided inside updateReadout, which runs on
+     * TIME changes — and adding a benchmark does not change the time, it changes the markers. So the
+     * state was correct and simply never recomputed: you were already standing on the thing that should
+     * have lit, and scrubbing away and back was the only way to make the app look again.
+     * Marker changes are a second input to that class, so they have to poke it too. */
+    updateReadout();
     if (FM.history) FM.history.commit();
   };
 
@@ -843,6 +855,7 @@ window.FM = window.FM || {};
     if (!FM.projects.pinThumbnail()) { if (FM.toast) FM.toast('Could not capture this frame'); return; }
     P.markers = P.markers.filter(m => !m.thumb);   // only one thumbnail marker at a time
     P.markers.push({ t: t, label: 'Thumbnail', thumb: true });
+    updateReadout();   // same reason as the benchmark toggle above (queue 243)
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();
     if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }

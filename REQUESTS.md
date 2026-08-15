@@ -4394,7 +4394,7 @@ wait for them to report back."*
       sitting in the row — only 10px wide, easy to miss by eye. The wrapper is now marked in step with
       its buttons, and the empty case is asserted. Both mutations red.
 
-- [ ] **243 — Adding a benchmark does not turn the timer yellow until you leave and come back.** (15
+- [x] **243 — Adding a benchmark does not turn the timer yellow until you leave and come back. DONE v7.94.** (15
       Aug.) His words: *"when you add a benchmark it doesnt show up as yellow, youve made it so if you
       add a bench mark, go away from it then go back itll show the timer as yellow but it should also
       show up straight away."*
@@ -4405,6 +4405,16 @@ wait for them to report back."*
       Almost certainly the readout is only re-derived on a scrub/transport update and not on the marker
       being added, so the state is correct and simply not recomputed. Look at `updateReadout` and
       whatever adds a marker, rather than at the parked-detection itself — that is demonstrably fine.
+
+      **That guess was right, and you had already diagnosed it in your own sentence.** `on-mark` is
+      decided inside `updateReadout`, which runs on TIME changes — and adding a benchmark does not change
+      the time, it changes the MARKERS. The state was never wrong, it was never looked at again; you were
+      already standing on the thing that should have lit. Fixed on all three marker paths: the benchmark
+      toggle, the thumbnail-frame pin, and the timeline's own "Add marker here" (a different module with
+      the identical omission — `FM.updateReadout` is exported for it).
+      The test **never moves the playhead**, on purpose: moving it is the bug's own workaround and would
+      hide the defect. It also checks the reverse — removing a benchmark puts the chip out without a
+      scrub — because the same staleness the other way round is just as wrong.
 
 - [ ] **244 — PC: drag the add menu independently of the timeline, with a snap where they meet.** (15
       Aug. *He asked for this one to go to the BOTTOM: "This can go to the bottom of the list as you have

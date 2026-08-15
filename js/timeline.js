@@ -2036,7 +2036,7 @@ window.FM = window.FM || {};
           items.push({ label: 'Rename marker…', action: () => { const n = prompt('Marker name:', near.label || 'Marker'); if (n != null && n.trim()) { near.label = n.trim(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } } });
           items.push({ label: near.thumb ? 'Remove thumbnail pin' : 'Remove marker', danger: true, action: () => { const wasThumb = !!near.thumb; P.markers = P.markers.filter(m => m !== near); unpinIf(wasThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         } else {
-          items.push({ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });   // markers live on exact frames
+          items.push({ label: 'Add marker here', action: () => { P.markers.push({ t: snapT(t), label: 'Marker' }); FM.timeline.rebuild(); if (FM.updateReadout) FM.updateReadout(); if (FM.history) FM.history.commit(); } });   // updateReadout: the chip's yellow is decided from the markers, and adding one is not a time change (queue 243)   // markers live on exact frames
         }
         if (P.markers.length > 1 || (P.markers.length === 1 && !near)) items.push({ label: 'Clear all markers', danger: true, action: () => { const hadThumb = P.markers.some(m => m.thumb); P.markers = []; unpinIf(hadThumb); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } });
         return items;
