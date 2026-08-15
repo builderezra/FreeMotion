@@ -432,7 +432,7 @@ window.FM = window.FM || {};
    *
    * This used to be a sideways PAGER: Recents was page 1 and your favourites were pages 2, 3… behind
    * a swipe right, with page dots. Ezra: "remove the feature of swiping right to see ur faves, just
-   * make it if you swipe down on recents it does a clean little animation and opens up the faves
+   * make it if you swipe [up] on recents it does a clean little animation and opens up the faves
    * menu you have just built." He is right that it was the wrong door — three grey dots are not an
    * affordance, and the favourites you had starred were invisible until you swiped at something that
    * did not look swipeable.
@@ -472,7 +472,7 @@ window.FM = window.FM || {};
     // no work: there is only one faves screen, so the word only ever added length to a 11px caps label.
     grab.innerHTML = '<span class="fxb-favmore-bar"></span><span class="fxb-favmore-txt">Faves' +
       (favs.length ? ' \u00b7 ' + favs.length : '') + ' \u25be</span>';
-    grab.title = 'Pull down (or tap) for your faves, with sorting';
+    grab.title = 'Pull up (or tap) for your faves, with sorting';
     grab.addEventListener('click', () => openFavourites());   // a drag that ended here never reaches this: attachFavPull swallows that click in the capture phase
     body.appendChild(grab);
     sec.appendChild(body);
@@ -488,12 +488,16 @@ window.FM = window.FM || {};
    * home overpull (js/home.js:386), Math.pow(dy, 0.78) capped, because a pull that follows the finger
    * 1:1 feels like the section has come loose.
    *
-   * IT IS GATED ON scrollTop <= 0, and that is the whole reason this can be a bare gesture on the
-   * block at all. The old swipe-UP had to live on its own narrow strip because up IS the scroll
-   * direction here, so claiming it would have made the browser unscrollable exactly where you need to
-   * scroll. Down at the top of a scroller is different: there is nothing left to scroll to, so the
-   * gesture is free. It is the pull-to-refresh bargain, and it costs the user nothing — the Recents
-   * block sits 244px down a 753px viewport, fully on screen the moment the browser opens.
+   * IT IS GATED ON BEING AT THE END OF THE SCROLLER (see atEnd), and that is the whole reason this can
+   * be a bare gesture on the block at all.
+   * DIRECTION FLIPPED AT v8.06 (queue 204), and the gate did NOT simply flip with it. This was built as
+   * a pull-DOWN gated on `scrollTop <= 0`: down at the top of a scroller is free, because there is
+   * nothing left to scroll up to. Ezra then asked twice for UP — "it still needs to be added that
+   * swiping up on the recents menu in effects opens the faves menu" — and up is only free at the OTHER
+   * end, where there is nothing left to scroll down to. Negating the gate instead of mirroring it would
+   * have claimed the scroll direction in the middle of the list and made the browser unscrollable,
+   * which is a far worse regression than the gesture being the wrong way round.
+   * It is the pull-to-refresh bargain, upside down.
    *
    * Under prefers-reduced-motion the gesture is not armed at all, the same call home.js makes for the
    * overpull: better that the feature simply is not there than that it fires a silent version of
@@ -519,6 +523,14 @@ window.FM = window.FM || {};
    * 12 damped px is 39–52px of real finger travel depending where you reversed from (the damping curve
    * squashes the top end) — far beyond hand jitter, well short of a hauling motion. */
   const REVERSE_BY = 12, REVERSE_FROM = PULL_COMMIT * 0.5;
+  /* AT THE END, not at the top (queue 204). Ezra asked twice for swipe UP, and the gate could not simply
+   * be negated: the down-pull was legal because `scrollTop <= 0` means there is nothing left to scroll
+   * UP to, so the gesture is free. An up-pull is only free at the other end, where there is nothing left
+   * to scroll DOWN to. Getting this backwards does not make the gesture wrong, it makes the effects
+   * browser unscrollable — a far worse regression than the direction, and on the screen he uses most.
+   * The 1px slack absorbs fractional scrollHeight on a zoomed or high-dpr viewport, where an exact
+   * equality never lands and the gesture would simply never arm. */
+  function atEnd(sc) { return sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1; }
   function reducedMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function attachFavPull(sec, body, hint) {
     if (reducedMotion()) return;
@@ -535,12 +547,12 @@ window.FM = window.FM || {};
       shown = state;
       hint.classList.toggle('armed', state === 'armed');
       hint.classList.toggle('cancelled', state === 'cancelled');
-      if (ico) ico.textContent = state === 'cancelled' ? '↑' : '★';
+      if (ico) ico.textContent = state === 'cancelled' ? '↓' : '★';   // reversing an UP pull means going back down
       if (txt) txt.textContent = state === 'armed' ? 'Release to open' : state === 'cancelled' ? 'Cancelled' : 'Faves';
     };
     const set = (v, ease) => {
       body.style.transition = ease || '';
-      body.style.transform = v ? 'translate3d(0,' + v.toFixed(1) + 'px,0)' : '';
+      body.style.transform = v ? 'translate3d(0,' + (-v).toFixed(1) + 'px,0)' : '';   // negative: pulls UP (queue 204)
       // The hint brightens with the pull and goes accent once you are past the commit point, so the
       // finger knows it has done enough BEFORE it lifts — the one thing a pull gesture must tell you.
       hint.style.opacity = v ? Math.min(1, v / (PULL_COMMIT * 0.75)).toFixed(2) : '';   // fully lit just before it arms, so the accent flip is the last thing that happens
@@ -557,7 +569,7 @@ window.FM = window.FM || {};
       disarmEat();                                             // a new touch always clears a stale trap
       if (live || e.pointerType === 'mouse' && e.button !== 0) return;
       const sc = scroller();
-      if (!sc || sc.scrollTop > 0) return;                       // only from a browser already at the top
+      if (!sc || !atEnd(sc)) return;                             // only from a browser already at the END — see atEnd
       if (e.target.closest('input, textarea, select')) return;
       live = true; claimed = false; px = 0; peak = 0; dead = false; id = e.pointerId;
       say('pulling');   // reset on the NEXT gesture, not on release — letting go is exactly when you still want to be reading "Cancelled"; by then the hint is fading out anyway
@@ -567,18 +579,18 @@ window.FM = window.FM || {};
       if (!live || e.pointerId !== id) return;
       const dy = e.clientY - sy, dx = e.clientX - sx;
       if (!claimed) {
-        if (dy < -4) { live = false; return; }                   // upward → this is a scroll, let it go
-        if (dy > 6 && dy > Math.abs(dx)) { claimed = true; try { body.setPointerCapture(id); } catch (_) {} }
+        if (dy > 4) { live = false; return; }                    // downward → this is a scroll, let it go
+        if (dy < -6 && -dy > Math.abs(dx)) { claimed = true; try { body.setPointerCapture(id); } catch (_) {} }
         else return;
       }
       const sc = scroller();
-      if (!sc || sc.scrollTop > 0) { set(0); live = false; return; }   // scrolled away mid-pull
+      if (!sc || !atEnd(sc)) { set(0); live = false; return; }         // scrolled away mid-pull
       if (e.cancelable) e.preventDefault();
       const now = e.timeStamp, dt = now - lastT;
       if (dt > 0) vy = (e.clientY - lastY) / dt;
       lastY = e.clientY; lastT = now;
       if (dead) return;                                          // cancelled: hold the block home, but keep eating the scroll until the finger leaves
-      px = Math.min(PULL_MAX, Math.pow(Math.max(0, dy), 0.78));
+      px = Math.min(PULL_MAX, Math.pow(Math.max(0, -dy), 0.78));   // -dy: the pull is UP now (queue 204)
       if (px > peak) peak = px;
       if (peak >= REVERSE_FROM && peak - px >= REVERSE_BY) {      // pulled back → decided against it
         dead = true; px = 0;

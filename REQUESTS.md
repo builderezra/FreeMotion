@@ -3573,7 +3573,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       make a soft phone clip look meaningfully better on a big canvas. What cannot be done is
       film-and-TV "enhance". Name it for what it does (Sharpen & upscale, say) rather than promising
       pixels it cannot create, or the feature will read as broken.
-- [ ] **204 — Swiping UP on Recents should open Faves — he has now said UP twice.** His words: *"Idk if
+- [x] **204 — Swiping UP on Recents should open Faves — he has now said UP twice. DONE v8.06.** His words: *"Idk if
       you've done it but it still needs to be added that swiping up on the recents menu in effects opens
       the faves menu."*
       **This resolves the ambiguity flagged in #124.** That entry recorded the conflict honestly — he
@@ -3601,6 +3601,18 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       **And the hint strings and `grab.title` say "Pull down"** — they are user-visible and must flip too.
       This wants a session with room to test the scroll-claim at 380px properly, which is why it is
       written down rather than half-done.
+
+      **DONE v8.06 — and the assessment above was right about where the risk was.** Up opens, reversing
+      (down) cancels, and the affordance reads "Pull up (or tap) for your faves".
+      The gate is **mirrored, not negated**: `scrollTop + clientHeight >= scrollHeight - 1`, with 1px of
+      slack because an exact equality never lands on a zoomed or high-dpr viewport and the gesture would
+      then never arm at all. Everything else is mirrored rather than reinvented — the reversal-cancel
+      still measures back from the PEAK, the damping is unchanged, and the commit point is untouched.
+      **Verified at 380px that the effects browser still scrolls freely**, which is the thing that must
+      not break. The suite's gesture test is mirrored (its assertions are the same contract either way)
+      and gains one for the gate: an up-pull away from the end must not be claimed. Both mutations red,
+      and the dangerous one reports **"scroller at 602/602"** — at the end, with the negated gate
+      rejecting it anyway, which is exactly the unscrollable-browser mistake being caught.
       being at the BOTTOM, the mirror of the current `scrollTop <= 0` gate, or it will fight scrolling.
 - [ ] **205 — Move & Transform should hide the outline and show the anchor point instead.** His words:
       *"Make it so when you open move and transform it gets rid of the outline on the shape or layer, and

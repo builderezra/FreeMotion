@@ -13403,28 +13403,58 @@
     };
     const openView = () => document.querySelector('.fxb-favview');
     try {
+      /* THE GESTURE IS PULL-UP FROM v8.06 (queue 204). Ezra asked twice — "it still needs to be added
+         that swiping up on the recents menu in effects opens the faves menu" — so every drag below is
+         mirrored: start low, move UP to pull, move DOWN to reverse. The assertions are unchanged,
+         because what they are about (arm, cancel, the cancel sticking, and a clean pull still opening
+         it) is the same contract in either direction. */
+      /* Get to the END of the scroller first, because that is the only place an up-pull is legal —
+         and this is not test scaffolding, it is the feature: away from the end, up is the scroll
+         direction and the gesture must keep its hands off. Step 5 asserts exactly that. */
+      const scEnd = sec.closest('.fxb-scroll');
+      if (scEnd) { scEnd.scrollTop = scEnd.scrollHeight; await sleep(40); }
+
       // 1) Pull well past the commit point — the hint must say so before the finger lifts.
-      pt('pointerdown', 100); win('pointermove', 130); win('pointermove', 300);
-      if (!hint.classList.contains('armed')) throw new Error('a 200px pull did not arm the gesture');
+      pt('pointerdown', 400); win('pointermove', 370); win('pointermove', 200);
+      if (!hint.classList.contains('armed')) throw new Error('a 200px pull UP did not arm the gesture (scroller at ' + (scEnd ? scEnd.scrollTop + '/' + (scEnd.scrollHeight - scEnd.clientHeight) : 'n/a') + ')');
       if (pulled() < 20) throw new Error('the block did not follow the finger (moved ' + pulled().toFixed(1) + 'px)');
 
-      // 2) Now change your mind. A modest pull BACK must cancel — from here the old position-only rule
-      //    would have needed ~220px of return travel to disarm.
-      win('pointermove', 230);
-      if (hint.classList.contains('armed')) throw new Error('pulling back up left the gesture armed');
+      // 2) Now change your mind. A modest pull BACK (downward now) must cancel — from here the old
+      //    position-only rule would have needed ~220px of return travel to disarm.
+      win('pointermove', 270);
+      if (hint.classList.contains('armed')) throw new Error('pulling back down left the gesture armed');
       if (!hint.classList.contains('cancelled')) throw new Error('reversing did not show a cancelled state — dim alone also means "not far enough", which is a different answer');
 
-      // 3) …and it sticks: shoving back down must NOT re-arm it.
-      win('pointermove', 360);
-      if (hint.classList.contains('armed')) throw new Error('pushing back down re-armed a cancelled gesture — you could not know what letting go would do');
-      win('pointerup', 360);
+      // 3) …and it sticks: shoving back up must NOT re-arm it.
+      win('pointermove', 140);
+      if (hint.classList.contains('armed')) throw new Error('pushing back up re-armed a cancelled gesture — you could not know what letting go would do');
+      win('pointerup', 140);
       await sleep(60);
       if (openView()) throw new Error('the faves screen opened anyway after the gesture was cancelled');
 
       // 4) Positive control — an uncancelled pull still opens it, or this test proves nothing.
-      pt('pointerdown', 100); win('pointermove', 130); win('pointermove', 300); win('pointerup', 300);
+      if (scEnd) { scEnd.scrollTop = scEnd.scrollHeight; await sleep(30); }
+      pt('pointerdown', 400); win('pointermove', 370); win('pointermove', 200); win('pointerup', 200);
       await sleep(80);
-      if (!openView()) throw new Error('a clean pull past the commit point no longer opens the faves screen');
+      if (!openView()) throw new Error('a clean pull UP past the commit point no longer opens the faves screen');
+
+      /* 5) THE GATE, which is the thing that could actually hurt him. An up-pull is only legal at the
+         END of the scroller; anywhere else it must be left alone so the list still scrolls. Without
+         this the browser becomes unscrollable and every assertion above still passes. */
+      const back0 = document.querySelector('.fxb-favview .fxb-catview-back, .fxb-favview .fxb-back');
+      if (back0) back0.click();
+      await sleep(80);
+      const sc = sec.closest('.fxb-scroll');
+      if (sc && sc.scrollHeight > sc.clientHeight + 8) {
+        sc.scrollTop = 0;                                   // NOT at the end
+        await sleep(30);
+        pt('pointerdown', 400); win('pointermove', 370); win('pointermove', 200);
+        const grabbed = hint.classList.contains('armed') || pulled() > 4;
+        win('pointerup', 200);
+        await sleep(60);
+        document.querySelectorAll('.fxb-favview').forEach(n => n.remove());
+        if (grabbed) throw new Error('an up-pull was claimed away from the end of the scroller — that is the scroll direction there, so the effects browser would stop scrolling');
+      }
     } finally {
       const back = document.querySelector('.fxb-favview .fxb-catview-back, .fxb-favview .fxb-back');
       if (back) back.click();

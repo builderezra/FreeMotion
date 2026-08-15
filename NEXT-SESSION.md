@@ -1,4 +1,4 @@
-# Where things are — written at v8.05, 16 Aug
+# Where things are — written at v8.06, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -65,8 +65,9 @@ it, still oldest-first.
 | 8.03 | The pan is clamped — it could push the canvas entirely off screen with no way back |
 | 8.04 | Subtle shading on the notes button (**#225**, which had been missed for 17 releases) |
 | 8.05 | "Export just this layer" is a picker, not a tick (**#174**) |
+| 8.06 | Swipe **UP** on Recents opens Faves (**#204**) — the gate mirrored, not negated |
 
-Suite: **371/371** at v8.05, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+Suite: **371/371** at v8.06, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
 green run finally means something again.
 
 **His PC-layout block (#230–#247) is FINISHED except #244**, so the queue-jump exception above has
@@ -106,11 +107,10 @@ them were visible from "what is next". This is worth repeating periodically, not
 
 ## Next builds, in order
 
-1. **#204 — flip the Faves gesture to swipe UP** (he has asked twice). Well specified in the entry, and
-   the risk is named there: the down-pull is gated on `scrollTop <= 0`, and flipping to up needs the
-   MIRROR gate (at the end of the scroller), not a negated one — get it wrong and the effects browser
-   stops scrolling. Mirror the reversal-cancel and damping too, and do not re-tune the constants in the
-   same pass.
+1. ~~#204 — flip the Faves gesture to swipe UP~~ **— DONE v8.06.** The risk named here was the real one:
+   the gate is mirrored (`scrollTop + clientHeight >= scrollHeight - 1`), not negated, and the mutation
+   that negated it reports "scroller at 602/602" — at the end, rejected anyway. Verified at 380px that
+   the browser still scrolls.
 2. **#244 — the add-menu drag.** Design corrected by measurement: the add menu and timeline are the SAME
    grid row, so "float over the canvas" is structural, not a preference.
 3. **#248 / #249** — his two requests that were invisible behind number collisions.
