@@ -3989,7 +3989,7 @@ layout, motion blur, the elements browser and the effects browser.
       **Not doing any of that unasked** — it is your intro and how it looks is your call, not a number
       I should quietly optimise away. Say which and it is quick.
 
-- [ ] **226 — A second flaky test: the microphone one.** *(Was numbered 224 by mistake — there were two
+- [x] **226 — A second flaky test: the microphone one. DONE v7.98.** *(Was numbered 224 by mistake — there were two
       #224s, and the other one is YOUR request, so it keeps the number and this one moved.)* Caught on 15 Aug while working #150 — the suite
       came back 350/351 with *"voice: the microphone is handed back on EVERY exit path — timed out
       waiting for the mic to be acquired"*, and two immediate re-runs were both fully green. Headless
@@ -3998,6 +3998,18 @@ layout, motion blur, the elements browser and the effects browser.
       the point at which a red run stops meaning anything, which is worse than having neither test — so
       they are worth fixing together: wait for the real signal rather than a timeout, or give the wait a
       budget that a slow acquisition cannot exceed.
+
+      **DONE v7.98 — the first of the two options, "wait for the real signal".** A bigger timeout would
+      have papered over it; the fix is a different KIND of waiting. `openMic()` now publishes its
+      acquisition promise (`FM.voiceRec._micPending()`) and the test awaits that instead of polling for
+      its side effects. A promise cannot be raced by a busy machine, and a genuinely dead mic still
+      REJECTS rather than hanging — so this does not trade a flake for a freeze. The old poll stays as a
+      fallback for a build without the hook, with a generous budget now it is not the primary path.
+      **This one had already cost something real:** it went red during a release earlier in the same
+      session and made a green run stop meaning anything for a minute, which is precisely the argument
+      the entry makes against flaky tests.
+      **#222 is still open** and is a different shape — an entrance-animation delay, diagnosed in its own
+      entry — so a single green run is not yet fully trustworthy. One down, one to go.
 
 - [ ] **225 — Add subtle shading to the notes button.** (15 Aug.) His words: *"Add subtle shading to the
       notes button."* The notes icon got its yellow-page look in **#186 / v7.13** — white page, yellow

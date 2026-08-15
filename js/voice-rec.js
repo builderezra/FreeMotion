@@ -140,14 +140,24 @@ window.FM = window.FM || {};
   // AudioContext.createMediaStreamDestination() stream — a REAL MediaStream carrying a REAL
   // MediaStreamTrack, so stop() / readyState / MediaRecorder / createMediaStreamSource are all the
   // browser's own, and only the permission prompt is avoided.
+  /* The acquisition is published so a caller can WAIT ON IT rather than poll for its side effects
+     (queue 226). The suite's recorder test polled `readyState` on a 6s budget and went red about one
+     run in twenty when the machine was busy — a test that is red one run in twenty is worse than no
+     test, because it trains you to re-run instead of read, and it cost this session real doubt during
+     a release. A promise is the signal itself: it cannot be raced, and a genuinely dead mic still
+     rejects rather than hanging. */
+  var micPending = null;
   function openMic() {
     var md = navigator.mediaDevices;
     if (!md || !md.getUserMedia) {
       var e = new Error('getUserMedia unavailable');
       e.name = window.isSecureContext === false ? 'SecurityError' : 'NotFoundError';
-      return Promise.reject(e);
+      micPending = Promise.reject(e);
+      micPending.catch(function () {});   // a rejected promise nobody awaits is an unhandled rejection
+      return micPending;
     }
-    return md.getUserMedia({ audio: true });
+    micPending = md.getUserMedia({ audio: true });
+    return micPending;
   }
 
   /* EVERY exit path calls this. It is deliberately total and idempotent: stopping a stopped track,
@@ -681,6 +691,9 @@ window.FM = window.FM || {};
 
   FM.voiceRec = {
     open: open,
+    // Read by the suite: the in-flight (or settled) mic acquisition, so a test can await the real
+    // signal instead of polling for readyState on a timeout. See openMic (queue 226).
+    _micPending: function () { return micPending; },
     close: close,
     isOpen: function () { return state !== 'closed'; },
     addFile: addFile,

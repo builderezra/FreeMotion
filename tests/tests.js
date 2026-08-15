@@ -10065,7 +10065,18 @@
       try {
         if (FM.overlayOwnsScreen()) throw new Error('something still covers the screen with the rig up — the coverage check below would pass for the wrong reason');
         FM.voiceRec.open();
-        await vrWait(function () { return vrStates().length > 0; }, 6000, 'the mic to be acquired');
+        /* AWAIT THE ACQUISITION ITSELF (queue 226). This used to poll `readyState` on a 6s budget and
+           went red about one run in twenty on a busy machine — it timed out during a release earlier
+           today and cost real doubt about a green run, which is the whole argument against a flaky
+           test: it trains you to re-run instead of read.
+           The promise cannot be raced. A dead mic still rejects rather than hanging, so this does not
+           trade a flake for a hang; the poll below is kept only as a fallback for a build where the
+           hook is missing, and it is now generous because it is no longer the primary path. */
+        if (FM.voiceRec._micPending) {
+          var pending = FM.voiceRec._micPending();
+          if (pending && pending.then) { try { await pending; } catch (e) { throw new Error('the fake mic rejected: ' + (e && e.message || e)); } }
+        }
+        await vrWait(function () { return vrStates().length > 0; }, 15000, 'the mic to be acquired');
         if (vrStates().join() !== 'live') throw new Error('the fake mic never went live (' + vrStates().join() + ') — every assertion below would pass for the wrong reason');
         /* The panel is spared the document-CAPTURE tap-to-deselect handler and every bare-key editor
            shortcut by BEING a full-screen fixed surface, not by being named in a list — see the CSS
