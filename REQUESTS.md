@@ -2422,7 +2422,7 @@ better still, keep working inside the turn rather than parking work for a later 
       dragging is what you get. Mutation-checked; the test measures the RENDERED width, because the data
       and the style property were both correct the whole time.
 
-- [ ] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans.** His words:
+- [x] **150 — Auto-detect captions: much easier to reach, and let me choose what it scans. DONE — scope v7.67, access v7.68.** His words:
       *"make the auto detect captions button way easier to access and use. and it should have a choice
       between only detecting where the captions are added in the project or detecting the whole project
       or detecting a specific audio later then let you select it."*
@@ -2452,10 +2452,18 @@ better still, keep working inside the turn rather than parking work for a later 
       is the expensive half of the whole operation. So the fallback is LAZY instead: try the clip you
       chose, and only if it finds nothing walk the rest. Same outcome where it matters, paid for only
       when you would otherwise be stuck on "no speech found" with no idea another clip was an option.
-      **PART 1 IS STILL OPEN — the button is no easier to reach.** It is still inside the Aa sheet, so
-      it is text layer → text editor → Aa → scroll. The natural home is a tile of its own on the
-      property grid beside Colouring and Effects, which is a new tile rather than a moved control, and
-      that is the next pass on this entry.
+      **PART 1 SHIPPED v7.68 — exactly the tile described here.** **Captions** now sits on the property
+      grid between Edit Text and Presets: one tap from a selected text layer, instead of text layer →
+      text editor → Aa sheet → scroll. It opens onto detection first and the cue grid under it, and on a
+      layer that is not a caption track yet it offers to make it one AND still shows the detector —
+      because detection converts the layer and fills the grid in one press, so asking you to press "use
+      as caption track" first would be a step for nothing.
+      The card HOSTS the captions UI rather than owning it — js/captions.js still builds both halves —
+      so this and the Aa sheet cannot drift into two different editors.
+      One trap worth recording: the category list is built by BLACKLIST in every branch, so a new card
+      appears on every layer kind unless it is explicitly removed. That is how Camera Options once
+      turned up on shapes, text, media and groups. The test asserts the Captions tile is absent from
+      shapes, groups, cameras and nulls, and the mutation that removes the guard is caught.
 
 - [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
       *"Also when editing a caption layer you should be able to chose somehow between adding effects to

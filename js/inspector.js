@@ -1340,6 +1340,13 @@ window.FM = window.FM || {};
     // the Add Effect browser each carry a Visual/Audio toggle — so there is one door to every effect.
     { key: 'element', label: 'Element Properties', icon: 'M4 9h7v7H4zM15 6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M16 14l4 6h-8z' },
     { key: 'editgroup', label: 'Edit Group', icon: 'M4 4h7v7H4zM13 13h7v7h-7zM13 7.5h3.5a1 1 0 0 1 1 1V12M11 16.5H7.5a1 1 0 0 1-1-1V12' },   // group only — opens the group's own timeline
+    /* CAPTIONS gets a door of its own (queue 150 part 1). Ezra: "make the auto detect captions button
+     * way easier to access and use." It was reachable only as text layer → text editor → Aa sheet →
+     * scroll, i.e. three levels down and inside a 46vh scroller, which is why he could not find it.
+     * A tile beside the others is one tap from a selected text layer, and it is where someone looking
+     * for captions would look first. Text and caption layers only — every other kind has nothing to
+     * caption, and the branches below build by blacklist, so it is taken back out in catsFor. */
+    { key: 'captions', label: 'Captions', icon: 'M3 5h18v14H3zM6.5 10.5h4M13.5 10.5h4M6.5 14h7' },
     { key: 'presets', label: 'Presets', icon: 'M12 3l2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.8 6.4 20l1.5-6.3L3 9.5 9.4 9z' },
     { key: 'effects', label: 'Effects', icon: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5L19 19M19 5l-3.5 3.5M8.5 15.5L5 19' },
     // camera only — the Effects-style door into the lens, focus and fog (Ezra)
@@ -1916,7 +1923,10 @@ window.FM = window.FM || {};
     // Camera Options is whitelisted onto the camera. Every OTHER branch below builds its list by
     // blacklist, so a new category leaks into all of them unless it is taken back out here — which is
     // exactly what happened: the card turned up on shapes, text, media and groups.
-    return (layer && layer.type === 'camera') ? out : out.filter(c => c.key !== 'cameraopts');
+    const isText = layer && (layer.type === 'text' || layer.type === 'caption');
+    return out
+      .filter(c => c.key !== 'cameraopts' || (layer && layer.type === 'camera'))
+      .filter(c => c.key !== 'captions' || isText);   // same blacklist trap the camera card fell into
   }
   function catsForBase(layer) {   // a camera only pans/zooms/rotates — hide categories that can't apply
     if (layer.type === 'camera') return CATEGORIES.filter(c => c.key === 'transform' || c.key === 'cameraopts');
@@ -3626,6 +3636,34 @@ window.FM = window.FM || {};
         }
         body.appendChild(row);
       });
+    } else if (key === 'captions') {
+      /* The captions card (queue 150 part 1). Everything that used to be buried in the Aa sheet, one
+       * tap from the layer: detection at the top — it is the reason to use captions at all — and the
+       * cue grid under it. This card does not own that UI, it hosts it: js/captions.js still builds
+       * both, so the Aa sheet and this card can never drift into two different captions editors. */
+      if (!FM.captionsEditor) {
+        body.appendChild(el('div', 'insp-hint', 'The captions editor failed to load — hard-refresh and try again.'));
+      } else if (Array.isArray(layer.captions)) {
+        const host = el('div', 'cap-host');
+        FM.captionsEditor.mount(host, layer);
+        body.appendChild(host);
+      } else {
+        body.appendChild(el('div', 'insp-hint', 'Turn this text layer into a caption track to give it timed cues — or detect them from a clip’s audio.'));
+        const mk = el('button', 'btn cap-make', '+ Use as caption track');
+        mk.addEventListener('click', () => {
+          if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.layerId() === layer.id) FM.textEdit.stop();
+          if (FM.captions) FM.captions.makeTrack(layer);
+          FM.requestRender(); commitH();
+          if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+          if (FM.inspector) FM.inspector.refresh();
+        });
+        body.appendChild(mk);
+        // …and detection straight from the empty state, because it converts the layer AND fills the
+        // grid in one press. Making someone press "use as caption track" first is a step for nothing.
+        if (FM.captionsEditor.detectRow) {
+          body.appendChild(FM.captionsEditor.detectRow(layer, () => { if (FM.inspector) FM.inspector.refresh(); }));
+        }
+      }
     } else if (key === 'presets') {
       body.appendChild(el('div', 'insp-hint', 'Tap a preset to apply its look, or save the current effect stack as a reusable preset.'));
       const pwrap = el('div', 'preset-wrap');
@@ -4045,6 +4083,10 @@ window.FM = window.FM || {};
   };
 
   FM.inspector = {
+    // The category list for a layer, exposed read-only for the suite. Which cards a layer offers is a
+    // rule that has been got wrong by accident before — Camera Options leaked onto four layer kinds —
+    // and it is invisible until someone opens the wrong layer and sees a card that does nothing.
+    _catsFor(layer) { return catsFor(layer).slice(); },
     init() {
       root = document.getElementById('inspector');
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents

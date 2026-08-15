@@ -14561,6 +14561,37 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #150 part 1: "make the auto detect captions button way easier to access" -------
+   * It was text layer → text editor → Aa sheet → scroll, inside a 46vh scroller. Now it is a tile on
+   * the property grid. The two things worth asserting are that the door EXISTS for a text layer and
+   * that it does NOT exist for everything else — the categories below it are built by blacklist, and
+   * that exact trap already leaked the Camera Options card onto shapes, text, media and groups once. */
+  test('captions: the detector has a door of its own, and only where it means anything', { item: 'cap-tile' }, function () {
+    if (!FM.inspector || !FM.inspector._catsFor) throw new Error('FM.inspector._catsFor is not exposed — the category list cannot be checked');
+    var keysFor = function (l) { return FM.inspector._catsFor(l).map(function (c) { return c.key; }); };
+
+    var text = FM.makeLayer('text', { text: 'hi', start: 0, duration: 3 });
+    var keys = keysFor(text);
+    // The control: this layer has to have a normal grid, or "captions is in the list" means nothing.
+    if (keys.indexOf('effects') < 0) throw new Error('control failed: a text layer has no Effects card either (' + keys.join(',') + ') — the category list is not being built');
+    if (keys.indexOf('captions') < 0) throw new Error('a text layer has no Captions card (' + keys.join(',') + ') — the detector is still three levels down inside the Aa sheet');
+
+    // …and nowhere else. Each of these builds its list by blacklist, so a new category leaks into all
+    // of them unless it is taken back out — which is how Camera Options ended up on four layer kinds.
+    [['shape', FM.makeLayer('shape', { shape: 'rect', start: 0, duration: 3 })],
+     ['group', FM.makeLayer('group', { start: 0, duration: 3 })],
+     ['camera', FM.makeLayer('camera', { start: 0, duration: 3 })],
+     ['null', FM.makeLayer('null', { start: 0, duration: 3 })]].forEach(function (pair) {
+      var k = keysFor(pair[1]);
+      if (k.indexOf('captions') >= 0) throw new Error('a ' + pair[0] + ' layer offers a Captions card (' + k.join(',') + ') — there is nothing on it to caption');
+    });
+
+    // A caption track keeps it too, which is the state you are in right after using it.
+    var cap = FM.makeLayer('text', { text: 'hi', start: 0, duration: 3 });
+    cap.captions = [{ start: 0, end: 1, text: 'one' }];
+    if (keysFor(cap).indexOf('captions') < 0) throw new Error('a layer that IS a caption track has no Captions card');
+  });
+
   /* ---------------- #150: let me choose what the detector scans ----------------
    * "it should have a choice between only detecting where the captions are added in the project or
    * detecting the whole project or detecting a specific audio layer then let you select it."
