@@ -2473,6 +2473,38 @@ better still, keep working inside the turn rather than parking work for a later 
       change — per-cue effect stacks — plus a control in the effects panel to say which you mean, so
       cost it honestly before starting. Sits naturally with #150 and #149 as a captions pass.
 
+      **COSTED 15 Aug, as the line above asks, and NOT started — deliberately. Here is the real shape of
+      it, so the next pass is a build rather than a survey.**
+
+      **The scary number is a red herring.** `layer.effects` is read in ~170 places (46 in the
+      compositor, 43 in the inspector, 80 in fx-thumbs), and a genuine per-cue model would touch all of
+      them. It does not have to: the compositor ALREADY has the pattern for this and uses it twice
+      (js/compositor.js:1945 and :3589) — `Object.assign({}, layer, { effects: <a different array> })`,
+      a shallow clone with a substituted stack. So the engine half is **one site**: where a caption
+      layer renders, hand the pipeline a clone whose `.effects` is `layer.effects.concat(cue.effects)`.
+      Everything downstream is unchanged and cannot tell the difference. Small, and safe.
+
+      **The real cost is the UI, and it is spread out.** There is no single "add an effect" choke point:
+      `layer.effects` is pushed or spliced from js/inspector.js:713, 739, 757, 1083, 1124, 1182 and
+      js/fx-browser.js:63. Every one has to ask "which stack am I adding to?" instead of assuming. The
+      clean way is one `fxTarget(layer)` helper returning the array to mutate — the track's, or the
+      active cue's — and then those seven sites become the same line with a different subject. That is
+      the change, and it is also the risk: a site left behind does not throw, it silently drops the
+      effect on the wrong stack, which is a data bug you find later and cannot undo.
+
+      **Two things that must not be forgotten, both already load-bearing elsewhere:**
+      · `sanitizeEffects` (js/storage.js:581) validates `layer.effects` on every import and autosave
+        load, and it does NOT walk `layer.captions`. Per-cue stacks would arrive completely unchecked
+        from a hand-edited or older project file — and this file's own comment calls layer.effects "the
+        sub-structure with the weakest validation on the way in". It needs the same walker.
+      · The nesting cap. A filter container inside a cue's stack inside a caption is a third level the
+        depth counter never anticipated.
+
+      **Why it is not built today:** it is a medium change whose failure mode is silent data going to the
+      wrong place, and #47's own notes record the lesson — *"I stopped rather than start it badly at the
+      end of a long session."* The costing above is the deliverable the entry asked for; the build is a
+      clean morning's work now that the shape is known.
+
 - [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
       His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,
       could be soemthing way to hard to do and would be better to not add it then add a shit version for
