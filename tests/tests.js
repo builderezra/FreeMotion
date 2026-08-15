@@ -3162,6 +3162,48 @@
     }
   });
 
+  test('export: a layer that contributes no audio is NAMED, not dropped in silence', { item: 'audio-drop-report' }, async function () {
+    /* Queue 215, the most serious open item in REQUESTS.md, and the one thing this test can actually
+     * change today. Ezra: "I made a fresh project, added some sound effects, pressed export with some
+     * pretty normal export settings and got an audioless clip."
+     * `buildAudioMix` skips layers with bare `continue`s — wrong type, no file, audio that will not
+     * decode — and every one of them is SILENT. Nothing warns, nothing fails, the export is simply mute.
+     * That silence is why this entry has been open and unreproducible for weeks: the failure leaves
+     * nothing behind to look at.
+     * This does not fix the drop. It makes the drop say which layer and why, which is what turns "it
+     * exported with no sound" into a one-line answer the next time it happens. */
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      // A layer that LOOKS like audio to the mixer — a media record with a decodable buffer but no
+      // File — which is precisely the shape a bundled or URL-backed clip would have.
+      const L = FM.makeLayer('video', { name: 'Boom SFX', start: 0, duration: 2 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      const had = FM.media.get(L.id);
+      FM.media.set(L.id, { file: null, audioBuffer: null, el: null });
+      FM._lastAudioDrops = null;
+      await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+
+      const drops = FM._lastAudioDrops;
+      if (!drops) throw new Error('the mixer reported nothing at all — the skip is still silent, which is the whole bug');
+      if (!drops.length) throw new Error('a layer with no file was skipped and NOT reported');
+      if (!/Boom SFX/.test(drops.join(' '))) throw new Error('the report does not name the layer: ' + JSON.stringify(drops));
+      if (!/file/i.test(drops.join(' '))) throw new Error('the report names the layer but not the reason: ' + JSON.stringify(drops));
+
+      // CONTROL: a HIDDEN layer is silent on purpose and must NOT be reported, or the warning becomes
+      // noise and stops being read — which is how a diagnostic quietly dies.
+      L.visible = false;
+      FM._lastAudioDrops = null;
+      await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+      if (FM._lastAudioDrops && FM._lastAudioDrops.length) throw new Error('a deliberately hidden layer was reported as a dropped audio clip: ' + JSON.stringify(FM._lastAudioDrops));
+      if (had) FM.media.set(L.id, had);   // FM.media is not a Map — it has get/set and no delete, so a synthetic record is left for a layer that is about to be removed anyway
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.refreshAll();
+    }
+  });
+
   test('PC add menu: it has a surface of its own, and it costs the panel no scrollbar', { item: 'addmenu-bg' }, async function () {
     /* Queue 236. Ezra: "on the PC version, for the background of the add menu, you should make it have,
      * like, a cool pattern and design, kind of like the home screen page, but slightly different."

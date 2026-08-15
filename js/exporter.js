@@ -246,12 +246,38 @@ window.FM = window.FM || {};
     const soloActive = scene.layers.some(l => l.solo);   // mirror the compositor's solo gate so the exported soundtrack matches the soloed picture (#14)
     let any = false;
     const chains = [];   // disposed only AFTER startRendering() resolves — dispose() stops the LFO oscillators, and an offline render that hasn't run yet would lose them
+    /* WHY THE SKIPS ARE COUNTED (queue 215). Every `continue` below is silent, and a silent skip in a
+     * mix builder is how you get Ezra's report: "I made a fresh project, added some sound effects,
+     * pressed export with some pretty normal export settings and got an audioless clip." Nothing warned,
+     * nothing failed, the file was simply mute. This entry has been open and unreproducible for weeks
+     * partly because the failure leaves no trace anywhere to look at.
+     * So the reasons are recorded as we go and reported at the end. This does not fix the drop — it
+     * makes the drop SAY something, which is what turns an unreproducible report into a one-line
+     * answer next time it happens. `deliberate` skips (hidden, solo-suppressed, silent by choice) are
+     * kept apart from `dropped` ones, because a hidden layer being silent is correct and saying so
+     * would be noise. */
+    const dropped = [];
+    const nameOf = l => l.name || l.type || l.id;
     for (const layer of scene.layers) {
-      if (layer.type !== 'video' || layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo)) continue;   // hidden (incl. inside a hidden GROUP) / solo-suppressed layers are silent — mirror the compositor's picture gate
+      const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo);
+      if (hiddenOrSolo) continue;                        // correct and intentional — not reported
+      if (layer.type !== 'video') {
+        // Imported audio rides the video path (an mp3 is a 'video' layer with a 0x0 picture), so a
+        // NON-video layer here either genuinely has no sound, or is an audio layer built by some other
+        // route that this mixer has never handled. Only the second is worth saying out loud, and the
+        // honest test for it is whether it has decodable media attached.
+        const mm = FM.media.get(layer.id);
+        if (mm && (mm.file || mm.audioBuffer)) dropped.push(nameOf(layer) + ' (type "' + layer.type + '" — the mixer only takes "video" layers)');
+        continue;
+      }
       const m = FM.media.get(layer.id);
-      if (!m || !m.file) continue;
+      if (!m || !m.file) {
+        if (m) dropped.push(nameOf(layer) + ' (no file on its media record — a bundled or URL-backed clip?)');
+        else dropped.push(nameOf(layer) + ' (no media record at all)');
+        continue;
+      }
       if (m.audioBuffer === undefined) m.audioBuffer = await FM.decodeAudio(m.file);
-      if (!m.audioBuffer) continue;
+      if (!m.audioBuffer) { dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue; }
       const buf = makeClipBuffer(oac, m.audioBuffer, layer);
       const clipEnd = layer.start + Math.min(layer.duration, buf.duration);
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]
@@ -315,6 +341,19 @@ window.FM = window.FM || {};
       node.connect(gain);
       node.start(oStart - from, oStart - layer.start, oEnd - oStart);   // when-in-range, offset-into-clip, play-len
     }
+    /* Report before returning, whichever way it went (queue 215). The `!any` case is the one he hit —
+     * an export with no soundtrack at all — and until now it returned null in silence. A layer that was
+     * dropped while OTHERS made it through is just as worth saying: that is the case where the file has
+     * sound, so nothing looks wrong, and one of your clips is quietly missing from it. */
+    if (dropped.length) {
+      console.warn('[export] ' + dropped.length + ' layer(s) contributed no audio:\n  · ' + dropped.join('\n  · '));
+      if (FM.toast) {
+        FM.toast(any
+          ? dropped.length + ' clip' + (dropped.length === 1 ? '' : 's') + ' had no usable audio — see the console'
+          : 'Exporting with NO SOUND — ' + dropped.length + ' audio clip' + (dropped.length === 1 ? '' : 's') + ' could not be read (see the console)', 5200);
+      }
+    }
+    FM._lastAudioDrops = dropped;   // the suite reads this rather than scraping toasts
     if (!any) return null;
     const rendered = await oac.startRendering();
     chains.forEach(c => { try { c.dispose(); } catch (e) {} });
