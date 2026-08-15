@@ -4623,6 +4623,28 @@ wait for them to report back."*
       · **His demo request stands**, and a probe page (`tests/_amdrag.html`) would be the honest way to
         show it: the gesture is hard to judge from a screenshot.
 
+      **MEASURED 16 Aug — and it corrects the design above in one important way.** In the Studio layout
+      (the one he uses) the add menu and the timeline are **not two things that can have different
+      heights**. They are side by side in the SAME grid row:
+      | | |
+      |---|---|
+      | `#app` grid rows | `616px 264px` — two rows, not three |
+      | inspector panel | top 616, height 264 |
+      | timeline panel | top 616, height 264 |
+      | difference | **0px in both top and height** |
+      So "drag the add menu up while the timeline stays put" is impossible *within the grid* — they are
+      one row, and its height is `--tl-h`. Raising one raises both.
+      **This makes his "it shouldn't push the canvas to be smaller but just go over the canvas" a
+      STRUCTURAL REQUIREMENT rather than a preference**, which is worth knowing before anyone tries to
+      honour it as a nicety: the add menu can only be taller than the timeline by leaving the grid
+      altogether and floating above the stage. The design note above guessed at that for performance
+      reasons; the real reason is that there is no other way for it to work at all.
+      **Practical consequence for the build:** the drag does not resize a grid row. It takes the panel
+      out of flow (absolute against `#app`, its grid slot left holding the undragged height so nothing
+      reflows), sizes it upward from the band's top edge, and only writes `--tl-h` in the coupled case
+      once it has been pushed back down onto the timeline. The floor is still `--tl-h`; what changes is
+      that the menu above that floor is a floating surface, not a taller row.
+
 - [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
       looks dead. DONE v7.95.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one
       to open up all your projects or elements or tutorials. Those buttons should also be clear but not
