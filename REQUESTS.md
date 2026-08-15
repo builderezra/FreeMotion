@@ -4124,7 +4124,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       up the bottom of the panel. Check the back arrow really does exit group context on BOTH phone and
       desktop before deleting the pill, so this does not repeat queue 53 (Group's action survived and
       every way to reach it did not).
-- [ ] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap.** Three parts,
+- [x] **184 — Speed menu: AM's four "speed to the playhead" buttons, and no speed cap. PARTS 1 & 2 DONE v8.09.** Three parts,
       from one message (AM screenshot attached showing the four buttons above the 1.00x slider):
       1. *"the speed menu needs the crop buttons… let's say your clip is slightly too short for what you
          need, then you can go on the timeline to exactly where you want it to last to, then press a
@@ -4136,6 +4136,30 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       3. *"it should be able to speed up stuff to your pointer, kinda like how we have the extend and
          crop buttons already, but instead of extending it, it just makes it faster or slower."* — the
          same gesture vocabulary as trimming, applied to speed.
+
+      **DONE v8.09 — parts 1 and 3, which are the same request said twice, and part 2.**
+      Two buttons above the speed ruler. Park the playhead and the speed is **solved**: the footage in
+      the clip (duration × speed) never changes when you re-time, so a clip that should end at T with
+      its start fixed needs speed = footage ÷ (T − start). A 4-second clip told to end 2 seconds after
+      it begins comes out at exactly 2.000× and lands on the playhead to the millisecond. One button
+      holds the start and moves the end; the other holds the end and moves the start. They **refuse**
+      the cases with no answer instead of doing something arbitrary — a playhead before the clip starts
+      cannot be where it ends, and a clip with a **speed ramp** has no single speed to solve for, so
+      solving one would throw your ramp away. Both say so.
+      **Part 2 — the cap is gone.** It was 0.25×–4×, which is why you hit it; it is now **0.01×–1000×**.
+      Type the number in the box for the extremes — the ruler still moves 5% a step so normal speeds
+      feel exactly as they did, and a linear slider across that range would have put 1× a pixel from
+      the left end. One caveat worth knowing: a browser caps how fast a `<video>` element can *play*,
+      so live preview of a 900× clip cannot keep up. The render and the export seek frame by frame and
+      are unaffected — the exported picture is right.
+
+      **⚠️ WHY TWO BUTTONS AND NOT FOUR — one line from you closes this.** You said AM has four, and
+      the screenshot is described as four buttons above the 1.00× slider. Working from the description
+      alone I could only find **two operations that actually differ**: solve so the clip STARTS at the
+      playhead, and solve so it ENDS there. Any other pairing I could invent came out as a duplicate
+      of one of those wearing a different arrow. Rather than ship two buttons that quietly do the same
+      thing as their neighbours, there are two. **If the other two do something I have not thought of,
+      say what they do and they go in.** Everything else in this entry is finished.
 - [x] **183 — Canvas settings needs "Save project as preset". DONE v8.08.** His words: *"This settings menu shall
       have an option that says save project as preset"* — screenshot is the **Canvas settings** dialog
       (aspect · Resolution · Frame rate · Background · Size · App settings / Cancel / Apply), so it is

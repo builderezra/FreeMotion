@@ -1,4 +1,4 @@
-# Where things are — written at v8.08, 16 Aug
+# Where things are — written at v8.09, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -68,8 +68,9 @@ it, still oldest-first.
 | 8.06 | Swipe **UP** on Recents opens Faves (**#204**) — the gate mirrored, not negated |
 | 8.07 | The app says when an effect **cannot do anything** to a layer (**#180**) |
 | 8.08 | **Save project as preset** in Canvas settings, spent on the New project screen (**#183**) |
+| 8.09 | **Speed to the playhead** — the speed is solved, not nudged — and the 4x cap lifted to 1000x (**#184**) |
 
-Suite: **378/378** at v8.08, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+Suite: **382/382** at v8.09, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
 green run finally means something again.
 
 **His PC-layout block (#230–#247) is FINISHED except #244**, so the queue-jump exception above has
@@ -157,6 +158,15 @@ the queue.
   checked Classic and he uses Studio. The test now checks both.
 - **A fix can go stale.** v7.87's black bar was a *correct* 2024 fix (a flat ring matching a flat home)
   that broke when home gained light and grain. Ask what a guard is matching, not just whether it works.
+- **A test can be dead without being wrong.** Twice more on 16 Aug: the "does nothing here" hint had a
+  380px check that passed while the EYE button was being shoved off screen (the tag fitted; the thing
+  next to it did not — a screenshot caught it, the DOM check could not), and the speed "held edge stays
+  put" assertion passed against a version that aimed at the playhead instead, because with nothing
+  clamped the two produce the identical number. **Both now assert a CONTROL first** — the test proves
+  the case can tell the two behaviours apart before it judges anything.
+- **Never run a browser check while a mutation job is running.** One measurement came back with the
+  speed solved upside-down; that was the mutation the background job had just written into the file,
+  not the code. Two minutes lost, and it would have been an hour if I had believed it.
 - **The suite catches what the browser misses.** Three times today: a dead fill assertion, a
   double-firing slam, a layout-moving padding. Never skip the mutation check.
 

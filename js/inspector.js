@@ -2435,6 +2435,23 @@ window.FM = window.FM || {};
   FM._fillPanel = fillPanel;
 
   // ===== Move & Transform — Alight Motion's mode-rail editor (Move / Rotate / Scale / Skew) =====
+  /* Speed bounds (queue 184 part 2). His words: "it seems alight motion lets you speed up and slow
+   * down unlimitedly, you can have something 1000x speed for example." It was 0.25×–4× — which is
+   * why he hit it. Now 0.01×–1000×.
+   *
+   * Widening it does NOT ruin the control, because the speed row is a scrub ruler plus a typed box,
+   * not a fixed-width slider: the ruler still moves 5% per step so ordinary speeds feel exactly as
+   * they did, and 1000× is reached by typing in the box — "the ruler is for feel, the box is for
+   * precision", which is rangeRow's own rule rather than a new one invented here. A linear slider
+   * across this range would have put 1× a pixel from the left end and made every normal speed
+   * unreachable, which is the trap this shape avoids.
+   *
+   * Worth knowing at the extremes: a <video> element's playbackRate is capped by the BROWSER (we ask
+   * for at most 16×), so live preview playback of a 900× clip cannot keep up. Rendering and export
+   * seek per frame and are unaffected — the picture is right, it is only the live element that
+   * cannot run that fast. */
+  const SPD_MIN = 0.01, SPD_MAX = 1000;
+
   const MT_ICONS = {
     track: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
     move: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>',
@@ -3643,8 +3660,76 @@ window.FM = window.FM || {};
       rail.appendChild(easeBtn);
       spRow.appendChild(rail);
       const spCenter = el('div', 'mt-center spd-center');
+      /* ---- Speed to the playhead (queue 184) --------------------------------------------------
+       * His words: "let's say your clip is slightly too short for what you need, then you can go on
+       * the timeline to exactly where you want it to last to, then press a button and it will change
+       * the speed to go exactly to that point."
+       *
+       * So the speed is SOLVED, not nudged. The invariant is the source span — duration × speed, the
+       * amount of footage in the clip — which re-timing never changes. Want the clip to end at time
+       * T with its start fixed? The new duration is T − start, so the new speed is span / (T − start).
+       * One divide; the value of this feature is that you never work it out yourself.
+       *
+       * Above the slider, matching where AM puts them. Two buttons, one per edge, because those are
+       * the two things that can actually be solved — see the note in REQUESTS #184 about the four in
+       * his screenshot. Deliberately NOT disabled when the playhead is out of range: the panel does
+       * not rebuild while you scrub, so a button greyed out at build time would still be grey after
+       * you moved the playhead somewhere valid. Same reasoning, and the same comment, as the trim
+       * buttons in the quick row — each handler checks the CURRENT playhead instead. */
+      function spdSolve(toEnd) {
+        // A ramp is a curve through several speeds; there is no single speed to solve for, and
+        // overwriting it would silently throw the ramp away.
+        if (FM.isAnimated(layer.speed)) {
+          if (FM.toast) FM.toast('This clip has a speed ramp — solving one speed would throw the ramp away', 2800);
+          return;
+        }
+        const span = layer.duration * (layer.speed || 1);         // the footage, which re-timing never changes
+        const end = layer.start + layer.duration;
+        const want = toEnd ? (FM.time - layer.start) : (end - FM.time);
+        if (!(want > 0.02)) {
+          if (FM.toast) FM.toast(toEnd ? 'Put the playhead after the clip starts' : 'Put the playhead before the clip ends', 2400);
+          return;
+        }
+        let sp = span / want;
+        sp = Math.max(SPD_MIN, Math.min(SPD_MAX, sp));
+        const durBefore = layer.duration;
+        layer.speed = sp;
+        layer.duration = Math.max(0.1, span / sp);
+        // Clamp against the source actually left, exactly as the slider and the trim grips do.
+        const mm = FM.media.get(layer.id);
+        const srcDur = (mm && mm.duration) ? mm.duration : Infinity;
+        if (layer.type === 'video' && isFinite(srcDur)) {
+          layer.duration = Math.max(0.1, Math.min(layer.duration, (srcDur - (layer.trimStart || 0)) / sp));
+        }
+        // Holding the RIGHT edge means the left edge moves — and it moves to wherever the clamped
+        // duration actually put it, not to the playhead we were aiming at, or a clip clamped by its
+        // source would end up somewhere neither edge was asked for.
+        if (!toEnd) layer.start = end - layer.duration;
+        if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+        const newEnd = layer.start + layer.duration;
+        if (newEnd > FM.scene.project.duration) FM.scene.project.duration = newEnd;
+        const m2 = FM.media.get(layer.id);
+        if (m2 && m2.el) { try { m2.el.playbackRate = Math.min(16, Math.max(0.0625, sp)); } catch (e) {} }
+        FM.seekVideosToTime(); FM.timeline.rebuild(); commitH(); FM.inspector.refresh();
+        if (FM.toast) FM.toast('Speed ' + (Math.round(sp * 100) / 100) + '×', 1600);
+      }
+      {
+        const sbar = el('div', 'spd-solve-row');
+        const mk = (title, icon, toEnd) => {
+          const b = el('button', 'qr-btn spd-solve');
+          b.title = title; b.innerHTML = svgIcon(icon);
+          b.setAttribute('aria-label', title);
+          b.addEventListener('click', () => spdSolve(toEnd));
+          sbar.appendChild(b);
+        };
+        // Same icon vocabulary as the trim pair, so the row reads as "the speed version of those".
+        mk('Speed so the clip STARTS at the playhead (the end stays put)', 'M6 4v16M6 4h4M6 20h4M14 4v16', false);
+        mk('Speed so the clip ENDS at the playhead (the start stays put)', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', true);
+        spCenter.appendChild(sbar);
+        spCenter.appendChild(el('div', 'insp-hint', 'Park the playhead, then press one of these — the speed is worked out so the clip begins or ends there.'));
+      }
       spCenter.appendChild(rangeRow('Speed %', () => Math.round((FM.evalProp(layer.speed, FM.time) || 1) * 100), v => {
-        const sp = Math.max(0.1, v / 100);
+        const sp = Math.max(SPD_MIN, v / 100);
         if (FM.isAnimated(layer.speed)) {
           FM.setProp(layer, 'speed', sp, FM.time);          // ramp: writes/updates a keyframe at the playhead; clip window stays fixed
         } else {
@@ -3674,7 +3759,7 @@ window.FM = window.FM || {};
         const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, FM.evalProp(layer.speed, FM.time) || 1)); } catch (e) {} }
         FM.seekVideosToTime();
         FM.timeline.rebuild();
-      }, 25, 400, 5, () => FM.inspector.refresh()));
+      }, SPD_MIN * 100, SPD_MAX * 100, 5, () => FM.inspector.refresh()));
       if (spAnim) spCenter.appendChild(el('div', 'insp-hint', 'Speed is keyframed (ramp): the clip length stays fixed while playback speeds up and slows down along the curve — use the curve button to shape the easing.'));
       spRow.appendChild(spCenter);
       body.appendChild(spRow);

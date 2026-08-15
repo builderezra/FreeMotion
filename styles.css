@@ -5477,3 +5477,11 @@ body.fm-pushing #toast { z-index: 213; }
 .hm-np-chip.on { border-color: var(--accent); background: var(--accent-soft); }
 .hm-np-chip-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hm-np-chip-meta { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+
+/* Speed-to-the-playhead buttons (queue 184). Above the speed ruler, matching where AM puts them.
+   They borrow .qr-btn so they are visibly the same KIND of control as the trim buttons in the quick
+   row — which is the comparison he drew himself ("kinda like how we have the extend and crop
+   buttons already"). Wider than a quick-row button because there are only two of them and a
+   40px-square target in a full-width panel looks like something went wrong. */
+.spd-solve-row { display: flex; gap: 8px; margin: 0 0 8px; }
+.spd-solve { flex: 1 1 0; min-width: 0; height: 40px; }

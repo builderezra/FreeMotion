@@ -14779,6 +14779,135 @@
     }
   });
 
+  /* ---------------- queue 184: speed to the playhead ----------------
+   * "Go on the timeline to exactly where you want it to last to, then press a button and it will
+   * change the speed to go exactly to that point." The whole value is that the number is EXACT, so
+   * the tests assert the landing position, not that a button exists. */
+
+  // A VIDEO layer, because the Speed panel is gated to layers with a source (layerHasSource) — a
+  // shape has no Speed category at all, so testing on one would prove nothing about this feature.
+  // No media is attached: FM.media.get() returns nothing, the source-length clamp sees Infinity, and
+  // the re-timing arithmetic under test is exactly the arithmetic a real clip gets.
+  function spdLayer(start, dur, speed) {
+    var L = FM.makeLayer('video', { name: 'V' });
+    L.start = start; L.duration = dur; L.speed = speed == null ? 1 : speed;
+    return L;
+  }
+  function spdPanel(L) {
+    FM.scene.layers.push(L); FM.selectLayer(L.id);
+    if (FM.inspector.openCategory) FM.inspector.openCategory('speed');
+    return document.querySelectorAll('.spd-solve');
+  }
+
+  test('speed-to-playhead lands the clip END exactly on the playhead', { item: 'speed-solve' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    var layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      var L = spdLayer(1, 4, 1);                       // 1s..5s, 4s of footage at 1x
+      var btns = spdPanel(L); await frame();
+      btns = document.querySelectorAll('.spd-solve');
+      if (btns.length !== 2) throw new Error('expected two speed-to-playhead buttons, found ' + btns.length);
+      FM.time = 3;                                     // want the clip to end at 3s
+      btns[1].click(); await frame();
+      var end = L.start + L.duration;
+      if (Math.abs(end - 3) > 0.001) throw new Error('the clip ends at ' + end.toFixed(3) + 's, not on the playhead at 3s');
+      if (Math.abs(L.start - 1) > 1e-6) throw new Error('the START moved (' + L.start + ') — it was supposed to stay put');
+      // 4s of footage into a 2s window is 2x, and the footage itself must not change
+      if (Math.abs(L.speed - 2) > 0.001) throw new Error('speed solved to ' + L.speed + ', expected 2');
+      if (Math.abs(L.duration * L.speed - 4) > 0.001) throw new Error('the source span changed — re-timing must not add or drop footage');
+    } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+  });
+
+  test('speed-to-playhead lands the clip START exactly, holding the end', { item: 'speed-solve' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    var layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      var L = spdLayer(1, 4, 1);                       // 1s..5s
+      spdPanel(L); await frame();
+      var btns = document.querySelectorAll('.spd-solve');
+      FM.time = 4;                                     // want the clip to begin at 4s, still ending at 5s
+      btns[0].click(); await frame();
+      if (Math.abs(L.start - 4) > 0.001) throw new Error('the clip starts at ' + L.start.toFixed(3) + 's, not on the playhead at 4s');
+      if (Math.abs((L.start + L.duration) - 5) > 0.001) throw new Error('the END moved to ' + (L.start + L.duration) + ' — it was supposed to stay put');
+      if (Math.abs(L.speed - 4) > 0.001) throw new Error('4s of footage into a 1s window is 4x, got ' + L.speed);
+
+      /* And the case that actually PROVES the end is held, rather than coinciding with it. In the
+         easy case above, "put the left edge at end − duration" and "put it at the playhead" give the
+         same number, so a version that aimed at the playhead passed — a dead assertion, found by
+         mutating it. They only diverge once the duration is CLAMPED: ask for a window so small that
+         the solved speed hits the 1000x ceiling and the 0.1s floor takes over. Aiming at the
+         playhead then leaves the clip ENDING past where it started, which is the real defect. */
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      var C = spdLayer(1, 4, 1);                       // 1s..5s again
+      spdPanel(C); await frame();
+      var cb = document.querySelectorAll('.spd-solve');
+      // Ask for a window BELOW the 0.1s duration floor, so the solved duration is clamped and the
+      // two versions stop agreeing. Read the clock back rather than assuming it took the value —
+      // the playhead may snap, and a window that snapped shut would make this prove nothing again.
+      FM.time = 4.95;
+      var want = 5 - FM.time;
+      if (!(want > 0.001 && want < 0.1)) throw new Error('control failed: the window is ' + want + 's, which does not reach the duration floor — this case cannot tell the two behaviours apart');
+      cb[0].click(); await frame();
+      if (C.duration < 0.099) throw new Error('control failed: the duration floor was not applied (' + C.duration + '), so nothing here is clamped');
+      var cEnd = C.start + C.duration;
+      if (Math.abs(cEnd - 5) > 0.002) throw new Error('the end moved to ' + cEnd.toFixed(3) + 's — with the duration clamped, the held edge must STILL land on 5s');
+    } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+  });
+
+  test('speed-to-playhead refuses the cases where there is no answer', { item: 'speed-solve' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    var layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      // Playhead BEFORE the start: "end here" has no solution — a clip cannot end before it begins.
+      var L = spdLayer(2, 4, 1);
+      spdPanel(L); await frame();
+      var btns = document.querySelectorAll('.spd-solve');
+      FM.time = 1;
+      var sp0 = L.speed, st0 = L.start, du0 = L.duration;
+      btns[1].click(); await frame();
+      if (L.speed !== sp0 || L.start !== st0 || L.duration !== du0) {
+        throw new Error('an impossible request still changed the clip: speed ' + L.speed + ' start ' + L.start + ' dur ' + L.duration);
+      }
+      // A speed RAMP has no single speed to solve for; overwriting it would throw the ramp away.
+      var R = spdLayer(1, 4, 1);
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.scene.layers.push(R); FM.selectLayer(R.id);
+      FM.time = 1; FM.toggleProp(R, 'speed', 1, 1);
+      FM.time = 4; FM.setProp(R, 'speed', 2, 4);
+      if (!FM.isAnimated(R.speed)) throw new Error('control failed: the ramp was not created, so this test proves nothing');
+      if (FM.inspector.openCategory) FM.inspector.openCategory('speed');
+      await frame();
+      var rb = document.querySelectorAll('.spd-solve');
+      var before = JSON.stringify(R.speed);
+      FM.time = 3; if (rb[1]) rb[1].click(); await frame();
+      if (JSON.stringify(R.speed) !== before) throw new Error('solving a speed destroyed an existing speed ramp');
+    } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+  });
+
+  test('the speed range reaches the 1000x he asked for', { item: 'speed-solve' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
+    var layers0 = FM.scene.layers.slice();
+    try {
+      var L = spdLayer(0, 4, 1);
+      spdPanel(L); await frame();
+      // The typed box is the precision half of this control — it must accept what the ruler cannot reach.
+      var box = null;
+      document.querySelectorAll('.spd-center .prop-row--scrub').forEach(function (r) {
+        var lb = r.querySelector('label');
+        if (lb && /speed/i.test(lb.textContent)) box = r.querySelector('.fx-scrub-val');
+      });
+      if (!box) throw new Error('no speed value box found');
+      box.value = '100000';                                   // 1000x, in percent
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await frame();
+      if (!(L.speed >= 999)) throw new Error('1000x was refused — speed came out as ' + L.speed + ' (the old cap was 4x)');
+      box.value = '1';                                        // 0.01x
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await frame();
+      if (!(L.speed <= 0.011)) throw new Error('0.01x was refused — speed came out as ' + L.speed);
+    } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); }
+  });
+
   /* ---------------- queue 183: "save project as preset" ----------------
    * The preset is the CANVAS SETTINGS dialog's own contents — aspect, size, fps, background. The
    * store is user-editable text on disk and the names are user text on screen, so both directions
