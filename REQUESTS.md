@@ -3456,6 +3456,27 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       mixed at zero, or never decoded at all; and check `layer.muted`, since Extract Audio deliberately
       mutes the original and a muted ORIGINAL plus a missing twin would produce exactly this. Establish
       which by exporting a known clip and inspecting the file, not by reading.
+      **REPRODUCTION, 15 Aug — the first one this entry has ever had.** His words: *"I made a fresh
+      project, added some sound effects, pressed export with some pretty normal export settings and got
+      an audioless clip."*
+      **Read what is specific in that sentence, because it narrows this a long way:**
+      · **A FRESH project** — so it is not state accumulated over a long edit, not a project migrated
+        from an older build, and not something a previous export left behind.
+      · **SOUND EFFECTS** — not an imported song. If he means the app's own audio (Elements / the audio
+        browser) then these layers are created by a different path from `FM.loadVideoFile`, and every
+        audio fix this file records (#96's duration disagreement, #95's start-up gap, #72's truncation)
+        was measured on IMPORTED files. A sound-effect layer may never have been exported with audio at
+        all, which would explain why this keeps coming back after each of those fixes.
+      · **Normal export settings** — so it is not an exotic codec or resolution combination.
+      **First move for whoever picks this up: build exactly that scene and export it.** Fresh project,
+      add a sound effect the way the UI does, export at defaults, then count the audio samples in the
+      resulting MP4 (`tests/_xresume.html` already counts video samples and shows how). Do NOT start from
+      the encoder — start from whether the exporter can even SEE that layer as an audio source, because
+      "a layer type the audio path does not recognise" fits every symptom here and nothing measured so
+      far rules it out.
+      **This is the most serious open item in the file** and now has a concrete repro, so it should go
+      first once the current PC run is finished.
+
 - [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
@@ -4261,7 +4282,7 @@ wait for them to report back."*
       out of the dialog's own backdrop blur is a layout change, and it deserves a clean run rather than
       being tacked onto a 280ms flourish.
 
-- [ ] **242 — The three layer buttons need a different background so they read as a group apart.** (15
+- [x] **242 — The three layer buttons need a different background so they read as a group apart. DONE v7.89.** (15
       Aug, with the trio circled in red.) His words: *"make these three buttons have a different
       background to signify their difference."* The three are the SELECTION-dependent controls in the
       transport row — parenting, delete, and the new ⋯ layer menu (#t-sel) — which appear only when a
@@ -4271,6 +4292,14 @@ wait for them to report back."*
       *Note: v7.79 (#230) deliberately stripped the resting box off every button in this row on his own
       instruction. This is not a reversal of that — it is a background behind the GROUP, not a box on
       each button — and it needs to keep the hover behaviour he asked for.*
+
+      **DONE v7.89, built exactly that way.** One quiet pill behind all three; every button inside stays
+      bare and keeps the hover box you asked for in #230. The test asserts BOTH halves, so a future
+      version that reaches for per-button backgrounds goes red.
+      **One thing that needed measuring rather than looking at:** hidden children still leave their
+      wrapper's padding and background behind, so with nothing selected there was an empty lit pill
+      sitting in the row — only 10px wide, easy to miss by eye. The wrapper is now marked in step with
+      its buttons, and the empty case is asserted. Both mutations red.
 
 - [ ] **243 — Adding a benchmark does not turn the timer yellow until you leave and come back.** (15
       Aug.) His words: *"when you add a benchmark it doesnt show up as yellow, youve made it so if you
@@ -4307,3 +4336,44 @@ wait for them to report back."*
       the space on screen except for the canvas so you can preview."* So the add menu is going to become
       a tall, resizable browser that must never cover the canvas — build the drag with that in mind.
       *"Feel free to do a demo of this when you get to it as well."*
+
+- [ ] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
+      looks dead.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one
+      to open up all your projects or elements or tutorials. Those buttons should also be clear but not
+      show the film grain. Also the film grain is seemingly still and not moving. It looks kind of cheap.
+      It would be nice if it was just subtle and just smoothly moving in the background so it doesn't
+      look shit — it's okay to just have it fast moving like actual film grain on the TV. Maybe this is
+      up to you but maybe it shouldn't be film grain and it should just be some sort of texture that
+      makes it look rough and like quality, I don't know what it would be but maybe there's a better
+      option, think about it."*
+      **(a) The tab buttons** — Projects / Templates / Elements / Tutorials, and the search/Select/cog
+      pills with them. Same fix the CARDS got in #227: they are glass with no backdrop blur, so the field
+      behind them comes through raw. One rule, the same one.
+      **(b) The grain looking still is a REGRESSION I introduced in v7.76, and the cause is arithmetic.**
+      Before that there were **six** tiles and the field cross-faded between randomly chosen pairs. v7.76
+      cut it to **two** — correctly, for the card case, since the cards had stopped using them — and two
+      tiles cross-fading can only ever go A→B→A→B. After the first second your eye has learned both
+      patterns and the whole thing reads as one static field breathing, which is exactly "seemingly still
+      and not moving… looks kind of cheap". More tiles, or a moving field, or something other than tiles.
+      **(c) He is explicitly inviting a rethink of the whole texture**, and it is worth taking: a tiled
+      noise PNG is the reason this keeps needing tuning (76 → 94 → 105 → 133 → 157 → 245). Options to
+      weigh before building: more tiles cycled in a longer non-repeating order (cheapest, keeps
+      everything else); a real per-frame re-roll on a small canvas (true TV static, costs a repaint);
+      or a non-noise texture — a fine woven/brushed field, or a very low-contrast diagonal weave — which
+      would read as "rough and quality" without pretending to be film. **His own steer: fast is fine.**
+
+- [ ] **246 — PC: the add-menu background must reach the menu's borders.** (15 Aug.) His words: *"the
+      background you added behind everything on the add menu on pc looks whack, it needs to fully go to
+      the borders on that menu."*
+      A fault in **v7.85** (#236). The gradient went on `.addmenu--panel`, which is only the CONTENT box
+      — measured 307×210 inside an inspector panel far taller than that — so it reads as a floating
+      rectangle of light sitting inside the menu instead of as the menu's surface. It needs to be on the
+      region that actually has the borders (`#inspector-panel` / `#inspector` while the add menu is up),
+      edge to edge. **Do not simply pad the panel to fill** — v7.85 already learned that: 9px of padding
+      there gave the inspector a scrollbar it did not have, and two tests catch it.
+
+- [ ] **247 — Opening the export menu should pause playback.** (15 Aug.) His words: *"when you open the
+      export menu playback should pause."* Straightforward: the export dialog opening is a hard stop for
+      the transport. Worth checking the same for the other full-screen doors while in there (settings,
+      canvas settings) and saying which ones already do it, rather than fixing one and leaving siblings
+      inconsistent.

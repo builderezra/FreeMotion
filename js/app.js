@@ -3622,6 +3622,10 @@ window.FM = window.FM || {};
     show('btn-del-layer', n >= 1);
     show('btn-parent', n >= 1 && total >= 2);
     show('btn-more-layer', n >= 1);   // queue 233 — the full clip menu had no button on PC at all
+    /* The group's own ground (queue 242) has to leave with its buttons: hidden children still leave the
+     * wrapper's padding and background behind, which is an empty 10px pill sitting in the row. */
+    const selWrap = document.getElementById('t-sel');
+    if (selWrap) selWrap.classList.toggle('has-sel', n >= 1);
   }
   FM.pcTransportLayout = pcTransportLayout;
   FM.pcTransportSync = pcTransportSync;

@@ -284,6 +284,7 @@
            appears and disappears, is what he called messy. */
         var pn = document.getElementById('proj-name');
         if (pn && pn.getBoundingClientRect().width > 1) throw new Error('a second name field is visible in the transport row — there should be exactly one, in the inspector header');
+
         var pns = document.getElementById('proj-name-s');
         if (!pns) throw new Error('#proj-name-s (the inspector header name field) is missing');
         if (pns.getBoundingClientRect().width < 10) throw new Error('the inspector header name field is not on screen (' + Math.round(pns.getBoundingClientRect().width) + 'px wide)');
@@ -3345,9 +3346,27 @@
       const btn = document.getElementById('btn-more-layer');
       if (!btn) throw new Error('#btn-more-layer does not exist — there is no three-dot button on PC at all');
       if (btn.getBoundingClientRect().width > 1) throw new Error('the layer ⋯ button is showing with nothing selected — it is a layer control');
+      // …and neither does the group's ground (queue 242) — an empty lit pill in the row is the bug.
+      const selEmpty = document.getElementById('t-sel');
+      if (selEmpty && selEmpty.getBoundingClientRect().width > 1) throw new Error('the selection group is still ' + Math.round(selEmpty.getBoundingClientRect().width) + 'px wide with nothing selected — its background is showing as an empty pill');
 
       FM.selectLayer(A.id); FM.refreshAll(); await sleep(40);
       if (btn.getBoundingClientRect().width < 10) throw new Error('a layer is selected and the ⋯ button is still not on screen');
+
+      /* The selection trio wears its own ground (queue 242). Ezra, with the three circled: "make these
+         three buttons have a different background to signify their difference." They are the controls
+         that belong to the SELECTION rather than to the project, and they come and go with it. */
+      const selW = document.getElementById('t-sel');
+      const bg = getComputedStyle(selW).backgroundColor;
+      if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') throw new Error('the selection trio has no ground of its own — it reads the same as the project controls beside it');
+      // …and the buttons inside stay BARE. Queue 230 removed every resting box on his own instruction
+      // ("if you're not hovering over it, you don't show it"), and a ground behind the GROUP must not
+      // quietly put boxes back on the members.
+      [].slice.call(selW.children).forEach(function (c) {
+        if (c.getBoundingClientRect().width < 2) return;
+        const cbg = getComputedStyle(c).backgroundColor;
+        if (cbg !== 'rgba(0, 0, 0, 0)' && cbg !== 'transparent') throw new Error(c.id + ' has a resting box again (' + cbg + ') — the ground belongs to the group, not to each button');
+      });
 
       // …and it must open the FULL clip menu, not the clipboard one next door.
       btn.click(); await sleep(60);

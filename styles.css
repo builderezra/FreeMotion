@@ -5304,3 +5304,25 @@ body.fm-pushing #toast { z-index: 213; }
 .ico.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 @keyframes cog-turn { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
 @media (prefers-reduced-motion: reduce) { .ico.cog-turn { animation: none; } }
+
+/* ---- The selection trio wears its own ground (v7.89, queue 242) --------------------------------
+   Ezra, with the three circled: "make these three buttons have a different background to signify their
+   difference." They are the SELECTION-dependent controls — parenting, delete, and the ⋯ layer menu —
+   which appear only while a layer is selected and vanish again when nothing is. Everything else on this
+   row belongs to the project and is always there, so the difference he is pointing at is real: this
+   group has a different owner, and it comes and goes.
+   The ground goes on the GROUP, not on the buttons. v7.79 stripped the resting box off every button in
+   this row on his own instruction ("if you're not hovering over it, you don't show it"), and putting
+   boxes back on three of them would undo that. One quiet pill behind all three says "these belong
+   together and they are not like their neighbours" while each button inside keeps the exact hover
+   behaviour he asked for.
+   Padding sits on the group so the pill has air without changing any button's hit box — the buttons are
+   34px either way, which the transport-fit test holds. */
+@media (min-width: 701px) {
+  #t-sel.has-sel {
+    padding: 0 5px; margin: 0 3px;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .045);
+    box-shadow: inset 0 0 0 1px var(--line-soft);
+  }
+}
