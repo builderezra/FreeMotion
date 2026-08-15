@@ -287,6 +287,27 @@
         var pns = document.getElementById('proj-name-s');
         if (!pns) throw new Error('#proj-name-s (the inspector header name field) is missing');
         if (pns.getBoundingClientRect().width < 10) throw new Error('the inspector header name field is not on screen (' + Math.round(pns.getBoundingClientRect().width) + 'px wide)');
+
+        /* PARENT sits next to the layer menu, delete one over (v7.81, queue 232). Ezra: "the one that's
+           next to the select layers button should be the parenting button." Asserted as DOM order in
+           #t-sel — the buttons are selection-dependent, so a pixel comparison would be measuring which
+           of them happens to be on screen rather than the order they are in. */
+        var selWrap = document.getElementById('t-sel');
+        if (!selWrap) throw new Error('#t-sel (the selection-dependent cluster) was never built');
+        var order = Array.prototype.slice.call(selWrap.children).map(function (c) { return c.id; });
+        if (order.indexOf('btn-parent') < 0 || order.indexOf('btn-del-layer') < 0) throw new Error('the selection cluster is missing parent or delete — it reads [' + order.join(', ') + ']');
+        if (order.indexOf('btn-parent') > order.indexOf('btn-del-layer')) {
+          throw new Error('delete still comes before parent — the cluster reads [' + order.join(', ') + '], and the one next to the layer menu should be parenting');
+        }
+
+        /* …and the parenting icon must not be the layer menu's icon again. Both were a rounded square
+           with a second rounded square behind it, which is exactly what he reported. Compared as SHAPE
+           COUNTS rather than by eye: two rects and nothing else is the mark that was wrong. */
+        var par = document.getElementById('btn-parent');
+        if (par) {
+          var rects = par.querySelectorAll('rect').length, paths = par.querySelectorAll('path').length;
+          if (rects >= 2 && paths === 0) throw new Error('the parenting icon is two bare rectangles again — that is the same mark as the layer-menu button next to it');
+        }
         if (!(ip.left < 2)) throw new Error('Studio: the bottom band should reach the window edge, inspector left=' + Math.round(ip.left));
         // …and the rail must never spill its controls over the panel below. The rail is only as tall as
         // the canvas now, and on a short window its buttons genuinely need more room than that (measured

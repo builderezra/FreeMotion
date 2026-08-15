@@ -3564,8 +3564,13 @@ window.FM = window.FM || {};
     if (home.childNodes.length) t.appendChild(home);
 
     // …after the duplicate button, the three that depend on what is selected
+    /* PARENT first, then delete (v7.81, queue 232). Ezra: "instead of it being the first one to the
+     * right of the select layers button… it should be like one over. So the one that's next to the
+     * select layers button should be the parenting button." Group is unmentioned and goes last: it only
+     * appears at 2+ selected, and putting it third keeps delete exactly "one over" as asked in both the
+     * one-layer and the many-layer case. */
     const sel = document.createElement('span'); sel.id = 't-sel';
-    ['btn-del-layer', 'btn-parent', 'btn-group'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
+    ['btn-parent', 'btn-del-layer', 'btn-group'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
     if (sel.childNodes.length) menu.parentNode.insertBefore(sel, menu.nextSibling);
 
     // far right — refresh chip, NOTES, cog, export, then view options OUTERMOST (his amendment)

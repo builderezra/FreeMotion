@@ -4073,8 +4073,8 @@ wait for them to report back."*
       writing to the right place are two different bugs, and the mutation that makes it always rename the
       project is caught by the second check, not the first.
 
-- [ ] **232 — PC: the delete and parenting buttons look bad, are in the wrong order, and the parenting
-      icon is a twin of its neighbour.** His words: *"the delete button, like the trash icon and the
+- [x] **232 — PC: the delete and parenting buttons look bad, are in the wrong order, and the parenting
+      icon is a twin of its neighbour. DONE — red delete and the hover-only box in v7.79, the rest in v7.81.** His words: *"the delete button, like the trash icon and the
       parenting button, those are in a good spot, but they just look shitty."*
       · Delete: *"it shouldn't have the box around it except for when you're hovering over it"* (same
         rule as #230) and *"the delete button should be, like, red by default. Like, it should just be a
@@ -4087,6 +4087,15 @@ wait for them to report back."*
         change its design so it doesn't look the exact same."*
       · *"it still needs to be fixed where it doesn't have the outline, and it's just the white version
         of itself where it's just the white logo, and it doesn't have that weird box around it."*
+
+      **DONE.** The cluster reads **⧉ layer menu · parent · delete** (Group last — it only shows at 2+
+      selected, and third keeps delete exactly "one over" in both cases). The parenting icon is a
+      **child-of tree** now — parent node, elbow down and across, child node. You were right that it was
+      almost literally the same mark: the layer-menu button is a rounded square with a second one behind
+      it, and parenting was a rounded square with a second one behind it; the only difference was a
+      dashed stroke, which is invisible at 19px. The boxes and the red delete came in v7.79.
+      The test compares the icon by SHAPE COUNTS — two rects and no paths is exactly the mark that was
+      wrong — so putting the twin back goes red. Both mutations caught.
 
 - [ ] **233 — PC: the three-dot menu does not appear when a layer is selected.** His words: *"when you
       have a layer selected, it should show the three dot menu. That three dot menu doesn't show up at
