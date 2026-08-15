@@ -1,6 +1,15 @@
 # Where things stand — written before a chat compaction (15 Aug 2026, updated at v7.47)
 
-**Live: v7.47. Working tree clean, HEAD == ssh/main. Suite 327/327. Nothing half-finished.**
+**Live: v7.52. Working tree clean, HEAD == ssh/main. Suite 329/329. Nothing half-finished.**
+
+Since v7.47: **v7.48** filters corrections + Delete out of the layer menu · **v7.49** the Filters tab
+became a real tile browser with a preview of every look (#113 DONE) · **v7.50** #31b's effects half
+answered (the app already had that blur, it just never said so) · **v7.51** an export can no longer be
+thrown away by a refresh · **v7.52** #168, the PC side rail gone and everything on the transport row.
+
+**Backed out and NOT shipped: #115** (drag a clip to the edge to auto-scroll). The second attempt hung
+the test suite outright — a `clipEdgeScroll` rAF that never terminated. Reverted clean. The entry's
+own notes on the two design defects still stand and are worth re-reading before a third go.
 
 [REQUESTS.md](REQUESTS.md) is the real list and is up to date. This file is the short version plus
 the things that are easy to get wrong.
@@ -9,8 +18,14 @@ the things that are easy to get wrong.
 
 ## The rules that are in force (he has had to repeat these)
 
-1. **OLDEST FIRST.** *"Remember I want the oldest things in the list done first, not what I just told
-   you."* Only an explicit "do this now" or a broken build jumps the queue.
+1. **OLDEST ACTIONABLE FIRST** — and the word *actionable* was learned the hard way on 15 Aug.
+   *"Remember I want the oldest things in the list done first, not what I just told you."* I read that
+   as strict lowest-number order, so #31/#47/#93/#95/#96/#97/#98 — nearly all **blocked waiting on
+   him** — kept absorbing every tick with small slices, while **#168**, fully specified and unblocked
+   since 13 Aug, sat untouched. He noticed: *"i swear you arent working through the tasks in order,
+   like i askied ages ago for the layout change on pc"* — and he was right. A blocked item does not
+   hold the queue. Say plainly that it is parked on him, and move to the next one that can actually
+   be finished. Only an explicit "do this now" or a broken build jumps ahead of that.
 2. **Every request goes into REQUESTS.md immediately**, at the bottom, before starting work on it.
    Never deleted. Anything not being done stays Open with a **Held** note.
 3. **If an old item is blocked on a decision from him, say so and move to the next-oldest.**
