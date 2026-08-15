@@ -1,0 +1,127 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#93 — is a plate translate the same thing as actually moving the layer?</title>
+<style>html,body{margin:0;background:#0d1418;color:#dfe8ec;font:12px/1.6 ui-monospace,monospace}pre{padding:14px;white-space:pre-wrap}</style>
+</head><body><pre id="out">…</pre>
+<script src="js/settings.js"></script><script src="js/screen.js"></script><script src="js/scene.js"></script>
+<script src="js/eases.js"></script><script src="js/masks.js"></script>
+<script src="js/behaviors.js"></script><script src="js/media.js"></script>
+<script src="js/blend-modes.js"></script><script src="js/compositor.js"></script>
+<script src="js/fx-registry.js"></script>
+<script>
+/* #93 left one thing undone and wrote down exactly what it was: a parallel agent reported a better
+ * wiggle — set the PLATE'S WINDOW to -d and blit 1:1, instead of rendering the plate at the layer's
+ * real position and then translating it — and the entry refused to adopt it "on the strength of a
+ * probe I have not run myself. Verify against ground truth first, then take it."
+ * This is that verification, and it is deliberately not a comparison of the two implementations
+ * against each other. Both are compared against GROUND TRUTH: the same layer with no effect at all
+ * and its transform genuinely moved by the same delta. That is the only reference that can say which
+ * one is RIGHT rather than which one is different.
+ *
+ * Three effects, not one. wiggle, drift and orbit are the same three lines — translate the plate,
+ * blit — so if the translate is wrong for wiggle at a frame edge it is wrong for all three, and the
+ * window trick fixes all three or none. Measuring them together is what makes that a fact instead
+ * of an assumption.
+ *
+ * Two numbers per case:
+ *   · DIFF vs ground truth — how many pixels disagree, and by how much. This is correctness.
+ *   · CONTROL — ground truth vs the layer NOT moved at all. If this is ~0 the comparison above is
+ *     vacuous (nothing moved, so of course everything matches), and the case is thrown out.
+ */
+(function () {
+  const L = [];
+  const say = s => { L.push(s); document.getElementById('out').textContent = L.join('\n'); };
+  const W = 300, H = 200;
+
+  // The compositor's own noise, copied. If this copy has drifted from the real one the numbers below
+  // cannot come out clean — a wrong delta moves ground truth somewhere the effect never goes — so the
+  // agreement IS the check on the copy, and no separate assertion is needed.
+  const wnoise = u => Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2;
+
+  const EFFECTS = {
+    wiggle: { params: { amount: 30, speed: 3 }, d: (p, tl) => [p.amount * wnoise(tl * p.speed), p.amount * wnoise(tl * p.speed + 100)] },
+    drift:  { params: { x: 40, y: 25 },         d: (p, tl) => [p.x * tl, p.y * tl] },
+    orbit:  { params: { radius: 45, speed: 0.8 }, d: (p, tl) => [p.radius * Math.cos(2 * Math.PI * p.speed * tl), p.radius * Math.sin(2 * Math.PI * p.speed * tl)] },
+  };
+
+  function scene(layers) { return { project: { width: W, height: H, fps: 30, duration: 6, background: '#000000', markers: [] }, layers: layers }; }
+
+  function shot(opts, t) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const l = FM.makeLayer('shape', { shape: 'rect', x: opts.x, y: opts.y, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 6 });
+    l.effects = opts.fx || [];
+    FM.renderScene(g, scene([l]), t);
+    return g.getImageData(0, 0, W, H).data;
+  }
+
+  // Grey-channel comparison: count of pixels off by more than 8/255, and the mean absolute error over
+  // the whole frame. The threshold exists because the two paths rasterise the same edge and a 1-LSB
+  // rounding difference along a 60px border is not a defect; anything structural is orders bigger.
+  function diff(a, b) {
+    let n = 0, sum = 0, worst = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      const e = Math.abs(a[i] - b[i]);
+      sum += e; if (e > 8) n++; if (e > worst) worst = e;
+    }
+    return { px: n, mean: sum / (a.length / 4), worst: worst };
+  }
+
+  const POSITIONS = [
+    { name: 'fully inside (control case)', x: W / 2, y: H / 2 },
+    { name: 'half off the LEFT edge',      x: 0,     y: H / 2 },
+    { name: 'half off the TOP-LEFT corner', x: 0,    y: 0 },
+  ];
+  const TIMES = [0.20, 0.55, 0.90, 1.25, 1.60, 1.95];
+
+  say('GROUND TRUTH = the same layer with NO effect, transform moved by the effect’s own delta.');
+  say('A translate of the finished plate can only be right where nothing was clipped away first.');
+  say('');
+
+  for (const key of Object.keys(EFFECTS)) {
+    const E = EFFECTS[key];
+    say('=== ' + key.toUpperCase() + '  ' + JSON.stringify(E.params));
+    for (const pos of POSITIONS) {
+      let sPx = 0, sMean = 0, sWorst = 0, sCtl = 0, n = 0;
+      for (const t of TIMES) {
+        const [dx, dy] = E.d(E.params, t);
+        const fx = [{ type: key, enabled: true, params: E.params }];
+        const got = shot({ x: pos.x, y: pos.y, fx: fx }, t);
+        const gt  = shot({ x: pos.x + dx, y: pos.y + dy, fx: [] }, t);
+        const still = shot({ x: pos.x, y: pos.y, fx: [] }, t);
+        const d = diff(got, gt), c = diff(gt, still);
+        sPx += d.px; sMean += d.mean; sWorst = Math.max(sWorst, d.worst); sCtl += c.px; n++;
+      }
+      const vacuous = (sCtl / n) < 200;
+      say('  ' + pos.name.padEnd(30) +
+          ' diff ' + String(Math.round(sPx / n)).padStart(6) + 'px' +
+          '   mean ' + (sMean / n).toFixed(2).padStart(6) +
+          '   worst ' + String(sWorst).padStart(3) +
+          '   [control ' + Math.round(sCtl / n) + 'px' + (vacuous ? '  <-- VACUOUS, ignore this row' : '') + ']');
+    }
+    say('');
+  }
+
+  /* COST. The claim attached to the better implementation is that it is also cheaper, because a
+     whole-pixel blit skips the bilinear resample a fractional translate() forces over the entire
+     frame. Timed at a real comp size rather than the 300x200 above, since the resample is per-pixel
+     and a toy frame hides it. */
+  (function cost() {
+    const PW = 1080, PH = 1920, N = 24;
+    const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+    const g = cv.getContext('2d');
+    const sc = { project: { width: PW, height: PH, fps: 30, duration: 6, background: '#000000', markers: [] }, layers: [] };
+    const l = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 260, shapeH: 260, fill: '#ffffff', start: 0, duration: 6 });
+    l.effects = [{ type: 'wiggle', enabled: true, params: { amount: 30, speed: 3 } }];
+    sc.layers = [l];
+    FM.renderScene(g, sc, 0.1);   // warm
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) FM.renderScene(g, sc, 0.2 + i * 0.05);
+    const per = (performance.now() - t0) / N;
+    say('COST  wiggle on a 1080x1920 comp, layer at the corner: ' + per.toFixed(2) + ' ms/frame over ' + N + ' frames');
+    say('      expanded-plate path: tried ' + (FM._wigTried || 0) + ', used ' + (FM._wigUsed || 0));
+  })();
+
+  window.__wigwin = L.join('\n');
+  window.__done = true;
+})();
+</script></body></html>

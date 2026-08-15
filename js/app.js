@@ -3547,10 +3547,17 @@ window.FM = window.FM || {};
     ['btn-del-layer', 'btn-parent', 'btn-group'].forEach(id => { const b = grab(id); if (b) sel.appendChild(b); });
     if (sel.childNodes.length) menu.parentNode.insertBefore(sel, menu.nextSibling);
 
-    // far right — refresh chip, cog, export, then view options OUTERMOST (his amendment)
+    // far right — refresh chip, NOTES, cog, export, then view options OUTERMOST (his amendment)
+    /* btn-notes was left behind by v7.52 and he caught it: "you still havent moved all the buttons on
+     * the pc version to where they should be, like the notepad button" (queue 229). Everything else in
+     * .top-actions came down to this row; notes did not, so it was stranded alone in a 50px header that
+     * otherwise held nothing but the wordmark. The order below is the one queue 171 wrote down and the
+     * comment beside the button in index.html has claimed ever since — refresh · notes · cog · export
+     * — which was true while they all lived in the top bar and quietly stopped being true when the rest
+     * of them moved. */
     const far = document.createElement('div'); far.id = 't-far';
     const ver = document.querySelector('.brand .ver'); if (ver) far.appendChild(ver);
-    ['btn-settings', 'btn-export', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
+    ['btn-notes', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
     if (far.childNodes.length) t.appendChild(far);
 
     t._pcBuilt = true;

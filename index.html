@@ -153,7 +153,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.72</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v7.73</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -193,8 +193,14 @@
              when at least one note is ticked, so you can see there is something waiting without
              opening it.
              LEFT OF THE COG since v7.12 (queue 171) — "Put the notes button to the left of the settings
-             cog, pushing the refresh button to the left". Once #168/#169 lands the refresh chip takes
-             the slot to the left of this one, so the run reads refresh · notes · cog · export. -->
+             cog, pushing the refresh button to the left", so the run reads refresh · notes · cog · export.
+             IT LIVES IN THE TRANSPORT ROW, NOT HERE. It is written in this header because that is where
+             its click handler was wired and where the rest of .top-actions used to be; pcTransportLayout
+             moves it into #t-far at startup on desktop. That move is why the sentence above is true
+             again: v7.52 took the cog and Export down to the row and left this button behind, alone in
+             the header, and the claim quietly became false for twenty-one builds until he noticed —
+             "you still havent moved all the buttons on the pc version" (queue 229, fixed v7.73). If you
+             ever add a control here, add it to that list too, or it will sit here on its own. -->
         <button id="btn-notes" class="btn tb-notes" title="Project notes" aria-label="Project notes"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke-linecap="round" stroke-linejoin="round"><!-- A sheet of paper, not an outline in the bar's colour (queue 186): white page, yellow edge, dark rules. Fixed colours on purpose — it is the one control that opens a light surface, and it should look like the thing it opens. --><path d="M5.9 1h12.2a2.45 2.45 0 0 1 2.45 2.45v17.1a2.45 2.45 0 0 1-2.45 2.45H5.9a2.45 2.45 0 0 1-2.45-2.45V3.45A2.45 2.45 0 0 1 5.9 1z" fill="#fffdf7" stroke="#ffcf47" stroke-width="2"/><path d="M8.3 7.1h7.4M8.3 12h7.4M8.3 16.9h4.5" stroke="#23211a" stroke-width="1.9"/></svg><span id="btn-notes-dot" class="tb-notes-dot"></span></button>
         <!-- App Settings on PC (v4.99). Ezra: "on mobile, there's a settings cog, but on PC, there
              isn't… the settings code should be added to PC version." Until now FM.settings was
@@ -771,7 +777,7 @@
   <script src="js/shortcuts.js?v=72"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=267"></script>
+  <script src="js/app.js?v=268"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=1"></script>

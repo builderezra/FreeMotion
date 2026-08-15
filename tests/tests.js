@@ -247,7 +247,12 @@
         if (bar.width > 4) throw new Error('Studio: the side rail is still ' + Math.round(bar.width) + 'px wide — it was supposed to go, with its contents moving into the transport row');
         var t = document.getElementById('transport');
         if (!t) throw new Error('Studio: no transport row for the rail\'s controls to have moved into');
-        ['btn-back', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(function (id) {
+        /* btn-notes joins this list at v7.73 (queue 229). It was the one control v7.52 forgot to bring
+           down: everything else in .top-actions moved into the row and notes stayed behind in the
+           header, alone, for twenty-one builds — while the comment beside it in index.html went on
+           describing the arrangement it had been part of before the move. A list is exactly the thing
+           a test can hold: forget a name next time and this goes red. */
+        ['btn-back', 'btn-notes', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(function (id) {
           var el = document.getElementById(id);
           if (!el) throw new Error('Studio: ' + id + ' has vanished entirely, not moved');
           if (!t.contains(el)) throw new Error('Studio: ' + id + ' did not move into the transport row');
@@ -264,6 +269,10 @@
         var kids = Array.prototype.slice.call(far.children).map(function (c) { return c.id || String(c.className); });
         if (kids[kids.length - 1] !== 'btn-amfit') throw new Error('Studio: view options is not outermost on the right — cluster reads [' + kids.join(', ') + ']');
         if (kids.indexOf('btn-settings') > kids.indexOf('btn-export')) throw new Error('Studio: the cog should sit to the LEFT of export — cluster reads [' + kids.join(', ') + ']');
+        // …and notes to the left of the cog, which is the order queue 171 chose and queue 229 came back
+        // to collect: refresh · notes · cog · export · view options.
+        if (kids.indexOf('btn-notes') < 0) throw new Error('Studio: the notes button is not in the far-right cluster at all — cluster reads [' + kids.join(', ') + ']');
+        if (kids.indexOf('btn-notes') > kids.indexOf('btn-settings')) throw new Error('Studio: notes should sit to the LEFT of the cog — cluster reads [' + kids.join(', ') + ']');
         if (!(ip.left < 2)) throw new Error('Studio: the bottom band should reach the window edge, inspector left=' + Math.round(ip.left));
         // …and the rail must never spill its controls over the panel below. The rail is only as tall as
         // the canvas now, and on a short window its buttons genuinely need more room than that (measured

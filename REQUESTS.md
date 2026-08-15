@@ -1622,6 +1622,25 @@ better still, keep working inside the turn rather than parking work for a later 
       across the whole frame.
       **Deliberately not adopted yet:** it replaces shipped, working code on the strength of a probe I
       have not run myself. Verify against ground truth first, then take it.
+      **VERIFIED 15 Aug (`tests/_wigwin.html`) — and the verification changed the job.** Ground truth is
+      the same layer with NO effect and its transform genuinely moved by the effect's own delta; both
+      implementations are scored against THAT, not against each other, because that is the only
+      reference that can say which is right rather than which is different. Every row carries a control
+      (ground truth vs the layer not moved at all) so a row where nothing actually moved is thrown out.
+      | effect | fully inside | half off the left | off the corner |
+      |---|---|---|---|
+      | **wiggle** (shipped, expanded plate) | 139 px, mean 0.04 | 151 px, mean 0.07 | 64 px, mean 0.03 |
+      | **drift** | 0 px | **1,519 px, mean 6.38, worst 255** | **2,048 px, mean 8.63, worst 255** |
+      | **orbit** | 100 px, mean 0.04 | **567 px, worst 255** | **660 px, worst 255** |
+      **So the agent's headline was wrong and the v7.32 fix is fine.** Wiggle already tracks ground truth
+      to within a rounding difference on a 60 px border — the "not bit-exact" it was marked down for is
+      resample softness at mean 0.04/255, not lost content. Adopting the window trick for wiggle alone
+      would be rewriting working code for a difference nobody can see.
+      **What the probe found instead is the real bug, and it is next door.** `drift` and `orbit` are the
+      same three lines wiggle was before v7.32 — translate the finished plate, blit — and they never got
+      the expanded-plate fix, so at a frame edge they pull in empty space exactly as wiggle used to. A
+      quarter of the frame wrong (worst 255 = solid content against solid nothing), not a rounding
+      difference. **That is now #228** rather than being smuggled into a wiggle entry.
 
 - [x] **92 — Favourites: kill the sideways swipe, open it by pulling DOWN on Recents.** **DONE v6.61.** His words:
       *"With the faves section I want it to be really easy to open, remove the feature of swiping right
@@ -2678,6 +2697,14 @@ better still, keep working inside the turn rather than parking work for a later 
       **Three answers are all cheap: rougher, subtler, or put it back.** Say which — this is the
       experiment you asked for, not a decision I have made for you.
 
+      **HE ANSWERED, 15 Aug: *"The background film grain looks shit."*** So the verdict on the experiment
+      is in and it is a no. Not blocked any more — this is now a real job with a clear brief, and it
+      arrives together with **#227**, which is the other half of what he wants the home screen to be.
+      Read them as one piece of work: the grain must stop being the thing you notice, and the cards must
+      stay see-through without the grain showing through them. Doing #157 as a plain revert would put the
+      texture back ON the cards, which is the opposite of #227 — so the answer is almost certainly a much
+      quieter background field plus the cards masking it out, not `git revert`.
+
 - [x] **158 — The spiral's last stretch is straight instead of curved.** (v7.03) (14 Aug, screenshot of a Spiral
       layer at v7.00.) His words: *"Spiral shapes last little bit is straight instead of round."*
       Visible in his shot: the outer end of the spiral runs off in a straight tail at the upper-left
@@ -3727,7 +3754,8 @@ layout, motion blur, the elements browser and the effects browser.
       **Not doing any of that unasked** — it is your intro and how it looks is your call, not a number
       I should quietly optimise away. Say which and it is quick.
 
-- [ ] **224 — A second flaky test: the microphone one.** Caught on 15 Aug while working #150 — the suite
+- [ ] **226 — A second flaky test: the microphone one.** *(Was numbered 224 by mistake — there were two
+      #224s, and the other one is YOUR request, so it keeps the number and this one moved.)* Caught on 15 Aug while working #150 — the suite
       came back 350/351 with *"voice: the microphone is handed back on EVERY exit path — timed out
       waiting for the mic to be acquired"*, and two immediate re-runs were both fully green. Headless
       Chrome's fake microphone takes a variable time to come up, so the test's wait is racing it.
@@ -3735,3 +3763,60 @@ layout, motion blur, the elements browser and the effects browser.
       the point at which a red run stops meaning anything, which is worse than having neither test — so
       they are worth fixing together: wait for the real signal rather than a timeout, or give the wait a
       budget that a slow acquisition cannot exceed.
+
+- [ ] **225 — Add subtle shading to the notes button.** (15 Aug.) His words: *"Add subtle shading to the
+      notes button."* The notes icon got its yellow-page look in **#186 / v7.13** — white page, yellow
+      edge, dark ruled lines — and this is the next pass on the same object: it currently reads flat.
+      "Subtle" is the whole instruction, so this is a small amount of depth (a soft gradient down the
+      page, a hint of a shadow under the sheet), not a skeuomorphic redraw, and it must still read at
+      24px in the top bar on both layouts.
+
+- [ ] **227 — The project cards should stay see-through, but NOT show the film grain through them.**
+      (15 Aug.) His words: *"the project layers are clear so you can see the film grain behind, i want
+      them clear still but not showing the film grain, so they look smooth and nice."*
+      Pairs with **#157**, where he also said the background grain *"looks shit"* — treat them as one job.
+      The two asks pull against each other in the obvious implementation: `#hm-grain` is one full-screen
+      field UNDER the cards, and the cards are translucent glass, so of course it shows through. Keeping
+      the glass while losing the grain behind it means the grain has to be *knocked out* where a card is,
+      not merely dimmed — a mask or a clip driven by the card rectangles, or the grain kept above the
+      background but below the cards with each card carrying a backdrop of its own that the grain cannot
+      reach. Whatever the route, the test is his sentence: still clear, and smooth.
+
+- [ ] **228 — Drift and Orbit lose content at a frame edge, the way Wiggle used to.** (Found 15 Aug by
+      `tests/_wigwin.html` while verifying #93 — not reported by you, but it is the same defect you DID
+      report for wiggle in #93(b), sitting unfixed in two more effects.)
+      Measured against ground truth (the same layer with no effect, genuinely moved by the same delta),
+      a 60×60 layer half off the left edge: **drift is wrong over 1,519 pixels, mean error 6.38/255,
+      worst 255**; orbit over 567. At the corner drift reaches 2,048 pixels. "Worst 255" means solid
+      content against solid nothing — the effect is showing empty space where the layer should be.
+      Cause is identical to wiggle's: they translate a COMP-SIZED plate, so whatever the layer had
+      outside the frame was thrown away before the effect ever saw it, and sliding it back in reveals
+      nothing. Wiggle got the expanded-plate fix in v7.32; these two were never touched.
+      The cheap general fix is the one #93's entry describes and this probe now supports: a pure
+      translation does not need MORE pixels, it needs the same plate taken from a window that has MOVED
+      — set the plate's `__fmOX/__fmOY` before `drawLayer` and blit 1:1. One mechanism serves all three,
+      and it is cheaper than the expanded plate as well as correct.
+
+- [ ] **229 — PC: the buttons still are not where they should be, and he says the PC version is close to
+      unusable.** (15 Aug.) His words: *"you still havent moved all the buttons on the pc version to
+      where they should be, like the notepad button and all the different options when you have a layer
+      selected, i know u gotta work from oldest to newest but you should focus on this because pc
+      version is pretty un usable."*
+      **He explicitly said to focus on this, so it JUMPS THE QUEUE** — that is the one exception the
+      oldest-first rule has, and he even acknowledged the rule while overriding it.
+      Two named things plus a general one:
+      · **the notepad button — DONE v7.73, and he was exactly right.** #171 claimed it sat "to the cog's
+        left"; measured at 1440×900 it was at x 1381 in the top header while the cog was at x 1257 in the
+        transport row, 585px and a whole bar away. Cause: **v7.52 moved everything else down and left
+        this one behind.** `pcTransportLayout` reparents `btn-back` → `#t-home`, delete/bind/group →
+        `#t-sel`, and version-chip/cog/Export/view-options → `#t-far`; `btn-notes` was simply not in that
+        last list, so it stayed in a 50px header whose only other contents are the wordmark and a
+        project-name field the inspector header already duplicates. One missing name in one array.
+        `#t-far` now reads v7.73 · notes · cog · Export · ⛶, which is the order #171 wrote down. The
+        suite's Studio-layout test carries the list, so forgetting a button in the next migration is red
+        rather than shipped; both mutations (drop it, or put it on the wrong side of the cog) caught it.
+      · **"all the different options when you have a layer selected"** — this is #169, still open: the
+        trim/split row should move onto the playhead and the align buttons should fill the panel.
+      · **"pretty un usable"** is the part that matters most and is not covered by either. Before
+        rearranging anything, look at the whole PC layout with a selection live and find out what makes
+        it unusable, rather than shipping the two named fixes and declaring it done.
