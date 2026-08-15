@@ -1601,21 +1601,28 @@ html.splash-on, html.splash-on body { background: #000; }
  * inspector (see .qr-nudge below); a floating pair on a 375px timeline would cover the clips. */
 #tl-nudge {
   position: absolute; z-index: 14;
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: 69px;
-  transform: translateX(-50%);
+  left: calc(50vw - var(--tl-panel-left, 0px)); top: 67px;
+  /* +1px, and it is not a fudge (queue 235). #tl-centerline is TWO pixels wide drawn from its left
+     edge, so its optical centre is x+1, while translateX(-50%) centres this row on x. Measured before:
+     14px of air on the left of the line and 12px on the right — which is exactly his "one is closer to
+     the playhead than the other, and it just looks weird". Both flanking groups take the same +1. */
+  transform: translateX(calc(-50% + 1px));
   display: flex; align-items: center; gap: 26px;   /* 26px straddles the 2px line with clearance both sides */
   pointer-events: none;                            /* only the buttons take clicks — the ruler under them still scrubs */
 }
 #tl-nudge.hidden { display: none; }
 #tl-nudge button {
   pointer-events: auto;
-  width: 30px; height: 24px; padding: 0;
+  /* 20 not 24, and top 67 not 69, for the same reason as the trim trio above — measured at 686-710
+     against a ruler band ending at 705, these hung 5px onto the first track row. "they need to be
+     moved up slightly as well." */
+  width: 30px; height: 20px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: var(--panel-3); border: 1px solid var(--line);
   border-radius: 7px; color: var(--text); cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
 }
-#tl-nudge button svg { width: 16px; height: 16px; display: block; }
+#tl-nudge button svg { width: 15px; height: 15px; display: block; }
 #tl-nudge button:hover { border-color: var(--accent); color: var(--accent); }
 #tl-nudge button:active { transform: translateY(1px); }
 /* one home per platform: the floating pair is desktop-only, the inspector copy is phone-only */
@@ -1640,7 +1647,7 @@ html.splash-on, html.splash-on body { background: #000; }
 #tl-trim {
   position: absolute; z-index: 14;
   left: calc(50vw - var(--tl-panel-left, 0px)); top: 67px;
-  transform: translateX(-50%);
+  transform: translateX(calc(-50% + 1px));   /* see #tl-nudge — the 2px centre line's optical centre is x+1 */
   display: flex; align-items: center; gap: 7px;
   pointer-events: none;
 }
@@ -5206,6 +5213,16 @@ body.fm-pushing #toast { z-index: 213; }
      one COLOURED mark in a row of white ones. font-size:0 hides the text node without touching the
      markup, exactly as .tbtn does. */
   #transport #btn-export {
+    /* 34x34 stated with TWO ids on purpose (v7.84, queue 240). Ezra: "The export buttons border is too
+       big so it goes over the divider line, make it fit abit better."
+       Measured in STUDIO — which is the layout he uses, and the reason v7.79 looked fine to me: the
+       button was 44x44 in a 40px row, standing 3px proud at the top and 2px below, lapping over the rule
+       between the row and the timeline, while the cog beside it was 34. The 44 comes from
+       `body.layout-studio #btn-export`, written when Export was a big square in the vertical RAIL and
+       left behind when v7.52 moved it into this row. My v7.79 sizing was on `#transport .btn` — one id
+       and one class, which LOSES to that rail rule. Two ids wins, and the rail rule can stay where it is
+       for whatever else might read it. */
+    width: 34px; height: 34px; min-width: 34px;
     background: transparent; box-shadow: none; font-size: 0; gap: 0;
     /* border-color explicitly, not inherited from the .btn rule above: something further up the sheet
        reaches this button by id, and the measured border came back accent-coloured until this was

@@ -4146,7 +4146,7 @@ wait for them to report back."*
       Two mutations red: the old order, and the old vertical position — and the second fails at a **1px**
       overhang, which is the sensitivity this needed, since the whole complaint was five pixels.
 
-- [ ] **235 — PC: the move-to-playhead and extend-to-playhead buttons are indistinguishable, and badly
+- [x] **235 — PC: the move-to-playhead and extend-to-playhead buttons are indistinguishable, and badly
       placed.** His words: *"the two buttons when you have a layer selected that are basically to make
       the clip either extend out to the playhead or jump to the playhead — those two buttons are very
       similar. I think you should make some differentiation in them, like, so they look a bit different
@@ -4155,6 +4155,16 @@ wait for them to report back."*
       than the other, and it just looks weird. They just need a little bit better positioning."*
       *(Worth knowing when doing this: the two icons differ only by whether the box is closed or open at
       one end — a distinction of about four pixels at that size. See timeline.js syncNudge.)*
+
+      **DONE v7.84, and all three complaints measured true.** The icons now differ by FILL versus
+      OUTLINE, which is the strongest cue at 15px: MOVE is a solid block with a double chevron (the clip
+      travels), EXTEND is an outlined block with a dashed span and one arrow (the edge is pulled out, and
+      the dashes are the new material). **Alignment was 14px left against 12px right**, and the cause was
+      worth finding rather than nudging: `#tl-centerline` is 2px wide drawn from its left edge, so its
+      optical centre is x+1 while `translateX(-50%)` centres the row on x. A +1px correction on both
+      flanking groups makes it 13/13 — and puts v7.83's split button dead on the line too (0px off, was
+      1). **And the move up was real**: 686–710 against a ruler band ending at 705, so it hung 5px into
+      the first track row; 684–704 now.
 
 - [ ] **236 — PC: the add menu needs a background of its own.** His words: *"on the PC version, for the
       background of the add menu, you should make it have, like, a cool pattern and design, kind of like
@@ -4177,3 +4187,33 @@ wait for them to report back."*
       happens when you slam" is a reproduction step, and the slam is exactly the moment the screen is
       TRANSFORMED (translate + rotate) with a 140px box-shadow ring standing in for the surround. Start
       there rather than re-reading the background rules.
+
+- [x] **240 — PC: the export button's border is too big and crosses the divider line. DONE v7.84.** (15 Aug, with a
+      screenshot at v7.83.) His words: *"The export buttons border is too big so it goes over the divider
+      line, make it fit abit better."*
+      A regression from **v7.79**, which turned Export from a filled pill into a bare icon (queue 230) —
+      the box it draws is taller than the transport row, so it laps over the rule between the row and the
+      timeline. Visible in his shot as a lit rounded rect around the blue arrow, standing proud of every
+      other icon on the row.
+
+- [ ] **241 — The cog should spin when you click it, and on PC the canvas-settings panel should come OUT
+      of the cog rather than open in the middle.** (15 Aug, with a traced screenshot.) His words: *"Make
+      the cog do a little turn animation when you click it and on pc make the canvas settings row show up
+      next to where the button is instead of the middle and make it kinda of come out of the button like
+      how ive traced in the image, so the settings button wouldnt be blured like everything else."*
+      Three parts: (a) a short rotation on the cog when pressed; (b) on desktop the panel anchors to the
+      cog — top-right, under it — instead of being centred on screen; (c) it should read as GROWING from
+      the button, and the cog must stay sharp while the rest of the screen is blurred behind the panel,
+      i.e. the cog sits above the backdrop layer rather than under it. His trace runs from the cog down
+      and around the area the panel should occupy.
+
+- [ ] **242 — The three layer buttons need a different background so they read as a group apart.** (15
+      Aug, with the trio circled in red.) His words: *"make these three buttons have a different
+      background to signify their difference."* The three are the SELECTION-dependent controls in the
+      transport row — parenting, delete, and the new ⋯ layer menu (#t-sel) — which appear only when a
+      layer is selected and sit between the always-there transport controls and the right-hand cluster.
+      So: a shared background treatment behind those three, marking them as the set that belongs to the
+      current selection rather than to the project.
+      *Note: v7.79 (#230) deliberately stripped the resting box off every button in this row on his own
+      instruction. This is not a reversal of that — it is a background behind the GROUP, not a box on
+      each button — and it needs to keep the hover behaviour he asked for.*

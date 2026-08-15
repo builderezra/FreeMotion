@@ -2464,11 +2464,24 @@ window.FM = window.FM || {};
       const n = targets.length;
       const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
       const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
-      const ico = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
-      // closed box = the whole clip travels; open-ended box = that edge stretches. Identical icons to
-      // the ones the inspector used, so the gesture is the one Ezra already knows.
-      L.innerHTML = ico(right ? 'M4 8h9v8H4zM15.5 12h3M17 10l2 2-2 2M21 4v16' : 'M20 8h-9v8h9zM8.5 12h-3M7 10l-2 2 2 2M3 4v16');
-      R.innerHTML = ico(right ? 'M12 8H4v8h8M12 12h6M16 10l2 2-2 2M21 4v16' : 'M12 8h8v8h-8M12 12H6M8 10l-2 2 2 2M3 4v16');
+      const ico = (inner) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+      /* TWO ICONS THAT ARE ACTUALLY DIFFERENT (queue 235). Ezra: "those two buttons are very similar…
+       * right now, honestly, at first glance, I cannot tell a fucking difference."
+       * He is right, and the old pair is a good lesson in what does not survive being small: they were
+       * the same drawing except that MOVE's box was closed (`h9v8H4z`) and EXTEND's was open at one end
+       * (`M12 8H4v8h8`). That is about four pixels of difference at 15px, and the two are never on
+       * screen together for you to compare.
+       * So the difference is now carried by the strongest cue available at this size — FILL versus
+       * OUTLINE — with the arrowheads reinforcing it:
+       *   MOVE   a SOLID block and a DOUBLE chevron: the whole clip picks up and travels to the line.
+       *   EXTEND an OUTLINED block whose near edge is open, a DASHED span, one arrow: the edge is being
+       *          pulled out to the line and the dashes are the new material. */
+      L.innerHTML = ico(right
+        ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
+        : '<path d="M12 8.5h8.5v7H12z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>');
+      R.innerHTML = ico(right
+        ? '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
+        : '<path d="M12 8.5h8.5v7H12"/><path d="M11.5 12h-6" stroke-dasharray="2 2"/><path d="M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>');
       // The count is in the words because the buttons look identical either way, and "move 3 clips" is
       // a very different press from "move clip" to have made by accident.
       const many = n > 1 ? 'all ' + n + ' clips' : 'clip';

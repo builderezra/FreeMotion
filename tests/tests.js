@@ -3111,6 +3111,95 @@
     }
   });
 
+  test('transport row: nothing on it is bigger than the row, in EITHER desktop layout', { item: 'transport-fit' }, async function () {
+    /* Queue 240. Ezra: "The export buttons border is too big so it goes over the divider line, make it
+     * fit abit better."
+     * A regression from v7.79, and the reason it shipped is the reason this test is written the way it
+     * is: I measured v7.79 in CLASSIC and it was fine. He uses STUDIO, where a rail-era rule
+     * (`body.layout-studio #btn-export`, written when Export was a big square in the vertical side rail)
+     * still sized it 44x44 inside a 40px row — 3px proud at the top, 2px below, lapping over the rule
+     * between the row and the timeline. v7.79's own sizing was one id and one class, which loses to it.
+     * So the assertion is not "export is 34px" — it is "NOTHING here is taller than the row", checked in
+     * BOTH layouts, because the whole failure was checking one layout and shipping for the other. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const had = document.body.classList.contains('layout-studio');
+    try {
+      for (const studio of [false, true]) {
+        document.body.classList.toggle('layout-studio', studio);
+        if (FM.resizeCanvas) FM.resizeCanvas();
+        await sleep(60);
+        const t = document.getElementById('transport');
+        if (!t) throw new Error('no transport row');
+        const tr = t.getBoundingClientRect();
+        if (tr.height < 20) throw new Error('the transport row measures ' + Math.round(tr.height) + 'px tall — this test would be comparing against nothing');
+        let checked = 0;
+        [].slice.call(t.querySelectorAll('button, .btn, .ver')).forEach(function (el) {
+          const b = el.getBoundingClientRect();
+          if (b.width < 2 || b.height < 2) return;   // hidden controls are not this test's business
+          checked++;
+          const over = Math.max(Math.round(tr.top - b.top), Math.round(b.bottom - tr.bottom));
+          if (over > 0) {
+            throw new Error((studio ? 'studio' : 'classic') + ': ' + (el.id || el.className) + ' is ' + Math.round(b.height) +
+              'px tall in a ' + Math.round(tr.height) + 'px row and stands ' + over + 'px proud of it — it laps over the divider');
+          }
+        });
+        // CONTROL: if the row were empty every check above would vacuously pass.
+        if (checked < 5) throw new Error((studio ? 'studio' : 'classic') + ': only ' + checked + ' visible controls found in the transport row — this test is not looking at the real row');
+      }
+    } finally {
+      document.body.classList.toggle('layout-studio', had);
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
+
+  test('timeline: the move and extend buttons are told apart, and sit level either side of the playhead', { item: 'nudge-pair' }, async function () {
+    /* Queue 235. Ezra: "those two buttons are very similar… right now, honestly, at first glance, I
+     * cannot tell a fucking difference. And they need to be moved up slightly as well. And also aligned
+     * a bit better, because one is closer to the playhead than the other."
+     * All three measured before the fix: the icons differed only by whether one box was closed or open
+     * at one end (about four pixels at 15px, and the two are never on screen together to compare); the
+     * pair hung 5px into the first track row; and the spacing was 14px on the left against 12px on the
+     * right, because #tl-centerline is 2px wide drawn from its left edge so its optical centre is x+1
+     * while translateX(-50%) centres the row on x. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 3 });
+      FM.scene.layers.push(A);
+      FM.selectLayer(A.id);
+      FM.time = 8;                       // OFF the clip — which is when the nudge pair shows at all
+      FM.timeline.rebuild(); FM.timeline.updatePlayhead(); await sleep(60);
+
+      const box = document.getElementById('tl-nudge');
+      if (!box || box.classList.contains('hidden')) throw new Error('the playhead is off the clip and the nudge pair is hidden');
+      const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
+      const line = document.getElementById('tl-centerline');
+      const lb = L.getBoundingClientRect(), rb = R.getBoundingClientRect(), cb = line.getBoundingClientRect();
+      if (lb.width < 10 || rb.width < 10) throw new Error('one of the nudge buttons is not on screen');
+
+      // …level. The two gaps to the line must match; 14 vs 12 is what he could see.
+      const gapL = (cb.x + cb.width / 2) - lb.right, gapR = rb.left - (cb.x + cb.width / 2);
+      if (Math.abs(gapL - gapR) > 1) throw new Error('the pair is not level about the playhead — ' + Math.round(gapL) + 'px on the left against ' + Math.round(gapR) + 'px on the right');
+
+      // …up out of the first track row.
+      const rr = document.getElementById('tl-rulerrow').getBoundingClientRect();
+      const over = lb.bottom - rr.bottom;
+      if (over > 0) throw new Error('the nudge pair hangs ' + Math.round(over) + 'px below the ruler band, onto the first track row');
+
+      // …and actually distinguishable. Compared as the DRAWING, not by eye: move is a solid block,
+      // extend is an outline with a dashed span. If either cue is missing they are twins again.
+      if (!L.querySelector('path[fill="currentColor"]')) throw new Error('the MOVE icon has no solid block — fill is what tells it apart from extend at 15px');
+      if (!R.querySelector('path[stroke-dasharray]')) throw new Error('the EXTEND icon has no dashed span — that is the cue that it stretches rather than travels');
+      if (R.querySelector('path[fill="currentColor"]')) throw new Error('the EXTEND icon is filled too — then both are solid blocks and the pair is indistinguishable again');
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.time = t0;
+      FM.refreshAll();
+    }
+  });
+
   test('timeline: split sits ON the playhead with a trim either side, inside the ruler band', { item: 'trim-on-playhead' }, async function () {
     /* Queue 234, and this has flipped once before, which is why the geometry is asserted rather than
      * the class names. v5.25 built "both trims on the left, split on the right" from his instruction at
