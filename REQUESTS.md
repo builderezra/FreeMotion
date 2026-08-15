@@ -210,12 +210,36 @@ better still, keep working inside the turn rather than parking work for a later 
       animation: *"make it so the animation… happens instantly"* was 113ms of dead air on the way in,
       and *"less janky when leaving"* was 81ms of it on the way out. The animations were smooth all
       along, which is why "it feels janky" kept not matching anything a profiler pointed at.
-- [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO.** His words: *"Added a screen
+- [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO. PARTLY ANSWERED v7.62 — the app now tells you why; whether it FIXES your file is still unknown.** His words: *"Added a screen
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
       case worth chasing: HEVC in an mp4/mov container, often with an odd colour range, and iOS screen
       recordings in particular. The clip EXISTS (it is on the timeline with a duration), so the decode or
       the draw is failing, not the import.
+
+      **INVESTIGATED 15 Aug, and the honest finding is a gap in what the app can TELL you — not a
+      reproduction of your file.** I do not have the clip and cannot make an H.265 recording here, so
+      this is reasoning from the code plus one real hole that is definitely there.
+      **Two ways a clip is present and blank, and only one was covered.** If the browser cannot read a
+      video track at all, `videoWidth` is 0 — and the import already catches that and says "no picture
+      — audio only". The other way had nothing watching it: the container parses fine, so the file
+      reports honest dimensions and a real duration and lands on the timeline looking completely
+      normal, and then the DECODER will not take it. `readyState` never reaches HAVE_CURRENT_DATA, the
+      compositor skips any video below that, and the canvas stays black — forever, with no error, no
+      toast and not one console line. **That is the exact shape of your report**, and iOS screen
+      recordings are H.265, precisely the codec a browser will parse the container of and then refuse
+      to decode.
+      **What v7.62 does:** a clip that has produced no frame after fifteen seconds is named out loud,
+      with the actionable half in the console — re-export as H.264, or open the project in Safari,
+      which does decode HEVC. The clip is NOT thrown away: the audio may be fine, and something you can
+      hear and trim beats a refused import.
+      **What it does NOT do, and I would rather say so than let you find out:** it does not make the
+      video play. If the file is H.265 in a browser that cannot decode H.265, no app code changes that
+      — the fix is transcoding, which is a much larger feature.
+      **So this stays OPEN, and one thing from you would close it.** Next time it happens: **if you see
+      the new toast, the diagnosis is confirmed and the answer is transcoding. If you see NO toast and
+      the clip is still blank, it is something else and I have been looking in the wrong place** —
+      which is worth knowing just as much.
 - [ ] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
       two seconds long, and the project lags from just that, it also still doesn't compress the quality

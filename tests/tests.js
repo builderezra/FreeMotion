@@ -14561,6 +14561,83 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #129: a clip on the timeline that never shows a picture ----------------
+   * His words, second report: "it still has the issue of being on the timeline but not actually
+   * showing any video." There are two ways that happens and only one was covered. A file whose video
+   * track cannot be READ has videoWidth 0, and the import already says "no picture — audio only". A
+   * file whose container parses but whose codec the DECODER will not take looks completely normal —
+   * real dimensions, real duration, a clip of the right length — and then never produces a frame, so
+   * the compositor skips it and the canvas stays black with nothing said. iOS screen recordings are
+   * H.265, so that is exactly the shape of the file he reported. */
+  test('import: a clip that never produces a frame says so instead of sitting there blank', { item: 'undecodable-clip' }, async function () {
+    var realWait = FM.decodeWait, realToast = FM.toast, toasts = [];
+    FM.toast = function (m) { toasts.push(String(m)); };
+    FM.decodeWait = 120;
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    // A stand-in for a <video> the decoder will not take: wireVideoRepaint only reads readyState and
+    // adds listeners, so an EventTarget with a readyState is the whole surface it touches.
+    function stubEl(readyState) {
+      var e = new EventTarget();
+      e.readyState = readyState;
+      return e;
+    }
+    try {
+      /* THE CONTROL FIRST — a clip that DOES decode must never be accused. Without this, a version
+         that flagged everything would pass the real assertion below and would be far worse than the
+         bug: every ordinary import would claim it was broken. */
+      var good = { kind: 'video', el: stubEl(0), file: { name: 'fine.mp4' }, width: 1170, height: 2532 };
+      FM.wireVideoRepaint(good);
+      good.el.readyState = 2;
+      good.el.dispatchEvent(new Event('loadeddata'));
+      await sleep(300);
+      if (good.undecodable) throw new Error('a clip that decoded normally was flagged as undecodable');
+      if (toasts.length) throw new Error('a clip that decoded normally produced a warning: ' + toasts[0]);
+
+      // …and the real case: dimensions parsed, no frame ever arrives.
+      var bad = { kind: 'video', el: stubEl(1), file: { name: 'screen-recording.mov' }, width: 1170, height: 2532 };
+      FM.wireVideoRepaint(bad);
+      await sleep(300);
+      if (!bad.undecodable) {
+        throw new Error('a clip that never produced a single frame was not flagged — it sits on the timeline at the right length with a black canvas, no error and no message, which is exactly the report');
+      }
+      if (!toasts.length) throw new Error('the clip was flagged internally but the user was told nothing, which is the whole complaint');
+      if (toasts[0].indexOf('screen-recording') < 0 && toasts[0].indexOf('…') < 0) {
+        throw new Error('the warning does not name the file (' + toasts[0] + ') — with several clips imported you cannot tell which one is broken');
+      }
+
+      // A clip that is merely SLOW must not be accused either: the frame arriving late still counts.
+      toasts.length = 0;
+      var slow = { kind: 'video', el: stubEl(1), file: { name: 'big.mp4' }, width: 3840, height: 2160 };
+      FM.decodeWait = 400;
+      FM.wireVideoRepaint(slow);
+      await sleep(120);
+      slow.el.readyState = 2;
+      slow.el.dispatchEvent(new Event('canplay'));
+      await sleep(500);
+      if (slow.undecodable || toasts.length) {
+        throw new Error('a clip whose first frame merely arrived late was reported as undecodable — on a phone decoding a big file that is every import');
+      }
+
+      /* AND THE CASE WHERE THE EVENT IS MISSED. A clip can reach HAVE_CURRENT_DATA without us hearing
+         about it — the listener goes on after the fact, or the event simply does not reach us — so the
+         deadline must re-check the element itself rather than trust that silence means failure. Left
+         out, the whole feature degrades into "warn about every clip", which is worse than the bug it
+         replaces; and it is not covered by the two cases above, because in both of those the timer is
+         cancelled by an event and never runs at all. */
+      toasts.length = 0;
+      var quiet = { kind: 'video', el: stubEl(1), file: { name: 'quiet.mp4' }, width: 640, height: 480 };
+      FM.decodeWait = 150;
+      FM.wireVideoRepaint(quiet);
+      quiet.el.readyState = 2;          // ready, but nothing is dispatched
+      await sleep(400);
+      if (quiet.undecodable || toasts.length) {
+        throw new Error('a clip that was decodable all along was accused because its "ready" event never reached us — the deadline has to look at the element, not just wait for a message');
+      }
+    } finally {
+      FM.decodeWait = realWait; FM.toast = realToast;
+    }
+  });
+
   /* ---------------- #128, the closing half: leaving a project ----------------
    * His words included "needs to be smoother and less janky when leaving a project also", and the
    * measurement came out the same shape as the opening half: not a stutter, a stall. `home.open()` is

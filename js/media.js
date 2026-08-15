@@ -128,12 +128,63 @@ window.FM = window.FM || {};
    * 'loadeddata' is the exact complement of the compositor's gate — it fires when readyState reaches
    * 2. 'canplay' is the belt to its braces. Added ALONGSIDE each call site's existing 'seeked'
    * listener rather than replacing it, so nothing that works today changes. */
+  /* How long a clip may sit without producing a single frame before we admit it is not going to
+   * (queue 129). Generous, because a phone decoding a big file is slow — but bounded, because the
+   * alternative is the app waiting forever and saying nothing. Exposed so the suite can shorten it;
+   * a fifteen-second sleep in a test is not a test. */
+  FM.decodeWait = 15000;
+
   FM.wireVideoRepaint = function (rec) {
     if (!rec || rec.kind !== 'video' || !rec.el || rec._repaintWired) return;
     rec._repaintWired = true;
     const repaint = () => { if (FM.requestRender) FM.requestRender(); };
     rec.el.addEventListener('loadeddata', repaint);
     rec.el.addEventListener('canplay', repaint);
+
+    /* ---- …AND SAY SO WHEN THE FRAME NEVER COMES (queue 129) ---------------------------------
+     * Ezra, on a two-second screen recording, for the second time: "it still has the issue of being
+     * on the timeline but not actually showing any video."
+     *
+     * There are two ways a clip can be present and blank, and only one of them was covered. If the
+     * browser cannot read a video track AT ALL, videoWidth is 0, and js/app.js already catches that
+     * and says "no picture — audio only". The other way has nothing watching it: the container parses
+     * fine, so the file reports honest dimensions and a duration and lands on the timeline looking
+     * completely normal — and then the DECODER cannot do anything with it, readyState never reaches
+     * HAVE_CURRENT_DATA, and the compositor (which skips any video below that) draws nothing. Forever,
+     * with no error, no toast and no console line. That is a screen recording all over: iOS records
+     * H.265, and a browser without HEVC support parses the container happily and decodes none of it.
+     *
+     * The source is a blob: URL, so there is no network to be slow — nothing buffered after fifteen
+     * seconds means the decoder is not going to produce anything, not that it is still trying.
+     *
+     * This does NOT throw the clip away. The audio may be perfectly good, and a clip the user can
+     * still hear and trim is worth more than a refused import. It marks the record and tells them
+     * what happened, which is the whole of the complaint: the app knew and did not say. */
+    if (rec.el.readyState >= 2) return;
+    let settled = false;
+    const arrived = () => {
+      if (settled) return;
+      settled = true; clearTimeout(rec._decodeTimer); rec._decodeTimer = 0;
+      rec.undecodable = false;
+    };
+    rec.el.addEventListener('loadeddata', arrived, { once: true });
+    rec.el.addEventListener('canplay', arrived, { once: true });
+    rec._decodeTimer = setTimeout(() => {
+      rec._decodeTimer = 0;
+      if (settled || !rec.el || rec.el.readyState >= 2) return;
+      settled = true;
+      rec.undecodable = true;
+      const nm = String((rec.file && rec.file.name) || 'that clip');
+      // Same width budget as the audio-only toast next door: #toast shrink-fits inside ~190px at 380px.
+      const shortNm = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      if (FM.toast) FM.toast('No picture from “' + shortNm + '” — this browser can’t decode it', 7000);
+      // The untruncated name and the actionable half, which will not fit in a phone toast.
+      console.warn('FreeMotion: "' + nm + '" gave no video frame after ' + Math.round(FM.decodeWait / 1000) +
+                   's (readyState ' + rec.el.readyState + ', ' + rec.width + 'x' + rec.height + '). The container ' +
+                   'parsed, so this is a codec the decoder will not take — screen recordings are usually H.265/HEVC. ' +
+                   'Re-exporting as H.264, or opening the project in Safari, is the usual fix.');
+      if (FM.requestRender) FM.requestRender();
+    }, FM.decodeWait);
   };
 
   /* Load an image file -> { kind:'image', el, width, height, url } */
