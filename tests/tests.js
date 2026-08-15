@@ -14459,6 +14459,31 @@
     }
   });
 
+  /* ---------------- #47 (part): a render is not thrown away by a stray gesture ----------------
+   * An export lives in page memory until the very last moment, so a refresh or a back swipe mid-render
+   * destroys it silently. Real crash-resume is a much bigger job; this is the common case. */
+  test('export: leaving the page mid-render is challenged, and at rest is not', { item: 'export-guard' }, function () {
+    var was = FM._exporting;
+    /* Do NOT pre-set ev.returnValue here. On a plain Event it is a LEGACY alias for preventDefault, so
+       assigning any falsy value (including '') marks the event as prevented — the probe would then
+       report "the reload was challenged" no matter what the app does, and the first version of this
+       test failed for exactly that reason. Dispatch clean; read what the handler left behind. */
+    function ask() {
+      var ev = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(ev);
+      // ev.returnValue is a LEGACY boolean that defaults to TRUE, so `!!ev.returnValue` is true whatever
+      // the app does — that was the second wrong version of this probe. A guard signals by calling
+      // preventDefault or by assigning a non-empty STRING; nothing else counts.
+      return ev.defaultPrevented || (typeof ev.returnValue === 'string' && ev.returnValue.length > 0);
+    }
+    try {
+      FM._exporting = false;
+      if (ask()) throw new Error('the app challenges an ordinary reload — a browser that questions every reload is a worse bug than the one this fixes');
+      FM._exporting = true;
+      if (!ask()) throw new Error('an export in progress can be thrown away by a refresh or a back swipe with no warning at all');
+    } finally { FM._exporting = was; }
+  });
+
   /* ---------------- #31b: which motion blur reads which motion ----------------
    * His report was "transform blur can't smear effect- or camera-driven motion", and that is true and
    * structural — the re-projection blur can only smear motion in the layer's own matrix. The question

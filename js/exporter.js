@@ -25,6 +25,25 @@ window.FM = window.FM || {};
   };
 
 
+  /* DON'T LOSE A RENDER TO A STRAY GESTURE (queue 47, the cheap half).
+   *
+   * An export holds everything in page memory and only becomes a file at the very end, so a refresh, a
+   * back swipe or a closed tab mid-render destroys minutes of work with no warning at all. Real
+   * crash-RESUME is a much larger job — the muxer's sample tables cannot be rehydrated, so it needs a
+   * segmented redesign — but the commonest way a render dies is not a crash, it is a hand.
+   *
+   * Registered ONCE and gated on FM._exporting rather than added and removed around each export: an
+   * arm/disarm pair has a failure mode where a thrown export leaves the guard armed forever, and a
+   * browser that questions every single reload would be a far worse bug than the one being fixed.
+   * The message is ignored by modern browsers (they show their own wording) — setting returnValue is
+   * what actually triggers the prompt. */
+  window.addEventListener('beforeunload', function (e) {
+    if (!FM._exporting) return;
+    e.preventDefault();
+    e.returnValue = 'An export is still rendering. Leaving now loses it.';
+    return e.returnValue;
+  });
+
   function download(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

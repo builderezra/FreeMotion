@@ -1559,6 +1559,11 @@ better still, keep working inside the turn rather than parking work for a later 
       IndexedDB as it finishes, then join them at the end. A crash then costs you at most one segment, and
       it makes the progress bar honest as a side effect. That is a different and larger design than the
       line above promised, and it should be agreed before it is built.
+      **PART OF THIS SHIPPED in v7.51 — the cheap half of "must not lose the render".** An export now
+      warns before you navigate away, but only while one is actually rendering. That is not resume and
+      is not pretending to be: it is the commonest way a render actually dies, which is not a crash but
+      a refresh, a back swipe or a closed tab. Both directions are tested — no guard at all, and a
+      guard that nags on every ordinary reload, each turn the test red.
       The second half — off the main thread — is much larger again: a worker means the whole compositor
       (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Do the first half alone, and only after the
       design above is settled.
