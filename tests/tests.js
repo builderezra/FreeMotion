@@ -14561,6 +14561,52 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #155: the open-project glint marks the open add-menu tab ----------------
+   * "I want the effect that you have on the open project, like with the shiny line going around it,
+   * also on whatever you have selected… the main button that opens the menu."
+   * It was already built — found on 15 Aug while working the list, unticked. This test exists for the
+   * warning the entry attached to it rather than for the feature: "Build it from the SAME
+   * implementation rather than a second copy, or the two will drift the way the slider glide drifted
+   * from the timeline's in #116." So the assertion that matters is that both glints are still one
+   * thing, which is invisible the day someone forks the CSS to tweak one of them. */
+  test('add menu: the open tab wears the same travelling glint as the open project', { item: 'addmenu-glint' }, function () {
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:380px';
+    document.body.appendChild(host);
+    try {
+      if (!FM.addMenu || !FM.addMenu.render) throw new Error('FM.addMenu.render is missing');
+      FM.addMenu.render(host, { variant: 'sheet' });
+      var tabs = Array.prototype.slice.call(host.querySelectorAll('.addmenu-tab'));
+      if (tabs.length < 2) throw new Error('control failed: only ' + tabs.length + ' tab(s) rendered, so "the glint follows the active one" cannot be tested');
+
+      var withGlint = tabs.filter(function (t) { return !!t.querySelector('.am-glint'); });
+      if (withGlint.length !== 1) throw new Error(withGlint.length + ' tabs carry a glint — it is supposed to mark the ONE that is open');
+      if (!withGlint[0].classList.contains('active')) throw new Error('the glint is on a tab that is not the active one');
+
+      /* It has to MOVE. The tab row is not rebuilt on a click — the active class is swapped in place —
+       * so a ring appended once at build time stays on whichever tab happened to open first, which
+       * looks right until the moment you change tab. */
+      var other = tabs.filter(function (t) { return !t.classList.contains('active'); })[0];
+      other.click();
+      var nowGlinted = tabs.filter(function (t) { return !!t.querySelector('.am-glint'); });
+      if (nowGlinted.length !== 1 || nowGlinted[0] !== other) {
+        throw new Error('after changing tab the glint is on ' + nowGlinted.length + ' tab(s) and not the newly opened one — it was appended once instead of following the selection');
+      }
+
+      /* THE ANTI-DRIFT ASSERTION, and the reason this test is worth having at all. Both rings must be
+       * driven by the same keyframes; the day one is forked to be tweaked, this goes red instead of the
+       * two quietly becoming different effects that are supposed to mean the same thing. */
+      var g = host.querySelector('.am-glint i');
+      if (!g) throw new Error('the glint element has no inner light');
+      var name = getComputedStyle(g).animationName;
+      if (name !== 'hm-glint') {
+        throw new Error('the add-menu glint runs "' + name + '" but the open project runs "hm-glint" — they have been forked, and two copies of one idea is exactly how the slider glide drifted from the timeline\'s in #116');
+      }
+    } finally {
+      host.remove();
+    }
+  });
+
   /* ---------------- #151: effects on one cue, or on the whole track ----------------
    * "when editing a caption layer you should be able to chose somehow between adding effects to each
    * section or adding effects that effect the whole layer."

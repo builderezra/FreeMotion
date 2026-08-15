@@ -2611,7 +2611,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Worth checking first whether our trim already quantises to frames — if it does not, the strip
       would be drawing a promise the trim does not keep, and the quantising is the real work.
 
-- [ ] **155 — Put the open-project glint on the SELECTED add-menu tab.** (14 Aug.) His words: *"I want
+- [x] **155 — Put the open-project glint on the SELECTED add-menu tab. ALREADY DONE — verified and tested v7.70.** (14 Aug.) His words: *"I want
       the effect that you have on the open project, like with the shiny line going around it, also on
       whatever you have selected, like elements or shapes etc"*, then immediately: *"Not the elements or
       shapes inside but the main button that opens the menu."*
@@ -2620,6 +2620,20 @@ better still, keep working inside the turn rather than parking work for a later 
       inside it. Same meaning in both places: *this is the one that is open*.
       Build it from the SAME implementation rather than a second copy, or the two will drift the way the
       slider glide drifted from the timeline's in #116.
+
+      **ALREADY BUILT — this entry was stale, found while working the list oldest-first (15 Aug).** The
+      glint has been on the active tab for some builds, and it does share the home card's implementation:
+      same `.hm-glint` keyframes, nothing duplicated but the corner radius. **Verified, not assumed** —
+      it sits on the active tab and only that one, and it follows the selection when you change tab.
+      That is the THIRD stale entry the list has turned up, after #37 and #147's first half. Worth
+      noticing that all three were found by working the list in order rather than by remembering, which
+      is the argument for the list.
+      **What v7.70 adds is the guard the entry asked for.** Your warning about drift was the right one
+      and it is invisible on the day it happens: fork the CSS to tweak one ring and both still look fine
+      on their own — only much later does anyone notice two lights that mean the same thing no longer
+      move alike. There is now a test that goes red the moment they stop sharing keyframes, and a second
+      one that the ring MOVES with the selection (the tab row is not rebuilt on a click, so a ring added
+      once at build time sits on whichever tab opened first and looks right until you switch).
 
 - [x] **156 — Duplicating should leave the copy exactly where the original is.** (v7.01) (14 Aug.) His words:
       *"Duplicating stuff should duplicate it in its exact position, not move it slightly."*
