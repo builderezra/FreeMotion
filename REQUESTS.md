@@ -3303,9 +3303,19 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       at 380px: the name field keeps 128px unselected, and 124px with a layer selected (unchanged, since
       notes is gone by then). On desktop the notes button moved to the cog's left; the refresh chip takes
       the slot left of it when #168/#169 lands.
-- [ ] **172 — Export resolution needs a "Same as project" option.** So you can export at exactly the
-      canvas size without hunting for the number that matches. (Pairs with #121, which just made the cog
-      the source of truth for resolution — this is the option that says "whatever the cog says".)
+- [x] **172 — Export resolution needs a "Same as project" option. ALREADY DONE — verified 16 Aug.** So you
+      can export at exactly the canvas size without hunting for the number that matches. (Pairs with #121,
+      which made the cog the source of truth for resolution — this is the option that says "whatever the
+      cog says".)
+      **Verified in the real dialog, not read off the source:** the resolution list opens on
+      **"Same as project — 1080×1920"**, first and selected, and it names the project's ACTUAL pixels
+      rather than saying "same" and leaving you to guess — the same treatment the frame-rate list above
+      it got in #141. The **seventh** stale entry (after #37, #147a, #155, #93's headline, #164, #173).
+      **Seven is no longer a coincidence, and it is worth naming what causes it:** these are items that
+      got built as part of a NEIGHBOURING request — this one almost certainly alongside #141, which was
+      doing exactly this to the frame-rate list — and the entry that asked for them was never revisited
+      because nobody was working *that* entry at the time. Sweeping the list catches them; memory never
+      does. **It is an argument for periodically auditing ticks rather than only working forwards.**
 - [x] **173 — Export quality should default to High. ALREADY DONE — implemented and never ticked; verified 16 Aug.**
       Found by sweeping the middle of the list after #225 turned up undone — the **sixth** stale entry
       this file has produced (after #37, #147's first half, #155, #93's headline and #164).
