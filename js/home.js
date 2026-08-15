@@ -181,6 +181,15 @@ window.FM = window.FM || {};
   function unstampIntro(n) {
     n.classList.remove('hm-in', 'hm-in-fab');
     n.style.animation = '';   // clears the inline animation-delay stampIntro wrote, and any other longhand
+    /* …and it must STAY unstamped (queue 222). Removing the class is not enough on its own: stampIntro
+     * re-stamps every card in the grid whenever the list is re-entered, so a card that has already
+     * begun a push can have `hm-in` — and with it an entrance DELAY of up to 0.82s — put straight back
+     * on. The lead animation then inherits that delay and has not started when the push is scrubbed to
+     * 280ms, which is exactly the diagnostic the flaky test captured: `state=paused ct=280` with the
+     * card still carrying `hm-in` and the transform still identity, about one run in five.
+     * A flag on the node is the smallest honest fix: the element itself is the thing that must not be
+     * re-stamped, so the element carries the answer. */
+    n._fmNoIntro = 1;
   }
   // hide=true finishes the push (the home screen goes away); hide=false just unwinds it, which is
   // what open() needs when you come back before the 280ms is up.
@@ -1690,6 +1699,7 @@ window.FM = window.FM || {};
     if (grid) Array.prototype.forEach.call(grid.children, n => seq.push(n));
     const step = 0.055, cap = 14;
     seq.forEach((n, i) => {
+      if (n._fmNoIntro) return;   // already pushed off this screen — re-stamping would re-attach an entrance delay (queue 222)
       n.classList.add('hm-in');
       n.style.animationDelay = (0.05 + Math.min(i, cap) * step).toFixed(3) + 's';
     });

@@ -3965,7 +3965,7 @@ layout, motion blur, the elements browser and the effects browser.
       Small, cosmetic, and the fix is likely one CSS rule — but two version labels disagreeing after a
       partial update is exactly the confusion the tap-to-force-update label exists to prevent.
 
-- [ ] **222 — A test in the suite is flaky, about 1 run in 5.** Found while working #128, and it is
+- [x] **222 — A test in the suite is flaky, about 1 run in 5. DONE v7.99.** Found while working #128, and it is
       PRE-EXISTING — measured on a clean tree at HEAD, five runs, one red, so it is not something a
       recent change introduced. The assertion is `key/cold-actually-shrinks` in the `home-push` section:
       after a keyboard Enter, the cold lead animation is paused and scrubbed to 280ms of its 380ms and
@@ -3976,6 +3976,20 @@ layout, motion blur, the elements browser and the effects browser.
       inherited an entrance DELAY and at ct=280 has not actually begun, which is exactly what
       `unstampIntro` exists to prevent and is intermittently not preventing.
       A test that is red one run in five is worse than no test: it trains you to re-run instead of read.
+
+      **DONE v7.99, and the diagnostic captured in this entry is what solved it.** The lead animation had
+      inherited an entrance DELAY — up to 0.82s — so at `ct=280` it had not begun, which is exactly the
+      `state=paused ct=280` with `hm-in` still on the card that was recorded above.
+      `unstampIntro` was being called correctly. **Removing the class is not enough on its own**, because
+      `stampIntro` re-stamps every card in the grid whenever the list is re-entered — so a card that has
+      already begun a push gets `hm-in`, and its delay, put straight back on. The element itself is the
+      thing that must not be re-stamped, so it carries a flag now and `stampIntro` skips it.
+      **Evidence, stated precisely: three consecutive clean runs plus an understood mechanism.** Three
+      passes is not proof against a 1-in-5 flake — roughly a coin toss on chance alone — so the reason to
+      believe it is the diagnosis, not the count. If it returns, that is the assumption to re-check.
+      **Both flaky tests are now closed** (#226 in v7.98, this in v7.99), which matters more than either
+      alone: a suite that is red one run in five stops meaning anything, and it cost this session real
+      doubt about a green result during a release.
 
 - [ ] **223 — The splash video is 2.8 MB, about as much as the whole app's code.** Found while
       answering #145 with real numbers (`tests/_boot.html`): a cold boot pulls 6.30 MB, and 3.09 MB of
