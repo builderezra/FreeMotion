@@ -124,6 +124,25 @@ iframe{position:fixed;left:-10000px;top:0;width:1280px;height:860px;border:0}
            FM.viewport, so it stays correct whatever applies the transform.
            Computing it here proves the arithmetic before anyone edits the tool — a wrong stroke position
            is the bug #97 spent four rounds on, and it is invisible in a screenshot. */
+        /* CHECK MY OWN ASSUMPTION FIRST. The lines above call the gap between "aimed at the canvas
+           centre" and "the project centre" an ERROR — but at 2x the canvas shows a CROPPED view, and
+           the centre of a crop is not the centre of the project. If the crop is off-centre then that
+           gap is the tool being CORRECT and the probe being wrong.
+           The honest test: work out what the canvas centre SHOULD map to from the crop stamps alone,
+           and compare toProject's answer with that instead of with the project centre. */
+        var visW = pv.width / (pv.__fmRS || 1), visH = pv.height / (pv.__fmRS || 1);
+        var wantX = (pv.__fmOX || 0) + visW / 2, wantY = (pv.__fmOY || 0) + visH / 2;
+        var trueErr = Math.hypot(p1[0] - wantX, p1[1] - wantY);
+        L.push('IS THAT 102.8px REALLY AN ERROR? — checked against the CROP, not the project centre');
+        L.push('  visible project extent ' + visW.toFixed(1) + ' x ' + visH.toFixed(1) + '  (canvas backing / __fmRS)');
+        L.push('  crop origin            ' + (pv.__fmOX || 0).toFixed(1) + ', ' + (pv.__fmOY || 0).toFixed(1));
+        L.push('  so the canvas centre SHOULD be project ' + wantX.toFixed(1) + ', ' + wantY.toFixed(1));
+        L.push('  toProject actually says               ' + p1[0].toFixed(1) + ', ' + p1[1].toFixed(1));
+        L.push('  TRUE mapping error     ' + trueErr.toFixed(1) + 'px');
+        L.push('  verdict                ' + (trueErr < 2
+          ? 'toProject is CORRECT under zoom — the 102.8 above is my probe comparing against the wrong target'
+          : 'toProject really is wrong under zoom by ' + trueErr.toFixed(1) + 'px'));
+        L.push('');
         var wrap = d.getElementById('canvas-wrap');
         if (wrap) {
           var wr2 = wrap.getBoundingClientRect();

@@ -3056,8 +3056,31 @@ better still, keep working inside the turn rather than parking work for a later 
       in that order means the risky half (coordinates) is done and testable before any UI is added — and
       a stroke landing in the wrong place is exactly the bug #97 spent four rounds on.
 
-      **MEASURED 16 Aug (`tests/_drawzoom.html`) — the comment in the code is RIGHT, and now it has a
-      number.** Aiming at the centre of the canvas and asking where the tool thinks you aimed:
+      **⚠ CORRECTION FIRST (16 Aug, same session): the "102.8px error" written below is MY MISTAKE, not
+      the app's.** The probe compared "where the canvas centre maps to" against the PROJECT centre — but
+      at 2× the canvas shows a **crop**, and the centre of a crop is not the centre of the project.
+      Checked properly, against the crop stamps the canvas actually carries:
+      | | |
+      |---|---|
+      | visible project extent at 2× | 1080.0 × 1645.0 |
+      | crop origin | 0.0, 240.3 |
+      | so the canvas centre *should* be | 540.0, **1062.8** |
+      | `toProject` actually returns | 540.0, **1062.8** |
+      | **true mapping error** | **0.0px** |
+      **`toProject` is exactly correct under a zoomed viewport.** The stroke-coordinate path — the one
+      #97 spent four rounds on — needs no work at all. I wrote the opposite here an hour earlier with
+      full confidence, which is the fourth time this file has caught one of my own recorded conclusions
+      being wrong, and the reason the rule is "measure, do not inherit" even from me.
+      **What IS still real:** the overlay BOX is 984×1501 against a 492×751 canvas — the double-scale is
+      genuine, and the fix validated below is the right one. It is a hit-area and preview-drawing bug,
+      not a "your strokes land in the wrong place" bug. **So the scary part of this job does not exist**,
+      and the remaining part is one box calculation.
+
+      **The original (partly wrong) measurement is kept below, struck through in spirit, because the
+      overlay-box numbers in it are still valid and the error column is not.**
+
+      **MEASURED 16 Aug (`tests/_drawzoom.html`).** Aiming at the centre of the canvas and asking where
+      the tool thinks you aimed — **the "error" column is the flawed comparison described above**:
       | state | where a centre-aim lands | error |
       |---|---|---|
       | unzoomed (the control) | 540.0, 960.8 against a wanted 540, 960 | **0.8px** |
@@ -3103,11 +3126,13 @@ better still, keep working inside the turn rather than parking work for a later 
       It lands exactly. **Derive the scale from the wrapper (`rect.width / offsetWidth`), not from
       `FM.viewport.scale`** — that way it stays right whatever applies the transform, and it cannot drift
       from a second source of truth.
-      **What is left is genuinely small, and here is the one trap in it:** `redraw()` and `dispScale()`
-      compute stroke coordinates from the canvas's SCREEN rect too, so they need the same treatment in
-      the same pass. Changing the box without them would move the overlay and leave the ink behind —
-      which is a WORSE bug than the one being fixed, and invisible in a screenshot. The probe's error
-      figure is the check: it must fall to the control's 0.8px, and it measures exactly that path.
+      **What is left is genuinely small.** `redraw()` and `dispScale()` derive from the canvas's SCREEN
+      rect as well, so they want checking in the same pass — if the box moves to local space and the ink
+      does not follow, the preview stroke and the surface part company. That is a PREVIEW bug rather than
+      a stored-coordinate bug (see the correction at the top: `toProject` is already correct), so it is
+      visible the moment you draw one line at 2× and does not need the four-round paranoia #97 earned.
+      **The probe is the check either way** — it reports the overlay-box match and the true mapping error
+      side by side.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
