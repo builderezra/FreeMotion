@@ -3503,6 +3503,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       scene both ways and count audio samples in the output, because the two guards above are testable
       without knowing the answer.
 
+      **FOLLOWED THAT LEAD AND IT DIED — recorded because a wrong lead left lying about costs a morning.**
+      The Audio tab does not open a picker: it lists previously-imported files as one-tap tiles and
+      re-adds them by media id (`addmenu.js` → `FM.mediaLib.use(mid)`). That looked like the answer — a
+      library re-add restoring from IndexedDB rather than a picked File would leave `m.file` empty and
+      hit the line-252 guard exactly as reported. **It does not.** `mediaLib.use()` pulls the real File
+      back out of storage and then calls `FM.loadVideoFile(file)` — *the identical path an import takes*.
+      So a re-added audio tile ends up with the same media record as a fresh import, and **both guards
+      pass**.
+      **What that rules out, which is the useful part:** if his "sound effects" came from the Audio tab
+      (his own files, either freshly imported or re-added), the mixer is NOT the thing dropping them, and
+      the cause is downstream — the AAC encoder, the muxer's audio track, or the `!any` path. #47's own
+      notes already flag that the muxer will commit an empty audio track to the moov on some iOS Safari
+      versions and produce a silent file, which is worth reading before anything else.
+      **So the question narrows rather than disappears:** if the effects came from the Audio tab, look
+      downstream of the mix; if they came from somewhere else, find that path first. **v7.90's toast now
+      answers this for him without him having to know any of it** — if it says "could not be read" the
+      mixer dropped them and the reason is named; if no toast appears at all and the file is still
+      silent, the mix was built fine and the loss is downstream.
+
 - [ ] **216 — An "audio only" export option.** His words: *"Add an export option to just export audio."*
       A natural pair with #215 — and useful in its own right for pulling a soundtrack out. Needs a format
       decision (m4a/aac is the obvious default) and the export dialog's resolution/fps controls should
