@@ -14561,6 +14561,61 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #151: effects on one cue, or on the whole track ----------------
+   * "when editing a caption layer you should be able to chose somehow between adding effects to each
+   * section or adding effects that effect the whole layer."
+   * The failure mode this has to be protected from is not a crash — it is an effect silently landing on
+   * the wrong stack, which you would not notice until later and could not undo. So the assertions are
+   * about WHICH ARRAY things end up in, and about the compositor seeing the right combination. */
+  test('captions: an effect can belong to one cue, and only shows while that cue does', { item: 'cue-effects' }, function () {
+    var keep = FM.scene.layers.slice(), keepT = FM.time;
+    try {
+      var L = FM.makeLayer('text', { text: '', x: 100, y: 100, start: 0, duration: 10 });
+      L.captions = [{ start: 0, end: 2, text: 'first' }, { start: 4, end: 6, text: 'second' }];
+      L.effects = [];
+      FM.scene.layers = [L];
+
+      // The cue stack is per-cue and is only minted when something is actually put in it — an empty
+      // array written on every render would stamp `effects: []` onto every cue you scrolled past.
+      FM.time = 1;
+      if (FM._cueFxList(L, false) !== null) throw new Error('an empty cue already carries an effects array — that would be written into every project file for cues nobody touched');
+      var a = FM._cueFxList(L, true);
+      if (!Array.isArray(a)) throw new Error('asking to create the cue stack did not produce one');
+      if (L.captions[0].effects !== a) throw new Error('the created stack did not land on the cue that is showing');
+      if (L.captions[1].effects) throw new Error('creating one cue’s stack also created another cue’s');
+
+      // …and it follows the playhead, because "this cue" means a different cue at a different time.
+      FM.time = 5;
+      if (FM._cueFxList(L, false) !== null) throw new Error('the second cue reports the FIRST cue’s stack — every per-cue edit would land on the wrong cue');
+      FM.time = 3;   // in the gap between cues
+      if (FM._cueFxList(L, false) !== null) throw new Error('a playhead in the gap between cues still claims a cue stack');
+
+      /* THE COMPOSITOR HALF. A cue's effects have to actually reach the render — and reach it exactly
+         once, which is the part that is easy to get wrong: drawLayer is re-entered by masks, motion
+         blur and blend modes, each rebuilding the layer, so an unguarded concat runs at every level. */
+      if (typeof FM._effectiveFx !== 'function') throw new Error('FM._effectiveFx is missing — the render-time merge has no testable seam');
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      L.captions[0].effects = [FM.fxRegistry.makeInstance('glow')];
+
+      var atCue = FM._effectiveFx(L, 1);
+      if (atCue.length !== 2) throw new Error('while the first cue is showing the render sees ' + atCue.length + ' effect(s), expected the track’s blur plus the cue’s glow');
+      if (atCue[0].type !== 'blur') throw new Error('the track’s effect must come first, so a cue effect stacks on top of the look the track already has');
+
+      var atOther = FM._effectiveFx(L, 5);
+      if (atOther.length !== 1) throw new Error('the second cue is showing but the render still sees ' + atOther.length + ' effects — the first cue’s glow is leaking onto a cue it does not belong to');
+      var inGap = FM._effectiveFx(L, 3);
+      if (inGap.length !== 1) throw new Error('between cues the render sees ' + inGap.length + ' effects — a cue effect is showing when its cue is not');
+
+      // A plain text layer must be completely untouched by any of this.
+      var plain = FM.makeLayer('text', { text: 'hi', start: 0, duration: 5 });
+      plain.effects = [FM.fxRegistry.makeInstance('blur')];
+      if (FM._effectiveFx(plain, 1).length !== 1) throw new Error('a layer with no captions had its effect list changed');
+    } finally {
+      FM.scene.layers = keep; FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- #150 part 1: "make the auto detect captions button way easier to access" -------
    * It was text layer → text editor → Aa sheet → scroll, inside a 46vh scroller. Now it is a tile on
    * the property grid. The two things worth asserting are that the door EXISTS for a text layer and

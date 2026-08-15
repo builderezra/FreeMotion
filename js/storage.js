@@ -579,6 +579,20 @@ window.FM = window.FM || {};
     return { keep: false };
   }
   function sanitizeEffects(l) {
+    /* PER-CUE STACKS GO THROUGH THE SAME GATE (queue 151). A caption cue can carry its own effects
+     * array now, and it arrives from exactly the same places layer.effects does — an imported project
+     * file, an autosave written by an older build, a hand-edited JSON. This function's own note calls
+     * layer.effects "the sub-structure with the weakest validation on the way in"; a second one that
+     * skipped the check entirely would simply be weaker still. Recursion is one level and cannot loop:
+     * a cue is a plain object with no captions of its own. */
+    if (Array.isArray(l.captions)) {
+      l.captions.forEach(c => {
+        if (!c || typeof c !== 'object') return;
+        if (c.effects == null) return;
+        if (!Array.isArray(c.effects)) { delete c.effects; return; }
+        sanitizeEffects(c);
+      });
+    }
     if (l.effects == null) return;
     if (!Array.isArray(l.effects)) { delete l.effects; return; }
     if (!FM.fxRegistry || typeof FM.fxRegistry.get !== 'function') return;   // no whitelist → touch nothing

@@ -1060,6 +1060,20 @@ window.FM = window.FM || {};
   FM.CSS_FX = Object.assign(Object.create(null), {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
   });
+  /* The effect list a layer actually renders with at time t: its own, plus the stack belonging to the
+   * caption cue showing right now (queue 151). Returns the SAME array when there is nothing to add, so
+   * the caller can tell "nothing changed" without comparing contents. Pure and exported, because the
+   * question "which effects are live on this cue" should be answerable without rasterising a frame. */
+  function effectiveFx(layer, t) {
+    const own = layer.effects || [];
+    if (!layer || !Array.isArray(layer.captions) || !layer.captions.length) return own;
+    let cue = null;
+    try { cue = FM.captions && FM.captions.cueAt(layer, t); } catch (e) { cue = null; }
+    const add = cue && cue.effects;
+    return (add && add.length) ? own.concat(add) : own;
+  }
+  FM._effectiveFx = effectiveFx;
+
   function effectFilter(layer, t, ps) {
     const S = ps == null ? 1 : ps;
     const parts = [];
@@ -8424,6 +8438,29 @@ window.FM = window.FM || {};
   }
 
   function drawLayer(ctx, layer, t, scene) {
+    /* PER-CUE EFFECTS (queue 151). Ezra: "when editing a caption layer you should be able to chose
+     * somehow between adding effects to each section or adding effects that effect the whole layer."
+     *
+     * The whole feature is this substitution. layer.effects is read in ~170 places across the
+     * compositor, inspector and thumbnail generator, and none of them change: the cue's stack is
+     * concatenated onto the track's ONCE, here, and everything downstream receives an ordinary layer
+     * with an ordinary flat effects array and cannot tell the difference. It is the same shallow-clone
+     * trick this file already uses to render a layer without one of its effects (see the isolate paths).
+     *
+     * `_cueFx` is not decoration. drawLayer is RE-ENTERED constantly — masks, motion blur, blend modes
+     * and effect isolation all rebuild the layer with Object.assign and call back in — so without a
+     * marker the cue's effects would be concatenated again at every level and a cue with one blur would
+     * render with four. Object.assign copies the flag onto every one of those clones, which is exactly
+     * the propagation this needs.
+     *
+     * Track effects come FIRST so a cue's effect stacks on top of the look the whole track already has,
+     * which is the order the two controls imply. */
+    if (layer && layer.captions && layer.captions.length && !layer._cueFx) {
+      const eff = effectiveFx(layer, t);
+      layer = (eff !== layer.effects)
+        ? Object.assign({}, layer, { effects: eff, _cueFx: 1 })
+        : Object.assign({}, layer, { _cueFx: 1 });
+    }
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
     if (layer.type === 'null') return;

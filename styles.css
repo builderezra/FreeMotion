@@ -1968,6 +1968,10 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
 .cap-detect { display: flex; gap: 6px; align-items: center; margin-top: 9px; }
 /* Both pickers share one shape — the scope choice and the clip choice are the same kind of question,
    and giving them different furniture would suggest they are not. (queue 150) */
+/* The "this cue" heading inside the Effects card (queue 151) — a quiet divider, not a second card
+   title: it is a subsection of the same stack, and giving it card weight would read as two features. */
+.fx-cue-head { margin: 12px 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--text-dim); border-top: 1px solid var(--line); padding-top: 10px; }
+
 .cap-src, .cap-scope { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
 .cap-src.hidden { display: none; }
 .cap-detect-btn { flex: 1 1 auto; justify-content: center; }

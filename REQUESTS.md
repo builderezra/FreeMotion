@@ -2465,7 +2465,7 @@ better still, keep working inside the turn rather than parking work for a later 
       turned up on shapes, text, media and groups. The test asserts the Captions tile is absent from
       shapes, groups, cameras and nulls, and the mutation that removes the guard is caught.
 
-- [ ] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer.** His words:
+- [x] **151 — A caption layer needs effects PER CUE as well as effects on the whole layer. DONE v7.69.** His words:
       *"Also when editing a caption layer you should be able to chose somehow between adding effects to
       each section or adding effects that effect the whole layer."* So a caption track carries one
       effect stack today (it is a text layer, so `layer.effects` applies to the whole thing), and he
@@ -2500,10 +2500,22 @@ better still, keep working inside the turn rather than parking work for a later 
       · The nesting cap. A filter container inside a cue's stack inside a caption is a third level the
         depth counter never anticipated.
 
-      **Why it is not built today:** it is a medium change whose failure mode is silent data going to the
-      wrong place, and #47's own notes record the lesson — *"I stopped rather than start it badly at the
-      end of a long session."* The costing above is the deliverable the entry asked for; the build is a
-      clean morning's work now that the shape is known.
+      **BUILT v7.69, the pass after the costing — and the costing was right about the shape and wrong
+      about the size.** The engine half really is one site, and the UI turned out much smaller than
+      feared once the add paths were left alone: you add to the track and then move the effect down with
+      **⋯ → Apply to this cue only**. Teaching the browser and three other add paths to aim at a
+      different stack is the version that breaks quietly — an add path that guesses wrong does not
+      throw, it puts your effect somewhere you never look — and one explicit move on a row that already
+      exists buys the same thing for none of that risk.
+      The Effects card shows the track's stack, a **This cue — "…"** divider naming the cue on screen,
+      and that cue's stack beneath it, so which is which is never a guess.
+      **Both hazards the costing flagged were real and are handled:** the row's ⋯ menu was acting on
+      `layer.effects` at an index belonging to a different array (Duplicate and Delete would have hit
+      whatever sat at that position on the TRACK) — it now takes its own stack, the same fix `fxRow`'s
+      `listOf()` already carries one level up; and `sanitizeEffects` now walks cue stacks, which it did
+      not, leaving them completely unchecked on import.
+      One thing worth knowing: a cue's array is created only when something is put in it, so merely
+      scrolling past a cue does not write `effects: []` into your project file.
 
 - [ ] **152 — Auto-detect speech probably does not work. He would rather it be REMOVED than shipped bad.**
       His words: *"Also im pretty sure the auto detect speaking and auto make the captions doesnt work,

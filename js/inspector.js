@@ -702,15 +702,42 @@ window.FM = window.FM || {};
     return row;
   }
 
-  function fxMoreMenu(layer, fx, idx, btn) {
+  /* Which list this menu's Duplicate / Delete / Paste act on. Without it they act on layer.effects at
+   * an index that belongs to a DIFFERENT array — the same defect fxRow's listOf() was written to fix,
+   * one level up. It matters now because a caption cue has a stack of its own. (queue 151) */
+  function fxMoreMenu(layer, fx, idx, btn, stack) {
+    const listFor = () => (stack ? (stack.list(layer) || []) : (layer.effects || []));
+    const done = stack ? stack.after : afterFx;
     if (!FM.contextMenu) return;
     const r = btn.getBoundingClientRect();
     const reg = FM.fxRegistry.get(fx.type);
     const clipLabel = FM.fxClipboard.label();
+    /* Move this effect between the track's stack and the cue that is showing (queue 151). Offered only
+     * on a caption track with a live cue — on anything else there is no second stack to move to, and a
+     * menu item that cannot do anything is worse than no menu item. */
+    const cueNow = activeCue(layer);
+    const moveItems = [];
+    if (cueNow) {
+      const onCue = stack === CUE_STACK;
+      moveItems.push({
+        label: onCue ? 'Apply to the whole track' : 'Apply to this cue only',
+        action: () => {
+          const from = listFor();
+          const i = from.indexOf(fx);
+          if (i < 0) return;
+          from.splice(i, 1);
+          const to = onCue ? (Array.isArray(layer.effects) ? layer.effects : (layer.effects = []))
+                           : cueFxList(layer, true);
+          if (to) to.push(fx);
+          afterFx();
+          if (FM.toast) FM.toast(onCue ? 'Moved to the whole track' : 'Moved to this cue', 1800);
+        },
+      });
+    }
     const items = [
       { label: 'Reset', action: () => { const inst = FM.fxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterFx(); } } },
       // Duplicate must carry the CURRENT settings + keyframes (a fresh default instance isn't a duplicate)
-      { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); layer.effects.splice(idx + 1, 0, copy); afterFx(); } },
+      { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); listFor().splice(idx + 1, 0, copy); done(); } },
       { label: 'Copy effect', action: () => {
         const ok = FM.fxClipboard.copy(fx);
         if (FM.toast) FM.toast(ok ? 'Copied ' + ((reg && reg.label) || fx.type) : 'Couldn’t copy this effect', 1600);
@@ -736,12 +763,13 @@ window.FM = window.FM || {};
         list.forEach(fxIn => delete fxIn._expanded);
         if (!Array.isArray(layer.effects)) layer.effects = [];
         // …below the effect you opened the menu on, in clipboard order.
-        layer.effects.splice(idx + 1, 0, ...list);
+        listFor().splice(idx + 1, 0, ...list);
         afterFx();
         if (FM.toast) FM.toast('Pasted ' + clipLabel, 1400);
       } });
     }
-    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, items.concat([
+    FM.contextMenu.show(Math.max(8, r.right - 170), r.bottom + 4, items.concat(
+      moveItems.length ? [{ sep: true }].concat(moveItems) : [], [
       { label: 'Save as preset…', action: () => {
         const name = prompt('Preset name:', (reg ? reg.label : fx.type) + ' preset'); if (!name || !name.trim()) return;
         const p = FM.effectPresets && FM.effectPresets.capture(fx, name.trim());
@@ -754,7 +782,7 @@ window.FM = window.FM || {};
         if (!note && FM.toast) FM.toast('Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400);
       } },
       { sep: true },
-      { label: 'Delete', danger: true, action: () => { layer.effects.splice(idx, 1); afterFx(); } },
+      { label: 'Delete', danger: true, action: () => { listFor().splice(idx, 1); done(); } },
     ]));
   }
 
@@ -959,7 +987,7 @@ window.FM = window.FM || {};
     head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
       const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
-      more.addEventListener('click', (ev) => fxMoreMenu(layer, fx, idx, ev.currentTarget));
+      more.addEventListener('click', (ev) => fxMoreMenu(layer, fx, idx, ev.currentTarget, stack));
       const del = el('button', 'fx-icon-btn fx-del'); del.title = 'Delete effect'; del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');
       del.addEventListener('click', () => { listOf().splice(idx, 1); after(); });
       head.appendChild(more); head.appendChild(del);
@@ -1144,6 +1172,21 @@ window.FM = window.FM || {};
     const list = el('div', 'fx-list');
     (layer.effects || []).forEach((fx, idx) => list.appendChild(fxRow(layer, fx, idx)));
     s.appendChild(list);
+    /* THE CUE'S OWN STACK, under the track's (queue 151). Shown only on a caption track while a cue is
+     * actually on screen — an "effects for this cue" list with no cue under the playhead would be a
+     * control with no subject. Labelled with the cue's own words so there is no doubt which one it
+     * belongs to, because the answer changes as the playhead moves. */
+    const cue = activeCue(layer);
+    if (cue) {
+      const cueFx = cueFxList(layer, false) || [];
+      const words = String(cue.text || '').trim();
+      const head = el('div', 'fx-cue-head', 'This cue' + (words ? ' — “' + (words.length > 22 ? words.slice(0, 21) + '…' : words) + '”' : ''));
+      s.appendChild(head);
+      const clist = el('div', 'fx-list');
+      cueFx.forEach((fx, idx) => clist.appendChild(fxRow(layer, fx, idx, CUE_STACK)));
+      if (!cueFx.length) clist.appendChild(el('div', 'insp-hint', 'Nothing on this cue yet — add an effect above, then ⋯ → Apply to this cue only.'));
+      s.appendChild(clist);
+    }
     const add = el('button', 'fx-add-btn', '+ Add Effect');
     add.addEventListener('click', () => { if (FM.fxBrowser) FM.fxBrowser.open(layer); });
     s.appendChild(add);
@@ -1202,6 +1245,33 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   }
   const AFX_STACK = { list: l => l.audioFx, after: afterAudioFx };
+
+  /* PER-CUE EFFECTS (queue 151). Ezra: "you should be able to chose somehow between adding effects to
+   * each section or adding effects that effect the whole layer."
+   *
+   * A cue's stack is an ordinary effects array living on the cue, and the compositor concatenates it
+   * onto the track's when that cue is showing (js/compositor.js, drawLayer). Here it is just another
+   * stack descriptor — the same shape the audio side and filter children already use — so every row,
+   * gesture, menu and index is scoped correctly by construction rather than by remembering.
+   *
+   * You still ADD effects to the track and then move them down. That is deliberate: the alternative is
+   * teaching the effect browser and three other add paths which stack they are aiming at, and an add
+   * path that guesses wrong does not throw, it silently puts your effect somewhere you did not look.
+   * Moving is one explicit action on a row that already exists. */
+  const CUE_STACK = { list: l => cueFxList(l, false), after: afterFx };
+  function activeCue(layer) {
+    if (!layer || !Array.isArray(layer.captions) || !layer.captions.length) return null;
+    try { return (FM.captions && FM.captions.cueAt(layer, FM.time)) || null; } catch (e) { return null; }
+  }
+  // `create` is the difference between reading the list and intending to put something in it — an
+  // empty array minted on every render would write `effects: []` onto every cue you merely scrolled past.
+  function cueFxList(layer, create) {
+    const cue = activeCue(layer);
+    if (!cue) return null;
+    if (!Array.isArray(cue.effects)) { if (!create) return null; cue.effects = []; }
+    return cue.effects;
+  }
+  FM._cueFxList = cueFxList;   // exposed for the suite
 
   // audio-fx.js param descriptors carry `def` and no `type`; fxScrubber reads `default` and dispatches
   // on `type`. Bridge them rather than teaching either side about the other.
