@@ -1,4 +1,4 @@
-# Where things are — written at v7.91, 15 Aug
+# Where things are — written at v7.99, 16 Aug
 
 **Read [REQUESTS.md](REQUESTS.md) first, then this.** This file is the short version; that one is the
 truth. If the two disagree, REQUESTS.md wins.
@@ -52,9 +52,28 @@ it, still oldest-first.
 | 7.90 | Export names any clip it could not read, instead of dropping it in silence |
 | 7.91 | …and says when the browser cannot encode AAC, which drops the whole mix |
 
-Suite: **365/365** at v7.91.
+Suite: **368/368** at v7.99, and **both flaky tests are closed** (#226 v7.98, #222 v7.99) — a single
+green run finally means something again.
+
+| | |
+|---|---|
+| 7.90 | Export names any clip the mixer could not read, instead of dropping it in silence |
+| 7.91 | …and says when the browser cannot encode AAC, which throws the whole mix away |
+| 7.92 | …and when the encode itself fails after the track was already declared |
+| 7.93 | Canvas settings hangs off the cog; the cog stays out of its own blur |
+| 7.94 | A new benchmark lights the timecode chip immediately |
+| 7.95 | Home tabs stop showing the grain; the grain actually boils |
+| 7.96 | The add-menu background reaches its borders |
+| 7.97 | Opening the export dialog stops the transport |
+| 7.98 | The flaky mic test waits on the real signal |
+| 7.99 | The flaky push test — unstampIntro now stays unstamped |
 
 ## What is open, in the order to do it
+
+0. **#244 — the add-menu drag.** Designed but NOT started, deliberately: five behaviours in one and
+   groundwork for his effects browser. The full design is in the entry — mirror `#tl-resizer`'s
+   structure, clamp against `--tl-h`, sticky snap plus a divider flash, and the panel must leave the
+   grid while dragged or every drag reflows the canvas. Build from that; do not re-research it.
 
 1. **#215 — export with no audio.** The most serious item in the file: the app produces silently wrong
    output. He gave the first reproduction on 15 Aug (fresh project + sound effects + default settings).
@@ -63,11 +82,11 @@ Suite: **365/365** at v7.91.
    clip = the mixer; the AAC toast = the encoder; **neither toast and still a silent file = the muxer**,
    which is the last place left to look and the next thing to read. A dead lead is recorded in the entry
    (library re-adds go through the identical path as imports) — do not re-derive it.
-2. **#241 (b)(c)** — the Canvas settings panel anchored to the cog, cog kept out of its own blur.
-   **Read the entry first:** inside a project the cog does *not* open App settings, it forwards to
-   `#btn-canvas`. Anchoring the wrong panel would look like nothing changed.
-3. **#243** — a new benchmark should turn the timecode chip yellow immediately, not after you leave and
-   come back.
+2. **#165 point 3** — pan/zoom while drawing. **Smaller than it looks:** `FM.viewport` already does
+   pan and zoom; `FM.startDraw` throws it away on entry because the draw overlay lays out in screen
+   pixels and double-scales under a zoom. Fix the overlay's coordinates first, then remove the reset and
+   add a hand toggle — coordinates before UI, because a stroke landing in the wrong place is the bug #97
+   spent four rounds on.
 4. **#244** — drag the add menu independently of the timeline, with a snap where they meet. He asked for
    this one to go at the bottom. It is groundwork for a bigger effects-browser plan; read the entry.
 5. **#245** — home tab buttons need the cards' no-grain treatment, **and the grain reads as static**.

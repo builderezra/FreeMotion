@@ -3032,6 +3032,20 @@ better still, keep working inside the turn rather than parking work for a later 
       or out so you can do more detailed drawing"* — and as the note above says it has to be a MODE (a
       grab/hand toggle), because one finger already means "draw". The bar now has the toggle pattern for
       it, so this is the next one.
+
+      **AND THE JOB IS SMALLER THAN IT LOOKS — read this before starting (found 16 Aug).** Pan and zoom
+      already exist: `FM.viewport` (js/canvas-edit.js) has `scale`, `apply()`, `reset()` and
+      `isDefault()`, and `FM.canvasZoom` mirrors it. So nothing needs building from scratch.
+      **What stands in the way is one line, and it names the real obstacle.** `FM.startDraw` opens with:
+      `if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();` — with the comment *"overlay
+      lays out in screen px — a zoomed viewport double-scales it"*. The drawing tool deliberately throws
+      your zoom away on entry because its overlay cannot survive one.
+      **So the work is: make `#draw-overlay` respect the viewport transform, then stop resetting it and
+      put a hand toggle on the bar.** `syncOverlay()` and `dispScale()` in draw-tool.js are where the
+      screen-pixel assumption lives; the same `__fmOX/__fmOY/__fmRS` machinery the compositor uses for a
+      cropped preview is the honest way to express it, since `toProject()` already reads those. Doing it
+      in that order means the risky half (coordinates) is done and testable before any UI is added — and
+      a stroke landing in the wrong place is exactly the bug #97 spent four rounds on.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
