@@ -3768,7 +3768,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       off effect reads almost the same as a live one. Copy the LAYER's treatment rather than inventing a
       second one — same slashed eye, same dimming — and it should apply to effects inside a filter too,
       not just top-level ones.
-- [ ] **223 — THREE layouts exist; there should be two.** (15 Aug, with two ultrawide photos.) His
+- [ ] **249 — THREE layouts exist; there should be two.** *(Was #223, which collided with the splash-video entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug, with two ultrawide photos.) His
       words: *"For some reason the new layout i had you make only shows up on certain display sizes like
       my laptop, but then an amalgamation of the old one shows when I flip my phone or use a wide
       monitor, I don't want this, I just want two layouts not three"*
@@ -3792,7 +3792,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       So retiring classic means fixing #147 first, and re-checking the suite's desktop assumptions.
       Reverted for now rather than shipping a desktop that is worse than the one you have. **Doing #147
       and this together is the right shape.**
-- [ ] **222 — A "?" in the top bar that opens the keyboard shortcuts.** (15 Aug.) His words: *"Put a
+- [ ] **248 — A "?" in the top bar that opens the keyboard shortcuts.** *(Was #222, which collided with the flaky-test entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug.) His words: *"Put a
       question mark in the top right corner to the left of note pad that quickly opens the keyboard
       shortcuts menu."* and *"On pc it can go on the play button row along side everything else when you
       get to that stage."*
@@ -4190,12 +4190,21 @@ layout, motion blur, the elements browser and the effects browser.
       **#222 is still open** and is a different shape — an entrance-animation delay, diagnosed in its own
       entry — so a single green run is not yet fully trustworthy. One down, one to go.
 
-- [ ] **225 — Add subtle shading to the notes button.** (15 Aug.) His words: *"Add subtle shading to the
+- [x] **225 — Add subtle shading to the notes button. DONE v8.04.** (15 Aug.) His words: *"Add subtle shading to the
       notes button."* The notes icon got its yellow-page look in **#186 / v7.13** — white page, yellow
       edge, dark ruled lines — and this is the next pass on the same object: it currently reads flat.
       "Subtle" is the whole instruction, so this is a small amount of depth (a soft gradient down the
       page, a hint of a shadow under the sheet), not a skeuomorphic redraw, and it must still read at
       24px in the top bar on both layouts.
+
+      **DONE v8.04** — a soft top-to-bottom gradient down the page so it reads as a lit sheet rather than
+      a flat rectangle, plus one faint shadow line under the top edge where a real page catches its own
+      curl. Both drawn INSIDE the existing page path, so the silhouette at 24px is byte-identical and the
+      mark is unchanged; it has just stopped being flat.
+      *Worth admitting: this sat undone for seventeen releases. It was the first thing logged this
+      session, then your PC message jumped the queue with your permission and ran for hours, and I twice
+      told you "everything is done except #244" — which was wrong. It surfaced from an integrity sweep of
+      the tick marks rather than from memory, which is exactly why that sweep is worth doing.*
 
 - [x] **227 — The project cards should stay see-through, but NOT show the film grain through them. DONE v7.76.**
       (15 Aug.) His words: *"the project layers are clear so you can see the film grain behind, i want
