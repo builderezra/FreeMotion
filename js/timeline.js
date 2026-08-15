@@ -22,6 +22,13 @@ window.FM = window.FM || {};
   let userScrollAt = 0, scrollSettle = 0;   // user-scroll grace window: while swiping, the finger owns scrollLeft
   const TRIM_EDGE = 46;     // px from a viewport edge that triggers auto-scroll while trimming
   let trimScrollRAF = 0;
+  /* The same thing for dragging a clip BODY (queue 115). Ezra: "when dragging a layer and you get to
+   * the end of the screen, make it so the screen moves so you can keep dragging… like how we have the
+   * selecting multiple layers tool." Separate handle from the trim one because both can never be live
+   * at once but sharing a variable would silently couple two loops that stop for different reasons.
+   * CLIP_SCROLL_MAX is a structural brake, not a tuning knob — see clipEdgeScroll. */
+  let clipScrollRAF = 0;
+  const CLIP_SCROLL_MAX = 1200;   // ~20s of continuous edge-hold at 60fps; a real drag never reaches it
   function isPhone() { return window.matchMedia('(max-width: 700px)').matches; }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
@@ -124,6 +131,8 @@ window.FM = window.FM || {};
     if (clipMove) {
       clipMove.layer.start = clipMove.origStart;
       (clipMove.group || []).forEach(g => { g.layer.start = g.origStart; });
+      // Before clipMove is nulled — the restore reads the width it borrowed off the gesture. (queue 115)
+      endClipEdgeScroll();
       clipMove = null;
     }
     if (trimDrag) {
@@ -1691,6 +1700,109 @@ window.FM = window.FM || {};
     FM.requestRender();
   }
 
+  /* The placement half of a clip-body drag, lifted out of the pointermove handler so the edge-scroll
+   * loop can re-run it with the finger standing still. Same maths as before, and only one copy of it:
+   * a second copy is how a clip ends up in one place while the guide says another. (queue 115)
+   *
+   * Deliberately NOT done by dispatching a synthetic pointermove, which is how the previous attempt
+   * reused the handler. Every other drag handler in the app also listens on window, so a replayed
+   * event reached edit-points and the text editor too — two of the three unrelated tests that attempt
+   * turned red. A direct call reaches the timeline and nothing else. */
+  function applyClipMoveAt(x, shiftKey, quiet) {
+    if (!clipMove || !tracksEl) return;
+    const pps = pxPerSec();
+    const dx = x - clipMove.startX;
+    // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
+    // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
+    const floor = -(clipMove.layer.duration - 0.1);
+    const raw = Math.max(floor, clipMove.origStart + dx / pps);
+    const sr = shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl, clipMove.sup);   // Shift bypasses snap; co-dragged clips excluded; just-snapped targets suppressed
+    clipMove.layer.start = Math.max(floor, sr.v);
+    if (sr.snapped) showSnap(sr.guide); else hideSnap();
+    const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
+    if (clipEl) clipEl.style.left = (PAD + clipMove.layer.start * pps) + 'px';
+    // group move: shift the other selected clips by the same delta (each floored to its own duration)
+    const delta = clipMove.layer.start - clipMove.origStart;
+    (clipMove.group || []).forEach(g => {
+      g.layer.start = Math.max(-(g.layer.duration - 0.1), g.origStart + delta);
+      const ge = tracksEl.querySelector('.clip[data-id="' + g.layer.id + '"]');
+      if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
+    });
+    /* `quiet` is the auto-scroll calling. It skips the canvas repaint, and that is not an
+     * optimisation — it is the whole reason the previous three attempts at this feature went red.
+     *
+     * FM.requestRender feeds noteMotion (js/app.js), the adaptive-quality heuristic: enough renders
+     * close together and the app decides it is IN MOTION and calls resizeCanvas() to drop the preview
+     * to a lower resolution, snapping back a moment after you stop. That is correct behaviour and it
+     * is why an editor looks softer while you drag. But a rAF loop repainting every frame while the
+     * finger sits still holds the preview in that state, and three tests that measure canvas geometry
+     * were then measuring a canvas that had quietly been resized underneath them — "the box is 157px
+     * off the text" and "the point landed at u=0". Nothing in the scene, the scroller or the scroll
+     * position was wrong, which is exactly why two attempts were spent looking at those.
+     *
+     * The cost is small and worth naming: while the finger is HELD at the edge the canvas does not
+     * repaint, so if the playhead sits over the clip the picture lags the scroll. Every actual finger
+     * movement repaints, and so does releasing — and while you are edge-scrolling you are looking at
+     * the timeline, where the clip does keep moving, not at the canvas. */
+    if (!quiet) FM.requestRender();
+  }
+
+  /* Drag a clip to the edge of the screen and the timeline comes to meet you (queue 115) — the
+   * behaviour the paint-select drag and a trim already have.
+   *
+   * THREE BRAKES, and each one is a bug that actually happened rather than defensive habit:
+   *  1. STOP IF THE SCROLL DID NOT MOVE. `v !== 0` only says the finger is inside the edge band.
+   *     Pinned at scrollLeft 0, a leftward step is a no-op — so the loop re-armed forever, re-placing
+   *     the clip and re-rendering every frame off a pointer that had not moved.
+   *  2. A HARD FRAME CAP. A headless test starts a drag and never releases it; a loop that only ends
+   *     on pointerup then never ends, and an earlier attempt hung the whole suite exactly that way.
+   *     A cap makes an endless loop structurally impossible rather than merely unlikely.
+   *  3. A BOUNDED SCROLLER. A trim cannot extend past its media, so growing the scroller to meet it
+   *     terminates. A clip move has no such limit, and "grow the scroller, then scroll into the space
+   *     you just made" is unbounded — one missed pointerup and the timeline runs away at 120px a
+   *     frame. Capped at the end of the composition (or the dragged clip) plus half a screen. */
+  /* Stop the loop wherever a gesture ends — pointerup, pointercancel, or an abort. It also stops on
+   * its own the moment clipMove goes null, but a frame already queued would still run once, and a
+   * feature whose failure mode is "a loop nobody is watching" should not rely on that. */
+  function endClipEdgeScroll() {
+    if (clipScrollRAF) { cancelAnimationFrame(clipScrollRAF); clipScrollRAF = 0; }
+  }
+
+  function clipEdgeScroll() {
+    clipScrollRAF = 0;
+    if (!clipMove || !clipMove.moved || !timelineEl) return;
+    if (++clipMove._scrollFrames > CLIP_SCROLL_MAX) return;                    // brake 2
+    const rect = timelineEl.getBoundingClientRect();
+    const x = clipMove.lastX, headRight = rect.left + HEAD_W, MAX = 22;
+    let v = 0;
+    if (x > rect.right - TRIM_EDGE) v = Math.min(MAX, ((x - (rect.right - TRIM_EDGE)) / TRIM_EDGE) * MAX);
+    else if (x < headRight + TRIM_EDGE) v = -Math.min(MAX, (((headRight + TRIM_EDGE) - x) / TRIM_EDGE) * MAX);
+    if (v === 0) return;
+    if (v > 0 && innerEl) {                                                    // brake 3
+      /* The limit is computed from where the clip STARTED, never from where it is now. Deriving it
+       * from the live position looks equivalent and is the runaway itself: the loop pushes the clip
+       * right, which pushes the limit right, which makes room to scroll further, which pushes the clip
+       * further. Measured — the scroller went 900px → 1904px off a single test drag, and stayed there.
+       * `origStart` cannot move for the length of the drag, so this terminates by construction. */
+      const pps = pxPerSec();
+      const far = Math.max(FM.scene.project.duration, clipMove.origStart + clipMove.layer.duration);
+      const limit = PAD + far * pps + timelineEl.clientWidth;
+      const need = Math.min(limit, timelineEl.scrollLeft + timelineEl.clientWidth + v + 120);
+      if ((parseFloat(innerEl.style.width) || 0) < need) innerEl.style.width = need + 'px';
+    }
+    const before = timelineEl.scrollLeft;
+    timelineEl.scrollLeft = Math.max(0, before + v);
+    const moved = timelineEl.scrollLeft - before;
+    if (!moved) return;                                                        // brake 1
+    /* The origin shift. The finger has not moved but the content under it has, so the clip must move
+     * by the scrolled amount. Shifting the drag's ORIGIN by that amount makes the existing `dx` absorb
+     * it with no second term anywhere — without this the clip stops dead at the edge while the timeline
+     * slides underneath it, which feels worse than having no auto-scroll at all. */
+    clipMove.startX -= moved;
+    applyClipMoveAt(clipMove.lastX, clipMove.lastShift, true);   // quiet: see applyClipMoveAt
+    clipScrollRAF = requestAnimationFrame(clipEdgeScroll);
+  }
+
   // While a trim finger sits near a viewport edge, scroll the timeline so the clip can keep extending past
   // the screen (AM behaviour). Re-arms via rAF until the finger leaves the edge or the drag ends.
   function trimEdgeScroll() {
@@ -1718,6 +1830,25 @@ window.FM = window.FM || {};
      * hypothetical — it is what the #115 edge-scroll tripped over, and it cost a bisect to find
      * because the symptom appeared in three unrelated tests measuring canvas geometry.
      * Read-only: a snapshot of booleans, so nothing outside can steer a gesture. */
+    /* One frame of the clip auto-scroll, with no gesture required (queue 115). A seam purely so the
+     * suite can assert the thing that cost this feature three attempts: that a loop frame does NOT
+     * repaint the canvas, because repainting every frame holds the preview in motion mode and resizes
+     * it underneath anything measuring canvas geometry. Guarded on there being no live drag, so it
+     * can never steer a real one. */
+    _edgeScrollTick: function (quiet) {
+      if (clipMove) return false;                          // never reach into a real drag
+      const L = (FM.scene.layers || [])[0];
+      if (!L) return false;
+      /* A throwaway gesture over a real layer, because the guard at the top of applyClipMoveAt means
+       * a tick without one would return before reaching the branch under test — a seam that always
+       * passes is the exact kind of dead test this feature has already produced. The layer's start is
+       * put back, so nothing survives the call. */
+      const save = L.start;
+      clipMove = { layer: L, origStart: L.start, startX: 0, moved: true, group: [], _excl: {}, sup: null };
+      try { applyClipMoveAt(0, false, quiet !== false); }
+      finally { L.start = save; clipMove = null; hideSnap(); }
+      return true;
+    },
     _dragState: function () {
       const live = [];
       if (clipMove) live.push('clipMove');
@@ -2016,24 +2147,18 @@ window.FM = window.FM || {};
             clipMove.group.slice().forEach(g => { if (g.layer.type === 'group') expandGrp(g.layer.id); });
             clipMove._excl = {}; clipMove._excl[clipMove.layer.id] = 1; clipMove.group.forEach(g => { clipMove._excl[g.layer.id] = 1; });
           }
-          const pps = pxPerSec();
-          // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
-          // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
-          const floor = -(clipMove.layer.duration - 0.1);
-          const raw = Math.max(floor, clipMove.origStart + dx / pps);
-          const sr = e.shiftKey ? { v: raw, snapped: false, guide: 0 } : snapStart(clipMove.layer, raw, pps, clipMove._excl, clipMove.sup);   // Shift bypasses snap; co-dragged clips excluded; just-snapped targets suppressed
-          clipMove.layer.start = Math.max(floor, sr.v);
-          if (sr.snapped) showSnap(sr.guide); else hideSnap();
-          const clipEl = tracksEl.querySelector('.clip[data-id="' + clipMove.layer.id + '"]');
-          if (clipEl) clipEl.style.left = (PAD + clipMove.layer.start * pps) + 'px';
-          // group move: shift the other selected clips by the same delta (each floored to its own duration)
-          const delta = clipMove.layer.start - clipMove.origStart;
-          (clipMove.group || []).forEach(g => {
-            g.layer.start = Math.max(-(g.layer.duration - 0.1), g.origStart + delta);
-            const ge = tracksEl.querySelector('.clip[data-id="' + g.layer.id + '"]');
-            if (ge) ge.style.left = (PAD + g.layer.start * pps) + 'px';
-          });
-          FM.requestRender();
+          clipMove.lastX = e.clientX; clipMove.lastShift = !!e.shiftKey;
+          applyClipMoveAt(e.clientX, e.shiftKey);
+          // Near a viewport edge? Bring the timeline to meet the finger so the drag can keep going
+          // past the screen, the same way a trim already does. (queue 115)
+          const trect = timelineEl ? timelineEl.getBoundingClientRect() : null;
+          if (trect && !clipScrollRAF &&
+              (e.clientX > trect.right - TRIM_EDGE || e.clientX < trect.left + HEAD_W + TRIM_EDGE)) {
+            // Reset per edge-hold, not per drag: leaving the edge and coming back is a fresh gesture,
+            // and a cap that only ever counted down would stop working part-way through a long edit.
+            clipMove._scrollFrames = 0;
+            clipScrollRAF = requestAnimationFrame(clipEdgeScroll);
+          }
           return;
         }
         if (slipDrag) {
@@ -2101,6 +2226,7 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointerup', (e) => {
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
+        endClipEdgeScroll();
         if (cueDrag) {
           const cd = cueDrag; cueDrag = null;
           if (cd.moved) {
@@ -2197,6 +2323,7 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointercancel', () => {
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
+        endClipEdgeScroll();
         abortGestures();   // RESTORE half-applied clip/trim/kf edits — never leave them in the scene
         dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });

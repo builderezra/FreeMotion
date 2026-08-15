@@ -14507,6 +14507,53 @@
     } finally { FM._exporting = was; }
   });
 
+  /* ---------------- #115: drag a clip to the edge and the timeline comes to meet you ----------
+   *
+   * This feature was built and backed out three times. Each attempt turned the SAME three unrelated
+   * tests red — two text-editor geometry checks and an edit-points snap — and each attempt guessed at
+   * the mechanism from those three names: the scroller width, the scroll position, a leaked drag, the
+   * scene. All four were measured and all four were wrong.
+   *
+   * The answer was that the auto-scroll loop called FM.requestRender() every frame, which feeds
+   * noteMotion() — the adaptive-quality heuristic that decides the app is IN MOTION and RESIZES THE
+   * PREVIEW CANVAS to a lower resolution. Three tests measuring canvas geometry were measuring a
+   * canvas that had been resized underneath them. Nothing was wrong with the scene, the scroller, or
+   * the scroll position, which is precisely why looking at those found nothing.
+   *
+   * So the test below is not about auto-scrolling. It is about the thing that cost three attempts:
+   * a timeline gesture must not be able to hold the preview in motion mode. */
+  test('timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode', { item: 'clip-edge-scroll-quiet' }, async function () {
+    if (!FM.timeline || !FM.timeline._edgeScrollTick) throw new Error('FM.timeline._edgeScrollTick is missing — the auto-scroll has no testable seam');
+    var keep = FM.scene.layers.slice(), keepDur = FM.scene.project.duration;
+    var real = FM.requestRender, calls = 0;
+    FM.requestRender = function () { calls++; return real.apply(this, arguments); };
+    try {
+      FM.scene.layers.length = 0;
+      var sc = offscreen(64, 48); sc.getContext('2d').fillRect(0, 0, 64, 48);
+      FM.addMediaLayer({ kind: 'image', width: 64, height: 48, canvas: sc, el: null });
+
+      /* THE CONTROL FIRST. An ordinary placement MUST repaint — that is how dragging a clip updates
+       * the picture. Without this line the assertion below would pass against a seam that does
+       * nothing at all, which is the exact shape of dead test this feature has already produced. */
+      calls = 0;
+      if (!FM.timeline._edgeScrollTick(false)) throw new Error('the tick did not run — no layer to drag');
+      if (calls !== 1) throw new Error('control failed: an ordinary clip placement repainted ' + calls + ' times, not once — this test cannot tell the fix from the bug');
+
+      calls = 0;
+      for (var i = 0; i < 40; i++) FM.timeline._edgeScrollTick(true);
+      if (calls !== 0) {
+        throw new Error('40 auto-scroll frames asked for ' + calls + ' canvas repaints. Every one feeds noteMotion(), ' +
+                        'which puts the app in motion mode and calls resizeCanvas() — so anything measuring canvas geometry ' +
+                        'afterwards measures a canvas that moved underneath it. That is what turned three unrelated tests red, three times.');
+      }
+    } finally {
+      FM.requestRender = real;
+      FM.scene.layers = keep; FM.scene.project.duration = keepDur;
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- #47 (second half): a render survives an actual crash ----------------
    *
    * The guard above stops a HAND from throwing an export away. It cannot stop an OOM kill or a tab

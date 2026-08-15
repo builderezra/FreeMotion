@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>queue 115 — what does the edge-scroll actually leave behind?</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, monospace; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 16px; }
+  table { border-collapse: collapse; margin: 10px 0; }
+  td, th { border: 1px solid #2a2f3a; padding: 4px 10px; text-align: left; }
+  th { color: #9fb; }
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+</style>
+</head>
+<body>
+  <h3>queue 115 — the state a clip-drag test leaves behind, with the edge-scroll wired in</h3>
+  <p style="color:#98a">Three attempts at this feature guessed at the mechanism from three red tests.
+  The full-suite diff pinned the damage to one call — the loop re-placing the clip — and this measures
+  what that call actually does to the scene, rather than reasoning about it.</p>
+  <div id="out">running…</div>
+  <iframe id="app" src="../index.html"></iframe>
+<script>
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () {
+  var w = frame.contentWindow;
+  setTimeout(function () {
+    go(w).then(show).catch(function (e) {
+      document.getElementById('out').textContent = 'Error: ' + ((e && e.stack) || e);
+      window.__q115 = { error: String(e && e.message || e) }; window.__done = true;
+    });
+  }, 1400);
+});
+
+function snap(w) {
+  var tl = w.document.getElementById('timeline');
+  var inner = w.document.getElementById('tl-inner');
+  return {
+    scrollLeft: tl ? Math.round(tl.scrollLeft) : -1,
+    innerWidth: inner ? Math.round(parseFloat(inner.style.width) || 0) : -1,
+    starts: (w.FM.scene.layers || []).map(function (l) { return +(l.start || 0).toFixed(3); }),
+    duration: w.FM.scene.project.duration,
+    snapGuideVisible: !!(function () {
+      var g = w.document.querySelector('.tl-snap, #tl-snap, .snap-guide');
+      if (!g) return false;
+      var cs = w.getComputedStyle(g);
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity || '1') > 0.01;
+    })(),
+  };
+}
+
+async function go(w) {
+  var src = await (await fetch('tests.js', { cache: 'no-store' })).text();
+  var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
+  if (!w.FMTests) throw new Error('FMTests did not load');
+  var t = w.FMTests.tests.filter(function (x) { return x.item === 'hold-drag'; })[0];
+  if (!t) throw new Error('the hold-drag test is gone — this probe is keyed to it');
+
+  var before = snap(w);
+  var err = '';
+  try { var r = t.fn(); if (r && r.then) await r; } catch (e) { err = String(e && e.message || e); }
+  /* HOW LONG DOES IT KEEP GOING? The suite runs tests back to back, so a loop that outlives the test
+   * that armed it is not a tidiness problem — it is twenty seconds of scrolling and re-rendering
+   * landing on top of whatever runs next. Sample until it settles, and report when it did. */
+  var t0 = Date.now(), lastChange = 0, prev = snap(w).scrollLeft, samples = 0;
+  while (Date.now() - t0 < 6000) {
+    await new Promise(function (r2) { setTimeout(r2, 50); });
+    samples++;
+    var now = snap(w).scrollLeft;
+    if (now !== prev) { lastChange = Date.now() - t0; prev = now; }
+  }
+  var after = snap(w);
+  return { before: before, after: after, testError: err, dragState: w.FM.timeline._dragState(),
+           stillScrollingForMs: lastChange, samples: samples };
+}
+
+function show(d) {
+  window.__q115 = d; window.__done = true;
+  function row(k) {
+    var a = JSON.stringify(d.before[k]), b = JSON.stringify(d.after[k]);
+    var changed = a !== b;
+    return '<tr><td>' + k + '</td><td>' + a + '</td><td style="color:' + (changed ? '#ff9' : '#8a9') + '">' + b + '</td></tr>';
+  }
+  document.getElementById('out').innerHTML =
+    '<table><tr><th>state</th><th>before hold-drag</th><th>after</th></tr>' +
+    ['scrollLeft', 'innerWidth', 'starts', 'duration', 'snapGuideVisible'].map(row).join('') +
+    '</table>' +
+    '<p>test error: <b>' + (d.testError || '(none — it passed)') + '</b></p>' +
+    '<p>gesture still live afterwards: <b>' + JSON.stringify(d.dragState) + '</b></p>' +
+    '<p>the timeline was STILL SCROLLING <b>' + d.stillScrollingForMs + 'ms</b> after the test returned' +
+    (d.stillScrollingForMs > 200 ? ' — that lands on top of whatever test runs next' : '') + '</p>';
+}
+</script>
+</body>
+</html>

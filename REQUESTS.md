@@ -622,7 +622,7 @@ better still, keep working inside the turn rather than parking work for a later 
       see this: was the note **rotated or scaled**, was it in **Edit Points**, or had it been **squished /
       had an effect on it**? Any of those could push ink past the box in a way a plain layer does not.
       Staying open until then rather than being closed on a clean measurement of the wrong thing.
-- [ ] **115 — Dragging a clip to the screen edge should auto-scroll the timeline.** His words: *"When
+- [x] **115 — Dragging a clip to the screen edge should auto-scroll the timeline. DONE v7.56.** His words: *"When
       dragging a layer and you get to the end of the screen, make it so the screen moves so you can keep
       dragging a layer to the left or right without needing to let go and then scroll etc, like how we
       have the selecting multiple layers tool."* So the edge-scroll behaviour the paint-select drag
@@ -689,6 +689,35 @@ better still, keep working inside the turn rather than parking work for a later 
       differently. The three reds are almost certainly downstream of something earlier, and guessing at
       the mechanism has now cost two attempts. Backed out rather than shipped red, or "fixed" by editing
       the tests it broke.
+
+      **FOURTH ATTEMPT — SHIPPED, v7.56. It works, and the cause was none of the four things we guessed.**
+      Doing what the paragraph above said to do is what found it. The full pass/fail diff pinned the
+      damage to a single call, and from there it took two experiments rather than another theory.
+      **The auto-scroll loop was calling `FM.requestRender()` every frame.** That feeds `noteMotion()`
+      in js/app.js — the adaptive-quality heuristic that decides the app is in motion and calls
+      `resizeCanvas()` to drop the preview to a lower resolution, snapping back when you stop. That is
+      correct behaviour and it is why an editor looks softer while you drag. But a loop repainting every
+      frame while the finger sits still HOLDS it in that state, and the three tests that kept going red
+      were measuring canvas geometry against a canvas that had been quietly resized. Nothing was ever
+      wrong with the timeline, which is exactly why three rounds of looking at the timeline found
+      nothing — it was invisible module state one file away.
+      The loop now moves the clip in the timeline without repainting the canvas. The cost is honest and
+      small: while your finger is HELD at the edge the picture does not refresh, so if the playhead sits
+      over the clip it lags the scroll. Every actual movement refreshes it, so does letting go, and
+      while you are edge-scrolling you are watching the timeline anyway.
+      **Two more defects fixed on the way, both recorded above as risks and both real:** the growth
+      limit was computed from the clip's LIVE position, so the loop pushed the clip right, which pushed
+      the limit right, which made room to scroll further — measured, a single test drag grew the
+      scroller from 900px to 1904px. It now comes from where the clip started, so it cannot run away.
+      And the loop is cancelled on every gesture-end path, not just pointerup.
+      **Two tools came out of this and are worth knowing about**, because the next mystery like it
+      should not cost four attempts: `tests/_fmdiff.py` captures the FULL pass/fail list from a suite
+      run and diffs two of them, and `tests/_only.html?items=a,b,c` runs any subset so you can ask
+      whether a test fails on its own or only after something earlier ran.
+      **Proven working, not merely green.** `tests/_q115b.html` drives a genuine pointer drag to the
+      edge — at desktop width AND at 380px — and checks that the timeline scrolls, that the clip
+      travels with it instead of stopping dead, that releasing stops it, and that no gesture is left
+      live. 5/5 at both widths. Suite 340/340.
 - [x] **116 — Sliders are too stiff; they should glide like the timeline. (REPEAT of #45.)** (v6.97) His words:
       *"The sliders we have for everything like effects and what not are too stiff, they need to flow
       like the timeline does, when you swipe it glides."* #45 "Give every slider the timeline's glide"
@@ -3208,3 +3237,12 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
 Everything before this is in POLISH-LOG.md from v2.31 onward — roughly 90 more shipped items,
 including the camera, captions, speed ramping, the easing editor, the shape library, the Studio
 layout, motion blur, the elements browser and the effects browser.
+
+- [ ] **221 — Phone: the version number is on screen TWICE.** Spotted by me at 380px while verifying
+      v7.56, not reported by you — noting it rather than fixing it now, because it is not its turn and
+      the queue is the queue. In the phone layout the build number appears both in the top bar next to
+      the FreeMotion name and again as a small "v7.55"-style label just above the Export button. Almost
+      certainly a leftover from **v7.52**, which moved the version-refresh control onto the transport
+      row for the PC layout; the phone's own copy was presumably never hidden once the row gained one.
+      Small, cosmetic, and the fix is likely one CSS rule — but two version labels disagreeing after a
+      partial update is exactly the confusion the tap-to-force-update label exists to prevent.

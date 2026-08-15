@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>queue 115 — does the auto-scroll actually scroll?</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, monospace; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 16px; }
+  .row { padding: 6px 10px; border-radius: 6px; margin: 4px 0; }
+  .ok { background: #11251a; } .fail { background: #2a1416; }
+  .tag { font-weight: 700; } .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+</style>
+</head>
+<body>
+  <h3>queue 115 — a real clip drag held at the right edge</h3>
+  <p style="color:#98a">The suite test proves the auto-scroll does not repaint the canvas, which is
+  what broke three previous attempts. It does not prove the thing Ezra asked for actually happens.
+  This drives a genuine pointer drag to the edge and watches the timeline.</p>
+  <div id="out">running…</div>
+  <iframe id="app" src="../index.html"></iframe>
+<script>
+var results = [];
+function say(n, ok, err) { results.push({ name: n, ok: !!ok, err: ok ? '' : (err || '') }); }
+function render() {
+  document.getElementById('out').innerHTML =
+    '<div style="margin:8px 0;font-weight:700">' + results.filter(function (r) { return r.ok; }).length + '/' + results.length + ' green</div>' +
+    results.map(function (r) {
+      return '<div class="row ' + (r.ok ? 'ok' : 'fail') + '"><span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span> ' +
+        r.name + (r.err ? '<br><span style="color:#c98">— ' + r.err + '</span>' : '') + '</div>';
+    }).join('');
+}
+/* ?w=380 narrows the iframe so the app takes its PHONE layout. This is a touch gesture — dragging a
+ * clip to the edge of the screen is something you do with a thumb — so proving it on a 900px desktop
+ * frame and stopping there would be testing the wrong device. */
+var frame = document.getElementById('app');
+var W = parseInt(new URLSearchParams(location.search).get('w') || '0', 10);
+if (W > 0) { frame.style.width = W + 'px'; }
+frame.addEventListener('load', function () {
+  var w = frame.contentWindow;
+  setTimeout(function () {
+    go(w).catch(function (e) { say('harness', false, String((e && e.stack) || e)); })
+         .then(function () { render(); window.__q115b = results; window.__done = true; });
+  }, 1500);
+});
+
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function pe(w, type, x, y) {
+  return new w.PointerEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+}
+
+async function go(w) {
+  var FM = w.FM, d = w.document;
+  var keepLayers = FM.scene.layers.slice(), keepDur = FM.scene.project.duration;
+  try {
+    // A project long enough that there is somewhere to scroll TO.
+    FM.scene.layers.length = 0;
+    FM.scene.project.duration = 60;
+    for (var i = 0; i < 3; i++) {
+      var cv = d.createElement('canvas'); cv.width = 64; cv.height = 48;
+      cv.getContext('2d').fillRect(0, 0, 64, 48);
+      FM.addMediaLayer({ kind: 'image', width: 64, height: 48, canvas: cv, el: null });
+    }
+    FM.scene.layers.forEach(function (l, k) { l.start = k * 3; l.duration = 3; });
+    FM.timeline.rebuild();
+    await sleep(300);
+
+    var tl = d.getElementById('timeline');
+    var L = FM.scene.layers[0];
+    FM.selectLayer(L.id);
+    await sleep(200);
+    FM.timeline.rebuild();
+    await sleep(200);
+
+    var clip = d.querySelector('.clip[data-id="' + L.id + '"]');
+    if (!clip) throw new Error('the clip element is not in the timeline');
+    var cr = clip.getBoundingClientRect(), tr = tl.getBoundingClientRect();
+    var scroll0 = tl.scrollLeft, start0 = L.start;
+
+    // Press on the clip, drag to the RIGHT EDGE of the timeline, then hold perfectly still.
+    var y = cr.top + cr.height / 2;
+    clip.dispatchEvent(pe(w, 'pointerdown', cr.left + cr.width / 2, y));
+    await sleep(60);
+    w.dispatchEvent(pe(w, 'pointermove', cr.left + cr.width / 2 + 30, y));   // past the 4px move threshold
+    await sleep(40);
+    var edgeX = tr.right - 8;
+    w.dispatchEvent(pe(w, 'pointermove', edgeX, y));
+    var held = L.start;
+    await sleep(700);            // the finger does not move again — only the loop can act now
+    var scroll1 = tl.scrollLeft, start1 = L.start;
+    w.dispatchEvent(pe(w, 'pointerup', edgeX, y));
+    await sleep(250);
+
+    say('holding a clip at the right edge scrolls the timeline',
+        scroll1 > scroll0 + 20,
+        'scrollLeft went ' + Math.round(scroll0) + ' → ' + Math.round(scroll1) + ' — the timeline did not come to meet the finger');
+    say('and the clip keeps travelling with it instead of stopping dead at the edge',
+        start1 > held + 0.2,
+        'the clip stayed at ' + held.toFixed(2) + 's while the timeline scrolled — that is worse than no auto-scroll at all');
+    say('the clip ends up later than it started',
+        start1 > start0,
+        'start went ' + start0.toFixed(2) + ' → ' + start1.toFixed(2));
+
+    // It has to STOP. Left running, this is a timeline that scrolls forever off one missed release.
+    var afterUp = tl.scrollLeft;
+    await sleep(600);
+    say('releasing stops it',
+        Math.abs(tl.scrollLeft - afterUp) < 1,
+        'the timeline kept scrolling after pointerup (' + Math.round(afterUp) + ' → ' + Math.round(tl.scrollLeft) + ')');
+    say('no gesture is left live afterwards',
+        !FM.timeline._dragState().any,
+        JSON.stringify(FM.timeline._dragState()));
+  } finally {
+    FM.scene.layers = keepLayers; FM.scene.project.duration = keepDur;
+    FM.selectLayer(null);
+    if (FM.refreshAll) FM.refreshAll();
+  }
+}
+</script>
+</body>
+</html>
