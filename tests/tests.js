@@ -14692,6 +14692,60 @@
     } finally { await XR.clear(); }
   });
 
+  /* The one the first cut of this feature got wrong, and the reason it is worth writing down: every
+   * other test here either stays inside one page or drives the module directly, so none of them ever
+   * ran the BOOT path — and the boot path is the only path a real crash takes. `pruneOrphans()` sweeps
+   * the media store at every boot and deleted these keys as orphans, so resume worked in a test and
+   * would never once have worked for him. A feature about surviving a reload has to be tested across
+   * the reload's clean-up, not just across the crash. */
+  test('export resume: the boot clean-up does not eat the render it is meant to protect', { item: 'export-resume-boot' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|boot';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 2 });
+      for (var i = 0; i < 4; i++) rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, [i, i]), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
+      await rec.settle();
+      if (!(await XR.load(sig))) throw new Error('control failed: nothing was saved, so the sweep below proves nothing');
+
+      // The real thing, not a stand-in: this is what runs at js/app.js's boot.
+      await FM.projects.pruneOrphans();
+
+      var after = await XR.load(sig);
+      if (!after) throw new Error('the boot sweep deleted the saved render — a crash is ALWAYS followed by a boot, so resume would never once have worked outside a test');
+      if (after.records.length !== 4) throw new Error('the boot sweep took ' + (4 - after.records.length) + ' of the 4 saved chunks');
+    } finally { await XR.clear(); }
+  });
+
+  test('export resume: an abandoned render is reaped instead of sitting on the device forever', { item: 'export-resume-reap' }, async function () {
+    var XR = FM.exportResume;
+    var sig = XR.signature(xrBaseSig()) + '|reap';
+    try {
+      await XR.clear();
+      var rec = XR.createRecorder(sig, { batchChunks: 2 });
+      for (var i = 0; i < 4; i++) rec.add(xrChunk(i === 0 ? 'key' : 'delta', i * 1000, 1000, [i, i]), i === 0 ? { decoderConfig: { codec: 'x', description: new Uint8Array([9]) } } : undefined);
+      await rec.settle();
+
+      // Debris from a torn write: parts the job does not count. They must go even while it is fresh,
+      // and the parts it DOES count must not.
+      await FM.storage.writeMedia(XR.PART_PREFIX + '9', { chunks: [{ k: 'delta', ts: 1, du: 1, d: new Uint8Array([1]) }] });
+      await XR.sweep();
+      if (await FM.storage.readMedia(XR.PART_PREFIX + '9')) throw new Error('an orphaned part left by a torn write survived the sweep and can never be read again — dead bytes on the device');
+      var still = await XR.load(sig);
+      if (!still || still.records.length !== 4) throw new Error('the sweep took the live parts along with the orphan (' + (still ? still.records.length : 0) + ' of 4 left)');
+
+      // Now age it past the point where load() would touch it. Exempting these keys from the generic
+      // orphan sweep is what makes this necessary: nothing else is looking after them any more.
+      var job = await FM.storage.readMedia(XR.JOB_KEY);
+      job.updatedAt = Date.now() - (4 * 24 * 3600 * 1000);
+      await FM.storage.writeMedia(XR.JOB_KEY, job);
+      await XR.sweep();
+      if (await FM.storage.readMedia(XR.JOB_KEY)) throw new Error('a four-day-old abandoned render kept its job record');
+      var left = await FM.storage.listMediaKeys(XR.PART_PREFIX);
+      if (left.length) throw new Error(left.length + ' chunk part(s) from an abandoned render are still on the device — up to 512 MB of video nobody is coming back for');
+    } finally { await XR.clear(); }
+  });
+
   /* ---------------- #31b: which motion blur reads which motion ----------------
    * His report was "transform blur can't smear effect- or camera-driven motion", and that is true and
    * structural — the re-projection blur can only smear motion in the layer's own matrix. The question

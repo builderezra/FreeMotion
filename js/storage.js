@@ -1043,6 +1043,11 @@ window.FM = window.FM || {};
     async pruneOrphans() {
       try {
         if (FM._mediaBusy) return;   // media writes in flight — sweep again next boot
+        /* An interrupted export's saved chunks live in this store too, and belong to no layer, no
+         * project and no media-library entry — so the keep-set below reads them as orphans and deletes
+         * them at the first boot after a crash, which is the exact boot on which they are the point.
+         * They are exempted from the scan (see the prefix list) and reaped by their own rules instead. */
+        if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
         const projIds = new Set();   // EVERY stored project doc — scanned from localStorage, not just the index (an unindexed doc's media must never be mass-deleted)
         const collectKeep = () => {
           const keep = new Set();
@@ -1064,7 +1069,7 @@ window.FM = window.FM || {};
         const db = await openDB();
         const candidates = [];
         for (const k of await idbKeys(db)) {
-          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0 || k.indexOf('libthumb2:') === 0)) continue;
+          if (typeof k === 'string' && (k.indexOf('tpl:') === 0 || k.indexOf('elem:') === 0 || k.indexOf('font:') === 0 || k.indexOf('libthumb2:') === 0 || k.indexOf('xr:') === 0)) continue;
           // project-card thumbnails are keyed 'thumb:<projectId>' — they were being treated as
           // orphans and wiped at EVERY boot; only a deleted project's thumb is really an orphan
           if (typeof k === 'string' && k.indexOf('thumb:') === 0) { if (projIds.has(k.slice(6))) continue; candidates.push(k); continue; }

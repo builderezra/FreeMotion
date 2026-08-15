@@ -1612,6 +1612,17 @@ better still, keep working inside the turn rather than parking work for a later 
       *(Also worth knowing: a finished export leaves nothing behind. The chunks are deleted on success
       and on Cancel, and kept on any other exit — an exception on the way out is exactly the case this
       exists for.)*
+      **v7.54 — and this one is worth reading, because v7.53 did not actually work for you.** I put the
+      finished change through an adversarial review, and it found the one thing every test had missed:
+      the app sweeps orphaned media out of its storage at every boot, and the saved export chunks belong
+      to no layer and no project, so the sweep deleted them — at the first boot after a crash, which is
+      exactly the boot they exist for. Resume worked when an export threw inside a live page (which is
+      what the end-to-end probe does) and would never once have worked for a real out-of-memory kill.
+      The tests could not have caught it because none of them ran the boot path at all. Fixed in both
+      halves — the keys are exempt from the generic sweep, and because nothing generic is minding them
+      any more, they now get reaped on their own terms instead (abandoned after three days, capped, or
+      left behind by a torn write). Two new tests, one calling the real boot sweep rather than a
+      stand-in; reverting the exemption reproduces the original bug exactly.
       **STILL OPEN: the second half — off the main thread.** Much larger again: a worker means the whole
       compositor (9,600 lines, DOM canvas throughout) on OffscreenCanvas. Not started.
       It also sits right next to **#215 (an export came out with NO AUDIO)**, which is still waiting on

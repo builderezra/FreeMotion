@@ -45,6 +45,11 @@
         if (!w.FMTests) throw new Error('FMTests did not load (is FM initialised?)');
         return w.FMTests.run();
       }).then(function (res) {
+        /* The FULL pass/fail list, not just the reds. #115 has now cost three attempts partly because
+         * a failing run only ever showed its three failures, and the three reds were almost certainly
+         * downstream of something earlier that still "passed". Diffing two complete runs finds the
+         * FIRST test that behaves differently, which is the actual question. tests/_fmdiff.py reads it. */
+        window.__fmResults = res.results.map(function (r) { return { name: r.name, item: r.item || '', ok: !!r.ok, pending: !!r.pending, error: r.error || '' }; });
         document.getElementById('sum').innerHTML =
           '<span class="pill ' + (res.regressionGreen ? 'green' : 'red') + '">Regression ' + res.regressionPass + '/' + res.regressionTotal + (res.regressionGreen ? ' ✓' : ' ✗') + '</span>' +
           '<span class="pill">Pending ' + res.pendingPass + '/' + res.pendingTotal + ' built</span>';

@@ -139,6 +139,41 @@ window.FM = window.FM || {};
     for (const k of keys) { try { await st.removeMedia(k); } catch (e) {} }
   }
 
+  /* THE BOOT REAPER, and the reason it has to exist.
+   *
+   * These records live in the same IndexedDB store as media, and `FM.projects.pruneOrphans()` sweeps
+   * that store at every boot: anything not referenced by a project layer, the live scene or the media
+   * library is deleted. `xr:job` and `xr:part:N` are referenced by none of those, so the generic sweep
+   * ate them — at the first boot after a crash, which is precisely the boot on which they are needed.
+   * The feature therefore worked within a page session and never across the crash it was built for.
+   * (Found by review, not by the tests: every test at the time either stayed inside one page or drove
+   * the module directly, so nothing ever ran the boot path. The test below now does.)
+   *
+   * So pruneOrphans skips `xr:` and calls this instead, which is the other half of the same fix: once
+   * the generic reaper is not looking after these keys, something has to. Two jobs.
+   *   • A job nobody came back for within MAX_AGE_MS goes, along with its parts. load() already refuses
+   *     to READ one that old, but refusing to read it is not the same as not storing it — without this
+   *     up to 512 MB of encoded video would sit on the device indefinitely.
+   *   • Parts numbered at or past the job's own count are the debris of a torn write and go whatever
+   *     the job's age.
+   * A capped job counts as stale: load() can never use one, so keeping it is pure cost. */
+  async function sweep() {
+    if (FM._exporting) return;          // never reap underneath a running export
+    const st = FM.storage;
+    if (!st || !st.readMedia) return;
+    let job = null;
+    try { job = await st.readMedia(JOB_KEY); } catch (e) { job = null; }
+    const stale = !job || job.v !== FORMAT || job.capped || !job.updatedAt ||
+                  (Date.now() - job.updatedAt) > MAX_AGE_MS || !(job.parts > 0);
+    if (stale) { await clear(); return; }
+    let keys = [];
+    try { keys = st.listMediaKeys ? await st.listMediaKeys(PART_PREFIX) : []; } catch (e) { keys = []; }
+    for (const k of keys) {
+      const i = parseInt(k.slice(PART_PREFIX.length), 10);
+      if (!(i >= 0) || i >= job.parts) { try { await st.removeMedia(k); } catch (e) {} }
+    }
+  }
+
   async function load(sig) {
     const st = FM.storage;
     if (!st || !st.readMedia) return null;
@@ -259,5 +294,6 @@ window.FM = window.FM || {};
     createRecorder: createRecorder,
     load: load,
     clear: clear,
+    sweep: sweep,
   };
 })(window.FM);

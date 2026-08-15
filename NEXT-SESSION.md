@@ -1,11 +1,20 @@
-# Where things stand — written before a chat compaction (15 Aug 2026, updated at v7.47)
+# Where things stand — written before a chat compaction (15 Aug 2026, updated at v7.53)
 
-**Live: v7.52. Working tree clean, HEAD == ssh/main. Suite 329/329. Nothing half-finished.**
+**Live: v7.53. Suite 336/336. Nothing half-finished.**
 
 Since v7.47: **v7.48** filters corrections + Delete out of the layer menu · **v7.49** the Filters tab
 became a real tile browser with a preview of every look (#113 DONE) · **v7.50** #31b's effects half
 answered (the app already had that blur, it just never said so) · **v7.51** an export can no longer be
-thrown away by a refresh · **v7.52** #168, the PC side rail gone and everything on the transport row.
+thrown away by a refresh · **v7.52** #168, the PC side rail gone and everything on the transport row ·
+**v7.53** #47's crash-resume half — an export killed by a crash now picks up at the seam.
+
+**v7.53 corrected a wrong conclusion this file was carrying.** It said crash-resume needed a
+"segmented export" redesign because mp4-muxer's sample tables cannot be rehydrated. The fact is true;
+the inference was not. The muxer never had to be resumable — muxing is a byte copy, not an encode. Save
+the encoded CHUNKS, bin the half-written file, replay the chunks into a fresh muxer in milliseconds, and
+carry on from the seam. `js/export-resume.js`, wired into `run()` in `js/exporter.js`. If you are ever
+tempted by a big design to protect an expensive pipeline, check first which end of it is actually
+expensive.
 
 **Backed out and NOT shipped: #115** (drag a clip to the edge to auto-scroll). The second attempt hung
 the test suite outright — a `clipEdgeScroll` rAF that never terminated. Reverted clean. The entry's
@@ -78,25 +87,22 @@ sentence, so expect him to want it.
 "what it is made of" line — it is the thing a picture cannot tell you, and the whole promise of a filter
 here is that it is not a black box.
 
-## The next item up: #47
+## The next item up: what is left of #47, then #93 onward
 
-**Export must not lose the render on a crash, and should get off the main thread.** Not blocked on him —
-just big, which is why it was not started at the tail of a long session. Its two halves are very
-different sizes:
+**#47's first half shipped in v7.53.** What remains is **off the main thread** — a worker, which means
+the whole compositor (9,600 lines, DOM-canvas throughout) on OffscreenCanvas. That one really is large,
+and unlike the resume half there is no clever shortcut hiding in it. Do not start it at the tail of a
+session.
 
-- **crash-resume** — and REQUESTS' "chunk-replay resume is proven" is WRONG, corrected there on 15 Aug:
-  there is no such code anywhere in the repo, the staged diffs or the history. Do not go looking.
-  The real obstacle is that `createMp4Sink` assembles the file in PAGE MEMORY and mp4-muxer keeps its
-  track/sample tables in memory with no way to rehydrate them — so a half-written file cannot be
-  reopened and muxed into, and a VideoEncoder cannot resume mid-GOP. The achievable shape is
-  **segmented export**: N-second segments, each finalised into IDB as it completes, joined at the end.
-  A crash then costs one segment. That is a bigger design than the old line promised — agree it with
-  him before building.
-- **off the main thread** — a worker, which means the whole compositor (9,600 lines, DOM-canvas
-  throughout) on OffscreenCanvas. Much larger.
+It sits right next to **#215 (an export came out with NO AUDIO)**, which he has now been asked THREE
+times about jumping the queue and has not answered. It is still the most serious open item: everything
+else is the app being awkward, that is the app's output being silently wrong after a long render.
 
-**Do the first half on its own.** It sits right next to **#215 (an export came out with NO AUDIO)**,
-which he has been asked twice about jumping the queue.
+**Where to start on #215 when it comes up:** the export mix is built separately from the preview
+(`buildAudioMix`, js/exporter.js:237), so it is not the same code as #96 though it may be the same class
+of bug. Establish which of muted / mixed-at-zero / never-decoded it is by exporting a known clip and
+inspecting the file, not by reading. Check `layer.muted` — Extract Audio deliberately mutes the original,
+and a muted original plus a missing twin produces exactly this.
 
 ### Two things he owes an answer on
 
@@ -127,6 +133,14 @@ tick them.
 - **Never move code with a script that walks the source to find its own boundaries.** One did that
   here, matched the wrong block, deleted three lines of row-building and turned five tests red. Revert
   the file to HEAD and redo it as one targeted edit.
+- **A focused runner turns a mutation check from 90s into 5s.** `tests/_xrunit.html` (export-resume) and
+  `tests/_q45_probe.html` are the pattern: filter `FMTests.tests` by `item` prefix and run only those.
+  Six mutations were checked against v7.53 in about the time one full suite run would have taken.
+- **Snapshot a batch when you hand it off, not when the write runs.** The export recorder queued its
+  IndexedDB writes as `chain.then(() => write(buf))`, which reads `buf` at execution time — so several
+  batches handed over in one turn of the event loop all collapsed into the first write and the rest
+  wrote nothing. Everything still worked; the part size just silently stopped being what was asked for.
+  A test's CONTROL line caught it, not its subject.
 - **The phone screenshot catches what the DOM cannot.** `.fx-row.fx-open .fx-disc` is a DESCENDANT
   selector, so every closed effect inside an open filter drew the OPEN chevron. `aria-expanded` was
   correct, the bodies were absent, every assertion was green. Only the 380px shot showed it.
