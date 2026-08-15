@@ -4440,8 +4440,8 @@ wait for them to report back."*
       a tall, resizable browser that must never cover the canvas — build the drag with that in mind.
       *"Feel free to do a demo of this when you get to it as well."*
 
-- [ ] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
-      looks dead.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one
+- [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself
+      looks dead. DONE v7.95.** (15 Aug.) His words: *"In the home menu I also want all of the buttons like the one
       to open up all your projects or elements or tutorials. Those buttons should also be clear but not
       show the film grain. Also the film grain is seemingly still and not moving. It looks kind of cheap.
       It would be nice if it was just subtle and just smoothly moving in the background so it doesn't
@@ -4464,6 +4464,19 @@ wait for them to report back."*
       everything else); a real per-frame re-roll on a small canvas (true TV static, costs a repaint);
       or a non-noise texture — a fine woven/brushed field, or a very low-contrast diagonal weave — which
       would read as "rough and quality" without pretending to be film. **His own steer: fast is fine.**
+
+      **DONE v7.95, and it took the cheapest of the three options because it turned out to cost nothing.**
+      (a) The tabs and the search / Select / cog pills get the cards' backdrop blur — same hole, same fix,
+      12px rather than 14 because they are small.
+      (b) The tiles are RANDOM noise, so sliding one by a non-repeating offset produces a visually
+      unrelated field. Stepping through six offsets on each layer turns two images into **twelve apparent
+      frames**, for zero extra bytes — no third tile, no per-frame canvas. `steps()` not a smooth slide,
+      because v6.62 removed a smooth drift for reading as fabric moving past a window, and the app's own
+      filmgrain effect re-rolls per frame for the same reason. The two layers run at different rates so
+      they cannot fall into step and re-create the A→B flicker.
+      **So (c) — replacing noise with some other texture — is NOT done, and is left open on purpose.**
+      If it still looks cheap to you now that it genuinely moves, that is the conversation to have, and
+      the options above still stand. This release fixed the thing that was measurably broken.
 
 - [ ] **246 — PC: the add-menu background must reach the menu's borders.** (15 Aug.) His words: *"the
       background you added behind everything on the add menu on pc looks whack, it needs to fully go to

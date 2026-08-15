@@ -3666,6 +3666,20 @@
       if (!/blur\(/.test(bf)) {
         throw new Error('a glass project card has no backdrop blur (backdrop-filter = ' + bf + '), so the animated grain field behind it shows straight through the 8.5% tint');
       }
+      /* …and the TAB buttons too (queue 245). Ezra: "I also want all of the buttons like the one to open
+         up all your projects or elements or tutorials. Those buttons should also be clear but not show
+         the film grain." Identical hole, identical fix — and asserted separately, because the cards
+         passing says nothing about the pills. */
+      const tab = document.createElement('button');
+      tab.className = 'hm-tab';
+      tab.style.cssText = 'position:fixed;left:-9999px;top:0;width:120px;height:38px';
+      host.appendChild(tab);
+      const tcs = getComputedStyle(tab);
+      const tbf = tcs.backdropFilter || tcs.webkitBackdropFilter || 'none';
+      const tabBg = tcs.backgroundImage;
+      tab.remove();
+      if (!/rgba?\(/.test(tabBg)) throw new Error('the probe tab did not pick up the glass theme at all — this test cannot tell a missing blur from a missing rule');
+      if (!/blur\(/.test(tbf)) throw new Error('a glass home tab has no backdrop blur (backdrop-filter = ' + tbf + ') — the grain field shows straight through it, same hole the cards had');
     } finally {
       probe.remove();
       if (theme0 == null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', theme0);
@@ -15284,7 +15298,20 @@
       /* SAME KEYFRAMES, not a second copy — the rule #116 and #155 were both written about. The four
        * rounds of tuning that produced this animation (the linear curve especially) are the thing that
        * would be quietly lost to a fork. */
-      if (ga.animationName !== 'hm-grain-a') throw new Error('the background grain runs "' + ga.animationName + '" instead of the tuned hm-grain-a — a forked copy loses the linear curve that four rounds went into');
+      /* v7.95 added a SECOND animation on the same layer (hm-boil-a, the position step that stops the
+         field reading as static — queue 245), so this can no longer demand that the list is exactly one
+         name. What it must still guarantee is the thing the rule was written for: the tuned cross-fade
+         is present and still LINEAR. An equality check would have blocked a legitimate addition while a
+         genuine fork — hm-grain-a replaced by a copy under another name — is caught either way. */
+      var names = String(ga.animationName).split(',').map(function (n) { return n.trim(); });
+      if (names.indexOf('hm-grain-a') < 0) throw new Error('the background grain runs "' + ga.animationName + '" and no longer includes the tuned hm-grain-a — a forked copy loses the linear curve that four rounds went into');
+      var timings = String(ga.animationTimingFunction).split(/,(?![^()]*\))/).map(function (n) { return n.trim(); });
+      if (timings[names.indexOf('hm-grain-a')] !== 'linear') throw new Error('the cross-fade is running "' + timings[names.indexOf('hm-grain-a')] + '" instead of linear — that ease is the dwell he reported four times as "a noticeable start and stop"');
+      /* …AND IT HAS TO BOIL (queue 245). Ezra: "the film grain is seemingly still and not moving. It
+         looks kind of cheap." Two tiles cross-fading can only go A→B→A→B, which the eye learns in about
+         a second — a v7.76 regression, not a tuning question. The position step is what turns two images
+         into a dozen apparent frames, so its absence IS the defect and is asserted directly. */
+      if (names.indexOf('hm-boil-a') < 0) throw new Error('the grain has no position step — with two tiles that leaves it cross-fading A-B-A-B, which reads as a still image breathing');
 
       // …and the other half of the move: the cards are smooth.
       var card = document.querySelector('.hm-card');

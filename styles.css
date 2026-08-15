@@ -3156,8 +3156,40 @@ body.hm-selecting .hm-card { touch-action: none; }
    reading the grain itself rather than a pattern, and it does not need to be that loud to be felt. */
 #hm-grain { --hm-grain-alpha: .034; }
 #hm-grain::before, #hm-grain::after { border-radius: 0; }   /* full bleed — it is the whole screen, not a card */
-#hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a; }
-#hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b; }
+/* IT HAS TO BOIL, NOT BREATHE (v7.95, queue 245). Ezra: "the film grain is seemingly still and not
+   moving. It looks kind of cheap… it's okay to just have it fast moving like actual film grain on the
+   TV."
+   He is right and it is my own regression from v7.76. That release cut the tile count from SIX to two —
+   correct at the time, since the cards had stopped using them and two is all a cross-fade needs — but
+   two tiles can only ever go A→B→A→B. Your eye learns both patterns inside a second and the whole field
+   reads as one static image breathing, which is exactly "seemingly still".
+   The fix costs no bytes: the tiles are RANDOM noise, so sliding one by a non-repeating offset produces
+   a visually unrelated field. Stepping through six offsets on each layer turns two images into twelve
+   apparent frames. `steps()` and not a smooth slide, deliberately — v6.62 removed a smooth drift because
+   it read as fabric moving past a window rather than as grain, and the app's own filmgrain effect
+   re-rolls per frame for the same reason ("static grain reads as dirt on the lens"). The two layers run
+   at different rates and offsets so they cannot fall into step and re-create the A→B flicker. */
+#hm-grain::after  { background-image: var(--hm-grain-a, var(--hm-static)); opacity: var(--hm-grain-alpha); animation-name: hm-grain-a, hm-boil-a; animation-duration: .36s, .5s; }
+#hm-grain::before { background-image: var(--hm-grain-b, var(--hm-static)); opacity: 0;                     animation-name: hm-grain-b, hm-boil-b; animation-duration: .36s, .62s; }
+@keyframes hm-boil-a {
+  0%   { background-position:   0px   0px; }
+  16%  { background-position: 137px  61px; }
+  33%  { background-position:  43px 189px; }
+  50%  { background-position: 211px 118px; }
+  66%  { background-position:  91px  27px; }
+  83%  { background-position: 168px 233px; }
+  100% { background-position:   0px   0px; }
+}
+@keyframes hm-boil-b {
+  0%   { background-position:  74px 152px; }
+  16%  { background-position: 199px  35px; }
+  33%  { background-position:  18px  97px; }
+  50%  { background-position: 121px 214px; }
+  66%  { background-position: 236px  73px; }
+  83%  { background-position:  57px 176px; }
+  100% { background-position:  74px 152px; }
+}
+#hm-grain::before, #hm-grain::after { animation-timing-function: linear, steps(1, end); }
 /* The pair still sums to a constant, which is what stops the field pulsing — it is just read from a
    variable now so the strength is one number to turn rather than four. */
 @keyframes hm-grain-a { 0%, 100% { opacity: var(--hm-grain-alpha, .032); } 50% { opacity: 0; } }
