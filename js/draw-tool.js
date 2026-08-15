@@ -7,7 +7,7 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  var overlay = null, octx = null, bar = null, drawing = false;
+  var overlay = null, octx = null, bar = null, drawing = false, erasing = false;
   // cursor: where the NEXT vector point will land (project coords). The trackpad moves it, "Add point"
   // commits it. snapX/snapY hold the co-ordinate it locked onto, so the guides can be drawn.
   FM.drawTool = { active: false, mode: null, points: [], stroke: 8, color: '#ffffff', cursor: null, snapX: null, snapY: null };
@@ -132,6 +132,14 @@ window.FM = window.FM || {};
     e.preventDefault(); e.stopPropagation();
     var p = toProject(e.clientX, e.clientY);
     if (FM.drawTool.mode === 'freehand') {
+      // ERASE (queue 165.2) takes the same gesture the brush does — press, and drag over anything else
+      // you want gone. It is a MODE, not a second meaning for one finger, which is the same reason the
+      // pan/zoom point in that entry has to be one too.
+      if (FM.drawTool.erasing) {
+        erasing = true; eraseAt(p);
+        try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
       drawing = true; FM.drawTool.points = [p]; redraw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
     } else {   // vector: tap adds an anchor; tapping near the first anchor closes
@@ -148,6 +156,7 @@ window.FM = window.FM || {};
     }
   }
   function onMove(e) {
+    if (FM.drawTool.active && erasing && FM.drawTool.mode === 'freehand') { eraseAt(toProject(e.clientX, e.clientY)); return; }
     if (!FM.drawTool.active || !drawing || FM.drawTool.mode !== 'freehand') return;
     var p = toProject(e.clientX, e.clientY), pts = FM.drawTool.points, last = pts[pts.length - 1], s = dispScale();
     if (Math.hypot((p[0] - last[0]) * s, (p[1] - last[1]) * s) < 2.5) return;   // min spacing
@@ -160,6 +169,7 @@ window.FM = window.FM || {};
   // full-screen inspector sheet over the canvas so you could not even see what you had drawn. Now a
   // stroke is committed and the tool stays armed for the next one; Done is how you leave.
   function onUp(e) {
+    if (erasing) { erasing = false; return; }
     if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand' || !drawing) return;
     drawing = false;
     commitStroke();
@@ -177,8 +187,8 @@ window.FM = window.FM || {};
      * is re-fitted around the union of them all. The renderer already supported this — layer.subs has
      * been a multi-subpath field all along; nothing was ever writing more than one into it. */
     var sub = smoothFreehand(t.points);
-    sessionSubs.push(sub);
-    sessionRedo.length = 0;   // drawing something new is the end of the branch you undid away from
+    pushHistory();            // snapshot BEFORE the change, and drawing ends the branch you undid away from
+    sessionSubs = sessionSubs.concat([sub]);
     var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
     if (!layer) {
       layer = FM.addPathLayer(sub, { closed: false, name: 'Freehand', color: t.color, stroke: t.stroke });
@@ -267,7 +277,15 @@ window.FM = window.FM || {};
   // Queue 167: the ONE layer a freehand session is building, and every stroke that has gone into it
   // (kept in PROJECT pixels, because the layer's box is re-fitted around their union on every stroke).
   var sessionLayerId = null, sessionSubs = [];
-  var sessionRedo = [];                          // strokes taken back by Undo, newest last (queue 165.4)
+  /* History is SNAPSHOTS of the whole stroke list, not a stack of individual strokes (queue 165.4,
+   * generalised for 165.2). The first version pushed and popped the TAIL, which is fine while the only
+   * edit is "add a stroke at the end" — and stops being fine the moment the eraser can take one out of
+   * the MIDDLE, because putting it back on the end would silently change the order the strokes paint
+   * in. A snapshot costs a few small arrays in a session that holds tens of strokes, and it makes every
+   * edit undoable by the same code rather than each one needing its own inverse. */
+  var histPast = [], histFuture = [];
+  function snap() { return sessionSubs.map(function (s) { return s; }); }   // strokes are never mutated in place, so a shallow copy is a real snapshot
+  function pushHistory() { histPast.push(snap()); histFuture.length = 0; }
 
   /* UNDO IS A STROKE, AND SO IS REDO (queue 165.4). Ezra asked for the transport row's two glyphs
    * "so you can go back or forwards"; going forwards needed building, and going BACK turned out to be
@@ -278,7 +296,7 @@ window.FM = window.FM || {};
    * of Undo deleted the entire drawing, every stroke of it. It also left sessionLayerId pointing at a
    * layer that no longer existed, so the next stroke re-fitted a ghost.
    * The unit of work is the stroke, so both directions move one subpath between sessionSubs and
-   * sessionRedo and re-fit. The layer itself is only removed when the last stroke leaves it, and
+   * a snapshot of the list and re-fit. The layer itself is only removed when the last stroke leaves it, and
    * recreated when the first one comes back. */
   function applySubs() {
     var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
@@ -312,19 +330,62 @@ window.FM = window.FM || {};
     // A half-drawn stroke under the finger goes first — it is the most recent thing you did, and
     // throwing it away is not something to put on the redo stack.
     if (t.points.length) { t.points = []; if (octx) octx.clearRect(0, 0, overlay.width, overlay.height); redraw(); updateBar(); return; }
-    if (!sessionSubs.length) return;
-    sessionRedo.push(sessionSubs.pop());
+    if (!histPast.length) return;
+    histFuture.push(snap());
+    sessionSubs = histPast.pop();
     applySubs();
   }
   function redoStep() {
     var t = FM.drawTool;
-    if (t.mode !== 'freehand' || !sessionRedo.length) return;
-    sessionSubs.push(sessionRedo.pop());
+    if (t.mode !== 'freehand' || !histFuture.length) return;
+    histPast.push(snap());
+    sessionSubs = histFuture.pop();
     applySubs();
   }
   FM.drawTool._undo = undoStep;   // the suite drives the real handlers, not copies of them
   FM.drawTool._redo = redoStep;
-  FM.drawTool._counts = function () { return { subs: sessionSubs.length, redo: sessionRedo.length }; };
+  FM.drawTool._counts = function () { return { subs: sessionSubs.length, redo: histFuture.length, undo: histPast.length }; };
+
+  /* ---- The eraser (queue 165.2) ----------------------------------------------------------------
+   * Ezra: "you should add an option to switch from drawing to erasing."
+   * WHOLE STROKES, not part of one, and that was a deliberate call rather than the lazy option: rubbing
+   * out the middle of a stroke means splitting a path in two and re-fitting both, while removing the
+   * stroke you touch is what most simple drawing tools do and is what "switch from drawing to erasing"
+   * most naturally means on a tool whose unit of work is already the stroke. Recorded in REQUESTS #165
+   * so he can say otherwise.
+   * The hit test is distance to the nearest SEGMENT, in project units, which is the only honest way to
+   * hit a line: a bounding box would catch every stroke that merely passes near, and a distance to the
+   * sample POINTS would miss a long straight run between two far-apart samples. */
+  function segDist(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+    var t = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+  function strokeIndexAt(p) {
+    // Reach: half the brush plus a finger's worth of slack, expressed in SCREEN px and converted, so
+    // the eraser feels the same however far the preview is zoomed.
+    var reach = FM.drawTool.stroke / 2 + 14 / Math.max(1e-6, dispScale());
+    var best = -1, bestD = reach;
+    for (var i = sessionSubs.length - 1; i >= 0; i--) {   // topmost first: later subpaths paint over earlier ones
+      var sub = sessionSubs[i];
+      for (var j = 1; j < sub.length; j++) {
+        var d = segDist(p[0], p[1], sub[j - 1][0], sub[j - 1][1], sub[j][0], sub[j][1]);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (sub.length === 1) { var d0 = Math.hypot(p[0] - sub[0][0], p[1] - sub[0][1]); if (d0 < bestD) { bestD = d0; best = i; } }
+    }
+    return best;
+  }
+  function eraseAt(p) {
+    var i = strokeIndexAt(p);
+    if (i < 0) return false;
+    pushHistory();
+    sessionSubs = sessionSubs.slice(0, i).concat(sessionSubs.slice(i + 1));
+    applySubs();
+    return true;
+  }
+  FM.drawTool._eraseAt = eraseAt;   // the suite erases at a real project coordinate, not through a synthetic drag
 
   // Exposed so the suite can measure the smoothing directly. Driving the whole tool just to check
   // the shape of a curve makes the test about the UI instead of about the maths.
@@ -364,8 +425,8 @@ window.FM = window.FM || {};
 
   function stop() {
     strokes = [];
-    sessionLayerId = null; sessionSubs = []; sessionRedo = [];   // a new drawing starts a new layer (queue 167) and a fresh redo stack
-    FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false;
+    sessionLayerId = null; sessionSubs = []; histPast = []; histFuture = [];   // a new drawing starts a new layer (queue 167) and a fresh history
+    FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false; erasing = false; FM.drawTool.erasing = false;
     FM.drawTool.cursor = null; FM.drawTool.snapX = FM.drawTool.snapY = null;
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
     if (overlay) overlay.style.display = 'none';
@@ -391,10 +452,16 @@ window.FM = window.FM || {};
     var rd = bar.querySelector('.db-redo');
     if (rd) {
       rd.style.display = vec ? 'none' : '';
-      rd.classList.toggle('db-dim', !sessionRedo.length);
+      rd.classList.toggle('db-dim', !histFuture.length);
     }
     var ud = bar.querySelector('.db-undo');
-    if (ud) ud.classList.toggle('db-dim', vec ? !FM.drawTool.points.length : !(FM.drawTool.points.length || sessionSubs.length));
+    if (ud) ud.classList.toggle('db-dim', vec ? !FM.drawTool.points.length : !(FM.drawTool.points.length || histPast.length));
+    var er = bar.querySelector('.db-erase');
+    if (er) {
+      er.style.display = vec ? 'none' : '';   // a vector shape is not committed yet — there is nothing to erase
+      er.classList.toggle('db-on', !!FM.drawTool.erasing);
+      er.setAttribute('aria-pressed', FM.drawTool.erasing ? 'true' : 'false');
+    }
     bar.classList.toggle('db-vector', vec);
     var n = FM.drawTool.points.length;
     var hint = bar.querySelector('.db-hint');
@@ -415,6 +482,10 @@ window.FM = window.FM || {};
       '<span class="db-hint"></span>' +
       '<label class="db-color" title="Colour"><input type="color" value="#ffffff"></label>' +
       '<label class="db-width" title="Brush width"><input type="range" min="1" max="40" value="8"></label>' +
+      /* Draw / erase (queue 165.2). A MODE, not a second meaning for one finger — the same reason the
+         pan/zoom point in that entry has to be one. Pressed state is the toggle's own answer to "which
+         one am I in", so the brush and the eraser never both look available. */
+      '<button class="db-erase" type="button" title="Erase strokes" aria-label="Erase strokes" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 20.5H20"/><path d="M15.4 4.6 4.6 15.4a2 2 0 0 0 0 2.8l2.2 2.2a2 2 0 0 0 2.8 0L20.4 9.6a2 2 0 0 0 0-2.8l-2.2-2.2a2 2 0 0 0-2.8 0z"/><path d="m10 10 4.5 4.5"/></svg></button>' +
       /* The two glyphs from the transport row, not the word "Undo" (queue 165.4). Ezra: "instead of an
          undo button just add the undo and redo icons that we have in the normal menu so you can go back
          or forwards." Same paths as #btn-undo / #btn-redo in index.html, so one mark means one thing
@@ -428,6 +499,12 @@ window.FM = window.FM || {};
     bar.querySelector('.db-width input').addEventListener('input', function (e) { FM.drawTool.stroke = +e.target.value; redraw(); });
     bar.querySelector('.db-undo').addEventListener('click', undoStep);
     bar.querySelector('.db-redo').addEventListener('click', redoStep);
+    bar.querySelector('.db-erase').addEventListener('click', function () {
+      FM.drawTool.erasing = !FM.drawTool.erasing;
+      FM.drawTool.points = [];   // a half-drawn stroke does not survive the switch
+      if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
+      redraw(); updateBar();
+    });
     bar.querySelector('.db-done').addEventListener('click', finish);
     bar.querySelector('.db-cancel').addEventListener('click', stop);
     bar.querySelector('.db-add').addEventListener('click', function () {
@@ -479,12 +556,12 @@ window.FM = window.FM || {};
     if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
     if (!overlay) FM.drawTools && FM.drawTools.init();
     if (!overlay) return;
-    FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false;
+    FM.drawTool.active = true; FM.drawTool.mode = mode; FM.drawTool.points = []; drawing = false; erasing = false; FM.drawTool.erasing = false;
     FM.drawTool.snapX = FM.drawTool.snapY = null;
     /* A NEW drawing starts a new layer (queue 167). stop() clears these too, but not every exit runs
        through it — and without the reset here a second drawing would silently append its strokes to
        the layer the FIRST one built, which is a worse bug than the one being fixed. */
-    sessionLayerId = null; sessionSubs = []; sessionRedo = [];
+    sessionLayerId = null; sessionSubs = []; histPast = []; histFuture = [];
     // Vector starts with the cursor parked in the middle of the frame, so the pad has something to
     // move from the moment the tool opens rather than only after a first tap.
     FM.drawTool.cursor = mode === 'vector' ? [FM.scene.project.width / 2, FM.scene.project.height / 2] : null;

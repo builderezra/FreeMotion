@@ -3132,6 +3132,23 @@
       stroke(180);
       if (FM.drawTool._counts().redo !== 0) throw new Error('drawing after an undo left ' + FM.drawTool._counts().redo + ' stroke(s) on the redo stack');
 
+      /* THE ERASER (queue 165.2), on the same session because standing the tool up is the expensive
+         part. It takes a WHOLE stroke — the one under the pointer — and it has to be undoable like any
+         other edit, which is the reason the history became snapshots rather than a stack of strokes:
+         a tail-pop cannot put back something taken out of the MIDDLE. */
+      stroke(240); stroke(300);
+      const before = FM.drawTool._counts().subs;
+      if (before < 3) throw new Error('need at least three strokes to erase from the middle, have ' + before);
+      // A point nowhere near any stroke must do nothing — otherwise "it erased something" below could
+      // be true of a tap anywhere on the canvas.
+      if (FM.drawTool._eraseAt([2000, 2000])) throw new Error('the eraser removed a stroke from a point nowhere near one');
+      if (FM.drawTool._counts().subs !== before) throw new Error('a miss still changed the drawing');
+      // …and a point ON the second stroke (y=100, drawn across x 80..260) must take exactly that one.
+      if (!FM.drawTool._eraseAt([170, 100])) throw new Error('the eraser missed a stroke it was placed directly on top of');
+      if (FM.drawTool._counts().subs !== before - 1) throw new Error('erasing took ' + (before - FM.drawTool._counts().subs) + ' strokes, expected exactly 1');
+      FM.drawTool._undo();
+      if (FM.drawTool._counts().subs !== before) throw new Error('Undo did not bring back the erased stroke (' + FM.drawTool._counts().subs + ' of ' + before + ')');
+
       /* …AND THE BAR STILL FITS. Adding a second icon button pushed this over on a phone: measured at
          380px, 378px of content in a 355px box, with Cancel's right edge at 391 against a 369 bar —
          partly off the screen and unpressable. It was already ~12px over before the icons went in, so

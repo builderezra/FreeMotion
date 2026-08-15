@@ -3007,9 +3007,31 @@ better still, keep working inside the turn rather than parking work for a later 
       test runner. The flexible version is verifiable at any width, which is why it replaced it. Three
       mutations red: whole-layer undo, a no-op redo, and a slider that refuses to shrink.*
 
-      **Still open here: point 2 (erase) and point 3 (pan/zoom).** On erase, my recommendation stands and
-      is recorded above — remove the whole stroke you touch rather than rubbing out part of one; with
-      strokes now individually undoable that is a small change, and splitting a path is not.
+      **Point 2 (erase) is DONE — v7.78.** A draw/erase toggle on the bar; in erase mode the same
+      press-and-drag takes out whole strokes instead of laying one down.
+      **Whole strokes, and the reasoning is recorded so you can overrule it:** rubbing out the middle of
+      a stroke means splitting a path in two and re-fitting both halves; removing the stroke you touch is
+      what most simple drawing tools do, and it is what "switch from drawing to erasing" most naturally
+      means on a tool whose unit of work is already the stroke. **Say the word if you wanted the other
+      kind** and it becomes a real job rather than a tweak.
+      The hit test is distance to the nearest SEGMENT, topmost stroke first, with a reach of half the
+      brush plus a finger's worth of slack converted from screen pixels so it feels identical at any
+      zoom. A bounding box would grab every stroke that merely passes near; measuring to the sample
+      POINTS would miss a long straight run between two far-apart samples.
+      **The undo history had to be rebuilt to hold it**, and that is the interesting part: v7.77 pushed
+      and popped the TAIL of the stroke list, which cannot put back something taken out of the MIDDLE
+      without silently changing the order the strokes paint in. It is snapshots of the whole list now —
+      a few small arrays — and every edit is undoable by the same code instead of each needing its own
+      inverse. Erasing is undoable, and the test proves it.
+      The bar needed room for a seventh control (28px over on a phone); the slack is spread rather than
+      taken from one place — gap and padding 2px each, swatch 4, slider down to 40 — and it measures
+      347px of content in a 355px box. Two mutations red: an eraser that hits everything, and an erase
+      that is not undoable.
+
+      **Still open here: point 3 (pan/zoom).** *"another option that lets you grab the screen and zoom in
+      or out so you can do more detailed drawing"* — and as the note above says it has to be a MODE (a
+      grab/hand toggle), because one finger already means "draw". The bar now has the toggle pattern for
+      it, so this is the next one.
 - [x] **166 — You cannot swipe the timeline up and down when clips fill it.** (v7.16) (14 Aug, screenshot at
       v7.05 showing nine Freehand rows.) His words: *"For some reason on free hand drawing layers I simply
       can't swipe up and down on the timeline"*, then a minute later: *"Actually it's any layer not just
@@ -3980,3 +4002,117 @@ layout, motion blur, the elements browser and the effects browser.
       104px. **No horizontal overflow anywhere, and no unreachable or undersized controls** — so it is
       not broken, it is cramped. One sentence from him about what he was trying to DO when it felt
       unusable would aim the next pass.
+
+### The PC layout message (15 Aug) — one message from him, split into jobs
+
+*He sent all of this at once, with a screenshot of the PC editor at v7.76, and asked twice that it be
+logged completely: "Please just make sure you correctly log everything I just said because this is a
+massive text, and I just wanna make sure it all gets correctly logged, and you actually remember to do
+it all." He also said **"finish whatever you're in the middle of and then move on to this"** and "I
+kinda wanna see it done as soon as possible because it means a lot to me" — so this JUMPS THE QUEUE
+once the in-flight item (#165's eraser, v7.78) is shipped.*
+*And on how to work it: "try and make sure everything is good as you go, and don't rush anything, and
+verify all looks good before you sign off on it. Maybe use other agents to verify… But also be careful
+because often when you use other agents, they get stuck and go forever… make sure you don't wait on
+them for too long and you give up on them after a certain period of time, and just keep going while you
+wait for them to report back."*
+
+- [ ] **230 — PC chrome: the buttons should be bare icons, with the box only on hover.** His words, in
+      order:
+      · **Export** — *"instead of being this big massive button to be kind of like the others where it's
+        just the icon with no button around it. And I want the coloring of it, though. Like, instead of
+        it just be the white arrow line facing up, I want it to have, like, this… like, the blue colors
+        and stuff so it stands out and looks noticeably different to the other stuff."* So: lose the
+        filled accent pill and the word, keep it unmistakable by COLOURING THE ICON instead.
+      · **Settings cog** — *"I don't know why you've turned it into that sort of button thing. I wish it
+        was still just, like, the simple settings cog design where it's kind of just, like, a white
+        outline like the others."*
+      · **Notepad** — *"that also shouldn't have the box around it. It should just be the notepad
+        button."*
+      · **Back** — *"the back button shouldn't have that box around it. It should just be the back
+        button, and you should just be able to press that."* (He likes where it is.)
+      · **THE RULE THAT TIES THEM TOGETHER** — *"with the play button and all that, when you hover over
+        it, it does show the box outline. But if you're not hovering over it, you don't show it. So I
+        think it should be like that as well for the others where it has the box showing it around it so
+        you can see the hit box radius. But that box around it should just be the same color as, like,
+        when you hover over the play button and nothing else."* So: one hover treatment, taken from the
+        play button, applied to every icon in the row; nothing carries a resting box.
+      · **The refresh spin icon** — *"put the little refresh spin icon next to the version refresh
+        button."*
+
+- [ ] **231 — PC: the layer-name field should REPLACE the project-name field, not pop up on the left.**
+      His words: *"on the left side, for some reason, that layers text edit box pops up, and it's really
+      messy. Instead, that layers text edit button that pops up should instead be replacing the projects
+      text edit button. So then, like, when you click on a layer, it goes from showing the name of the
+      project to showing the name of the layer, and you can then edit the layers name. I think that'd be
+      a lot cleaner and make a lot more sense."*
+      *Note for whoever picks this up: v7.75 moved `#proj-name` into the transport row and made it appear
+      only when a layer is selected — which is half of this and is why it now reads as "pops up". What he
+      wants is the OTHER half: the field is always there, showing the PROJECT name, and swaps to the
+      LAYER name when one is selected. The field is already dual-purpose in the code; what changed at
+      v7.75 was hiding it in the project case, and that is the bit to undo.*
+
+- [ ] **232 — PC: the delete and parenting buttons look bad, are in the wrong order, and the parenting
+      icon is a twin of its neighbour.** His words: *"the delete button, like the trash icon and the
+      parenting button, those are in a good spot, but they just look shitty."*
+      · Delete: *"it shouldn't have the box around it except for when you're hovering over it"* (same
+        rule as #230) and *"the delete button should be, like, red by default. Like, it should just be a
+        red icon. So it's, like, obvious."*
+      · Order: *"instead of it being the first one to the right of the select layers button… it should be
+        one over. So the one that's next to the select layers button should be the parenting button."*
+        So the run becomes ⧉ layer-menu · parenting · delete.
+      · *"the parenting button looks very similar to the select layers button. So I think you should
+        change its design so it doesn't look the exact same."*
+      · *"it still needs to be fixed where it doesn't have the outline, and it's just the white version
+        of itself where it's just the white logo, and it doesn't have that weird box around it."*
+
+- [ ] **233 — PC: the three-dot menu does not appear when a layer is selected.** His words: *"when you
+      have a layer selected, it should show the three dot menu. That three dot menu doesn't show up at
+      the moment, so there's no way to go into that and do all those settings, which is annoying."*
+      This is a missing DOOR, not a style note — everything in that menu is currently unreachable on PC.
+
+- [ ] **234 — PC: split sits ON the playhead, the two trims flank it, and all three move up a row.** His
+      words: *"the buttons to split the layer or delete the layer all the way to the left or all the way
+      to the right — those buttons aren't how I told you to change them. You probably forgot because I
+      told you to do it, and you just logged it in your memory and didn't actually write it down."*
+      *(He is right to be annoyed, and right about the cause. #169 recorded "trim-left immediately LEFT
+      of the playhead, trim-right immediately RIGHT, split centred ON the playhead" — and what shipped in
+      v5.25 put BOTH trims on the left with the split alone on the right, which is a different, earlier
+      instruction. Nobody reconciled the two.)*
+      What he wants now: *"the split button is hovering over the playhead. And then the two buttons to
+      delete to the left or delete to the right, those two buttons should be on the left and right side
+      of it. And they might need to be slightly moved up a bit so they're not going onto the top layer —
+      just so they're on that top little row, right underneath the counter button, the button that tells
+      you what time you're in the project."*
+
+- [ ] **235 — PC: the move-to-playhead and extend-to-playhead buttons are indistinguishable, and badly
+      placed.** His words: *"the two buttons when you have a layer selected that are basically to make
+      the clip either extend out to the playhead or jump to the playhead — those two buttons are very
+      similar. I think you should make some differentiation in them, like, so they look a bit different
+      because right now, honestly, at first glance, I cannot tell a fucking difference. And they need to
+      be moved up slightly as well. And also aligned a bit better, because one is closer to the playhead
+      than the other, and it just looks weird. They just need a little bit better positioning."*
+      *(Worth knowing when doing this: the two icons differ only by whether the box is closed or open at
+      one end — a distinction of about four pixels at that size. See timeline.js syncNudge.)*
+
+- [ ] **236 — PC: the add menu needs a background of its own.** His words: *"on the PC version, for the
+      background of the add menu, you should make it have, like, a cool pattern and design, kind of like
+      the home screen page, but slightly different just so it looks good for that specific area."*
+
+- [ ] **237 — PC: the pull-down slam Easter egg breaks the screen.** His words: *"on PC, when you do the
+      Easter egg where you pull down and then it slams back up in the home menu, it kinda breaks the
+      screen when you do it. Might need to fix that a bit. It kinda looks a bit tacky."*
+
+- [ ] **238 — PC: after over-pulling, it freezes before snapping back.** His words: *"when you do it and
+      you swipe down too far on PC, it takes a bit too long before it snaps back up. It would be nice if
+      when you kept swiping up, it was a bit of a smooth animation and didn't just freeze for a second
+      before going back up."*
+
+- [ ] **239 — The black bar is STILL there, and it happens during the slam.** His words: *"the black bar
+      glitch where the black bar comes up onto the side of the screen still happens, and it seems to
+      happen when you, like, do the easter egg thing where you're slamming the screen and stuff."*
+      **This is the lead the earlier black-bar entries never had** — see #187 and the queue-154 work,
+      which chased it as a paint/background problem and fixed three real ones without closing it. "It
+      happens when you slam" is a reproduction step, and the slam is exactly the moment the screen is
+      TRANSFORMED (translate + rotate) with a 140px box-shadow ring standing in for the surround. Start
+      there rather than re-reading the background rules.

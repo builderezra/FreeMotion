@@ -3598,11 +3598,11 @@ body.drawing #app { grid-template-columns: minmax(0, 1fr) 0 !important; }
 body.drawing #stage { padding: 10px 0 104px; box-sizing: border-box; }
 body.drawing.draw-vector #stage { padding-bottom: 268px; }
 body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
-#draw-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 170; display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 14px; background: rgba(10,14,20,.94); border: 1px solid var(--accent); box-shadow: 0 10px 30px rgba(0,0,0,.55); max-width: 94vw; }
+#draw-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 170; display: flex; align-items: center; gap: 7px; padding: 8px 8px; border-radius: 14px; background: rgba(10,14,20,.94); border: 1px solid var(--accent); box-shadow: 0 10px 30px rgba(0,0,0,.55); max-width: 94vw; }
 #draw-bar.hidden { display: none; }
 #draw-bar .db-hint { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
 #draw-bar .db-color input, #draw-bar .db-width input { vertical-align: middle; }
-#draw-bar .db-color input { width: 30px; height: 28px; padding: 0; border: none; background: none; cursor: pointer; }
+#draw-bar .db-color input { width: 26px; height: 28px; padding: 0; border: none; background: none; cursor: pointer; }
 #draw-bar .db-width { width: 92px; }
 #draw-bar .db-width input { width: 92px; }
 #draw-bar button { padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 12.5px; cursor: pointer; }
@@ -3631,7 +3631,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    the assertion that was supposed to guard it passed against the bug.
    Wrapping was the other option and was rejected: a taller bar takes canvas, and queue 165's FIRST
    point was about the drawing surface being squeezed. */
-#draw-bar .db-width { flex: 0 1 92px; min-width: 52px; }
+/* The bar carries seven controls at v7.78 and a phone gives it 355px, so the slack is spread rather
+   than taken from one place: the gap and the padding each give up 2px, the swatch 4, and the slider
+   goes down to 40 before anything is clipped. Measured after: 347px of content in a 355px box. */
+#draw-bar .db-width { flex: 0 1 92px; min-width: 40px; }
 #draw-bar .db-width input { width: 100%; min-width: 0; }
 /* Vector mode grows a second row: the precision trackpad spans the bar, the controls sit under it. */
 #draw-bar.db-vector { flex-wrap: wrap; width: min(94vw, 420px); }
@@ -5160,3 +5163,11 @@ body.fm-pushing #toast { z-index: 213; }
   #t-home .proj-name:hover { border-color: var(--line); }
   #t-home .proj-name:focus { outline: none; border-color: var(--accent); background: var(--panel-3); }
 }
+
+/* The eraser toggle on the drawing bar (queue 165.2). Ezra: "you should add an option to switch from
+   drawing to erasing." Same square 34px as undo/redo so the row reads as one set of tools, and .db-on
+   is the accent fill every other toggle in this app uses for "this mode is live" — the brush and the
+   eraser must never both look available. */
+#draw-bar .db-erase { padding: 0; flex: 0 0 34px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; }
+#draw-bar .db-erase svg { width: 18px; height: 18px; display: block; }
+#draw-bar .db-erase.db-on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
