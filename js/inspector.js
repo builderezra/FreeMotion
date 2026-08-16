@@ -2909,12 +2909,47 @@ window.FM = window.FM || {};
     corner: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 12 7l8 11"/><rect x="9.8" y="4.8" width="4.4" height="4.4" fill="currentColor" stroke="none"/></svg>',
     del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/></svg>',
   };
+  /* Keyframe a shape's POINT SET (queue 254 — "edit points has literally no keyframe functionality").
+   * Deliberately the same shape as toggleMaskPathKf above, because it is the same problem: the value
+   * is a whole path, not a number, so FM.toggleProp/evalProp would NaN it. Seeds through
+   * FM.evalShapeSubs so pressing ◆ between keys captures the shape you can SEE.
+   * A keyframe holds the WHOLE point set rather than one vertex — a per-point track would need stable
+   * identity for every vertex across every key, and inserting a point mid-path silently renumbers
+   * everything after it. Removing the last keyframe reverts to a plain static array. */
+  function cloneSubs(s) { return (Array.isArray(s) ? s : []).map(pl => (Array.isArray(pl) ? pl : []).map(p => Array.isArray(p) ? p.slice() : p)); }
+  function toggleShapeSubsKf(layer, t) {
+    const cur = cloneSubs(FM.evalShapeSubs ? FM.evalShapeSubs(layer, t) : []);
+    const p = layer.subs;
+    if (!p || Array.isArray(p)) {
+      if (!cur.length) { if (FM.toast) FM.toast('This shape has no points to animate'); return; }
+      layer.subs = { kf: [{ t: t, v: cur, e: 'linear' }] };
+      layer.points = null;              // subs win in traceShapePath; don't leave a stale single path
+      return;
+    }
+    if (!Array.isArray(p.kf)) return;
+    const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
+    if (hit) { p.kf = p.kf.filter(k => k !== hit); if (!p.kf.length) layer.subs = cloneSubs(hit.v); return; }
+    p.kf.push({ t: t, v: cur, e: 'linear' }); p.kf.sort((a, b) => a.t - b.t);
+  }
+
   function editPointsTools(layer, body) {
     const pe = FM.pointEdit;
     const panel = el('div', 'mt-panel pep-panel');
 
-    // left rail — curve / corner / delete for the selected point
+    // left rail — keyframe the point set, then curve / corner / delete for the selected point
     const left = el('div', 'mt-rail mt-rail-left');
+    const subsAnim = !!(FM.isAnimated && FM.isAnimated(layer.subs));
+    const subsHere = subsAnim && FM.hasKeyframeAt(layer.subs, FM.time);
+    const kfBtn = el('button', 'mt-kf' + (subsAnim ? ' active' : '') + (subsHere ? ' here' : ''), '◆');
+    kfBtn.title = subsHere ? 'Remove the point keyframe at the playhead'
+      : subsAnim ? 'Keyframe these points at the playhead'
+      : 'Animate the points — adds a keyframe at the playhead';
+    kfBtn.addEventListener('click', () => {
+      toggleShapeSubsKf(layer, FM.time);
+      commitH(); FM.requestRender(); FM.inspector.refresh();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    });
+    left.appendChild(kfBtn);
     const curveBtn = el('button', 'pep-btn'); curveBtn.innerHTML = PEP_ICONS.curve; curveBtn.title = 'Curve — the outline flows smoothly through this point';
     const cornerBtn = el('button', 'pep-btn'); cornerBtn.innerHTML = PEP_ICONS.corner; cornerBtn.title = 'Corner — the outline bends hard at this point';
     const delBtn = el('button', 'pep-btn pep-del'); delBtn.innerHTML = PEP_ICONS.del; delBtn.title = 'Delete this point (double-tapping it on the canvas works too)';

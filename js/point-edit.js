@@ -109,7 +109,43 @@ window.FM = window.FM || {};
     return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
   }
 
-  function subsOf(l) { return l.subs || (l.points ? [l.points] : []); }
+  /* The point arrays the editor works on (queue 254).
+   * A STATIC path returns the live array exactly as it always did, so every in-place edit below is
+   * untouched. An ANIMATED path ({kf}) evaluates at the playhead, so the overlay draws the same shape
+   * the canvas draws instead of frozen frame-0 points.
+   * Between keyframes that evaluated array is a FRESH allocation, so writing to it would edit a
+   * throwaway and the drag would silently do nothing. Hence ensureKfHere() below: every mutating path
+   * calls it first, which turns the snapshot into a real keyframe whose array this then hands back. */
+  /* The STORED array for the keyframe sitting at the playhead, or null if none is. This is the whole
+   * difference between an edit that sticks and one that vanishes: FM.evalShapeSubs interpolates
+   * between the surrounding pair, and at a key that is neither the first nor the last it STILL takes
+   * that path (with f landing on 1) — so it hands back a fresh array even when the playhead is exactly
+   * on a keyframe. Writing to that edits a throwaway. Caught by the point moving on screen and then
+   * snapping back the moment anything re-rendered. */
+  function liveKfSubs(l) {
+    const kf = l.subs.kf, t = FM.time || 0;
+    for (let i = 0; i < kf.length; i++) if (Math.abs(kf[i].t - t) < 1e-3 && Array.isArray(kf[i].v)) return kf[i].v;
+    return null;
+  }
+  function subsOf(l) {
+    if (l && l.subs && !Array.isArray(l.subs) && Array.isArray(l.subs.kf)) {
+      return liveKfSubs(l) || (FM.evalShapeSubs ? FM.evalShapeSubs(l, FM.time || 0) : []);
+    }
+    return l.subs || (l.points ? [l.points] : []);
+  }
+  /* Make sure an animated path has a keyframe AT the playhead before it is edited — AE-style roto,
+   * and the same bargain mask-tool.js's flush() already strikes: editing off-key CREATES the key
+   * rather than doing nothing. Idempotent, so calling it on every pointermove of a drag costs one
+   * find() after the first. A static path is left alone entirely; nothing here starts animating a
+   * shape that the ◆ has not been pressed on. */
+  function ensureKfHere(l) {
+    if (!l || !l.subs || Array.isArray(l.subs) || !Array.isArray(l.subs.kf) || !l.subs.kf.length) return;
+    const t = FM.time || 0, kf = l.subs.kf;
+    if (kf.some(k => Math.abs(k.t - t) < 1e-3)) return;
+    const v = (FM.evalShapeSubs(l, t) || []).map(pl => pl.map(p => p.slice()));
+    kf.push({ t: t, v: v, e: 'linear' }); kf.sort((a, b) => a.t - b.t);
+    if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+  }
 
   function draw() {
     const l = layer(), cv = preview();
@@ -238,6 +274,7 @@ window.FM = window.FM || {};
 
   function delPoint(si, pi) {
     const l = layer(); if (!l) return false;
+    ensureKfHere(l);
     const pts = subsOf(l)[si], min = (l.closed !== false) ? 3 : 2;
     if (!pts || pts.length <= min) { if (FM.toast) FM.toast('A shape needs at least ' + min + ' points'); return false; }
     pts.splice(pi, 1);
@@ -267,6 +304,7 @@ window.FM = window.FM || {};
       return;
     }
     e.preventDefault(); e.stopPropagation();
+    ensureKfHere(l);   // a gesture is about to edit points — pin them to a keyframe here first
     const subs = subsOf(l);
     if (hit.kind === 'mid') {   // insert a vertex ON the curve, then drag it (inherits smoothness)
       const pts = subs[hit.si];
@@ -378,6 +416,7 @@ window.FM = window.FM || {};
     },
     setSelPos(px, py) {   // project-canvas px
       const l = layer(); if (!l || !sel) return;
+      ensureKfHere(l);
       const pts = subsOf(l)[sel.si]; const p = pts && pts[sel.pi]; if (!p) return;
       const loc = toLocal(l, px, py);
       p[0] = loc.u; p[1] = loc.v;
@@ -389,6 +428,7 @@ window.FM = window.FM || {};
     },
     setSelSmooth(smooth) {
       const l = layer(); if (!l || !sel) return;
+      ensureKfHere(l);
       const pts = subsOf(l)[sel.si]; const p = pts && pts[sel.pi]; if (!p) return;
       if (smooth) { p[2] = 1; p.length = 3; } else p.length = 2;   // Curve → smooth (resets any manual handle to auto); Corner → hard
       FM.requestRender(); draw(); if (FM.history) FM.history.commit(); notify('sel');

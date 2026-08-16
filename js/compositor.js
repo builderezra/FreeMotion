@@ -7938,7 +7938,11 @@ window.FM = window.FM || {};
   // Trace a shape layer's outline into ctx (beginPath + geometry only — caller fills/strokes).
   // ONE tracer shared by drawLayer and renderThumb so the two can never drift. Returns 'stroke'
   // for open kinds (line/arc — stroked, never filled) and 'fill' for everything else.
-  FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh) {
+  /* `t` is the scene time, and it is what makes an ANIMATED point set render (queue 254). It is the
+   * LAST parameter and optional on purpose: every existing caller keeps working, and one that does not
+   * know the time falls back to the playhead rather than freezing the path at frame 0. For a static
+   * shape FM.evalShapeSubs hands back the very same array, so the hot path allocates nothing. */
+  FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh, t) {
     const kind = layer.shape || 'rect';
     const P = (u, v) => [ox + u * sw, oy + v * sh];
     ctx.beginPath();
@@ -7951,7 +7955,7 @@ window.FM = window.FM || {};
       // Freehand / vector / converted-shape path. layer.subs = multi-subpath (array of point
       // arrays); layer.points = single path. All [0,1]-normalized within the box; points may
       // carry a smooth flag ([u,v,1]) which renders as a curve through the point.
-      const subs = layer.subs || (layer.points && layer.points.length ? [layer.points] : []);
+      const subs = FM.evalShapeSubs(layer, t == null ? (FM.time || 0) : t);
       if (!subs.length) return layer.closed ? 'fill' : 'stroke';
       subs.forEach(pts => FM.buildSubPath(ctx, pts, !!layer.closed, p => P(p[0], p[1])));
       return layer.closed ? 'fill' : 'stroke';   // open path (freehand brush) is stroked, never filled
@@ -8001,13 +8005,15 @@ window.FM = window.FM || {};
   // Convert ANY shape kind into editable normalized points → { subs: [[ [u,v], … ], …], closed }.
   // The single source for "Edit points": parametric kinds are sampled/vertex-listed to match
   // traceShapePath exactly, library kinds hand over their polygon data.
-  FM.shapeToPoints = function (layer) {
+  FM.shapeToPoints = function (layer, t) {
     const kind = layer.shape || 'rect';
     // clone must PRESERVE the smooth flag (p[2]) AND any manual tangent handle (p[3],p[4])
     const clone = a => a.map(pl => pl.map(p => p.slice()));
     const PI = Math.PI;
     if (FM.SHAPE_POLYS[kind]) return { subs: clone(FM.SHAPE_POLYS[kind]), closed: !OPEN_POLY[kind] };
-    if (kind === 'path') return { subs: clone(layer.subs || (layer.points ? [layer.points] : [])), closed: layer.closed !== false };
+    // Animated point sets evaluate at the playhead, so "convert to editable points" hands back the
+    // shape you can actually SEE rather than the first keyframe (queue 254).
+    if (kind === 'path') return { subs: clone(FM.evalShapeSubs(layer, t == null ? (FM.time || 0) : t)), closed: layer.closed !== false };
     // Parametric kinds below are NOT point shapes in the UI anymore (FM.isPointShape excludes them —
     // squares/circles/etc stay parametric, no messy point sets). Sparse smooth fallbacks kept only
     // for any legacy caller.
@@ -8031,7 +8037,10 @@ window.FM = window.FM || {};
   // including arc/pie/semicircle/ring whose shapeToPoints is a bounding-rect fallback, and the measure can
   // never drift from what is rendered. (An earlier shapeToPoints-based measure returned the rect perimeter
   // for those four, so a half-trimmed ring showed an arbitrary fraction.)
-  function shapeOutlineLenPx(layer, ox, oy, sw, sh) {
+  // `t` threaded through for the same reason traceShapePath needs it: on an animated path the outline
+  // LENGTH changes frame to frame, and Trim Paths divides by it. Measuring frame 0's length against a
+  // moving path would make a trimmed stroke creep as the shape animates (queue 254).
+  function shapeOutlineLenPx(layer, ox, oy, sw, sh, t) {
     let L = 0, cx = 0, cy = 0, sx = 0, sy = 0, has = false;
     const seg = (x, y) => { if (has) L += Math.hypot(x - cx, y - cy); cx = x; cy = y; has = true; };
     const M = {
@@ -8062,7 +8071,7 @@ window.FM = window.FM || {};
       rect(x, y, w, h) { M.moveTo(x, y); seg(x + w, y); seg(x + w, y + h); seg(x, y + h); M.closePath(); },
       roundRect(x, y, w, h, r) { r = Math.max(0, Math.min(+r || 0, w / 2, h / 2)); L += Math.max(0, 2 * (w + h) - 8 * r + 2 * Math.PI * r); cx = x; cy = y; sx = x; sy = y; has = true; },
     };
-    try { FM.traceShapePath(M, layer, ox, oy, sw, sh); } catch (e) { return 0; }
+    try { FM.traceShapePath(M, layer, ox, oy, sw, sh, t); } catch (e) { return 0; }
     return isFinite(L) ? L : 0;
   }
 
@@ -8186,7 +8195,7 @@ window.FM = window.FM || {};
     a.fillStyle = '#fff';
     if (layer.type === 'shape') {
       const sw = layer.shapeW || 400, sh = layer.shapeH || 300, ox = -sw * anchorX(tr), oy = -sh * anchorY(tr);
-      const mode = FM.traceShapePath(a, layer, ox, oy, sw, sh);
+      const mode = FM.traceShapePath(a, layer, ox, oy, sw, sh, t);
       if (mode === 'stroke') { a.lineWidth = (layer.stroke && layer.stroke.width) || 8; a.strokeStyle = '#fff'; a.lineCap = 'round'; a.stroke(); }
       else a.fill();
     } else if (layer.type === 'text') {
@@ -8898,7 +8907,7 @@ window.FM = window.FM || {};
       let strokeDash = null, strokeDashOff = 0, skipStroke = false;
       const _trim = layer.trimPath;
       if (_trim && _trim.enabled) {
-        const L = shapeOutlineLenPx(layer, ox, oy, sw, sh);
+        const L = shapeOutlineLenPx(layer, ox, oy, sw, sh, t);
         if (L > 0) {   // empty path → no-op (trim leaves the layer as-is)
           const s = clamp01(FM.evalProp(_trim.start, t));
           const e = clamp01(FM.evalProp(_trim.end, t));
@@ -8946,7 +8955,7 @@ window.FM = window.FM || {};
       // Trace + fill + border for ONE copy in the CURRENT ctx transform (re-traced per copy so the
       // per-copy scale/rotate is baked into the geometry, and effects/mask/blend wrap the whole layer).
       const drawUnit = () => {
-        const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh);
+        const mode = FM.traceShapePath(ctx, layer, ox, oy, sw, sh, t);
         if (mode === 'stroke') {   // open kinds (line / arc / freehand) are stroked, never filled — Color & Fill IS the line colour
           if (skipStroke) return;   // trim window empty → nothing to draw
           const lw = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
@@ -9950,7 +9959,7 @@ window.FM = window.FM || {};
     }
     if (layer.type === 'shape') {
       const pad = 6, iw = W - 2 * pad, ih = H - 2 * pad;
-      const mode = FM.traceShapePath(ctx, layer, pad, pad, iw, ih);
+      const mode = FM.traceShapePath(ctx, layer, pad, pad, iw, ih, FM.time || 0);
       if (mode === 'stroke') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
       const fmode = FM.fillModeOf(layer);
       // Outline-only: the CANVAS strokes this with layer.stroke.color, so the thumb has to as well —

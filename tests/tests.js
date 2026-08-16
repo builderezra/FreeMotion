@@ -15960,6 +15960,129 @@
     if (FM.evalShapeSubs(SM, 0.5)[0][0][2] !== 1) throw new Error('the smooth flag was dropped mid-interpolation');
   });
 
+  /* ---- queue 254, the WIRING: an animated point set has to actually RENDER, and be editable ----
+   * The interpolator above was built in v8.34 and left unwired, which is the state these four cover:
+   * the tracer reading through it, the point-set getter doing the same, the editor writing into the
+   * keyframe you are standing on, and the ◆ existing at all — which is literally what he asked for. */
+
+  test('the tracer draws an animated point set at the right time (queue 254)', { item: 'pts-kf' }, function () {
+    if (typeof FM.traceShapePath !== 'function') throw new Error('FM.traceShapePath is not exported');
+    // A recording proxy: geometry only, so this asserts on the coordinates the renderer would draw.
+    const rec = () => { const pts = []; return { pts: pts,
+      beginPath() {}, closePath() {}, moveTo(x, y) { pts.push([x, y]); }, lineTo(x, y) { pts.push([x, y]); },
+      bezierCurveTo(a, b, c, d, x, y) { pts.push([x, y]); }, quadraticCurveTo(a, b, x, y) { pts.push([x, y]); },
+      ellipse() {}, arc() {}, rect() {}, roundRect() {} }; };
+    const A = [[[0, 0], [1, 0], [1, 1]]];
+    const B = [[[0, 1], [1, 1], [1, 0]]];
+    const L = { type: 'shape', shape: 'path', closed: true, subs: { kf: [{ t: 0, v: A }, { t: 1, v: B }] } };
+    const at = t => { const r = rec(); FM.traceShapePath(r, L, 0, 0, 100, 100, t); return r.pts; };
+    const p0 = at(0), pMid = at(0.5), p1 = at(1);
+    if (!p0.length) throw new Error('the tracer drew nothing for an animated path');
+    if (Math.abs(p0[0][1] - 0) > 1e-6) throw new Error('at t=0 the first point should sit at y=0, got ' + p0[0][1]);
+    if (Math.abs(p1[0][1] - 100) > 1e-6) throw new Error('at t=1 the first point should sit at y=100, got ' + p1[0][1]);
+    if (Math.abs(pMid[0][1] - 50) > 1e-6) throw new Error('the tracer is not interpolating — y=' + pMid[0][1] + ' at the midpoint, so it froze on one keyframe');
+    /* Omitting t must fall back to the PLAYHEAD, not to frame 0. A caller that does not know the time
+       is the one most likely to render a stale shape, and silently freezing at 0 looks like it works. */
+    const t0 = FM.time; FM.time = 1;
+    try {
+      const noT = rec(); FM.traceShapePath(noT, L, 0, 0, 100, 100);
+      if (Math.abs(noT.pts[0][1] - 100) > 1e-6) throw new Error('called without t it drew y=' + noT.pts[0][1] + ' with the playhead at 1 — it is frozen at frame 0');
+    } finally { FM.time = t0; }
+  });
+
+  test('an animated point shape renders differently as time moves (queue 254)', { item: 'pts-kf' }, function () {
+    /* End-to-end through the real compositor, because the tracer test above talks to a proxy and a
+       proxy cannot prove drawLayer passes its own t down. Pixels or it did not happen. */
+    const scene = FM.scene, keepT = FM.time, keep = scene.layers.slice(), keepSel = scene.selectedId;
+    try {
+      const A = [[[0, 0], [0.25, 0], [0.25, 1], [0, 1]]];      // a bar down the LEFT
+      const B = [[[0.75, 0], [1, 0], [1, 1], [0.75, 1]]];      // the same bar on the RIGHT
+      const L = FM.makeLayer('shape', { shape: 'path', x: (scene.project.width / 2) | 0, y: (scene.project.height / 2) | 0,
+        shapeW: 400, shapeH: 400, fill: '#ffffff' });
+      L.closed = true; L.points = null;
+      L.subs = { kf: [{ t: 0, v: A }, { t: 1, v: B }] };
+      scene.layers = [L];
+      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 160;
+      const ctx = cv.getContext('2d');
+      const shot = t => { ctx.clearRect(0, 0, 160, 160); FM.renderScene(ctx, scene, t);
+        const d = ctx.getImageData(0, 0, 160, 160).data; let sum = 0;
+        for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) * ((i / 4) % 160);   // x-weighted → moves when the bar moves
+        return sum; };
+      const s0 = shot(0), s1 = shot(1);
+      if (s0 === s1) throw new Error('t=0 and t=1 rendered identically — the animated points never reached the canvas');
+      if (!(s1 > s0)) throw new Error('the bar did not move right as time advanced (t0=' + s0 + ', t1=' + s1 + ')');
+    } finally { scene.layers = keep; scene.selectedId = keepSel; FM.time = keepT; }
+  });
+
+  test('converting to editable points reads the playhead, not frame 0 (queue 254)', { item: 'pts-kf' }, function () {
+    const A = [[[0, 0], [1, 0]]], B = [[[0, 1], [1, 1]]];
+    const L = { type: 'shape', shape: 'path', closed: false, subs: { kf: [{ t: 0, v: A }, { t: 1, v: B }] } };
+    const got = FM.shapeToPoints(L, 1);
+    if (Math.abs(got.subs[0][0][1] - 1) > 1e-6) throw new Error('shapeToPoints at t=1 handed back y=' + got.subs[0][0][1] + ' — it is stuck on the first keyframe');
+    if (got.subs[0][0] === B[0][0]) throw new Error('it handed back the keyframe by reference; editing the copy would corrupt the animation');
+    const t0 = FM.time; FM.time = 1;
+    try { if (Math.abs(FM.shapeToPoints(L).subs[0][0][1] - 1) > 1e-6) throw new Error('with no t it ignored the playhead'); }
+    finally { FM.time = t0; }
+  });
+
+  test('the Edit Points panel HAS a keyframe diamond, and dragging off-key makes a key (queue 254)', { item: 'pts-kf' }, function () {
+    /* His whole request was "edit points has literally no keyframe functionality" — so the first half
+       is simply: is the ◆ there. The second half is the part that would otherwise look like it works
+       and quietly do nothing: between two keys the evaluated points are a throwaway array, so an edit
+       has to CREATE the keyframe it is editing (AE roto, and what mask-tool.js already does). */
+    if (!FM.pointEdit || !FM.pointEdit.start) throw new Error('FM.pointEdit missing');
+    const scene = FM.scene, keep = scene.layers.slice(), keepSel = scene.selectedId, keepT = FM.time;
+    const wasActive = FM.pointEdit.isActive();
+    let added = null;
+    try {
+      added = FM.makeLayer('shape', { shape: 'rect', x: (scene.project.width / 2) | 0, y: (scene.project.height / 2) | 0,
+        shapeW: 600, shapeH: 600, fill: '#ffd24a' });
+      scene.layers.unshift(added);
+      FM.selectLayer(added.id);
+      FM.pointEdit.start(added.id);
+      // The Edit Points panel lives in the 'element' section — refresh() alone leaves it unbuilt, and
+      // then this would "pass" for the wrong reason the day the ◆ is removed.
+      FM.inspector.openCategory('element');
+      if (!document.querySelector('.pep-panel')) throw new Error('the Edit Points panel did not build, so this cannot say anything about the ◆');
+      const kf = document.querySelector('.pep-panel .mt-kf');
+      if (!kf) throw new Error('the Edit Points panel still has no ◆ — every other property panel has one');
+      if (kf.textContent.indexOf('◆') < 0) throw new Error('the rail button is not the keyframe diamond');
+
+      // Press it at t=0 → the points become animated with a key here.
+      FM.time = 0; kf.click();
+      if (!FM.isAnimated(added.subs)) throw new Error('pressing ◆ did not start animating the point set');
+      if (!FM.hasKeyframeAt(added.subs, 0)) throw new Error('pressing ◆ left no keyframe at the playhead');
+      // A second key later, so t=0.5 is genuinely BETWEEN two keys.
+      FM.time = 1; document.querySelector('.pep-panel .mt-kf').click();
+      const nKeys = added.subs.kf.length;
+      if (nKeys !== 2) throw new Error('expected two keyframes, got ' + nKeys);
+
+      // Now edit between them. setSelPos needs a selection, so select point 0 the way a tap would.
+      FM.time = 0.5;
+      const ov = document.getElementById('pe-overlay'), cvp = document.getElementById('preview');
+      if (!ov || !cvp) throw new Error('no point-edit overlay / preview');
+      const r = cvp.getBoundingClientRect();
+      if (!(r.width > 0)) throw new Error('the preview has no size to aim at');
+      const here = FM.evalShapeSubs(added, 0.5)[0][0];
+      const client = (u, v) => ({ x: r.left + ((added.transform.x + (u - 0.5) * added.shapeW) / scene.project.width) * r.width,
+                                  y: r.top + ((added.transform.y + (v - 0.5) * added.shapeH) / scene.project.height) * r.height });
+      const c = client(here[0], here[1]);
+      ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: c.x, clientY: c.y, buttons: 1 }));
+      ov.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: c.x, clientY: c.y, buttons: 0 }));
+      const sel = FM.pointEdit.getSel();
+      if (!sel) throw new Error('tapping a point did not select it, so the edit below would prove nothing');
+      FM.pointEdit.setSelPos(sel.x + 40, sel.y);
+      if (added.subs.kf.length !== 3) throw new Error('editing between keyframes did not create a keyframe there — it has ' + added.subs.kf.length + ' keys, so the drag edited a throwaway array');
+      if (!FM.hasKeyframeAt(added.subs, 0.5)) throw new Error('a keyframe was added, but not at the playhead');
+      const moved = FM.evalShapeSubs(added, 0.5)[0][0];
+      if (Math.abs(moved[0] - here[0]) < 1e-9) throw new Error('the point did not actually move at the playhead');
+    } finally {
+      try { if (FM.pointEdit.isActive() && !wasActive) FM.pointEdit.stop(); } catch (e) {}
+      scene.layers = keep; scene.selectedId = keepSel; FM.time = keepT;
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

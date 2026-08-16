@@ -1883,7 +1883,7 @@ better still, keep working inside the turn rather than parking work for a later 
       clicks twice and asserts a fresh animation each time; the old `offsetWidth`-on-SVG version turns
       it red.
 
-- [ ] **254 — Edit Points has no keyframe functionality at all. (16 Aug, with a screenshot.)** His
+- [x] **254 — Edit Points has no keyframe functionality at all. DONE v8.40. (16 Aug, with a screenshot.)** His
       words, verbatim: *"edit points has literally no keyframe functionality. add it"*.
       The screenshot is the **Edit Points** panel on a Drawing layer: an X and a Y readout (522.9 /
       818.6), the "Swipe here to move point" pad, the three point-mode buttons down the left, and the
@@ -1926,6 +1926,30 @@ better still, keep working inside the turn rather than parking work for a later 
       4. A ◆ rail on the Edit Points panel (`editPointsTools`, js/inspector.js ~2802), matching the one
          every other property panel has.
       **Not started at the tail of a long session on purpose** — it is surgery on the render hot path.
+
+      **DONE v8.40 — all four wired, and the ◆ is on the rail.**
+      1. `FM.traceShapePath` takes a scene time and reads through `FM.evalShapeSubs`. It is the LAST
+         parameter and optional, so every existing caller keeps working and one that does not know the
+         time falls back to the PLAYHEAD — not to frame 0, which looks identical to working.
+      2. `FM.shapeToPoints` does the same, so "convert to editable points" hands back the shape you can
+         see. *(It also turns out the old code would THROW on an animated path — `clone()` on a `{kf}`
+         object — so this was already broken, not merely frozen.)*
+      3. `shapeOutlineLenPx` has `t` threaded through, which is the fiddly bit that stopped the last
+         run: on an animated path the outline LENGTH changes frame to frame and Trim Paths divides by
+         it, so measuring frame 0 would make a trimmed stroke creep as the shape moves.
+      4. A ◆ on the Edit Points rail, above curve/corner/delete. Verified at 375px: 38×38, same as its
+         three siblings, no overflow.
+      **The mistake worth recording, because the tests caught it and I did not.** Editing between two
+      keyframes has to CREATE the keyframe it edits (AE roto — what `mask-tool.js` already does), and
+      `ensureKfHere()` does that. But at a keyframe that is neither the FIRST nor the LAST,
+      `evalShapeSubs` still takes the interpolating branch with the fraction landing on 1, so it hands
+      back a fresh array — the edit went into a throwaway and the point snapped back on the next
+      render. The editor now takes the STORED array whenever the playhead sits on a key.
+      **Found while mutation-checking, not fixed here:** deleting the CROP panel's ◆ outright leaves all
+      437 tests green, so that keyframe button is unguarded. There are four `left.appendChild(kfBtn)`
+      rails in inspector.js and only this new one is now covered. Worth a sweep of its own.
+      **Still open, and deliberately not folded in:** #206 (sensible edit points) — you said you want to
+      do that one with me.
 
 - [x] **253 — Shape sliders scrub too fast to hit an exact size. DONE v8.33. (16 Aug.)** His words, verbatim:
       *"when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
