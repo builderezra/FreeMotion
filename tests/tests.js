@@ -15741,6 +15741,59 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 254: keyframed edit points (the interpolator) ----------------
+   * "edit points has literally no keyframe functionality. add it." This is the hard half — evaluating
+   * an animated point set — built on the pen masks' own path interpolator, which has keyframed a
+   * whole path since it was written. The wiring into the renderer is recorded in the entry and not
+   * yet done; this makes sure the piece that IS done is correct rather than dead code. */
+
+  test('a static point shape is untouched by the animated-points evaluator', { item: 'pts-kf' }, function () {
+    /* The one that matters most: every existing shape must take exactly the old path, with no
+       allocation and no arithmetic, or this lands a cost on the render hot path for no reason. */
+    if (typeof FM.evalShapeSubs !== 'function') throw new Error('FM.evalShapeSubs is not exported');
+    const subs = [[[0, 0], [1, 0], [1, 1]]];
+    const L = { type: 'shape', shape: 'path', subs: subs };
+    const got = FM.evalShapeSubs(L, 0.5);
+    if (got !== subs) throw new Error('a static shape did not get back the very same array — it is being copied every frame');
+    // the legacy single-path form still works
+    const P = { type: 'shape', shape: 'path', points: [[0, 0], [1, 1]] };
+    const gp = FM.evalShapeSubs(P, 0);
+    if (!gp.length || gp[0].length !== 2) throw new Error('the legacy layer.points form stopped resolving: ' + JSON.stringify(gp));
+    if (FM.evalShapeSubs({ type: 'shape' }, 0).length !== 0) throw new Error('a shape with no points should evaluate to nothing');
+  });
+
+  test('animated points interpolate, and SNAP when a point is added or removed', { item: 'pts-kf' }, function () {
+    const A = [[[0, 0], [1, 0]]];
+    const B = [[[0, 1], [1, 1]]];
+    const L = { type: 'shape', shape: 'path', subs: { kf: [{ t: 0, v: A }, { t: 1, v: B }] } };
+    // before / after the ends
+    if (FM.evalShapeSubs(L, -1)[0][0][1] !== 0) throw new Error('before the first keyframe it should hold the first');
+    if (FM.evalShapeSubs(L, 5)[0][0][1] !== 1) throw new Error('after the last keyframe it should hold the last');
+    // halfway
+    const mid = FM.evalShapeSubs(L, 0.5);
+    if (Math.abs(mid[0][0][1] - 0.5) > 1e-6) throw new Error('it did not interpolate: got y=' + mid[0][0][1] + ' at the midpoint');
+    if (mid === A || mid === B) throw new Error('the midpoint returned one of the keyframes by reference');
+    /* TOPOLOGY: interpolating a 2-point path towards a 3-point one has no correct answer — you would
+       have to invent a vertex and decide where it came from — so the earlier keyframe is held. The
+       pen masks make the same choice, and predictable beats clever for something animated by hand. */
+    const C = [[[0, 1], [1, 1], [2, 1]]];
+    const T = { type: 'shape', shape: 'path', subs: { kf: [{ t: 0, v: A }, { t: 1, v: C }] } };
+    const snapped = FM.evalShapeSubs(T, 0.5);
+    if (snapped.length !== 1 || snapped[0].length !== 2) throw new Error('a point was invented across a topology change: ' + JSON.stringify(snapped));
+    if (Math.abs(snapped[0][0][1] - 0) > 1e-6) throw new Error('it morphed across a topology change instead of holding');
+    // a differing SUBPATH count is a topology change too
+    const D = [[[0, 1], [1, 1]], [[2, 2], [3, 3]]];
+    const T2 = { type: 'shape', shape: 'path', subs: { kf: [{ t: 0, v: A }, { t: 1, v: D }] } };
+    if (FM.evalShapeSubs(T2, 0.5).length !== 1) throw new Error('it morphed across a change in the number of subpaths');
+    // 'hold' easing steps rather than slides
+    const H = { type: 'shape', shape: 'path', subs: { kf: [{ t: 0, v: A }, { t: 1, v: B, e: 'hold' }] } };
+    if (FM.evalShapeSubs(H, 0.9)[0][0][1] !== 0) throw new Error('a hold keyframe interpolated instead of stepping');
+    // the smooth flag rides from the EARLIER keyframe, as the mask interpolator does
+    const S1 = [[[0, 0, 1], [1, 0]]], S2 = [[[0, 1], [1, 1]]];
+    const SM = { type: 'shape', shape: 'path', subs: { kf: [{ t: 0, v: S1 }, { t: 1, v: S2 }] } };
+    if (FM.evalShapeSubs(SM, 0.5)[0][0][2] !== 1) throw new Error('the smooth flag was dropped mid-interpolation');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

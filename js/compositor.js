@@ -7875,6 +7875,66 @@ window.FM = window.FM || {};
     return !!FM.SHAPE_POLYS[layer.shape] && !NON_POINT_POLYS[layer.shape];
   };
 
+  /* ---- Keyframed EDIT POINTS (queue 254) --------------------------------------------------------
+   * Ezra: "edit points has literally no keyframe functionality. add it."
+   *
+   * `layer.subs` is EITHER a static array of subpaths (today's shape, untouched) OR an animated prop
+   * `{ kf: [{ t, v: subsArray, e }] }` — the WHOLE point set per keyframe, not one point. That choice
+   * is copied from the pen masks, which have keyframed a whole path since they were built, and it is
+   * the right one: a per-point track would need identity for every vertex across every keyframe, and
+   * adding a point in the middle would silently re-number everything after it.
+   *
+   * TOPOLOGY CHANGES SNAP rather than morph, for the same reason masks do. Interpolating a 5-point
+   * path towards a 7-point one has no correct answer — you would have to invent two vertices and
+   * decide where they came from — so the earlier keyframe is held until the later one arrives. That
+   * is predictable, and predictable beats clever for something you are animating by hand.
+   *
+   * A static layer takes exactly the old path: `Array.isArray` is the first test and returns the very
+   * same array object, so no allocation and no arithmetic on the render hot path. */
+  function isAnimatedProp(p) { return p && typeof p === 'object' && Array.isArray(p.kf); }
+  function subsSameShape(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!a[i] || !b[i] || a[i].length !== b[i].length) return false;
+    }
+    return true;
+  }
+  FM.evalShapeSubs = function (layer, t) {
+    const raw = layer && layer.subs;
+    if (!raw) return (layer && layer.points && layer.points.length) ? [layer.points] : [];
+    if (Array.isArray(raw)) return raw;                  // static — the old path, same object
+    if (!isAnimatedProp(raw)) return [];
+    const kf = raw.kf;
+    if (!kf.length) return [];
+    const vOf = (k) => (k && Array.isArray(k.v)) ? k.v : [];
+    if (t <= kf[0].t) return vOf(kf[0]);
+    const last = kf[kf.length - 1];
+    if (t >= last.t) return vOf(last);
+    for (let i = 0; i < kf.length - 1; i++) {
+      const a = kf[i], b = kf[i + 1];
+      if (t >= a.t && t <= b.t) {
+        const av = vOf(a), bv = vOf(b);
+        if (b.e === 'hold') return av;                   // step: hold until b
+        if (!subsSameShape(av, bv)) return av;           // a point was added or removed — SNAP
+        const span = b.t - a.t;
+        let f = span <= 0 ? 1 : (t - a.t) / span;
+        if (b.bez && FM.bezierAt) f = FM.bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);
+        const out = new Array(av.length);
+        for (let si = 0; si < av.length; si++) {
+          const pa = av[si], pb = bv[si], sub = new Array(pa.length);
+          for (let k = 0; k < pa.length; k++) {
+            const A = pa[k], B = pb[k];
+            const x = A[0] + (B[0] - A[0]) * f, y = A[1] + (B[1] - A[1]) * f;
+            sub[k] = (A[2] === 1) ? [x, y, 1] : [x, y];  // smooth flag carried from the earlier kf
+          }
+          out[si] = sub;
+        }
+        return out;
+      }
+    }
+    return vOf(last);
+  };
+
   // Trace a shape layer's outline into ctx (beginPath + geometry only — caller fills/strokes).
   // ONE tracer shared by drawLayer and renderThumb so the two can never drift. Returns 'stroke'
   // for open kinds (line/arc — stroked, never filled) and 'fill' for everything else.

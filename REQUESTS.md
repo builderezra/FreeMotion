@@ -1815,6 +1815,30 @@ better still, keep working inside the turn rather than parking work for a later 
       Related: **#206** (sensible edit points) is HELD because he wants to do it with me — do not fold
       these together without asking.
 
+      **THE INTERPOLATOR IS BUILT AND TESTED — v8.34. The wiring is not.**
+      The entry's own instruction paid off: the machinery half-existed. The **pen masks have keyframed
+      a whole path since they were written**, easing, hold steps and topology changes included, so
+      `FM.evalShapeSubs` is that pattern applied to `layer.subs`.
+      **Both decisions this entry asked to settle are now settled and tested:**
+      · a keyframe captures the **whole point set**, not one point — a per-point track would need
+        identity for every vertex across every keyframe, and inserting a point mid-path would silently
+        re-number everything after it;
+      · a **topology change SNAPS** rather than morphing, because interpolating 2 points towards 3 has
+        no correct answer. The masks already make this call.
+      A static shape returns the very same array — no allocation on the render hot path, asserted.
+
+      **WHAT IS LEFT, with the call sites named so the next run wires instead of researching:**
+      1. `FM.traceShapePath(ctx, layer, ox, oy, sw, sh)` (js/compositor.js ~7941) needs a `t` and must
+         read through `FM.evalShapeSubs`. Of its three callers, `drawLayer` (~8620) and `drawCopyBg`
+         (~8168) already have `t`; **`shapeOutlineLenPx` (~8034) does not** and would need it threaded
+         from its own callers — that is the fiddly bit, and the reason this stopped here.
+      2. The same read at ~8010 (`kind === 'path'` in the point-set getter).
+      3. `subsOf` in js/point-edit.js (~112) should evaluate at the playhead, so dragging a point while
+         animated edits the keyframe you are standing on rather than the raw array.
+      4. A ◆ rail on the Edit Points panel (`editPointsTools`, js/inspector.js ~2802), matching the one
+         every other property panel has.
+      **Not started at the tail of a long session on purpose** — it is surgery on the render hot path.
+
 - [x] **253 — Shape sliders scrub too fast to hit an exact size. DONE v8.33. (16 Aug.)** His words, verbatim:
       *"when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
       cos it jumps a lot of numbers, leaving me to type in what i want"*.
