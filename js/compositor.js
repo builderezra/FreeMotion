@@ -1065,12 +1065,23 @@ window.FM = window.FM || {};
    * the caller can tell "nothing changed" without comparing contents. Pure and exported, because the
    * question "which effects are live on this cue" should be answerable without rasterising a frame. */
   function effectiveFx(layer, t) {
-    const own = layer.effects || [];
-    if (!layer || !Array.isArray(layer.captions) || !layer.captions.length) return own;
+    const own = (layer && layer.effects) || [];
+    /* …plus the effects being PREVIEWED on it (queue 277). Ezra, on the multi-select browser: "when you
+     * tap on an effect it doesn't just add it selects it and it will show the layer selected like what
+     * the layer will look like with the effect selected".
+     * A VIEW-ONLY override, the same arrangement `FM.isolate` already uses: nothing is written to the
+     * layer, so nothing reaches history, autosave or the export — dropping `FM._fxPreview` is all it
+     * takes to undo the whole thing. It goes through this function because this function is already
+     * the single answer to "which effects does this layer render with at time t", so the preview cannot
+     * disagree with the real stack about ordering or about anything else. */
+    const pv = FM._fxPreview;
+    const pre = (pv && layer && pv.id === layer.id && pv.list && pv.list.length) ? pv.list : null;
+    const base = pre ? own.concat(pre) : own;
+    if (!layer || !Array.isArray(layer.captions) || !layer.captions.length) return base;
     let cue = null;
     try { cue = FM.captions && FM.captions.cueAt(layer, t); } catch (e) { cue = null; }
     const add = cue && cue.effects;
-    return (add && add.length) ? own.concat(add) : own;
+    return (add && add.length) ? base.concat(add) : base;
   }
   FM._effectiveFx = effectiveFx;
 
@@ -8793,7 +8804,15 @@ window.FM = window.FM || {};
      *
      * Track effects come FIRST so a cue's effect stacks on top of the look the whole track already has,
      * which is the order the two controls imply. */
-    if (layer && layer.captions && layer.captions.length && !layer._cueFx) {
+    /* …and the same clone carries a PREVIEWED stack (queue 277), which is why this condition is no
+       longer just about captions: effectiveFx now answers for both, and a layer being previewed has no
+       captions in the ordinary case, so gating on captions alone meant the preview never reached the
+       frame. `_cueFx` still guards the recursion for both. */
+    const _pvOn = (function () {
+      const pv = FM._fxPreview;
+      return !!(pv && layer && pv.id === layer.id && pv.list && pv.list.length);
+    })();
+    if (layer && ((layer.captions && layer.captions.length) || _pvOn) && !layer._cueFx) {
       const eff = effectiveFx(layer, t);
       layer = (eff !== layer.effects)
         ? Object.assign({}, layer, { effects: eff, _cueFx: 1 })

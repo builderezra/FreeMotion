@@ -17506,6 +17506,124 @@
     }
   });
 
+  test('the sheet previews the picked effects and shows only that layer, and puts it all back (queue 277)', { item: 'fx-sheet' }, async function () {
+    /* Clauses 5 and 7: "when you tap on an effect it doesn't just add it selects it and it will show the
+     * layer selected like what the layer will look like with the effect selected", and "it'll just take
+     * you back to the start of that layer instead and it will only show that layer".
+     * Both are VIEW-ONLY overrides, so the thing that can go wrong is not that they fail to appear — it
+     * is that they fail to LEAVE. The first build of this left the layer isolated after the sheet closed,
+     * with every other layer invisible, because the restore was guarded on `_isoWas !== null` and the
+     * ordinary case is that nothing was isolated to begin with. That is what the after-close half of this
+     * test is for. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice();
+    const iso0 = FM.isolate || null;
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(260);
+      /* Placed as FRACTIONS of whatever project the suite is running, not at fixed pixel coordinates.
+         Hard-coding (300,300) and (700,900) assumed a tall 1080x1920 comp; under a smaller project both
+         points clamped to the same corner and layer B's "centre" sampled layer A's red — the fixture
+         quietly testing nothing. */
+      const _P = FM.scene.project;
+      const _sz = Math.round(Math.min(_P.width, _P.height) * 0.16);
+      const A = FM.makeLayer('shape', { shape: 'rect', x: Math.round(_P.width * 0.28), y: Math.round(_P.height * 0.24), shapeW: _sz, shapeH: _sz, fill: '#ee3333' });
+      const B = FM.makeLayer('shape', { shape: 'circle', x: Math.round(_P.width * 0.72), y: Math.round(_P.height * 0.74), shapeW: _sz, shapeH: _sz, fill: '#33ccff' });
+      A.start = 0; A.duration = 4; B.start = 0; B.duration = 4;
+      /* The scene is SHARED with every other test in this file, so this adds its two layers and takes
+         exactly those away again — an earlier version emptied `FM.scene.layers` and put a copy back,
+         and three unrelated tests fell over behind it. Hiding the rest is what `FM.isolate` is for and
+         is the thing under test anyway. */
+      FM.scene.layers.push(A, B);
+      FM.selectLayer(A.id); FM.refreshAll();
+      FM.setTime(1);
+      await sleep(260);
+      const P = FM.scene.project;
+      /* RENDERED FRESH INTO THIS TEST'S OWN CANVAS, rather than read off `#preview`. Two earlier
+         versions read the on-screen one and both were wrong about where they were looking: the preview
+         can be zoomed or cropped by whatever ran before this (it stamps `__fmCrop` and its own scale),
+         so project coordinates do not map linearly onto it — layer B's centre sampled layer A's red.
+         `FM.renderScene` into a canvas sized to the project is the same compositor, the same preview
+         stack and the same isolate, with a mapping that is just division. */
+      const off = document.createElement('canvas');
+      off.width = Math.max(64, Math.round(P.width / 4));
+      off.height = Math.max(64, Math.round(P.height / 4));
+      const at = L => [FM.evalProp(L.transform.x, FM.time) / P.width, FM.evalProp(L.transform.y, FM.time) / P.height];
+      const px = (pt) => {
+        const g = off.getContext('2d');
+        g.clearRect(0, 0, off.width, off.height);
+        FM.renderScene(g, FM.scene, FM.time);
+        const x = Math.max(0, Math.min(off.width - 1, Math.round(pt[0] * off.width)));
+        const y = Math.max(0, Math.min(off.height - 1, Math.round(pt[1] * off.height)));
+        return Array.prototype.slice.call(g.getImageData(x, y, 1, 1).data, 0, 3);
+      };
+      const ptA = at(A), ptB = at(B);
+      /* Matched against each layer's own FILL, not against "is this pixel bright". The first version
+         asked `(r+g+b) > 60`, which is a question about the project BACKGROUND as much as about the
+         layer — this project's ground is not black, so a hidden layer's sample point still read as
+         "something is drawn here" and the isolate assertion failed on working code. A colour match
+         cannot be fooled that way. */
+      const near = (p, hex) => {
+        const want = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+        return Math.abs(p[0] - want[0]) < 26 && Math.abs(p[1] - want[1]) < 26 && Math.abs(p[2] - want[2]) < 26;
+      };
+      const isA = () => near(px(ptA), '#ee3333'), isB = () => near(px(ptB), '#33ccff');
+      if (!isA()) throw new Error('the fixture did not draw layer A at its own centre (' + px(ptA).join(',') + ') — nothing below this would mean anything');
+      if (!isB()) throw new Error('the fixture did not draw layer B at its own centre (' + px(ptB).join(',') + ')');
+
+      FM.fxBrowser.open(A);
+      await sleep(340);
+      // …only that layer
+      if (!FM.isolate || FM.isolate.id !== A.id || FM.isolate.mode !== 1) throw new Error('opening the sheet did not isolate the selected layer — "it will only show that layer"');
+      if (isB()) throw new Error('the other layer is still on the canvas while the sheet is open — "it will only show that layer"');
+      // …and it loops that layer rather than sitting still
+      const t1 = FM.time;
+      await sleep(320);
+      if (FM.time === t1) throw new Error('the canvas is not looping the layer while the sheet is open');
+      if (FM.time < A.start - 0.01 || FM.time > A.start + A.duration + 0.01) throw new Error('the loop ran outside the layer (' + FM.time.toFixed(2) + ' against ' + A.start + '…' + (A.start + A.duration) + ')');
+
+      // …a pick previews without touching the layer
+      const root = document.getElementById('fx-browser');
+      const tile = root.querySelector('[data-fxid]');
+      tile.click();
+      await sleep(160);
+      if (!FM._fxPreview || FM._fxPreview.id !== A.id || FM._fxPreview.list.length !== 1) throw new Error('picking an effect did not put it into the preview stack');
+      if ((FM.layerById(FM.scene, A.id).effects || []).length !== 0) throw new Error('picking wrote the effect onto the layer — the preview is supposed to be view-only');
+
+      /* …and a previewed stack really reaches the pixels. Asserted with `invert`, whose result is not a
+         matter of opinion, rather than with whatever tile happened to be first — several effects are
+         geometry-only and would leave this sample point identical while working perfectly. */
+      if (FM.fxRegistry.get('invert')) {
+        const plain = px(ptA);
+        FM._fxPreview = { id: A.id, list: [FM.fxRegistry.makeInstance('invert')] };
+        FM.setTime(FM.time);
+        await sleep(200);
+        const inv = px(ptA);
+        if (plain.join() === inv.join()) throw new Error('a previewed Invert changed nothing on the canvas (' + plain.join() + ') — the preview stack is not reaching the frame');
+      }
+
+      FM.fxBrowser.close();
+      await sleep(320);
+      FM.setTime(1);
+      await sleep(220);
+      if (FM._fxPreview) throw new Error('the preview stack outlived the sheet');
+      if (FM.isolate && FM.isolate.id === A.id) throw new Error('closing the sheet left the layer ISOLATED — every other layer is now invisible and nothing in the UI says why');
+      if (!isB()) throw new Error('the other layer did not come back after the sheet closed (' + px(ptB).join(',') + ')');
+      if (!isA()) throw new Error('the selected layer did not come back after the sheet closed (' + px(ptA).join(',') + ')');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM._fxPreview = null; FM.isolate = iso0;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(220);
+    }
+  });
+
   test('on a desktop width the effects browser still adds on one tap (queue 277 is phone-only)', { item: 'fx-sheet' }, async function () {
     /* "all just for mobile btw". A multi-select that leaked onto the desktop would mean every PC user's
        first tap silently did nothing, which is a worse bug than the one this feature fixes. */

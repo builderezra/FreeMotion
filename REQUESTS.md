@@ -2986,12 +2986,12 @@ better still, keep working inside the turn rather than parking work for a later 
              Already true; deliberately left alone.
       4. [x] An **"add effect" button** inside Visual opens the browser as that partial sheet. **v8.68**
              — the existing + Add Effect button now opens the sheet rather than the full-screen dialog.
-      5. [ ] Tapping an effect **SELECTS** rather than adds — **DONE v8.68** — and the canvas previews
-             the layer with it — **NOT YET**, that is the next stage.
+      5. [x] Tapping an effect **SELECTS** rather than adds (**v8.68**) and the canvas previews the layer
+             with it (**v8.69**).
       6. [x] **Multi-select with an order badge** — 1, 2, 3… showing the order they will be added in.
              **v8.68**, and re-tapping renumbers the rest rather than leaving a hole.
-      7. [ ] While the sheet is open the canvas **loops only the selected layer**, restarting from that
-             layer's start on each tap.
+      7. [x] While the sheet is open the canvas **loops only the selected layer**, restarting from that
+             layer's start on each tap. **v8.69.**
       8. [x] Filters tab: leave as is — *"pretty much good how it is right now"*. Untouched.
       9. [ ] **A toggle for how the chosen effects land:** with the values shown in the preview, or
              *"naked"* / fresh-slate.
@@ -3006,7 +3006,24 @@ better still, keep working inside the turn rather than parking work for a later 
       renumbered the third to 2; committing added them in that order and closed. The desktop path is
       asserted separately to be unchanged — one tap, one effect, closes — because *"all just for mobile
       btw"* and a multi-select leaking onto PC would mean every first tap there silently did nothing.
-      **Still to come: clauses 5 (the live preview), 7 (loop just that layer) and 9 (the naked toggle).**
+      **STAGE B SHIPPED v8.69 — the live preview and the loop.** Both are VIEW-ONLY overrides, which is
+      the whole design: `FM.isolate` (which already existed for the ⧉ button and is documented as
+      touching nothing in the scene) hides the other layers, and a new `FM._fxPreview` carries the
+      picked stack. The layer object is never written to, so a preview cannot reach history, autosave or
+      an export, and closing the sheet is the entire undo. The preview goes in through `effectiveFx()`,
+      which was already the single answer to "which effects does this layer render with at time t", so
+      the preview cannot disagree with the real stack about ordering. The loop is a 24fps ticker that
+      restarts on every tap — *"it'll just take you back to the start of that layer"*.
+      **Two real bugs found by looking rather than by reading**, both worth recording:
+      · the isolate was restored under `if (_isoWas !== null)`, and the ordinary case is that nothing was
+        isolated before — so the guard never fired and **closing the sheet left every other layer
+        invisible**, with nothing in the UI to say why. It is an explicit held-flag now.
+      · `close()` repainted before it hid the overlay, and the repaint walks the media elements — a
+        layer whose element is not ready throws on `.currentTime`, the throw escaped, and **the browser
+        was left on screen covering the phone's settings button**. Hiding now happens first and the
+        repaint is guarded, so whatever else fails, the sheet closes.
+      **Still to come: clause 9 (the naked / preview-values toggle) and clause 10 (his "potentially"
+      idea about choosing which preset a plain tap spawns).**
 
       **DO NOT START the default-good-values work** — his words: *"I don't want you to start on it yet"*.
       The toggle in clause 9 is the agreed shape for it.

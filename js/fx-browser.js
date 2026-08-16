@@ -203,14 +203,71 @@ window.FM = window.FM || {};
       if (btn) btn.textContent = _picked.length === 1 ? 'Add 1 effect' : 'Add ' + _picked.length + ' effects';
     }
   }
+  /* ---- THE PREVIEW, AND THE LOOP (queue 277, clauses 5 and 7) --------------------------------
+   * "it'll just take you back to the start of that layer instead and it will only show that layer which
+   * makes sense because you're only seeing the effects for that layer anyways".
+   * Both halves are VIEW-ONLY overrides — `FM.isolate` (which already exists and is documented as
+   * touching nothing in the scene) for "only show that layer", and `FM._fxPreview` for the stack. The
+   * layer object is never written to, so closing the sheet is the entire undo and a preview can never
+   * reach history, autosave or an export.
+   * The loop is a plain 24fps ticker rather than real playback: it must not fight the transport, and it
+   * has to restart on every tap, which a play/pause API is a clumsy way to ask for. */
+  /* `_isoHeld` is a separate flag rather than a null check on `_isoWas`, and that is not fussiness:
+     the first version restored with `if (_isoWas !== null)`, and the ordinary case is that nothing was
+     isolated before the sheet opened — so `_isoWas` was null, the guard never fired, and closing the
+     sheet LEFT THE LAYER ISOLATED with every other layer invisible. Found by closing it and looking,
+     not by reading the code. */
+  let _loopTimer = 0, _isoWas = null, _isoHeld = false, _loopFrom = 0;
+  function stopPreview() {
+    if (_loopTimer) { clearInterval(_loopTimer); _loopTimer = 0; }
+    FM._fxPreview = null;
+    if (_isoHeld) { FM.isolate = _isoWas; _isoWas = null; _isoHeld = false; }
+    /* THE REPAINT CANNOT BE ALLOWED TO TAKE THE CLOSE DOWN WITH IT. `FM.setTime` walks the media
+       elements to re-seek them, and a layer whose element is not ready throws on `.currentTime` — which
+       happened, in the suite, three tests deep: `close()` called this FIRST, the throw escaped before
+       the overlay was hidden, and the effects browser was left on screen covering the phone's settings
+       button. Two changes, because either alone would have been enough and both are cheap: the repaint
+       is guarded, and `close()` hides the overlay before calling this. */
+    try {
+      if (FM.refreshCanvas) FM.refreshCanvas();
+      else if (FM.setTime) FM.setTime(FM.time);
+    } catch (e) { /* a preview that cannot repaint is a stale frame; a close that throws is a trapped user */ }
+  }
+  function previewStack() {
+    /* Rebuilt from the picked ids each time rather than kept in step by hand: the list is short, the
+       instances are cheap, and one source of truth beats two that can drift. Pseudo-tiles (Mask,
+       Motion Blur (Object)) are layer state rather than effects, so they cannot be previewed — they
+       are skipped rather than crashing makeInstance. */
+    return _picked.map(id => (PSEUDO[id] ? null : FM.fxRegistry.makeInstance(id))).filter(Boolean);
+  }
+  function restartPreview() {
+    if (!sheetMode()) return;
+    const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
+    if (!layer) return;
+    FM._fxPreview = { id: layer.id, list: previewStack() };
+    if (!_isoHeld) { _isoWas = FM.isolate || null; _isoHeld = true; }
+    FM.isolate = { id: layer.id, mode: 1 };            // draw only this layer
+    if (FM.playing && FM.pause) FM.pause();            // the sheet owns the clock while it is open
+    const st = layer.start || 0, du = Math.max(0.25, layer.duration || 0);
+    _loopFrom = Date.now();
+    if (FM.setTime) FM.setTime(st);                    // "take you back to the start of that layer"
+    if (_loopTimer) clearInterval(_loopTimer);
+    _loopTimer = setInterval(() => {
+      if (!sheetMode() || !FM.setTime) return;
+      FM.setTime(st + (((Date.now() - _loopFrom) / 1000) % du));
+    }, 1000 / 24);
+  }
+
   function togglePick(id) {
     const i = pickIndex(id);
     if (i >= 0) _picked.splice(i, 1); else _picked.push(id);
     paintPicks();
+    restartPreview();      // every tap re-previews AND restarts the layer, which is what he asked for
   }
   function commitPicks() {
     const list = _picked.slice();
     _picked = [];
+    stopPreview();          // the previewed copies go before the real ones land, or the layer gets both
     if (!list.length) { FM.fxBrowser.close(); return; }
     /* In tap order, and quietly — addEffect closes the browser and jumps the inspector on its own,
        which is right for one tap and wrong nine times in a row. */
@@ -1005,7 +1062,7 @@ window.FM = window.FM || {};
         const bar = el('div', 'fxb-commit hidden');
         const clear = el('button', 'fxb-commit-clear', 'Clear');
         const go = el('button', 'fxb-commit-go', 'Add');
-        clear.addEventListener('click', () => { _picked = []; paintPicks(); });
+        clear.addEventListener('click', () => { _picked = []; paintPicks(); restartPreview(); });
         go.addEventListener('click', commitPicks);
         bar.appendChild(clear); bar.appendChild(go);
         root.appendChild(bar);
@@ -1042,12 +1099,24 @@ window.FM = window.FM || {};
       root.classList.remove('hidden');
       rebuild();
       paintPicks();
+      if (phone) restartPreview();     // isolate + loop the layer straight away, with an empty stack
       // one-time discoverability nudge for the hidden gesture (AM users know it; new users don't)
       if (FM.toast && !localStorage.getItem('fm.fx.presetHint')) {
         try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (_) {}
         FM.toast('Tip: hold any effect to browse its presets', 2600);
       }
     },
-    close: function () { _into = null; if (!root) return; _picked = []; root.classList.remove('fxb-sheet'); root.style.removeProperty('--fxb-top'); stopAuto(); if (FM.fxThumbs) FM.fxThumbs.stopAll(); root.classList.add('hidden'); root.querySelectorAll('.fxb-catview').forEach(v => v.remove()); _catDepth = 0; },   // belt-and-braces: a leaked depth must never survive close/reopen
+    /* HIDING COMES FIRST, before anything that could throw. Everything after it is teardown, and one
+       of those steps repaints — which can throw on a media layer whose element is not ready. When it
+       did, the overlay stayed on screen with no way out. Whatever else fails here, the browser closes. */
+    close: function () {
+      _into = null; if (!root) return;
+      root.classList.add('hidden');
+      _picked = []; root.classList.remove('fxb-sheet'); root.style.removeProperty('--fxb-top');
+      stopPreview(); stopAuto();
+      if (FM.fxThumbs) FM.fxThumbs.stopAll();
+      root.querySelectorAll('.fxb-catview').forEach(v => v.remove());
+      _catDepth = 0;   // belt-and-braces: a leaked depth must never survive close/reopen
+    },
   };
 })(window.FM);
