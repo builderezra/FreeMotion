@@ -3695,6 +3695,39 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       1000% really works everywhere (bigger, touches audio routing), or ship the scrub-field control
       first at today's range so at least the control feels right? My recommendation is the gain stage —
       the control alone would still leave the slider lying above 100%.
+
+      **IN PROGRESS 16 Aug — step 1 (the gain stage) IS BUILT AND SHIPPED, but is INERT until the UI can
+      ask for more than 100%.** Taking my own recommendation above rather than leaving it as a question.
+      Landed in **v8.10/v8.11**, in `js/audio-fx-live.js`:
+      · `boostOf(layer)` / `needsBoost(layer)` — the peak of a static or keyframed volume, so a clip
+        whose volume goes above 1 anywhere is routed for its whole length (a chain cannot be built
+        halfway through a drag without a gap in the sound).
+      · `makeBoostStage(ctx)` — a GainNode into a DynamicsCompressor set as a **limiter**
+        (threshold −1.5 dBFS, knee 0, ratio 20, attack 3ms, release 120ms). It engages only on what
+        would have clipped, so ordinary boosts pass through unshaped.
+      · `sync()` routes on boost as well as on audio effects, with the boost stage **last** — a limiter
+        has to be the final thing in the path or an effect after it can push the signal back over the
+        ceiling. `dropBoost()` on every exit; `passthrough()` unchanged.
+      · `setBoost(layer, vol)` ramps the gain (`setTargetAtTime`, not a bare assignment, which clicks).
+      · app.js's reconcile now **splits at unity**: `el.volume` keeps everything up to 1 — so fades,
+        solo, mute and the de-click are untouched — and only the excess goes to the boost. They
+        multiply back to the value asked for.
+      **The iOS hazard named above is handled by REUSING this module rather than writing a second one.**
+      It already owns the MediaElementSource rule (one per element, ever, cached on the media rec), so
+      boost is just another reason to route and there is exactly one place that can get it wrong. **A
+      layer at or below 100% is still never routed at all** and keeps today's exact native path.
+
+      **WHAT IS LEFT — pick this up here:**
+      1. `volumePanel` (js/inspector.js): `setPct` clamps to `Math.min(1, …)` and `mtVBox` is capped at
+         `max: 100`. Both need to allow **1000**.
+      2. Replace the dot-on-a-line `vol-slider-row` with the effects-style scrub ruler — the half he
+         asked for **by name**: *"needs to be like the effects slider and not a dot on a line"*.
+      3. Call `FM.audioFxLive.sync(layer)` when the volume crosses 1, or the chain is never built.
+      4. Give the EXPORT the same limiter (`js/exporter.js`, the GainNode at ~line 242), or preview and
+         file disagree again at 1000% — which is the whole reason this entry exists.
+      5. Tests: preview and export must agree above unity, and a layer at ≤100% must NOT be routed.
+      **Careful with #253** (sliders scrub too fast) — it is about this same `tickStrip`, so whatever
+      lands there must still let this row cross 0–1000%.
 - [ ] **203 — An "Improve quality" action in a clip's ⋯ menu.** His words: *"We should add a button in
       the three dot menu when tapping on a clip to improve quality, so if your video or photo is low
       quality then you can add pixels or whatever to enhance it."*
