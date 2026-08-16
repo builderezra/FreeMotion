@@ -3386,14 +3386,35 @@ window.FM = window.FM || {};
   }
 
   // ===== Volume panel — keyframeable audio level + easing (AM-style left rail: ◆ + curve) =====
+  /* Volume ceiling (queue 195). Ezra: "I want to be able adjust the volume up to like 1000%." Above
+   * unity is Web Audio only — `el.volume` cannot exceed 1 — and the boost stage in audio-fx-live.js
+   * clamps to the same number, so the UI cannot ask for a gain the audio path will not honour. */
+  const VOL_MAX = 10;
+
   function volumePanel(layer) {
     if (layer.volume == null) layer.volume = 1;
     const panel = el('div', 'mt-panel vol-panel');
     const volPct = () => Math.round((layer.volume == null ? 1 : FM.evalProp(layer.volume, FM.time)) * 100);   // raw level (mute is a separate flag, shown on the speaker)
+    /* UP TO 1000% (queue 195). Ezra: "I want to be able adjust the volume up to like 1000%."
+     * It was capped at 1, and that cap was not arbitrary — `el.volume` CANNOT exceed 1 (assigning 2
+     * throws IndexSizeError and the value stays 1), so a wider slider on its own would have been
+     * silent in the preview and loud in the export. Above unity now goes through the Web Audio boost
+     * stage in audio-fx-live.js instead, with a limiter, so preview and file agree.
+     * `el.volume` still carries everything UP TO unity — fades, solo, mute and the de-click all live
+     * there and are untouched — and the two multiply back to the value asked for. */
     const setPct = pct => {
-      const f = Math.max(0, Math.min(1, pct / 100));
+      const f = Math.max(0, Math.min(VOL_MAX, pct / 100));
+      const wasBoosted = FM.audioFxLive && FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
       FM.setProp(layer, 'volume', f, FM.time);            // keyframe-aware (writes a kf when animated)
-      const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = f;
+      const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = Math.min(1, f);
+      /* CROSSING unity has to (re)build the routing — the chain does not exist below it, and it must
+       * come back OUT when you drop back down, or a clip stays in Web Audio for no reason. Only on the
+       * crossing, not on every drag step, or each pixel of movement would tear down a live graph. */
+      if (FM.audioFxLive) {
+        const nowBoosted = FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
+        if (nowBoosted !== wasBoosted) FM.audioFxLive.sync(layer);
+        else if (nowBoosted && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, f);
+      }
       FM.requestRender(); if (FM.reconcileAudio) FM.reconcileAudio();
     };
 
@@ -3413,19 +3434,28 @@ window.FM = window.FM || {};
     const values = el('div', 'mt-values');
     const control = el('div', 'mt-control vol-control');
     center.append(values, control);
-    const vbox = mtVBox('Volume', volPct, v => setPct(Math.round(v)), { dp: 0, unit: '%', scrub: 1, min: 0, max: 100 });
+    const vbox = mtVBox('Volume', volPct, v => setPct(Math.round(v)), { dp: 0, unit: '%', scrub: 1, min: 0, max: VOL_MAX * 100 });
     values.appendChild(vbox);
 
     const srow = el('div', 'vol-slider-row');
     const mute = el('button', 'vol-mute');
     const muteIcon = () => { const m = !!layer.muted || volPct() <= 0; mute.classList.toggle('on', m); mute.innerHTML = svgIcon(m ? 'M11 5 6 9H3v6h3l5 4zM17 9l4 6M21 9l-4 6' : 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7'); };
     muteIcon();
-    const slider = document.createElement('input'); slider.type = 'range'; slider.min = '0'; slider.max = '100'; slider.step = '1'; slider.value = String(volPct()); slider.className = 'vol-slider';
-    const paint = () => { const p = volPct(); slider.style.background = 'linear-gradient(90deg, var(--accent) ' + p + '%, var(--line) ' + p + '%)'; };
-    paint();
-    const sync = () => { slider.value = String(volPct()); if (vbox._refresh) vbox._refresh(); muteIcon(); paint(); };
-    slider.addEventListener('input', () => { setPct(parseFloat(slider.value) || 0); if (vbox._refresh) vbox._refresh(); muteIcon(); paint(); });
-    slider.addEventListener('change', () => commitH());
+    /* THE EFFECTS-STYLE SCRUB RULER, not a dot on a line (queue 195) — his words: "The volume slider
+       needs to be like the effects slider and not a dot on a line, because I want to be able adjust
+       the volume up to like 1000%." The two halves are one requirement: an `<input type=range>` maps
+       its whole travel onto its min..max, so at 0–1000% every ordinary level would be squeezed into
+       the first tenth of the bar and 100% would be a few pixels from the left. A scrub ruler has no
+       ends to run out of — the same control the effect params use, and the reason he asked for it. */
+    const slider = tickStrip({
+      min: 0, max: VOL_MAX * 100, step: 1, unit: '%', dflt: 100, read: volPct,
+      apply: v => { setPct(Math.round(v)); if (vbox._refresh) vbox._refresh(); muteIcon(); },
+      release: () => commitH(),
+    });
+    slider.classList.add('vol-strip');
+    // Kept because FM.inspector.syncTransform below calls it every time the playhead moves — on a
+    // keyframed volume the displayed level changes without anyone touching the control.
+    const sync = () => { if (slider._sync) slider._sync(volPct()); if (vbox._refresh) vbox._refresh(); muteIcon(); };
     // Mute is a whole-clip flag (FM.layerVolume returns 0 when set) — NOT a 0-keyframe at the playhead,
     // so it works the same whether or not volume is animated. The slider still shows the real level.
     mute.addEventListener('click', () => { layer.muted = !layer.muted; if (FM.reconcileAudio) FM.reconcileAudio(); FM.requestRender(); muteIcon(); commitH(); });

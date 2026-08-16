@@ -3662,7 +3662,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       home menu. The aura went on the EDITOR's +. The home screen's own "New project" + (`#hm-new`) has
       none — and a coloured button sitting on the coloured home background may lose separation, so that
       is a direction call rather than an oversight.
-- [ ] **195 — The volume control should be a scrub field like the effects sliders, not a dot on a line.**
+- [x] **195 — The volume control should be a scrub field like the effects sliders, not a dot on a line. DONE v8.12.**
       His words: *"The volume slider needs to be like the effects slider and not a dot on a line, because
       I want to be able adjust the volume up to like 1000%."* Two things in one: the CONTROL type (the
       effect params use a drag-to-scrub number field with no fixed end, which is why he wants it) and the
@@ -3728,6 +3728,22 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       5. Tests: preview and export must agree above unity, and a layer at ≤100% must NOT be routed.
       **Careful with #253** (sliders scrub too fast) — it is about this same `tickStrip`, so whatever
       lands there must still let this row cross 0–1000%.
+
+      **DONE v8.12 — all three steps, in the order this entry set out.**
+      1. ✅ **The gain stage**, reusing `audio-fx-live.js` rather than writing a second router, so the
+         irreversible `MediaElementSource` rule stays in one place. A layer at or below 100% is never
+         routed and keeps the native path — that negative is the load-bearing test, and making it
+         route everything turns three tests red.
+      2. ✅ **The control**: the dot-on-a-line is gone, replaced by the effects scrub ruler you asked
+         for by name. The two halves of your sentence were one requirement — a range input maps its
+         travel onto its range, so at 0–1000% every normal level would be squashed into the first
+         tenth of the bar.
+      3. ✅ **The range and the limiter**: 0–1000%, with a limiter (−1.5 dBFS, ratio 20) last in the
+         chain, and **the same stage added to the export** so preview and file agree above unity —
+         which is the disagreement this entry was opened for. The limiter is applied only to boosted
+         clips, so it cannot quietly re-shape mixes you have already made.
+      Verified at 375px. *(One of my own tests was dead: it set `layer.volume` directly and skipped the
+      panel's clamp, so restoring the 100% cap left the suite green. It drags the real control now.)*
 - [ ] **203 — An "Improve quality" action in a clip's ⋯ menu.** His words: *"We should add a button in
       the three dot menu when tapping on a clip to improve quality, so if your video or photo is low
       quality then you can add pixels or whatever to enhance it."*

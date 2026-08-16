@@ -337,7 +337,31 @@ window.FM = window.FM || {};
           chain = null;
         }
       }
-      if (!chain) gain.connect(oac.destination);
+      /* THE SAME LIMITER THE PREVIEW USES (queue 195). Volume can now reach 1000%, and this GainNode
+       * has always been willing to amplify — it was the PREVIEW that could not, because `el.volume`
+       * refuses anything above 1. Now that both can, they have to agree, and the disagreement this
+       * entry was opened for would otherwise just move: preview limited, export clipping.
+       * Only when the clip is actually boosted. A limiter on every export would re-shape mixes that
+       * have never gone near full scale, which is a silent change to every file he has already made.
+       * Placed LAST, after any audio effects — a limiter that is not the final stage can be pushed
+       * back over the ceiling by whatever follows it. */
+      const boosted = FM.audioFxLive && FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
+      let limiter = null;
+      if (boosted) {
+        try {
+          limiter = oac.createDynamicsCompressor();
+          limiter.threshold.value = -1.5; limiter.knee.value = 0;
+          limiter.ratio.value = 20; limiter.attack.value = 0.003; limiter.release.value = 0.12;
+          limiter.connect(oac.destination);
+        } catch (e) { limiter = null; }
+      }
+      const sink = limiter || oac.destination;
+      if (chain) {
+        // re-point the chain's output at the limiter rather than straight at the destination
+        if (limiter) { try { chain.output.disconnect(); chain.output.connect(limiter); } catch (e) {} }
+      } else {
+        gain.connect(sink);
+      }
       node.connect(gain);
       node.start(oStart - from, oStart - layer.start, oEnd - oStart);   // when-in-range, offset-into-clip, play-len
     }

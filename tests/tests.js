@@ -14894,6 +14894,79 @@
     }
   });
 
+  /* ---------------- queue 195: volume up to 1000% ----------------
+   * "The volume slider needs to be like the effects slider and not a dot on a line, because I want
+   * to be able adjust the volume up to like 1000%." The dangerous half is not the number — it is
+   * that exceeding unity requires Web Audio, and creating a MediaElementSource is IRREVERSIBLE. Get
+   * the routing decision wrong and a clip is silent forever. So the load-bearing assertion here is
+   * the NEGATIVE one: at or below 100%, nothing is routed. */
+
+  test('a layer at or below 100% is never routed into Web Audio', { item: 'vol-boost' }, function () {
+    if (!FM.audioFxLive || !FM.audioFxLive.needsBoost) throw new Error('FM.audioFxLive.needsBoost is not exported');
+    const L = FM.makeLayer('video', { name: 'V' });
+    [0, 0.5, 1].forEach(function (v) {
+      L.volume = v;
+      if (FM.audioFxLive.needsBoost(L)) throw new Error('volume ' + v + ' asked for a boost — it must stay on the native el.volume path');
+    });
+    L.volume = 1.0001;   // the epsilon must not trip it either
+    if (FM.audioFxLive.needsBoost(L)) throw new Error('a rounding-width overshoot routed the clip into Web Audio');
+    L.volume = 2;
+    if (!FM.audioFxLive.needsBoost(L)) throw new Error('volume 200% did NOT ask for a boost — it would be silently clamped to 100%');
+    // muted is not a boost, whatever the level underneath says
+    L.volume = 5; L.muted = true;
+    if (FM.audioFxLive.needsBoost(L)) throw new Error('a muted layer asked for a boost stage it cannot use');
+  });
+
+  test('a keyframed volume routes if it goes above unity ANYWHERE', { item: 'vol-boost' }, function () {
+    // The chain cannot be built halfway through playback without a gap in the sound, so the whole
+    // clip is routed if any keyframe exceeds 1 — the peak, not the value at the playhead.
+    const L = FM.makeLayer('video', { name: 'V' });
+    L.volume = { kf: [{ t: 0, v: 0.5 }, { t: 1, v: 0.8 }] };
+    if (FM.audioFxLive.needsBoost(L)) throw new Error('a ramp that never exceeds unity was routed anyway');
+    L.volume = { kf: [{ t: 0, v: 0.5 }, { t: 1, v: 4 }] };
+    if (!FM.audioFxLive.needsBoost(L)) throw new Error('a ramp peaking at 400% was not routed — it would be clamped to 100% for the loud half');
+    if (Math.abs(FM.audioFxLive.boostOf(L) - 4) > 1e-6) throw new Error('the peak came out as ' + FM.audioFxLive.boostOf(L) + ', expected 4');
+  });
+
+  test('the volume control is a scrub ruler that reaches 1000%', { item: 'vol-boost' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('video', { name: 'V' });
+      L.start = 0; L.duration = 4; L.volume = 1;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('volume');
+      await frame();
+      // "not a dot on a line" — the range input is gone, replaced by the effects-style strip
+      if (document.querySelector('.vol-panel input[type="range"]')) throw new Error('the volume control is still an <input type=range> dot-on-a-line');
+      const strip = document.querySelector('.vol-panel .vol-strip');
+      if (!strip) throw new Error('no scrub ruler in the volume panel');
+      /* DRIVE THE REAL CONTROL, do not just assign layer.volume. My first version set the value
+         directly, which skipped the panel's own clamp entirely — putting the 100% cap back left every
+         test green. Dragging the number box is the actual user path (it scrubs, like every other
+         number in the app) and it runs through setPct, which is where the ceiling lives. */
+      const shown = document.querySelector('.vol-panel .mt-vbox-val');
+      if (!shown) throw new Error('no volume value readout');
+      const pd = (t, x) => shown.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, pointerId: 1, buttons: 1 }));
+      pd('pointerdown', 0); pd('pointermove', 40); pd('pointermove', 1600); pd('pointerup', 1600);
+      await frame();
+      const got = FM.layerVolume(L, 0);
+      if (!(got > 1.5)) throw new Error('dragging the volume box to its far end reached only ' + Math.round(got * 100) + '% — the control is still capped at 100%');
+      L.volume = 10; FM.inspector.refresh(); await frame();
+      const shown2 = document.querySelector('.vol-panel .mt-vbox-val');
+      const n = parseFloat(String(shown2 && shown2.textContent).replace(/[^0-9.]/g, ''));
+      if (!(n >= 999)) throw new Error('the panel shows ' + (shown2 && shown2.textContent) + ' for a 10x layer — the readout is still capped near 100%');
+      // …and it must ask for the boost stage, or it would be inaudible above unity
+      if (!FM.audioFxLive.needsBoost(L)) throw new Error('the layer is at 1000% but was not routed for boost — the preview would still play it at 100%');
+      // the strip's ruler must span the whole range too, or the scrub cannot reach what the box shows
+      const ruler = strip.querySelector('.fx-scrub-ticks');
+      if (!ruler) throw new Error('the scrub ruler has no tick track');
+      if (!(parseFloat(ruler.style.width) > 400)) throw new Error('the ruler is only ' + ruler.style.width + ' wide — it is still built for a 0-100 range');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
   /* ---------------- queue 184: speed to the playhead ----------------
    * "Go on the timeline to exactly where you want it to last to, then press a button and it will
    * change the speed to go exactly to that point." The whole value is that the number is EXACT, so
