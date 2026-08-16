@@ -66,11 +66,21 @@ This is easy to get wrong, because a request he has just typed feels urgent and 
 weeks ago does not. It is still wrong. The whole point of the list is that nothing rots at the bottom
 while newer, shinier things jump ahead of it — which is exactly what had been happening.
 
-To find the next item, don't eyeball the file — it is not in numeric order:
+To find the next item, don't eyeball the file and **don't grep it either**:
 
 ```bash
-grep -n "^- \[ \] \*\*[0-9]" REQUESTS.md | sed 's/^\([0-9]*\):- \[ \] \*\*\([0-9]*\).*/\2 (line \1)/' | sort -n | head
+./tools/next.sh
 ```
+
+**The grep that used to live here was wrong, and wrong in the exact way this file warns about.** It
+matched `^- \[ \] \*\*[0-9]`, and that `[0-9]` is a silent filter: **ten open items have no number**
+(they predate the numbering) and so were invisible to every session that used it — not deprioritised,
+unreachable. One is a measured phone bug where six effects' option rows run off screen and the last
+options cannot be tapped. Nothing rots at the bottom was the whole point of the list, and the tool
+meant to enforce it was the thing causing it.
+`tools/next.sh` lists unnumbered items FIRST (they are the oldest), then numbered ones in order, and
+prints a total so a shrinking list is visible. It also parses letter-suffixed numbers like `31b` —
+the first version of the script mis-sorted that one to the bottom, which is the same bug again.
 
 The only things that jump the queue are what HE explicitly says to do now ("do this asap", "right now
 you need to…"), and a genuine emergency like a broken build. If an old item is blocked on a decision
