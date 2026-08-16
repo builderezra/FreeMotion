@@ -4438,6 +4438,35 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       Worth noting the decode window above is a plausible part of what he calls lag: while a clip is
       still decoding, the app is competing with the decoder for the same device.
 
+      **★ HIS FIRST REAL MEASUREMENT, 16 Aug — the thing this entry has needed since it opened.**
+      Verbatim:
+      ```
+      FRAMES   44.6 fps average
+               median gap 17.0ms · p95 38.0ms · worst 494.0ms
+               14 of 446 frames were late (over 42ms)
+      QUALITY  tier 0 (6 available) · mode smooth
+               app-measured render 0.34ms · app-measured gap 0ms
+      CANVAS   762k pixels
+      PROJECT  3024×4032 @30fps · 8 layers (6 shape, 1 video, 1 image) · 2 effects
+      DEVICE   screen 440×956 @dpr3 · 4 cores · Safari · iOS
+      ```
+      **Three findings, and the first is probably the whole story.**
+      1. **The PROJECT is 3024×4032 — 12.2 megapixels.** That is a photo's dimensions, almost certainly
+         inherited from an imported image, on a 4-core phone. Every frame composites 12.2M pixels. No
+         amount of tuning the render path fixes a canvas that size; this is very likely the cause of the
+         lag reported across #95, #125 and #202, and it is a *project setup* problem rather than an
+         engine one. **Needs a product answer, not a perf fix** — a warning when a project is created
+         far larger than any screen or export will use, and/or an offer to scale it down.
+      2. **`app-measured gap 0ms` is a BUG.** v7.57 added gap-watching precisely so the ladder could see
+         GPU and decode cost that its own render clock cannot. His report shows real gaps — p95 38ms,
+         worst 494ms, 14 late frames — while the app's own gap metric reads **zero**. So the ladder is
+         blind again, still sat on **tier 0 of 6** in *smooth* mode, and never shed quality through
+         half-second freezes. That is exactly the shape of "nothing much ever gets resolved" from #125.
+      3. **The readout's own READ line was wrong.** It printed *"this sample looks healthy"* because the
+         MEDIAN (17ms) is fine, while ignoring 14 late frames and a 494ms worst case. A report that
+         reaches a confident wrong verdict is the precise failure this feature exists to end, so the
+         heuristic has to weigh the tail and the late count, not just the middle.
+
       **THE READOUT IS BUILT — v8.13.** This entry asked for it in its own last line, and #125 and #95
       are both blocked on the same thing, so it is done rather than guessed around again.
       **Settings → "What's slow" → Measure.** Use the app normally for ten seconds — do the thing that
