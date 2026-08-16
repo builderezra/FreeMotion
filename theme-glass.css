@@ -187,7 +187,7 @@ html[data-theme="glass"] .addmenu-card.addmenu-card--rainbow {
     linear-gradient(95deg,
       rgba(255, 90, 90, .26) 0%, rgba(255, 175, 70, .26) 20%, rgba(245, 225, 90, .24) 38%,
       rgba(110, 215, 130, .30) 56%, rgba(90, 175, 255, .40) 76%, rgba(185, 120, 255, .44) 100%);
-  border-color: rgba(255, 175, 70, .34);
+  border-color: transparent;
 }
 html[data-theme="glass"] .addmenu-card.addmenu-card--rainbow:hover {
   background:

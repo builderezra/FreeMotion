@@ -696,15 +696,26 @@ window.FM = window.FM || {};
    * it the exact same as the shape menu." So a different family from Shape's — cooler and earthier,
    * no violet-to-pink run — and the BACKDROP alpha is dropped separately in CSS so the icons stay
    * bright while the plate recedes. */
+  /* VIVID hues, muted PLATE — the correction to v8.20 (queue 258). Ezra: "I wanted the colours of the
+   * background for each option more faint, not the actual icon itself, keep the background colours but
+   * make the icons pop like they used to."
+   * He is right and the mistake was mine. His #210 wording was "the main icon can stay bright but the
+   * backdrop more subtle" — TWO things — and I collapsed them into one by muting the palette itself.
+   * Since the icon takes its colour from the same --am-tint, muting the palette muted the icons too;
+   * his v7.30-against-v8.24 screenshots show it plainly.
+   * The tint is vivid again, and the plate is kept faint by the `--soft` class's low alpha instead. One
+   * hue per card, two different jobs: the icon gets it at full strength, the backdrop at 5.5%.
+   * Still deliberately NOT Shape's palette — different hues in a different order, because "we don't
+   * want it the exact same as the shape menu" was the other half of #210. */
   var TINTS_ELEMENT = [
-    '108, 176, 255',   // sky
-    '96, 214, 190',    // sea
-    '176, 200, 120',   // moss
-    '230, 176, 108',   // sand
-    '150, 160, 255',   // dusk
-    '120, 205, 232',   // ice
-    '214, 158, 190',   // clay
-    '160, 190, 150',   // sage
+    '86, 214, 255',    // cyan
+    '236, 122, 214',   // magenta
+    '150, 230, 110',   // lime
+    '255, 186, 74',    // amber
+    '132, 142, 255',   // indigo
+    '255, 118, 140',   // rose
+    '84, 226, 190',    // mint
+    '110, 168, 255',   // azure
   ];
   var TINTS_MEDIA = ['150, 160, 176', '240, 200, 90', '120, 190, 240'];
   var TINTS_AUDIO = ['150, 160, 176', '160, 140, 235', '235, 70, 70'];

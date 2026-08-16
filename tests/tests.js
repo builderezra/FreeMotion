@@ -15747,6 +15747,86 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 257 + 258: correcting v8.20's add-menu colour ----------------
+   * #258 is a regression I introduced. His #210 wording was "the main icon can stay bright but the
+   * backdrop more subtle" — TWO things — and I collapsed them into one muted palette, which dulled
+   * the icons along with the plate. The two halves are now asserted separately so they cannot be
+   * collapsed again. */
+
+  test('Elements icons are vivid while their backdrops stay faint', { item: 'addmenu-colour' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 140));
+    return atPhoneWidth(async function () {
+      const fab = document.getElementById('add-fab');
+      if (!fab) throw new Error('no #add-fab');
+      fab.click(); await frame();
+      try {
+        const t = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab'))
+          .filter(function (x) { return /element/i.test(x.textContent); })[0];
+        if (!t) throw new Error('no Elements tab');
+        t.click(); await frame();
+        const cards = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-card')).slice(0, 4);
+        if (!cards.length) throw new Error('no Elements cards to measure');
+        const sat = function (c) { const m = String(c).match(/(\d+),\s*(\d+),\s*(\d+)/); if (!m) return -1;
+          const v = [+m[1], +m[2], +m[3]]; return Math.max.apply(null, v) - Math.min.apply(null, v); };
+        cards.forEach(function (card) {
+          const ic = card.querySelector('.addmenu-ic');
+          if (!ic) return;
+          const s2 = sat(getComputedStyle(ic).color);
+          /* "make the icons pop like they used to". v8.20's muted palette put these around 60-90;
+             the vivid ones measure 110-170. 100 is comfortably between, and far enough from grey
+             that a genuinely washed-out palette cannot pass. */
+          if (s2 < 100) throw new Error('an Elements icon is washed out (saturation ' + s2 + ') — he asked for the ICONS to pop and only the backdrop to be faint');
+        });
+        // …and the plate must still be faint, or this trades one complaint for the other
+        const bg = getComputedStyle(cards[0]).backgroundImage + ' ' + getComputedStyle(cards[0]).backgroundColor;
+        const alphas = (bg.match(/0\.\d+(?=\))/g) || []).map(Number);
+        if (alphas.length && Math.max.apply(null, alphas) > 0.2) {
+          throw new Error('the Elements backdrop is at alpha ' + Math.max.apply(null, alphas) + ' — he asked for it fainter, not bolder');
+        }
+      } finally {
+        const sh = document.getElementById('add-sheet');
+        if (sh) sh.classList.remove('open');
+        document.body.classList.remove('add-open');
+      }
+    }, 375);
+  });
+
+  test('the Sound effects card has a white icon and a gradient ring', { item: 'addmenu-colour' }, async function () {
+    /* "The colour of the button for the sound effects should be white and the border colour around
+       the rainbow should be white too, not solid white, give it some gradient."
+       The ring is a masked pseudo-element. The obvious two-background trick was tried and is wrong
+       here: this card's fill is translucent so it reads over the glass panel, and the border-box
+       layer showed through the WHOLE card, washing the rainbow to a pale smear. */
+    const frame = () => new Promise(r => setTimeout(r, 140));
+    return atPhoneWidth(async function () {
+      document.getElementById('add-fab').click(); await frame();
+      try {
+        const t = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab'))
+          .filter(function (x) { return /audio/i.test(x.textContent); })[0];
+        t.click(); await frame();
+        const sfx = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-card'))
+          .filter(function (c) { return /sound effects/i.test(c.textContent); })[0];
+        if (!sfx) throw new Error('no Sound effects card');
+        const ic = sfx.querySelector('.addmenu-ic');
+        const col = getComputedStyle(ic).color;
+        const m = col.match(/(\d+),\s*(\d+),\s*(\d+)/);
+        if (!m || +m[1] < 240 || +m[2] < 240 || +m[3] < 240) throw new Error('the Sound effects icon is not white: ' + col);
+        const ring = getComputedStyle(sfx, '::after');
+        if (!ring.backgroundImage || ring.backgroundImage === 'none') throw new Error('there is no gradient ring around the rainbow');
+        if (!/gradient/.test(ring.backgroundImage)) throw new Error('the ring is a flat colour — he asked for "not solid white, give it some gradient"');
+        const mask = ring.maskImage || ring.webkitMaskImage || '';
+        if (!/gradient/.test(mask)) throw new Error('the ring is not masked to the border — it would cover the whole card');
+        // the card's own fill must still be the rainbow, not washed out by the ring
+        const stops = (getComputedStyle(sfx).backgroundImage.match(/rgba?\(/g) || []).length;
+        if (stops < 4) throw new Error('the rainbow fill was lost: only ' + stops + ' colour stops');
+      } finally {
+        const sh = document.getElementById('add-sheet');
+        if (sh) sh.classList.remove('open');
+        document.body.classList.remove('add-open');
+      }
+    }, 375);
+  });
+
   /* ---------------- queue 254: keyframed edit points (the interpolator) ----------------
    * "edit points has literally no keyframe functionality. add it." This is the hard half — evaluating
    * an animated point set — built on the pen masks' own path interpolator, which has keyframed a

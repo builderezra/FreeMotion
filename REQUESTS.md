@@ -1730,7 +1730,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Check the ⋯ menu's Delete entry at the same time — if that is still neutral on the phone the two
       doors to the same action disagree.
 
-- [ ] **258 — Elements: the BACKGROUNDS should be fainter, but the ICONS should pop like they used to.
+- [x] **258 — Elements: the BACKGROUNDS should be fainter, but the ICONS should pop like they used to.
       (16 Aug, with a before/after pair of phone screenshots.)** His words, verbatim: *"In this section
       I wanted the colours of the background for each option more faint, not the actual icon itself,
       keep the background colours but make the icons pop like they used to"*.
@@ -1748,7 +1748,14 @@ better still, keep working inside the turn rather than parking work for a later 
       **Do this with #257** — both are corrections to v8.20's add-menu colour work and touch the same
       rules, and doing them apart risks a third round.
 
-- [ ] **257 — Sound effects: white icon, and a gradient white border round the rainbow. (16 Aug, with a
+      **DONE v8.36, together with #257 as this line said.** You were right and the mistake was mine: your
+      #210 wording had TWO halves and I collapsed them. The hues are vivid again (cyan, magenta, lime,
+      amber, indigo, rose, mint, azure — still not Shape's) and the backdrop stays faint through the
+      low-alpha plate instead of through a muted palette. Measured: icon saturation 110–170, where the
+      muted set sat at 60–90. The two halves are asserted separately now so they cannot be collapsed
+      again.
+
+- [x] **257 — Sound effects: white icon, and a gradient white border round the rainbow. (16 Aug, with a
       phone screenshot.)** His words, verbatim: *"The colour of the button for the sound effects should
       be white and the border colour around the rainbow should be white too, not solid white, give it
       some gradient"*.
@@ -1762,6 +1769,14 @@ better still, keep working inside the turn rather than parking work for a later 
       Watch the glass theme: v8.20 established that `theme-glass.css` restates card backgrounds at
       (0,2,0) and silently beat the rainbow until it was restated there too. Whatever lands here needs
       the same treatment or it will look right in one theme and wrong in the one he actually uses.
+
+      **DONE v8.36.** The icon is white — the only colour that sits on all six hues — and the ring is a
+      white gradient, bright at the top-left and fading round.
+      **The obvious way to do that border is wrong here, and I built it before noticing.** Two
+      backgrounds (fill to the padding box, gradient to the border box) is the standard trick, but this
+      card's fill is translucent so it reads over the glass panel — so the border-box layer showed
+      through the WHOLE card and washed the rainbow to a pale smear. It is a masked pseudo-element ring
+      now, which paints the 1px frame and nothing else.
 
 - [x] **256 — The microphone test is STILL flaky, after #226 was marked fixed at v7.98. DONE v8.35. (16 Aug.)**
       *(Found by me, twice in one day.)* `voice: the microphone is handed back on EVERY exit path` failed

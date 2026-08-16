@@ -5700,3 +5700,38 @@ body.fm-pushing #toast { z-index: 213; }
     body.layout-studio #inspector-panel.am-snap { animation: none; border-top-color: var(--accent); }
   }
 }
+
+/* ---- Sound effects: white icon, gradient white border (queue 257) -----------------------------
+   Ezra: "The colour of the button for the sound effects should be white and the border colour around
+   the rainbow should be white too, not solid white, give it some gradient."
+   The ICON goes white because it is the one colour that sits on all six hues — it was inheriting the
+   card's representative tint (a pink/orange stand-in for a gradient no single triple can express) and
+   fighting the rainbow behind it.
+   The BORDER is a gradient, which a 1px border cannot be on its own. Two backgrounds do it: the
+   rainbow clipped to the padding box, a white-to-transparent sweep clipped to the border box, and a
+   transparent border for the second to show through. That keeps the rounded corners, which
+   `border-image` would not without extra work. */
+.addmenu-card--rainbow > .addmenu-ic,
+html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; }
+.addmenu-card--rainbow > .addmenu-lbl { color: rgba(255, 255, 255, .92); }
+
+/* The white GRADIENT ring (queue 257). "the border colour around the rainbow should be white too, not
+   solid white, give it some gradient."
+   A 1px border cannot itself hold a gradient. The obvious trick — two backgrounds, the fill clipped to
+   the padding box and the gradient to the border box — was tried and is WRONG here: this card's fill
+   is deliberately translucent so it reads over the glass panel, so the border-box layer showed through
+   the whole card and washed the rainbow out to a pale smear. Measured by looking at it.
+   A masked ring paints the edge and nothing else: a full-size gradient with a mask that excludes the
+   content box, leaving only the 1px frame. Rounded corners come free from `border-radius: inherit`. */
+.addmenu-card--rainbow { position: relative; }
+.addmenu-card--rainbow::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: linear-gradient(115deg,
+    rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .28) 38%,
+    rgba(255, 255, 255, .70) 68%, rgba(255, 255, 255, .18) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
