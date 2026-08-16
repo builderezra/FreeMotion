@@ -1721,6 +1721,61 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **263 — Kaleidoscope: dragging the Centre sliders to either end erases the layer. (Found in the
+      16 Aug hunt, not reported by him.)** Measured: with only the shape layer visible, moving **Centre Y
+      to 0 or to 100** — or **Centre X to 100** — leaves ZERO pixels different from the background. The
+      layer is simply gone, with no hint why. Default centre renders fine.
+      Mechanism is in `js/compositor.js:4635`: after `a = Math.abs(a - slice/2)` the sampled angle is
+      always a small POSITIVE angle, so every pixel samples a wedge pointing down-and-right from the
+      centre. Park the centre on an edge and that wedge is off-canvas, so it samples nothing.
+      **Judgement call in the fix:** a kaleidoscope pivoting at the frame edge legitimately has less to
+      mirror, so "it goes dark" is arguably honest. What is NOT defensible is a slider whose own end
+      stop silently deletes your layer. Either clamp the centre to a range that always has content, or
+      wrap the sample back into frame. Worth asking him which he'd expect before choosing.
+
+- [ ] **262 — Hot Colour (thermal): setting Low at or above High turns the layer into a flat black
+      rectangle. (Found in the 16 Aug hunt.)** Two independent sliders, nothing stops them crossing.
+      Measured on a shape whose real colour is rgb(53,220,175):
+      | Low / High | what the layer becomes |
+      |---|---|
+      | 0 / 100 (default) | rgb(236,79,31) — correct heat map |
+      | 50 / 50 | **rgb(0,0,0) — flat black, every pixel** |
+      | 80 / 20 (crossed) | **rgb(40,0,141) — flat purple, every pixel, all detail gone** |
+      `js/compositor.js:2844`: `span = (hi-lo)/100; inv = span === 0 ? 0 : 1/span`. The `span === 0`
+      guard stops a divide-by-zero but then maps EVERY luminance to ramp position 0, which is black in
+      four of the six palettes. A NEGATIVE span isn't guarded at all — it inverts, clamps, and flattens.
+      On a black canvas the result reads as "my layer disappeared", not "I crossed two sliders".
+      **Check the sibling while in there:** `pixelsort` has the same low/high pair (0..1) and the same
+      crossing risk. I could NOT verify it — my test shape is a single flat colour, so "detail
+      destroyed" is unmeasurable on it; it needs a textured layer. `counter`'s from/to also cross, but
+      there that is the feature (counting down), so leave it alone.
+
+- [ ] **261 — Halftone Lines goes SOLID BLACK in the preview while the export is fine. (Found in the
+      16 Aug hunt — a preview/export mismatch, the class this codebase keeps getting bitten by.)**
+      Measured, same project (1080×1920), same effect, size 3, counting white pixels:
+      | rendered at | white px | result |
+      |---|---|---|
+      | 1080×1920 (full / export) | 64,800 | correct stripes |
+      | 540×960 (half) | 24,300 | correct stripes |
+      | **360×640 (preview)** | **0** | **solid black — the effect has collapsed** |
+      `js/compositor.js:3049`: `htlSize = Math.max(1, Math.round(htlSize * (ps||1)))`. At a preview
+      scale of 1/3, size 3 rounds to **1**, so `rowMod` is always 0, the threshold always beats it, and
+      every pixel is written black. The stripes cannot exist at a period of one pixel.
+      **Why this matters more than it looks:** `ps` is not fixed — the QUALITY LADDER lowers it under
+      load. So a halftone layer can look right, and then turn into a black rectangle mid-playback on his
+      phone as the ladder drops a tier, while the exported file is perfectly fine. That is close to
+      unreportable from the user's side ("it went black sometimes"), which is exactly why the sweep
+      found it and he never did.
+      Fix direction: floor the SCALED size at 2 (a stripe needs two rows to be a stripe), or scale the
+      threshold rather than the period so the effect degrades in contrast instead of collapsing.
+
+- [ ] **260 — Bug and issue hunt, plus ideas. (16 Aug.)** His words, verbatim: *"When you finish the last
+      thing, do a bug and issue hunt. Also look for potential ideas and things to do. when all is said
+      and done, ill do what u need me to. Also pause so i can compact the chat."*
+      Asked for straight after v8.39 shipped, so it jumps the queue by his own rule ("do this now").
+      Anything the hunt finds gets its OWN numbered entry below rather than living inside this one —
+      a hunt that files its findings into a single bullet is a hunt whose findings rot.
+
 - [x] **259 — Phone: make the trash icon red. DONE v8.37. (16 Aug, with a screenshot.)** His words, verbatim:
       *"Make the trash icon red."* Screenshot is the PHONE top bar — back · "Laurel" · version chip ·
       duplicate · trash · ⋯ — where the bin is the same plain white as everything beside it.
@@ -2074,6 +2129,21 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **264 — Land the parameter-extremes sweep as a permanent test. (Idea from the 16 Aug hunt.)**
+      The hunt that found 261/262/263 was one script: render every one of the **197 effects** with a
+      SINGLE parameter pushed to its min, then its max, and flag any combination where the layer stops
+      differing from the background at all. It found three real bugs on its first run and took seconds.
+      Nothing in the suite covers this today — the existing effect tests use DEFAULT parameters, which
+      is the one setting that is always well-trodden.
+      **Two traps to avoid, both of which I hit while writing it** and which would have made it a green
+      test that proves nothing: (1) the baseline must be a render with the layer's `visible` flag OFF —
+      comparing against "canvas has opaque pixels" always passes, because the background fills the frame;
+      (2) it must vary ONE parameter at a time, or every finding is an unreproducible corner combination
+      instead of "this specific slider does it".
+      Legitimate vanishers (dissolve at 100%, wipe at 0%, chromakeypro at max, brightness at 0…) need an
+      allow-list, and that list is the valuable part — anything NEW that starts erasing layers is then a
+      real regression rather than noise.
+
 - [ ] **Check I changed the right "Presets".** v6.30 gave live per-layer previews to the preset rows
       in the EFFECTS BROWSER. The inspector category card literally named **Presets** is a different,
       older system (saved effect stacks, no tiles, empty on a fresh install) and is untouched. If the
