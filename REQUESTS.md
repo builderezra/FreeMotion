@@ -2884,7 +2884,9 @@ better still, keep working inside the turn rather than parking work for a later 
       9. [ ] On PC you **click the line itself** to open the add menu, rather than the far-right grip.
       10. [~] The line can be dragged up and down too. *(The dragging is built and shared — it moves one
               number, `FM.addAt`. The PC LINE it applies to is not built yet, so this ticks with clause 7.)*
-      11. [ ] **Copy/paste also lands at that position.**
+      11. [x] **Copy/paste also lands at that position.** **v8.86** — `pasteClipboard`'s default index is
+              the Add row's, so paste and add agree about where things go. An explicit index still wins,
+              which is what the ⧉ Paste-Layer button's arrow passes, so choosing by hand is unaffected.
       12. [ ] **Keyboard shortcuts to send it straight to the top or the bottom**, so you never have to
               hunt for it and drag.
 
@@ -2936,8 +2938,14 @@ better still, keep working inside the turn rather than parking work for a later 
         finger crosses**, so the element that was grabbed is gone by the second move. The pointer
         listeners live on `window` and the "being dragged" look is re-applied to whatever replaces it —
         without that it moved correctly and never looked grabbed.
-      **Left for stage C:** the PC line (7, 8, 9, and 10 with it), copy/paste landing at the row (11 —
-      a second site, `js/app.js:2250`, noted below), and the top/bottom shortcuts (12).
+      **Clause 11 shipped v8.86** — one line, once the index existed. Correcting my own note below while
+      I am here: the site I had recorded as paste (`js/app.js:2250`) is **duplicate**, which inserts
+      beside the ORIGINAL and is right to; the real one is `FM.pasteClipboard`, whose `insertIndex`
+      argument simply defaulted to 0.
+      **Left for stage C: the PC half only** — the thin line between layers (7), growing on hover (8),
+      clicking it to open the menu (9), dragging it (10, which is the same one number this already
+      moves), and the keyboard shortcuts to fling it to the top or bottom (12 — they pair with the PC
+      line, since a shortcut that moves an invisible row is no use).
 
       **GROUNDWORK FOR STAGE B, found and verified 17 Aug — this is the part that decides whether it is
       a big job or a small one, and it is a small one.** Clause 5 needs exactly ONE function changed:

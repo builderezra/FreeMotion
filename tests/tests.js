@@ -17579,6 +17579,46 @@
     }
   });
 
+  test('paste lands where the Add layer is, not always on top (queue 294 clause 11)', { item: 'add-row' }, async function () {
+    /* "when you copy and paste stuff it could go there like I would go to wear that liners" — the
+     * dictation is garbled but the sentence before it settles it: the Add row marks where things go,
+     * and paste is one of the things. An explicit index still wins, because the ⧉ Paste-Layer button's
+     * arrow lets you choose a position by hand and that must keep working. */
+    if (typeof FM.pasteClipboard !== 'function' || typeof FM.copySelection !== 'function') {
+      throw new Error('FM.pasteClipboard / FM.copySelection are not exported — this test would skip and say nothing');
+    }
+    const layers0 = FM.scene.layers.slice(), clip0 = FM.clipboard, at0 = FM.addAt, sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0; FM.addAt = 0;
+      ['A', 'B', 'C'].forEach(function (n) {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#888' });
+        L.start = 0; L.duration = 4; FM.insertLayer(L);
+      });
+      const names = () => FM.scene.layers.map(function (l) { return l.name; }).join(',');
+      const src = FM.scene.layers[0];
+      FM.selectLayer(src.id);
+      if (!FM.copySelection()) throw new Error('copying the selected layer put nothing on the clipboard');
+
+      FM.addAt = 2;
+      await FM.pasteClipboard();
+      const after = FM.scene.layers.map(function (l) { return l.name; });
+      if (after.length !== 4) throw new Error('paste produced ' + after.length + ' layers from ' + names());
+      if (after[2] === undefined || !/copy/i.test(after[2])) {
+        throw new Error('with the Add row at index 2 the pasted layer landed at ' + after.join(',') + ' — it is supposed to arrive where the row is, like everything else you add');
+      }
+
+      /* An explicit index still overrides it, or the ⧉ button's arrow silently stops choosing. */
+      FM.addAt = 2;
+      await FM.pasteClipboard(0);
+      if (!/copy/i.test(FM.scene.layers[0].name)) throw new Error('an explicit paste index no longer wins over the Add row');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.clipboard = clip0; FM.addAt = at0;
+      FM.selectLayer(sel0 || null); FM.refreshAll();
+      await sleep(150);
+    }
+  });
+
   test('the Add layer can be dragged by its grip, and the grip does not steal the tap (queue 294)', { item: 'add-row' }, async function () {
     /* "you can press the three lines on the right side drag it up and down" — the same grip every other
      * row has, in the same place. The second half of the title is the trap: the row is one big tap

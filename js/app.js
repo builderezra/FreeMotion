@@ -2321,7 +2321,8 @@ window.FM = window.FM || {};
     return FM.clipboard.length;
   };
   // insertIndex: z-position to drop the pasted layers at (0 = top, layers.length = bottom).
-  // Omitted → top, matching duplicate/add. The ⧉ Paste-Layer split-button's arrow passes a chosen index.
+  // Omitted → wherever the Add row is sitting (queue 294 clause 11), which is also where a plain add
+  // goes, so paste and add agree. The ⧉ Paste-Layer split-button's arrow still passes a chosen index.
   FM.pasteClipboard = async function (insertIndex) {
     if (!FM.clipboard || !FM.clipboard.length) return;
     const idMap = Object.create(null);   // null-proto: a crafted parent/target id of 'constructor' must not "remap" to a prototype function
@@ -2345,7 +2346,13 @@ window.FM = window.FM || {};
       copy.start = Math.max(0, base + (orig - anchor));
       if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(copy, copy.start - orig);   // keyframes are absolute time — pasted animation must ride to the playhead
     });
-    let insertAt = (typeof insertIndex === 'number' && insertIndex >= 0) ? Math.min(insertIndex, FM.scene.layers.length) : 0;   // TOP of the z-stack by default (layers[0] = top)
+    /* Default: WHERE THE ADD ROW IS (queue 294, clause 11 — "when you copy and paste stuff it could go
+       there like I would go to wear that liners"). An explicit index still wins, which is what the ⧉
+       Paste-Layer split-button's arrow passes, so choosing a position by hand is unaffected. Inside
+       Edit Group the flat index means nothing — same reason `insertLayer` skips it there — so paste
+       falls back to the top. */
+    const _dflt = FM.groupContext ? 0 : (FM.clampAddAt ? FM.clampAddAt() : 0);
+    let insertAt = (typeof insertIndex === 'number' && insertIndex >= 0) ? Math.min(insertIndex, FM.scene.layers.length) : _dflt;
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.
       if (copy.parent) {
