@@ -151,11 +151,12 @@ window.FM = window.FM || {};
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
   // added/updated effects lead — prepend on every effect add/update, trim from the tail (~12 max).
-  // ONE EXCEPTION, found by the suite at v8.98: nothing from MEDIA_ONLY (or TEXT_ONLY) belongs
+  // ONE EXCEPTION, found by the suite at v8.98 and walked into AGAIN at v9.03 (the text effects
+  // that time — so the comment did not save me and the test did): nothing from MEDIA_ONLY or TEXT_ONLY belongs
   // here. The carousel does not filter by appliesTo — it offers every card and `guardedAdd`
   // refuses with a toast — so a media-only effect at the head of the row is two cards that a
   // shape or text layer can only answer with 'That effect needs a video or image layer'.
-  FM.FX_FEATURED = ['radialrepeat', 'gridrepeat', 'mirrortile', 'emboss', 'bumpmap', 'edge', 'halftone', 'halftonelines', 'crosshatch', 'sketch', 'grid', 'checker'];
+  FM.FX_FEATURED = ['radialrepeat', 'gridrepeat', 'mirrortile', 'emboss', 'bumpmap', 'edge', 'halftone', 'halftonelines', 'crosshatch'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],

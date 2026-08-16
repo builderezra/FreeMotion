@@ -3792,6 +3792,14 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 18, v9.03:* the text-string effects. The typewriter could only reveal one LETTER at a
+      time (half-words on screen every frame — wrong for captions); it does words and lines now, from
+      either end or outward from the middle, with a caret. Timecode could only count UP from zero at
+      the clip's start — no offset, no countdown, no way to read project time; all three now work.
+      Text Spacing threw away the layer's own tracking instead of offsetting it.
+      **Still open from that same request:** word spacing and line height. They need the text renderer
+      to carry two more fields and the line-breaking loop to honour them — a layout change, not a
+      slider, so I have left it rather than bolt it on badly.
       *Round 17, v9.02:* the repeat warps. Grid Repeat could only build a square wall of identical
       tiles with a hard seam at every join; Radial Repeat's kaleidoscope seam was stuck at 0° and its
       wedges butt-joined; Mirror Tile's reflection line was welded to the frame corner. All three fixed
@@ -5131,6 +5139,29 @@ better still, keep working inside the turn rather than parking work for a later 
       would otherwise land outside the drawing. The layer keeps its id, stack position and selection.
       Also reset on `startDraw`, not just `stop()`: without that a second drawing would silently append
       its strokes to the first drawing's layer, which is a worse bug than the one being fixed.
+
+- [ ] **296 — The + on the create-layer button is not centred in its circle.** (17 Aug.) His words,
+      verbatim: *"The plus button on the create layer isn't centred inside the circle."*
+      Arrived in the same message as 297.
+
+- [ ] **297 — Inside an effect's sub-menu there should be a Done button.** (17 Aug.) His words,
+      verbatim: *"When adding effects the done button should be there if ur inside one of the effects
+      sub menus"*. Arrived in the same message as 296.
+
+- [ ] **298 — The Add-layer marker still does not put layers where it points.** (17 Aug.) His words,
+      verbatim: *"The tap to add layer button doesn't actually make layers land below it, they just go
+      to the top still"*.
+      ⚠️ **This is against 294, which I marked DONE at v8.88 with all 15 clauses ticked.** So either the
+      insert position never worked outside the case I tested, or it works for some layer types and not
+      others, or it regressed since. Treat the DONE as unproven and re-check the real path — `FM.addAt`
+      / `FM.clampAddAt` / `FM.insertLayer` — against what the button actually does on HIS phone layout,
+      not the one I happen to have open. That is the v7.79 lesson and it is the second time.
+
+- [ ] **299 — The Media and Audio sheets open taller than the other tabs.** (17 Aug, two screenshots
+      at v9.02 — Shape tab vs Media tab, the Media sheet clearly starting higher up the screen.) His
+      words, verbatim: *"The media and audio screens open taller than the others, this can be fixed by
+      removing one layer of recent clips added, instead of three rows just two"*.
+      He has given the fix as well as the report: show TWO rows of recent clips, not three.
 
 ## Done
 

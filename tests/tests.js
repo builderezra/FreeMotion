@@ -18186,6 +18186,89 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 18: the text-string effects ---------------- */
+
+  /* A TEXT_FX is neither a pixel kernel nor a warp: it takes (st, params, t, info) and mutates
+   * st = { text, letterSpacing } BEFORE layout. So it is asserted on strings, which is the strongest
+   * form available here — an exact expected string, not a count of anything. */
+  var TXT_FIXTURE = 'The quiet house\non Marine Terrace\nsold in nine days';
+  function textFx(type) {
+    var f = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX && FM._FX_TABLES.TEXT_FX[type];
+    if (!f) throw new Error('FM._FX_TABLES.TEXT_FX.' + type + ' is not reachable — the suite cannot test the real text effect');
+    return f;
+  }
+  function textRun(type, params, t, info) {
+    var st = { text: TXT_FIXTURE, letterSpacing: 7 };
+    textFx(type)(st, params, t == null ? 0.5 : t, info || { localT: 12.5, fps: 30 });
+    return st;
+  }
+
+  /* Reveal by LETTER is the only unit the effect had, and it is the wrong default for a caption: it
+   * puts half-words on screen every frame. The assertions are exact strings, and the two that matter
+   * most are the boundaries — at full progress the original must come back CHARACTER FOR CHARACTER
+   * (a tokeniser that drops or doubles a separator fails here and nowhere else), and the legacy path
+   * must be untouched across the whole progress range rather than at one sampled value. */
+  test('effects: Text Progress can reveal by word and line, from either end', { item: 'fx-text' }, function () {
+    for (var q = 0; q <= 1.0001; q += 0.05) {
+      var legacy = TXT_FIXTURE.slice(0, Math.round(TXT_FIXTURE.length * Math.min(1, q)));
+      var got = textRun('textprogress', { progress: Math.min(1, q) }).text;
+      if (got !== legacy) throw new Error('at progress ' + q.toFixed(2) + ' the default path returned ' + JSON.stringify(got) + ' instead of the legacy ' + JSON.stringify(legacy));
+    }
+    var byWord = textRun('textprogress', { progress: 0.5, unit: 1 }).text;
+    if (/\S$/.test(byWord) === false || /\s\S*$/.test(byWord) && byWord !== byWord.replace(/\s+$/, ''))
+      throw new Error('word reveal ended on whitespace: ' + JSON.stringify(byWord));
+    if (byWord !== 'The quiet house\non Marine') throw new Error('word reveal at 0.5 gave ' + JSON.stringify(byWord));
+    if (/house\no$|Marin$/.test(byWord)) throw new Error('word reveal split a word: ' + JSON.stringify(byWord));
+    if (textRun('textprogress', { progress: 0.66, unit: 2 }).text !== 'The quiet house\non Marine Terrace')
+      throw new Error('line reveal at 0.66 gave ' + JSON.stringify(textRun('textprogress', { progress: 0.66, unit: 2 }).text));
+    if (textRun('textprogress', { progress: 0.4, unit: 1, dir: 1 }).text !== 'sold in nine days')
+      throw new Error('revealing from the END gave ' + JSON.stringify(textRun('textprogress', { progress: 0.4, unit: 1, dir: 1 }).text));
+    var mid = textRun('textprogress', { progress: 0.4, unit: 1, dir: 2 }).text;
+    if (mid === textRun('textprogress', { progress: 0.4, unit: 1 }).text) throw new Error('revealing from the middle matched revealing from the start');
+    if (TXT_FIXTURE.indexOf(mid) < 0) throw new Error('the middle reveal is not a contiguous slice of the original: ' + JSON.stringify(mid));
+    // THE TOKENISER BOUNDARY. Any unit whose split loses a separator shows up only here.
+    [0, 1, 2].forEach(function (u) {
+      if (textRun('textprogress', { progress: 1, unit: u }).text !== TXT_FIXTURE)
+        throw new Error('at full progress, unit ' + u + ' did not reproduce the original string exactly');
+      if (textRun('textprogress', { progress: 0, unit: u }).text !== '')
+        throw new Error('at zero progress, unit ' + u + ' left text on screen');
+    });
+    var caret = textRun('textprogress', { progress: 0.5, unit: 1, cursor: 3 }).text;
+    if (caret !== byWord + '▌') throw new Error('the caret did not land at the reveal edge: ' + JSON.stringify(caret));
+    if (textRun('textprogress', { progress: 1, unit: 1, cursor: 3 }).text.indexOf('▌') >= 0)
+      throw new Error('the caret is still showing once the reveal has finished');
+  });
+
+  /* Timecode could only count UP from zero at the clip's start. Counting DOWN is the single most
+   * common use of a timer on social video and did not exist at all; a broadcast 01:00:00:00 head was
+   * unreachable; and reading project time is what keeps a timer running across a cut instead of
+   * restarting at every clip. Each asserted as the exact string it must produce. */
+  test('effects: Timecode can start at an offset, count down, and read timeline time', { item: 'fx-text' }, function () {
+    var at = function (p, info) { return textRun('timecode', p, 12.5, info || { localT: 12.5, fps: 30 }).text; };
+    if (at({ mode: 0 }) !== '00:12:15') throw new Error('the default no longer reads 00:12:15 at t=12.5s/30fps, it reads ' + at({ mode: 0 }));
+    if (at({ mode: 0, offset: 0, dir: 0, source: 0 }) !== at({ mode: 0 }))
+      throw new Error('spelling the new keys out at their fallbacks changed the output');
+    if (at({ mode: 1, offset: 3600 }) !== '01:00:12') throw new Error('a one-hour head gave ' + at({ mode: 1, offset: 3600 }) + ' instead of 01:00:12');
+    if (at({ mode: 0, dir: 1, offset: 30 }) !== '00:17:15') throw new Error('counting down from 30s at t=12.5 gave ' + at({ mode: 0, dir: 1, offset: 30 }) + ' instead of 00:17:15');
+    if (at({ mode: 0, dir: 1, offset: 5 }) !== '00:00:00') throw new Error('a countdown past zero gave ' + at({ mode: 0, dir: 1, offset: 5 }) + ' — it must floor at zero, not go negative');
+    // clip time vs timeline time: the clip starts late, so the two MUST disagree or the control is dead
+    var late = { localT: 2.0, fps: 30 };
+    if (at({ mode: 0 }, late) !== '00:02:00') throw new Error('clip time gave ' + at({ mode: 0 }, late));
+    if (at({ mode: 0, source: 1 }, late) === at({ mode: 0 }, late))
+      throw new Error('reading timeline time gave the same answer as clip time on a clip that starts 10.5s in — the control is not switching source');
+    if (at({ mode: 0, source: 1 }, late) !== '00:12:15') throw new Error('timeline time gave ' + at({ mode: 0, source: 1 }, late) + ' instead of the project time 00:12:15');
+  });
+
+  /* Text Spacing always OVERRODE the layer's own tracking, so an effect meant to nudge it silently
+   * discarded whatever the layer was set to. Replaces stays the default, so existing instances are
+   * unchanged; the fixture carries a non-zero layer spacing precisely so the two modes differ. */
+  test('effects: Text Spacing can add to the layer instead of replacing it', { item: 'fx-text' }, function () {
+    if (textRun('textspacing', { spacing: 30 }).letterSpacing !== 30)
+      throw new Error('the default no longer replaces the layer spacing');
+    var added = textRun('textspacing', { spacing: 30, mode: 1 }).letterSpacing;
+    if (added !== 37) throw new Error('adding 30 to the fixture\'s own 7px of tracking gave ' + added + ', not 37');
+  });
+
   /* ---------------- EFFECTS-PLAN round 17: the repeat warps ---------------- */
 
   /* A WARP is not a pixel kernel: it takes (x,y,W,H,cx,cy,maxR,p,t,ps) and RETURNS the source point to

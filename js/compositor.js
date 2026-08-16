@@ -557,11 +557,24 @@ window.FM = window.FM || {};
     ] },
     // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
     { type: 'counter', label: 'Count Up/Down', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: 0, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: 0, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 }] },
-    { type: 'textprogress', label: 'Text Progress', param: 'progress', min: 0, max: 1, step: 0.01, def: 0.5 },
+    { type: 'textprogress', label: 'Text Progress', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 },
+      { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
+      { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
+      { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
+    ] },
     { type: 'textrandomizer', label: 'Text Randomizer', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }] },
-    { type: 'textspacing', label: 'Text Spacing', param: 'spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
+    { type: 'textspacing', label: 'Text Spacing', params: [
+      { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
+      { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
+    ] },
     { type: 'texttransform', label: 'Text Transform', param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
-    { type: 'timecode', label: 'Timecode', param: 'mode', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
+    { type: 'timecode', label: 'Timecode', params: [
+      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
+      { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },
+      { key: 'dir', label: 'Counts', def: 0, options: [[0, 'Up'], [1, 'Down']] },
+      { key: 'source', label: 'Reads', def: 0, options: [[0, 'Clip time'], [1, 'Timeline time']] },
+    ] },
     // ---- batch 20: cinematic grades + framing ----
     { type: 'bleachbypass', label: 'Bleach Bypass', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.7 },
     { type: 'tealorange', label: 'Teal & Orange', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -1396,7 +1409,36 @@ window.FM = window.FM || {};
     },
     textprogress: function (st, p, t) {
       var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
-      st.text = st.text.slice(0, Math.round(st.text.length * pr));
+      // A typewriter that could only run left-to-right one code unit at a time, with no caret.
+      // UNIT matters most: a caption revealed character by character flickers half-words on screen,
+      // and by WORD is the only unit that reads. DIR reveals from the end or outward from the middle.
+      // CURSOR draws the caret every typewriter has, and only while the reveal is actually mid-way.
+      var dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
+      var cur = p.cursor == null ? 0 : (Math.round(FM.evalProp(p.cursor, t)) | 0);
+      if (dir === 0 && unit === 0 && cur === 0) { st.text = st.text.slice(0, Math.round(st.text.length * pr)); return; }
+      var src = st.text, toks, keep;
+      if (unit === 2) toks = src.split('\n');
+      else if (unit === 1) toks = src.match(/\s+|\S+/g) || [];
+      else toks = src.split('');
+      // For words the UNITS are the non-space tokens; the spaces between them ride along with whatever
+      // range is revealed, so joining a full range reproduces the original string exactly.
+      var idx = [];
+      if (unit === 1) { for (var i = 0; i < toks.length; i++) if (/\S/.test(toks[i])) idx.push(i); }
+      else { for (var j = 0; j < toks.length; j++) idx.push(j); }
+      var total = idx.length, n = Math.round(total * pr);
+      if (n <= 0) { st.text = ''; return; }
+      if (n >= total) { st.text = src; return; }
+      var lo, hi;                                        // inclusive token-array bounds
+      if (dir === 1) { lo = idx[total - n]; hi = toks.length - 1; }
+      else if (dir === 2) { var st0 = Math.floor((total - n) / 2); lo = idx[st0]; hi = idx[st0 + n - 1]; }
+      else { lo = 0; hi = idx[n - 1]; }
+      keep = toks.slice(lo, hi + 1).join(unit === 2 ? '\n' : '');
+      if (cur) {
+        var glyph = cur === 1 ? '/' : (cur === 2 ? '_' : '\u258c');
+        keep = dir === 1 ? glyph + keep : keep + glyph;
+      }
+      st.text = keep;
     },
     textrandomizer: function (st, p, t) {
       var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
@@ -1410,7 +1452,13 @@ window.FM = window.FM || {};
       st.text = out;
     },
     textspacing: function (st, p, t) {
-      st.letterSpacing = tnum(FM.evalProp(p.spacing, t), 24);
+      var sp = tnum(FM.evalProp(p.spacing, t), 24);
+      // It always OVERRODE the layer's own spacing, so an effect meant to nudge tracking silently threw
+      // away whatever the layer was already set to — and stacking two of them, or animating one on a
+      // layer that already had spacing, could not do the obvious thing. Absolute stays the default so
+      // every existing instance keeps replacing, exactly as it did.
+      var mode = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
+      st.letterSpacing = mode === 1 ? (st.letterSpacing || 0) + sp : sp;
     },
     texttransform: function (st, p, t) {
       var m = (p.mode | 0), s = st.text;
@@ -1421,7 +1469,18 @@ window.FM = window.FM || {};
     },
     timecode: function (st, p, t, info) {
       var m = (p.mode | 0), fps = (info && info.fps) || 30, lt = (info && info.localT != null) ? info.localT : t;
+      // It could only count UP from zero at the clip's start. OFFSET gives it a head — 01:00:00:00 is
+      // the broadcast convention and was unreachable. DIR counts down, which is the single most common
+      // use of a timer on social video and simply did not exist. SOURCE reads project time instead of
+      // clip time, so a timer keeps running across a cut instead of restarting at every clip.
+      var offs = p.offset == null ? 0 : FM.evalProp(p.offset, t);
+      if (offs < 0) offs = 0; if (offs > 3600) offs = 3600;
+      var dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      var srcSel = p.source == null ? 0 : (Math.round(FM.evalProp(p.source, t)) | 0);
+      if (srcSel === 1) lt = t;
       if (lt < 0) lt = 0;
+      if (dir === 1) { lt = offs - lt; if (lt < 0) lt = 0; }
+      else if (offs !== 0) lt = lt + offs;
       var ff = Math.floor(lt * fps) % Math.max(1, Math.round(fps)), totalS = Math.floor(lt);
       var ss = totalS % 60, mm = Math.floor(totalS / 60) % 60, hh = Math.floor(totalS / 3600);
       if (m === 0) st.text = tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);

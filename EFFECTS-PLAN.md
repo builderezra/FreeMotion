@@ -335,6 +335,25 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
   * **Assert the period AND the wrong period.** "With rows=5 it repeats every H/5" passes trivially if
     the mapping repeats at every interval; it only means something next to "and no longer every H/3".
 
+- v9.03 (round 18 — **the text-string effects**) — `textprogress` (reveal by letter/word/line, from
+  start/end/middle, caret), `timecode` (start offset, count down, clip vs timeline time) and
+  `textspacing` (adds to the layer instead of replacing it). A third kind of effect and so a third
+  harness: TEXT_FX takes `(st, params, t, info)` and mutates `st = { text, letterSpacing }` before
+  layout, which means these are asserted on EXACT STRINGS — the strongest assertion available anywhere
+  in this file. Findings:
+  * **The tokeniser boundary is the whole test.** Any word/line splitter that loses or doubles a
+    separator behaves correctly at every intermediate progress and fails at 1.0, so "at full progress
+    each unit reproduces the original string CHARACTER FOR CHARACTER" is the assertion that matters;
+    the interesting-looking mid-reveal ones would all pass on a broken tokeniser.
+  * **`textspacing` word and line spacing are NOT built, deliberately.** `st` carries only `text` and
+    `letterSpacing`, and the draw path at compositor.js ~7648 consumes exactly those. Word spacing and
+    line height need the text RENDERER to carry two more fields and the line-breaking loop to honour
+    them — a layout change, not a param add, and it does not belong bolted onto a round like this. The
+    `mode` third of that row (offset vs override, which is a real defect) is done. **Left open.**
+  * **textprogress slices by UTF-16 code UNIT, so an emoji can be cut in half** into a replacement
+    glyph. Not changed, because unit=0 is the legacy path and every existing project depends on its
+    exact output. Worth its own entry rather than a silent behaviour change.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are
