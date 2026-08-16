@@ -3497,6 +3497,22 @@ body.hm-selecting .hm-pin { display: none; }
    of its own; border-radius:50% keeps the sheen (theme-glass.css) clipped to the rim instead of a
    square; and the SVG glyph is hidden, not removed, so the accessible name survives. */
 #hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; color: #eef8ff; cursor: pointer; -webkit-tap-highlight-color: transparent; }   /* centred like AM's +; the ambient glow is a box-shadow so it can't reach the + cut-out */
+/* A BIGGER HIT BOX, NOT A BIGGER BUTTON (queue 213). His words: "Make it so the button on the bottom
+   of the screen has a larger hit box, don't make it bigger but larger hit box cos I keep accidentally
+   opening projects." Measured at 375x812 before touching it: the button is 58x58 and its hit reach was
+   29-30px from centre in every direction — exactly the disc and not a pixel more — with #hm-scroll
+   immediately outside it. So a near-miss lands on the project list and OPENS a project, which is the
+   worst possible miss because it navigates away from what you were doing.
+   A transparent ::before inset by -12px gives an 82px catch area around an unchanged 58px disc. Two
+   things it is deliberately NOT:
+   · not a square. A circle steals the least from the cards behind it — the corners of an 82px square
+     are the parts furthest from the + and the likeliest to be a genuine tap on something else.
+   · not larger than 12px. The ring also blocks SCROLL drags that start inside it, and the entry warns
+     that swallowing too much makes the list feel dead near the bottom. 12px is enough to cover the
+     misses he describes without turning the bottom of the screen into a wall.
+   It stays clear of the home indicator: the button already sits at max(24px, safe-area-inset-bottom),
+   so the ring's outer edge is still 12px above the bottom of the viewport. */
+#hm-new::before { content: ''; position: absolute; inset: -12px; border-radius: 50%; }
 /* v6.09: the + glyph is the button again. */
 #hm-dialog { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
 #hm-dialog.hidden { display: none; }

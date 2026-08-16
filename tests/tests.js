@@ -14894,6 +14894,61 @@
     }
   });
 
+  /* ---------------- queue 213: a bigger hit box, not a bigger button ----------------
+   * "Make it so the button on the bottom of the screen has a larger hit box, don't make it bigger
+   * but larger hit box cos I keep accidentally opening projects." Both halves are the test: the
+   * catch area has to grow AND the disc has to stay the size it is. A hit box is invisible, so this
+   * probes elementFromPoint outward from the centre rather than trusting the CSS. */
+
+  test('the home + catches taps well outside itself, without getting bigger', { item: 'fab-hitbox' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 110));
+    return atPhoneWidth(async function () {
+      const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+      try {
+        if (!wasOpen && FM.home.open) { FM.home.open(); await frame(); }
+        const fab = document.getElementById('hm-new');
+        if (!fab) throw new Error('no home + button');
+        const r = fab.getBoundingClientRect();
+        if (!(r.width > 10)) throw new Error('the + is not on screen');
+        const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+        const reach = function (dx, dy) {
+          for (let d = 0; d < 120; d++) {
+            const el = document.elementFromPoint(Math.round(cx + dx * d), Math.round(cy + dy * d));
+            if (!el || !(el === fab || fab.contains(el))) return d;
+          }
+          return 120;
+        };
+        // "don't make it bigger" — the DISC is unchanged.
+        if (Math.abs(r.width - 58) > 1 || Math.abs(r.height - 58) > 1) {
+          throw new Error('the button itself is now ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — he asked for a bigger hit box, not a bigger button');
+        }
+        // "larger hit box" — measured, because a hit box cannot be seen.
+        const visualRadius = r.width / 2;                       // 29
+        ['left', 'right', 'up'].forEach(function (dir, i) {
+          const d = reach([-1, 1, 0][i], [0, 0, -1][i]);
+          if (!(d >= visualRadius + 8)) throw new Error('the + only catches ' + d + 'px ' + dir + ' of centre, against a ' + visualRadius + 'px disc — that is barely more than the button itself');
+        });
+        // A tap just outside the disc must reach the +, not the project list behind it — which is the
+        // actual complaint: a near-miss opens a project and navigates away.
+        const justAbove = document.elementFromPoint(cx, Math.round(r.top) - 8);
+        if (!(justAbove && (justAbove === fab || fab.contains(justAbove)))) {
+          throw new Error('8px above the + still hits "' + (justAbove && (justAbove.id || justAbove.className)) + '" — a near-miss still opens a project');
+        }
+        // …but it must stay a CIRCLE. A square would steal the corners, which are the points furthest
+        // from the + and the likeliest to be a genuine tap on a card.
+        const axis = reach(0, -1);
+        let diag = 120;
+        for (let d = 0; d < 120; d++) {
+          const el = document.elementFromPoint(Math.round(cx + d * 0.707), Math.round(cy - d * 0.707));
+          if (!el || !(el === fab || fab.contains(el))) { diag = d; break; }
+        }
+        if (diag > axis * 1.25) throw new Error('the hit area reaches ' + diag + 'px diagonally against ' + axis + 'px on the axis — it is a square, and the corners steal taps meant for cards');
+        // and it must not run past the bottom of the screen, over the home indicator
+        if (r.bottom + 12 > window.innerHeight + 1) throw new Error('the hit ring extends past the bottom of the viewport, over the home indicator');
+      } finally { if (!(FM.home && FM.home.isOpen && FM.home.isOpen())) { /* left as found */ } }
+    }, 375);
+  });
+
   /* ---------------- queue 210: per-tab colour in the add menu ----------------
    * "The shapes colours are fine, but the rest aren't. They're generic and copy paste." The cause
    * was one palette cycled by index on every tab, so colour meant position rather than meaning. The

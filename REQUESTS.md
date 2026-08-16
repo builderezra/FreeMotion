@@ -4188,7 +4188,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       localStorage and all rebuild `layer.effects` from what they find there, checking only that the
       effect NAME is real — never the values. Same story as #217: harmless-ish today, genuinely not once a
       filter is a container with children inside it. Worth folding into the same pass as #217.
-- [ ] **213 — The + at the bottom of the home screen needs a bigger HIT BOX, not a bigger button.** His
+- [x] **213 — The + at the bottom of the home screen needs a bigger HIT BOX, not a bigger button. DONE v8.21.** His
       words: *"Make it so the button on the bottom of the screen has a larger hit box, don't make it
       bigger but larger hit box cos I keep accidentally opening projects."*
       So a tap NEAR the + is landing on the project card behind or beside it and opening that project —
@@ -4200,6 +4200,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       the list feel dead, and it must not overlap the safe-area home indicator. Measure the real hit
       rect before and after, the same way #189's spacing was measured — a hit box is invisible, so
       "looks fine" cannot confirm it.
+
+      **DONE v8.21, measured both ways as this entry asked.** Before: 58×58 button, catch area reaching
+      **29–30px from centre** — exactly the disc — with `#hm-scroll` immediately outside, which is what
+      was opening projects. After: **41–42px reach around an unchanged 58×58 disc**, and a tap 8px above
+      the button now lands on the + instead of the list.
+      Both cautions in this entry are honoured. It is a **circle**, not a square — the diagonal reach is
+      41px against 42px on the axis, where a square would reach 59px into the corners, and the corners
+      are the points furthest from the + and the likeliest to be a real tap on a card. And it is only
+      12px, because the ring also blocks scroll drags that start inside it; more would make the bottom
+      of the list feel dead. The outer edge stays 12px above the viewport bottom, clear of the home
+      indicator.
 - [ ] **212 — A long-exposure camera tool for his phone (Slow Shutter Cam style). NOT DECIDED — he asked
       whether it was possible, not for it to be built.** His words: *"Would it be possible for you to
       create me a camera tool for my phone that can do cool long exposure photography? Like this app
