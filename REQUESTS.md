@@ -1799,7 +1799,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Making Studio the plain default and deleting the Classic rules would remove it from the bundle
       altogether, which is closer to what you were actually worried about.
 
-- [ ] **285 — Layer-panel buttons should shrink when the timeline is made small. (16 Aug, screenshot.)**
+- [x] **285 — Layer-panel buttons should shrink when the timeline is made small. DONE v8.77.** (16 Aug, screenshot.)
       His words, verbatim: *"the layer edit pannels buttons should shrink if you make the timeline too
       small, so the button all stay fitting on screen"*.
       The 3x3 grid of layer buttons — Colouring · Border & Shadow · Blending & Opacity · Move &
@@ -1809,6 +1809,22 @@ better still, keep working inside the turn rather than parking work for a later 
       inspector is a 264px band, and buttons that FILL it measure ~43px). Whatever lands should make the
       tiles FLEX to the band height rather than pick a second fixed size, or the next band change breaks
       it again.
+
+      **DONE v8.77, and sized off the band rather than off a breakpoint** — the band is DRAGGABLE, so its
+      height is a continuous number he chooses and any breakpoint would be wrong on one side of itself.
+      Measured before: the inspector needed **74px of scroll at a 300px band, 134 at 240, 194 at 180**,
+      with the tiles stuck at 101px. After: **zero scroll from 240px upward**, including the default 264
+      (which used to scroll), with the tiles sliding 101 → 40 as the band comes down and the icon, the
+      label and the gaps coming with them.
+      **Two passes, and the first one is the lesson.** Scaling the padding and the icon made the tiles
+      visibly smaller and still left ~50px of scroll at EVERY height, because three rows are not the only
+      thing in the panel — there is a 33px title and a 16px quick-row above them and about 20px of the
+      wrap's own gaps. "Make it smaller" was not the requirement; "make the sum fit" was. The row height
+      is arithmetic now: `(band − 88px of chrome) ÷ 3`, floored and capped.
+      **The honest limit:** below about a 200px band the 40px floor bites and the panel scrolls the last
+      few pixels (6px at 200, 36px at 170). Tiles smaller than that stop being tappable, so it stops
+      there rather than shrinking them into nothing — and 200px is a band barely taller than one clip
+      row. Say the word if you would rather it kept going.
 
 - [x] **284 — Dragging the timeline moves the selected layer's outline off the layer. DONE v8.76.** (16 Aug.) His
       words, verbatim: *"Found a weird issue where when you drag the timeline up and down while having a

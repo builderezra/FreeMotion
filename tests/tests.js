@@ -17426,6 +17426,54 @@
     }
   });
 
+  /* ---------------- queue 285: the layer buttons did not shrink with the band ---------------- */
+
+  test('the layer buttons shrink with the timeline band so they all stay on screen (queue 285)', { item: 'cat-shrink' }, async function () {
+    /* "the layer edit pannels buttons should shrink if you make the timeline too small, so the button
+     * all stay fitting on screen."
+     * They were a fixed 101px tall, so shortening the band pushed the bottom row under the fold and gave
+     * the inspector a scrollbar — measured before: 74px of scroll at a 300px band, 134 at 240, 194 at
+     * 180. Both directions are asserted, because "make them small enough to fit" is easy to overdo: at
+     * a tall band they have to be exactly the size they always were. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const root = document.documentElement;
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    const wasStudio = document.body.classList.contains('layout-studio');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      document.body.classList.add('layout-studio');
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: 300, shapeH: 300, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(300);
+      const panel = document.getElementById('inspector-panel');
+      const cards = () => [].slice.call(panel.querySelectorAll('.cat-card'));
+      if (cards().length < 6) return;              // not the category grid this test is about
+
+      root.style.setProperty('--tl-h', '240px');
+      await sleep(300);
+      const small = Math.round(cards()[0].getBoundingClientRect().height);
+      const scroll = panel.scrollHeight - panel.clientHeight;
+      if (scroll > 2) throw new Error('at a 240px band the layer panel still needs ' + scroll + 'px of scrolling — the buttons are not fitting on screen');
+      const bottom = panel.getBoundingClientRect().bottom;
+      const spilled = cards().filter(function (c) { return c.getBoundingClientRect().bottom > bottom + 1; });
+      if (spilled.length) throw new Error(spilled.length + ' of the ' + cards().length + ' layer buttons hang below the panel at a 240px band');
+
+      root.style.setProperty('--tl-h', '420px');
+      await sleep(300);
+      const big = Math.round(cards()[0].getBoundingClientRect().height);
+      if (!(big > small + 20)) throw new Error('the buttons are ' + big + 'px at a 420px band against ' + small + 'px at 240 — they are not growing back, so the fix has just made them permanently small');
+      if (big < 90) throw new Error('at a tall band the buttons are only ' + big + 'px — they used to be 101 and there is room for it');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      if (!wasStudio) document.body.classList.remove('layout-studio');
+      await sleep(200);
+    }
+  });
+
   /* ---------------- queue 284: the selection outline drifted when the stage was resized -------- */
 
   test('the selection outline stays on its layer when the timeline is dragged (queue 284)', { item: 'gizmo-resize' }, async function () {
