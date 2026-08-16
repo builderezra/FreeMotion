@@ -3792,6 +3792,10 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 16, v9.01:* the relief family. Emboss's light was welded to the top-left corner, Bump
+      Map's to a single vector and depth — so every embossed surface in the app was lit identically —
+      and Find Edges could only make glowing white lines on black. All three now take a light angle or
+      a polarity, plus the controls to stop them fringing and smearing.
       *Round 15, v9.00:* the print family. Halftone Dots could not run its screen at 45°, which is
       the angle every real print halftone uses; Halftone Lines was stuck horizontal with hard aliased
       edges; Crosshatch's ink was dictated by the source exposure and its 1px strokes vanish at 1080p;

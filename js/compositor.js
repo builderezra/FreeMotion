@@ -185,8 +185,18 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 5, max: 200, step: 1, def: 100, unit: '%' },
     ] },
     // ---- batch 4 ----
-    { type: 'edge', label: 'Find Edges', param: 'amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
-    { type: 'emboss', label: 'Emboss', param: 'amount', min: 0, max: 3, step: 0.05, def: 1 },
+    { type: 'edge', label: 'Find Edges', params: [
+      { key: 'amount', label: 'Amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
+      { key: 'polarity', label: 'Lines', def: 0, options: [[0, 'White on black'], [1, 'Black on white']] },
+      { key: 'threshold', label: 'Ignore below', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'emboss', label: 'Emboss', params: [
+      { key: 'amount', label: 'Depth', min: 0, max: 3, step: 0.05, def: 1 },
+      { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
+      { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
+      { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'exposure', label: 'Exposure', params: [
       { key: 'stops', label: 'Stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
       { key: 'offset', label: 'Black point', min: -50, max: 50, step: 1, def: 0 },
@@ -372,7 +382,12 @@ window.FM = window.FM || {};
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
     // ---- batch 10 ----
-    { type: 'bumpmap', label: 'Bump Map', param: 'amount', min: 0, max: 3, step: 0.05, def: 1.2 },
+    { type: 'bumpmap', label: 'Bump Map', params: [
+      { key: 'amount', label: 'Strength', min: 0, max: 3, step: 0.05, def: 1.2 },
+      { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 225, unit: '°' },
+      { key: 'relief', label: 'Relief depth', min: 10, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'ambient', label: 'Ambient', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+    ] },
     /* Edge Glow. GLOW ON is the design, not a mode flag bolted on: "the layer" versus "the media
      * inside the layer" IS "alpha edges versus luminance edges", which is why the control is honest.
      * Layer reads the SILHOUETTE (a flat shape and a line of text finally glow); Media reads contrast
@@ -3069,6 +3084,11 @@ window.FM = window.FM || {};
     // ---- batch 4 ----
     edge: function (d, W, H, p, t) {
       const k = FM.evalProp(p.amount, t) || 1, s = d.slice(), w4 = W * 4;
+      const thrP = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
+      const thr = Math.max(0, Math.min(100, thrP)) / 100 * 255;
+      const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
+      const mixP = p.mix == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.mix, t)));
+      const mix = mixP / 100, full = mixP === 100;
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
@@ -3081,17 +3101,63 @@ window.FM = window.FM || {};
           const bc = s[i + w4] * 0.299 + s[i + w4 + 1] * 0.587 + s[i + w4 + 2] * 0.114;
           const br = s[i + w4 + 4] * 0.299 + s[i + w4 + 5] * 0.587 + s[i + w4 + 6] * 0.114;
           const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
-          const mag = Math.min(255, Math.hypot(gx, gy) * k);
-          d[i] = mag; d[i + 1] = mag; d[i + 2] = mag;
+          let mag = Math.min(255, Math.hypot(gx, gy) * k);
+          // THRESHOLD kills the grey mush: a Sobel over a smooth area still returns a small reading,
+          // so every gentle gradient came back faintly lit with no way to say "that is not an edge".
+          if (thr > 0 && mag < thr) mag = 0;
+          // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
+          // way line art is actually drawn — was simply unreachable.
+          if (inv) mag = 255 - mag;
+          if (full) { d[i] = mag; d[i + 1] = mag; d[i + 2] = mag; }
+          // MIX lays the edges back over the picture instead of replacing it.
+          else { d[i] = s[i] + (mag - s[i]) * mix; d[i + 1] = s[i + 1] + (mag - s[i + 1]) * mix; d[i + 2] = s[i + 2] + (mag - s[i + 2]) * mix; }
         }
       }
     },
     emboss: function (d, W, H, p, t) {
       const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = d.slice(), w4 = W * 4;
+      // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
+      // control and not a second effect wearing the same name. The legacy weights are
+      //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
+      //     -1  0  1        (-1,-1)->-2, (0,-1)->-1, (1,-1)->0, (-1,0)->-1, (1,0)->1, (1,1)->2.
+      //      0  1  2        So the kernel IS dot(offset, L) with the light L = (1,1), and turning the
+      // light is just turning L. The default still runs the literal legacy line, because sqrt(2)*cos(45°)
+      // is 1.0000000000000002 and not 1 — the same float trap EFFECTS-PLAN flags for bumpmap's 225.
+      const angP = p.angle == null ? 135 : FM.evalProp(p.angle, t);
+      const def135 = angP === 135;
+      const th = (angP - 90) * Math.PI / 180, R2 = Math.SQRT2;
+      const Lx = R2 * Math.cos(th), Ly = R2 * Math.sin(th);
+      const mono = (p.mono == null ? 0 : (Math.round(FM.evalProp(p.mono, t)) | 0)) === 1;
+      const blP = p.blend == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.blend, t)));
+      const bl = blP / 100, allIn = blP === 100;
+      const plain = def135 && !mono && allIn;
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
-          for (let c = 0; c < 3; c++) { const j = i + c; d[j] = 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; }
+          if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; d[j] = 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; } continue; }
+          // MONO runs the kernel over LUMINANCE once instead of per channel. Per channel is what puts
+          // colour fringing on the relief; a clean grey metal stamp was unreachable.
+          if (mono) {
+            const lum = (j) => s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114;
+            let acc = 0;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+              const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
+              if (w !== 0) acc += lum(i + dy * w4 + dx * 4) * w;
+            }
+            const v = 128 + acc * k;
+            if (allIn) { d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+            else { d[i] = s[i] + (v - s[i]) * bl; d[i + 1] = s[i + 1] + (v - s[i + 1]) * bl; d[i + 2] = s[i + 2] + (v - s[i + 2]) * bl; }
+            continue;
+          }
+          for (let c = 0; c < 3; c++) {
+            const j = i + c; let acc = 0;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+              const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
+              if (w !== 0) acc += s[j + dy * w4 + dx * 4] * w;
+            }
+            const v = 128 + acc * k;
+            d[j] = allIn ? v : s[j] + (v - s[j]) * bl;
+          }
         }
       }
     },
@@ -3345,7 +3411,23 @@ window.FM = window.FM || {};
     blocknoise: function(d,W,H,p,t,ps){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4; for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue; var sf_h=(sf_x*374761393+sf_y*668265263)|0; sf_h=(sf_h^(sf_h>>>13))*1274126177; sf_h=sf_h^(sf_h>>>16); var sf_r=(sf_h>>>0)/4294967295; if(sf_r<sf_thr){ sf_d[sf_i]=sf_col[0]; sf_d[sf_i+1]=sf_col[1]; sf_d[sf_i+2]=sf_col[2]; sf_d[sf_i+3]=255; } } } },
     // ---- batch 10 (pixel) ----
-    bumpmap: function(d,W,H,p,t){ var bmAmt=FM.evalProp(p.amount,t); if(bmAmt==null)bmAmt=1.2; bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=d.slice(); var bmW4=W*4; var bmK=4; var bmLx=-0.5,bmLy=-0.5,bmLz=1; var bmLlen=Math.sqrt(bmLx*bmLx+bmLy*bmLy+bmLz*bmLz); bmLx/=bmLlen; bmLy/=bmLlen; bmLz/=bmLlen; for(var bmY=0;bmY<H;bmY++){ var bmYu=bmY>0?bmY-1:0; var bmYd=bmY<H-1?bmY+1:H-1; for(var bmX=0;bmX<W;bmX++){ var bmI=(bmY*W+bmX)*4; if(bmS[bmI+3]===0){ d[bmI]=bmS[bmI]; d[bmI+1]=bmS[bmI+1]; d[bmI+2]=bmS[bmI+2]; continue; } var bmXl=bmX>0?bmX-1:0; var bmXr=bmX<W-1?bmX+1:W-1; var bmIl=(bmY*W+bmXl)*4; var bmIr=(bmY*W+bmXr)*4; var bmIu=(bmYu*W+bmX)*4; var bmId=(bmYd*W+bmX)*4; var bmLumL=0.299*bmS[bmIl]+0.587*bmS[bmIl+1]+0.114*bmS[bmIl+2]; var bmLumR=0.299*bmS[bmIr]+0.587*bmS[bmIr+1]+0.114*bmS[bmIr+2]; var bmLumU=0.299*bmS[bmIu]+0.587*bmS[bmIu+1]+0.114*bmS[bmIu+2]; var bmLumD=0.299*bmS[bmId]+0.587*bmS[bmId+1]+0.114*bmS[bmId+2]; var bmGx=(bmLumR-bmLumL)/255; var bmGy=(bmLumD-bmLumU)/255; var bmNx=-bmGx, bmNy=-bmGy, bmNz=bmK; var bmNlen=Math.sqrt(bmNx*bmNx+bmNy*bmNy+bmNz*bmNz); if(bmNlen<1e-6)bmNlen=1e-6; bmNx/=bmNlen; bmNy/=bmNlen; bmNz/=bmNlen; var bmDiff=bmNx*bmLx+bmNy*bmLy+bmNz*bmLz; if(bmDiff<0)bmDiff=0; var bmF=0.5+bmAmt*0.6*bmDiff; var bmR=bmS[bmI]*bmF; var bmG=bmS[bmI+1]*bmF; var bmB=bmS[bmI+2]*bmF; d[bmI]=bmR>255?255:(bmR<0?0:bmR); d[bmI+1]=bmG>255?255:(bmG<0?0:bmG); d[bmI+2]=bmB>255?255:(bmB<0?0:bmB); } } },
+    bumpmap: function(d,W,H,p,t){ var bmAmt=FM.evalProp(p.amount,t); if(bmAmt==null)bmAmt=1.2; bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=d.slice(); var bmW4=W*4;
+      // Every embossed surface in the app was lit from the same top-left corner at the same depth.
+      // ANGLE moves the key light, RELIEF changes how deep the surface reads (it scales the normal's
+      // z: a flatter z tilts the normals further, so MORE relief means a SMALLER constant), AMBIENT is
+      // the 0.5 floor that decides how dark the unlit side goes.
+      // THE 225 SPECIAL CASE IS NOT SUPERSTITION — EFFECTS-PLAN flags it and it is real:
+      // Math.cos(225°) * Math.SQRT1_2 is -0.5000000000000001, not the -0.5 written here, so computing
+      // the default from the angle instead of short-circuiting would change every existing bump map.
+      var bmAngP=p.angle==null?225:FM.evalProp(p.angle,t);
+      var bmRelP=p.relief==null?100:FM.evalProp(p.relief,t); if(bmRelP<10)bmRelP=10; if(bmRelP>400)bmRelP=400;
+      var bmAmbP=p.ambient==null?50:FM.evalProp(p.ambient,t); if(bmAmbP<0)bmAmbP=0; if(bmAmbP>100)bmAmbP=100;
+      var bmK=bmRelP===100?4:4*(100/bmRelP);
+      var bmAmb=bmAmbP===50?0.5:bmAmbP/100;
+      var bmLx,bmLy;
+      if(bmAngP===225){ bmLx=-0.5; bmLy=-0.5; }
+      else { var bmRad=bmAngP*Math.PI/180; bmLx=Math.cos(bmRad)*Math.SQRT1_2; bmLy=Math.sin(bmRad)*Math.SQRT1_2; }
+      var bmLz=1; var bmLlen=Math.sqrt(bmLx*bmLx+bmLy*bmLy+bmLz*bmLz); bmLx/=bmLlen; bmLy/=bmLlen; bmLz/=bmLlen; for(var bmY=0;bmY<H;bmY++){ var bmYu=bmY>0?bmY-1:0; var bmYd=bmY<H-1?bmY+1:H-1; for(var bmX=0;bmX<W;bmX++){ var bmI=(bmY*W+bmX)*4; if(bmS[bmI+3]===0){ d[bmI]=bmS[bmI]; d[bmI+1]=bmS[bmI+1]; d[bmI+2]=bmS[bmI+2]; continue; } var bmXl=bmX>0?bmX-1:0; var bmXr=bmX<W-1?bmX+1:W-1; var bmIl=(bmY*W+bmXl)*4; var bmIr=(bmY*W+bmXr)*4; var bmIu=(bmYu*W+bmX)*4; var bmId=(bmYd*W+bmX)*4; var bmLumL=0.299*bmS[bmIl]+0.587*bmS[bmIl+1]+0.114*bmS[bmIl+2]; var bmLumR=0.299*bmS[bmIr]+0.587*bmS[bmIr+1]+0.114*bmS[bmIr+2]; var bmLumU=0.299*bmS[bmIu]+0.587*bmS[bmIu+1]+0.114*bmS[bmIu+2]; var bmLumD=0.299*bmS[bmId]+0.587*bmS[bmId+1]+0.114*bmS[bmId+2]; var bmGx=(bmLumR-bmLumL)/255; var bmGy=(bmLumD-bmLumU)/255; var bmNx=-bmGx, bmNy=-bmGy, bmNz=bmK; var bmNlen=Math.sqrt(bmNx*bmNx+bmNy*bmNy+bmNz*bmNz); if(bmNlen<1e-6)bmNlen=1e-6; bmNx/=bmNlen; bmNy/=bmNlen; bmNz/=bmNlen; var bmDiff=bmNx*bmLx+bmNy*bmLy+bmNz*bmLz; if(bmDiff<0)bmDiff=0; var bmF=bmAmb+bmAmt*0.6*bmDiff; var bmR=bmS[bmI]*bmF; var bmG=bmS[bmI+1]*bmF; var bmB=bmS[bmI+2]*bmF; d[bmI]=bmR>255?255:(bmR<0?0:bmR); d[bmI+1]=bmG>255?255:(bmG<0?0:bmG); d[bmI+2]=bmB>255?255:(bmB<0?0:bmB); } } },
     /* EDGE GLOW — finds edges, blurs the edge magnitude, and screens a colour over the result.
      *
      * GLOW ON is the whole design, and the mapping is not a coincidence: "the layer" versus "the

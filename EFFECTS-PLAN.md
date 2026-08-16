@@ -66,6 +66,12 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
 
 - **bumpmap `angle` def 225** is NOT legacy-exact: `cos(225°)*SQRT1_2 = -0.5000000000000001`
   but the code hardcodes `-0.5`. Special-case `if (angle === 225) { bmLx = -0.5; bmLy = -0.5; }`.
+  **CORRECTED at v9.01, having built it: the arithmetic is right and the CONSEQUENCE is nil.** That
+  1-ulp difference in the light vector cannot survive quantisation to 8 bits — measured at 0 differing
+  bytes across noise, ramp and hard-step plates at five amounts, and the mutation that removes the
+  short-circuit SURVIVES the suite, correctly. Keep the branch (it is free, and a higher-bit-depth path
+  would need it) but do not budget effort for this class of special-case again without measuring the
+  rendered difference first. A float that differs in the 16th place is not automatically a visible one.
 - **vignette `falloff` on the media path** is not byte-identical — canvas quantises gradient
   stops to 8-bit premultiplied before rasterising, so inserting stops can move a code value.
   Gate it: keep the exact 2-stop path when `falloff === 1`.
@@ -298,6 +304,21 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     that, so all four readings tied at exactly W*H. And Sobel mud on a smooth gradient sits at ~253, so
     a "darker than 250" cutoff reports zero mud on a frame that is 100% mud — which is what Pencil
     Sketch actually does: 14,400 of 14,400 pixels smeared, and 0 after the new threshold.
+
+- v9.01 (round 16 — **the relief family**) — `edge` (polarity, threshold, mix), `emboss` (light angle,
+  mono, mix) and `bumpmap` (light angle, relief depth, ambient). Findings:
+  * **The emboss kernel generalises EXACTLY, which is why this is an angle control and not a second
+    effect.** Its legacy weights `-2 -1 0 / -1 0 1 / 0 1 2` are precisely `dot(offset, L)` for the light
+    L = (1,1) — check every tap and they all fall out. So turning the light is turning L, and lighting
+    from the opposite side negates the relief at every pixel (measured: 7733 of 7733). Do the same
+    check before assuming a hardcoded kernel needs rewriting; this one did not.
+  * The default still short-circuits, because `sqrt(2)*cos(45°)` is `1.0000000000000002`. Unlike
+    bumpmap's 225 this one was not measured to be invisible — it is simply free to keep.
+  * **The bumpmap 225 flag is overstated, and the flag itself is now corrected above.** Measured.
+  * **A multiplying effect cannot be measured on its output.** bumpmap scales the source, so the
+    output's spread is the SOURCE's spread — relief 10 / 100 / 400 all read an identical 235 until the
+    statistic changed to the shading factor `out/src`, where they read 0.107 / 0.118 / 0.188. Any effect
+    that modulates rather than replaces needs the same treatment.
 
 ## Build order (from the ranking pass)
 

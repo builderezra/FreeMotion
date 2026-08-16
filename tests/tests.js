@@ -18186,6 +18186,115 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 16: the relief family ---------------- */
+
+  test('effects: the relief effects still render an un-upgraded instance exactly as they did', { item: 'fx-relief' }, function () {
+    var W = 96, H = 96, fails = [];
+    var CASES = [
+      { type: 'edge',    old: { amount: 1.5 }, legacyKeys: { polarity: 0, threshold: 0, mix: 100 },
+        moved: { polarity: 1, threshold: 40, mix: 45 } },
+      { type: 'emboss',  old: { amount: 1 },   legacyKeys: { angle: 135, mono: 0, blend: 100 },
+        moved: { angle: 300, mono: 1, blend: 40 } },
+      { type: 'bumpmap', old: { amount: 1.2 }, legacyKeys: { angle: 225, relief: 100, ambient: 50 },
+        moved: { angle: 60, relief: 300, ambient: 15 } },
+    ];
+    CASES.forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old), full = fxRun(c.type, W, H, withKeys);
+      var n = fxDiff(bare, full);
+      if (n) fails.push(c.type + ': ' + n + ' bytes differ between an old instance and one holding the new keys at their fallbacks');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': draws nothing at all at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) {
+        var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, stamped))) fails.push(c.type + ': a NEW instance renders differently from an old one');
+      }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* Find Edges could only ever draw glowing white lines on black. Three separate things follow from
+   * that, and each is asserted as the exact property rather than as "the output changed":
+   * polarity must be a TRUE inversion (the two means sum to 255), the threshold must clear the mush a
+   * Sobel invents across a smooth ramp, and mix at 0 must hand the picture back untouched. */
+  test('effects: Find Edges can invert, gate the mush, and lay the lines back over the picture', { item: 'fx-relief' }, function () {
+    var W = 96, H = 96;
+    var innerMean = function (d) { var a = 0, n = 0;
+      for (var y = 2; y < H - 2; y++) for (var x = 2; x < W - 2; x++) { a += d[(y * W + x) * 4]; n++; } return a / n; };
+    var white = innerMean(fxRun('edge', W, H, { amount: 1.5 }));
+    var black = innerMean(fxRun('edge', W, H, { amount: 1.5, polarity: 1 }));
+    if (Math.abs(white + black - 255) > 1.5) {
+      throw new Error('polarity is not a clean inversion: the two means are ' + white.toFixed(1) + ' and ' + black.toFixed(1) + ', which should sum to 255 and sum to ' + (white + black).toFixed(1));
+    }
+    // a plate with NO real edge anywhere: everything the effect finds there is mush by definition
+    var mush = innerMean(fxRun('edge', W, H, { amount: 1.5 }, 'gradient'));
+    if (mush < 3) throw new Error('the smooth ramp produced almost no mush (' + mush.toFixed(2) + ') — this test can no longer show what the gate is for');
+    var gated = innerMean(fxRun('edge', W, H, { amount: 1.5, threshold: 40 }, 'gradient'));
+    if (gated > 0.5) throw new Error('after gating, the smooth ramp still reads ' + gated.toFixed(2) + ' — the threshold is not clearing it');
+    var src = fxPlate(W, H), out = fxRun('edge', W, H, { amount: 1.5, mix: 0 });
+    for (var y2 = 2; y2 < H - 2; y2++) for (var x2 = 2; x2 < W - 2; x2++) { var i = (y2 * W + x2) * 4;
+      if (Math.abs(out[i] - src[i]) > 1) throw new Error('at mix 0 the picture came back altered at ' + x2 + ',' + y2 + ' (' + out[i] + ' vs ' + src[i] + ')'); }
+  });
+
+  /* The emboss kernel GENERALISES exactly, which is the claim worth pinning: its legacy weights
+   *     -2 -1  0 / -1  0  1 / 0  1  2
+   * are precisely dot(offset, L) for the light L = (1,1), so an angle control turns that vector rather
+   * than swapping in a different effect. Lighting from the OPPOSITE side must therefore negate the
+   * relief at every single pixel — a property no amount of "some bytes changed" could establish.
+   * The default keeps a short-circuit even so: sqrt(2)*cos(45°) is 1.0000000000000002, not 1. */
+  test('effects: Emboss relights from any angle, and grey output has no colour fringing', { item: 'fx-relief' }, function () {
+    var W = 96, H = 96;
+    var a = fxRun('emboss', W, H, { amount: 1 }), b = fxRun('emboss', W, H, { amount: 1, angle: 315 });
+    var counted = 0, opposed = 0;
+    for (var y = 2; y < H - 2; y++) for (var x = 2; x < W - 2; x++) { var i = (y * W + x) * 4;
+      var u = a[i] - 128, v = b[i] - 128;
+      if (Math.abs(u) > 6) { counted++; if (u * v < 0) opposed++; } }
+    if (counted < 500) throw new Error('only ' + counted + ' pixels carry any relief — the fixture is too flat to tell anything');
+    if (opposed < counted * 0.98) {
+      throw new Error(opposed + ' of ' + counted + ' pixels flipped when the light moved to the opposite side; a turned light must negate the relief essentially everywhere, so the angle is not turning the kernel');
+    }
+    // COUNT ONLY THE PROCESSED AREA. The kernel skips the 1px border, which is left as the original
+    // plate — counting it counts the SOURCE's colour and reports fringing that the effect never made.
+    var fringe = function (d) { var n = 0;
+      for (var y2 = 1; y2 < H - 1; y2++) for (var x2 = 1; x2 < W - 1; x2++) { var j = (y2 * W + x2) * 4;
+        if (d[j] !== d[j + 1] || d[j + 1] !== d[j + 2]) n++; } return n; };
+    if (fringe(fxRun('emboss', W, H, { amount: 1 })) < 500) throw new Error('the colour path is no longer fringing, so the grey check below proves nothing');
+    var grey = fringe(fxRun('emboss', W, H, { amount: 1, mono: 1 }));
+    if (grey !== 0) throw new Error(grey + ' pixels still carry colour in Grey mode — a metal stamp must be neutral');
+  });
+
+  /* Bump Map lit every surface in the app from the same top-left corner at the same depth.
+   * The effect MULTIPLIES the source, so any statistic on the output is dominated by the source's own
+   * range — the first version of this measured the output's spread and read an identical 235 at every
+   * relief setting. Recover the shading factor as out/src and measure that; it is the only thing these
+   * two controls move. And the 225 short-circuit is asserted as arithmetic, because it looks like
+   * superstition until you evaluate it. */
+  test('effects: Bump Map relief and ambient actually move the shading', { item: 'fx-relief' }, function () {
+    var W = 96, H = 96, src = fxPlate(W, H);
+    var shading = function (p) { var out = fxRun('bumpmap', W, H, p), lo = 99, hi = 0, sum = 0, n = 0;
+      for (var i = 0; i < out.length; i += 4) { if (src[i + 3] === 0 || src[i] < 20) continue;
+        var f = out[i] / src[i]; if (f < lo) lo = f; if (f > hi) hi = f; sum += f; n++; }
+      return { spread: hi - lo, mean: sum / n }; };
+    var s10 = shading({ amount: 1.2, relief: 10 }), s100 = shading({ amount: 1.2 }), s400 = shading({ amount: 1.2, relief: 400 });
+    if (!(s400.spread > s100.spread && s100.spread > s10.spread)) {
+      throw new Error('relief does not deepen the shading: spreads were ' + s10.spread.toFixed(3) + ' / ' + s100.spread.toFixed(3) + ' / ' + s400.spread.toFixed(3) + ' at 10 / 100 / 400');
+    }
+    var a0 = shading({ amount: 1.2, ambient: 0 }), a50 = shading({ amount: 1.2 }), a100 = shading({ amount: 1.2, ambient: 100 });
+    if (!(a0.mean < a50.mean && a50.mean < a100.mean)) {
+      throw new Error('ambient does not lift the unlit side: means were ' + a0.mean.toFixed(3) + ' / ' + a50.mean.toFixed(3) + ' / ' + a100.mean.toFixed(3));
+    }
+    // The reason the default angle is written as a literal rather than computed. EFFECTS-PLAN flags it;
+    // this keeps the flag honest, because a later tidy-up would "simplify" the branch away.
+    if (Math.cos(225 * Math.PI / 180) * Math.SQRT1_2 === -0.5) {
+      throw new Error('cos(225°)*SQRT1_2 now equals -0.5 exactly, so the bumpmap short-circuit is no longer needed — delete it and this check together');
+    }
+  });
+
   /* ---------------- EFFECTS-PLAN round 15: the print family ---------------- */
 
   test('effects: the print effects still render an un-upgraded instance exactly as they did', { item: 'fx-print' }, function () {
