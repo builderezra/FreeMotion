@@ -1856,8 +1856,17 @@ better still, keep working inside the turn rather than parking work for a later 
       This revisits #245 (v7.95), where he asked for it to move rather than sit still — it moves now,
       but the speed and strength are both wrong: **faster, and fainter.**
 
-- [ ] **281 — Drop the element count from the custom elements section. (16 Aug.)** His words, verbatim:
+- [x] **281 — Drop the element count from the custom elements section. DONE v8.74.** (16 Aug.) His words, verbatim:
       *"get rid of the number from the custom elements section that says how many elements you have"*.
+
+      **DONE v8.74.** The card read "Custom elements (3)"; it reads "Custom elements". One knock-on
+      cleaned up with it: the tint lookup carried a special case *because* of the count — the label
+      renamed itself as you saved elements, so an exact match dropped the card back to the index
+      palette — and with a stable label that fallback is gone rather than left lying around.
+      *Worth recording about the TEST rather than the change:* the first version passed while the
+      count was still there, because the suite's element library is empty and the number only ever
+      appeared once you had saved one. Only the mutation check caught it. It stubs a three-element
+      library for the render now, so it is testing the case the bug lived in.
 
 - [x] **280 — Grey out the layers button when no layer is selected. DONE v8.73.** (16 Aug, with a screenshot he
       circled.) His words, verbatim: *"make this button greyed out when a layer isnt selected"*.

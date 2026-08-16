@@ -223,7 +223,10 @@ window.FM = window.FM || {};
       // all that"). They live behind one button, which opens a real browser with its own search.
       var saved = (FM.elements ? FM.elements.list() : []) || [];
       base.push({
-        label: saved.length ? 'Custom elements (' + saved.length + ')' : 'Custom elements',
+        /* Just the name (queue 281). Ezra: "get rid of the number from the custom elements section that
+           says how many elements you have." It read "Custom elements (3)" and the count told you
+           nothing you could not see the moment you opened it. */
+        label: 'Custom elements',
         /* Four marks, four colours (queue 271). A CSS gradient cannot paint a stroke, so the icon
            carries its own paint servers — the same reason #267 and #270 needed them. Each square gets
            a hue from well apart on the wheel and the plus stays neutral, so it reads as "many things"
@@ -973,10 +976,11 @@ window.FM = window.FM || {};
              carrying its own thumb, which is #210's last clause word for word: "it shouldn't even
              colour it should show the hero image of whatever the template is (still keeping the
              text)". A template with no thumb keeps its colour and its glyph. */
-          /* Custom elements renames itself to "Custom elements (3)" as you save them, so an exact
-             label lookup silently drops back to the index palette the moment you have one. */
-          var byName = BY_LABEL[o.label]
-            || (o.label && o.label.indexOf('Custom elements') === 0 ? BY_LABEL['Custom elements'] : null);
+          /* A plain lookup again. This used to need a prefix fallback because the card renamed itself
+             to "Custom elements (3)" as you saved them and an exact match silently dropped back to the
+             index palette; queue 281 removed the count, so the label is stable and the special case
+             went with it. */
+          var byName = BY_LABEL[o.label];
           var tint = (o.mid || o.thumb) ? null : (byName || pal[idx % pal.length]);
           // Elements gets the quieter plate (queue 210) — his "backdrop more subtle", applied per
           // TAB rather than per card so the whole tab reads as one family.

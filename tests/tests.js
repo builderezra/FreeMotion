@@ -17426,6 +17426,41 @@
     }
   });
 
+  /* ---------------- queue 281: the custom-elements card counted itself ---------------- */
+
+  test('the Custom elements card does not show how many you have (queue 281)', { item: 'ce-count' }, async function () {
+    /* "get rid of the number from the custom elements section that says how many elements you have."
+     * It read "Custom elements (3)". Asserted with saved elements PRESENT, because the count only ever
+     * appeared once you had one — a test run against an empty library would pass without the fix. */
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:380px';
+    document.body.appendChild(host);
+    /* THE LIBRARY HAS TO HAVE SOMETHING IN IT, or this proves nothing: the count only ever appeared
+       once you had saved an element, so against the suite's empty library the label read "Custom
+       elements" with or without the fix — and the first version of this test duly passed while the
+       mutation check put the count straight back. `list()` is stubbed for the render and restored
+       after, rather than writing real elements into his library from a test. */
+    const list0 = (FM.elements && FM.elements.list) ? FM.elements.list : null;
+    if (list0) FM.elements.list = function () { return [{ id: 'x1', name: 'One' }, { id: 'x2', name: 'Two' }, { id: 'x3', name: 'Three' }]; };
+    try {
+      if (list0 && FM.elements.list().length !== 3) throw new Error('the stub did not take, so the count could not appear either way');
+      FM.addMenu.render(host, { variant: 'sheet' });
+      await sleep(220);
+      const tab = [].slice.call(host.querySelectorAll('.addmenu-tab')).find(function (t) { return t.textContent.trim() === 'Elements'; });
+      if (!tab) return;
+      tab.click();
+      await sleep(200);
+      const labels = [].slice.call(host.querySelectorAll('.addmenu-card')).map(function (c) { return (c.getAttribute('title') || c.textContent || '').trim(); });
+      const ce = labels.filter(function (l) { return l.indexOf('Custom elements') === 0; });
+      if (!ce.length) return;                       // the card is not in this tab's build
+      const counted = ce.filter(function (l) { return /\(\s*\d+\s*\)/.test(l); });
+      if (counted.length) throw new Error('the Custom elements card still reads "' + counted[0] + '" — the number is what he asked to be rid of');
+    } finally {
+      if (list0) FM.elements.list = list0;
+      host.remove();
+    }
+  });
+
   /* ---------------- queue 280: the layer-actions button looked live with nothing selected -------- */
 
   test('the layer-actions button is greyed out when nothing is selected (queue 280)', { item: 'layer-btn-off' }, async function () {
