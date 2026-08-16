@@ -3565,6 +3565,42 @@ better still, keep working inside the turn rather than parking work for a later 
       **Held pending your call**, for the same reason as 72: making those three animate means audio
       automation I cannot HEAR, and a slider that clicks or zips every frame is worse than one that
       doesn't animate. Say the word and I'll build the three cheap ones and you can listen.
+
+      **RE-MEASURED 17 Aug, as this entry asked for — and the numbers above do not survive.** The entry
+      said the 6.8× / 2.8× / 1.7× figures "carry the same artifact and should be re-measured with the
+      phase-controlled comparison before anyone acts on them". They have been, and the honest summary is
+      that the three curve effects look FAR less click-prone than recorded.
+      **The method, recorded this time — that was the stated lesson.** No segments and no rebuilds: ONE
+      OfflineAudioContext renders a continuous sine through the app's own `FM.buildAudioFxChain`, and
+      `ctx.suspend()` stops it mid-render at a block boundary so the parameter can be changed and the
+      render resumed on the same graph. There is no restart to cancel out, because nothing restarts. The
+      control is the identical render with the value HELD, and what is compared is how far the changed
+      output departs from the held one at the swap sample, measured against the effect's own biggest
+      normal sample-to-sample slope in the same render.
+      | | 220 Hz | 330 Hz | 147 Hz | verdict |
+      |---|---|---|---|---|
+      | **Distortion** 40→45 | 0 | 0 | 0 | **no step at all** |
+      | **Distortion** 20→60 (a big jump) | 0 | 0 | 0 | **no step at all** |
+      | **Bit Crush** 6→5 | 1.0× | 0 | 0 | at most one of its own quantisation steps |
+      | **Lo-Fi** 0.5→0.55 | 1.09× | 0.57× | 0.05× | at or below its own slope |
+      | Pitch Shift 3→4 | 24.2× | 0 | 5.8× | **unusable spread — see below** |
+      | Pitch Shift 0→1 | 62.3× | 0 | 44.2× | **unusable spread** |
+      · **Distortion Drive is the clearest result: zero, under every condition, including a 40-unit
+        jump.** The recorded 2.8× does not reproduce.
+      · **Bit Crush and Lo-Fi produce a step no bigger than the effect's own normal slope**, and often
+        none. That is not "clean" proven, but it is nothing like 6.8×.
+      · **Pitch Shift cannot be answered this way, and its earlier "safe" verdict should not be trusted
+        either.** It swings from 0 to 62× on input FREQUENCY alone — which is precisely the test this
+        entry already applies to a suspicious number: "a figure that swings that much on the test tone
+        is measuring the harness, not the effect". It has delay lines and grain windows, so a
+        phase-dependent result is what you would expect.
+      **What this changes for your decision.** The mechanism argument still stands in principle — swapping
+      a transfer curve IS a step change — but measured, at the step sizes a slider actually moves in a
+      frame, that step lands at or under what the effect is already doing to the signal. So the three
+      "cheap" ones look more animatable than the note above implies, and **Pitch Shift is the one now
+      carrying an unknown**, which is the reverse of what was recorded.
+      Still yours to call, and still for the same reason: I can measure a discontinuity, and you can hear
+      whether it sounds like anything.
 - [ ] **47 — Export must not lose the render on a crash,** and should get off the main thread.
       Chunk-replay resume is proven; not landed.
       **THIS IS THE NEXT ITEM UP** (15 Aug). Not blocked on you — just big, and I stopped rather than
