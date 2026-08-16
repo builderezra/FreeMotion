@@ -10333,10 +10333,16 @@
            The promise cannot be raced. A dead mic still rejects rather than hanging, so this does not
            trade a flake for a hang; the poll below is kept only as a fallback for a build where the
            hook is missing, and it is now generous because it is no longer the primary path. */
-        if (FM.voiceRec._micPending) {
-          var pending = FM.voiceRec._micPending();
-          if (pending && pending.then) { try { await pending; } catch (e) { throw new Error('the fake mic rejected: ' + (e && e.message || e)); } }
-        }
+        /* The await is now REACHED. It was not before: the acquisition starts on a microtask, so
+           _micPending() returned null in the same turn as open() and this whole block was skipped —
+           the test fell through to the poll below, which is the very thing v7.98 replaced it to
+           avoid. That is why the flake survived being "fixed", and why it cost a release. The app
+           publishes the promise synchronously now, so this asserts it rather than hoping. */
+        if (!FM.voiceRec._micPending) throw new Error('FM.voiceRec._micPending is gone — this test would silently fall back to polling');
+        var pending = FM.voiceRec._micPending();
+        if (!pending || !pending.then) throw new Error('the mic promise is not published synchronously, so awaiting it is skipped and the flake comes back');
+        try { await pending; } catch (e) { throw new Error('the fake mic rejected: ' + (e && e.message || e)); }
+        // The promise resolves only after the tracks are assigned, so this should already be true.
         await vrWait(function () { return vrStates().length > 0; }, 15000, 'the mic to be acquired');
         if (vrStates().join() !== 'live') throw new Error('the fake mic never went live (' + vrStates().join() + ') — every assertion below would pass for the wrong reason');
         /* The panel is spared the document-CAPTURE tap-to-deselect handler and every bare-key editor

@@ -478,17 +478,30 @@ window.FM = window.FM || {};
       return;
     }
     if (!keepMsg) say('');
-    Promise.resolve().then(FM.voiceRec._openMic).then(function (s) {
+    /* micPending is published SYNCHRONOUSLY here, and it resolves only once the tracks are actually
+     * in hand (queue 256). Both halves matter and both were wrong.
+     * The acquisition runs on a microtask, so anyone asking for the pending promise in the same turn
+     * as open() got NULL — which is exactly what the suite does. v7.98 added "await the real signal
+     * instead of polling" to fix a flake, and that await was silently never taken: it saw null, fell
+     * through to the poll it was replacing, and the flake stayed. It cost a release, because
+     * tools/ship.sh correctly refused to push on the red run.
+     * And it resolves AFTER the tracks are assigned rather than when getUserMedia returns, so
+     * awaiting it means "the mic is ready" rather than "the request came back" — otherwise a waiter
+     * can wake before micTracks is set and find nothing, which is the same race one level down. */
+    var chain = Promise.resolve().then(FM.voiceRec._openMic).then(function (s) {
       if (state === 'closed') { // closed while the permission prompt was up — never leave it running
         try { s.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
-        return;
+        return s;
       }
       stream = s;
       micTracks = s.getTracks ? s.getTracks() : [];
       state = 'idle';
       startMeter();
       paint();
-    }).catch(function (err) {
+      return s;
+    });
+    micPending = chain;
+    chain.catch(function (err) {
       var n = (err && err.name) || '';
       var m = n === 'NotAllowedError' || n === 'PermissionDeniedError' ? 'Microphone blocked. Allow mic access for this site, then tap Retake.'
         : n === 'SecurityError' ? 'Recording needs a secure page (https, or localhost). Import an audio file instead.'

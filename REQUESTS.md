@@ -1763,7 +1763,7 @@ better still, keep working inside the turn rather than parking work for a later 
       (0,2,0) and silently beat the rainbow until it was restated there too. Whatever lands here needs
       the same treatment or it will look right in one theme and wrong in the one he actually uses.
 
-- [ ] **256 — The microphone test is STILL flaky, after #226 was marked fixed at v7.98. (16 Aug.)**
+- [x] **256 — The microphone test is STILL flaky, after #226 was marked fixed at v7.98. DONE v8.35. (16 Aug.)**
       *(Found by me, twice in one day.)* `voice: the microphone is handed back on EVERY exit path` failed
       with **"timed out waiting for the mic to be acquired"** during a mutation run, and again during the
       v8.24 ship — where it did real damage, because `tools/ship.sh` correctly refused to push a green
@@ -1778,6 +1778,17 @@ better still, keep working inside the turn rather than parking work for a later 
       simply be late under load (both failures happened while a mutation run had a second Chrome busy on
       the same machine) rather than absent. If it is lateness, the wait needs to be on the signal with a
       generous ceiling, not a race against a timer.
+
+      **DONE v8.35, and the cause is worth keeping: v7.98's fix was never actually running.**
+      That release replaced a poll with "await the real acquisition signal" — correct in intent. But
+      acquisition starts on a **microtask**, so when the test asked for the pending promise in the same
+      turn as `open()` it got **null**, skipped the await, and fell through to the very poll it was
+      replacing. A fix that is silently skipped looks identical to a fix that does not work.
+      Now the promise is published **synchronously**, and it resolves only once the tracks are assigned
+      rather than when `getUserMedia` returns — so awaiting it means "the mic is ready" rather than
+      "the request came back", which is the same race one level down.
+      **The test asserts the promise EXISTS** instead of quietly falling back to polling when it does
+      not, so it cannot fail this way twice. Three consecutive full runs, no variance.
 
 - [x] **255 — The settings cog rotates once and never again until you refresh. DONE v8.16.** His words,
       verbatim: *"the setttings cog rotates once but never again until you refresh, prolly coz it doesnt
