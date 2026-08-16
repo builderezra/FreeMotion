@@ -3799,7 +3799,10 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
-      *Progress 17 Aug:* a **ninth** struck off — **the tracker's cache doubling and ignoring the device
+      *Progress 17 Aug:* a **tenth** struck off — **presets silently flattening bounce/elastic/hold/
+      overshoot easing to linear (v8.95)**, which destroyed the motion permanently: the graph editor
+      writes those names bare, so once the name was rewritten there was no bezier left to recover from.
+      *And a ninth:* — **the tracker's cache doubling and ignoring the device
       budget (v8.94)**, measured at ~720MB resident on a phone budgeted 96–128MB, which is an OOM-kill
       mid-track.
       *And an eighth:* — **the motion tracker ignoring `layer.crop` (v8.93)**,

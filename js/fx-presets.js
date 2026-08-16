@@ -45,7 +45,25 @@ window.FM = window.FM || {};
   ];
 
   // ---- validation (custom presets come back from localStorage — never trust the shape) ----
-  const EASE_OK = { linear: 1, easeIn: 1, easeOut: 1, easeInOut: 1 };
+  /* DERIVED FROM THE LIVE EASING TABLES, not a hard-coded four (BUG-HUNT: "Saving an effect as a preset
+   * silently rewrites bounce/elastic/hold/overshoot keyframe easing to linear").
+   * This whitelisted linear/easeIn/easeOut/easeInOut and rewrote everything else to 'linear' — but the
+   * app also ships bounce, elastic and hold in `FM.EASES`, and overshoot and anticipate in
+   * `FM.EASE_PRESETS`, and the graph editor writes those names BARE (`kf.e = key; delete kf.bez`), so
+   * there is no bezier left for the evaluator to fall back on. Every preset round-trip therefore
+   * flattened the motion the user authored and previewed, permanently — `readCustom()` re-applies this
+   * on every read — with no warning. Measured on a blur radius keyed [0, 40 bounce, 5 hold, 20
+   * overshoot]: the original holds at 40 through t=2.5 while the preset gave 22.5.
+   * scene.js loads before this file, so the tables are there at IIFE time. `custom` is allowed because
+   * it only means anything alongside a valid `bez`, which saneKf already preserves separately. */
+  const EASE_OK = (function () {
+    const ok = { custom: 1 };
+    [FM.EASES, FM.EASE_PRESETS].forEach(function (t) { if (t) Object.keys(t).forEach(function (k) { ok[k] = 1; }); });
+    /* If the tables somehow are not loaded, fall back to the four this used to allow rather than to
+       NOTHING — an empty whitelist would rewrite every easing in the app, which is worse than the bug. */
+    if (Object.keys(ok).length <= 1) { ok.linear = 1; ok.easeIn = 1; ok.easeOut = 1; ok.easeInOut = 1; }
+    return ok;
+  })();
   // Two bits of state the validator leaves behind for whoever asked it to validate. Reads (readCustom)
   // ignore them; the user-facing entry points (save/capture) drain them and speak up, so a rejection
   // or a trim is never silent. They are read IMMEDIATELY after the sanePreset() call that set them —

@@ -18186,6 +18186,51 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: presets flattened bounce/elastic/hold/overshoot ---------------- */
+
+  test('a saved preset keeps the easing you authored (BUG-HUNT)', { item: 'preset-easing' }, function () {
+    /* "Saving an effect as a preset silently rewrites bounce/elastic/hold/overshoot keyframe easing to
+     * linear." The whitelist named four easings; the app has nine. The graph editor writes the others
+     * BARE — it sets `kf.e` and deletes `kf.bez` — so once the name was rewritten there was no bezier
+     * left to fall back on and the motion was gone for good, re-applied on every read.
+     * Asserted on VALUES as well as names, using the entry's own measured figures: on a blur radius
+     * keyed [0, 40 bounce, 5 hold, 20 overshoot] the original holds at 40 through t=2.5 and reaches
+     * 21.31 at t=3.5, where the flattened preset gave 22.5 and 12.5. A name check alone would pass on a
+     * build that kept the name and lost the curve. */
+    if (!FM.effectPresets || !FM.effectPresets.capture || !FM.effectPresets.makeInstance) throw new Error('FM.effectPresets.capture/makeInstance are missing');
+    const fx = FM.fxRegistry.makeInstance('blur');
+    if (!fx || !fx.params || fx.params.radius === undefined) return;   // no blur/radius in this build
+    const authored = [
+      { t: 0, v: 1, e: 'linear' },
+      { t: 2, v: 40, e: 'bounce' },
+      { t: 3, v: 5, e: 'hold' },
+      { t: 4, v: 20, e: 'overshoot' },
+      { t: 5, v: 8, e: 'elastic' },
+    ];
+    fx.params.radius = { kf: authored.map(function (k) { return Object.assign({}, k); }) };
+
+    const p = FM.effectPresets.capture(fx, 'suite-easing-probe');
+    if (!p) throw new Error('capturing the effect as a preset returned null');
+    const stored = (p.params && p.params.radius && p.params.radius.kf) || [];
+    if (stored.length !== authored.length) throw new Error('the preset stored ' + stored.length + ' keyframes for ' + authored.length + ' authored');
+    authored.forEach(function (k, i) {
+      if (stored[i].e !== k.e) {
+        throw new Error('keyframe ' + i + ' was authored "' + k.e + '" and stored as "' + stored[i].e + '" — the preset has flattened the motion, and there is no bezier left to recover it from');
+      }
+    });
+
+    /* …and it still EVALUATES the same, which is the thing the user sees. */
+    const inst = FM.effectPresets.makeInstance(p, 0);
+    if (!inst) throw new Error('the preset would not make an instance');
+    [[2.5, 'the hold holding'], [3.5, 'the overshoot']].forEach(function (pair) {
+      const a = FM.evalProp(fx.params.radius, pair[0]);
+      const b = FM.evalProp(inst.params.radius, pair[0]);
+      if (Math.abs(a - b) > 0.05) {
+        throw new Error('at t=' + pair[0] + ' (' + pair[1] + ') the original gives ' + a.toFixed(2) + ' and the preset gives ' + b.toFixed(2) + ' — the preset is animating a straight ramp instead of what was authored');
+      }
+    });
+  });
+
   /* ---------------- BUG-HUNT: the tracker's cache ignored the device budget ---------------- */
 
   test('a track can never budget more frames than the device allows (BUG-HUNT)', { item: 'tracker-mem' }, function () {
