@@ -5838,6 +5838,13 @@ body.fm-pushing #toast { z-index: 213; }
    the handle is not a control and must not advertise itself. */
 #am-resizer { display: none; }
 @media (min-width: 701px) {
+  /* THE HANDLE HAS TO HAVE SOMETHING TO BE ABSOLUTE AGAINST. It did not: `#inspector-panel` is a plain
+     grid item with no `position`, so `position: absolute; top: 0` on the handle resolved against the
+     PAGE — measured at 1280x800 as `y:0, 1280x10`, a strip across the very top of the window. That is
+     both why Ezra could not find it for weeks and, once he did, why he said *"the button to do it
+     shouldnt be at the top of the screen"*. Scoped to the state the handle is live in, so the inspector's
+     own absolutely-positioned children are not given a new containing block for the sake of this. */
+  body.layout-studio #inspector-panel:has(.addmenu--panel) { position: relative; }
   body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer {
     display: block; position: absolute; left: 0; right: 0; top: 0; height: 10px;
     cursor: ns-resize; z-index: 6; touch-action: none;
@@ -5853,9 +5860,20 @@ body.fm-pushing #toast { z-index: 213; }
      canvas — which is not a nicety here but the only way the gesture can work at all: the band and
      the timeline are ONE grid row, so a taller row would take the height out of the stage. Its grid
      slot keeps the undragged height, so nothing below reflows while dragging. */
+  /* …AND IT GROWS UPWARD ONLY. Ezra, on what this used to do: *"this is dogshit and not what i wanted
+     at all, its completely broken. It shouldnt take up the whole screen only go up"*. It was absolute
+     against the page with `left: 0; right: var(--insp-w, 0)` — and `--insp-w` is set nowhere, so it
+     resolved to `right: 0` and the panel spanned the FULL window the moment it left the grid, covering
+     the timeline beside it and most of the canvas. The height it was measured on during the build was
+     correct the whole time, which is why a panel that also grew sideways passed.
+     Pinned to its own slot instead: left, width and bottom are measured from the panel's grid box when
+     the drag starts and held for the whole gesture, so the only edge that can move is the top one.
+     `fixed` rather than `absolute` on purpose — those three numbers are viewport coordinates, and fixed
+     is the one position where they mean what they measured, with no containing block to guess at. */
   body.layout-studio.am-floating #inspector-panel {
-    position: absolute; left: 0; right: var(--insp-w, 0);
-    height: var(--am-h, 264px); bottom: 0; z-index: 8;
+    position: fixed;
+    left: var(--am-left, 0); width: var(--am-width, 307px); right: auto;
+    bottom: var(--am-bottom, 0); height: var(--am-h, 264px); z-index: 8;
     border-top: 1px solid var(--line);
     box-shadow: 0 -18px 40px rgba(0, 0, 0, .45);
   }

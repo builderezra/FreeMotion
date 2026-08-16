@@ -6668,7 +6668,7 @@ wait for them to report back."*
       hide the defect. It also checks the reverse — removing a benchmark puts the chip out without a
       scrub — because the same staleness the other way round is just as wrong.
 
-- [ ] **244 — PC: drag the add menu independently of the timeline. ⚠️ REOPENED 16 Aug — shipped v8.30 and he says it is broken.** (15
+- [x] **244 — PC: drag the add menu independently of the timeline. DONE v8.67 — all five behaviours, after a reopen.** (15
       Aug. *He asked for this one to go to the BOTTOM: "This can go to the bottom of the list as you have
       a lot of things to work on still, remember ur doing oldest first."*) His words:
       *"Make it so you can seperatly drag up and down the add menu, on pc, but you cant drag lower than
@@ -6788,6 +6788,44 @@ wait for them to report back."*
       the add menu's own top edge, which is both why he could not find it for so long and why it is
       wrong now that he has.
       So the drag handle must move to the panel's top edge and travel WITH it, not sit at screen top.
+
+      **FIXED v8.67 — both faults, and both were geometry rather than logic.** The drag itself (floor,
+      sticky snap, blue flash, coupling) was right and is untouched.
+      1. **"It shouldnt take up the whole screen only go up."** The floating panel was
+         `position: absolute; left: 0; right: var(--insp-w, 0)` — and **`--insp-w` is set nowhere in the
+         stylesheet**, so it resolved to `right: 0` and the panel spanned the FULL window the instant it
+         left the grid, covering the timeline and most of the canvas. It is pinned to its own column
+         now: left, width and bottom are measured from the panel's grid box at pointerdown, while it is
+         still in the grid, and held for the whole gesture. `fixed` rather than `absolute`, because
+         those three numbers are viewport coordinates and that is the one position where they mean what
+         they measured.
+      2. **"the button to do it shouldnt be at the top of the screen."** `#inspector-panel` is a plain
+         grid item with no `position`, so the handle's `position: absolute; top: 0` resolved against the
+         PAGE. Measured before the fix: **`y:0, 1280x10`** — a strip across the very top of the window,
+         which is also why it took him weeks to find it. The panel is now a containing block in exactly
+         the state the handle is live in, so the handle sits on its top edge and rides up with it.
+      Measured through a real drag at 1280×800, which is the check the last entry asked for by name
+      ("do not re-measure only the height"): x **0**, width **307** and bottom **800** identical at every
+      step while the top went 560 → 500 → 380 → 304; the handle tracked the top edge to the pixel; and
+      the timeline's box was **byte-identical at every step** (x 307, y 560, w 973, bottom 800).
+      **One change you did not ask for, so push back if you disagree:** how far up it may go was 82% of
+      the window, which leaves about 140px of stage — with the sideways bug on top, that is the "whole
+      screen" you saw. It is 62% now, so roughly a third of the window stays canvas. One number in one
+      place if you want it taller.
+      **AND THE LAST CLAUSE IS BUILT TOO, so this entry is finally complete.** v8.30 shipped without
+      *"dragging the timeline brings the add menu with it unless they arent connected, until you reach
+      to where the add menu is at then it will do the same thing but the other way around by snapping
+      them back together"*, and said so rather than pretending. It is in now.
+      Half of it needed nothing: while the two are connected they are ONE grid row, so dragging the
+      timeline already carries the add menu. The half that needed building is the raised one — coming up
+      into a floating menu, the timeline holds at the menu's height and flashes the same divider, and
+      only past the same 9px of travel do the two re-couple and move as one. The design note's warning
+      about "a second `--tl-h` writer" is respected: the timeline's handle writes `--tl-h` as it always
+      did and simply asks the add menu to stop floating; it never writes `--am-h`.
+      Measured through the real gesture: menu raised to y=405 with the timeline still at 605, then
+      dragging the timeline up gave 545 → 465 → 409 → **held at 405 with the divider flashing** → past
+      the stick, both at 345 with the float dropped. The snap machinery is now one flag and one flash
+      shared by both handles, so a gesture from either side cannot fire it twice.
 
 
 - [x] **245 — Home: the tab buttons should be clear-but-grain-free like the cards, and the grain itself

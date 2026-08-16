@@ -17782,6 +17782,131 @@
     }
   });
 
+  test('the add menu grows UPWARD only, and its handle rides its own top edge (queue 244 reopen)', { item: 'am-drag' }, async function () {
+    /* Ezra, on what v8.30 shipped: "i jsut figured out how to do ur version of the add menu dragging up
+     * and down and this is dogshit and not what i wanted at all, its completely broken. It shouldnt take
+     * up the whole screen only go up" — and separately "and the button to do it shouldnt be at the top
+     * of the screen".
+     * Both were real and both were geometry. The floating panel was `left: 0; right: var(--insp-w, 0)`
+     * with `--insp-w` set nowhere, so it spanned the whole window and swallowed the timeline; and the
+     * handle was absolute inside a panel with no `position`, so it resolved against the page and sat at
+     * `y:0, 1280x10` across the top of the window.
+     * THE TEST ABOVE PASSED THROUGH ALL OF THAT, because it measured the panel's HEIGHT and the canvas's
+     * height and nothing else. That is the whole lesson here, and it is why this one measures the three
+     * edges that are supposed to be nailed down and the box of the panel that is supposed to be
+     * untouched — the things a "grows in every direction" bug shows up in. */
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const root = document.documentElement, body = document.body;
+    const wasStudio = body.classList.contains('layout-studio');
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    try {
+      body.classList.add('layout-studio');
+      root.style.setProperty('--tl-h', '240px');
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.inspector) FM.inspector.refresh();
+      await frame();
+      const rez = document.getElementById('am-resizer');
+      const panel = document.getElementById('inspector-panel');
+      const tlp = document.getElementById('timeline-panel');
+      if (!rez || !panel) throw new Error('need #am-resizer and #inspector-panel');
+      if (!document.querySelector('#inspector-panel .addmenu--panel')) return;
+      if (getComputedStyle(rez).display === 'none') throw new Error('the drag handle is not shown in Studio with the add menu up');
+      const box = e => { const r = e.getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom), w: Math.round(r.width) }; };
+
+      /* THE HANDLE, before anything is dragged. It has to be on the panel, not on the window: the
+         reported symptom was a 10px strip across the top of the screen. */
+      const p0 = box(panel), h0 = box(rez);
+      if (Math.abs(h0.t - p0.t) > 3) throw new Error('the drag handle sits at y=' + h0.t + ' while the add menu starts at y=' + p0.t + ' — it is not on the panel\'s top edge, which is what he found and called "the button to do it shouldnt be at the top of the screen"');
+      if (Math.abs(h0.w - p0.w) > 6) throw new Error('the drag handle is ' + h0.w + 'px wide against a ' + p0.w + 'px panel — it is spanning something other than the add menu');
+
+      const t0 = tlp ? box(tlp) : null;
+      const pd = (t, y) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: 150, clientY: y, pointerId: 1, buttons: 1 }));
+      const y0 = Math.round(h0.t + 5);
+      pd('pointerdown', y0);
+      for (const dy of [60, 180, 300]) {
+        pd('pointermove', y0 - dy);
+        await frame();
+        const p = box(panel), h = box(rez);
+        if (p.l !== p0.l) throw new Error('dragged up ' + dy + 'px and the add menu\'s LEFT edge moved ' + p0.l + ' → ' + p.l + ' — it is supposed to only go up');
+        if (p.r !== p0.r) throw new Error('dragged up ' + dy + 'px and the add menu\'s RIGHT edge moved ' + p0.r + ' → ' + p.r + ' — this is the "takes up the whole screen" fault: it grew sideways over the timeline');
+        if (p.b !== p0.b) throw new Error('dragged up ' + dy + 'px and the add menu\'s BOTTOM edge moved ' + p0.b + ' → ' + p.b);
+        if (!(p.t < p0.t)) throw new Error('dragged up ' + dy + 'px and the top edge did not rise (' + p0.t + ' → ' + p.t + ')');
+        if (Math.abs(h.t - p.t) > 3) throw new Error('the handle came off the panel\'s top edge mid-drag: handle ' + h.t + ' vs panel ' + p.t);
+        if (t0) {
+          const t = box(tlp);
+          if (t.l !== t0.l || t.r !== t0.r || t.t !== t0.t || t.b !== t0.b) {
+            throw new Error('the timeline moved while the add menu was dragged: ' + JSON.stringify(t0) + ' → ' + JSON.stringify(t) + ' — "the timeline beside it is not touched at all"');
+          }
+        }
+      }
+      pd('pointerup', y0 - 300);
+      await frame();
+    } finally {
+      document.body.classList.remove('am-floating', 'am-resizing');
+      if (!wasStudio) document.body.classList.remove('layout-studio');
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      ['--am-h', '--am-left', '--am-width', '--am-bottom'].forEach(v => root.style.removeProperty(v));
+    }
+  });
+
+  test('dragging the TIMELINE up into a raised add menu snaps them back together (queue 244)', { item: 'am-drag' }, async function () {
+    /* The clause v8.30 shipped without, and said so: "dragging the timeline brings the add menu with it
+     * unless they arent connected, until you reach to where the add menu is at then it will do the same
+     * thing but the other way around by snapping them back together."
+     * While they are connected there is nothing to build — they are one grid row. The case is the
+     * RAISED one: coming up into a floating menu the timeline holds at the menu's height and flashes the
+     * divider, and only past the same 9px of travel do the two re-couple. */
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const root = document.documentElement, body = document.body;
+    const wasStudio = body.classList.contains('layout-studio');
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    try {
+      body.classList.add('layout-studio');
+      root.style.setProperty('--tl-h', '240px');
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.inspector) FM.inspector.refresh();
+      await frame();
+      const amRez = document.getElementById('am-resizer');
+      const tlRez = document.getElementById('tl-resizer');
+      const panel = document.getElementById('inspector-panel');
+      const tlp = document.getElementById('timeline-panel');
+      if (!amRez || !tlRez || !panel || !tlp) throw new Error('need both resizers, #inspector-panel and #timeline-panel');
+      if (!document.querySelector('#inspector-panel .addmenu--panel')) return;
+      if (getComputedStyle(amRez).display === 'none') return;
+      const send = (el, t, y) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: 600, clientY: y, pointerId: 1, buttons: 1 }));
+      const top = e => Math.round(e.getBoundingClientRect().top);
+
+      // raise the add menu so the two are apart
+      const y0 = top(panel);
+      send(amRez, 'pointerdown', y0); send(amRez, 'pointermove', y0 - 200); await frame();
+      send(amRez, 'pointerup', y0 - 200); await frame();
+      if (!body.classList.contains('am-floating')) throw new Error('could not raise the add menu, so the re-coupling case cannot be reached');
+      const amTop = top(panel);
+      if (!(top(tlp) > amTop + 40)) throw new Error('the timeline is not below the raised menu (' + top(tlp) + ' vs ' + amTop + '), so there is nothing to drag up INTO');
+
+      // now drag the TIMELINE up into it
+      const t0 = top(tlp);
+      const reach = t0 - amTop;               // travel that lands the timeline exactly on the menu
+      send(tlRez, 'pointerdown', t0);
+      send(tlRez, 'pointermove', t0 - (reach + 4)); await frame();     // just past it, inside the sticky zone
+      const stuckTop = top(tlp);
+      if (Math.abs(stuckTop - amTop) > 3) throw new Error('the timeline did not hold at the add menu\'s level: it is at ' + stuckTop + ' against the menu at ' + amTop + ' — no snap');
+      if (!body.classList.contains('am-floating')) throw new Error('the two re-coupled on contact instead of pausing there — "it should pause and snap for a second"');
+
+      send(tlRez, 'pointermove', t0 - (reach + 60)); await frame();    // past the sticky threshold
+      if (body.classList.contains('am-floating')) throw new Error('pushing past the snap did not re-couple them — the menu is still floating');
+      if (Math.abs(top(tlp) - top(panel)) > 3) throw new Error('re-coupled but the two are not level: timeline ' + top(tlp) + ' vs menu ' + top(panel));
+      send(tlRez, 'pointerup', t0 - (reach + 60)); await frame();
+    } finally {
+      document.body.classList.remove('am-floating', 'am-resizing', 'tl-resizing');
+      if (!wasStudio) document.body.classList.remove('layout-studio');
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      ['--am-h', '--am-left', '--am-width', '--am-bottom'].forEach(v => root.style.removeProperty(v));
+    }
+  });
+
   test('the add menu cannot be dragged below the timeline, and its clamp is real', { item: 'am-drag' }, function () {
     /* "you cant drag lower than what the timeline is dragged too" — a clamp, not a collision test,
        and its floor is the CURRENT --tl-h read from one source of truth rather than re-measured. */

@@ -3367,11 +3367,29 @@ window.FM = window.FM || {};
     let saved = 0;
     try { saved = parseInt(localStorage.getItem('fm_tl_h') || '', 10) || 0; } catch (_) {}
     if (saved && !isPhone()) root.style.setProperty('--tl-h', clampH(saved) + 'px');
+    /* SHARED BY BOTH RESIZERS (queue 244). The snap belongs to the LINE between the two, not to one
+       handle: "if you start dragging it back down and hit the level of the timeline it should pause and
+       snap for a second, showing a little blue flash… and also dragging the timeline brings the add menu
+       with it… until you reach to where the add menu is at then it will do the same thing but the other
+       way around by snapping them back together." One flag, one flash, so a gesture from either side
+       cannot fire it twice or leave the other side unable to. */
+    const STICK244 = 9;
+    let snapFlashed = false;
+    const flashDivider = () => {
+      if (snapFlashed) return;
+      snapFlashed = true;
+      const p = document.getElementById('inspector-panel');
+      if (!p) return;
+      p.classList.remove('am-snap'); void p.offsetWidth; p.classList.add('am-snap');
+      setTimeout(() => p.classList.remove('am-snap'), 420);
+    };
+    const amHeightNow = () => parseInt(getComputedStyle(root).getPropertyValue('--am-h'), 10) || 0;
+
     let dragging = false, startY = 0, startH = 0;
     rez.addEventListener('pointerdown', (e) => {
       if (isPhone()) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      dragging = true; startY = e.clientY;
+      dragging = true; startY = e.clientY; snapFlashed = false;
       const panel = document.getElementById('timeline-panel');
       startH = panel ? panel.getBoundingClientRect().height : 232;
       document.body.classList.add('tl-resizing');
@@ -3380,8 +3398,24 @@ window.FM = window.FM || {};
     });
     rez.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      const h = clampH(startH + (startY - e.clientY));   // drag UP → taller timeline
-      root.style.setProperty('--tl-h', h + 'px');         // pure CSS-grid resize — no timeline reflow needed (height doesn't touch clip-x / pps math)
+      const want = clampH(startH + (startY - e.clientY));   // drag UP → taller timeline
+      /* THE OTHER DIRECTION (queue 244, the clause that was left unbuilt at v8.30): "dragging the
+         timeline brings the add menu with it unless they arent connected, until you reach to where the
+         add menu is at then it will do the same thing but the other way around by snapping them back
+         together."
+         While they are connected — the add menu is not floating — this needs nothing at all: they are
+         one grid row, so the timeline's height IS the add menu's. The case to build is the raised one.
+         Coming UP into a floating menu, the timeline holds at the menu's height and flashes the same
+         divider, and only once the pointer has travelled the same 9px past it do the two re-couple:
+         the float drops and from there one height moves both. Mirrors the add menu's own rule with the
+         roles swapped, which is exactly how he described it. */
+      const amH = document.body.classList.contains('am-floating') ? amHeightNow() : 0;
+      if (amH && want >= amH) {
+        flashDivider();
+        if (want <= amH + STICK244) { root.style.setProperty('--tl-h', amH + 'px'); return; }
+        if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();     // snapped back together
+      }
+      root.style.setProperty('--tl-h', want + 'px');       // pure CSS-grid resize — no timeline reflow needed (height doesn't touch clip-x / pps math)
     });
     const end = () => {
       if (!dragging) return;
@@ -3414,32 +3448,44 @@ window.FM = window.FM || {};
     const amRez = document.getElementById('am-resizer');
     if (amRez) {
       const AM_KEY = 'fm_am_h';
-      const STICK = 9;                    // px of travel past the floor before the two couple (draw-tool's snapCursor uses the same idea)
+      const STICK = STICK244;             // px of travel past the floor before the two couple (draw-tool's snapCursor uses the same idea)
       const amFloor = () => parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10) || 232;
       const amClamp = (h) => {
         const vh = window.innerHeight;
-        const ceil = Math.max(200, Math.round(vh * 0.82));   // never the whole window: the canvas has to stay visible
+        /* How far up it may go. This was 0.82 of the window, which leaves about 140px of stage on a
+           1280x800 screen — with the sideways bug on top of it, that is the "takes up the whole
+           screen" he reported. 0.62 keeps roughly a third of the window as canvas, which is the point
+           of a menu that floats OVER the canvas rather than replacing it. A judgement call rather than
+           a measured one, so it is a single number in one place if he wants it taller. */
+        const ceil = Math.max(200, Math.round(vh * 0.62));
         return Math.max(amFloor(), Math.min(ceil, h));
       };
       FM.clampAddMenuH = amClamp;         // exposed so the suite tests the clamp that runs, not a copy
       const studioAdd = () => !isPhone() &&
         document.body.classList.contains('layout-studio') &&
         !!document.querySelector('#inspector-panel .addmenu--panel');
-      let amDrag = false, amStartY = 0, amStartH = 0, amStuck = 0, amFlashed = false;
-      const flashDivider = () => {
-        if (amFlashed) return;
-        amFlashed = true;
+      let amDrag = false, amStartY = 0, amStartH = 0, amStuck = 0;
+      /* PIN THE SLOT BEFORE LEAVING IT. The panel floats while it is raised, and a floating box needs
+         to be told where its other three edges are or it resolves against the page — which is what it
+         did, spanning the whole window and covering the timeline. Measured here, while the panel is
+         still IN the grid, so these are its real column: only the top edge is left free to move.
+         Re-read on every pointerdown rather than cached, because the column moves when the window is
+         resized or the inspector is widened. */
+      const amPinSlot = () => {
         const p = document.getElementById('inspector-panel');
         if (!p) return;
-        p.classList.remove('am-snap'); void p.offsetWidth; p.classList.add('am-snap');
-        setTimeout(() => p.classList.remove('am-snap'), 420);
+        const r = p.getBoundingClientRect();
+        root.style.setProperty('--am-left', Math.round(r.left) + 'px');
+        root.style.setProperty('--am-width', Math.round(r.width) + 'px');
+        root.style.setProperty('--am-bottom', Math.round(window.innerHeight - r.bottom) + 'px');
       };
       amRez.addEventListener('pointerdown', (e) => {
         if (!studioAdd()) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-        amDrag = true; amStartY = e.clientY; amStuck = 0; amFlashed = false;
+        amDrag = true; amStartY = e.clientY; amStuck = 0; snapFlashed = false;
         const p = document.getElementById('inspector-panel');
         amStartH = p ? p.getBoundingClientRect().height : amFloor();
+        amPinSlot();                        // measured in the grid, before anything floats
         document.body.classList.add('am-resizing');
         try { amRez.setPointerCapture(e.pointerId); } catch (_) {}
         e.preventDefault();
@@ -3481,6 +3527,7 @@ window.FM = window.FM || {};
       FM.dropAddMenuFloat = function () {
         document.body.classList.remove('am-floating');
         root.style.removeProperty('--am-h');
+        ['--am-left', '--am-width', '--am-bottom'].forEach(v => root.style.removeProperty(v));
       };
       window.addEventListener('resize', () => { if (!studioAdd()) FM.dropAddMenuFloat(); });
     }
