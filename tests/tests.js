@@ -18186,6 +18186,103 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 15: the print family ---------------- */
+
+  test('effects: the print effects still render an un-upgraded instance exactly as they did', { item: 'fx-print' }, function () {
+    var W = 96, H = 96, fails = [];
+    var CASES = [
+      { type: 'halftone',      old: { size: 8 }, legacyKeys: { angle: 0, gain: 1.45, shape: 0 },
+        moved: { angle: 45, gain: 2.2, shape: 1 } },
+      { type: 'halftonelines', old: { size: 8 }, legacyKeys: { angle: 0, weight: 1, softness: 0 },
+        moved: { angle: 60, weight: 2.2, softness: 3 } },
+      { type: 'crosshatch',    old: { spacing: 7, color: '#101014' }, legacyKeys: { density: 50, weight: 1, angle: 0 },
+        moved: { density: 90, weight: 3, angle: 30 } },
+      { type: 'sketch',        old: { amount: 0.85 }, legacyKeys: { darkness: 510, threshold: 0, tooth: 0 },
+        moved: { darkness: 1100, threshold: 60, tooth: 80 } },
+    ];
+    CASES.forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old), full = fxRun(c.type, W, H, withKeys);
+      var n = fxDiff(bare, full);
+      if (n) fails.push(c.type + ': ' + n + ' bytes differ between an old instance and one holding the new keys at their fallbacks');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': draws nothing at all at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) {
+        var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, stamped))) fails.push(c.type + ': a NEW instance renders differently from an old one');
+      }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* The screen angle is the whole point of a halftone — every real print screen runs at 45 degrees,
+   * because an axis-aligned dot grid beats against the subject and reads as moire rather than as ink.
+   * Asserted as a property of the LATTICE (at 0 the pattern repeats exactly every `size` rows; turned,
+   * it cannot), which a pixel count could never distinguish from a change of pitch.
+   * The dot shape is checked by AREA RATIO against its own geometry — and note the pitch: at pitch 8
+   * and a mid tone the dot radius is 2.89px, at which a circle and a square enclose exactly the same
+   * 25 integer pixels, so the ratio comes out 1.000 and a working control looks dead. That is the
+   * degenerate-test-value trap EFFECTS-PLAN warns about, met in the wild. Use a coarse pitch. */
+  test('effects: Halftone can turn its screen and change its dot shape', { item: 'fx-print' }, function () {
+    var W = 120, H = 120, size = 8;
+    var rowsSame = function (d, y1, y2) { for (var x = 0; x < W; x++) if (d[(y1 * W + x) * 4] !== d[(y2 * W + x) * 4]) return false; return true; };
+    var flat0 = fxRun('halftone', W, H, { size: size }, 'flat');
+    var flat45 = fxRun('halftone', W, H, { size: size, angle: 45 }, 'flat');
+    if (!rowsSame(flat0, 20, 20 + size)) throw new Error('the un-turned screen no longer repeats every ' + size + ' rows — the lattice itself has changed');
+    if (rowsSame(flat45, 20, 20 + size)) throw new Error('at 45 degrees the screen still repeats on the vertical axis, so the lattice was not turned');
+    var black = function (p) { var d = fxRun('halftone', W, H, p, 'flat'), n = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] === 0) n++; return n; };
+    var rnd = black({ size: 24 }), sq = black({ size: 24, shape: 1 }), dia = black({ size: 24, shape: 2 });
+    if (!rnd) throw new Error('the round dot inked nothing at all, so the ratios below mean nothing');
+    if (!(sq / rnd > 1.08)) throw new Error('a square dot inked ' + (sq / rnd).toFixed(3) + 'x the round one; a square of radius r covers 4r^2 against a circle\'s pi*r^2, so it must be materially MORE');
+    if (!(dia / rnd < 0.85)) throw new Error('a diamond dot inked ' + (dia / rnd).toFixed(3) + 'x the round one; Manhattan distance covers 2r^2, so it must be materially LESS');
+  });
+
+  /* Crosshatch's three tiers fired at hardcoded luminances, so how much ink went down was decided
+   * entirely by how the source happened to be exposed — and its 1px strokes are invisible at 1080p,
+   * which is the resolution everything in this app is.
+   * Counted as the INK COLOUR, not as "anything dark": the first version of this counted every pixel
+   * below mid-grey, and on a plate darker than that cutoff the background counted as ink, so all four
+   * readings tied at exactly W*H and a broken control would have passed. */
+  test('effects: Crosshatch ink density and stroke weight are controls now', { item: 'fx-print' }, function () {
+    var W = 120, H = 120;
+    var inked = function (p) { var q = { spacing: 7, color: '#101014' };
+      Object.keys(p).forEach(function (k) { q[k] = p[k]; });
+      var d = fxRun('crosshatch', W, H, q, 'flat'), n = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] === 16 && d[i + 2] === 20) n++; return n; };
+    var base = inked({});
+    if (!base) throw new Error('the default hatch inked nothing on a mid plate — this test cannot measure anything');
+    if (inked({ density: 0 }) !== 0) throw new Error('at density 0 the hatch still put ink down');
+    if (!(inked({ density: 100 }) > base)) throw new Error('density 100 did not increase the ink over the default');
+    if (!(inked({ weight: 3 }) > base * 2)) throw new Error('a 3px stroke inked ' + inked({ weight: 3 }) + ' against ' + base + ' at 1px — stroke weight is not widening the lines');
+    var a = fxRun('crosshatch', W, H, { spacing: 7, color: '#101014' }, 'flat');
+    var b = fxRun('crosshatch', W, H, { spacing: 7, color: '#101014', angle: 30 }, 'flat');
+    if (!fxDiff(a, b)) throw new Error('the angle control did not turn the hatch');
+  });
+
+  /* Pencil Sketch's Amount could only fade the whole drawing back toward the photo. The measurable
+   * complaint is the grey mud: a Sobel across a SMOOTH area still returns a small gradient, so every
+   * gentle ramp came out faintly smeared with no way to say "that is not a line".
+   * Measured on a plate with no real edge anywhere. Note the cutoff — the mud sits at about 253, so a
+   * "darker than 250" test reports zero mud on a frame that is entirely mud. */
+  test('effects: Pencil Sketch can clear the grey mud out of smooth areas, and give the paper tooth', { item: 'fx-print' }, function () {
+    var W = 120, H = 120;
+    var notPaper = function (d) { var n = 0; for (var i = 0; i < d.length; i += 4) if (d[i] < 255) n++; return n; };
+    var mud = notPaper(fxRun('sketch', W, H, { amount: 1 }, 'gradient'));
+    if (mud < W * H * 0.5) throw new Error('only ' + mud + ' of ' + (W * H) + ' pixels came back off-white on a plate with no edges — this test can no longer show the mud it is about');
+    var clean = notPaper(fxRun('sketch', W, H, { amount: 1, threshold: 60 }, 'gradient'));
+    if (clean > W * H * 0.02) throw new Error('after thresholding, ' + clean + ' pixels are still smeared — the gate is not clearing the smooth areas');
+    var shades = function (p) { var d = fxRun('sketch', W, H, p, 'flat'), set = {};
+      for (var i = 0; i < d.length; i += 4) set[d[i]] = 1; return Object.keys(set).length; };
+    if (shades({ amount: 1 }) !== 1) throw new Error('flat paper is no longer flat without tooth — something else is texturing it');
+    if (!(shades({ amount: 1, tooth: 80 }) > 8)) throw new Error('paper tooth produced only ' + shades({ amount: 1, tooth: 80 }) + ' distinct shades on flat paper');
+  });
+
   /* ---------------- EFFECTS-PLAN round 14: the pattern overlays ---------------- */
 
   /* Same shape as the round-12 gate, and for the same reason: the identity harness in EFFECTS-PLAN.md
@@ -18405,6 +18502,10 @@
     } else if (kind === 'dot') {                     // a single lit pixel: the splat IS the tap set
       for (i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
       var c = ((H >> 1) * W + (W >> 1)) * 4; d[c] = 255; d[c + 1] = 255; d[c + 2] = 255;
+    } else if (kind === 'gradient') {                // smooth ramp: contains no real edge to detect
+      for (var gy = 0; gy < H; gy++) for (var gx = 0; gx < W; gx++) {
+        var gi = (gy * W + gx) * 4, gv = Math.round(60 + 120 * gx / (W - 1));
+        d[gi] = gv; d[gi + 1] = gv; d[gi + 2] = gv; d[gi + 3] = 255; }
     } else if (kind === 'flat') {                    // uniform: the ONLY plate a pattern test can use
       for (i = 0; i < W * H; i++) { d[i * 4] = 160; d[i * 4 + 1] = 160; d[i * 4 + 2] = 160; d[i * 4 + 3] = 255; }
     } else {

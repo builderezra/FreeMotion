@@ -152,7 +152,12 @@ window.FM = window.FM || {};
       { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']] },
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Mono']] },
     ] },
-    { type: 'halftone', label: 'Halftone Dots', param: 'size', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
+    { type: 'halftone', label: 'Halftone Dots', params: [
+      { key: 'size', label: 'Dot pitch', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
+      { key: 'angle', label: 'Screen angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
+      { key: 'gain', label: 'Ink gain', min: 0.5, max: 2.5, step: 0.05, def: 1.45, unit: '×' },
+      { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
+    ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
       { key: 'amount', label: 'Amplitude', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
@@ -284,7 +289,12 @@ window.FM = window.FM || {};
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 60, unit: '%' },
     ] },
     { type: 'longshadow', label: 'Long Shadow', param: 'length', min: 0, max: 80, step: 1, def: 30, unit: 'px', color: true, defColor: '#000000', colorLabel: 'Shadow' },
-    { type: 'halftonelines', label: 'Halftone Lines', param: 'size', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
+    { type: 'halftonelines', label: 'Halftone Lines', params: [
+      { key: 'size', label: 'Line pitch', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
+      { key: 'angle', label: 'Screen angle', min: 0, max: 180, step: 1, def: 0, unit: '°' },
+      { key: 'weight', label: 'Ink weight', min: 0.2, max: 2.5, step: 0.05, def: 1, unit: '×' },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 4, step: 0.1, def: 0, unit: 'px' },
+    ] },
     { type: 'clouds', label: 'Clouds', color: true, defColor: '#ffffff', colorLabel: 'Cloud', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'scale', label: 'Scale', min: 20, max: 400, step: 5, def: 100, unit: '%' },
@@ -509,7 +519,12 @@ window.FM = window.FM || {};
     { type: 'innerblur', label: 'Inner Blur', param: 'radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
     { type: 'contourstrips', label: 'Contour Strips', param: 'levels', min: 2, max: 12, step: 1, def: 5, color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High' },
     { type: 'innerpinch', label: 'Inner Pinch', param: 'amount', min: -1, max: 1, step: 0.02, def: 0.5 },
-    { type: 'crosshatch', label: 'Crosshatch', param: 'spacing', min: 3, max: 30, step: 1, def: 7, unit: 'px', color: true, defColor: '#101014', colorLabel: 'Ink' },
+    { type: 'crosshatch', label: 'Crosshatch', color: true, defColor: '#101014', colorLabel: 'Ink', params: [
+      { key: 'spacing', label: 'Spacing', min: 3, max: 30, step: 1, def: 7, unit: 'px' },
+      { key: 'density', label: 'Ink density', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'weight', label: 'Stroke weight', min: 1, max: 5, step: 1, def: 1, unit: 'px' },
+      { key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
+    ] },
     // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
     { type: 'counter', label: 'Count Up/Down', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: 0, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: 0, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 }] },
     { type: 'textprogress', label: 'Text Progress', param: 'progress', min: 0, max: 1, step: 0.01, def: 0.5 },
@@ -541,7 +556,12 @@ window.FM = window.FM || {};
     // ---- batch 21 ----
     { type: 'faded', label: 'Faded Film', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.6 },
     { type: 'nightvision', label: 'Night Vision', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
-    { type: 'sketch', label: 'Pencil Sketch', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+    { type: 'sketch', label: 'Pencil Sketch', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'darkness', label: 'Stroke darkness', min: 100, max: 1200, step: 10, def: 510 },
+      { key: 'threshold', label: 'Clear smooth areas', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'tooth', label: 'Paper tooth', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     // ---- batch 22: 3D (textured-mesh renderer via CANVAS_FX — AM's 3D category) ----
     // Shared params: rotx/roty/rotz spin the solid (keyframe them to animate), size scales it
     // relative to the layer's rendered bounds, shading = strength of the fixed key light.
@@ -3006,15 +3026,42 @@ window.FM = window.FM || {};
     })(),
     halftone: function (d, W, H, p, t, ps) {
       const size = Math.max(2, Math.round((FM.evalProp(p.size, t) || 8) * (ps || 1))), r2 = size / 2, s = d.slice();
+      // ANGLE is the one that matters: every real print halftone runs its screen at 45 degrees,
+      // because an axis-aligned dot grid beats against the subject and reads as a moire artefact
+      // rather than as print. GAIN was a hardcoded 1.45 — ink coverage, the difference between a
+      // newsprint smudge and a crisp screen. SHAPE was always a circle.
+      const ang = p.angle == null ? 0 : FM.evalProp(p.angle, t);
+      const rot = ((ang % 360) + 360) % 360 !== 0;
+      const rad = ang * Math.PI / 180, ca = Math.cos(rad), sa = Math.sin(rad);
+      let gain = p.gain == null ? 1.45 : FM.evalProp(p.gain, t);
+      if (gain < 0.5) gain = 0.5; if (gain > 2.5) gain = 2.5;
+      const shape = p.shape == null ? 0 : (Math.round(FM.evalProp(p.shape, t)) | 0);
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
-          const ccx = Math.min(W - 1, Math.floor(x / size) * size + (size >> 1));
-          const ccy = Math.min(H - 1, Math.floor(y / size) * size + (size >> 1));
+          let cx0, cy0, dx, dy, ccx, ccy;
+          if (rot) {
+            // All the cell maths happens in the ROTATED frame; the tone for a cell is then sampled by
+            // mapping its centre back into the image, so the dots sit on a turned lattice while still
+            // reporting the brightness of what is underneath them.
+            const u = x * ca + y * sa, v2 = -x * sa + y * ca;
+            cx0 = Math.floor(u / size) * size + r2; cy0 = Math.floor(v2 / size) * size + r2;
+            dx = u - cx0; dy = v2 - cy0;
+            ccx = Math.min(W - 1, Math.max(0, Math.round(cx0 * ca - cy0 * sa)));
+            ccy = Math.min(H - 1, Math.max(0, Math.round(cx0 * sa + cy0 * ca)));
+          } else {
+            // the legacy expressions, verbatim: for an ODD size `size >> 1` and `r2` are NOT the same
+            // number, and the sample centre uses the first while the distance uses the second.
+            ccx = Math.min(W - 1, Math.floor(x / size) * size + (size >> 1));
+            ccy = Math.min(H - 1, Math.floor(y / size) * size + (size >> 1));
+            dx = x - (Math.floor(x / size) * size + r2); dy = y - (Math.floor(y / size) * size + r2);
+          }
           const ci = (ccy * W + ccx) * 4;
           const l = (s[ci] * 0.299 + s[ci + 1] * 0.587 + s[ci + 2] * 0.114) / 255;
-          const dist = Math.hypot(x - (Math.floor(x / size) * size + r2), y - (Math.floor(y / size) * size + r2));
-          const v = dist < (1 - l) * r2 * 1.45 ? 0 : 255;
+          const dist = shape === 1 ? Math.max(Math.abs(dx), Math.abs(dy))
+                     : shape === 2 ? Math.abs(dx) + Math.abs(dy)
+                     : Math.hypot(dx, dy);
+          const v = dist < (1 - l) * r2 * gain ? 0 : 255;
           d[i] = v; d[i + 1] = v; d[i + 2] = v;
         }
       }
@@ -3247,7 +3294,36 @@ window.FM = window.FM || {};
        the exported file was perfectly fine, which is close to unreportable from the user's side.
        At the smallest sizes the preview's stripes are now slightly coarser than the export's — that is
        the resolution limit, and it beats solid black. */
-      htlSize=Math.max(2,Math.round(htlSize*(ps||1))); var htlW4=W*4; for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4; for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue; var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1; var htlThresh=(1-htlL)*htlSize; var htlV=(htlRowMod<htlThresh)?0:255; d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
+      htlSize=Math.max(2,Math.round(htlSize*(ps||1))); var htlW4=W*4;
+      // The screen was permanently HORIZONTAL, which is the one angle a real engraving never uses, and
+      // its edges were 1-bit hard. ANGLE turns the whole line screen, WEIGHT scales the ink so a tone
+      // can be run heavy or light independently of the source exposure, SOFTNESS takes the aliased
+      // step off the edge of every line.
+      var htlAng=p.angle==null?0:FM.evalProp(p.angle,t);
+      var htlRot=((htlAng%360)+360)%360!==0;
+      var htlRad=htlAng*Math.PI/180, htlCos=Math.cos(htlRad), htlSin=Math.sin(htlRad);
+      var htlWt=p.weight==null?1:FM.evalProp(p.weight,t); if(htlWt<0.2)htlWt=0.2; if(htlWt>2.5)htlWt=2.5;
+      var htlSoft=p.softness==null?0:FM.evalProp(p.softness,t); if(htlSoft<0)htlSoft=0; if(htlSoft>4)htlSoft=4;
+      for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4;
+        for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue;
+          var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1;
+          var htlM=htlRowMod;
+          if(htlRot){ var htlV2=-htlX*htlSin+htlY*htlCos; htlM=htlV2%htlSize; if(htlM<0)htlM+=htlSize; }
+          // THE CAP IS NOT COSMETIC — it is the queue-261 failure reachable through a new door. The
+          // note above explains that once the threshold beats the period, EVERY row of every period is
+          // inked and the layer is written solid black; `ps` shrinks the period on a reduced preview
+          // plate, so at 1/3 scale the pitch here is 3px and a weight of 2.5 clears it for any tone
+          // below 60% — the layer turns into a black rectangle mid-playback while the export is fine.
+          // Caught by the queue-264 extremes sweep. Applied ONLY in the weighted branch: at weight 1
+          // the legacy expression must stay bit-for-bit what it was, and it reaches the period only on
+          // near-black tones, where solid ink is the right answer anyway.
+          var htlThresh;
+          if(htlWt===1) htlThresh=(1-htlL)*htlSize;
+          else { htlThresh=(1-htlL)*htlSize*htlWt; var htlCap=htlSize-1; if(htlThresh>htlCap)htlThresh=htlCap; }
+          var htlV;
+          if(htlSoft>0){ var htlE=(htlM-htlThresh)/htlSoft; htlV=htlE<=0?0:(htlE>=1?255:Math.round(htlE*255)); }
+          else htlV=(htlM<htlThresh)?0:255;
+          d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
     clouds: function(d,W,H,p,t){ var cl_amt=FM.evalProp(p.amount,t); if(cl_amt==null)cl_amt=0.6; cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=cl_x+cl_ox; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_y/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_y-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
     rays: function(d,W,H,p,t){ var raysCount=FM.evalProp(p.count,t); if(raysCount==null)raysCount=16; raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t,ps){ var stp_size=FM.evalProp(p.size,t); if(stp_size==null)stp_size=16; stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
@@ -3740,7 +3816,27 @@ window.FM = window.FM || {};
       var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1; for(var zs_y=0; zs_y<H; zs_y++){ for(var zs_x=0; zs_x<W; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
     innerblur: function(d,W,H,p,t){ var ib_r=FM.evalProp(p.radius,t); if(ib_r==null) ib_r=8; ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return; var ib_w4=W*4; var ib_n=W*H; var ib_div=ib_r*2+1; var ib_tmp=new Float32Array(ib_n*3); var x,y,ch,acc,xx,yy,si,di; var ib_src=d; for(y=0;y<H;y++){ var ib_row=y*W; for(ch=0;ch<3;ch++){ acc=0; for(xx=-ib_r;xx<=ib_r;xx++){ var cx0=xx<0?0:(xx>=W?W-1:xx); acc+=ib_src[((ib_row+cx0)*4)+ch]; } for(x=0;x<W;x++){ ib_tmp[(ib_row+x)*3+ch]=acc/ib_div; var ib_xout=x-ib_r; var ib_xin=x+ib_r+1; var ib_co=ib_xout<0?0:(ib_xout>=W?W-1:ib_xout); var ib_ci=ib_xin<0?0:(ib_xin>=W?W-1:ib_xin); acc+=ib_src[((ib_row+ib_ci)*4)+ch]-ib_src[((ib_row+ib_co)*4)+ch]; } } } for(x=0;x<W;x++){ for(ch=0;ch<3;ch++){ acc=0; for(yy=-ib_r;yy<=ib_r;yy++){ var cy0=yy<0?0:(yy>=H?H-1:yy); acc+=ib_tmp[(cy0*W+x)*3+ch]; } for(y=0;y<H;y++){ di=((y*W+x)*4)+ch; d[di]=acc/ib_div; var ib_yout=y-ib_r; var ib_yin=y+ib_r+1; var ib_ro=ib_yout<0?0:(ib_yout>=H?H-1:ib_yout); var ib_ri=ib_yin<0?0:(ib_yin>=H?H-1:ib_yin); acc+=ib_tmp[(ib_ri*W+x)*3+ch]-ib_tmp[(ib_ro*W+x)*3+ch]; } } } },
     contourstrips: function(d,W,H,p,t){ var cs_levels=FM.evalProp(p.levels,t); if(cs_levels==null)cs_levels=5; cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2); var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor(cs_l*cs_levels); if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=(cs_band&1)?1.0:0.4; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
-    crosshatch: function(d,W,H,p,t,ps){ var sp=FM.evalProp(p.spacing,t); if(sp==null)sp=7; sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4; for(var y=0;y<H;y++){ var row=y*W4; var ymod=y%sp; for(var x=0;x<W;x++){ var ci=row+x*4; var a=d[ci+3]; if(a===0)continue; var r=d[ci],g=d[ci+1],b=d[ci+2]; var l=(0.299*r+0.587*g+0.114*b)/255; var hatch=false; if(l<0.75){ var xy=(x+y)%sp; if(xy<0)xy+=sp; if(xy<1)hatch=true; } if(!hatch&&l<0.5){ var xmy=(x-y)%sp; if(xmy<0)xmy+=sp; if(xmy<1)hatch=true; } if(!hatch&&l<0.25){ if(ymod<1)hatch=true; } if(hatch){ d[ci]=ir; d[ci+1]=ig; d[ci+2]=ib; } } } },
+    crosshatch: function(d,W,H,p,t,ps){ var sp=FM.evalProp(p.spacing,t); if(sp==null)sp=7; sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
+      // The three hatch tiers fired at hardcoded luminances of 0.75/0.5/0.25 with 1px strokes on fixed
+      // axes, so how much ink went down was dictated entirely by how the source happened to be exposed
+      // — and a 1px stroke is invisible at 1080p, which is the resolution everything here is.
+      // DENSITY scales all three tiers together (50 leaves them exactly where they were), WEIGHT is the
+      // stroke width, ANGLE turns all three axes together so the hatch keeps its 45-degree relationships.
+      var chDen=p.density==null?50:FM.evalProp(p.density,t); if(chDen<0)chDen=0; if(chDen>100)chDen=100;
+      var chF=chDen/50, chT1=0.75*chF, chT2=0.5*chF, chT3=0.25*chF;
+      var chWt=p.weight==null?1:FM.evalProp(p.weight,t); if(chWt<1)chWt=1; if(chWt>5)chWt=5;
+      var chAng=p.angle==null?0:FM.evalProp(p.angle,t);
+      var chRot=((chAng%360)+360)%360!==0;
+      var chRad=chAng*Math.PI/180, chCos=Math.cos(chRad), chSin=Math.sin(chRad);
+      for(var y=0;y<H;y++){ var row=y*W4; var ymod=y%sp;
+        for(var x=0;x<W;x++){ var ci=row+x*4; var a=d[ci+3]; if(a===0)continue;
+          var r=d[ci],g=d[ci+1],b=d[ci+2]; var l=(0.299*r+0.587*g+0.114*b)/255; var hatch=false;
+          var hx=x, hy=y, hym=ymod;
+          if(chRot){ hx=x*chCos+y*chSin; hy=-x*chSin+y*chCos; hym=hy%sp; if(hym<0)hym+=sp; }
+          if(l<chT1){ var xy=(hx+hy)%sp; if(xy<0)xy+=sp; if(xy<chWt)hatch=true; }
+          if(!hatch&&l<chT2){ var xmy=(hx-hy)%sp; if(xmy<0)xmy+=sp; if(xmy<chWt)hatch=true; }
+          if(!hatch&&l<chT3){ if(hym<chWt)hatch=true; }
+          if(hatch){ d[ci]=ir; d[ci+1]=ig; d[ci+2]=ib; } } } },
     // ---- batch 20: cinematic grades + framing ----
     bleachbypass: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.7; if(a<0)a=0; if(a>1)a=1; function ov(b,o){ return b<128 ? (2*b*o/255) : (255-2*(255-b)*(255-o)/255); } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=r*0.299+g*0.587+b*0.114; var dr=r+(l-r)*0.6, dg=g+(l-g)*0.6, db=b+(l-b)*0.6; d[i]=r+(ov(dr,l)-r)*a; d[i+1]=g+(ov(dg,l)-g)*a; d[i+2]=b+(ov(db,l)-b)*a; } },
     tealorange: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=(l-0.5)*2; var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
@@ -3890,7 +3986,21 @@ window.FM = window.FM || {};
     // ---- batch 21 ----
     faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var lift=26*a, con=1-0.25*a; function ch(v){ v=lift+v*(255-lift)/255; return 128+(v-128)*con; } for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b); var nr=cr+(L-cr)*0.15*a+8*a, ng=cg+(L-cg)*0.15*a+2*a, nb=cb+(L-cb)*0.15*a-6*a; d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
     nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*1.3+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*60; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*0.2, gg=L, gb=L*0.2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
-    sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice(); function lum(xx,yy){ var j=(yy*W+xx)*4; return s[j]*0.299+s[j+1]*0.587+s[j+2]*0.114; } for(var y=0;y<H;y++){ for(var x=0;x<W;x++){ var i=(y*W+x)*4; if(d[i+3]===0)continue; var xm=x>0?x-1:0, xp=x<W-1?x+1:W-1, ym=y>0?y-1:0, yp=y<H-1?y+1:H-1; var gx=(lum(xp,ym)+2*lum(xp,y)+lum(xp,yp))-(lum(xm,ym)+2*lum(xm,y)+lum(xm,yp)); var gy=(lum(xm,yp)+2*lum(x,yp)+lum(xp,yp))-(lum(xm,ym)+2*lum(x,ym)+lum(xp,ym)); var mag=Math.sqrt(gx*gx+gy*gy)/1442; if(mag>1)mag=1; var v=255-mag*510; if(v<0)v=0; d[i]=d[i]+(v-d[i])*a; d[i+1]=d[i+1]+(v-d[i+1])*a; d[i+2]=d[i+2]+(v-d[i+2])*a; } } },
+    sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice();
+      // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510
+      // gain, so the strokes could not be made bolder or lighter. THRESHOLD clears the grey mud that a
+      // Sobel leaves across smooth areas — every gentle gradient produced a faint smear, and there was
+      // no way to say "that is not a line". TOOTH gives the paper some grain instead of flat 255 white;
+      // it is scaled by how light the pixel already is, so it textures the paper and not the strokes.
+      var skDark=p.darkness==null?510:FM.evalProp(p.darkness,t); if(skDark<100)skDark=100; if(skDark>1200)skDark=1200;
+      var skThrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(skThrP<0)skThrP=0; if(skThrP>100)skThrP=100;
+      var skThr=skThrP/400;
+      var skTooth=p.tooth==null?0:FM.evalProp(p.tooth,t); if(skTooth<0)skTooth=0; if(skTooth>100)skTooth=100; function lum(xx,yy){ var j=(yy*W+xx)*4; return s[j]*0.299+s[j+1]*0.587+s[j+2]*0.114; } for(var y=0;y<H;y++){ for(var x=0;x<W;x++){ var i=(y*W+x)*4; if(d[i+3]===0)continue; var xm=x>0?x-1:0, xp=x<W-1?x+1:W-1, ym=y>0?y-1:0, yp=y<H-1?y+1:H-1; var gx=(lum(xp,ym)+2*lum(xp,y)+lum(xp,yp))-(lum(xm,ym)+2*lum(xm,y)+lum(xm,yp)); var gy=(lum(xm,yp)+2*lum(x,yp)+lum(xp,yp))-(lum(xm,ym)+2*lum(x,ym)+lum(xp,ym)); var mag=Math.sqrt(gx*gx+gy*gy)/1442; if(mag>1)mag=1;
+      if(skThr>0&&mag<skThr)mag=0;
+      var v=255-mag*skDark; if(v<0)v=0;
+      if(skTooth>0){ var skH=(x*374761393+y*668265263)|0; skH=(skH^(skH>>>13))*1274126177|0; skH=skH^(skH>>>16);
+        v-=((skH>>>0)%1000)/999*skTooth*(v/255); if(v<0)v=0; }
+      d[i]=d[i]+(v-d[i])*a; d[i+1]=d[i+1]+(v-d[i+1])*a; d[i+2]=d[i+2]+(v-d[i+2])*a; } } },
   };
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 

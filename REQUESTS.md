@@ -3792,6 +3792,10 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 15, v9.00:* the print family. Halftone Dots could not run its screen at 45°, which is
+      the angle every real print halftone uses; Halftone Lines was stuck horizontal with hard aliased
+      edges; Crosshatch's ink was dictated by the source exposure and its 1px strokes vanish at 1080p;
+      and Pencil Sketch smeared grey over every smooth area with no way to clear it. All four fixed.
       *Round 14, v8.99:* the pattern overlays. Grid could not set its line weight apart from its
       spacing — a wide grid forced fat lines — Checker was stuck at a 50/50 tint on axis-aligned
       squares, and Stripes only ever ran at 45°. All three get their real controls.

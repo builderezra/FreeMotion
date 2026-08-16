@@ -274,6 +274,31 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     effect, and nothing in the schema distinguishes those from ones an effect was born with. Keep
     writing the per-round test with its legacy values spelled out; do not try to generalise it.
 
+- v9.00 (round 15 — **the print family**) — `halftone` (screen angle, ink gain, dot shape),
+  `halftonelines` (screen angle, ink weight, edge softness), `crosshatch` (ink density, stroke weight,
+  angle) and `sketch` (stroke darkness, threshold, paper tooth). Every one of the four was locked to a
+  single axis with its ink weight hardcoded, which for a halftone is the whole ballgame: a real print
+  screen runs at 45 degrees precisely because an axis-aligned dot grid beats against the subject.
+  Findings:
+  * **A new control re-opened the queue-261 failure through a different door, and the queue-264
+    extremes sweep caught it.** halftonelines' ink WEIGHT multiplies a threshold that is compared
+    against the pattern period; once it beats the period every row is inked and the layer is written
+    solid black. `ps` shrinks that period on a reduced preview plate, so at 1/3 scale the pitch is 3px
+    and weight 2.5 clears it for any tone below 60% — a black rectangle mid-playback with a clean
+    export, which is the same near-unreportable symptom 261 had. The cap is applied ONLY in the
+    weighted branch, because at weight 1 the legacy expression has to stay bit-for-bit what it was.
+    Worth noting the warning about exactly this was in a comment three lines above the code I edited,
+    and I still had to be told by a test. That is the argument for the sweep existing.
+  * **The dot-shape test was degenerate and read 1.000 for a working control.** At pitch 8 and a mid
+    tone the dot radius is 2.89px, and a circle and a square of that radius enclose the SAME 25 integer
+    pixels. Ratios only separate at a coarse pitch. This file warns about degenerate test values in the
+    abstract; this is what it looks like in practice.
+  * **Two more measurement mistakes worth recording, both of which read as "the feature is dead".**
+    Counting crosshatch ink as "anything below mid-grey" counts the PLATE when the plate is darker than
+    that, so all four readings tied at exactly W*H. And Sobel mud on a smooth gradient sits at ~253, so
+    a "darker than 250" cutoff reports zero mud on a frame that is 100% mud — which is what Pencil
+    Sketch actually does: 14,400 of 14,400 pixels smeared, and 0 after the new threshold.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are
