@@ -16471,6 +16471,29 @@
     if (FM.srcSampleAt(0, 0, N, 2, true) !== (N - 1) * 2) throw new Error('speed is not scaling the reversed step');
   });
 
+  test('switching projects does not strand a deleted clip\'s media', { item: 'media-gc' }, function () {
+    /* BUG-HUNT.md raised this twice (both entries point at js/storage.js:707) and v8.44's sweep did
+       NOT cover it: that one runs when history DISCARDS a snapshot, and a project switch RESETS the
+       stack instead, which discards nothing. Measured before the fix — the record was still in the
+       store after the exact teardown sequence projects.open() performs. The cost BUG-HUNT put on it
+       is ~140 MB for a single discarded 3-minute track, pinned for the life of the page. */
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(L.id, { el: offscreen(8, 8), width: 8, height: 8 });
+      S.layers = [L]; FM.history.commit();
+      FM.deleteLayer(L.id);
+      if (!FM.media.get(L.id)) throw new Error('the record was already gone before the switch, so this cannot see the defect');
+      // exactly what FM.projects.open() does: release the layers STILL present, then reset history
+      FM.releaseProjectMedia(FM.scene.layers);
+      FM.history.reset();
+      if (FM.media.get(L.id)) throw new Error('the deleted clip survived the project switch — it is pinned for the life of the page');
+    } finally {
+      S.layers = keep; S.selectedId = keepSel;
+      try { FM.history.reset(); } catch (e) {}
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

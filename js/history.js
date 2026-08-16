@@ -66,7 +66,22 @@ window.FM = window.FM || {};
     // reset() runs on open/load/boot — its commit must not count as a user edit, or merely VIEWING
     // a project would bump it to the top of the home list (the autosave it schedules is harmless:
     // it rewrites the just-loaded doc).
-    reset() { stack.length = 0; index = -1; this.commit(); if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty(); syncButtons(); },
+    /* Resetting the stack strands media just as an eviction does, and MORE of it: every clip deleted
+     * during the outgoing project becomes unreachable the instant the undo history goes. The
+     * project-switch teardown (FM.releaseProjectMedia) only walks FM.scene.layers, and a deleted
+     * layer is by definition not in that array — so those records survived the switch and were pinned
+     * for the life of the page. Measured: a discarded clip's record is still in the store after the
+     * exact teardown sequence storage.js performs. BUG-HUNT.md put the cost at roughly 140 MB for one
+     * discarded 3-minute track, and iOS Safari jetsams the tab, which reads as the app randomly
+     * reloading and losing unsaved edits.
+     * Safe at every caller: reset() runs either with the new project's layers and media already in
+     * place (project open, import, template insert) or with both empty (boot). */
+    reset() {
+      stack.length = 0; index = -1; this.commit();
+      if (FM.releaseUnreachableMedia) { try { FM.releaseUnreachableMedia(stack); } catch (e) {} }
+      if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty();
+      syncButtons();
+    },
     commit() {
       if (suppress) return;
       const s = snap();

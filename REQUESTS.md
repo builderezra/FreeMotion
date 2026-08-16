@@ -1721,6 +1721,68 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **275 — Mobile shapes menu scrolls up and down; it should all fit. (16 Aug.)** His words, verbatim:
+      *"On mobile the shapes menu has like a thing where you can scroll up and down but it shouldn't have
+      that because on mobile it should all just fit on the screen nice and you shouldn't need to scroll
+      up and down. I don't even know why that happens or why won't let you do that"*.
+
+- [ ] **274 — The keyboard-shortcuts sheet needs a button through to the tutorials. (16 Aug.)** His words,
+      verbatim: *"At the bottom of the keyboard shortcuts menu when you press the? Icon it should show a
+      button that takes you straight to the tutorial section and it should also the button should just
+      say like tutorials here or whatever and then you click on it and it takes you to tutorials."*
+
+- [ ] **273 — The layer-loading name bar covers the + create button. (16 Aug.)** His words, verbatim:
+      *"When a layer is loading, you added the loading effects like I want it but make sure that the bar
+      that reads out the name of the thing that voting doesn't go to cover over the plus create button."*
+      (He means the loading readout must not overlap the + / create control.)
+
+- [ ] **272 — The notepad button wants subtle shading. (16 Aug.)** His words, verbatim: *"I still want
+      subtle shading to the notepad button just so it looks a little bit more detailed just like some
+      subtle shading is all I need. Nothing crazy."*
+
+- [ ] **271 — Elements menu: the colours are poor, random and too alike. (16 Aug.)** His words, verbatim:
+      *"In the elements menu like how you have it now where the actual icon will be a vibrant colour but
+      then the border will be a more dull version of itself like that's good but I think the colour
+      choices are kind of poor and they kind of just like random and also similar to a lot of them. Null
+      being red is good and you could make the custom elements button be multicoloured."*
+      So: KEEP the vibrant-icon / dull-border treatment and keep Null red — the complaint is the palette
+      itself, not the scheme. Custom elements → multicoloured.
+
+- [ ] **270 — Media: the Import icon should be white with a gradient, not grey. (16 Aug.)** His words,
+      verbatim: *"For the import button in the media section keep it all looking the same. I just want
+      the actual icon for the import button to be more white colour with a gradient instead of grey how
+      it is right now."* Only the ICON changes — he says twice to keep the rest the same.
+
+- [ ] **269 — Audio menu: the three default buttons must not scroll away. (16 Aug, with a screenshot he
+      drew a red line on.)** His words, verbatim: *"Also in the audio menu if you look at the image I sent
+      the three that I highlighted like the three options that are just default options like import audio
+      sound effects work voice record like all of those ones should be segregated from the ones at the
+      bottom and when you scroll to the left and right it shouldn't scroll those top buttons. It should
+      just scroll through the ones that you've added so those are always on screen."*
+      The red line in the screenshot sits under Import audio / Sound effects / Record voice…, separating
+      them from the .wav tiles below. So: pin that first row, and let only the added items pan.
+
+- [ ] **268 — Template tiles need a real picture of the template, not a logo. (16 Aug.)** His words,
+      verbatim: *"In the templates menu, all of the different templates should be pictures of the template
+      like the hero shot of the template so don't he keep leaving it as just a random little template logo
+      picture. I want an actual visual representation of what's in the template kind of like how each
+      project and template in the home menu you actually has a picture to it."*
+      The home screen already renders a real thumbnail per project, so the machinery for this exists —
+      check whether the template tiles can use the same renderer before building anything new.
+
+- [ ] **267 — The sound-effects ICON is still red; it should be the white gradient. (16 Aug.)** His words,
+      verbatim: *"The sound effects icon needs to be the white gradient, it still is red. The rainbow and
+      white border is good but the sound icon still isn't."*
+      **This is a MISS from the earlier request, not a new idea.** He asked for the button to be white
+      with a gradient border; the border landed and the icon did not. Screenshot confirms: the speaker
+      glyph is still pink/red on the rainbow tile.
+
+- [ ] **266 — The ? button is off-centre and in the wrong place. (16 Aug.)** His words, verbatim:
+      *"Question mark button is wonky and off centred and I need it to the right of the refresh button."*
+      From the screenshot the top bar reads: back · "Project 8" · **?** · version chip (the refresh
+      button) · notepad · cog · export. So he wants ? moved to the RIGHT of the version/refresh chip,
+      and its glyph properly centred in its circle.
+
 - [x] **265 — Three of the four keyframe ◆ rails have no test at all. DONE 16 Aug — all FIVE rails
       are covered now. (Found while mutation-checking 254, not reported by him.)** A mutation aimed at the new Edit Points diamond
       hit the CROP panel's instead, because the line `left.appendChild(kfBtn);` appears **four times**
@@ -2240,6 +2302,17 @@ better still, keep working inside the turn rather than parking work for a later 
       IndexedDB blob is untouched; `pruneOrphans` still owns that at boot. This is RAM only.
       Freeing now also detaches the `<video>` element's `src`, which matters more than the URL revoke:
       an element still pointing at a blob keeps its decode buffers.
+      **AND THE PROJECT-SWITCH HALF, v8.46 — v8.44 did not actually cover it.** BUG-HUNT.md raises this
+      twice (both entries point at `js/storage.js:707`) and I only found the gap by working that file.
+      v8.44's sweep runs when history **discards** a snapshot; a project switch calls `history.reset()`,
+      which discards nothing, so every clip deleted in the outgoing project stayed pinned for the life
+      of the page. Measured before fixing: the record was still in the store after running the exact
+      teardown sequence `projects.open()` performs. BUG-HUNT put the cost at ~140 MB for one discarded
+      3-minute track, and an iOS jetsam reads to you as the app randomly reloading and losing edits.
+      `history.reset()` now sweeps too — safe at every caller, because reset runs either with the new
+      project's layers and media already in place (open, import, template insert) or with both empty
+      (boot). Both BUG-HUNT entries are struck through with the version.
+
       **A hazard I nearly shipped, and it was a mutation run that found it, not me.** `FM.media` is
       keyed by layer id but not every entry belongs to a layer in `FM.scene` — `js/fx-thumbs.js` parks
       `_fxthumb*` records for layers in its OWN private sample scene. The first version of the sweep
