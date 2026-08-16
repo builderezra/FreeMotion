@@ -1850,6 +1850,22 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   #transport {
     position: relative;
     display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    /* CENTRE THE ROW TRACK, not just the items in it (queue 278). Ezra: "the bar with the bin on it and
+       stuff, the darkening of the background… is still off centred, the bar gos lower than it gos
+       higher, and it looks off." Measured at 1280x800 rather than eyeballed, because "still" means it
+       has been guessed at before: the row is 40px with 4px of padding, so its content box is 32px tall,
+       and the buttons inside are 34. A grid lays its single row track from the TOP of the content box,
+       so the track ran 350→384 inside a row spanning 346→386 — four pixels of clear space above the
+       darkened pill and two below it. `align-items: center` could not fix that: it centres each item in
+       the track, and the track itself was the thing sitting low.
+       With the track centred the 2px of overflow is shared, so the pill sits 3px from both edges. */
+    align-content: center;
+    /* …and the separator stops eating layout height. `border-bottom: 1px` lives INSIDE the row's 40px,
+       so the box the track can centre in is 39px and the pill ended up one pixel low however the track
+       was aligned — which is the last of the "it looks off" he can actually see. An inset shadow draws
+       the same hairline in the same place and takes no space, so the pill centres on the full 40. */
+    border-bottom: none;
+    box-shadow: inset 0 -1px 0 var(--line-soft);
     max-width: none; margin-inline: 0; width: auto;
   }
   .t-side { display: flex; align-items: center; gap: 6px; }

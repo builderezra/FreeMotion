@@ -17426,6 +17426,42 @@
     }
   });
 
+  /* ---------------- queue 278: the darkened bin pill sat low on the transport row ---------------- */
+
+  test('the darkened bin group is vertically centred on the transport row (queue 278)', { item: 'bin-pill' }, async function () {
+    /* "on pc the bar with the bin on it and stuff, the darkening of the background to sginfiy that
+     * theyre seperate and not default functions is still off centred, the bar gos lower than it gos
+     * higher, and it looks off."
+     * "still" is why this is measured and not eyeballed. Two separate pixels were wrong: the row is a
+     * grid and its single track was laid from the TOP of a content box two pixels shorter than the
+     * buttons in it, and its `border-bottom` ate a third pixel of layout height. Before: 4px above the
+     * pill and 2px below. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const body = document.body;
+    const wasStudio = body.classList.contains('layout-studio');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      body.classList.add('layout-studio');
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.4), y: Math.round(P.height * 0.4), shapeW: 200, shapeH: 200, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(220);
+      const pill = document.getElementById('t-sel'), row = document.getElementById('transport');
+      if (!pill || !row) throw new Error('need #t-sel and #transport');
+      const p = pill.getBoundingClientRect(), r = row.getBoundingClientRect();
+      if (!(p.height > 0)) return;              // the group only exists with a selection on screen
+      const above = p.top - r.top, below = r.bottom - p.bottom;
+      if (Math.abs(above - below) > 1) {
+        throw new Error('the darkened group sits ' + above.toFixed(1) + 'px from the top of the transport row and ' + below.toFixed(1) + 'px from the bottom — that is the "it goes lower than it goes higher" he reported');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (!wasStudio) body.classList.remove('layout-studio');
+    }
+  });
+
   /* ---------------- queue 277: the effects browser becomes a phone sheet you multi-select in --------
    * "the menu won't cover the whole screen the menu will only go up until where the canvas is" — and,
    * correcting himself later in the same message, "it covers the play buttons and all of that so it goes

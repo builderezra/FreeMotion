@@ -1866,7 +1866,7 @@ better still, keep working inside the turn rather than parking work for a later 
       selection, matching however the rest of the app already shows a disabled control rather than
       inventing a second look.
 
-- [ ] **278 — PC: the darkened bar behind the bin group is off-centre. (16 Aug, with a screenshot.)**
+- [x] **278 — PC: the darkened bar behind the bin group is off-centre. DONE v8.71.** (16 Aug, with a screenshot.)
       His words, verbatim: *"on pc the bar with the bin on it and stuff, the darkening of the background
       to sginfiy that theyre seperate and not default functions is still off centred, the bar gos lower
       than it gos higher, and it looks off"*.
@@ -1876,6 +1876,21 @@ better still, keep working inside the turn rather than parking work for a later 
       low against the row rather than centred on it.
       **"still" matters** — this has been reported before, so measure the actual box rather than eyeball
       it, and check it at a DESKTOP width in the Studio layout, which is what he is looking at.
+
+      **DONE v8.71 — measured at 1280×800 in Studio, and it was TWO pixels from two different causes.**
+      Before: **4px of clear space above the pill and 2px below**, which is exactly "the bar gos lower
+      than it gos higher".
+      1. The transport row is a **grid**, and a grid lays its single row track from the TOP of the
+         content box. The row is 40px with 4px of padding, so that box is 32px tall — and the buttons in
+         it are 34. The track therefore ran from 350 to 384 inside a row spanning 346 to 386, hanging
+         two pixels past the bottom. `align-items: center` could never have fixed this: it centres each
+         item *within* the track, and the track itself was the thing sitting low. `align-content: center`
+         centres the track, which shares the overflow.
+      2. That left 3px above and 2px below, because the row's **`border-bottom` lives inside its 40px**,
+         so there were only 39 to centre in. The hairline is an inset box-shadow now — same line, same
+         place, no layout height — and the pill centres on the full 40.
+      **After: 3.0px above, 3.0px below**, with the play button and the rest of the row unmoved. The
+      suite asserts the two gaps match within a pixel, so this cannot drift back a third time.
 
 - [x] **276 — Same pinned-top-row treatment for the MEDIA menu. (16 Aug.)** His words, verbatim:
       *"Also how I said in the audio section how the different buttons at the top like the three buttons
