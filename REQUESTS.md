@@ -2429,7 +2429,32 @@ better still, keep working inside the turn rather than parking work for a later 
         shaper nodes, or driving the parameter through a real AudioParam instead of a curve rebuild.
         That is a bigger job than flipping a `keyframable` flag, and now you know that before asking
         for it rather than after hearing it.
-      · Pitch Shift Semitones — not measured yet.
+      · **Pitch Shift Semitones — MEASURED 16 Aug, and the controlled answer is "no click".** With the
+        parameter change isolated and the input phase held constant, a single semitone step adds
+        **exactly nothing**: 3→4 measured 0.3279 against a hold-at-3 control of 0.3279, 5→6 measured
+        0.3639 against 0.3639, 7→8 measured 0.0498 against 0.0498 — identical to four decimal places in
+        all three cases. Unlike Bit Crush, Distortion and Lo-Fi, this one does not rebuild a transfer
+        curve; it assigns delay-line and gain values, and those land without a step in the output.
+        **A number I nearly reported and had to throw away, which matters more than the result.** A
+        full 0→12 sweep looked damning at first — worst sample jump 0.6625 against 0.383 for any static
+        value, i.e. "1.73× worse than the effect ever is at rest", landing exactly on a frame boundary.
+        It is an artifact of the measuring method. That method renders one short segment per frame and
+        rebuilds the chain each time, so every segment boundary restarts the delay lines and grain
+        windows, and the size of THAT restart depends on where in the waveform it lands. Changing only
+        the input phase moved the "worst" jump from 0.6625 at frame 9 to 0.4507 at frame 2, and a
+        different input frequency gave 0.674 at frame 3. A figure that swings that much on the test
+        tone is measuring the harness, not the effect. The isolated single-step comparisons above are
+        trustworthy precisely because they compare the SAME seam index with and without a change, so
+        the restart artifact cancels.
+        **Worth knowing before trusting the other three numbers:** if Bit Crush's 6.8×, Distortion's
+        2.8× and Lo-Fi's 1.7× came from this same per-segment harness, they carry the same artifact and
+        should be re-measured with the phase-controlled comparison before anyone acts on them. I did
+        not record the method at the time, which is the lesson — a measurement without its method is
+        not re-checkable. What is NOT in doubt for those three is the mechanism: swapping a transfer
+        curve is a step change by construction, and that argument stands without the numbers.
+        **So on current evidence Pitch Shift is the one of the six that looks safe to animate.** Still
+        held with the rest, because "looks safe in an offline harness" is not "sounds right to you",
+        and you are the one who can hear it.
       **Held pending your call**, for the same reason as 72: making those three animate means audio
       automation I cannot HEAR, and a slider that clicks or zips every frame is worse than one that
       doesn't animate. Say the word and I'll build the three cheap ones and you can listen.
