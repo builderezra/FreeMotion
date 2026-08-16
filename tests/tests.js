@@ -18186,6 +18186,89 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 14: the pattern overlays ---------------- */
+
+  /* Same shape as the round-12 gate, and for the same reason: the identity harness in EFFECTS-PLAN.md
+   * diffs against the PREVIOUS COMMIT, so it can be run once and never again. Stated as a property —
+   * an instance holding only the keys it shipped with must render identically to one that also holds
+   * every new key at the renderer's fallback — it protects every existing project from the next edit
+   * too. Paired with per-control assertions, since a same-code comparison passes when both sides are
+   * equally broken, which is the failure mode EFFECTS-PLAN warns about by name.
+   * The legacy values are written out rather than read from the schema on purpose: reading them from
+   * the same catalogue the renderer reads would make this test agree with itself. */
+  test('effects: the pattern overlays still render an un-upgraded instance exactly as they did', { item: 'fx-pattern' }, function () {
+    var W = 96, H = 96, fails = [];
+    var CASES = [
+      { type: 'grid',    old: { size: 32, color: '#ffffff' }, legacyKeys: { thickness: 6, mix: 1, angle: 0 },
+        moved: { thickness: 22, mix: 0.35, angle: 31 } },
+      { type: 'checker', old: { size: 24, color: '#000000' }, legacyKeys: { mix: 0.5, ratio: 1, angle: 0 },
+        moved: { mix: 1, ratio: 2.5, angle: 31 } },
+      { type: 'stripes', old: { size: 16, color: '#000000' }, legacyKeys: { direction: 0, duty: 0.5, strength: 0.6 },
+        moved: { direction: 2, duty: 0.85, strength: 1 } },
+    ];
+    CASES.forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = fxRun(c.type, W, H, c.old), full = fxRun(c.type, W, H, withKeys);
+      var n = fxDiff(bare, full);
+      if (n) fails.push(c.type + ': ' + n + ' bytes differ between an old instance and one holding the new keys at their fallbacks');
+      if (!fxDiff(fxPlate(W, H), bare)) fails.push(c.type + ': draws nothing at all at its legacy settings');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!fxDiff(bare, fxRun(c.type, W, H, m))) fails.push(c.type + '.' + k + ' moves no pixels');
+      });
+      // and a NEWLY ADDED instance, which carries every schema default stamped in, must match the old
+      // one too — the vignette trap this plan flags, checked rather than assumed.
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) {
+        var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        if (fxDiff(bare, fxRun(c.type, W, H, stamped))) {
+          fails.push(c.type + ': a NEW instance renders differently from an old one — a schema default disagrees with the renderer fallback');
+        }
+      }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* The specific complaints, so the round is not proved only by "some pixels moved".
+   * Grid's line weight was welded to 6% of the spacing, which is the bug worth naming: asking for a
+   * wide grid FORCED fat bars, so the two numbers a grid is made of could never be set independently. */
+  test('effects: Grid line weight is independent of spacing now', { item: 'fx-pattern' }, function () {
+    var W = 128, H = 128;
+    var inked = function (params) { var d = fxRun('grid', W, H, params), n = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 255 && d[i + 2] === 255) n++; return n; };
+    var wideThin = inked({ size: 120, color: '#ffffff', thickness: 1 });
+    var wideFat  = inked({ size: 120, color: '#ffffff', thickness: 40 });
+    if (!(wideFat > wideThin * 3)) {
+      throw new Error('at the same 120px spacing, weight 40 inked ' + wideFat + ' pixels against ' + wideThin + ' at weight 1 — line weight is still riding on spacing');
+    }
+    // and spacing must still do something of its own. NOT "narrower inks more": weight is a PERCENTAGE
+    // of the spacing, so a 120px grid at 6% draws 7px bars against a 16px grid's 1px, and the wide one
+    // inks MORE. Asserting the direction here would be asserting my own arithmetic, not the feature.
+    var narrow = inked({ size: 16, color: '#ffffff', thickness: 6 });
+    var wide   = inked({ size: 120, color: '#ffffff', thickness: 6 });
+    if (narrow === wide) throw new Error('spacing no longer changes anything at a fixed line weight — the two controls have been crossed');
+  });
+
+  /* Stripes were locked to one 45-degree diagonal. "Across" must produce rows that are constant along
+   * x and varying down y — asserted as that property rather than as a pixel count, because a count
+   * cannot tell a rotated pattern from a differently-sized one. */
+  test('effects: Stripes can run across and down, not only diagonally', { item: 'fx-pattern' }, function () {
+    var W = 64, H = 64;
+    var rowVaries = function (d, y) { var i0 = (y * W + 8) * 4;
+      for (var x = 9; x < W - 8; x++) { var i = (y * W + x) * 4; if (d[i] !== d[i0]) return true; } return false; };
+    var colVaries = function (d, x) { var i0 = (8 * W + x) * 4;
+      for (var y = 9; y < H - 8; y++) { var i = (y * W + x) * 4; if (d[i] !== d[i0]) return true; } return false; };
+    var across = fxRun('stripes', W, H, { size: 16, color: '#000000', direction: 2 }, 'flat');
+    if (rowVaries(across, 20)) throw new Error('"Across" still varies along a row — the bars are not horizontal');
+    if (!colVaries(across, 20)) throw new Error('"Across" is constant down a column too, so no stripes are being drawn at all');
+    var down = fxRun('stripes', W, H, { size: 16, color: '#000000', direction: 3 }, 'flat');
+    if (colVaries(down, 20)) throw new Error('"Down" still varies down a column — the bars are not vertical');
+    if (!rowVaries(down, 20)) throw new Error('"Down" is constant along a row too, so no stripes are being drawn at all');
+    var diag = fxRun('stripes', W, H, { size: 16, color: '#000000' }, 'flat');
+    if (!rowVaries(diag, 20) || !colVaries(diag, 20)) throw new Error('the default diagonal is no longer diagonal');
+  });
+
   /* A gate, not a note. The standing rule is that the newest effects lead FX_FEATURED, and following
    * it at v8.98 put Chroma Key and Luma Key — both MEDIA_ONLY — at the head of the carousel. The
    * carousel does not filter by appliesTo: it renders every card and `guardedAdd` refuses on tap with
@@ -18322,6 +18405,8 @@
     } else if (kind === 'dot') {                     // a single lit pixel: the splat IS the tap set
       for (i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
       var c = ((H >> 1) * W + (W >> 1)) * 4; d[c] = 255; d[c + 1] = 255; d[c + 2] = 255;
+    } else if (kind === 'flat') {                    // uniform: the ONLY plate a pattern test can use
+      for (i = 0; i < W * H; i++) { d[i * 4] = 160; d[i * 4 + 1] = 160; d[i * 4 + 2] = 160; d[i * 4 + 3] = 255; }
     } else {
       for (i = 0; i < W * H; i++) { d[i * 4] = (i * 7) % 256; d[i * 4 + 1] = (i * 13) % 256; d[i * 4 + 2] = (i * 29) % 256; d[i * 4 + 3] = 255; }
     }

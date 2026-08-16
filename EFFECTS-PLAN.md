@@ -258,6 +258,22 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     `[0,0,0]`, which is TRUTHY, so `hexToRGB(p.color) || DEFAULT` silently keys off black and the hue
     shift comes out zero. Pass the colours explicitly; the app always stamps them.
 
+- v8.99 (round 14 — **the pattern overlays**) — `grid` (line weight, strength, angle), `checker`
+  (strength, cell shape, angle) and `stripes` (direction, bar/gap, strength). Grid's line weight was
+  welded to 6% of the spacing, so the two numbers a grid is made of could never be set independently:
+  asking for a 160px grid FORCED 10px bars. Notes:
+  * **A lerp at 0.5 is byte-identical to the original `(a+b)*0.5`** — integers and halves are both
+    exact in binary and the result lands in a Uint8ClampedArray either way, so checker's new Strength
+    control needed no special-casing at its default. Grid's full-opacity punch-in did, and got a
+    branch rather than a lerp at mix === 1.
+  * **A catalogue-wide version of the vignette check does not exist**, and it was worth finding out
+    rather than assuming. "Deleting a param must change nothing unless the schema declares `legacy`"
+    sounds like the general form of the rule, and it reports 110 offenders out of 266 params — because
+    for most effects the param in question is the effect's own amount or size, which the renderer
+    quite reasonably reads as OFF when absent. The property only holds for params ADDED to an existing
+    effect, and nothing in the schema distinguishes those from ones an effect was born with. Keep
+    writing the per-round test with its legacy values spelled out; do not try to generalise it.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

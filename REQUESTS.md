@@ -3792,6 +3792,9 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 14, v8.99:* the pattern overlays. Grid could not set its line weight apart from its
+      spacing — a wide grid forced fat lines — Checker was stuck at a 50/50 tint on axis-aligned
+      squares, and Stripes only ever ran at 45°. All three get their real controls.
       *Round 13, v8.98:* the keys. Chroma Key cut a hard jagged edge with no way to soften it;
       Luma Key could only remove the DARK end, so you could not key a subject shot against white at
       all; and Replace Colour only rotated hue — pick pale pink to replace a red and you got a
