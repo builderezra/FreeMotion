@@ -15700,6 +15700,47 @@
     }
   });
 
+  test('the perf verdict recognises a stutter the median cannot see', { item: 'perf-verdict' }, function () {
+    /* HIS ACTUAL NUMBERS, from the first real measurement: 44.6fps average, median 17ms — and a
+       494ms freeze with 14 late frames of 446. The report said "this sample looks healthy". That is
+       the exact failure this feature exists to end, on its very first use.
+       Tested against the pure verdict function rather than by driving the probe: an earlier attempt
+       stubbed requestAnimationFrame, produced nonsense timings, and broke a later test. */
+    if (!FM.perfProbe || typeof FM.perfProbe._verdict !== 'function') throw new Error('the verdict is not a testable function');
+    const his = FM.perfProbe._verdict({ med: 17, worst: 494, late: 14, total: 446, appMs: 0.34, budget: 1000 / 60 });
+    if (/looks healthy/.test(his)) throw new Error('his run — a 494ms freeze and 14 late frames — is STILL called healthy:\n' + his);
+    if (!/STUTTERS/.test(his)) throw new Error('the verdict does not name the stutter:\n' + his);
+    if (!/494ms/.test(his)) throw new Error('the verdict does not quote the worst frame:\n' + his);
+    // …and it should point at the right culprit: our own drawing was 0.34ms, so it is not the loop.
+    if (!/GPU work, video/.test(his)) throw new Error('with drawing at 0.34ms it should say the cost is GPU/decode, not the render loop:\n' + his);
+  });
+
+  test('a genuinely smooth run is still called healthy', { item: 'perf-verdict' }, function () {
+    /* The control. A verdict that cries "stutter" at every sample is as useless as one that never
+       does, and it would send the next investigation chasing nothing. */
+    const smooth = FM.perfProbe._verdict({ med: 16.7, worst: 22, late: 0, total: 600, appMs: 3, budget: 1000 / 60 });
+    if (/STUTTERS/.test(smooth)) throw new Error('a steady run was reported as stuttering:\n' + smooth);
+    if (!/looks healthy/.test(smooth)) throw new Error('a steady run was not called healthy:\n' + smooth);
+    // one late frame in six hundred is jitter, not a stutter — it must not trip either
+    const jitter = FM.perfProbe._verdict({ med: 16.7, worst: 60, late: 1, total: 600, appMs: 3, budget: 1000 / 60 });
+    if (/STUTTERS/.test(jitter)) throw new Error('a single late frame in 600 tripped the stutter verdict — that is ordinary jitter:\n' + jitter);
+  });
+
+  test('an oversized project is called out whatever the frame numbers did', { item: 'perf-verdict' }, function () {
+    /* His sample was a 3024x4032 project — 12.2 megapixels, photo dimensions — composited every
+       frame on a 4-core phone. That is the one cause a person can actually fix, so it is said out
+       loud even when the frames look fine. */
+    const P = FM.scene.project, w0 = P.width, h0 = P.height;
+    try {
+      P.width = 3024; P.height = 4032;
+      const big = FM.perfProbe._verdict({ med: 16.7, worst: 20, late: 0, total: 600, appMs: 3, budget: 1000 / 60 });
+      if (!/12\.2 megapixels/.test(big)) throw new Error('a 12-megapixel project was not mentioned:\n' + big);
+      P.width = 1080; P.height = 1920;
+      const ok = FM.perfProbe._verdict({ med: 16.7, worst: 20, late: 0, total: 600, appMs: 3, budget: 1000 / 60 });
+      if (/megapixels/.test(ok)) throw new Error('an ordinary 1080x1920 project was flagged as oversized:\n' + ok);
+    } finally { P.width = w0; P.height = h0; }
+  });
+
   /* ---------------- queue 202/125: the ladder can see PLAYBACK cost now ----------------
    * His first on-device sample showed the app's own `avgGapMs` reading ZERO while the real frame
    * intervals were p95 38ms and worst 494ms, with 14 late frames of 446 — so the quality ladder was

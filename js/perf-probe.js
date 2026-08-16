@@ -60,7 +60,52 @@ window.FM = window.FM || {};
       fx + ' effect' + (fx === 1 ? '' : 's');
   }
 
+  /* THE VERDICT, as a pure function — because this judgement has already been wrong once, on the
+   * very first real measurement, and a wrong verdict is worse than no verdict in a tool built to
+   * stop us drawing wrong conclusions. Pure so the suite can put his actual numbers in and read the
+   * sentence out, with no rAF stubbing and nothing to leak into the next test.
+   *
+   * JUDGE THE TAIL, NOT JUST THE MIDDLE. The first version looked only at the median and told him
+   * "this sample looks healthy" about a run containing a 494ms freeze and 14 late frames of 446. A
+   * median is exactly the statistic that cannot see a stutter — half a second of freeze every few
+   * seconds leaves the middle untouched — and a stutter is what "laggy" actually means. */
+  function verdictLines(lines, m) {
+    const latePct = m.total ? (m.late / m.total) * 100 : 0;
+    const hitching = m.late > 0 && (latePct >= 1 || m.worst > 250);
+    if (hitching) {
+      lines.push('READ: the average is fine but this STUTTERS — ' + m.late + ' of ' + m.total +
+                 ' frames were late and the worst took ' + Math.round(m.worst) + 'ms.');
+      lines.push('A median cannot see a freeze; that is what "laggy" actually feels like.');
+      if (m.appMs < m.budget * 0.5) {
+        lines.push('Our own drawing averaged ' + m.appMs + 'ms, so the hitches are GPU work, video');
+        lines.push('decode or garbage collection — not the render loop.');
+      }
+    } else if (m.med > m.budget * 1.5 && m.appMs < m.budget * 0.5) {
+      lines.push('READ: frames are slow but our own drawing is fast — the cost is GPU effects or');
+      lines.push('video decode, NOT the render loop. That is the case every earlier pass missed.');
+    } else if (m.med > m.budget * 1.5) {
+      lines.push('READ: our own drawing is genuinely slow — the render loop is the cost.');
+    } else {
+      lines.push('READ: this sample looks healthy — steady frames and no hitching. If it felt slow');
+      lines.push('WHILE measuring, say so; that means the slowness is somewhere this cannot see.');
+    }
+    /* A canvas far larger than anything that will ever be shown or exported is worth saying whatever
+     * the frame numbers did, because it is the one cause a person can actually fix — and his own
+     * first sample was a 3024x4032 project on a phone. */
+    const P = FM.scene && FM.scene.project;
+    const mp = P ? (P.width * P.height) / 1e6 : 0;
+    if (mp >= 8) {
+      lines.push('');
+      lines.push('NOTE: this project is ' + P.width + '×' + P.height + ' (' + mp.toFixed(1) + ' megapixels).');
+      lines.push('That is photo-sized, and every frame composites all of it. Almost certainly the');
+      lines.push('biggest single cost here, and the easiest to fix — see Canvas settings.');
+    }
+    return lines;
+  }
+
   FM.perfProbe = {
+    _verdict: function (m) { return verdictLines([], m).join('\n'); },
+
     running: false,
 
     /* Sample frame intervals for `ms`, then hand back a finished report string.
@@ -157,14 +202,8 @@ window.FM = window.FM || {};
              healthy" is the exact wrong conclusion this whole feature exists to stop us drawing. */
           lines.push('READ: nothing can be concluded from this run — measure again with the app on');
           lines.push('screen the whole time.');
-        } else if (med > budget * 1.5 && appMs < budget * 0.5) {
-          lines.push('READ: frames are slow but our own drawing is fast — the cost is GPU effects or');
-          lines.push('video decode, NOT the render loop. That is the case every earlier pass missed.');
-        } else if (med > budget * 1.5) {
-          lines.push('READ: our own drawing is genuinely slow — the render loop is the cost.');
         } else {
-          lines.push('READ: this sample looks healthy. If it felt slow WHILE measuring, say so — that');
-          lines.push('would mean the slowness is somewhere this does not yet look.');
+          verdictLines(lines, { med: med, worst: worst, late: late, total: sorted.length, appMs: appMs, budget: budget });
         }
         if (typeof done === 'function') done(lines.join('\n'));
       }
