@@ -16981,6 +16981,57 @@
       throw new Error('both ends of the icon gradient are identical (' + key(stops[0]) + ') — that is solid white, not a gradient');
   });
 
+  /* ---------------- queue 268: template tiles showed a glyph, not the template ----------------
+   * "I want an actual visual representation of what's in the template kind of like how each project
+   * and template in the home menu you actually has a picture to it." Also #210's last open clause:
+   * "it shouldn't even colour it should show the hero image of whatever the template is (still
+   * keeping the text)."
+   * Nothing had to be built — FM.templates.save already stores an inline `thumb` on the index entry,
+   * the same picture the home screen shows. The tiles were not asking for it. */
+
+  test('a template tile shows the template\'s own picture, untinted (queue 268)', { item: 'tpl-thumb' }, async function () {
+    if (!FM.addMenu || !FM.addMenu.render) throw new Error('FM.addMenu.render missing');
+    /* Stubs the LIST rather than saving a real template: this suite runs against the app's own
+       storage, and a test must not leave a template behind in his library. */
+    const realList = FM.templates.list;
+    const PIX = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:420px;height:600px';
+    document.body.appendChild(host);
+    try {
+      FM.templates.list = () => ([
+        { id: 't_withthumb', name: 'Has Picture', width: 1080, height: 1920, duration: 5, thumb: PIX },
+        { id: 't_nothumb', name: 'No Picture', width: 1080, height: 1920, duration: 5 },
+      ]);
+      FM.addMenu.render(host, { variant: 'panel' });
+      const tab = [...host.querySelectorAll('.addmenu-tab')].find(e => e.textContent.trim() === 'Template');
+      if (!tab) throw new Error('no Template tab rendered');
+      tab.click();
+      await sleep(160);
+
+      const withPic = [...host.querySelectorAll('.addmenu-card')].find(c => /Has Picture/.test(c.textContent));
+      if (!withPic) throw new Error('the template card did not render');
+      const img = withPic.querySelector('img.addmenu-thumb');
+      if (!img) throw new Error('the template tile has no <img> — it is still showing the generic glyph');
+      if (img.getAttribute('src') !== PIX) throw new Error('the tile is showing some other image, not the template\'s own thumb');
+      if (!withPic.classList.contains('has-thumb')) throw new Error('the tile did not take the has-thumb treatment, so the glyph will show through and the label will not sit over the picture');
+      /* #210: "it shouldn't even colour" — a tint plate over a photo is just a wash across it. */
+      if (withPic.style.getPropertyValue('--am-tint')) throw new Error('the tile is still tinted (' + withPic.style.getPropertyValue('--am-tint') + ') — a colour plate over the hero image');
+      /* "still keeping the text" */
+      const lbl = withPic.querySelector('.addmenu-lbl');
+      if (!lbl || lbl.textContent !== 'Has Picture') throw new Error('the template name is gone from the tile');
+
+      /* A template saved before thumbs existed must still get a usable tile. */
+      const noPic = [...host.querySelectorAll('.addmenu-card')].find(c => /No Picture/.test(c.textContent));
+      if (!noPic) throw new Error('the thumb-less template did not render at all');
+      if (noPic.querySelector('img.addmenu-thumb')) throw new Error('a template with no thumb somehow got an image');
+      if (!noPic.style.getPropertyValue('--am-tint')) throw new Error('a template with no picture lost its colour too — it would be a blank card');
+    } finally {
+      FM.templates.list = realList;
+      host.remove();
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

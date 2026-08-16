@@ -399,7 +399,17 @@ window.FM = window.FM || {};
       + '<path d="M4 10h16" stroke="url(#fm-ic-tpH)"/>'
       + '<rect x="4" y="4" width="16" height="16" rx="2" stroke="url(#fm-ic-tpB)"/>'), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
-        return { label: t.name, icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
+        /* THE TEMPLATE'S OWN PICTURE, not the same little glyph nine times (queue 268, and the last
+           open clause of #210 — "it shouldn't even colour it should show the hero image of whatever
+           the template is (still keeping the text)"). His words here: "I want an actual visual
+           representation of what's in the template kind of like how each project and template in the
+           home menu you actually has a picture to it."
+           Nothing had to be built: FM.templates.save already stores an inline `thumb` on the index
+           entry — the project's own card image, captured at save time — which is exactly the picture
+           the home screen shows. The tiles simply were not asking for it. The glyph stays as the
+           fallback for a template saved before thumbs existed, or one whose capture failed. */
+        return { label: t.name, thumb: t.thumb || null,
+          icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/>'),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
       });
       if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });
@@ -770,6 +780,15 @@ window.FM = window.FM || {};
       }
     }
     if (item.mid && hidden) b.classList.add('addmenu-media', 'addmenu-media--demo');
+    /* A card that already HAS its picture (templates carry one inline) shows it straight away — no
+       IDB round trip, no flash of the glyph first. Same classes as the media tiles above so it wears
+       the treatment he already signed off: image edge to edge, label over a gradient at the foot. */
+    if (item.thumb && typeof item.thumb === 'string') {
+      var timg = document.createElement('img');
+      timg.src = item.thumb; timg.alt = ''; timg.className = 'addmenu-thumb';
+      b.insertBefore(timg, b.firstChild);
+      b.classList.add('addmenu-media', 'has-thumb');
+    }
     if (!iconOnly) {   // shape cards are icon-only (AM) — the name lives in the tooltip
       var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
       lb.textContent = label;   // element/template/file names are USER input — textContent, never innerHTML (#r3)
@@ -865,7 +884,12 @@ window.FM = window.FM || {};
                   : tab.key === 'media' ? TINTS_MEDIA
                   : tab.key === 'audio' ? TINTS_AUDIO
                   : TINTS;
-          var tint = o.mid ? null : (BY_LABEL[o.label] || pal[idx % pal.length]);
+          /* A card that shows a PICTURE gets no tint — a colour plate under a photo is just a wash
+             over it. That was already true for media tiles (o.mid); it is now true for a template
+             carrying its own thumb, which is #210's last clause word for word: "it shouldn't even
+             colour it should show the hero image of whatever the template is (still keeping the
+             text)". A template with no thumb keeps its colour and its glyph. */
+          var tint = (o.mid || o.thumb) ? null : (BY_LABEL[o.label] || pal[idx % pal.length]);
           // Elements gets the quieter plate (queue 210) — his "backdrop more subtle", applied per
           // TAB rather than per card so the whole tab reads as one family.
           var soft = tab.key === 'object' ? ' addmenu-card--soft' : '';

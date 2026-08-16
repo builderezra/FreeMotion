@@ -1930,13 +1930,28 @@ better still, keep working inside the turn rather than parking work for a later 
       The red line in the screenshot sits under Import audio / Sound effects / Record voice…, separating
       them from the .wav tiles below. So: pin that first row, and let only the added items pan.
 
-- [ ] **268 — Template tiles need a real picture of the template, not a logo. (16 Aug.)** His words,
+- [x] **268 — Template tiles need a real picture of the template, not a logo. DONE v8.58.** His words,
       verbatim: *"In the templates menu, all of the different templates should be pictures of the template
       like the hero shot of the template so don't he keep leaving it as just a random little template logo
       picture. I want an actual visual representation of what's in the template kind of like how each
       project and template in the home menu you actually has a picture to it."*
       The home screen already renders a real thumbnail per project, so the machinery for this exists —
       check whether the template tiles can use the same renderer before building anything new.
+      **DONE v8.58 — and the entry's own instruction was right: nothing had to be built.** It said to
+      check whether the home screen's renderer could serve these tiles first, and the answer is better
+      than that — `FM.templates.save` has always stored an inline `thumb` on the index entry, captured
+      from the project at save time. That IS the picture the home screen shows. The tiles simply were
+      not asking for it; every one drew the same little frame glyph.
+      A tile with a thumb now shows it edge to edge with the name over a gradient at the foot — the same
+      treatment the media tiles already use, so it did not need a second look inventing for it. It also
+      **loses its colour tint**, because a colour plate under a photo is just a wash across it, and that
+      is **#210's last open clause word for word**: *"it shouldn't even colour it should show the hero
+      image of whatever the template is (still keeping the text)"*. So that clause closes here too.
+      A template saved before thumbs existed, or one whose capture failed, keeps the glyph AND its
+      colour — asserted separately, because the fallback silently turning into a blank card would be a
+      worse bug than the one being fixed.
+      Verified on the phone at 375px with a real saved template: a 203×360 thumbnail on the tile, no
+      tint, name intact.
 
 - [x] **267 — The sound-effects ICON is still red; it should be the white gradient. DONE v8.57.** His words,
       verbatim: *"The sound effects icon needs to be the white gradient, it still is red. The rainbow and
@@ -5512,7 +5527,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       (v8.50). It was one report and it needed two fixes with two different causes.
 
 
-- [x] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words. ELEMENTS/MEDIA/AUDIO DONE v8.20; Template still open.**
+- [x] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words. ELEMENTS/MEDIA/AUDIO v8.20; TEMPLATE v8.58 — all four done.**
       *"The shapes colours are fine, but the rest aren't. They're generic and copy paste. They need to
       look quality."* Four screenshots, one per tab. Shape is the one to leave alone — it is the
       reference for "done right".
