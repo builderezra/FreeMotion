@@ -1721,6 +1721,24 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **253 — Shape sliders scrub too fast to hit an exact size. (16 Aug.)** His words, verbatim:
+      *"when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
+      cos it jumps a lot of numbers, leaving me to type in what i want"*.
+      **The complaint is precision, and the tell is the last clause** — he is falling back to typing,
+      which means the scrub is not usable for fine work. This is `tickStrip` (js/inspector.js), the
+      drag-to-scrub ruler shared by every `rangeRow` in the app, so whatever changes here changes ALL
+      of them — check the fix against a few different ranges, not just shape size.
+      Likely one of: the value step per pixel is too large at the sizes he works at, the ruler's `step`
+      is quantising away the in-between numbers, or there is no fine mode. **Worth measuring first: how
+      many value-units does one pixel of drag produce, at the shape sizes he actually uses?** That
+      number is the bug, and it should be written into the entry before anything changes.
+      The obvious answer — a fine-drag modifier — is a poor one on a PHONE, where there is no modifier
+      key. Prefer something that works with one finger: a slower rate near the current value, or a
+      rate that falls the further the finger moves from the strip (the standard iOS scrubber idiom),
+      so precision comes for free rather than needing a second input.
+      **Do NOT just make it slower everywhere** — the same control has to cross 1–100000% on the speed
+      row (#184), and a uniformly fine rate makes that untraversable. Whatever lands must serve both.
+
 - [ ] **252 — PC: the settings cog does not open the way he traced, and the menu should not need
       scrolling. (16 Aug, with a traced screenshot.)** His words: *"the way i said the settings cog to
       open up does not open up like how i showed, look at my screenshot and replicate it. you dont have
@@ -4841,6 +4859,26 @@ wait for them to report back."*
       They were left out of v7.88 on purpose: re-anchoring a dialog to its button and lifting that button
       out of the dialog's own backdrop blur is a layout change, and it deserves a clean run rather than
       being tacked onto a 280ms flourish.
+
+      **REOPENED AND FIXED 16 Aug (v8.10) — two of the three clauses were NOT working for him**, and
+      this entry was ticked anyway. His words: *"you didnt even give the settings cog an animation like
+      i asked and left it blury. like what i said was so simple to understand and you somehow missed
+      it. maybe start logging my requests by copying exactly what i said because how do you leave all
+      this out"*. Fair. His original request had three clauses and only the anchoring half really
+      landed.
+      **It was one cause, not two.** The animation had been running since v7.88 — underneath the blur
+      scrim, where he could not see it. `#t-far` (the far-right cluster the PC row puts the cog in)
+      had `transform: translateY(-50%)` just to centre itself, and **a transform creates a stacking
+      context**, so the cog's `z-index: 101` was trapped inside it and could never clear the dialog.
+      Measured: computed z-index 101 as designed, `elementFromPoint` over the cog returning
+      `#canvas-dialog`. Covered, blurred, unclickable. Centring is now `top: 0; bottom: 0` + flex —
+      identical result, no transform, no stacking context.
+      **Why the test did not catch it, which is the part worth keeping:** it compared the two z-index
+      NUMBERS, and 101 > 100 was true the whole time. That assertion is structurally blind to the only
+      way this breaks. It now asserts what is actually painted over the cog, that only the cog is
+      lifted, and that no ancestor creates a stacking context.
+      **Still open from this message: #252** — the panel should open UPWARD into the empty space he
+      traced and fit without scrolling.
 
 - [x] **242 — The three layer buttons need a different background so they read as a group apart. DONE v7.89.** (15
       Aug, with the trio circled in red.) His words: *"make these three buttons have a different

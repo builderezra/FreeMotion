@@ -5214,7 +5214,17 @@ body.fm-pushing #toast { z-index: 213; }
    Absolute means they hang off the ends without touching the balance. */
 @media (min-width: 701px) {
   #t-home { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; }
-  #t-far  { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+  /* Stretched top-to-bottom and flex-centred, NOT `top:50% + translateY(-50%)` — and this is a fix,
+     not a tidy-up (queue 241). A transform creates a STACKING CONTEXT, so `body.cv-anchored
+     #btn-settings { z-index: 101 }` was being trapped inside #t-far and could never rise above the
+     canvas dialog. Measured: the cog computed z-index 101 exactly as intended and
+     elementFromPoint over it still returned #canvas-dialog — covered, blurred, and not even
+     clickable. That is both halves of what Ezra reported ("you didnt even give the settings cog an
+     animation like i asked and left it blury"): the quarter-turn WAS running, underneath a blur
+     scrim, where he could not see it. One cause, two symptoms.
+     The v7.93 test asserted the z-index NUMBER, which is exactly the assertion that cannot see this —
+     it passed throughout. The test now asserts what is actually on top of the cog. */
+  #t-far  { position: absolute; right: 14px; top: 0; bottom: 0; display: flex; align-items: center; gap: 8px; }
   /* amfit lived here on its own before; inside #t-far it is a normal flex child again. */
   #t-far #btn-amfit { position: static; transform: none; right: auto; top: auto; }
   #t-far .ver { margin: 0; }

@@ -3414,10 +3414,38 @@
       // …and it must not run off the bottom, which anchoring low on the screen makes easy to do.
       if (kr.bottom > window.innerHeight + 1) throw new Error('the card runs ' + Math.round(kr.bottom - window.innerHeight) + 'px off the bottom of the screen');
 
-      // (c) the cog outranks the scrim, so the blur passes under it.
-      const cogZ = parseInt(getComputedStyle(cog).zIndex, 10);
-      const scrimZ = parseInt(getComputedStyle(dlg).zIndex, 10);
-      if (!(cogZ > scrimZ)) throw new Error('the cog sits at z-index ' + cogZ + ' under a scrim at ' + scrimZ + ' — it is being blurred along with everything else');
+      /* (c) the cog outranks the scrim, so the blur passes under it.
+         ASKED THE RIGHT WAY ROUND SINCE v8.10. This used to compare the two z-index NUMBERS, and that
+         assertion is blind to the only way this actually breaks: an ancestor with a transform creates
+         a STACKING CONTEXT, and a z-index inside one cannot rise out of it however large it is. The
+         cog computed 101 against a scrim at 100 — the old test passed — while #t-far's
+         `transform: translateY(-50%)` trapped it, so in the Studio layout the cog was covered,
+         blurred and not even clickable. Ezra: "you didnt even give the settings cog an animation like
+         i asked and left it blury" — the animation WAS running, under the scrim, where he could not
+         see it. So the question is now what is ACTUALLY painted on top, which no stacking context can
+         lie about. */
+      const cr2 = cog.getBoundingClientRect();
+      const onTop = document.elementFromPoint(Math.round(cr2.left + cr2.width / 2), Math.round(cr2.top + cr2.height / 2));
+      if (!(onTop && (onTop === cog || cog.contains(onTop)))) {
+        const what = onTop ? (onTop.id || onTop.className || onTop.tagName) : 'nothing';
+        throw new Error('"' + what + '" is painted over the cog — it is blurred with everything else, and cannot even be clicked');
+      }
+      // …and only the COG is lifted. Raising the whole cluster would pull the notes and export
+      // buttons out of the blur too, which is not what he asked for.
+      const nb2 = document.getElementById('btn-notes');
+      if (nb2) {
+        const nr = nb2.getBoundingClientRect();
+        const nOn = document.elementFromPoint(Math.round(nr.left + nr.width / 2), Math.round(nr.top + nr.height / 2));
+        if (nOn && (nOn === nb2 || nb2.contains(nOn))) throw new Error('the notes button was lifted out of the blur too — only the cog should be');
+      }
+      // The guard that keeps the fix from being undone: no ancestor of the cog may create a stacking
+      // context while anchored, or the z-index above is inert again.
+      for (let el = cog.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+        const cs = getComputedStyle(el);
+        if (cs.transform !== 'none' || cs.filter !== 'none' || (cs.opacity !== '1' && cs.opacity !== '')) {
+          throw new Error('"' + (el.id || el.className) + '" creates a stacking context (transform/filter/opacity) — the cog\'s z-index is trapped inside it');
+        }
+      }
       if (getComputedStyle(cog).position === 'static') throw new Error('the cog is position:static, so its z-index does nothing');
     } finally {
       dlg.classList.add('hidden');

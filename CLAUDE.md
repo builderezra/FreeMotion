@@ -76,6 +76,23 @@ The only things that jump the queue are what HE explicitly says to do now ("do t
 you need to…"), and a genuine emergency like a broken build. If an old item is blocked on a decision
 from him, say so and move to the next-oldest — do not treat blocked as done.
 
+## ⚠️ QUOTE HIM VERBATIM, AND CHECK OFF EVERY CLAUSE BEFORE TICKING
+
+His words, after finding two halves of one request missing from something I had marked DONE:
+*"maybe start logging my requests by copying exactly what i said because how do you leave all this
+out"*.
+
+So, structurally:
+1. **Paste his message into the entry verbatim, in full**, before paraphrasing anything. A summary is
+   where clauses go to die — #241 said three things (a turn animation on the cog, the panel opening
+   beside the button, the button not being blurred) and shipped one and a half.
+2. **Split a multi-part request into a numbered checklist of HIS clauses**, and tick them one at a
+   time. An entry cannot be marked DONE while any clause is unticked.
+3. **Verify in the layout HE uses.** Both misses here passed their tests and passed my own check,
+   because I verified in a layout where the cog is a different element. This is the v7.79 lesson
+   repeating verbatim: *measure the layout you ship to, not the one you have open.* For a PC report
+   that means a desktop width AND the Studio layout, not Classic.
+
 ## ⚠️ Every request Ezra makes goes in REQUESTS.md — immediately
 
 **[REQUESTS.md](REQUESTS.md) is the running list of everything he has asked for.** Read it at the

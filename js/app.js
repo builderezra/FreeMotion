@@ -1298,7 +1298,17 @@ window.FM = window.FM || {};
           // exported soundtrack (exporter buildAudioMix). Mute rather than pause so un-soloing resumes
           // instantly without a re-seek.
           if (FM.soloSilenced(layer)) { m.el.muted = true; }
-          else { m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol)); }
+          else {
+            m.el.muted = false;
+            /* SPLIT AT UNITY (queue 195). `el.volume` cannot go above 1 — assigning 2 throws
+             * IndexSizeError and the value stays 1 — so everything up to unity stays here, where
+             * fades, solo, mute and the de-click already live and keep working untouched, and only
+             * the part ABOVE unity is handed to the Web Audio boost stage. The two multiply, so the
+             * result is the volume asked for without reimplementing any of the above. A layer at or
+             * below 100% never reaches setBoost and is never routed into Web Audio at all. */
+            m.el.volume = Math.max(0, Math.min(1, vol));
+            if (vol > 1 && FM.audioFxLive && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, vol);
+          }
         } catch (e) {}
       }
     });

@@ -88,9 +88,17 @@ window.FM = window.FM || {};
     if (!m._mes) return;
     try { m._mes.disconnect(); } catch (e) {}
     if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
+    dropBoost(m);
     try { m._mes.connect(FM.audioCtx().destination); } catch (e) {}
     m._afxSig = '';
     m._afxInsts = null;
+  }
+
+  function dropBoost(m) {
+    if (!m || !m._boost) return;
+    try { m._boost.input.disconnect(); } catch (e) {}
+    try { m._boost.output.disconnect(); } catch (e) {}
+    m._boost = null;
   }
 
   // Is the live chain still the one this layer describes? The signature answers that for STRUCTURE,
@@ -116,7 +124,7 @@ window.FM = window.FM || {};
       if (!layer || layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return;
-      const has = FM.layerHasAudioFx && FM.layerHasAudioFx(layer);
+      const has = (FM.layerHasAudioFx && FM.layerHasAudioFx(layer)) || needsBoost(layer);
       if (!has) {
         if (m._mes) passthrough(m);   // was routed; can't un-route an element, so hand it straight through
         return;                       // never routed and nothing to route: touch nothing, build no context
@@ -131,15 +139,54 @@ window.FM = window.FM || {};
       if (chainIsCurrent(m, layer)) return;
       try { mes.disconnect(); } catch (e) {}
       if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
+      dropBoost(m);
       const chain = FM.buildAudioFxChain(ctx, layer);
-      if (!chain) { try { mes.connect(ctx.destination); } catch (e) {} m._afxSig = ''; m._afxInsts = null; return; }
+      /* Boost stage LAST, after any audio effects — it is the output stage, and a limiter has to be
+       * the final thing in the path or an effect downstream of it can push the signal back over the
+       * ceiling it was there to hold. A layer routed only because of its volume has no fx chain at
+       * all, and then the boost IS the whole chain. */
+      const boost = needsBoost(layer) ? makeBoostStage(ctx) : null;
+      m._boost = boost;
+      const tail = boost ? boost.input : ctx.destination;
+      if (!chain) {
+        try { mes.connect(tail); } catch (e) {}
+        if (boost) { try { boost.output.connect(ctx.destination); } catch (e) {} }
+        m._afxSig = boost ? sig : '';
+        m._afxInsts = null;
+        if (boost) this.setBoost(layer);
+        return;
+      }
       mes.connect(chain.input);
-      chain.output.connect(ctx.destination);
+      chain.output.connect(tail);
+      if (boost) { try { boost.output.connect(ctx.destination); } catch (e) {} }
       m._afxChain = chain;
       m._afxSig = sig;
       m._afxInsts = ((layer.audioFx) || []).slice();   // the exact objects the chain now reads from
       chain.applyAt(FM.time || 0);
+      if (boost) this.setBoost(layer);
     },
+
+    /* The live gain, called from app.js's volume reconcile every frame. `el.volume` still carries
+     * everything up to unity — it is upstream of the source node, so fades, solo, mute and the
+     * de-click all keep working exactly as they did — and this carries only the part ABOVE it. The
+     * two multiply, so the total is the volume you asked for and nothing had to be reimplemented.
+     * Ramped, not assigned: a bare assignment to gain.value on a live graph clicks. */
+    setBoost(layer, vol) {
+      const m = layer && FM.media.get(layer.id);
+      if (!m || !m._boost) return false;
+      const v = (typeof vol === 'number') ? vol
+        : (FM.layerVolume ? FM.layerVolume(layer, FM.time || 0) : 1);
+      const g = Math.max(1, Math.min(10, isFinite(v) ? v : 1));
+      try {
+        const ctx = FM.audioCtx();
+        m._boost.gain.gain.setTargetAtTime(g, ctx.currentTime, 0.01);
+      } catch (e) { try { m._boost.gain.gain.value = g; } catch (e2) {} }
+      return true;
+    },
+
+    // Exposed so the suite can assert the routing decision without standing up a real graph.
+    needsBoost(layer) { return needsBoost(layer); },
+    boostOf(layer) { return boostOf(layer); },
 
     // Exposed so the invariant above can be asserted without standing up a real audio graph.
     isChainCurrent(m, layer) { return chainIsCurrent(m, layer); },
