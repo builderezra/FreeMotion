@@ -2642,18 +2642,27 @@ better still, keep working inside the turn rather than parking work for a later 
       **If you did mean "gone in both states", say so and it is one line.** Renaming a layer would then
       live on the timeline (double-click a track head), which already works.
 
-- [ ] **147 — PC: the text editor covers the text you are editing. RE-OPENED 16 Aug — it is fixed in CLASSIC only, and you use Studio.** *(first half v6.96, second half v7.65 — both classic-only)* (13 Aug,
+- [x] **147 — PC: the text editor covers the text you are editing. DONE — first half v6.96, second half v7.65. My 16 Aug re-open was WRONG and is corrected below.** (13 Aug,
       screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
       text while you edit it, get it off the canvas, also the text edit stuff on pc for some reason
       covers up the canvas, making it smaller when you could just put it in the add menu, so it doesnt
       take up real estate on the screen."*
-      **⚠️ RE-OPENED 16 Aug. Measured at v8.31: in the STUDIO layout the Aa options still cover 99.5%
-      of the canvas.** v7.65 fixed this by docking the editor into the desktop **side column** — and
-      studio has no side column, its inspector is a band under the stage, measured 307×258 at 1280px
-      and reported by the suite as "too small to dock". So the fix never engages in the layout you
-      actually use, and the editor falls back to covering the canvas exactly as your screenshot showed.
-      **The work is to dock it into studio's bottom band.** This is also the last thing blocking #249
-      (one desktop layout instead of three) — see that entry for the other two tests that go red.
+      **⚠️ I RE-OPENED THIS ON 16 Aug AND I WAS WRONG. Re-closed the same day. The record is kept
+      because the mistake nearly cost a rebuild of the text editor for no reason.**
+      What I saw: trialling studio as the default turned a suite test red with "the Aa options cover
+      99.5% of the canvas", and I concluded the v7.65 fix never engages in studio because studio has no
+      side column to dock into.
+      **Measured properly afterwards, in the real app, three ways — switching to studio at 1280×860,
+      switching at 900×760, and BOOTING into studio at 900×760 — the card and the Aa popover cover
+      0.0% of the canvas every time**, and the stage is padded 170px so the canvas keeps its room. The
+      floating-card fallback works exactly as designed; studio never needed a side column.
+      **The 99.5% is an artefact of the TEST's fixture.** It does `FM.scene = scene([])`, a synthetic
+      **320×240** project — a canvas so small that any popover covers nearly all of it. In classic the
+      popover happens to land clear of it; in studio the geometry shifts by a few pixels and it
+      overlaps. The assertion is measuring its own fixture, not the app.
+      **So the remaining work for #249 is to fix three TESTS' classic-only assumptions, not the
+      product.** That is a much smaller and completely different job, and getting it wrong would have
+      meant rebuilding a feature that already works.
 
       Two faults, and the second one carries his proposed fix:
       1. **It covers its own subject.** The "Aa" sheet (Spacing / Line height / Curve / Animate / caption
@@ -4349,9 +4358,16 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
          inspector is a band under the stage. So the fix cannot engage, and the editor falls back to
          covering the canvas.
       3. the multi-select align buttons measure 43px tall in studio against the height the test expects.
-      **So the work is: dock the text editor into studio's BOTTOM BAND, the way v7.65 docked it into
-      classic's side column.** That is a real change to where the editor mounts, not a tuning pass, and
-      it is the last thing standing between you and one desktop layout instead of two.
+      **CORRECTED the same day: that reading was wrong, and the product is fine.** Measured in the real
+      app three ways — switching to studio at 1280×860, switching at 900×760, and booting into studio at
+      900×760 — the editor card and the Aa popover cover **0.0% of the canvas** every time, with the
+      stage padded so the canvas keeps its room. The floating-card fallback works; studio never needed a
+      side column.
+      The 99.5% comes from the TEST's own fixture: it builds a synthetic **320×240** project, and against
+      a canvas that small any popover covers nearly all of it.
+      **So the work here is to fix three TESTS, not the app** — their assumptions were written when
+      classic was the only layout the suite ever ran in. Much smaller, and a completely different job
+      from the one I first wrote down.
       **Not started at the tail of a long session, deliberately** — the same call that was made for #244,
       which then built cleanly in one go. The measurements above mean the next session builds instead of
       re-deriving. #147 should be RE-OPENED as part of it: it is done for the layout you are not using.
