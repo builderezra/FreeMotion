@@ -307,7 +307,21 @@ window.FM = window.FM || {};
         // mobile it has three dots on the text for those two buttons, get rid of that." The ellipsis is
         // the desktop convention for "this opens a picker", and on a phone every tile opens something,
         // so it says nothing and just reads as a truncated word.
-        { label: 'Import', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: fileImport },
+        /* A WHITE GRADIENT ICON ON A GREY PLATE (queue 270). "keep it all looking the same. I just
+           want the actual icon for the import button to be more white colour with a gradient instead
+           of grey how it is right now."
+           Only the ICON changes — the plate keeps the plain grey that #210 made a system ("Import and
+           Import audio are both grey on purpose", the neutral everyday action beside the things that
+           MAKE something). That grey is `--am-tint`, and `.addmenu-card > .addmenu-ic` paints the icon
+           from it, which is why the arrow was grey too: ico() strokes with currentColor.
+           So the icon gets its own paint server, exactly as Sound effects does — a CSS colour cannot
+           override one, which is the whole reason #267 took two attempts. Namespaced id: a duplicate
+           silently steals the paint from whichever element asked for it second. */
+        { label: 'Import', icon: icoMulti(
+          '<defs><linearGradient id="fm-ic-imp" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">'
+          + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient></defs>'
+          + '<path d="M12 16V4M7 9l5-5 5 5" stroke="url(#fm-ic-imp)"/>'
+          + '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="url(#fm-ic-imp)"/>'), add: fileImport },
         { label: 'Sample clip', icon: ico('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M9 5v4.5M15 5v4.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
         { label: 'AI Scene', emoji: '✨', add: function () { FM.aiPanel && FM.aiPanel.show(); } },
       ];

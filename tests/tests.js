@@ -17099,6 +17099,52 @@
     }
   });
 
+  /* ---------------- queue 270: the Media Import icon was grey ----------------
+   * "keep it all looking the same. I just want the actual icon for the import button to be more white
+   * colour with a gradient instead of grey how it is right now."
+   * Only the ICON. The plate keeps the plain grey #210 made a system — Import and Import audio are the
+   * neutral everyday action beside the things that MAKE something — and that grey is `--am-tint`,
+   * which `.addmenu-card > .addmenu-ic` also paints the icon from. Hence a paint server on the icon,
+   * the same answer as #267: a CSS colour cannot override one. */
+
+  test('the Media Import icon is a white gradient on a still-grey plate (queue 270)', { item: 'import-icon' }, async function () {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:420px;height:600px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      const tab = [...host.querySelectorAll('.addmenu-tab')].find(e => e.textContent.trim() === 'Media');
+      if (!tab) throw new Error('no Media tab');
+      tab.click();
+      await sleep(180);
+      const card = [...host.querySelectorAll('.addmenu-card')].find(c => c.textContent.trim() === 'Import');
+      if (!card) throw new Error('no Import card on the Media tab');
+      const paths = [...card.querySelectorAll('svg path')];
+      if (!paths.length) throw new Error('the Import icon has no strokes to check');
+      /* Every stroke must use the gradient — one path left on currentColor would come out grey and
+         the arrow would be half white, which is worse than all grey. */
+      paths.forEach(pth => {
+        const st = pth.getAttribute('stroke') || '';
+        if (!/^url\(#/.test(st)) throw new Error('an Import icon stroke is "' + st + '" — it will take the card\'s grey tint, not the white gradient');
+      });
+      const grad = card.querySelector('linearGradient');
+      if (!grad) throw new Error('the Import icon references a gradient that is not in the card');
+      const stops = [...grad.querySelectorAll('stop')];
+      if (stops.length < 2) throw new Error('the Import icon gradient has ' + stops.length + ' stop(s)');
+      stops.forEach(st => {
+        const c = (st.getAttribute('stop-color') || '').toLowerCase();
+        if (!/^#f{3,6}$|^#ffffff$|^white$/.test(c)) throw new Error('an Import gradient stop is "' + c + '" — it has to be white');
+      });
+      const a = stops[0].getAttribute('stop-opacity') || '1', b = stops[stops.length - 1].getAttribute('stop-opacity') || '1';
+      if (a === b) throw new Error('both ends of the Import gradient are identical — that is flat white, not a gradient');
+      /* "keep it all looking the same" — the PLATE must not have changed. */
+      const tint = card.style.getPropertyValue('--am-tint');
+      if (!tint) throw new Error('the Import card lost its tint — the grey plate is part of a system (#210), only the icon was meant to change');
+      const [r, g, bl] = tint.split(',').map(n => parseInt(n, 10));
+      if (Math.max(r, g, bl) - Math.min(r, g, bl) > 40) throw new Error('the Import plate is no longer a neutral grey: ' + tint);
+    } finally { host.remove(); }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

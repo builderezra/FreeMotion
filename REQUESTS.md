@@ -1917,10 +1917,25 @@ better still, keep working inside the turn rather than parking work for a later 
       So: KEEP the vibrant-icon / dull-border treatment and keep Null red — the complaint is the palette
       itself, not the scheme. Custom elements → multicoloured.
 
-- [ ] **270 — Media: the Import icon should be white with a gradient, not grey. (16 Aug.)** His words,
+- [x] **270 — Media: the Import icon should be white with a gradient, not grey. DONE v8.60.** His words,
       verbatim: *"For the import button in the media section keep it all looking the same. I just want
       the actual icon for the import button to be more white colour with a gradient instead of grey how
       it is right now."* Only the ICON changes — he says twice to keep the rest the same.
+      **DONE v8.60 — and #267 made this one quick.** Same cause: the arrow was grey because `ico()`
+      strokes with `currentColor` and `.addmenu-card > .addmenu-ic` paints that from `--am-tint`, which
+      for Import is the plain grey. So a CSS rule could never have made just the icon white without
+      taking the plate with it — the icon needed its own paint server, exactly as Sound effects has.
+      **The plate is untouched, which is the half you asked for twice** (*"keep it all looking the
+      same"*): still `150, 160, 176`, still the neutral grey that #210 made a system — Import and Import
+      audio are the everyday action, beside the things that MAKE something. The test asserts the plate
+      is still a neutral grey as well as the icon being white, because a fix that whitened the whole
+      card would satisfy the icon check and break the system.
+      Verified at 375px with a screenshot: a white arrow on the grey plate, with Sample clip still pink
+      and AI Scene still yellow beside it.
+      **Left alone on purpose, and worth your word:** *Import audio* on the Audio tab is the same grey
+      button with the same grey arrow. You named the media one specifically, and #210 deliberately made
+      those two a matching pair — so whitening only one splits it. Say if you want the audio one to
+      match and it is a one-line change.
 
 - [x] **269 — Audio menu: the three default buttons must not scroll away. (16 Aug, with a screenshot he
       drew a red line on.)** His words, verbatim: *"Also in the audio menu if you look at the image I sent
