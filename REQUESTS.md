@@ -1721,6 +1721,34 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **265 — Three of the four keyframe ◆ rails have no test at all. (Found 16 Aug while
+      mutation-checking 254, not reported by him.)** A mutation aimed at the new Edit Points diamond
+      hit the CROP panel's instead, because the line `left.appendChild(kfBtn);` appears **four times**
+      in js/inspector.js and I did not anchor uniquely. It survived: **the crop panel's ◆ can be
+      deleted outright and all 437 tests still pass.**
+      That is a genuine coverage hole rather than a curiosity — the ◆ is how every animatable property
+      in the app gets animated, and three of the four rails could silently stop rendering without the
+      suite noticing. Only the Edit Points one (added v8.40) is covered.
+      The job: find all four rails, and give each a test that presses the diamond and asserts the
+      property actually became animated — not merely that a button with the right class exists, which
+      is the weaker assertion that would let a dead button pass.
+      *(The wider lesson is already banked: a mutation string must be anchored uniquely, or a surviving
+      mutation is measuring somewhere you did not mean to look.)*
+
+      **PARTLY DONE 16 Aug — 4 of the 5 rails are covered now. NOT ticked, because the CROP one, which
+      is the rail that started this, is still uncovered.** Counting properly there are **five** ◆ rails,
+      not four: crop, Edit Points, transform, volume and speed. Edit Points was covered by v8.40; a new
+      test now covers **transform, speed and volume**.
+      It asserts **the property actually became animated**, not that a button with the right class
+      exists — a dead button satisfies the weaker check, and a dead keyframe button is the whole point.
+      Proven both ways: deleting the transform diamond fails it with *"the transform panel has no ◆
+      rail at all"*, and leaving the button in place while gutting its click handler fails it with
+      *"pressing ◆ did not animate the property — the button is dead"*.
+      **Why crop is still open:** its panel only builds for a layer with real media loaded, and the
+      suite cannot create one. Deleting the crop diamond STILL leaves the suite green — I re-ran that
+      mutation to confirm rather than assume. Finishing it needs a media fixture, which is a bigger
+      job than this entry and probably worth doing once for several tests at the same time.
+
 - [x] **263 — Kaleidoscope: dragging the Centre sliders to either end erases the layer. DONE v8.42.
       (Found in the 16 Aug hunt, not reported by him.)** Measured: with only the shape layer visible, moving **Centre Y
       to 0 or to 100** — or **Centre X to 100** — leaves ZERO pixels different from the background. The
@@ -1756,6 +1784,10 @@ better still, keep working inside the turn rather than parking work for a later 
       slider cannot change which part of your image is the one being mirrored. That is arguably its
       whole job. Left alone because it is a behaviour change rather than a bug fix, and this entry was
       about the vanishing. Its own item if you want it.
+      **Measured afterwards so this note is not misleading: the slider is NOT dead** — phase 90 and
+      phase 180 each visibly change the render (90 distinct colours against 99). It rearranges the
+      mirrored wedge rather than doing nothing. What it cannot do is bring in a different PART of your
+      image, because the fold leaves the source wedge fixed. Whether that matters is a taste call.
 
 - [x] **262 — Hot Colour (thermal): setting Low at or above High turns the layer into a flat black
       rectangle. DONE v8.41. (Found in the 16 Aug hunt.)** Two independent sliders, nothing stops them crossing.
@@ -1783,8 +1815,10 @@ better still, keep working inside the turn rather than parking work for a later 
       the effect is broken or not. The fixture asserts it produces a range BEFORE testing the defect,
       and that guard fired on the first run and caught me using the wrong gradient shape
       (`layer.fillGradient` with c0/c1, not a stops array).
-      **pixelsort is still unchecked** — same low/high pair, same crossing risk, now with a gradient
-      fixture available to test it properly.
+      **pixelsort CHECKED, and it is fine** — measured with the same gradient fixture: crossing its
+      low/high preserves all 181 colours (no flattening), and 0.9/0.1 renders BYTE-IDENTICAL to 0.1/0.9,
+      so it already reads a crossed pair as the window it describes. Nothing to fix; the concern this
+      entry raised about its sibling is closed.
 
 - [x] **261 — Halftone Lines goes SOLID BLACK in the preview while the export is fine. DONE v8.41. (Found in the
       16 Aug hunt — a preview/export mismatch, the class this codebase keeps getting bitten by.)**

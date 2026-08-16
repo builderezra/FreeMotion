@@ -16245,6 +16245,45 @@
     if (gone.length) throw new Error(gone.length + ' effect(s) erase the layer at a single slider extreme: ' + gone.slice(0, 8).join(' · '));
   });
 
+  /* ---------------- queue 265: the keyframe rails had almost no coverage ----------------
+   * Found by a mutation aimed at the new Edit Points ◆ landing on the CROP panel's instead, because
+   * `left.appendChild(kfBtn)` appears four times in inspector.js and I had not anchored uniquely. It
+   * SURVIVED: the crop diamond could be deleted outright with all 437 tests still green. There are
+   * five ◆ rails in total and only the Edit Points one was covered.
+   *
+   * The assertion is deliberately "the property actually became animated", NOT "a button with class
+   * mt-kf exists" — a dead button satisfies the second one, and a dead keyframe button is exactly the
+   * failure this is here to catch. */
+
+  test('every reachable keyframe ◆ actually animates its property (queue 265)', { item: 'kf-rails' }, function () {
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
+    try {
+      FM.time = 0;
+      const check = (label, layer, category, isAnimated) => {
+        S.layers = [layer]; FM.selectLayer(layer.id);
+        FM.inspector.openCategory(category);
+        const btn = document.querySelector('.mt-kf');
+        if (!btn) throw new Error(label + ': the "' + category + '" panel has no ◆ rail at all');
+        if (btn.textContent.indexOf('◆') < 0) throw new Error(label + ': the rail button is not the keyframe diamond');
+        if (isAnimated(layer)) throw new Error(label + ': the fixture was ALREADY animated, so pressing ◆ would prove nothing');
+        btn.click();
+        if (!isAnimated(layer)) throw new Error(label + ': pressing ◆ in "' + category + '" did not animate the property — the button is dead');
+      };
+      check('transform', FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#e8a33d' }),
+        'transform', l => FM.isAnimated(l.transform.x) || FM.isAnimated(l.transform.y));
+      check('speed', FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#e8a33d' }),
+        'speed', l => FM.isAnimated(l.speed));
+      check('volume', FM.makeLayer('video', { x: 270, y: 480 }),
+        'volume', l => FM.isAnimated(l.volume));
+      /* The CROP rail is the one that started this and it is still uncovered: its panel only builds
+         for a layer with real media loaded, which this suite cannot make. Recorded rather than
+         quietly dropped — see queue 265. */
+    } finally {
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
