@@ -2913,7 +2913,7 @@ better still, keep working inside the turn rather than parking work for a later 
       lines, empty states and helper text that explain what is already obvious. Worth a sweep of its own
       some time; for now, read it as a standing constraint on any new label or hint I add anywhere.
 
-- [ ] **293 — Delete the retired Classic layout CSS, don't just stop showing it. (16 Aug, from #292.)**
+- [x] **293 — Delete the retired Classic layout CSS, don't just stop showing it. DONE v8.83.** (16 Aug, from #292.)
       #292 stopped the old Alight-Motion-shaped layout being PAINTED on refresh by putting
       `layout-studio` in the markup. But the Classic rules are still the DEFAULT in `styles.css` — a
       50px top bar and the inspector as a right-hand side column — so the shape he does not want is
@@ -2942,6 +2942,31 @@ better still, keep working inside the turn rather than parking work for a later 
       passes; (2) retire the `boot-layout` guard test in the same commit, since it exists to assert the
       two layouts differ and there will be only one; (3) drop the class from the markup and the two JS
       sites LAST, so that until then the app can be flipped back by re-adding it.
+
+      **DONE v8.83, in exactly that order.** 45 selectors lost the class (`body.layout-studio X` → `body
+      X`, so specificity fell by exactly one class everywhere rather than unpredictably), and the Classic
+      layout itself — the `50px minmax(0,1fr) var(--tl-h)` grid and the four `grid-area` placements that
+      put the inspector down the right — is **deleted**, not merely unmatched. Every width is covered by
+      one of the two blocks that remain: desktop at min-width 701px, phone at max-width 700px.
+      **Proved inert before the class came off**, which is the step that made this safe: with the Classic
+      rules gone, `#app` and all four regions measured **byte-identical with and without** the class. Only
+      then did it come off the markup, `settings.js` and `app.js`.
+      **What the suite caught, which is why it was worth doing carefully.** Three tests were written
+      against the class rather than against the layout, and they are re-based rather than deleted:
+      · the desktop text-editor DOCKING test skipped itself by asking "is the Studio class on the body?"
+        — it asks whether this window's inspector band is actually big enough to dock into now, which is
+        the real condition and still runs on a tall window;
+      · the "one name field" test asserted the class applied; it checks the inspector is the band under
+        the stage;
+      · and the two queue-292 guards retired together, exactly as their own comments instructed.
+      **They are replaced by a stronger promise.** 292 asserted "the old layout is covered up"; the new
+      test asserts **there is no old layout** — no `layout-studio` selector anywhere in styles.css, and
+      neither Classic fingerprint (the 2/2/3/3 inspector placement, the 50px top-bar grid). It reads the
+      shipped file rather than the DOM, because your concern was that someone could READ it: *"if someone
+      sees it in the final version they may be able to use this against us"*, and a rule that never
+      matches is still shipped and still legible.
+      Verified at 1280×800 and 380×800: both layouts pixel-unchanged, and the body now carries no layout
+      class at all.
 
 - [x] **291 — The signature white edge-glow on the sound-effects and voice-record menus. DONE v8.82.** (16 Aug.) His
       words, verbatim: *"Also put the our signature white line glow that move around the edges in the

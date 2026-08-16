@@ -53,10 +53,11 @@ window.FM = window.FM || {};
       // A stored 'classic' from before queue 178 is ignored rather than honoured: the option is gone,
       // and a saved value is the one way someone could still be looking at a look with no way back.
       if (['auto', 'smooth', 'detail'].indexOf(saved.playbackQuality) >= 0) state.playbackQuality = saved.playbackQuality;
-      /* A saved 'classic' is migrated rather than honoured (queue 249). Honouring it would leave every
-       * machine that ever opened the app before today on the layout he asked to be rid of, and he
-       * would have to find the setting on each one — which is the situation he reported. */
-      if (saved.layout === 'studio' || saved.layout === 'classic') state.layout = 'studio';
+      /* `layout` is not read from saved settings any more (queue 293). Queue 249 removed the switch and
+       * migrated every saved 'classic' to 'studio'; 293 deleted the Classic CSS itself, so there is one
+       * layout and nothing left for a stored value to select. An old settings blob still carrying
+       * layout:'classic' is simply ignored rather than migrated, because there is no longer a second
+       * thing it could mean. */
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
@@ -76,10 +77,10 @@ window.FM = window.FM || {};
        is exactly the Classic look queue 178 removed. Ezra: "Get rid of the classic theme option." */
     document.documentElement.setAttribute('data-theme', 'glass');
     document.body.classList.toggle('demo-mode', !!state.demoMode);
-    // Studio layout is a pure re-placement of the same four regions (see the block at the end of
-    // styles.css). The class goes on unconditionally; the media query decides whether it means anything,
-    // so a phone is never affected and switching costs no reflow beyond the grid itself.
-    document.body.classList.toggle('layout-studio', state.layout === 'studio');
+    /* The `layout-studio` class is GONE (queue 293). It marked one of two desktop layouts; the other has
+       been deleted from the stylesheet, so the class selected nothing and applying it said something
+       about the app that was no longer true. Verified before removing it: with the Classic rules gone,
+       #app and all four regions measure identically with and without the class. */
     touchRipples(state.showTouches);
     listeners.forEach(fn => { try { fn(state); } catch (e) {} });
   }

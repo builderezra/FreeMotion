@@ -129,17 +129,17 @@ body {
      The four regions (top bar / stage / inspector / timeline) are all direct children and are PLACED
      explicitly below, so switching to the Studio layout is a pure re-placement — no DOM moves, no
      duplicated panels. minmax(0,…) on both axes keeps a 1080px canvas from blowing the layout out. */
-  grid-template-rows: 50px minmax(0, 1fr) var(--tl-h, 232px);
-  grid-template-columns: minmax(0, 1fr) var(--insp-w, 286px);
+  /* No grid TEMPLATE here any more (queue 293). It used to carry the Classic one — a 50px top-bar row
+     with the inspector as a right-hand column — and every width is covered by one of the two blocks
+     that follow: the desktop layout at min-width 701px and the phone layout at max-width 700px. Ezra:
+     "if someone sees it in the final version they may be able to use this against us", and CSS in a
+     no-build app is plain text anyone can read, so the shape is gone rather than merely unused. */
   height: 100vh;
   width: 100%;
   overflow: hidden;
 }
-/* Classic layout: top bar across the top, inspector down the right, timeline across the bottom. */
-#topbar          { grid-area: 1 / 1 / 2 / 3; }
-#main            { grid-area: 2 / 1 / 3 / 2; }
-#inspector-panel { grid-area: 2 / 2 / 3 / 3; }
-#timeline-panel  { grid-area: 3 / 1 / 4 / 3; }
+/* The four regions are PLACED by the layout that is running — desktop at min-width 701px, phone at
+   max-width 700px — not here. The Classic placement that used to sit at this spot is deleted (293). */
 
 /* ---------- top bar ---------- */
 #topbar {
@@ -879,7 +879,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
  * classic's two columns (stage | inspector). Studio has three and places #topbar in column 1, so on a
  * 2000px window the 60px rail swelled to 1596px and the canvas was exiled to a 404px sliver on the
  * right — the small black rectangle in his screenshot. Drawing mode hit the identical bug and was
- * patched with a Studio-aware variant (see body.layout-studio.drawing #app); the text editor does not
+ * patched with a layout-aware variant (see body.drawing #app); the text editor does not
  * need one, because on desktop it no longer touches the grid at all. */
 @media (min-width: 701px) {
   .te-panel {
@@ -4255,11 +4255,11 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
  * a fixed-position inspector — is untouched no matter what the setting says.
  */
 @media (min-width: 701px) {
-  body.layout-studio {
+  body {
     --rail-w: 60px;
     --insp-w: clamp(300px, 24vw, 400px);
   }
-  body.layout-studio #app {
+  body #app {
     grid-template-columns: var(--rail-w) var(--insp-w) minmax(0, 1fr);
     /* The bottom band was a flat 232px at every viewport HEIGHT, which is fine on a desktop and
        absurd on a phone held sideways: 844x390 is over 700px wide, so it takes this layout, and
@@ -4269,13 +4269,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
        the 150px floor stops it collapsing past a usable timeline on something very short. */
     grid-template-rows: minmax(0, 1fr) var(--tl-h, max(150px, min(232px, 46vh)));
   }
-  body.layout-studio #topbar          { grid-area: 1 / 1 / 2 / 2; }   /* rail: canvas row only, never the band */
-  body.layout-studio #main            { grid-area: 1 / 2 / 2 / 4; }   /* stage takes the full width right of it */
-  body.layout-studio #inspector-panel { grid-area: 2 / 1 / 3 / 3; }   /* band runs edge to edge, under the rail */
-  body.layout-studio #timeline-panel  { grid-area: 2 / 3 / 3 / 4; }
+  body #topbar          { grid-area: 1 / 1 / 2 / 2; }   /* rail: canvas row only, never the band */
+  body #main            { grid-area: 1 / 2 / 2 / 4; }   /* stage takes the full width right of it */
+  body #inspector-panel { grid-area: 2 / 1 / 3 / 3; }   /* band runs edge to edge, under the rail */
+  body #timeline-panel  { grid-area: 2 / 3 / 3 / 4; }
 
   /* ---- the top bar, stood on its end ---- */
-  body.layout-studio #topbar {
+  body #topbar {
     flex-direction: column; align-items: center; justify-content: flex-start;
     gap: 10px; padding: 12px 6px;
     border-bottom: 0; border-right: 1px solid var(--line);
@@ -4285,23 +4285,23 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
        window. Scroll it instead; min-height:0 is what lets a grid item actually shrink and scroll. */
     min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
   }
-  body.layout-studio #topbar::-webkit-scrollbar { display: none; }
+  body #topbar::-webkit-scrollbar { display: none; }
   /* the wordmark can't fit 60px, so drop the text and keep the version pill.
      The "▶" mark that used to stand in for it is GONE (v6.13): it sat at the very top-left of the rail
      and clicking it went Home, so the app's one back control was a right-pointing play triangle. Ezra:
      "make the top left arrow that takes you back actually obviously be a back button." The real back
      button now occupies that corner (.tb-back below), and re-drawing a second, differently-shaped
      home door directly beneath it would put the confusion straight back. */
-  body.layout-studio .brand { flex-direction: column; gap: 4px; font-size: 0; line-height: 1; }
-  body.layout-studio .brand .ver { font-size: 8.5px; padding: 1px 5px; }
+  body .brand { flex-direction: column; gap: 4px; font-size: 0; line-height: 1; }
+  body .brand .ver { font-size: 8.5px; padding: 1px 5px; }
   /* Back stacks its chevron over a small label — 60px is enough for "Back" at 8.5px, and the label is
      what makes it obvious. Full width so the whole tile is the target, not just the glyph. */
   /* The rail is 60px wide, so the button can be its full size here — it is the widest thing in the
      column after Export and it sits at the very top, which is where back belongs. */
-  body.layout-studio .tb-back { width: 38px; height: 38px; }
-  body.layout-studio .tb-back .ico { width: 22px; height: 22px; }
-  body.layout-studio .top-actions { flex-direction: column; align-items: center; gap: 9px; width: 100%; }
-  body.layout-studio .top-actions .spacer { display: none; }
+  body .tb-back { width: 38px; height: 38px; }
+  body .tb-back .ico { width: 22px; height: 22px; }
+  body .top-actions { flex-direction: column; align-items: center; gap: 9px; width: 100%; }
+  body .top-actions .spacer { display: none; }
   /* Export keeps its accent and icon but loses the label — it is still the only green thing here.
      NOT pinned to the bottom with margin-top:auto: the rail is only as tall as the canvas now, so on a
      short window that pushed Export out of the rail entirely (measured: 20px past the end, sitting over
@@ -4317,26 +4317,26 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      the last thing you do, and re-ordering the DOM would have quietly changed that too. Only the two
      app-level buttons are ordered; the layer buttons (parent, delete) keep the default 0 and so stay
      above both — they belong to the selection, not to the app. */
-  body.layout-studio #btn-export { order: 1; }
-  body.layout-studio #btn-settings { order: 2; }
-  body.layout-studio #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; justify-content: center; }
-  body.layout-studio #btn-export::before { width: 30px; height: 30px; }
+  body #btn-export { order: 1; }
+  body #btn-settings { order: 2; }
+  body #btn-export { width: 44px; height: 44px; padding: 0; gap: 0; font-size: 0; justify-content: center; }
+  body #btn-export::before { width: 30px; height: 30px; }
   /* the icon is centred here rather than pinned to a padding edge, so the shine has to follow it */
-  body.layout-studio #btn-export::after { left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
+  body #btn-export::after { left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
 
   /* The project name has nowhere to live in a 60px rail, so it floats over the stage's top-left —
      same input, same handlers, just repositioned. */
-  body.layout-studio .proj-name {
+  body .proj-name {
     position: fixed; top: 10px; left: calc(var(--rail-w) + 14px);
     width: 220px; z-index: 30;
   }
   /* …and it goes away entirely while it would only be repeating the name already in the inspector's
      own header (queue 146). `.is-dupe` is stamped by syncTopBar and means "nothing is selected, so
      this field is showing the PROJECT name" — see the note there for why it is not just deleted. */
-  body.layout-studio .proj-name.is-dupe { display: none; }
+  body .proj-name.is-dupe { display: none; }
 
   /* the inspector now borders the timeline on its right, and both sit under the stage */
-  body.layout-studio #inspector-panel { border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
+  body #inspector-panel { border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
   /* The Add menu is what overflows Studio's band, NOT the category grid (v5.58, from the layout
      sweep). Measured at 1440x900: the band is 269px of client height against 328px of content, and
      the tallest child is the wrapper holding .addmenu--panel at 277px — which is why adding columns
@@ -4349,8 +4349,8 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      column the 2-row tab grid was built for in v5.48 — and that grid is most of the overflow:
      measured, the panel is 277px of which the BODY is only 133px, so the tabs and title are the
      bulk. Five tabs share one row here, which fits comfortably at this width and gives ~50px back. */
-  body.layout-studio .addmenu--panel .addmenu-tabs { display: flex; }
-  body.layout-studio .addmenu--panel .addmenu-tab { flex: 1 1 0; min-width: 0; }
+  body .addmenu--panel .addmenu-tabs { display: flex; }
+  body .addmenu--panel .addmenu-tab { flex: 1 1 0; min-width: 0; }
   /* …and a STATED height on the body, not a percentage. A percentage max-height resolves against a
      parent that has no definite height of its own, so it silently does nothing — the same circular
      dependency that defeated three attempts at the phone sheet before v5.46 used a number. */
@@ -4359,15 +4359,15 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      1920x1080 — so it was a scrollbar and a big empty strip AT THE SAME TIME, which is exactly what
      Ezra photographed. When planGrid() can measure the panel it sets the tile area's height itself
      and nothing scrolls; this stays as the fallback for a panel too small to plan for. */
-  body.layout-studio .addmenu--panel:not(.addmenu--fit) .addmenu-body {
+  body .addmenu--panel:not(.addmenu--fit) .addmenu-body {
     max-height: 128px;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  body.layout-studio #timeline-panel  { border-top: 1px solid var(--line); }
+  body #timeline-panel  { border-top: 1px solid var(--line); }
   /* the drag handle should grab the whole band, not just the timeline half — the band now starts at
      the window edge, so reach back across the inspector AND the rail's column */
-  body.layout-studio #tl-resizer { left: calc(-1 * (var(--rail-w) + var(--insp-w))); }
+  body #tl-resizer { left: calc(-1 * (var(--rail-w) + var(--insp-w))); }
 
   /* DRAWING MODE. The generic rule (`body.drawing #app { grid-template-columns: minmax(0,1fr) 0 }`)
      was written for classic's TWO columns — stage | inspector. Studio has THREE, and its regions are
@@ -4375,7 +4375,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      60px to 967px and the stage collapsed to 233px and jumped to x=967, which is Ezra's "puts the
      canvas in a weird spot". Keep the rail its own width, collapse the inspector column, and give
      everything else to the stage (which spans columns 2-3). */
-  body.layout-studio.drawing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  body.drawing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
 }
 
 /* Per-slider keyframe diamond inside a Move & Transform value box (v4.78). Each slider owns its own
@@ -5588,17 +5588,17 @@ body.fm-pushing #toast { z-index: 213; }
      row that ordering is stale and it visibly REVERSED the far-right cluster — the DOM read
      ver·cog·export·view-options while the screen read ver·view-options·export·cog. Source order is the
      contract here, so the leftover ordering is cleared rather than fought with more of it. */
-  body.layout-studio #t-far #btn-export,
-  body.layout-studio #t-far #btn-settings { order: 0; margin: 0; }
+  body #t-far #btn-export,
+  body #t-far #btn-settings { order: 0; margin: 0; }
   #t-sel { display: flex; align-items: center; gap: 6px; }
   /* The rail is gone: #topbar carried it, and everything on it has either moved into the row above or
      belongs to the phone bars. Hidden rather than deleted so a layout that still wants it can show it.
      Its COLUMN closes via --rail-w rather than by rewriting grid-template-columns — the drawing mode
-     override (body.layout-studio.drawing #app) sets its own columns off that same variable, and a
+     override (body.drawing #app) sets its own columns off that same variable, and a
      second hard-coded template here fought it and SHRANK the stage instead of widening it. Changing
      the variable leaves every rule that derives from it correct, including the ones I did not touch. */
-  body.layout-studio { --rail-w: 0px; }
-  body.layout-studio #topbar { display: none; }
+  body { --rail-w: 0px; }
+  body #topbar { display: none; }
 
   /* ---- the LAST control comes down off the header (v7.75, queue 229) -------------------------
      Ezra: "no dont reclaim the top bar, i just want you to move the nescesary buttons to the bottoms
@@ -5662,7 +5662,7 @@ body.fm-pushing #toast { z-index: 213; }
        Measured in STUDIO — which is the layout he uses, and the reason v7.79 looked fine to me: the
        button was 44x44 in a 40px row, standing 3px proud at the top and 2px below, lapping over the rule
        between the row and the timeline, while the cog beside it was 34. The 44 comes from
-       `body.layout-studio #btn-export`, written when Export was a big square in the vertical RAIL and
+       `body #btn-export`, written when Export was a big square in the vertical RAIL and
        left behind when v7.52 moved it into this row. My v7.79 sizing was on `#transport .btn` — one id
        and one class, which LOSES to that rail rule. Two ids wins, and the rail rule can stay where it is
        for whatever else might read it. */
@@ -6007,7 +6007,7 @@ body.fm-pushing #toast { z-index: 213; }
    the `.cat-span2/3` classes set `grid-column` and are inert here — switching to a real grid to get
    flexible rows would silently bring those back to life and re-flow the panel. */
 @media (min-width: 701px) {
-  body.layout-studio #inspector-panel {
+  body #inspector-panel {
     /* THE TILE HEIGHT IS SOLVED, not mapped. The first attempt scaled padding and the icon off the band
        and shrank the tiles nicely while STILL leaving ~50px of scroll at every height, because the
        three rows are not the only things in the panel: there is a 33px title and a 16px quick-row above
@@ -6026,15 +6026,15 @@ body.fm-pushing #toast { z-index: 213; }
        costing more height than the padding inside a tile. */
     --cat-gap: clamp(4px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
   }
-  body.layout-studio #inspector-panel .cat-card {
+  body #inspector-panel .cat-card {
     height: var(--cat-h); box-sizing: border-box;
     padding: var(--cat-pad) 8px; gap: var(--cat-inner-gap);
     overflow: hidden;                 /* a long label must crop, never push the tile taller again */
   }
-  body.layout-studio #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
+  body #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
   /* The label follows, or a 14px icon sits under text as tall as it is. Its line-height tightens with
      it — at three rows, 1.3 line-height is another 10px of nothing. */
-  body.layout-studio #inspector-panel .cat-label {
+  body #inspector-panel .cat-label {
     font-size: clamp(9.5px, calc((var(--tl-h, 264px) - 120px) / 12.5), 11.5px);
     line-height: clamp(1.05, calc((var(--tl-h, 264px) - 120px) / 110), 1.3);
   }
@@ -6051,17 +6051,17 @@ body.fm-pushing #toast { z-index: 213; }
      both why Ezra could not find it for weeks and, once he did, why he said *"the button to do it
      shouldnt be at the top of the screen"*. Scoped to the state the handle is live in, so the inspector's
      own absolutely-positioned children are not given a new containing block for the sake of this. */
-  body.layout-studio #inspector-panel:has(.addmenu--panel) { position: relative; }
-  body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer {
+  body #inspector-panel:has(.addmenu--panel) { position: relative; }
+  body #inspector-panel:has(.addmenu--panel) > #am-resizer {
     display: block; position: absolute; left: 0; right: 0; top: 0; height: 10px;
     cursor: ns-resize; z-index: 6; touch-action: none;
   }
   /* The grab affordance: a short bar, centred, the same language as the timeline's own resizer. */
-  body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer::after {
+  body #inspector-panel:has(.addmenu--panel) > #am-resizer::after {
     content: ''; position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
     width: 46px; height: 4px; border-radius: 2px; background: var(--line);
   }
-  body.layout-studio #inspector-panel:has(.addmenu--panel) > #am-resizer:hover::after { background: var(--accent); }
+  body #inspector-panel:has(.addmenu--panel) > #am-resizer:hover::after { background: var(--accent); }
 
   /* FLOATING. The panel leaves the grid and sits above the stage, so raising it cannot shrink the
      canvas — which is not a nicety here but the only way the gesture can work at all: the band and
@@ -6077,7 +6077,7 @@ body.fm-pushing #toast { z-index: 213; }
      the drag starts and held for the whole gesture, so the only edge that can move is the top one.
      `fixed` rather than `absolute` on purpose — those three numbers are viewport coordinates, and fixed
      is the one position where they mean what they measured, with no containing block to guess at. */
-  body.layout-studio.am-floating #inspector-panel {
+  body.am-floating #inspector-panel {
     position: fixed;
     left: var(--am-left, 0); width: var(--am-width, 307px); right: auto;
     bottom: var(--am-bottom, 0); height: var(--am-h, 264px); z-index: 8;
@@ -6097,9 +6097,9 @@ body.fm-pushing #toast { z-index: 213; }
     18%  { border-top-color: var(--accent); box-shadow: 0 -2px 14px rgba(41, 217, 187, .55), 0 -18px 40px rgba(0, 0, 0, .45); }
     100% { border-top-color: var(--line); box-shadow: 0 -18px 40px rgba(0, 0, 0, .45); }
   }
-  body.layout-studio #inspector-panel.am-snap { animation: am-snap-flash 400ms ease-out; }
+  body #inspector-panel.am-snap { animation: am-snap-flash 400ms ease-out; }
   @media (prefers-reduced-motion: reduce) {
-    body.layout-studio #inspector-panel.am-snap { animation: none; border-top-color: var(--accent); }
+    body #inspector-panel.am-snap { animation: none; border-top-color: var(--accent); }
   }
 }
 

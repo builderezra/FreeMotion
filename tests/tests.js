@@ -12938,11 +12938,17 @@
     const pn = document.getElementById('proj-name');
     if (!pn) throw new Error('#proj-name is missing');
     const hadSel = FM.scene.selectedId, hadIds = (FM.scene.selectedIds || []).slice();
-    const hadLayout = FM.settings.get('layout');
     try {
-      FM.settings.set('layout', 'studio');
       await sleep(40);
-      if (!document.body.classList.contains('layout-studio')) throw new Error('the studio layout did not apply, so this test is checking nothing');
+      /* This used to set the layout and check the class landed (queue 293 deleted both — there is one
+         desktop layout now). The CONTROL it was really after is still worth keeping: the inspector has
+         to be the band under the stage, or "one name field, in the inspector header" is being asserted
+         against something else entirely. */
+      const _insp = document.getElementById('inspector-panel'), _stage = document.getElementById('stage');
+      if (_insp && _stage) {
+        const ir = _insp.getBoundingClientRect(), sr = _stage.getBoundingClientRect();
+        if (ir.height && sr.height && ir.top < sr.top + sr.height * 0.5) throw new Error('the inspector is not the band under the stage, so this test is checking a layout the app does not have');
+      }
 
       FM.scene = scene([FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 })]);
       // Nothing selected → it is the second copy of the project name, and must be gone.
@@ -12963,7 +12969,6 @@
       if (FM.scene.layers[0].name !== 'Renamed') throw new Error('typing in the field did not rename the layer (it is still "' + FM.scene.layers[0].name + '")');
       if (FM.scene.project.name !== projWas) throw new Error('typing a LAYER name overwrote the PROJECT name — it is writing to the wrong place');
     } finally {
-      FM.settings.set('layout', hadLayout);
       FM.scene.selectedIds = hadIds; FM.selectLayer(hadSel || null);
     }
   });
@@ -16760,31 +16765,33 @@
    * inspector as a right-hand side column. A cold load hid it behind the splash; a refresh is exactly
    * the case the splash skips, which is why it only ever appeared on reload. */
 
-  test('the shipped markup cannot paint the pre-Studio layout (queue 292)', { item: 'boot-layout' }, async function () {
-    /* Reads index.html as SHIPPED rather than the live DOM: by the time the suite runs, settings.js has
-       long since added the class, so inspecting document.body here would pass no matter what and prove
-       nothing about the first paint. */
+  test('the Classic layout is not in the stylesheet at all (queue 293)', { item: 'boot-layout' }, async function () {
+    /* THIS REPLACES THE PAIR OF QUEUE-292 GUARDS, and both of them said so themselves: one asserted the
+     * markup carried `layout-studio` so a first paint could not flash the old layout, and the other
+     * asserted the two layouts still LOOKED different, "so that if the Classic CSS is ever deleted this
+     * test says so out loud". It has been deleted, so they are retired together and replaced by the
+     * stronger promise — not "the old layout is covered up" but "there is no old layout".
+     * His reason is the reason this is checked in the source rather than on screen: "if someone sees it
+     * in the final version they may be able to use this against us", and CSS in a no-build app is plain
+     * text anyone can read. A rule that is never MATCHED is still shipped and still readable. */
+    const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
+    const strip = css.replace(/\/\*[\s\S]*?\*\//g, '');      // prose about the old layout is fine; rules are not
+    if (/layout-studio/.test(strip)) {
+      throw new Error('styles.css still has `layout-studio` selectors — the app is back to shipping two layouts');
+    }
+    /* The Classic placement itself: a 50px top-bar row with the inspector as a right-hand column. Its
+       exact grid lines are the fingerprint, and they are what someone would recognise. */
+    if (/#inspector-panel\s*\{\s*grid-area:\s*2\s*\/\s*2\s*\/\s*3\s*\/\s*3/.test(strip)) {
+      throw new Error('the Classic inspector placement (grid-area 2/2/3/3 — the right-hand column) is back in styles.css');
+    }
+    if (/grid-template-rows:\s*50px minmax\(0, 1fr\) var\(--tl-h/.test(strip)) {
+      throw new Error('the Classic grid (a 50px top-bar row above the stage) is back in styles.css');
+    }
     const html = await (await fetch('../index.html?boot=' + Date.now())).text();
     const m = html.match(/<body[^>]*>/i);
-    if (!m) throw new Error('no <body> tag found in index.html');
-    if (!/class\s*=\s*["'][^"']*\blayout-studio\b/.test(m[0]))
-      throw new Error('the shipped <body> does not carry layout-studio: ' + m[0].slice(0, 120) + ' — the first paint after a refresh will render the retired Classic layout');
-  });
-
-  test('Studio and the unclassed default are still visibly different layouts (queue 292)', { item: 'boot-layout' }, function () {
-    /* The guard above is only worth having while the two layouts actually differ. If the Classic CSS is
-       ever deleted and Studio becomes the plain default, this test says so out loud rather than leaving
-       a rule in index.html that nobody can explain. */
-    const B = document.body, had = B.classList.contains('layout-studio');
-    const app = document.getElementById('app');
-    if (!app) throw new Error('no #app');
-    try {
-      B.classList.add('layout-studio');
-      const studio = getComputedStyle(app).gridTemplateRows;
-      B.classList.remove('layout-studio');
-      const plain = getComputedStyle(app).gridTemplateRows;
-      if (studio === plain) throw new Error('the unclassed layout now matches Studio — the Classic CSS appears to be gone, so the index.html guard is obsolete and this pair of tests should be retired together');
-    } finally { B.classList.toggle('layout-studio', had); }
+    if (m && /\blayout-studio\b/.test(m[0])) {
+      throw new Error('index.html still marks the body with layout-studio, which now selects nothing: ' + m[0].slice(0, 90));
+    }
   });
 
   /* ------- queue 211, the OTHER half: track-head thumbnails were stretched, not just spilling -------
@@ -20290,9 +20297,12 @@
          to dock into and nothing for this test to check. That is by design, not a failure: the editor
          uses the floating-card fallback there, which is asserted by the cover test above. Skipping is
          honest; failing would be this test insisting on a layout that no longer has to exist. */
-      if (document.body.classList.contains('layout-studio')) return;
-        throw new Error('control failed: the side column is ' + (cr ? Math.round(cr.width) + 'x' + Math.round(cr.height) : 'missing') +
-                        ' at ' + window.innerWidth + 'px — too small to dock into, so this test cannot tell the fix from the bug');
+        /* Nothing here to dock INTO, so there is nothing to check — skip rather than fail. This used
+           to ask whether the Studio class was on the body; queue 293 deleted the other layout, so the
+           question is simply whether this window's inspector band is big enough to hold the card. On a
+           tall window it is and the rest of this test runs; on a normal one the editor uses the
+           floating fallback, which the cover test above asserts. */
+        return;
       }
       if (!docked) throw new Error('the card did not dock into a ' + Math.round(cr.width) + 'x' + Math.round(cr.height) + ' side column');
 

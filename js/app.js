@@ -3476,9 +3476,9 @@ window.FM = window.FM || {};
         return Math.max(amFloor(), Math.min(ceil, h));
       };
       FM.clampAddMenuH = amClamp;         // exposed so the suite tests the clamp that runs, not a copy
-      const studioAdd = () => !isPhone() &&
-        document.body.classList.contains('layout-studio') &&
-        !!document.querySelector('#inspector-panel .addmenu--panel');
+      /* No layout test any more (queue 293): there is one desktop layout, so "not a phone and the band
+         is showing the add menu" is the whole condition. */
+      const studioAdd = () => !isPhone() && !!document.querySelector('#inspector-panel .addmenu--panel');
       let amDrag = false, amStartY = 0, amStartH = 0, amStuck = 0;
       /* PIN THE SLOT BEFORE LEAVING IT. The panel floats while it is raised, and a floating box needs
          to be told where its other three edges are or it resolves against the page — which is what it

@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=481">
+<link rel="stylesheet" href="styles.css?v=482">
 <link rel="stylesheet" href="theme-glass.css?v=30">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -60,21 +60,11 @@
 <link rel="apple-touch-startup-image" media="(device-width:402px) and (device-height:874px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1206x2622.png">
 <link rel="apple-touch-startup-image" media="(device-width:440px) and (device-height:956px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1320x2868.png">
 </head>
-<!-- class="layout-studio" IS ON THE TAG, NOT ADDED BY JS (queue 292 — his most urgent report).
-     "when you refresh the page it shows an old version that looks a lot like alight motion, this is bad
-     because if someone sees it in the final version they may be able to use this against us."
-     He was looking at the FIRST PAINT. js/settings.js adds this class only once its script runs, so
-     until then the page renders the UNCLASSED default — which is the old Classic layout: a 50px top bar
-     and the inspector as a right-hand SIDE COLUMN. Measured at 1400px: unclassed gives grid rows
-     "50px 552px 258px" with the inspector at x=1092; Studio gives "602px 258px" with it at x=0, y=602.
-     That side-column-plus-top-bar arrangement is the Alight-Motion-shaped one v8.39 retired, and every
-     refresh was showing it for a beat.
-     A COLD load never showed it because the splash covers the boot — and a refresh is exactly the case
-     the splash SKIPS (sessionStorage 'fm.splashed'), which is why it only ever happened on reload and
-     why it survived so long unreported.
-     Studio has been the only desktop layout since v8.39, so this is unconditional and belongs in the
-     markup. settings.js still toggles it; that call is now a no-op that agrees. -->
-<body class="layout-studio">
+<!-- ONE desktop layout (queue 293). The retired Classic rules are deleted from styles.css, so there
+     is no second shape a first paint could land on and no class to mark this one with. Queue 292's fix
+     — putting the class in the markup so a refresh could not flash the old layout — is superseded by
+     there no longer being an old layout. -->
+<body>
   <!-- Splash: the FreeMotion logo animation, once per session (fresh tab / PWA cold launch).
        FIRST in <body> deliberately — it parses + paints BEFORE the ~1.5MB of app scripts, so on a
        cold load the splash covers the load instead of appearing after it. The video sits on PURE
@@ -167,7 +157,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v8.82</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v8.83</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -814,7 +804,7 @@
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=4"></script>
-  <script src="js/settings.js?v=19"></script>
+  <script src="js/settings.js?v=20"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=95"></script>
   <script src="js/eases.js?v=3"></script>
@@ -864,7 +854,7 @@
   <script src="js/shortcuts.js?v=75"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=49"></script>
-  <script src="js/app.js?v=295"></script>
+  <script src="js/app.js?v=296"></script>
   <script src="js/audio-tools.js?v=4"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=3"></script>
