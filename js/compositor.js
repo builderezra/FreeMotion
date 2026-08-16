@@ -462,7 +462,12 @@ window.FM = window.FM || {};
     { type: 'mattechoker', label: 'Matte Choker', param: 'choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
     { type: 'mattefringe', label: 'Matte Fringe', param: 'width', min: 1, max: 12, step: 1, def: 3, unit: 'px', color: true, defColor: '#00e0ff', colorLabel: 'Fringe' },
     // ---- batch 15: Repeat (tiled-coordinate warps) ----
-    { type: 'gridrepeat', label: 'Grid Repeat', param: 'count', min: 1, max: 10, step: 1, def: 3 },
+    { type: 'gridrepeat', label: 'Grid Repeat', params: [
+      { key: 'count', label: 'Columns', min: 1, max: 10, step: 1, def: 3 },
+      { key: 'rows', label: 'Rows', min: 0, max: 10, step: 1, def: 0, note: '0 = same as columns' },
+      { key: 'mirror', label: 'Mirror', def: 0, options: [[0, 'Off'], [1, 'X'], [2, 'Y'], [3, 'Both']] },
+      { key: 'stagger', label: 'Row offset', min: 0, max: 1, step: 0.05, def: 0 },
+    ] },
     /* Queue 123. Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
        horizontally when you do it." It was a one-param pixel warp that crushed the whole picture into
        each cell; it draws real copies at original size now, so it needs the controls a repeat actually
@@ -474,8 +479,18 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
     ] },
-    { type: 'radialrepeat', label: 'Radial Repeat', param: 'count', min: 2, max: 16, step: 1, def: 6 },
-    { type: 'mirrortile', label: 'Mirror Tile', param: 'size', min: 20, max: 400, step: 1, def: 140, unit: 'px' },
+    { type: 'radialrepeat', label: 'Radial Repeat', params: [
+      { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
+      { key: 'rotate', label: 'Seam angle', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'mirror', label: 'Mirror wedges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'twist', label: 'Twist', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+    ] },
+    { type: 'mirrortile', label: 'Mirror Tile', params: [
+      { key: 'size', label: 'Tile size', min: 20, max: 400, step: 1, def: 140, unit: 'px' },
+      { key: 'offsetx', label: 'Seam X', min: -400, max: 400, step: 1, def: 0, unit: 'px' },
+      { key: 'offsety', label: 'Seam Y', min: -400, max: 400, step: 1, def: 0, unit: 'px' },
+      { key: 'axis', label: 'Folds on', def: 0, options: [[0, 'Both'], [1, 'Across'], [2, 'Down']] },
+    ] },
     // ---- batch 16: Other / Color / Procedural / Drawing ----
     { type: 'channelremap', label: 'Channel Remap', param: 'mode', def: 1, options: [[0, 'RGB (identity)'], [1, 'Swap R/B'], [2, 'Swap R/G'], [3, 'Swap G/B'], [4, 'Rotate RGB→GBR'], [5, 'Rotate RGB→BRG'], [6, 'Hue Invert'], [7, 'Swap Sat/Val']] },
     { type: 'gradientoverlay', label: 'Gradient Overlay', params: [{ key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
@@ -5106,15 +5121,60 @@ window.FM = window.FM || {};
     // amount. At 1 the frame reads as an infinite tube; small amounts give a wormhole pucker.
     tunnel: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y]; var tnDx=x-cx, tnDy=y-cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y]; var tnInv=(maxR*0.30)*(maxR*0.30)/tnR; var tnRR=tnR*(1-tnA)+tnInv*tnA; return [cx+tnDx/tnR*tnRR, cy+tnDy/tnR*tnRR]; },
     // ---- batch 15 (repeat / tiling) ----
-    gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10; var grCellW=W/grCount, grCellH=H/grCount; var grGx=(x-Math.floor(x/grCellW)*grCellW)/grCellW; var grGy=(y-Math.floor(y/grCellH)*grCellH)/grCellH; return [grGx*W, grGy*H]; },
+    gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var grCount=Math.round(FM.evalProp(p.count,t)||3); if(grCount<1)grCount=1; if(grCount>10)grCount=10;
+      // Rows were welded to columns and every tile was a byte-identical copy butt-joined to the next,
+      // so the effect could make exactly one thing: a square wall of clones. ROWS frees the second axis
+      // (0 keeps it square, which is what every existing instance is). MIRROR flips alternate tiles so
+      // they meet edge to edge instead of showing a hard repeat seam. STAGGER offsets alternate rows,
+      // which is the difference between a grid and a brick course.
+      var grRowsP=p.rows==null?0:Math.round(FM.evalProp(p.rows,t)); if(grRowsP<0)grRowsP=0; if(grRowsP>10)grRowsP=10;
+      var grRows=grRowsP===0?grCount:grRowsP;
+      var grMir=p.mirror==null?0:(Math.round(FM.evalProp(p.mirror,t))|0);
+      var grStag=p.stagger==null?0:FM.evalProp(p.stagger,t); if(grStag<0)grStag=0; if(grStag>1)grStag=1;
+      var grCellW=W/grCount, grCellH=H/grRows;
+      var grX=x;
+      if(grStag>0){ var grRow0=Math.floor(y/grCellH); if(grRow0&1) grX=x+grStag*grCellW; }
+      var grIx=Math.floor(grX/grCellW), grIy=Math.floor(y/grCellH);
+      var grGx=(grX-grIx*grCellW)/grCellW; var grGy=(y-grIy*grCellH)/grCellH;
+      if(grMir===1||grMir===3){ if(grIx&1) grGx=1-grGx; }
+      if(grMir===2||grMir===3){ if(grIy&1) grGy=1-grGy; }
+      return [grGx*W, grGy*H]; },
     /* linearrepeat's WARP entry is GONE (queue 123). It read:
          var cellW=W/count; var lx=(x-floor(x/cellW)*cellW)/cellW; return [lx*W, y];
        i.e. every cell mapped its own 0..1 across the FULL source width, so each copy held the
        whole picture crushed into 1/count of the frame — Ezra's "it just squishes horizontally".
        A repeat draws copies at their own size, which a coordinate remap cannot do, so it lives
        in CANVAS_FX now. */
-    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16; var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy); var rr_seg=Math.PI*2/rr_count; var rr_a=Math.atan2(rr_dy,rr_dx); var rr_a2=rr_a-Math.floor(rr_a/rr_seg)*rr_seg; return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
-    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; mt_size*=(ps||1); if(mt_size<1) mt_size=1; var mt_cix=Math.floor(x/mt_size); var mt_lx=x-mt_cix*mt_size; if(mt_cix&1) mt_lx=mt_size-mt_lx; var mt_ciy=Math.floor(y/mt_size); var mt_ly=y-mt_ciy*mt_size; if(mt_ciy&1) mt_ly=mt_size-mt_ly; var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
+    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t){ var rr_count=Math.round(FM.evalProp(p.count,t)||6); if(rr_count<2)rr_count=2; if(rr_count>16)rr_count=16;
+      // The fan's seam was nailed to 0 degrees with no way to turn or animate it, and the wedges
+      // BUTT-JOINED — so every segment boundary showed a hard seam, which is the one thing a
+      // kaleidoscope is not supposed to have. MIRROR reflects alternate wedges so they meet cleanly.
+      // TWIST turns the fold by an amount that grows with radius, bending the fan into a spiral.
+      var rr_rot=p.rotate==null?0:FM.evalProp(p.rotate,t);
+      var rr_mir=(p.mirror==null?0:(Math.round(FM.evalProp(p.mirror,t))|0))===1;
+      var rr_tw=p.twist==null?0:FM.evalProp(p.twist,t);
+      var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy);
+      var rr_seg=Math.PI*2/rr_count; var rr_a=Math.atan2(rr_dy,rr_dx);
+      var rr_rr=rr_rot===0?0:rr_rot*Math.PI/180;
+      var rr_base=rr_rr===0?rr_a:rr_a-rr_rr;
+      var rr_k=Math.floor(rr_base/rr_seg);
+      var rr_a2=rr_base-rr_k*rr_seg;
+      if(rr_mir&&(rr_k&1)) rr_a2=rr_seg-rr_a2;
+      if(rr_tw!==0&&maxR>0) rr_a2+=rr_tw*Math.PI/180*(rr_r/maxR);
+      if(rr_rr!==0) rr_a2+=rr_rr;
+      return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
+    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; mt_size*=(ps||1); if(mt_size<1) mt_size=1;
+      // The reflection lines were welded to the frame's top-left corner and it always folded on BOTH
+      // axes — but where the mirror line falls IS the composition of a mirror effect, and there was no
+      // way to move it. OFFSET slides the seams; AXIS picks which of them fold at all (the other one
+      // still tiles, it just stops flipping).
+      var mt_ox=p.offsetx==null?0:FM.evalProp(p.offsetx,t);
+      var mt_oy=p.offsety==null?0:FM.evalProp(p.offsety,t);
+      var mt_ax=p.axis==null?0:(Math.round(FM.evalProp(p.axis,t))|0);
+      var mt_x=mt_ox===0?x:x-mt_ox*(ps||1), mt_y=mt_oy===0?y:y-mt_oy*(ps||1);
+      var mt_cix=Math.floor(mt_x/mt_size); var mt_lx=mt_x-mt_cix*mt_size; if((mt_ax===0||mt_ax===1)&&(mt_cix&1)) mt_lx=mt_size-mt_lx;
+      var mt_ciy=Math.floor(mt_y/mt_size); var mt_ly=mt_y-mt_ciy*mt_size; if((mt_ax===0||mt_ax===2)&&(mt_ciy&1)) mt_ly=mt_size-mt_ly;
+      var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
     // ---- batch 18 (warp) ----
     innerpinch: function(x,y,W,H,cx,cy,maxR,p,t){ var ip_a=FM.evalProp(p.amount,t); if(ip_a===null||ip_a===undefined)ip_a=0.5; if(ip_a<-1)ip_a=-1; if(ip_a>1)ip_a=1; var ip_dx=x-cx, ip_dy=y-cy; var ip_r=Math.hypot(ip_dx,ip_dy); var ip_rad=maxR*0.6; if(ip_rad<=0)return [x,y]; var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8; return [cx+ip_dx*ip_k, cy+ip_dy*ip_k]; },
     // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), AM featured ----

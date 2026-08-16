@@ -155,7 +155,7 @@ window.FM = window.FM || {};
   // here. The carousel does not filter by appliesTo — it offers every card and `guardedAdd`
   // refuses with a toast — so a media-only effect at the head of the row is two cards that a
   // shape or text layer can only answer with 'That effect needs a video or image layer'.
-  FM.FX_FEATURED = ['emboss', 'bumpmap', 'edge', 'halftone', 'halftonelines', 'crosshatch', 'sketch', 'grid', 'checker', 'stripes', 'replacecolor', 'lensblur'];
+  FM.FX_FEATURED = ['radialrepeat', 'gridrepeat', 'mirrortile', 'emboss', 'bumpmap', 'edge', 'halftone', 'halftonelines', 'crosshatch', 'sketch', 'grid', 'checker'];
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],

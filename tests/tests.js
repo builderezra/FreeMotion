@@ -18186,6 +18186,119 @@
     }
   });
 
+  /* ---------------- EFFECTS-PLAN round 17: the repeat warps ---------------- */
+
+  /* A WARP is not a pixel kernel: it takes (x,y,W,H,cx,cy,maxR,p,t,ps) and RETURNS the source point to
+   * sample. EFFECTS-PLAN says so explicitly — compare a grid of returned coordinates, never bytes. */
+  var WRP = { W: 240, H: 400 };
+  function warpFn(type) {
+    var f = FM._FX_TABLES && FM._FX_TABLES.WARP_FX && FM._FX_TABLES.WARP_FX[type];
+    if (!f) throw new Error('FM._FX_TABLES.WARP_FX.' + type + ' is not reachable — the suite cannot test the real warp');
+    return f;
+  }
+  function warpAt(type, x, y, params) {
+    var W = WRP.W, H = WRP.H;
+    return warpFn(type)(x, y, W, H, W / 2, H / 2, Math.hypot(W / 2, H / 2), params, 0.5, 1);
+  }
+  function warpGrid(type, params) {
+    var out = [];
+    for (var y = 0; y < WRP.H; y += 7) for (var x = 0; x < WRP.W; x += 7) out.push(warpAt(type, x, y, params));
+    return out;
+  }
+  function warpDiff(a, b) { var n = 0; for (var i = 0; i < a.length; i++) if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) n++; return n; }
+
+  test('effects: the repeat warps still map an un-upgraded instance to exactly the same points', { item: 'fx-repeat' }, function () {
+    var fails = [];
+    var CASES = [
+      { type: 'gridrepeat',   old: { count: 3 },  legacyKeys: { rows: 0, mirror: 0, stagger: 0 },
+        moved: { rows: 5, mirror: 3, stagger: 0.5 } },
+      { type: 'radialrepeat', old: { count: 6 },  legacyKeys: { rotate: 0, mirror: 0, twist: 0 },
+        moved: { rotate: 40, mirror: 1, twist: 120 } },
+      { type: 'mirrortile',   old: { size: 140 }, legacyKeys: { offsetx: 0, offsety: 0, axis: 0 },
+        moved: { offsetx: 70, offsety: 70, axis: 1 } },
+    ];
+    CASES.forEach(function (c) {
+      var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
+      Object.keys(c.legacyKeys).forEach(function (k) { withKeys[k] = c.legacyKeys[k]; });
+      var bare = warpGrid(c.type, c.old);
+      var n = warpDiff(bare, warpGrid(c.type, withKeys));
+      if (n) fails.push(c.type + ': ' + n + ' sampled points move between an old instance and one holding the new keys at their fallbacks');
+      var identity = []; for (var y = 0; y < WRP.H; y += 7) for (var x = 0; x < WRP.W; x += 7) identity.push([x, y]);
+      if (!warpDiff(identity, bare)) fails.push(c.type + ': maps every point to itself — the warp is doing nothing at all');
+      Object.keys(c.moved).forEach(function (k) {
+        var m = {}; Object.keys(c.old).forEach(function (q) { m[q] = c.old[q]; }); m[k] = c.moved[k];
+        if (!warpDiff(bare, warpGrid(c.type, m))) fails.push(c.type + '.' + k + ' moves no points');
+      });
+      var inst = FM.fxRegistry.makeInstance(c.type);
+      if (inst) {
+        var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        if (warpDiff(bare, warpGrid(c.type, stamped))) fails.push(c.type + ': a NEW instance maps differently from an old one');
+      }
+    });
+    if (fails.length) throw new Error(fails.join(' ;; '));
+  });
+
+  /* THE SEAM, measured rather than described. Both of these effects butt-joined their tiles, and a
+   * butt-join means the point being sampled LEAPS when you step one pixel across the boundary — which
+   * is what a hard repeat seam is. So step across a join and measure the leap: butt-joined it is very
+   * nearly the whole frame, mirrored it is zero, because a mirrored tile continues its neighbour.
+   * That is a property no pixel-count could establish, and it is the actual complaint in both rows. */
+  test('effects: mirroring Grid Repeat and Radial Repeat closes the hard seam', { item: 'fx-repeat' }, function () {
+    var W = WRP.W, H = WRP.H, cellW = W / 3;
+    var gridJump = function (p) {
+      var a = warpAt('gridrepeat', cellW - 0.01, 100, p), b = warpAt('gridrepeat', cellW + 0.01, 100, p);
+      return Math.abs(a[0] - b[0]); };
+    var open = gridJump({ count: 3 });
+    if (open < W * 0.5) throw new Error('the un-mirrored grid only leaps ' + open.toFixed(1) + 'px across its join, so there is no seam here to close and this test proves nothing');
+    var closed = gridJump({ count: 3, mirror: 1 });
+    if (closed > 1) throw new Error('with Mirror X the sampled point still leaps ' + closed.toFixed(1) + 'px across the join — the tiles are not meeting edge to edge');
+
+    var cx = W / 2, cy = H / 2, seg = Math.PI * 2 / 6;
+    var fanJump = function (p) {
+      var pt = function (ang) { return warpAt('radialrepeat', cx + Math.cos(ang) * 120, cy + Math.sin(ang) * 120, p); };
+      var a = pt(seg - 0.0005), b = pt(seg + 0.0005);
+      return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+    var fanOpen = fanJump({ count: 6 });
+    if (fanOpen < 40) throw new Error('the un-mirrored fan only leaps ' + fanOpen.toFixed(1) + 'px across a wedge boundary, so this test cannot see the seam');
+    var fanClosed = fanJump({ count: 6, mirror: 1 });
+    if (fanClosed > 1) throw new Error('with mirrored wedges the fan still leaps ' + fanClosed.toFixed(1) + 'px at the boundary — the seam is still there');
+  });
+
+  /* Rows were welded to columns, so the effect could only make a square wall of clones; stagger is the
+   * difference between a grid and a brick course. Asserted on the mapping's PERIOD, with the wrong
+   * period as the control — "it repeats every H/5" is only meaningful alongside "and not every H/3". */
+  test('effects: Grid Repeat rows and stagger break up the square wall of clones', { item: 'fx-repeat' }, function () {
+    var H = WRP.H;
+    var periodGap = function (p, rows) { var h = H / rows;
+      var a = warpAt('gridrepeat', 30, 10, p), b = warpAt('gridrepeat', 30, 10 + h, p);
+      return Math.abs(a[1] - b[1]); };
+    if (periodGap({ count: 3 }, 3) > 0.001) throw new Error('a square 3x3 grid no longer repeats every H/3');
+    if (periodGap({ count: 3, rows: 5 }, 5) > 0.001) throw new Error('with rows=5 the mapping does not repeat every H/5, so rows is not setting the vertical count');
+    if (periodGap({ count: 3, rows: 5 }, 3) < 1) throw new Error('with rows=5 the mapping ALSO still repeats every H/3, so rows changed nothing and the check above is vacuous');
+    var rowU = function (p, row) { return warpAt('gridrepeat', 30, row * (H / 3) + 5, p)[0]; };
+    if (rowU({ count: 3 }, 0) !== rowU({ count: 3 }, 1)) throw new Error('rows 0 and 1 already sample different columns without any stagger');
+    if (rowU({ count: 3, stagger: 0.5 }, 0) === rowU({ count: 3, stagger: 0.5 }, 1)) throw new Error('stagger did not offset the alternate row');
+  });
+
+  /* Where the reflection line falls IS the composition of a mirror effect, and it was welded to the
+   * frame's top-left corner. Folding is measured as a REVERSAL in the sampled coordinate: inside a
+   * mirrored tile every step walks the source backwards, so counting backward steps separates "folds
+   * here" from "tiles here" — which a coordinate value on its own cannot. */
+  test('effects: Mirror Tile can move its seam and fold on one axis only', { item: 'fx-repeat' }, function () {
+    var H = WRP.H;
+    var firstReversal = function (p) { var prev = warpAt('mirrortile', 0, 50, p)[0];
+      for (var x = 1; x < 400; x++) { var u = warpAt('mirrortile', x, 50, p)[0];
+        if (u < prev) return x; prev = u; } return -1; };
+    var a = firstReversal({ size: 140 }), b = firstReversal({ size: 140, offsetx: 70 });
+    if (a < 0) throw new Error('the default tile never reverses, so it is not folding at all');
+    if (a === b) throw new Error('moving the seam by 70px left the first fold in exactly the same place (' + a + ')');
+    var backSteps = function (p) { var prev = warpAt('mirrortile', 20, 0, p)[1], n = 0;
+      for (var y = 1; y < H; y++) { var v = warpAt('mirrortile', 20, y, p)[1]; if (v < prev) n++; prev = v; } return n; };
+    var both = backSteps({ size: 140 }), across = backSteps({ size: 140, axis: 1 });
+    if (both < 50) throw new Error('folding on both axes only walks the source backwards ' + both + ' times down the frame — it is not mirroring vertically at all');
+    if (across > 5) throw new Error('set to fold across only, the vertical axis still walks backwards ' + across + ' times, so it is still folding down as well');
+  });
+
   /* ---------------- EFFECTS-PLAN round 16: the relief family ---------------- */
 
   test('effects: the relief effects still render an un-upgraded instance exactly as they did', { item: 'fx-relief' }, function () {

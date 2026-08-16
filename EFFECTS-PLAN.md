@@ -320,6 +320,21 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     statistic changed to the shading factor `out/src`, where they read 0.107 / 0.118 / 0.188. Any effect
     that modulates rather than replaces needs the same treatment.
 
+- v9.02 (round 17 — **the repeat warps**) — `gridrepeat` (rows, mirror, stagger), `radialrepeat`
+  (seam angle, mirrored wedges, twist) and `mirrortile` (seam X/Y, which axis folds). `linearrepeat`
+  was already done under queue 123 and needed nothing. Findings:
+  * **A seam is a DISCONTINUITY, and that makes it measurable.** Both effects butt-joined their tiles,
+    so stepping one pixel across a join makes the SAMPLED point leap: measured at 239.9px of a 240px
+    frame for the grid and 119.9px for the fan, and exactly 0 once alternate tiles mirror, because a
+    mirrored tile continues its neighbour. Far better than any pixel count — and the un-mirrored value
+    is the control that stops the zero being vacuous.
+  * **Folding and tiling look the same in a coordinate value and differ in its DIRECTION.** mirrortile's
+    axis control is asserted by counting steps where the sampled coordinate walks BACKWARDS down the
+    frame: 140 with both axes folding, 2 with only the horizontal one (those 2 being the tile resets,
+    not folds). Reading the coordinate itself cannot separate the two.
+  * **Assert the period AND the wrong period.** "With rows=5 it repeats every H/5" passes trivially if
+    the mapping repeats at every interval; it only means something next to "and no longer every H/3".
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

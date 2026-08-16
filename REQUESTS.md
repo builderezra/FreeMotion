@@ -3792,6 +3792,15 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 17, v9.02:* the repeat warps. Grid Repeat could only build a square wall of identical
+      tiles with a hard seam at every join; Radial Repeat's kaleidoscope seam was stuck at 0° and its
+      wedges butt-joined; Mirror Tile's reflection line was welded to the frame corner. All three fixed
+      (Linear Repeat was already done when you reported the squishing).
+      **A heads-up, not a question — I'll keep going unless you say otherwise.** Clearing this plan is
+      the oldest open item, so by the oldest-first rule it holds the queue, and there are still ~52
+      effects with one control each — roughly a dozen more rounds. Meanwhile BUG-HUNT.md (the item
+      directly below this one) has 26 open findings that are actual BUGS rather than missing knobs.
+      If you'd rather I interleave them, or clear BUG-HUNT first, say so and I'll switch.
       *Round 16, v9.01:* the relief family. Emboss's light was welded to the top-left corner, Bump
       Map's to a single vector and depth — so every embossed surface in the app was lit identically —
       and Find Edges could only make glowing white lines on black. All three now take a light angle or
