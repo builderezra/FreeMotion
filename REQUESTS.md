@@ -2546,11 +2546,19 @@ better still, keep working inside the turn rather than parking work for a later 
       **If you did mean "gone in both states", say so and it is one line.** Renaming a layer would then
       live on the timeline (double-click a track head), which already works.
 
-- [x] **147 — PC: the text editor covers the text you are editing. Get it off the canvas. DONE — first half v6.96, second half v7.65.** (13 Aug,
+- [ ] **147 — PC: the text editor covers the text you are editing. RE-OPENED 16 Aug — it is fixed in CLASSIC only, and you use Studio.** *(first half v6.96, second half v7.65 — both classic-only)* (13 Aug,
       screenshot at v6.86.) His words: *"this pop up menu on pc is so shit, it literally covers up the
       text while you edit it, get it off the canvas, also the text edit stuff on pc for some reason
       covers up the canvas, making it smaller when you could just put it in the add menu, so it doesnt
       take up real estate on the screen."*
+      **⚠️ RE-OPENED 16 Aug. Measured at v8.31: in the STUDIO layout the Aa options still cover 99.5%
+      of the canvas.** v7.65 fixed this by docking the editor into the desktop **side column** — and
+      studio has no side column, its inspector is a band under the stage, measured 307×258 at 1280px
+      and reported by the suite as "too small to dock". So the fix never engages in the layout you
+      actually use, and the editor falls back to covering the canvas exactly as your screenshot showed.
+      **The work is to dock it into studio's bottom band.** This is also the last thing blocking #249
+      (one desktop layout instead of three) — see that entry for the other two tests that go red.
+
       Two faults, and the second one carries his proposed fix:
       1. **It covers its own subject.** The "Aa" sheet (Spacing / Line height / Curve / Animate / caption
          controls) and the toolbar + text field below it are painted over the canvas — in the screenshot
@@ -4235,6 +4243,22 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       So retiring classic means fixing #147 first, and re-checking the suite's desktop assumptions.
       Reverted for now rather than shipping a desktop that is worse than the one you have. **Doing #147
       and this together is the right shape.**
+
+      **RE-TRIED 16 Aug at v8.31, and the blocker is now NAMED rather than described.** Making studio the
+      default reddens exactly three tests, and the important thing they say together is that **#147 is
+      only fixed in CLASSIC**, despite being ticked as done:
+      1. *"the Aa options cover 99.5% of the canvas"* — your #147, unchanged in studio.
+      2. *"the side column is 307×258 at 1280px — too small to dock"* — and this is WHY. v7.65 fixed #147
+         by docking the editor into the desktop **side column**, and **studio has no side column**: its
+         inspector is a band under the stage. So the fix cannot engage, and the editor falls back to
+         covering the canvas.
+      3. the multi-select align buttons measure 43px tall in studio against the height the test expects.
+      **So the work is: dock the text editor into studio's BOTTOM BAND, the way v7.65 docked it into
+      classic's side column.** That is a real change to where the editor mounts, not a tuning pass, and
+      it is the last thing standing between you and one desktop layout instead of two.
+      **Not started at the tail of a long session, deliberately** — the same call that was made for #244,
+      which then built cleanly in one go. The measurements above mean the next session builds instead of
+      re-deriving. #147 should be RE-OPENED as part of it: it is done for the layout you are not using.
 - [x] **248 — A "?" in the top bar that opens the keyboard shortcuts. DONE v8.31.** *(Was #222, which collided with the flaky-test entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug.) His words: *"Put a
       question mark in the top right corner to the left of note pad that quickly opens the keyboard
       shortcuts menu."* and *"On pc it can go on the play button row along side everything else when you
