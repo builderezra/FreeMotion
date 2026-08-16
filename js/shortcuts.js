@@ -10,6 +10,7 @@ window.FM = window.FM || {};
     ['↑ / ↓', 'Nudge selected layer vertically'],
     [', / .', 'Step one frame back / forward'],
     ['Home / End', 'Jump to start / end'],
+    ['⇧ + Home / End', 'Send the add marker to the top / bottom'],
     ['[ / ]', 'Set loop region in / out  (\\ clears)'],
     ['M', 'Add a timeline marker at the playhead'],
     ['+ / −', 'Zoom timeline in / out'],

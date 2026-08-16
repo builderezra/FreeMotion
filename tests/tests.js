@@ -17584,6 +17584,117 @@
     }
   });
 
+  test('Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12)', { item: 'add-row' }, async function () {
+    /* "we could add shortcuts on the keyboard to quickly push it up to the top… push it up to the bottom
+     * so that you don't have to go and find it and then drag it up or down."
+     * The pairing is the point: Home/End already jump the PLAYHEAD to the start/end, so the shifted pair
+     * means the same thing for the marker. Which is exactly why the last assertion matters — if the
+     * shifted keys leaked into the plain ones, or the plain ones into the shifted, one of the two
+     * meanings would silently disappear. */
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt, t0 = FM.time, gc0 = FM.groupContext;
+    let _covered = [];
+    try {
+      /* TWO PIECES OF LEAKED STATE WILL SWALLOW THESE KEYS, and both are things another test can leave
+         behind: the app ignores shortcuts while a field is focused (correctly — you are typing), and
+         `moveAddMarker` stands down inside Edit Group (also correctly — the index does not apply
+         there). Neither is this feature's bug, but a test that inherits either reports one. Cleared
+         here rather than hoped for; found by the suite going red on a shortcut that worked by hand. */
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      FM.groupContext = null;
+      /* …and the EDITOR has to be the thing on screen. Bare-key shortcuts are deliberately ignored while
+         a full-screen overlay owns the display — the home screen is one, and it is loaded behind every
+         test — because otherwise Backspace on the project browser would delete a layer in the project
+         you cannot see. That guard is right and this test has to satisfy it rather than route around it. */
+      if (FM.home && FM.home.isOpen && FM.home.isOpen() && FM.home.close) FM.home.close();
+      /* Settings counts too — `overlayOwnsScreen()` names home and settings explicitly before it looks
+         at geometry, "because their own isOpen() is authoritative even mid-transition". The suite had
+         settings open, which is why hiding every covering element still left the keys ignored. */
+      if (FM.settings && FM.settings.isOpen && FM.settings.isOpen() && FM.settings.close) FM.settings.close();
+      await sleep(200);
+      /* …and nothing else may be covering it either. The guard is `FM.overlayOwnsScreen()`, which asks a
+         GEOMETRY question — what is at the middle of the screen — so it does not care whose element it
+         is or how deeply nested. The suite runs hundreds of tests before this one and any scrim left
+         behind silences every bare-key shortcut; that is what was happening here, while the same keys
+         worked by hand. Use the app's own answer rather than a lookalike check, and hide whatever it is
+         actually seeing until the app agrees the editor owns the screen. */
+      for (let guard = 0; guard < 6 && FM.overlayOwnsScreen && FM.overlayOwnsScreen(); guard++) {
+        const stack = document.elementsFromPoint(innerWidth / 2, innerHeight / 2) || [];
+        const blocker = stack.filter(function (el) {
+          if (el === document.body || el === document.documentElement) return false;
+          if (getComputedStyle(el).position !== 'fixed') return false;
+          const r = el.getBoundingClientRect();
+          return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
+        })[0];
+        if (!blocker) break;
+        _covered.push(blocker);
+        blocker.dataset.fmWasDisplay = blocker.style.display || '';
+        blocker.style.display = 'none';
+        await sleep(40);
+      }
+      if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('something is still covering the screen, so bare-key shortcuts are correctly ignored and this test cannot send any');
+      await sleep(60);
+      FM.scene.layers.length = 0; FM.addAt = 0;
+      ['A', 'B', 'C'].forEach(function (n) {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#888' });
+        L.start = 0; L.duration = 4; FM.insertLayer(L);
+      });
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(220);
+      const key = (code, shift) => document.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: code, shiftKey: !!shift, bubbles: true }));
+
+      FM.setTime(1.5);
+      await sleep(80);
+      const timeBefore = FM.time;
+      key('End', true);
+      await sleep(200);
+      if (FM.addAt !== FM.scene.layers.length) {
+        /* Report WHY, not just that. The key path has several legitimate gates in front of it and a bare
+           "it did not move" sent me guessing at three of them in turn. */
+        const seen = FM.addAt;   /* read BEFORE anything below touches it — the first version of this
+                                    diagnostic called moveAddMarker and then reported the value it had
+                                    just set, which read as "it worked" on a failing run. */
+        const covers = [].slice.call(document.querySelectorAll('body > *')).filter(function (el) {
+          if (getComputedStyle(el).position !== 'fixed') return false;
+          const r = el.getBoundingClientRect();
+          return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
+        }).map(function (el) { return el.id || el.tagName; });
+        throw new Error('Shift+End left the marker at ' + seen + ' of ' + FM.scene.layers.length +
+          '; home open: ' + !!(FM.home && FM.home.isOpen && FM.home.isOpen()) +
+          '; full-screen overlays: [' + covers.join(',') + ']' +
+          '; focus: ' + (document.activeElement && document.activeElement.tagName) +
+          '; groupContext: ' + FM.groupContext);
+      }
+      if (FM.time !== timeBefore) throw new Error('Shift+End also moved the playhead to ' + FM.time + ' — the shifted pair belongs to the marker, the plain pair to the playhead');
+
+      key('Home', true);
+      await sleep(200);
+      if (FM.addAt !== 0) throw new Error('Shift+Home left the marker at ' + FM.addAt + ' — it should go to the top');
+      if (FM.time !== timeBefore) throw new Error('Shift+Home also moved the playhead');
+
+      // …and the plain keys still belong to the playhead.
+      FM.addAt = 2;
+      key('Home', false);
+      await sleep(200);
+      if (FM.time !== 0) throw new Error('plain Home no longer jumps the playhead to the start (time ' + FM.time + ')');
+      if (FM.addAt !== 2) throw new Error('plain Home moved the add marker as well — it should only move the playhead');
+
+      /* Documented where shortcuts are documented. A shortcut nobody can discover is a shortcut for the
+         person who wrote it. */
+      if (FM.shortcuts && FM.shortcuts.open) {
+        FM.shortcuts.open();
+        await sleep(200);
+        const txt = (document.getElementById('shortcuts-overlay') || document.body).textContent || '';
+        if (FM.shortcuts.close) FM.shortcuts.close();
+        if (!/add marker/i.test(txt)) throw new Error('the shortcuts sheet does not mention the add marker keys');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      _covered.forEach(function (el) { el.style.display = el.dataset.fmWasDisplay || ''; delete el.dataset.fmWasDisplay; });
+      FM.addAt = at0; FM.groupContext = gc0; FM.setTime(t0); FM.selectLayer(null); FM.refreshAll();
+      await sleep(150);
+    }
+  });
+
   test('on PC the Add marker is a thin line: click opens the menu, drag moves it (queue 294)', { item: 'add-row' }, async function () {
     /* "for PC since we don't have an ad button you could just make it so this layout instead of being
      * like an actual full layer and like taking up all that face on the timeline instead it could just

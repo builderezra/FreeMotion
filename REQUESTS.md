@@ -2821,7 +2821,7 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
-- [ ] **294 — Replace the + button with an "ADD" LAYER that lives on the timeline. (16 Aug.)** ⚠️ **BIG,
+- [x] **294 — Replace the + button with an "ADD" LAYER that lives on the timeline. DONE v8.88 (all 15 clauses).** (16 Aug.) ⚠️ **BIG,
       and he asked for it to be locked down verbatim:** *"Make sure you lock this request and don't lose
       any of the specific details that I mentioned just copy and paste it and then add it to the bottom
       of the list and then get to it when you get to that stage of the list keep up the good work"*.
@@ -2890,8 +2890,19 @@ better still, keep working inside the turn rather than parking work for a later 
       11. [x] **Copy/paste also lands at that position.** **v8.86** — `pasteClipboard`'s default index is
               the Add row's, so paste and add agree about where things go. An explicit index still wins,
               which is what the ⧉ Paste-Layer button's arrow passes, so choosing by hand is unaffected.
-      12. [ ] **Keyboard shortcuts to send it straight to the top or the bottom**, so you never have to
-              hunt for it and drag.
+      12. [x] **Keyboard shortcuts to send it straight to the top or the bottom**, so you never have to
+              hunt for it and drag. **v8.88 — ⇧+Home / ⇧+End.** Paired with the plain keys on purpose:
+              Home/End already jump the PLAYHEAD to the start and end, so the shifted pair means the
+              same thing for the marker and there is one idea to remember instead of two arbitrary keys.
+              Listed in the shortcuts sheet, and the suite checks it is — a shortcut nobody can discover
+              is a shortcut for the person who wrote it.
+              *Worth recording, because it cost four suite runs:* the test failed while the keys worked
+              by hand. The app deliberately ignores bare-key shortcuts whenever an overlay owns the
+              screen — `FM.overlayOwnsScreen()`, which names home and settings explicitly and then asks
+              a geometry question — and the suite had **settings open** from an earlier test. The right
+              fix was for the test to satisfy that guard rather than route around it: it closes home and
+              settings, hides anything the app itself reports as covering the middle of the screen, and
+              refuses to run if the app still says the editor is covered.
 
       **Worth settling before building, recorded rather than asked:** whether the Add layer occupies a
       real row in the layer ORDER (so it has an index among the layers) or is drawn between rows; the
@@ -2958,8 +2969,18 @@ better still, keep working inside the turn rather than parking work for a later 
       test had to learn to filter it out.
       It is also **hidden inside Edit Group**, because `insertLayer` ignores the index there — a marker
       that promises to place things where it sits would be lying in the one place it cannot.
-      **Left: clause 12 only** — keyboard shortcuts to fling it to the top or bottom. Small, and it wants
-      a key pair that does not collide with the existing shortcuts.
+      **ALL FIFTEEN CLAUSES DONE, v8.88.** The + button is gone, the Add layer is on the phone timeline
+      and the Add line is on the desktop one, both drag, what you add — or paste — lands below the
+      marker, the label changes with the project and stays one short line, and ⇧+Home / ⇧+End fling it
+      to either end.
+      **What is deliberately NOT here, and it is the thing he flagged himself:** *"most of our filters
+      and stuff I kind of just like basic when you first add them"* — making effects spawn with values
+      that already look like something. That is #277's clause 9 toggle territory and he said *"I don't
+      want you to start on it yet"*.
+      **And the note about my habits stands as a standing constraint**, not a finished item: *"you just,
+      like, put an explanation for everything in every section, and it just looks messy."* The 34-character
+      cap on this row's label is one place it is now enforced rather than remembered; a sweep of the rest
+      of the app's hint and empty-state copy is still worth doing on its own.
 
       **GROUNDWORK FOR STAGE B, found and verified 17 Aug — this is the part that decides whether it is
       a big job or a small one, and it is a small one.** Clause 5 needs exactly ONE function changed:

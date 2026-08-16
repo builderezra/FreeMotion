@@ -1584,6 +1584,19 @@ window.FM = window.FM || {};
    * It lives here rather than in the timeline because the timeline is a VIEW: the add path has to know
    * the number even when the timeline has not been built (a fresh project, an AI op, an import). */
   FM.addAt = 0;
+  /* Moves the marker and shows it moving. A shortcut whose only feedback is a line jumping somewhere
+     off-screen is a shortcut nobody trusts, so it scrolls the marker into view after the rebuild. */
+  function moveAddMarker(to) {
+    if (FM.groupContext) return;
+    FM.addAt = to;
+    FM.clampAddAt();
+    if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    else if (FM.refreshAll) FM.refreshAll();
+    const el = document.querySelector('.tl-addrow');
+    if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
+  }
+  FM.moveAddMarker = moveAddMarker;   // exposed so the suite drives the same path the key does
+
   FM.clampAddAt = function () {
     const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
     FM.addAt = Math.max(0, Math.min(typeof FM.addAt === 'number' ? FM.addAt : 0, n));
@@ -4777,6 +4790,16 @@ window.FM = window.FM || {};
       }
       else if (e.code === 'Comma') { e.preventDefault(); FM.pause(); FM.setTime(FM.time - 1 / (FM.scene.project.fps || 30)); }
       else if (e.code === 'Period') { e.preventDefault(); FM.pause(); FM.setTime(FM.time + 1 / (FM.scene.project.fps || 30)); }
+      /* SHIFT+HOME / SHIFT+END send the Add marker to the top or the bottom (queue 294, clause 12):
+         "we could add shortcuts on the keyboard to quickly push it up to the top… push it up to the
+         bottom so that you don't have to go and find it and then drag it up or down."
+         Paired with the plain keys on purpose — Home/End already mean "jump to the start/end" for the
+         PLAYHEAD, so the shifted pair means the same thing for the marker and there is one idea to
+         remember rather than two arbitrary keys. Nothing else in the app binds a shifted Home or End.
+         Not while editing a group, for the same reason the marker is hidden there: the index is
+         ignored, so the shortcut would silently do nothing. */
+      else if (e.code === 'Home' && e.shiftKey) { e.preventDefault(); moveAddMarker(0); }
+      else if (e.code === 'End' && e.shiftKey) { e.preventDefault(); moveAddMarker(FM.scene.layers.length); }
       else if (e.code === 'Home') { e.preventDefault(); FM.pause(); FM.setTime(0); }
       else if (e.code === 'End') { e.preventDefault(); FM.pause(); FM.setTime(FM.scene.project.duration); }
       else if (e.code === 'BracketLeft') { e.preventDefault(); markRegionIn(); }
