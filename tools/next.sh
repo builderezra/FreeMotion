@@ -25,11 +25,22 @@ F="REQUESTS.md"
 # every queue tool here matches ^- \[ \]. It was not deprioritised, it was unreachable, and he found
 # it himself: "i said this a long time ago and still no fix". Same failure as the unnumbered items,
 # different cause, so it gets the same treatment: detected loudly rather than trusted.
-BAD="$(grep -n '[^ ]- \[[ x]\] \*\*[0-9]' "$F" || true)"
+# ...but it must not cry wolf, or it gets ignored and we are back where we started. The first version
+# fired on this file's own PROSE: #211's writeup quotes the malformed text verbatim to explain the bug,
+# inside backticks. Backtick-quoted spans are stripped before testing, so a quotation of the problem is
+# not mistaken for the problem.
+BAD="$(python3 - "$F" << 'PYEOF'
+import re, sys
+for i, ln in enumerate(open(sys.argv[1], encoding='utf-8'), 1):
+    bare = re.sub(r'`[^`]*`', '', ln)          # drop anything quoted in backticks
+    if re.search(r'\S- \[[ x]\] \*\*[0-9]', bare):
+        print('%d:%s' % (i, ln.rstrip()[:100]))
+PYEOF
+)"
 if [ -n "$BAD" ]; then
   echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   echo "!! MALFORMED ENTRIES — these do NOT start a line, so NOTHING below sees them:"
-  echo "$BAD" | cut -c1-110
+  echo "$BAD"
   echo "!! Put each on its own line before trusting this list."
   echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   echo
