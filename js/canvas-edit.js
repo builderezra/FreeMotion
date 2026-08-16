@@ -701,7 +701,39 @@ window.FM = window.FM || {};
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onUp);   // lost touches must release pinch fingers + drags
       window.addEventListener('resize', update);
+      /* …AND WHEN THE STAGE RESIZES WITHOUT THE WINDOW DOING (queue 284). Ezra: "when you drag the
+         timeline up and down while having a layer selected the layers outline starts moving somewhere
+         else, when you press back on a layer it goes back to normal but this shouldnt be happening."
+         Measured at 1280x800 before the fix: dragging the timeline up shrank the preview from 179x317
+         to 116x207, and the outline kept its OLD screen box — so against the smaller canvas it sat at
+         0.77, 0.77 of the way across instead of dead centre on the layer, at 1.53x the width it should
+         be. Re-selecting rebuilt it, which is his "press back on a layer".
+         The `resize` listener above cannot see this: the WINDOW never changed size. The gizmo is laid
+         out in screen pixels against the preview's box, so the thing to watch is that box.
+         AND THE OBSERVER IS NOT THE MECHANISM, because it cannot be trusted to be one. This hook was
+         written once before and reverted with the note "a ResizeObserver never fires in either browser
+         I can drive here", and that is still true — measured again for this fix: an RO attached to
+         #preview logged ZERO callbacks, not even the initial one the spec promises, while the canvas
+         went from 197px wide to 300. So it is kept as a belt for the browsers where it does work, and
+         the BRACES are `FM.stageResized()` below, called by the code that actually changes the stage's
+         size. A resize hook that silently does not fire looks exactly like one that works, so the thing
+         the suite proves is the explicit call, not the observer. */
+      if (window.ResizeObserver) {
+        /* Routed through the same entry point the resizers call, not straight at `update`. Two paths to
+           one behaviour should have one door: it means a mutation check can actually disable the
+           feature (with two independent calls to `update` it could not, and the check duly reported a
+           dead test), and it means anything added here later — the zoomed preview's own re-measure is
+           the next one — is picked up by both. */
+        const ro = new ResizeObserver(() => FM.canvasEdit.stageResized());
+        ro.observe(canvas);
+        if (wrap) ro.observe(wrap);
+      }
     },
     update: update,
+    /* THE STAGE CHANGED SIZE — re-lay the gizmo (queue 284). Called by whatever resized it rather than
+       waiting to be noticed, because nothing here can observe that reliably. One named entry point so
+       the next thing that resizes the stage has somewhere obvious to call, instead of every resizer
+       growing its own copy of "and also nudge the selection box". */
+    stageResized: update,
   };
 })(window.FM);

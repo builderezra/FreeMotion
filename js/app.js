@@ -3358,6 +3358,19 @@ window.FM = window.FM || {};
      * on one — is untouched; it only bites where 72% of the screen was never a sane timeline.
      * The window `resize` handler below re-clamps, so this also fixes the case that actually happens:
      * turning the phone sideways with a height stored from somewhere roomier. */
+    /* THE SELECTION OUTLINE HAS TO BE TOLD (queue 284). Ezra: "when you drag the timeline up and down
+       while having a layer selected the layers outline starts moving somewhere else, when you press
+       back on a layer it goes back to normal but this shouldnt be happening."
+       The gizmo is laid out in SCREEN pixels against the preview's box, and dragging either resizer
+       changes that box without the WINDOW resizing — so canvas-edit's `resize` listener never hears
+       about it and the outline keeps the geometry it had. Measured before the fix at 1280x800: the
+       canvas went 197px wide to 300 and the outline stayed put, landing at 0.33 across the frame
+       instead of dead centre on the layer.
+       Called explicitly rather than observed: a ResizeObserver on #preview logs zero callbacks in the
+       browser this is developed and tested against, which is why the same fix was written and reverted
+       once already. */
+    const stageResized = () => { if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized(); };
+
     const clampH = (h) => {
       const vh = window.innerHeight;
       const ceil = vh >= 504 ? Math.round(vh * 0.72) : Math.max(150, Math.round(vh * 0.46));
@@ -3416,6 +3429,7 @@ window.FM = window.FM || {};
         if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();     // snapped back together
       }
       root.style.setProperty('--tl-h', want + 'px');       // pure CSS-grid resize — no timeline reflow needed (height doesn't touch clip-x / pps math)
+      stageResized();
     });
     const end = () => {
       if (!dragging) return;
@@ -3501,6 +3515,7 @@ window.FM = window.FM || {};
           amStuck = 0;
           root.style.setProperty('--am-h', amClamp(want) + 'px');
           document.body.classList.add('am-floating');
+          stageResized();
         } else {
           // At or below the floor. Hold here until the pointer has travelled STICK past it.
           amStuck = floor - want;
@@ -3509,6 +3524,7 @@ window.FM = window.FM || {};
           if (amStuck > STICK) {
             document.body.classList.remove('am-floating');
             root.style.setProperty('--tl-h', clampH(floor - (amStuck - STICK)) + 'px');
+            stageResized();
           }
         }
       });

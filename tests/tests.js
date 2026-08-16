@@ -17426,6 +17426,58 @@
     }
   });
 
+  /* ---------------- queue 284: the selection outline drifted when the stage was resized -------- */
+
+  test('the selection outline stays on its layer when the timeline is dragged (queue 284)', { item: 'gizmo-resize' }, async function () {
+    /* "Found a weird issue where when you drag the timeline up and down while having a layer selected
+     * the layers outline starts moving somewhere else, when you press back on a layer it goes back to
+     * normal but this shouldnt be happening."
+     * The gizmo lays out in SCREEN pixels against the preview's box; dragging the timeline resizes that
+     * box without the WINDOW resizing, so canvas-edit's `resize` listener never hears about it.
+     * Measured against the CANVAS rather than in absolute pixels — the whole point is that the canvas
+     * moved and the outline should have moved with it, so absolute numbers are supposed to change.
+     * AND IT CHECKS THE CANVAS ACTUALLY RESIZED, because this is the failure mode that got the previous
+     * attempt at this fix reverted: a resize that never happens makes a broken hook look perfect. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const root = document.documentElement;
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    const layers0 = FM.scene.layers.slice();
+    try {
+      root.style.setProperty('--tl-h', '420px');
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: Math.round(P.width * 0.3), shapeH: Math.round(P.width * 0.3), fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(320);
+      const box = document.getElementById('select-box'), cv = document.getElementById('preview');
+      if (!box || !cv || box.style.display === 'none') return;      // no gizmo on screen in this layout
+      const rel = () => {
+        const b = box.getBoundingClientRect(), c = cv.getBoundingClientRect();
+        return { cx: (b.left + b.width / 2 - c.left) / c.width, cy: (b.top + b.height / 2 - c.top) / c.height, w: b.width / c.width, cw: Math.round(c.width) };
+      };
+      const before = rel();
+      const rez = document.getElementById('tl-resizer');
+      if (!rez) throw new Error('no #tl-resizer to drag');
+      const r = rez.getBoundingClientRect(), y0 = Math.round(r.top + r.height / 2);
+      const pd = (t, y) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: 600, clientY: y, pointerId: 1, buttons: 1 }));
+      pd('pointerdown', y0); pd('pointermove', y0 + 120); await sleep(70); pd('pointermove', y0 + 200);
+      await sleep(200);
+      pd('pointerup', y0 + 200);
+      await sleep(260);
+      const after = rel();
+      if (Math.abs(after.cw - before.cw) < 20) throw new Error('the canvas only changed from ' + before.cw + 'px to ' + after.cw + 'px — the drag did not really resize the stage, so this test would pass with the fix removed');
+      const drift = Math.abs(after.cx - before.cx) + Math.abs(after.cy - before.cy);
+      if (drift > 0.02) throw new Error('after resizing the stage the outline sits at ' + after.cx.toFixed(2) + ',' + after.cy.toFixed(2) + ' of the canvas instead of ' + before.cx.toFixed(2) + ',' + before.cy.toFixed(2) + ' — it kept its old screen box, which is the outline "moving somewhere else"');
+      if (Math.abs(after.w - before.w) > 0.02) throw new Error('after resizing the stage the outline is ' + (after.w / before.w).toFixed(2) + 'x the width it should be relative to the canvas');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      document.body.classList.remove('tl-resizing');
+      await sleep(200);
+    }
+  });
+
   /* ---------------- queue 282: the film grain, faster and fainter ---------------- */
 
   test('the home film grain runs fast and faint, and its two layers cannot fall into step (queue 282)', { item: 'home-grain' }, async function () {

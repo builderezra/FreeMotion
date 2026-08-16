@@ -1810,7 +1810,7 @@ better still, keep working inside the turn rather than parking work for a later 
       tiles FLEX to the band height rather than pick a second fixed size, or the next band change breaks
       it again.
 
-- [ ] **284 — Dragging the timeline moves the selected layer's outline off the layer. (16 Aug.)** His
+- [x] **284 — Dragging the timeline moves the selected layer's outline off the layer. DONE v8.76.** (16 Aug.) His
       words, verbatim: *"Found a weird issue where when you drag the timeline up and down while having a
       layer selected the layers outline starts moving somewhere else, when you press back on a layer it
       goes back to normal but this shouldnt be happening"*.
@@ -1830,6 +1830,26 @@ better still, keep working inside the turn rather than parking work for a later 
       from a broken one. The honest way through is to drive the resize the way HE does — a real drag on
       `#tl-resizer` — and measure the outline's box before and after, rather than relying on the
       observer firing on its own.
+
+      **DONE v8.76, and the old note was still right about the observer.** Reproduced first, by driving
+      the real gesture at 1280×800: dragging the timeline took the preview from **197px wide to 300**,
+      and the outline kept its old screen box — so it sat at **0.33, 0.33 across the frame instead of
+      dead centre on the layer**, at the wrong size too. Re-selecting rebuilt it, which is his "press
+      back on a layer it goes back to normal".
+      **The ResizeObserver still does not fire here** — measured again rather than assumed: one attached
+      to `#preview` logged **zero** callbacks, not even the initial one the spec promises, while the
+      canvas changed size underneath it. So it is not the mechanism. The resizers now TELL the gizmo
+      (`FM.canvasEdit.stageResized()`), which is deterministic and drivable in a test; the observer is
+      kept as a belt for browsers where it works, but nothing depends on it.
+      **One structural note worth keeping:** the first version had the observer and the explicit call
+      going independently to `update()`, and the mutation check reported the new test as DEAD — with two
+      redundant paths, removing either one changes nothing. They both go through the single
+      `stageResized` door now, so the guarantee is testable, and the check confirms it: with that door
+      shut the outline drifts to 0.31 and the test fails.
+      **Not done, and it was named in this entry as the same root cause:** *"Zoomed preview renders
+      stretched/wrong-aspect after any stage resize"*. It is a different code path — the crop box the
+      zoomed preview pins — and it now has an obvious place to be fixed from (that same door), but it is
+      not fixed, so it stays open rather than being quietly folded in.
 
 - [x] **283 — CHECK: is the add-menu drag (#244, v8.30) actually working for him? ANSWERED 16 Aug — it runs, but it is built wrong. Folded into #244, which is reopened.** His words:
       *"I hope you haven't forgotten that you have logged the exact specific details and everything I
