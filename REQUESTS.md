@@ -1721,6 +1721,38 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **285 — Layer-panel buttons should shrink when the timeline is made small. (16 Aug, screenshot.)**
+      His words, verbatim: *"the layer edit pannels buttons should shrink if you make the timeline too
+      small, so the button all stay fitting on screen"*.
+      The 3x3 grid of layer buttons — Colouring · Border & Shadow · Blending & Opacity · Move &
+      Transform · Speed · Volume · Edit Shape · Presets · Effects — keeps a fixed tile size, so shortening
+      the band pushes the bottom row off rather than scaling them down.
+      **Same family as #244's band work and as the align-button floor I hit in v8.39** (Studio's
+      inspector is a 264px band, and buttons that FILL it measure ~43px). Whatever lands should make the
+      tiles FLEX to the band height rather than pick a second fixed size, or the next band change breaks
+      it again.
+
+- [ ] **284 — Dragging the timeline moves the selected layer's outline off the layer. (16 Aug.)** His
+      words, verbatim: *"Found a weird issue where when you drag the timeline up and down while having a
+      layer selected the layers outline starts moving somewhere else, when you press back on a layer it
+      goes back to normal but this shouldnt be happening"*.
+      **THERE IS ALREADY A REVERTED FIX FOR THIS AND IT SHOULD BE THE STARTING POINT.** The note at the
+      top of this file says: *"One fix I reverted rather than ship: the stage-resize hook. It's correct,
+      but a ResizeObserver never fires in either browser I can drive here, so I couldn't demonstrate it
+      — and a resize hook that silently doesn't fire looks exactly like one that works. BUG-HUNT.md says
+      how to finish it."* That is this bug: the selection gizmo lays out in SCREEN pixels against the
+      preview's box, dragging the timeline resizes the stage, and nothing re-measures — so the outline
+      keeps its old geometry until a re-select rebuilds it, which is exactly *"press back on a layer it
+      goes back to normal"*.
+      Related BUG-HUNT finding, still open: *"Zoomed preview renders stretched/wrong-aspect after any
+      stage resize — the pinned #canvas-wrap box is never re-measured"* — same root cause, so fix both
+      together rather than twice.
+      **The reason it was reverted is the thing to solve:** a ResizeObserver would not fire in the test
+      browser, so the fix could not be demonstrated, and an unproven resize hook is indistinguishable
+      from a broken one. The honest way through is to drive the resize the way HE does — a real drag on
+      `#tl-resizer` — and measure the outline's box before and after, rather than relying on the
+      observer firing on its own.
+
 - [ ] **283 — CHECK: is the add-menu drag (#244, v8.30) actually working for him? (16 Aug.)** His words:
       *"I hope you haven't forgotten that you have logged the exact specific details and everything I
       said regarding the ad menu or inspector menu, whatever you wanna call it, slash the layer edit
@@ -4269,6 +4301,28 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       sized to a container that excludes a gutter).
       **Reproduce at a wide desktop width on the home screen and measure the field's right edge against
       `document.documentElement.clientWidth`** before changing anything.
+      **INVESTIGATED 16 Aug and NOT reproduced — here is what is ruled out, so the next run does not
+      repeat it.** Measured on the home screen at 1400px and again at 1900px, after a resize, listing
+      every element wider than 600px that paints a background: **every one reaches the right edge
+      exactly** (`shortBy: 0`) — the ground, `#stage`, `#home-screen` and the field. The only element
+      that stops short is the decorative conic glow, which is 980px and centred by design.
+      **The hypothesis that fits, and why I cannot test it here.** `#home-screen` is
+      `position: fixed; inset: 0`, so it spans `clientWidth` — which EXCLUDES a classic scrollbar. This
+      browser reports `innerWidth - clientWidth = 0`: it uses **overlay** scrollbars, so a gutter can
+      never appear for me. On a machine with classic scrollbars the gutter would be bare ground to the
+      right of the fixed overlay — a dark vertical strip exactly where his screenshot shows one, and one
+      that "creeps in" as the list grows long enough to need scrolling. **Three rounds of fixes have
+      missed this bug, and an artefact that is invisible in the only browser I can drive is a very good
+      explanation for that.**
+      Against the hypothesis: at the moment of measuring, `body` was `overflow: hidden`, the document
+      did not scroll, and no element inside `#home-screen` was scrollable — though the project list was
+      not populated in my programmatic open, so that last point is weak.
+      **What would settle it, and it needs him:** with the home screen open and his project list long
+      enough to scroll, run this and send the numbers —
+      `JSON.stringify({iw: innerWidth, cw: document.documentElement.clientWidth, home: document.getElementById('home-screen').getBoundingClientRect().right})`.
+      If `iw - cw` is about 15 and `home.right` equals `cw`, the strip IS the scrollbar gutter and the
+      fix is to paint the ground behind it (or `scrollbar-gutter: stable both-edges`), not to chase the
+      field's width again.
 
 
 - [x] **188 — The notes button still does not sit right.** (v7.17) His words, after v7.13 evened the gaps: *"The
