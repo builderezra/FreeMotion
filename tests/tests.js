@@ -7539,30 +7539,31 @@
         if (!(tz > az)) throw new Error('#toast sits at z-index ' + tz + ' during the push, under #app’s ' + az + ' — a toast that is already on screen gets buried by the incoming editor and reappears when the push ends');
       }
 
-      /* ---- the orb is really there now, so this is a measurement and not a skipped branch ---- */
-      if (fabCs.display === 'none' || fabCs.position !== 'fixed') throw new Error('at ' + innerWidth + 'px the + orb is display:' + fabCs.display + ' position:' + fabCs.position + ' — the phone chrome this test exists to measure is not on screen, so nothing below would be asserting anything');
-
-      /* ---- same distance, same duration, same curve ---- */
-      if (fabCs.animationName === 'none') throw new Error('the + orb does not animate during the push — it would sit still in the middle of the screen everything else is leaving');
+      /* ---- THE + ORB'S HALF OF THIS TEST IS RETIRED (queue 294) ----
+         It was the one piece of body-level chrome that had to be flown with the editor, and it is gone:
+         the + button is replaced by an Add layer that lives INSIDE the timeline, so it travels with #app
+         for free and there is nothing left outside #app to keep in formation. The assertions below —
+         that #app animates at all, and that a toast already on screen is not buried — are the part of
+         this test that still has something to measure. If body-level chrome is ever added back, this is
+         the block to restore: it checked the orb's duration, easing and start offset against #app's. */
       if (appCs.animationName === 'none') throw new Error('#app does not animate during the push');
-      if (fabCs.animationDuration !== appCs.animationDuration) throw new Error('the + orb runs for ' + fabCs.animationDuration + ' against #app’s ' + appCs.animationDuration + ' — it lands at a different moment from the screen it belongs to');
-      if (fabCs.animationTimingFunction !== appCs.animationTimingFunction) throw new Error('the + orb eases on ' + fabCs.animationTimingFunction + ' against #app’s ' + appCs.animationTimingFunction + ' — same distance, different shape, so it drifts mid-flight');
       var appStart = startPx(appCs.animationName, app.getBoundingClientRect().width);
-      var fabStart = startPx(fabCs.animationName, fab.getBoundingClientRect().width);
-      if (Math.abs(appStart - fabStart) > 2) throw new Error('the + orb starts ' + Math.round(fabStart) + 'px off-screen where #app starts ' + Math.round(appStart) + 'px off-screen — a % inside translate is of the ANIMATED ELEMENT, so a 64px button on #app’s keyframes travels 64px while its screen travels a whole viewport');
+      if (!(appStart > 1)) throw new Error('#app starts ' + Math.round(appStart) + 'px off-screen — the incoming editor is not travelling');
 
       if (typeof app.getAnimations !== 'function') throw new Error('this browser cannot seek CSS animations from script — the push cannot be measured at its first frame');
       var pushNames = { 'fm-push-in': 1, 'fm-push-in-vw': 1, 'fm-push-out': 1, 'fm-push-fade': 1 };
-      var anims = [home, app, fab].reduce(function (acc, e) { return acc.concat(e.getAnimations()); }, [])
+      var anims = [home, app].reduce(function (acc, e) { return acc.concat(e.getAnimations()); }, [])
         .filter(function (a) { return pushNames[a.animationName]; });
-      if (anims.length < 3) throw new Error('only ' + anims.length + ' push animation(s) are running (#home-screen, #app and the + orb each need one) — this test would be asserting nothing');
+      if (anims.length < 2) throw new Error('only ' + anims.length + ' push animation(s) are running (#home-screen and #app each need one) — this test would be asserting nothing');
       anims.forEach(function (a) { a.pause(); a.currentTime = 0; });
 
       /* ---- FRAME ZERO: home is still fully up, so NOTHING of the editor may be on screen ---- */
       var a0 = app.getBoundingClientRect();
       if (a0.left < innerWidth - 1) throw new Error('#app starts the push already ' + Math.round(innerWidth - a0.left) + 'px on screen');
-      var f0 = fab.getBoundingClientRect();
-      if (f0.left < innerWidth - 1) throw new Error('the + orb starts the push ' + Math.round(innerWidth - f0.left) + 'px INSIDE the home screen — a sliver of the editor is painted over home before the editor has moved at all');
+      /* The orb's own frame-zero check retires with it (queue 294 — there is no + button any more). The
+         general form immediately below is the version that outlives any one control: it sweeps every
+         fixed, animating, lifted element outside both screens, so the next piece of floating chrome is
+         caught without anyone remembering to add a line for it. */
 
       // The general form, so the next piece of floating chrome is caught for free: anything outside
       // both screens that TRAVELS with the push, has been lifted above the home overlay's z-index 200
@@ -7628,8 +7629,16 @@
         if (t.n === fab) fabDrift = dApp;
         if (Math.min(dApp, dHome, dSelf) > 1) throw new Error(id + ' drifted ' + dApp.toFixed(1) + 'px from #app, ' + dHome.toFixed(1) + 'px from #home-screen and ' + dSelf.toFixed(1) + 'px from where it started, across the push — it is rigid with neither screen nor the viewport, so it travels on a distance of its own');
       });
-      if (onScreen.indexOf('#add-fab') < 0) throw new Error('the + orb was never on screen during the push at ' + innerWidth + 'px — the one piece of body-level chrome this test exists for was not measured');
-      if (!(fabDrift <= 1)) throw new Error('the + orb drifted ' + fabDrift.toFixed(1) + 'px from #app’s left edge across the push — the editor’s own chrome has to travel with the editor, whether that means swimming across it or sitting still while it arrives');
+      /* SAY WHAT THIS TEST IS NOW, rather than let it look like it is still measuring something.
+         Queue 294 replaced the + orb with a layer inside the timeline, and the orb was the ONE piece of
+         body-level chrome the editor had — so there is nothing outside #app left to keep in formation
+         and the two assertions that named it are retired.
+         What remains is a standing GUARD, not an active measurement: the sweep above walks every fixed,
+         animating, lifted element outside both screens and fails if one drifts from both screens and
+         from itself. Today it finds none, and that is the correct answer; the day someone adds floating
+         chrome that misbehaves during the push, it catches it without anyone having remembered to write
+         a line for it. */
+      void fabDrift;
     } finally {
       document.body.classList.remove('fm-pushing');
       home.classList.remove('fm-push-out');
@@ -17361,17 +17370,23 @@
       el.classList.add('on');
       const lbl = el.querySelector('.ld-label');
       try {
+        /* THE + BUTTON IS GONE (queue 294), so the collision this test was written for cannot happen —
+           it is an Add layer inside the timeline now, nowhere near the pill's corner. The overlap check
+           retires with it; the cap on the pill's WIDTH does not, and that is the half that actually
+           kept the screen usable: the pill still must not run off the edge and the name must ellipsise
+           rather than the pill growing to fit it. */
         const fab = document.getElementById('add-fab');
-        if (!fab || !fab.getBoundingClientRect().width) throw new Error('no + button on screen at phone width — nothing to stay clear of');
-        const f = fab.getBoundingClientRect();
+        const f = (fab && fab.getBoundingClientRect().width) ? fab.getBoundingClientRect() : null;
         /* A filename he would really have, then an absurd one: the cap has to hold at any length, or
            it is a guess that happens to fit today's names. */
         [['a real one', 'Loading Invincible (2023) - Thragg Teaser (S04) - 1080p YT WEB-DL AV1.mp4'],
          ['an absurd one', 'Loading ' + 'x'.repeat(300)]].forEach(([what, text]) => {
           lbl.textContent = text;
           const p = el.getBoundingClientRect();
-          const overlaps = p.right > f.left && p.bottom > f.top && p.top < f.bottom;
-          if (overlaps) throw new Error('with ' + what + ', the pill reaches ' + Math.round(p.right) + ' and the + starts at ' + Math.round(f.left) + ' — it is covering the button');
+          if (f) {
+            const overlaps = p.right > f.left && p.bottom > f.top && p.top < f.bottom;
+            if (overlaps) throw new Error('with ' + what + ', the pill reaches ' + Math.round(p.right) + ' and the + starts at ' + Math.round(f.left) + ' — it is covering the button');
+          }
           if (p.right > window.innerWidth) throw new Error('with ' + what + ', the pill runs off the screen edge');
           /* The name must ELLIPSISE rather than the pill growing — a truncated filename still says
              which clip is loading, which is the whole reason it is named. */
@@ -17433,6 +17448,75 @@
       try { if (!wasHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       try { if (!wasSheet) FM.shortcuts.hide(); } catch (e) {}
       await sleep(120);
+    }
+  });
+
+  /* ---------------- queue 294: the + button becomes a layer on the timeline ---------------- */
+
+  test('the phone timeline carries an Add layer instead of the + button (queue 294)', { item: 'add-row' }, async function () {
+    /* "the plus button inside the creator menu is kind of on the nose like… it looks very similar to what
+     * a light motion has and I was thinking of a way to get rid of it from being there while also keeping
+     * functionality… it could be a layer now… if you just tap anywhere on that line it'll open up the
+     * same admin where you can add shapes or elements or whatever."
+     * The label is his too, and SHORT is an explicit instruction rather than taste: "when you start a new
+     * project… tap here to start creating", then "once you add stuff, it would obviously change", then —
+     * about my habits, not just this row — "you just, like, put an explanation for everything in every
+     * section, and it just looks messy. So just don't overexplain it." The length check below is that
+     * sentence made into a rule. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice();
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(280);
+      if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) return;   // not the phone path here
+
+      // EMPTY PROJECT — the row is the empty state, and it invites rather than explains.
+      FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll();
+      await sleep(260);
+      let row = document.querySelector('.tl-addrow');
+      if (!row) throw new Error('an empty project shows no Add layer on the timeline');
+      const emptyLabel = row.querySelector('.tl-addrow-label').textContent.trim();
+      if (!/creat/i.test(emptyLabel)) throw new Error('the empty-project label reads "' + emptyLabel + '" — his example was "tap here to start creating"');
+      if (document.querySelector('.tl-empty')) throw new Error('the old "No layers yet" sentence is still there as well as the Add row — that is the over-explaining he asked me to stop');
+      const fab = document.getElementById('add-fab');
+      if (fab && getComputedStyle(fab).display !== 'none') throw new Error('the + button is still on screen — clause 1 is that it goes away');
+
+      // WITH LAYERS — the label changes, and the row is not one of the layers.
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.5), y: Math.round(P.height * 0.5), shapeW: 200, shapeH: 200, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(null); FM.refreshAll();
+      await sleep(260);
+      row = document.querySelector('.tl-addrow');
+      if (!row) throw new Error('the Add layer disappeared once the project had a layer in it');
+      const label = row.querySelector('.tl-addrow-label').textContent.trim();
+      if (label === emptyLabel) throw new Error('the label still reads "' + label + '" with layers present — "once you add stuff, it would obviously change"');
+      [emptyLabel, label].forEach(function (t) {
+        if (t.length > 34) throw new Error('the Add layer says "' + t + '" (' + t.length + ' chars) — "just don\'t overexplain it"; one short line');
+      });
+      if (FM.scene.layers.length !== 1) throw new Error('the Add row put itself into the scene — it must be drawn, not stored, or it reaches the export and the layer count');
+      const rows = [].slice.call(document.querySelectorAll('.track-row'));
+      if (!rows.length || !rows[0].classList.contains('tl-addrow')) throw new Error('the Add layer is not the first row');
+
+      // TAPPING IT opens the same sheet the + used to.
+      const sheet = document.getElementById('add-sheet');
+      if (sheet) {
+        sheet.classList.remove('open');
+        row.click();
+        await sleep(300);
+        if (!sheet.classList.contains('open')) throw new Error('tapping the Add layer did not open the add menu');
+        if (FM.mobile.closeAdd) FM.mobile.closeAdd();
+      }
+    } finally {
+      if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(240);
     }
   });
 

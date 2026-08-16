@@ -2864,13 +2864,14 @@ better still, keep working inside the turn rather than parking work for a later 
       that removes a copied element rather than adding an original one.
 
       **His clauses, as a checklist — none of this is DONE until every line is ticked:**
-      1. [ ] The + button **goes away** from inside a project.
-      2. [ ] **MOBILE:** an "Add" layer that is always present on the timeline, with a glowing design in
+      1. [x] The + button **goes away** from inside a project. **v8.84** (phone; PC never had one).
+      2. [x] **MOBILE:** an "Add" layer that is always present on the timeline, with a glowing design in
              the same visual language as the current + button, labelled *"ad"* / Add / *"whatever you can
-             say anything"*.
+             say anything"*. **v8.84** — it takes the orb's own teal light rather than a second look.
       3. [ ] It behaves like a normal layer **except**: it cannot move left/right and cannot be trimmed
              or cropped. It **can** be dragged up and down.
-      4. [ ] **Tapping anywhere on it opens the same add menu** (shapes, elements, etc.).
+      4. [x] **Tapping anywhere on it opens the same add menu** (shapes, elements, etc.). **v8.84** — the
+             same sheet the + opened, so nothing about adding changed except where you press.
       5. [ ] **The point of the whole idea:** whatever you add is inserted **at that layer's position —
              below the Add layer** — instead of landing on top and being dragged down. So you position
              first, then add.
@@ -2900,13 +2901,27 @@ better still, keep working inside the turn rather than parking work for a later 
       > itself way too much. Like, a little tutorial for explaining what it does. You'd seem to do that
       > a lot where you just, like, put an explanation for everything in every section, and it just
       > looks messy. So just don't overexplain it."*
-      13. [ ] **Empty project:** the Add layer reads something like *"tap here to start creating"* — his
-              example, and he says *"if anything"* make it **a bit more inspirational**.
-      14. [ ] **Once the project has layers:** the label CHANGES to something contextual — his example is
-              *"tap here to add audio layer"*.
-      15. [ ] **Keep it SHORT.** The dictation garbles mid-way (*"Just start making it overexplementary"*)
-              but the sentences either side of it settle the meaning and the last one is explicit:
-              *"So just don't overexplain it."* One short line, not a tutorial.
+      13. [x] **Empty project:** the Add layer reads *"Tap here to start creating"* — his own words.
+              **v8.84.** It also REPLACES the old "No layers yet — Import media, add Text…" sentence
+              rather than sitting under it, which would have been two explanations of the same thing.
+      14. [x] **Once the project has layers:** the label changes — *"Tap to add a layer"*. **v8.84.**
+      15. [x] **Keep it SHORT.** **v8.84**, and made structural: the suite fails if either label goes
+              past 34 characters, so *"just don't overexplain it"* is a rule rather than a memory.
+      **STAGE A SHIPPED v8.84 — the row exists and the + is gone.** It is drawn by the timeline and is
+      NOT a scene layer, which answers one of the open questions above by construction: it cannot reach
+      the export, the layer count, history or a saved project, because it was never in `scene.layers`.
+      **Still to come, and clause 5 is the one that matters most** — *"the actual cool functionality
+      part"*: dragging it up and down (3, 6, 10) so that what you add lands BELOW it (5) instead of on
+      top. Right now it sits at the top, which is where a new layer already went, so nothing regressed
+      but nothing new is possible yet either. Then the PC line (7, 8, 9), copy/paste landing there (11)
+      and the top/bottom shortcuts (12).
+      **Two existing tests had to be re-based rather than left red**, and both were measuring the + orb:
+      the home-push test tracked it as "the editor's one piece of body-level chrome" — with the orb gone
+      there is nothing outside `#app` to keep in formation, so its orb-specific assertions retired and
+      what remains is a standing guard that catches the NEXT piece of floating chrome automatically; and
+      the loading-pill test asserted the pill never covers the + button, which cannot happen any more,
+      so that half retired and the cap on the pill's width (the half that kept the screen usable) stayed.
+
       **AND HE IS TELLING ME SOMETHING ABOUT MY OWN HABITS, WHICH IS WORTH MORE THAN THIS FEATURE:**
       *"You'd seem to do that a lot where you just, like, put an explanation for everything in every
       section, and it just looks messy."* That is about the app's UI copy, not this file's notes — hint

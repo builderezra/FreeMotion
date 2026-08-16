@@ -1607,6 +1607,47 @@ window.FM = window.FM || {};
     return lane;
   }
 
+  /* ---- THE ADD LAYER (queue 294) --------------------------------------------------------------
+   * Ezra: "the plus button inside the creator menu is kind of on the nose… it looks very similar to what
+   * a light motion has", and his idea for replacing it — "the ad button could instead of being a button
+   * like that it could be a layer now… if you just tap anywhere on that line it'll open up the same
+   * admin where you can add shapes or elements".
+   * It is NOT a scene layer and must never become one: it is a row this function draws, so it cannot
+   * reach the export, the layer count, history, or a saved project by construction rather than by being
+   * filtered out of each of them in turn.
+   * What it SAYS is his too, and short is the requirement: "when you start a new project… tap here to
+   * start creating", and then "once you add stuff, it would obviously change" — followed immediately by
+   * "just don't overexplain it". So: one line, two states, no helper text under it. */
+  function addRowLabel() {
+    return FM.scene.layers.length ? 'Tap to add a layer' : 'Tap here to start creating';
+  }
+  function buildAddRow() {
+    const row = document.createElement('div');
+    row.className = 'track-row tl-addrow';
+    row.setAttribute('role', 'button');
+    row.tabIndex = 0;
+    row.setAttribute('aria-label', addRowLabel());
+    const inner = document.createElement('div');
+    inner.className = 'tl-addrow-inner';
+    const plus = document.createElement('span');
+    plus.className = 'tl-addrow-plus'; plus.textContent = '+';
+    const label = document.createElement('span');
+    label.className = 'tl-addrow-label'; label.textContent = addRowLabel();
+    inner.append(plus, label);
+    row.appendChild(inner);
+    const open = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
+    };
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
+    return row;
+  }
+  /* PHONE ONLY so far. His PC half is a different shape — "instead of being like an actual full layer…
+     it could just be a line between layers" — and is not built yet; on a desktop the add menu is
+     already a permanent panel rather than a button, so nothing there is replaced by this. */
+  function addRowWanted() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
+
   function buildTracks() {
     tracksEl.innerHTML = '';
     /* RESERVE THE CHEVRON COLUMN ONLY WHEN A GROUP EXISTS (queue 295). Every childless layer carries a
@@ -1618,6 +1659,10 @@ window.FM = window.FM || {};
      * the scene actually contains a group. The alignment invariant is untouched the moment one exists. */
     tracksEl.classList.toggle('tl-no-groups', !FM.scene.layers.some(l => l.type === 'group'));
     if (!FM.scene.layers.length) {
+      /* On a phone the Add row IS the empty state — it says "tap here to start creating", which is both
+         the invitation and the control, so a sentence above it explaining the same thing is the exact
+         over-explaining he asked me to stop doing. */
+      if (addRowWanted()) { tracksEl.appendChild(buildAddRow()); return; }
       const empty = document.createElement('div');
       empty.className = 'tl-empty'; empty.textContent = 'No layers yet — Import media, add Text, Captions, or a Sample clip.';
       tracksEl.appendChild(empty);
@@ -1640,6 +1685,11 @@ window.FM = window.FM || {};
       row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
       tracksEl.appendChild(row);
     });
+    /* At the top for now, which is where a new layer already lands. Dragging it to choose the insertion
+       point — "you can drag that first and then add stuff and when you do add something it'll just go
+       below the add one" — is the next stage and is what makes the idea worth having; this stage is the
+       row itself and the removal of the + button. */
+    if (addRowWanted() && !soloId) tracksEl.insertBefore(buildAddRow(), tracksEl.firstChild);
   }
 
   // ---- inertial scrubbing: a flick keeps gliding after you let go, decelerating to a stop ----

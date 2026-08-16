@@ -2613,6 +2613,12 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   body.m-editing { --stage-h: 40vh; }   /* keep the canvas full-size while editing (no resize jump); panel docks below */
   body.m-editing #inspector-panel { overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,.5); }
   body.m-editing .panel-title { display: none; }     /* AM shows no "Inspector" label */
+  /* THE + BUTTON IS GONE (queue 294, clause 1). "I was thinking of a way to get rid of it from being
+     there while also keeping functionality" — the Add row in the timeline is that functionality, and it
+     opens the same sheet the orb did. The element stays in the DOM: FM.mobile.openAdd() is still what
+     the row calls, and several tests and the swipe-down-to-close gesture are wired through the sheet it
+     owns. Hidden rather than deleted, so nothing else has to be re-plumbed to lose a button. */
+  #add-fab { display: none !important; }
   body.m-editing #add-fab { display: none; }          /* no + while editing a clip */
   body.m-editing #insp-grab { display: none; }        /* docked panel, not a dismissable sheet */
   body.m-editing #inspector { padding-top: 12px; }
@@ -5943,6 +5949,48 @@ body.fm-pushing #toast { z-index: 213; }
 }
 .addmenu-card--pinkblue:hover {
   background: linear-gradient(120deg, rgba(255, 88, 132, .36) 0%, rgba(90, 150, 255, .36) 100%);
+}
+
+/* ---- The ADD layer, in place of the + button (queue 294) ---------------------------------------
+   Ezra: "the plus button inside the creator menu is kind of on the nose… it looks very similar to what
+   a light motion has", and his replacement — "it could be a layer now… It has a nice little design like
+   the same design plus button has but instead of take a line it's a layer… if you just tap anywhere on
+   that line it'll open up the same admin".
+   So it takes the + button's own language rather than inventing a second one: the same teal light the
+   orb throws (`drop-shadow(0 0 9px rgba(90,199,237,.3))`), on a row instead of a disc. It is a row in
+   the tracks list, not a floating control, because that is the whole point of the idea.
+   Sticky to the left so it stays readable however far the timeline is scrolled — the row spans the full
+   scrollable width, and a label that scrolled off with the clips would be a control you cannot find. */
+.tl-addrow {
+  display: flex; align-items: center;
+  min-height: 38px; margin: 4px 0;
+  cursor: pointer; position: relative;
+  border-radius: 10px;
+  border: 1px dashed rgba(120, 214, 240, .45);
+  background: linear-gradient(90deg, rgba(90, 199, 237, .10), rgba(90, 199, 237, .02) 60%, transparent);
+  box-shadow: 0 0 9px rgba(90, 199, 237, .16);
+}
+.tl-addrow:hover, .tl-addrow:focus-visible {
+  border-color: rgba(150, 232, 255, .8);
+  box-shadow: 0 0 14px rgba(90, 199, 237, .30);
+  outline: none;
+}
+.tl-addrow-inner {
+  position: sticky; left: 0;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 12px; max-width: 100vw; box-sizing: border-box;
+}
+.tl-addrow-plus {
+  flex: 0 0 auto; width: 21px; height: 21px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1; font-weight: 600;
+  color: #04121a; background: linear-gradient(150deg, #8fe3ff, #4fb9e8);
+  box-shadow: 0 0 8px rgba(90, 199, 237, .45);
+}
+.tl-addrow-label { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+.tl-addrow:hover .tl-addrow-label, .tl-addrow:focus-visible .tl-addrow-label { color: var(--text); }
+@media (prefers-reduced-motion: no-preference) {
+  .tl-addrow { transition: border-color .15s, box-shadow .15s; }
 }
 
 /* ---- The panel reacts to the cursor (queue 286) -----------------------------------------------
