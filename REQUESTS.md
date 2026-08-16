@@ -1721,8 +1721,8 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
-- [ ] **265 — Three of the four keyframe ◆ rails have no test at all. (Found 16 Aug while
-      mutation-checking 254, not reported by him.)** A mutation aimed at the new Edit Points diamond
+- [x] **265 — Three of the four keyframe ◆ rails have no test at all. DONE 16 Aug — all FIVE rails
+      are covered now. (Found while mutation-checking 254, not reported by him.)** A mutation aimed at the new Edit Points diamond
       hit the CROP panel's instead, because the line `left.appendChild(kfBtn);` appears **four times**
       in js/inspector.js and I did not anchor uniquely. It survived: **the crop panel's ◆ can be
       deleted outright and all 437 tests still pass.**
@@ -1744,10 +1744,16 @@ better still, keep working inside the turn rather than parking work for a later 
       Proven both ways: deleting the transform diamond fails it with *"the transform panel has no ◆
       rail at all"*, and leaving the button in place while gutting its click handler fails it with
       *"pressing ◆ did not animate the property — the button is dead"*.
-      **Why crop is still open:** its panel only builds for a layer with real media loaded, and the
-      suite cannot create one. Deleting the crop diamond STILL leaves the suite green — I re-ran that
-      mutation to confirm rather than assume. Finishing it needs a media fixture, which is a bigger
-      job than this entry and probably worth doing once for several tests at the same time.
+      **Crop is now covered too, and it was easier than the "needs a media fixture" verdict I first
+      gave it.** `cropMediaOf` only wants `m.width` / `m.height` — nothing on that path decodes the
+      element — so a plain CANVAS standing in for the media is enough, with no async load and no real
+      file. My first attempt failed only because I set `w`/`h` on the media record instead of
+      `width`/`height`, and I had written that off as "the suite cannot make one" rather than reading
+      the twelve-line function that decides. Worth remembering: I called something blocked after a
+      failed guess instead of after reading the gate.
+      The fixture also runs a real composite with the canvas stand-in, so it cannot be lying about the
+      layer being renderable.
+      **The mutation that survived twice now fails.** Deleting the crop diamond is caught.
 
 - [x] **263 — Kaleidoscope: dragging the Centre sliders to either end erases the layer. DONE v8.42.
       (Found in the 16 Aug hunt, not reported by him.)** Measured: with only the shape layer visible, moving **Centre Y

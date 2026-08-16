@@ -16263,7 +16263,8 @@
         S.layers = [layer]; FM.selectLayer(layer.id);
         FM.inspector.openCategory(category);
         const btn = document.querySelector('.mt-kf');
-        if (!btn) throw new Error(label + ': the "' + category + '" panel has no ◆ rail at all');
+        if (!btn) throw new Error(label + ': the "' + category + '" panel has no ◆ rail at all — ' +
+          (document.querySelector('.insp-hint') ? 'the panel said: ' + document.querySelector('.insp-hint').textContent.slice(0, 60) : 'no panel built'));
         if (btn.textContent.indexOf('◆') < 0) throw new Error(label + ': the rail button is not the keyframe diamond');
         if (isAnimated(layer)) throw new Error(label + ': the fixture was ALREADY animated, so pressing ◆ would prove nothing');
         btn.click();
@@ -16275,9 +16276,20 @@
         'speed', l => FM.isAnimated(l.speed));
       check('volume', FM.makeLayer('video', { x: 270, y: 480 }),
         'volume', l => FM.isAnimated(l.volume));
-      /* The CROP rail is the one that started this and it is still uncovered: its panel only builds
-         for a layer with real media loaded, which this suite cannot make. Recorded rather than
-         quietly dropped — see queue 265. */
+      /* THE CROP RAIL — the one that started all this, and the reason it went uncovered for so long is
+         that its panel refuses to build without real media (cropMediaOf wants m.width / m.height, and
+         a layer with no picture gets "This clip has no picture to crop." instead of a panel).
+         A CANVAS standing in for the element is enough and needs no async load: nothing on this path
+         decodes it, it only needs measurable dimensions — and a render is exercised below to make sure
+         the stand-in does not throw somewhere else. */
+      const mediaCv = offscreen(64, 48);
+      const mg = mediaCv.getContext('2d'); mg.fillStyle = '#cc3333'; mg.fillRect(0, 0, 64, 48);
+      const imgLayer = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(imgLayer.id, { el: mediaCv, width: 64, height: 48 });
+      check('crop', imgLayer, 'element', l => !!l.crop && (FM.isAnimated(l.crop.w) || FM.isAnimated(l.crop.x) || FM.isAnimated(l.crop.h) || FM.isAnimated(l.crop.y)));
+      // the stand-in must survive an actual composite, or this fixture would be lying about the layer
+      const rc = offscreen(180, 320);
+      FM.renderScene(rc.getContext('2d'), S, 0.5);
     } finally {
       S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
       try { FM.inspector.openCategory('home'); } catch (e) {}
