@@ -2868,19 +2868,22 @@ better still, keep working inside the turn rather than parking work for a later 
       2. [x] **MOBILE:** an "Add" layer that is always present on the timeline, with a glowing design in
              the same visual language as the current + button, labelled *"ad"* / Add / *"whatever you can
              say anything"*. **v8.84** — it takes the orb's own teal light rather than a second look.
-      3. [ ] It behaves like a normal layer **except**: it cannot move left/right and cannot be trimmed
-             or cropped. It **can** be dragged up and down.
+      3. [x] It behaves like a normal layer **except**: it cannot move left/right and cannot be trimmed
+             or cropped. It **can** be dragged up and down. **v8.85** — it has no clip at all, so there
+             is nothing to trim, crop or slide sideways; up and down is the only thing it does.
       4. [x] **Tapping anywhere on it opens the same add menu** (shapes, elements, etc.). **v8.84** — the
              same sheet the + opened, so nothing about adding changed except where you press.
-      5. [ ] **The point of the whole idea:** whatever you add is inserted **at that layer's position —
+      5. [x] **The point of the whole idea:** whatever you add is inserted **at that layer's position —
              below the Add layer** — instead of landing on top and being dragged down. So you position
-             first, then add.
-      6. [ ] Reorder it with the same three-lines grip on the right that every other layer uses.
+             first, then add. **v8.85**, and it works for every creator at once because they all route
+             through `FM.insertLayer` — shapes, text, media, captions, and anything added later.
+      6. [x] Reorder it with the same three-lines grip on the right that every other layer uses. **v8.85.**
       7. [ ] **PC:** not a full-height row — a **thin but noticeable LINE between layers** marking where
              the next layer will go.
       8. [ ] On PC, **hovering the line makes it grow** to signal it is clickable.
       9. [ ] On PC you **click the line itself** to open the add menu, rather than the far-right grip.
-      10. [ ] The line can be dragged up and down too.
+      10. [~] The line can be dragged up and down too. *(The dragging is built and shared — it moves one
+              number, `FM.addAt`. The PC LINE it applies to is not built yet, so this ticks with clause 7.)*
       11. [ ] **Copy/paste also lands at that position.**
       12. [ ] **Keyboard shortcuts to send it straight to the top or the bottom**, so you never have to
               hunt for it and drag.
@@ -2915,6 +2918,26 @@ better still, keep working inside the turn rather than parking work for a later 
       top. Right now it sits at the top, which is where a new layer already went, so nothing regressed
       but nothing new is possible yet either. Then the PC line (7, 8, 9), copy/paste landing there (11)
       and the top/bottom shortcuts (12).
+
+      **STAGE B SHIPPED v8.85 — the part he called "the actual cool functionality part".** Drag the row
+      by its ≡ grip and what you add next lands directly below it; the row stays where you left it.
+      Measured end to end: with layers stacked C,B,A and the row dragged to third place, adding gave
+      **C,B,NEW,A** with the row still above NEW.
+      · It is **one number** — `FM.addAt` — and `FM.insertLayer` splices there instead of unshifting.
+        That is why it works for every creator at once rather than for shapes only.
+      · **Edit Group is exempt on purpose:** inside a group the rows on screen are a subtree, so a flat
+        index means nothing there and that path keeps the old top-insert. Asserted, because getting it
+        wrong would put a layer you added while editing a group *outside* the group — the exact failure
+        `insertLayer` was written to prevent.
+      · The grip drags; the row taps. A grip that also fired the row's tap would open the add sheet
+        every time you tried to move it, so it stops its own press — and the suite checks tapping still
+        works after a drag.
+      · One thing found by watching rather than reading: the row is **rebuilt on every boundary the
+        finger crosses**, so the element that was grabbed is gone by the second move. The pointer
+        listeners live on `window` and the "being dragged" look is re-applied to whatever replaces it —
+        without that it moved correctly and never looked grabbed.
+      **Left for stage C:** the PC line (7, 8, 9, and 10 with it), copy/paste landing at the row (11 —
+      a second site, `js/app.js:2250`, noted below), and the top/bottom shortcuts (12).
 
       **GROUNDWORK FOR STAGE B, found and verified 17 Aug — this is the part that decides whether it is
       a big job or a small one, and it is a small one.** Clause 5 needs exactly ONE function changed:

@@ -1621,9 +1621,16 @@ window.FM = window.FM || {};
   function addRowLabel() {
     return FM.scene.layers.length ? 'Tap to add a layer' : 'Tap here to start creating';
   }
+  /* The drag survives the row being REBUILT, which it is on every boundary the finger crosses — the
+     whole track list is re-laid so the row appears in its new place. The element that was grabbed is
+     therefore gone by the second move, so the "being dragged" look has to be re-applied to whatever
+     replaces it, and the pointer listeners live on `window` rather than on the grip for the same
+     reason. Without this the row moved correctly and never looked grabbed. */
+  let addDragging = false;
+
   function buildAddRow() {
     const row = document.createElement('div');
-    row.className = 'track-row tl-addrow';
+    row.className = 'track-row tl-addrow' + (addDragging ? ' tl-addrow-dragging' : '');
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
     row.setAttribute('aria-label', addRowLabel());
@@ -1641,7 +1648,70 @@ window.FM = window.FM || {};
     };
     row.addEventListener('click', open);
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
+    row.appendChild(buildAddGrip(row));
     return row;
+  }
+
+  /* DRAGGING IT (queue 294, clauses 3, 6 and 10). "you can move this layer up and down like you can
+   * move every other layer like you can press the three lines on the right side drag it up and down".
+   * So it gets the same ≡ grip in the same place, and the grip — not the row — is what drags: the row
+   * itself is one big tap target that opens the add menu, and a control that both opens a sheet and
+   * reorders on the same gesture would fire the wrong one half the time.
+   * The layers' own reorder is not reused, deliberately. That code moves an entry inside
+   * scene.layers and is keyed by a layer index; this row is not a layer and moves nothing — it only
+   * changes a number. Borrowing it would have meant teaching it about a row that has no layer, which
+   * is how the two would drift. */
+  function buildAddGrip(row) {
+    const grip = document.createElement('div');
+    grip.className = 'tl-addrow-grip';
+    grip.setAttribute('aria-label', 'Drag to choose where new layers go');
+    grip.innerHTML = '<span></span><span></span><span></span>';
+    let dragging = false;
+    const boundaryAt = (clientY) => {
+      /* The insertion point nearest the finger, read off the LAYER rows on screen. Each row votes for
+         the boundary above it or below it depending on which half the finger is in, which is the same
+         rule a drag-to-reorder uses and the reason it feels like one. */
+      const rows = [].slice.call(tracksEl.querySelectorAll('.track-row')).filter(r => !r.classList.contains('tl-addrow'));
+      if (!rows.length) return 0;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i].getBoundingClientRect();
+        if (clientY < r.top + r.height / 2) return idxOfRow(rows[i]);
+        if (clientY < r.bottom) return idxOfRow(rows[i]) + 1;
+      }
+      return FM.scene.layers.length;
+    };
+    const idxOfRow = (r) => {
+      const hd = r.querySelector('.track-head');
+      const i = hd ? parseInt(hd.dataset.idx, 10) : NaN;
+      return isFinite(i) ? i : FM.scene.layers.length;
+    };
+    const move = (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      const at = boundaryAt(e.clientY);
+      if (at !== FM.addAt) { FM.addAt = at; buildTracks(); }
+    };
+    const end = () => {
+      if (!dragging) return;
+      dragging = false; addDragging = false;
+      const live = tracksEl.querySelector('.tl-addrow');
+      if (live) live.classList.remove('tl-addrow-dragging');
+      row.classList.remove('tl-addrow-dragging');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();      // never let the grip's press also open the add menu
+      dragging = true; addDragging = true;
+      row.classList.add('tl-addrow-dragging');
+      window.addEventListener('pointermove', move, { passive: false });
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+    });
+    grip.addEventListener('click', (e) => { e.stopPropagation(); });
+    return grip;
   }
   /* PHONE ONLY so far. His PC half is a different shape — "instead of being like an actual full layer…
      it could just be a line between layers" — and is not built yet; on a desktop the add menu is
@@ -1685,11 +1755,21 @@ window.FM = window.FM || {};
       row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
       tracksEl.appendChild(row);
     });
-    /* At the top for now, which is where a new layer already lands. Dragging it to choose the insertion
-       point — "you can drag that first and then add stuff and when you do add something it'll just go
-       below the add one" — is the next stage and is what makes the idea worth having; this stage is the
-       row itself and the removal of the + button. */
-    if (addRowWanted() && !soloId) tracksEl.insertBefore(buildAddRow(), tracksEl.firstChild);
+    /* AT ITS OWN INDEX (queue 294, clause 5). The row is drawn before the layer that currently sits at
+       FM.addAt, and FM.insertLayer splices new layers at that same number — so what you add appears
+       directly BELOW the row, exactly as he described, and the row stays where you left it. */
+    if (addRowWanted() && !soloId) {
+      const at = FM.clampAddAt ? FM.clampAddAt() : 0;
+      const rows = [].slice.call(tracksEl.children);
+      /* Counted against the rows ON SCREEN rather than scene.layers, because a collapsed group hides
+         members: the row belongs beside what the eye can see. */
+      const before = rows.filter(r => {
+        const hd = r.querySelector && r.querySelector('.track-head');
+        const i = hd ? parseInt(hd.dataset.idx, 10) : -1;
+        return isFinite(i) && i >= at;
+      })[0];
+      tracksEl.insertBefore(buildAddRow(), before || null);
+    }
   }
 
   // ---- inertial scrubbing: a flick keeps gliding after you let go, decelerating to a stop ----

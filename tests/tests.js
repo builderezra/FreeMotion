@@ -17520,6 +17520,125 @@
     }
   });
 
+  test('what you add lands below the Add layer, wherever you have dragged it (queue 294)', { item: 'add-row' }, async function () {
+    /* "the actual cool functionality part of this is that let's say you've got heaps of layers on your
+     * project. You can move this layer up and down… and then when you press the button and add a layer
+     * out of shape, it'll actually add it where you have that so instead of just automatically adding
+     * whatever you add to the top and then drag it down you can drag that first and then add stuff and
+     * when you do add something it'll just go below the add one."
+     * Asserted through `FM.insertLayer`, which is the one function every creator routes through — so
+     * this covers shapes, text, media, captions and anything added later, rather than one add path. */
+    const layers0 = FM.scene.layers.slice();
+    const at0 = FM.addAt;
+    try {
+      FM.scene.layers.length = 0;
+      FM.addAt = 0;
+      ['A', 'B', 'C'].forEach(function (n) {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#888' });
+        L.start = 0; L.duration = 4;
+        FM.insertLayer(L);
+      });
+      const names = () => FM.scene.layers.map(function (l) { return l.name; }).join(',');
+      if (names() !== 'C,B,A') throw new Error('the fixture built ' + names() + ' — inserting at 0 should stack them C,B,A');
+
+      // Put the Add row two down, then add: the newcomer belongs at 2, directly under the row.
+      FM.addAt = 2;
+      const D = FM.makeLayer('shape', { name: 'NEW', shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#fc0' });
+      D.start = 0; D.duration = 4;
+      FM.insertLayer(D);
+      if (names() !== 'C,B,NEW,A') throw new Error('with the Add row at index 2 the new layer landed in ' + names() + ' — it is supposed to go directly below the row, not on top of the stack');
+      if (FM.addAt !== 2) throw new Error('adding moved the Add row to ' + FM.addAt + ' — it should stay where it was put, with the new layer under it');
+
+      // The bottom of the stack has to be reachable too, or "drag it wherever" is only half true.
+      FM.addAt = FM.scene.layers.length;
+      const E = FM.makeLayer('shape', { name: 'LAST', shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#0cf' });
+      E.start = 0; E.duration = 4;
+      FM.insertLayer(E);
+      if (FM.scene.layers[FM.scene.layers.length - 1].name !== 'LAST') throw new Error('with the row at the bottom the new layer landed at ' + names());
+
+      // …and it cannot point past the end after a delete.
+      FM.addAt = FM.scene.layers.length;
+      FM.scene.layers.length = 1;
+      if (FM.clampAddAt() > FM.scene.layers.length) throw new Error('the insertion index still points past the end of a shortened project');
+
+      /* EDIT GROUP is the one place this must NOT apply. `insertLayer` puts the new layer inside the
+         group being edited, and the flat index means nothing there — the rows on screen are a subtree.
+         A layer added while editing a group must still land in the group. */
+      const g0 = FM.groupContext;
+      try {
+        FM.groupContext = 'some-group-id';
+        FM.addAt = 0;
+        const F = FM.makeLayer('shape', { name: 'INGROUP', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#f0f' });
+        FM.insertLayer(F);
+        if (F.parent !== 'some-group-id') throw new Error('a layer added while editing a group did not get the group as its parent');
+      } finally { FM.groupContext = g0; }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.addAt = at0; FM.selectLayer(null); FM.refreshAll();
+      await sleep(150);
+    }
+  });
+
+  test('the Add layer can be dragged by its grip, and the grip does not steal the tap (queue 294)', { item: 'add-row' }, async function () {
+    /* "you can press the three lines on the right side drag it up and down" — the same grip every other
+     * row has, in the same place. The second half of the title is the trap: the row is one big tap
+     * target that opens the add menu, so a grip that also fired that tap would open a sheet every time
+     * you tried to move it. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice();
+    const at0 = FM.addAt;
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(280);
+      if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) return;
+      FM.scene.layers.length = 0; FM.addAt = 0;
+      ['A', 'B', 'C'].forEach(function (n) {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#888' });
+        L.start = 0; L.duration = 4; FM.insertLayer(L);
+      });
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(280);
+      const grip = document.querySelector('.tl-addrow-grip');
+      if (!grip) throw new Error('the Add layer has no ≡ grip — clause 6 is that it reorders like every other row');
+      const g = grip.getBoundingClientRect();
+      const at = (t, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: Math.round(g.left + g.width / 2), clientY: y, pointerId: 1, pointerType: 'touch', buttons: 1 }));
+      at('pointerdown', Math.round(g.top + g.height / 2), grip);
+      await sleep(60);
+      const rows = [].slice.call(document.querySelectorAll('.track-row:not(.tl-addrow)'));
+      if (rows.length < 3) throw new Error('only ' + rows.length + ' layer rows — not enough to drag between');
+      const target = rows[1].getBoundingClientRect();
+      at('pointermove', Math.round(target.top + target.height * 0.8));
+      await sleep(160);
+      if (FM.addAt === 0) throw new Error('dragging the grip down did not move the Add row (index still 0)');
+      if (!document.querySelector('.tl-addrow-dragging')) throw new Error('the row does not look grabbed while it is being dragged — it is rebuilt on every boundary it crosses, so the state has to survive that');
+      at('pointerup', Math.round(target.top + target.height * 0.8));
+      await sleep(120);
+      const landed = FM.addAt;
+      if (!landed) throw new Error('the row snapped back to the top when the finger came off');
+
+      // The tap must still work — the grip stops its own press, not the row's.
+      const sheet = document.getElementById('add-sheet');
+      if (sheet) {
+        sheet.classList.remove('open');
+        document.querySelector('.tl-addrow').click();
+        await sleep(260);
+        if (!sheet.classList.contains('open')) throw new Error('after a drag, tapping the row no longer opens the add menu');
+        if (FM.mobile.closeAdd) FM.mobile.closeAdd();
+      }
+      if (FM.addAt !== landed) throw new Error('tapping the row moved it from ' + landed + ' to ' + FM.addAt);
+    } finally {
+      if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.addAt = at0; FM.selectLayer(null); FM.refreshAll();
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(240);
+    }
+  });
+
   /* ---------------- queue 291: the signature edge-light on two more menus ---------------- */
 
   test('the sound-effects sheet wears the SAME travelling edge-light as the project card (queue 291)', { item: 'glint-hosts' }, async function () {

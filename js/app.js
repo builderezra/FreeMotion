@@ -1576,9 +1576,27 @@ window.FM = window.FM || {};
    *
    * A helper rather than eight more copies of the line, precisely so the ninth creator cannot forget
    * it. `!layer.parent` is deliberate: a caller that has already chosen a parent keeps it. */
+  /* WHERE the Add row is sitting (queue 294, clause 5). An index into scene.layers: 0 puts it above
+   * everything, layers.length puts it at the bottom. This is the whole of "the actual cool
+   * functionality part" of his idea — "you can drag that first and then add stuff and when you do add
+   * something it'll just go below the add one" — because the row draws at this index and new layers
+   * land at it, which leaves the row sitting directly above whatever you just made.
+   * It lives here rather than in the timeline because the timeline is a VIEW: the add path has to know
+   * the number even when the timeline has not been built (a fresh project, an AI op, an import). */
+  FM.addAt = 0;
+  FM.clampAddAt = function () {
+    const n = (FM.scene && FM.scene.layers) ? FM.scene.layers.length : 0;
+    FM.addAt = Math.max(0, Math.min(typeof FM.addAt === 'number' ? FM.addAt : 0, n));
+    return FM.addAt;
+  };
   FM.insertLayer = function (layer) {
     if (FM.groupContext && !layer.parent) layer.parent = FM.groupContext;
-    FM.scene.layers.unshift(layer);   // the ONE unshift — every creator routes through here
+    /* INSIDE EDIT GROUP the flat index means nothing — the rows on screen are one group's subtree, not
+       scene.layers — so that path keeps the old top-insert until the Add row understands subtrees.
+       Getting this wrong would put a layer you added while editing a group somewhere outside it, which
+       is the exact failure this helper was written for in the first place. */
+    const at = FM.groupContext ? 0 : FM.clampAddAt();
+    FM.scene.layers.splice(at, 0, layer);   // the ONE insert — every creator routes through here
     return layer;
   };
 
