@@ -3339,15 +3339,27 @@ body.hm-selecting .hm-card { touch-action: none; }
    overscan against a 13px translate — 0.2px of margin, before the .34deg twist takes ~8px at the
    corners of a 1400px width. 1.06 gives 26px against a worst case near 21, which holds on short windows
    too. It tapers with the shake and lands exactly at 1, so the screen finishes where it started. */
+/* THE OVERSCAN SCALE IS GONE (queue 250). Ezra: "THe slam easter egg is still broken as fuck, it just
+   bugs out the screen on pc and doesnt look good at all, needs a lot of attention."
+   The 1.06 was never a look — it was the fix for the shake uncovering the editor at the edges, replacing
+   an earlier flat ring that had itself become the black bar. It works on a phone and it is wrong on a
+   desktop: scaling the WHOLE fixed, inset:0 home screen by 6% pushes its chrome off the viewport.
+   Measured frozen mid-shake at 1440x900: the screen rendered 1522x953 at (-40,-30) — the wordmark
+   clipped off the top-left corner and the search / Select / cog clipped off the top-right. On a phone
+   6% of a narrow header is barely anything; across a 1440px header it is the controls leaving the
+   screen, which is exactly "bugs out the screen on pc".
+   The shake itself was never the problem, so it is unchanged — same 13px of travel, same .34deg twist.
+   What changed is how the edges stay covered: home's own painted field now overhangs its box (see
+   #home-screen::before), so there is nothing to uncover and nothing has to be scaled to hide it. */
 @keyframes hm-slam {
-  0%   { transform: translate3d(0, 13px, 0) rotate(0deg) scale(1.06); }
-  12%  { transform: translate3d(0, -11px, 0) rotate(-.34deg) scale(1.06); }
-  26%  { transform: translate3d(3px, 8px, 0) rotate(.26deg) scale(1.05); }
-  40%  { transform: translate3d(-3px, -6px, 0) rotate(-.19deg) scale(1.04); }
-  55%  { transform: translate3d(2px, 4px, 0) rotate(.12deg) scale(1.03); }
-  70%  { transform: translate3d(-1px, -2.5px, 0) rotate(-.07deg) scale(1.018); }
-  85%  { transform: translate3d(0, 1px, 0) rotate(0deg) scale(1.008); }
-  100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  0%   { transform: translate3d(0, 13px, 0) rotate(0deg); }
+  12%  { transform: translate3d(0, -11px, 0) rotate(-.34deg); }
+  26%  { transform: translate3d(3px, 8px, 0) rotate(.26deg); }
+  40%  { transform: translate3d(-3px, -6px, 0) rotate(-.19deg); }
+  55%  { transform: translate3d(2px, 4px, 0) rotate(.12deg); }
+  70%  { transform: translate3d(-1px, -2.5px, 0) rotate(-.07deg); }
+  85%  { transform: translate3d(0, 1px, 0) rotate(0deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
 }
 .hm-thumb { position: relative; flex: 0 0 86px; width: 86px; height: 86px; border-radius: 11px; background: #05070b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
@@ -4453,9 +4465,20 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    back into normal flow and the whole home screen vanished behind the editor. Only the stacking
    context is needed, and isolation gives that without touching position. */
 #home-screen { isolation: isolate; }
+/* inset is NEGATIVE so this field overhangs the screen it paints (queue 250). The slam shifts
+   #home-screen by up to 13px and twists it .34deg, which at a 1440px width swings the corners another
+   ~5px; an inset:0 field would leave that sliver showing the editor behind. The previous answers to
+   that were a flat ring (which became the black bar, queue 237/239) and then a 6% overscan scale of the
+   whole screen (which threw the desktop chrome off the viewport, queue 250). Overhanging the PAINT
+   instead costs nothing, moves no content, and is the same surface — light and all — so there is no
+   second thing to keep in step. The background-COLOUR comes with it, or the overhang would be
+   translucent gradient over bare editor.
+   8% of the shorter side is ~72px against a worst case near 18, and it still holds once this layer's
+   own drift (±4% and up to 1.04 scale) has moved it. */
 #home-screen::before {
-  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background:
+  content: ""; position: absolute; inset: -8%; z-index: -1; pointer-events: none;
+  background-color: var(--bg, #0b0e14);
+  background-image:
     radial-gradient(78vmax 58vmax at 12% -8%,  rgba(41, 217, 187, .16), transparent 62%),
     radial-gradient(66vmax 52vmax at 96% 8%,   rgba(122, 92, 255, .14), transparent 60%),
     radial-gradient(88vmax 62vmax at 62% 108%, rgba(38, 132, 255, .13), transparent 64%);

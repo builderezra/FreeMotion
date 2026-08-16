@@ -16765,6 +16765,59 @@
     }, 375);
   });
 
+  /* ---------------- queue 250: the slam "bugs out the screen" on PC ----------------
+   * "THe slam easter egg is still broken as fuck, it just bugs out the screen on pc and doesnt look
+   * good at all". The shake was fine; the 6% OVERSCAN was not. It existed to stop the shake uncovering
+   * the editor at the edges (after an earlier flat ring turned out to be the black bar, 237/239), and
+   * scaling a fixed inset:0 home screen by 6% throws its chrome off the viewport. Measured frozen
+   * mid-shake at 1440x900 before the fix: the screen rendered 1522x953 at (-40,-30) — the wordmark off
+   * the top-left, the search/Select/cog off the top-right. */
+
+  test('the slam shakes the home screen without scaling it off the viewport (queue 250)', { item: 'slam' }, async function () {
+    const root = document.getElementById('home-screen');
+    if (!root) throw new Error('no #home-screen to shake');
+    const hadSlam = root.classList.contains('hm-slam');
+    const prevPlay = root.style.animationPlayState, prevDelay = root.style.animationDelay;
+    try {
+      root.classList.add('hm-slam');
+      root.style.animationPlayState = 'paused';
+      const worst = { scale: 1, over: 0 };
+      for (const d of ['-0ms', '-40ms', '-60ms', '-110ms', '-170ms', '-240ms']) {
+        root.style.animationDelay = d;
+        const m = new DOMMatrixReadOnly(getComputedStyle(root).transform);
+        const sc = Math.hypot(m.a, m.b);                       // uniform scale out of the matrix
+        if (Math.abs(sc - 1) > Math.abs(worst.scale - 1)) worst.scale = sc;
+        const b = root.getBoundingClientRect();
+        const over = Math.max(-b.x, -b.y, b.right - window.innerWidth, b.bottom - window.innerHeight, 0);
+        if (over > worst.over) worst.over = over;
+      }
+      /* A scale is the defect itself: it magnifies the whole surface, so every control drifts outward
+         proportionally and the ones at the edges leave. 13px of translate is the shake and is fine. */
+      if (Math.abs(worst.scale - 1) > 0.005)
+        throw new Error('the slam scales the home screen by ' + worst.scale.toFixed(3) + 'x — on a wide window that pushes the header controls off the edges');
+      if (worst.over > 20)
+        throw new Error('the slam pushes the home screen ' + Math.round(worst.over) + 'px past the viewport — more than its own travel, so something is magnifying it');
+    } finally {
+      if (!hadSlam) root.classList.remove('hm-slam');
+      root.style.animationPlayState = prevPlay; root.style.animationDelay = prevDelay;
+    }
+  });
+
+  test('home\'s own paint overhangs its box, so the shake cannot uncover the editor (queue 250)', { item: 'slam' }, function () {
+    /* The overscan was doing a real job — without something covering the edges the shake shows the
+       editor through (queue 144). The paint field overhangs now instead, so this asserts the guarantee
+       the scale used to provide. Without it, removing the scale would simply reopen the older bug. */
+    const root = document.getElementById('home-screen');
+    if (!root) throw new Error('no #home-screen');
+    const cs = getComputedStyle(root, '::before');
+    const parts = (cs.inset && cs.inset !== 'auto' ? cs.inset : [cs.top, cs.right, cs.bottom, cs.left].join(' ')).split(/\s+/);
+    const nums = parts.map(parseFloat).filter(n => isFinite(n));
+    if (!nums.length) throw new Error('could not read the paint layer inset: ' + cs.inset);
+    const worst = Math.max(...nums);
+    if (worst > -18)
+      throw new Error('home\'s paint layer only reaches ' + worst + 'px past its box — the shake travels ~13px plus ~5px of corner swing, so the edges would show the editor');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

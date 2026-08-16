@@ -2387,7 +2387,28 @@ better still, keep working inside the turn rather than parking work for a later 
       attempt to reproduce failed and a phone-width check is the likeliest reason.
       He rates it *"needs a lot of attention"*, so treat it as a rebuild of the effect rather than a
       one-line fix, and if it cannot be made to look good on PC, offer turning it off there.
-
+      **FOUND AND FIXED v8.54 — it was the OVERSCAN, not the shake.** Reproduced at 1440x900 by freezing
+      the animation mid-shake, which is the only way to look at a 420ms effect properly.
+      | | frozen mid-shake at 1440x900 |
+      |---|---|
+      | before | screen rendered **1522x953 at (-40,-30)** — wordmark clipped off the top-left, search /
+        Select / cog clipped off the top-right |
+      | after | **≤13px of travel**, nothing clipped, every control on screen |
+      **Why it was there, because it was not a mistake.** The shake moves home 13px and twists it .34deg,
+      and home is `position: fixed; inset: 0` — so for those 420ms the edges uncovered the EDITOR behind
+      it (#144). That was first patched with a flat ring, which later became the black bar you reported
+      (#237/#239), and then with a 6% overscan scale so home's own lit surface filled the gap. The scale
+      works on a phone. On a desktop, magnifying a full-viewport surface by 6% moves everything outward
+      proportionally, and the things at the edges — your header controls — leave the screen. That is the
+      "bugs out" you saw, and it is why it reads as broken on PC and not on your phone.
+      **The fix keeps the guarantee and drops the cost:** home's own paint field now OVERHANGS its box
+      (`::before` at `inset: -8%`, carrying the background colour as well as the light), so there is
+      nothing to uncover and nothing has to be scaled to hide it. The shake is untouched — same 13px,
+      same .34deg. Both halves are tested: one asserts the animation never scales, the other asserts the
+      paint still overhangs far enough, so removing the scale cannot quietly reopen #144.
+      **LEFT OPEN for your eye.** You said it "doesnt look good at all" and "needs a lot of attention" —
+      the screen-breaking part is measured and fixed, but whether the slam now LOOKS right is yours to
+      judge. Say if it still does not and this is live again.
 
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
