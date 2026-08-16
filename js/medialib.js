@@ -76,7 +76,12 @@ window.FM = window.FM || {};
 
     // Is this entry a song? Entries written before the `audio` flag existed are recognised by the
     // shape they already have: not an image, and no picture dimensions.
-    isAudio(e) { return !!e && (e.audio === true || (e.kind !== 'image' && !e.w && !e.h)); },
+    /* An explicit flag WINS, in both directions. It used to be `e.audio === true || <shape guess>`,
+     * so writing `audio: false` on a row changed nothing — the guess ran anyway and a dimensionless
+     * video was still called a song. Caught by the test for the backfill fix, which is the only
+     * reason that fix is not inert. The shape heuristic now applies ONLY where the flag is absent,
+     * which is exactly what it was written for: rows saved before the flag existed. */
+    isAudio(e) { return !!e && (e.audio === true || (e.audio === undefined && e.kind !== 'image' && !e.w && !e.h)); },
 
     // Every IDB key the library still points at — pruneOrphans must not sweep these.
     keys() { return readIndex().map(e => e.key).filter(Boolean); },
@@ -125,11 +130,26 @@ window.FM = window.FM || {};
         // decoded frame yet paints NOTHING, which used to bake a solid black tile into the cache
         // forever. Wait for a real frame first, and bail rather than cache a blank.
         const ok = e.kind === 'image' ? true : await frameReady(loaded.el);
+        this._learn(mid, loaded.width, loaded.height);   // backfilled rows learn what they actually are
         url = ok ? makeThumb(loaded) : null;
         if (loaded.url) URL.revokeObjectURL(loaded.url);   // this element was only ever for the thumbnail
       } catch (err) { return null; }
       if (url) { memThumb.set(mid, url); FM.storage.writeMedia(THUMB + mid, url); }
       return url;
+    },
+
+    /* Write back what a decode just taught us about a backfilled entry, so the guess above becomes a
+       fact. A backfilled row has w:0/h:0 and no idea whether it is a clip or a song; the moment its
+       file is actually loaded we know both. Songs land back under Audio, clips keep their real size.
+       Only ever touches rows that still have no dimensions, so a real import is never rewritten. */
+    _learn(mid, width, height) {
+      const list = readIndex();
+      const e = list.find(x => x.mid === mid);
+      if (!e || e.fp !== '' || (e.w && e.h)) return false;
+      const isSong = !(width > 0 && height > 0);
+      e.w = width || 0; e.h = height || 0; e.audio = isSong;
+      writeIndex(list);
+      return true;
     },
 
     remove(mid) {
@@ -170,6 +190,25 @@ window.FM = window.FM || {};
 
     // One-time sweep so the library isn't empty on the day it ships: every media layer in every
     // stored project becomes an entry, pointing at the blob that layer already owns.
+    /* Heal an index that backfill already poisoned, once. Targets `fp === ''` — backfill's own
+       marker — so it CANNOT touch a real import, which always carries a fingerprint from add(). That
+       is what makes this safe: a genuine song imported normally has audio:true and a real fp, and is
+       never considered here. Entries that really are songs get corrected back by getThumb the first
+       time their tile is drawn. */
+    repairBackfilled() {
+      try { if (localStorage.getItem('fm.medialibAudioFix')) return 0; } catch (e) { return 0; }
+      const list = readIndex();
+      let n = 0;
+      list.forEach(e => {
+        if (!e || e.fp !== '' || e.kind === 'image') return;
+        if (e.audio !== undefined) return;
+        e.audio = false; n++;
+      });
+      if (n) writeIndex(list);
+      try { localStorage.setItem('fm.medialibAudioFix', '1'); } catch (e) {}
+      return n;
+    },
+
     backfill() {
       try { if (localStorage.getItem('fm.medialibFilled')) return; } catch (e) { return; }
       const list = readIndex();
@@ -188,7 +227,14 @@ window.FM = window.FM || {};
           found.push({
             mid: newMid(), key: l.id, fp: '',
             name: l.name || (l.type === 'video' ? 'Video' : 'Photo'),
-            kind: l.type, w: 0, h: 0, dur: l.duration || 0, size: 0,
+            /* audio:false EXPLICITLY (BUG-HUNT: "the whole pre-existing video library is filed under
+               Add → Audio as songs"). backfill reads layer JSON, never the file, so it hardcodes
+               w:0/h:0 — and isAudio() infers "song" from exactly that shape, so every clip the user
+               ever placed vanished from the Media tab and reappeared under Audio with a music note.
+               It cannot tell a clip from a song here (an mp3 rides the video path as a 0x0 <video>,
+               and the live media record isAudioOnly needs is not loaded for a closed project), so it
+               states the common case and getThumb heals the rest on first view. */
+            kind: l.type, audio: false, w: 0, h: 0, dur: l.duration || 0, size: 0,
             added: (l._added || 0) || Date.now() - 1,
           });
         });

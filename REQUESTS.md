@@ -1721,6 +1721,18 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **276 — Same pinned-top-row treatment for the MEDIA menu. (16 Aug.)** His words, verbatim:
+      *"Also how I said in the audio section how the different buttons at the top like the three buttons
+      at the top that actually do something and just previous stuff you've added like how I said those
+      should stay on screen all the the same thing should happen to the media menu where like those stay
+      at the top and like a separated and like by line or like whatever and then you can only like scroll
+      the two rows underneath that and not the top row"*.
+      **Do this WITH #269, not after it** — it is the same mechanism applied to a second panel, and
+      building it twice is how the two end up subtly different. He names a separator explicitly here
+      ("separated and like by line"), which also settles how #269 should look.
+      Note his phrasing "the two rows underneath": in the media panel only the rows BELOW the pinned
+      action row pan.
+
 - [ ] **275 — Mobile shapes menu scrolls up and down; it should all fit. (16 Aug.)** His words, verbatim:
       *"On mobile the shapes menu has like a thing where you can scroll up and down but it shouldn't have
       that because on mobile it should all just fit on the screen nice and you shouldn't need to scroll
@@ -2723,6 +2735,12 @@ better still, keep working inside the turn rather than parking work for a later 
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
 - [ ] **Clear the rest of the BUG-HUNT backlog** (~59 items).
+      *Progress 16 Aug:* three struck off — the two media-leak findings (v8.44 + v8.46) and the
+      library-misfiling one (v8.47). Worth knowing before picking more off it: the file's own warning
+      is to re-check the code rather than trust its line numbers, and that cuts both ways. The two
+      leak entries were **still live after a fix I thought had covered them**, because that fix
+      addressed the defect class and missed the documented instance. Read the file as a list of
+      instances to test a fix against, not only as a to-do list.
 
 ### Held, on purpose
 - [ ] **The visual identity pass before any public release.** The UI is modelled on Alight Motion and

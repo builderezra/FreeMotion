@@ -16494,6 +16494,40 @@
     }
   });
 
+  /* ---- BUG-HUNT: every clip you ever used was filed under Add -> Audio as a song ----
+   * backfill() seeds one library row per media layer by reading LAYER JSON, never the file, so it
+   * hardcodes w:0/h:0 — and isAudio() infers "song" from exactly that shape (not an image, no
+   * dimensions). So a backfilled kind:'video' row satisfies the heuristic, the Media tab shows only
+   * photos, and the whole clip library turns up under Audio drawn with a music note.
+   * The report's prescribed fix — audio:false on every backfilled row — is half right: an mp3 rides
+   * the VIDEO path as a 0x0 <video>, so that would misfile genuine songs the other way. It states the
+   * common case AND heals from the real file on first view. */
+
+  test('a backfilled video is not mistaken for a song', { item: 'medialib-audio' }, function () {
+    const L = FM.mediaLib;
+    if (!L || !L.isAudio) throw new Error('FM.mediaLib.isAudio missing');
+    // the exact row shape backfill writes, before and after the fix
+    const poisoned = { mid: 'm1', key: 'k1', fp: '', name: 'Clip', kind: 'video', w: 0, h: 0 };
+    if (!L.isAudio(poisoned)) throw new Error('the heuristic no longer treats a dimensionless video as audio, so this test cannot see the defect it is for');
+    const fixed = { mid: 'm2', key: 'k2', fp: '', name: 'Clip', kind: 'video', audio: false, w: 0, h: 0 };
+    if (L.isAudio(fixed)) throw new Error('an explicit audio:false is still being read as a song — the Media tab stays empty');
+    // and a genuine song must still be a song
+    if (!L.isAudio({ mid: 'm3', fp: 'abc', kind: 'video', audio: true, w: 0, h: 0 })) throw new Error('a real song stopped being classified as audio');
+    // a real import (which always has a fingerprint) with a picture is not audio
+    if (L.isAudio({ mid: 'm4', fp: 'abc', kind: 'video', audio: false, w: 1920, h: 1080 })) throw new Error('a real clip was classified as audio');
+  });
+
+  test('backfill records the flag instead of leaving it to be inferred', { item: 'medialib-audio' }, function () {
+    /* Reads the SOURCE of backfill rather than running it — backfill walks every fm.proj.* key in
+       localStorage and is one-shot behind fm.medialibFilled, so invoking it in the suite would either
+       do nothing or rewrite the real library. Asserting on the literal it writes is the honest
+       compromise, and it still fails if the flag is dropped. */
+    const src = String(FM.mediaLib.backfill);
+    if (!/audio:\s*false/.test(src)) throw new Error('backfill no longer writes an explicit audio flag — dimensionless video rows will be inferred as songs again');
+    if (typeof FM.mediaLib.repairBackfilled !== 'function') throw new Error('there is no repair pass, so an index poisoned before the fix stays broken forever');
+    if (typeof FM.mediaLib._learn !== 'function') throw new Error('nothing heals a backfilled row from the real file, so a genuine song stays misfiled under Media');
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
