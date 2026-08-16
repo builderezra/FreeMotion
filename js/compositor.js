@@ -691,7 +691,7 @@ window.FM = window.FM || {};
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
     ], color: true, defColor: '#ffd23f', colorLabel: 'Start', color2: true, defColor2: '#ff5e5e', color2Label: 'End' },
     // ---- batch 31: the two grading gaps ----
-    // Levels — set a real black and white point, per channel. Everything else in Color & Light
+    // Levels — set a real black and white point, per channel. Everything else in Colouring
     // pushes the image around; this is the one that says where 0 and 255 actually are.
     { type: 'levels', label: 'Levels', desc: 'Sets where black and white actually fall. Pull the input points in to fill the range, or push the output points in to fade it.', params: [
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0 },

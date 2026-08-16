@@ -13964,7 +13964,7 @@
   test('tiles mounted before they are attached survive the art-decode invalidation', { item: 'fx-thumb-race' }, async function () {
     if (!FM.fxThumbs || !FM.fxThumbs.queueState) throw new Error('FM.fxThumbs.queueState is missing — this test cannot see what it is testing');
     const types = FM.fxRegistry.byCategory('color').filter(Boolean).slice(0, 8).map(r => r.type);
-    if (types.length < 4) throw new Error('not enough Colour & Light effects to test with');
+    if (types.length < 4) throw new Error('not enough Colouring effects to test with');
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-9999px;top:0;width:400px';
     const cvs = types.map(t2 => {
@@ -17426,6 +17426,41 @@
       try { if (!wasHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       try { if (!wasSheet) FM.shortcuts.hide(); } catch (e) {}
       await sleep(120);
+    }
+  });
+
+  /* ---------------- queue 287 + 288: the titles lost their ampersands ---------------- */
+
+  test('no effects-browser category title still carries an ampersand (queue 287/288)', { item: 'amp-sweep' }, function () {
+    /* "any other title like background and opacity that has the & in it, replace the & with a /", and
+     * "Change colour and light effect menu to just Colouring".
+     * The layer menu's nine cards are covered by the card-order test, which carries the new names as its
+     * spec. This one guards the OTHER title tables — the effects browser, the filters and the audio
+     * effects — because those are lists a new category gets added to, and the next one added with an
+     * ampersand in it should fail here rather than ship. */
+    /* Read through the PUBLIC accessors, not from a table lifted out of the module. The first version
+       of this looked for `FM.fxRegistry.categoryLabels`, which does not exist — the labels are
+       module-local — so it found nothing to check and passed while saying nothing at all. */
+    const groups = [];
+    if (FM.fxRegistry && FM.fxRegistry.categories) groups.push(['effects', FM.fxRegistry.categories()]);
+    if (FM.audioFxRegistry && FM.audioFxRegistry.categories) groups.push(['audio effects', FM.audioFxRegistry.categories()]);
+    if (FM.filters && FM.filters.sections) groups.push(['filters', FM.filters.sections()]);
+    if (!groups.length) throw new Error('no category list is reachable, so this test cannot check anything');
+    const bad = [];
+    let effectLabels = [];
+    groups.forEach(function (g) {
+      const list = g[1] || [];
+      list.forEach(function (c) {
+        const label = (c && c.label) || '';
+        if (g[0] === 'effects') effectLabels.push(label);
+        if (label.indexOf('&') >= 0) bad.push(g[0] + ': "' + label + '"');
+      });
+    });
+    if (bad.length) throw new Error('category titles still using "&": ' + bad.join(', ') + ' — he asked for "/" in titles');
+    /* …and the one he named by name. Asserted directly, because "no ampersands" would also be satisfied
+       by "Colour Light" or by deleting the category. */
+    if (effectLabels.length && effectLabels.indexOf('Colouring') < 0) {
+      throw new Error('the effects browser has no "Colouring" category — it reads ' + effectLabels.join(' | '));
     }
   });
 

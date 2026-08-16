@@ -60,12 +60,13 @@ and the text anchor doing nothing.
   because it's audio automation I can't hear. Say the word and you can listen.
 - **74** — I did NOT delete the left-right pager. *"Replacing the swipe-right"* reads two ways and
   I won't remove a working gesture on a coin flip. One line either way.
-- **"Color & Light"** is spelled the American way in the effects browser, which sits oddly next to
-  the "Colouring" rename you asked for. Your app's voice, not mine to change unasked.
+- ~~**"Color & Light"** is spelled the American way in the effects browser~~ — **settled v8.80.** You
+  asked for it to become "Colouring" (#288), which removes the American spelling and the ampersand
+  together, so there is nothing left to decide.
 
-One fix I **reverted rather than ship**: the stage-resize hook. It's correct, but a ResizeObserver
-never fires in either browser I can drive here, so I couldn't demonstrate it — and a resize hook that
-silently doesn't fire looks exactly like one that works. BUG-HUNT.md says how to finish it.
+~~One fix I **reverted rather than ship**: the stage-resize hook.~~ — **shipped v8.76 (#284).** The
+observer still does not fire in either browser here, measured again; so the resizers call the gizmo
+directly instead, which is demonstrable, and the observer is only a belt for browsers where it works.
 
 ---
 
@@ -2948,13 +2949,25 @@ better still, keep working inside the turn rather than parking work for a later 
       is a judgement call per effect — list what moves where in the entry when it is built, so the
       choices are reviewable rather than silent.
 
-- [ ] **288 — Rename the "Colour & Light" effect menu to just "Colouring". (16 Aug.)** His words,
+- [x] **288 — Rename the "Colour & Light" effect menu to just "Colouring". DONE v8.80.** (16 Aug.) His words,
       verbatim: *"Change colour and light effect menu to just Colouring"*.
       **This also settles a question that has sat open for weeks.** The standing note in this file says:
       *"'Color & Light' is spelled the American way in the effects browser, which sits oddly next to the
       'Colouring' rename you asked for. Your app's voice, not mine to change unasked."* Renaming it to
       **Colouring** removes the American spelling and the ampersand in one go — do both together and
       strike that note.
+
+      **DONE v8.80**, and the note at the top of this file is struck — as is the other one beside it,
+      about the reverted stage-resize hook, which shipped as #284 in v8.76. Two standing questions off
+      the pile.
+      The comments in the compositor and the thumbnail engine that named the category were updated with
+      it: a rename that leaves half the codebase calling it something else is how the next person ends
+      up looking for a menu that no longer exists.
+      **Guarded by a new sweep test** rather than by one hard-coded string: it walks the effects, filter
+      and audio-effect category tables through their public accessors and fails on ANY ampersand in a
+      title, so the next category added with one in it fails before it ships. (Its first version looked
+      for a table that does not exist — the labels are module-local — so it checked nothing and passed;
+      the mutation check is what said so.)
 
 - [x] **287 — "Move & Transform" becomes "Position / Scale"; every other "&" becomes "/". DONE v8.79.** (16 Aug.)
       His words, verbatim: *"Change the name of move and transform to position / Scale. And any other

@@ -109,7 +109,7 @@ window.FM = window.FM || {};
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
   const CATEGORY_LABELS = {
-    color: 'Colour & Light',
+    color: 'Colouring',          // queue 288 — "Change colour and light effect menu to just Colouring"
     blur: 'Blur',
     distort: 'Distortion / Warp',
     proc: 'Procedural',

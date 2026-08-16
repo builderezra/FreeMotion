@@ -318,7 +318,7 @@ window.FM = window.FM || {};
     g.fillStyle = '#2fd0b5'; g.fillRect(4 * u, 4 * u, 18 * u, 18 * u);
   }
 
-  // Category key -> the art its tiles are built from. Colour & Light keeps the landscape; every
+  // Category key -> the art its tiles are built from. Colouring keeps the landscape; every
   // other section gets art built for what that family actually does.
   /* Five sections now lead with a photograph, each chosen for what its family needs to show, with
    * the drawn art kept behind it as the pre-decode fallback:
@@ -341,7 +341,7 @@ window.FM = window.FM || {};
   /* The remaining nine photographs, wired to the individual effects they demonstrate better than
    * their section's default. Applied ON TOP of SUBJECT_OF so the FORM already reasoned out below is
    * preserved — an effect that needs a card keeps its card, it just gets a photograph on it. (#66) */
-  /* Reassigned across Colour & Light so neighbouring tiles do not share a picture (queue 110). Ezra:
+  /* Reassigned across Colouring so neighbouring tiles do not share a picture (queue 110). Ezra:
    * "you can tell the effects don't work because all the images don't show any change in the effects
    * menu." Most of the section had no photo of its own and fell through to the SAME section default,
    * so forty tiles were one photograph with a succession of quiet grades on it — which reads exactly
