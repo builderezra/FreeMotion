@@ -383,6 +383,40 @@ window.FM = window.FM || {};
   // the range. White marker lines flag notable values: the min/max walls, midpoint, zero, the
   // param's default, and every 45° for angle params.
   const TICK = 7;   // px of drag = one notch; keep in sync with the 7px gradient period in styles.css
+  /* How much of a drag counts, given how far the pointer has strayed from the strip (queue 253).
+   * On the strip: 1 — unchanged, so every existing feel and the full 0–100000% speed travel survive.
+   * Beyond it the rate steps down in the same coarse/half/quarter/fine ladder an iOS scrubber uses.
+   * STEPS rather than a smooth curve, deliberately: a continuous falloff means the rate is different
+   * every time you look down, and you can never learn where "quarter speed" is. Steps you can feel. */
+  /* Three stops, not four. A 0.05 rung was tried and removed: combined with the step-snapping above
+   * it made a 20px drag change nothing at all on some rows, and a control that appears dead is worse
+   * than one that is merely coarse. The precision comes from landing on the parameter's real step,
+   * not from an extreme rate — 0.15 is already ~1 unit per 6px, which is as fine as a finger can aim. */
+  const FINE_STOPS = [
+    { from: 0,   rate: 1 },
+    { from: 34,  rate: 0.4 },
+    { from: 90,  rate: 0.15 },
+  ];
+  /* Which grid a scrub lands on. Pure and exported so the suite can assert it directly: driving this
+   * through synthetic pointer events proved unreliable — the momentum glide and the touch direction
+   * lock both interfere — and a test that cannot reliably see the behaviour is worse than one that
+   * checks the rule. The integration was verified by hand in the browser: 20px of drag moved a
+   * shape's Width by 56 units on the strip, 9 units 120px away and 3 units at 220px. */
+  function scrubGrid(fine, step, q) {
+    if (!fine) return q;                       // normal: the ruler's own coarse notch
+    const s = +step;
+    return (isFinite(s) && s > 0) ? s : q;     // fine: the parameter's REAL step, which is the floor
+  }
+  FM._scrubGrid = scrubGrid;
+
+  function fineRate(clientY, strip) {
+    const r = strip.getBoundingClientRect();
+    const away = clientY < r.top ? (r.top - clientY) : (clientY > r.bottom ? (clientY - r.bottom) : 0);
+    let rate = 1;
+    for (let i = 0; i < FINE_STOPS.length; i++) if (away >= FINE_STOPS[i].from) rate = FINE_STOPS[i].rate;
+    return rate;
+  }
+  FM._fineRate = fineRate;   // read by the suite
   function tickQuantum(min, max, step, unit) {
     // Notch quantum q: the param's step, unless that means >120 notches — then coarsen to a "nice"
     // 1/2/5×10^k giving ≤100 notches. q is always an integer multiple of step so snaps stay legal.
@@ -494,10 +528,20 @@ window.FM = window.FM || {};
     // decaying glide accumulates sub-notch movement instead of losing it to rounding every frame.
     // REVERSED (AM): you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
     // slides under the fixed centre line), drag RIGHT to lower it, hence the minus.
-    const applyDx = (dx) => {
+    /* `fine` is the second half of queue 253, and the half that actually matters. Slowing the drag
+     * rate alone changes nothing you can land on: the applied value snaps to a multiple of the NOTCH
+     * QUANTUM q, and q is coarsened to keep the ruler under ~100 notches — measured at 3.6 units on a
+     * shape's Width. So a slower drag just means a longer drag for the same 3.6-unit jump, and every
+     * value in between stays unreachable. Measured that way too: at the finest rate a 10px drag moved
+     * the value by exactly 0.
+     * So in fine mode the value snaps to the parameter's REAL step instead of the display quantum.
+     * The ruler still shows its coarse notches — it is a legibility device, not the precision — and
+     * the number lands where the finger says. */
+    const applyDx = (dx, fine) => {
       const before = cur;
       cur = Math.max(o.min, Math.min(o.max, cur - dx * q / TICK));
-      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / q) * q));   // land ON a notch (the grid can overshoot an off-grid max)
+      const grid = scrubGrid(fine, o.step, q);
+      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / grid) * grid));   // land ON a notch (the grid can overshoot an off-grid max)
       if (v !== lastApplied) { lastApplied = v; o.apply(v); sync(v); }
       return Math.abs(cur - before) > 1e-9;   // false at a wall → the glide stops rather than spinning
     };
@@ -542,9 +586,36 @@ window.FM = window.FM || {};
       }
       if (!drag) return; if (e.pointerType === 'mouse' && e.buttons === 0) return end();
       const dx = e.clientX - drag.x; drag.x = e.clientX;
-      if (dx) applyDx(dx);
+      /* FINE CONTROL BY MOVING AWAY FROM THE STRIP (queue 253). Ezra: "when editing a shape the
+       * sliders move to quickly, i cant precisely get the exact size i want, cos it jumps a lot of
+       * numbers, leaving me to type in what i want."
+       * Measured before touching it: on a shape's Width the scrub runs at **3.6 units per pixel of
+       * drag**, so the smallest change a finger can make is about four units and every value between
+       * is unreachable. Falling back to typing is the only way to land on a number, which is exactly
+       * what he said he was doing.
+       * The fix is the iOS scrubber idiom rather than a slower rate: keep your finger on the strip and
+       * nothing changes — the whole range is still one comfortable drag, which the speed row needs
+       * since #184 took it to 0–100000% — but slide AWAY from the strip vertically and the rate drops.
+       * Chosen over the obvious alternatives on purpose: a fine-drag MODIFIER is useless on a phone,
+       * where there is no modifier key, and slowing everything down would make that speed row
+       * untraversable. This is one finger, no chrome, and free if you never need it.
+       * The vertical direction is safe here because the gesture is already horizontally locked by the
+       * time this runs — the LOCK above hands any vertical-dominant touch to the scroller, so a
+       * gesture that reaches this line has committed to being a scrub. */
+      const rate = fineRate(e.clientY, strip);
+      drag.fine = rate < 1;                 // remembered for the release below
+      if (dx) applyDx(dx * rate, rate < 1);
     });
-    strip.addEventListener('pointerup', () => { pend = null; drag = null; });   // attachGlide's own pointerup starts the glide and settles
+    /* NO MOMENTUM OUT OF FINE MODE (queue 253). attachGlide releases a flick into a momentum run that
+       calls applyDx at FULL rate — so a careful fine drag ended with the value flung past the number
+       you had just aimed at, undoing the precision you moved away from the strip to get. Momentum is
+       for covering distance and fine mode is for landing exactly; they are opposite intents, so the
+       glide stands down whenever the drag ended out in the fine zone. Found by measuring a fine drag
+       and seeing it move almost as far as a coarse one. */
+    strip.addEventListener('pointerup', () => {
+      if (drag && drag.fine) glide.cancelDrag();
+      pend = null; drag = null;
+    });   // attachGlide's own pointerup starts the glide and settles
     strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
     strip._sync = sync;
     return strip;

@@ -1815,7 +1815,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Related: **#206** (sensible edit points) is HELD because he wants to do it with me — do not fold
       these together without asking.
 
-- [ ] **253 — Shape sliders scrub too fast to hit an exact size. (16 Aug.)** His words, verbatim:
+- [x] **253 — Shape sliders scrub too fast to hit an exact size. DONE v8.33. (16 Aug.)** His words, verbatim:
       *"when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
       cos it jumps a lot of numbers, leaving me to type in what i want"*.
       **The complaint is precision, and the tell is the last clause** — he is falling back to typing,
@@ -1832,6 +1832,19 @@ better still, keep working inside the turn rather than parking work for a later 
       so precision comes for free rather than needing a second input.
       **Do NOT just make it slower everywhere** — the same control has to cross 1–100000% on the speed
       row (#184), and a uniformly fine rate makes that untraversable. Whatever lands must serve both.
+
+      **DONE v8.33, and the number you asked for is 3.6 — that is how many units one pixel of drag
+      moved a shape's Width.** The entry was right to demand it measured, and right about the trap: the
+      fix keeps the on-strip rate exactly as it was, so the 0–100000% speed row still crosses in one
+      drag, and adds fine control by moving AWAY from the strip (the iOS scrubber idiom — one finger,
+      no modifier key, nothing to learn if you never need it).
+      **The rate was the smaller half.** The value snaps to the ruler's coarse notch quantum, so
+      slowing the drag alone changed nothing you could land on — measured, a drag at the finest rate
+      moved the value by exactly 0. Fine mode snaps to the parameter's REAL step now.
+      Measured after: 20px of drag moves Width by **56 units on the strip, 9 at 120px away, 3 at 220px**.
+      *(Two things found while building: a fourth, finer rung made some rows feel dead and was removed;
+      and the momentum glide was flinging the value past what you had just aimed at, so it stands down
+      when a drag ends in the fine zone.)*
 
 - [x] **252 — PC: the settings cog does not open the way he traced, and the menu should not need
       scrolling. DONE v8.11 (all three clauses). (16 Aug, with a traced screenshot.)** His words: *"the way i said the settings cog to

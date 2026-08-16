@@ -15741,6 +15741,50 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
+   * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
+   * cos it jumps a lot of numbers, leaving me to type in what i want."
+   * Measured first: a shape's Width scrubs at 3.6 units per pixel of drag. But the rate was only half
+   * of it — the applied value SNAPS to the notch quantum, so slowing the drag alone just meant a
+   * longer drag for the same 3.6-unit jump. Both halves are asserted. */
+
+  test('moving away from the strip slows the scrub, and never changes it on the strip', { item: 'fine-scrub' }, function () {
+    if (typeof FM._fineRate !== 'function') throw new Error('FM._fineRate is not exposed, so this could only re-derive the formula and agree with itself');
+    const fake = { getBoundingClientRect: function () { return { top: 100, bottom: 130 }; } };
+    const on = FM._fineRate(115, fake);
+    if (on !== 1) throw new Error('the rate on the strip is ' + on + ' — it must be untouched, or the 0-100000% speed row becomes untraversable');
+    if (FM._fineRate(100, fake) !== 1) throw new Error('the rate changed at the strip edge');
+    const near = FM._fineRate(180, fake), far = FM._fineRate(240, fake), farthest = FM._fineRate(400, fake);
+    if (!(near < on)) throw new Error('moving away did not slow it: ' + near);
+    if (!(far < near)) throw new Error('the rate is not monotonic: ' + near + ' then ' + far);
+    if (!(far <= near)) throw new Error('the rate stops falling: ' + near + ' then ' + far);
+    if (!(farthest > 0.05)) throw new Error('the finest rate is ' + farthest + ' — that low the control feels dead, which is worse than coarse');
+    // symmetric: above the strip must behave the same as below
+    if (FM._fineRate(100 - 140, fake) !== FM._fineRate(130 + 140, fake)) throw new Error('dragging above the strip behaves differently from below');
+  });
+
+  test('fine mode lands on the real step, not the coarse notch', { item: 'fine-scrub' }, function () {
+    /* The half that actually fixes his complaint, and it is not the rate. The applied value snaps to
+       the ruler's NOTCH QUANTUM, which is coarsened to keep the strip legible — measured at ~3.6
+       units on a shape's Width. So a slower drag alone just meant a longer drag for the same jump,
+       and every value in between stayed unreachable. Measured that way too: at the finest rate the
+       value moved by exactly 0 until this changed.
+       Asserted on the rule rather than through synthetic pointer events: driving it that way proved
+       unreliable (the momentum glide and the touch direction-lock both interfere), and a test that
+       cannot reliably see the behaviour is worse than one that checks the rule. The integration was
+       measured by hand — 20px of drag moved a Width by 56 units on the strip, 9 units 120px away and
+       3 units at 220px, landing on 235 and 232, values the 3.6 grid could never reach. */
+    if (typeof FM._scrubGrid !== 'function') throw new Error('FM._scrubGrid is not exposed');
+    const q = 20, step = 1;
+    if (FM._scrubGrid(false, step, q) !== q) throw new Error('the normal scrub no longer uses the ruler quantum — the strip and the value would disagree');
+    if (FM._scrubGrid(true, step, q) !== step) throw new Error('fine mode still snaps to the coarse quantum (' + FM._scrubGrid(true, step, q) + ') — that is the floor he was hitting');
+    // a row with no declared step has nothing finer to offer, and must not fall to zero or NaN
+    if (FM._scrubGrid(true, undefined, q) !== q) throw new Error('a step-less row broke fine mode');
+    if (FM._scrubGrid(true, 0, q) !== q) throw new Error('a zero step would divide the value into infinite pieces');
+    // and a fractional step must survive — effect params use 0.05 and 0.02
+    if (FM._scrubGrid(true, 0.05, q) !== 0.05) throw new Error('a fractional step was rounded away');
+  });
+
   /* ---------------- queue 251: the selection cluster's ground ----------------
    * "make the backdrop more subtle, maybe instead of being brighter than everything else make its
    * lightly darker, and also it isnt centred and aligned so fix that." Two faults, and measuring
