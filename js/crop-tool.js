@@ -19,37 +19,16 @@ window.FM = window.FM || {};
   function media() { const l = layer(); return l && FM.media ? FM.media.get(l.id) : null; }
 
   // Same transform math as the point editor, but the content box is the full media (MW×MH).
-  function xform(l) {
-    const t = FM.time, tr = l.transform, sc = FM.evalProp(tr.scale, t) || 1e-6;
-    return {
-      x: FM.evalProp(tr.x, t), y: FM.evalProp(tr.y, t),
-      sx: (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6,
-      sy: (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6,
-      rot: FM.evalProp(tr.rotation, t) * Math.PI / 180,
-      tanX: Math.tan((tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) * Math.PI / 180),
-      tanY: Math.tan((tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) * Math.PI / 180),
-      ax: (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5,
-      ay: (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5,
-      w: MW || 1, h: MH || 1,
-    };
-  }
-  function toCanvas(l, u, v) {   // normalized (u,v) → preview-canvas px
-    const m = xform(l);
-    let px = (u - m.ax) * m.w, py = (v - m.ay) * m.h;
-    let qx = px + m.tanX * py, qy = m.tanY * px + py;
-    qx *= m.sx; qy *= m.sy;
-    const c = Math.cos(m.rot), s = Math.sin(m.rot);
-    return { x: m.x + qx * c - qy * s, y: m.y + qx * s + qy * c };
-  }
-  function toLocal(l, cx, cy) {   // preview-canvas px → normalized (u,v)
-    const m = xform(l);
-    const dx = cx - m.x, dy = cy - m.y, c = Math.cos(-m.rot), s = Math.sin(-m.rot);
-    let sx = (dx * c - dy * s) / m.sx, sy = (dx * s + dy * c) / m.sy;
-    const det = (1 - m.tanX * m.tanY) || 1e-6;
-    const rx = (sx - m.tanX * sy) / det, ry = (sy - m.tanY * sx) / det;
-    return { u: rx / m.w + m.ax, v: ry / m.h + m.ay };
-  }
-  // Project units, via the one shared conversion — toCanvas() below is misnamed: xform() reads
+  /* THE SHARED PLACEMENT MAP, not a third hand-rolled copy (BUG-HUNT).
+   * These used to rebuild the matrix as T·R·S·K and never read flipH/flipV or the parent chain, while
+   * the compositor draws through T·R·S·K·F. With a flip on, the dim mask, thirds grid and handles all
+   * drew mirrored, and the rect written to layer.crop was the mirror of the box you dragged — stored
+   * in SOURCE pixels, so the export kept the wrong half of the frame too. point-edit.js hit the exact
+   * same bug and was fixed in v6.53; this file never was. Both go through one helper now, which runs
+   * the compositor's own applyLayerTransform, so neither can drift from it again. */
+  function toCanvas(l, u, v) { return FM.layerUVToCanvas(l, u, v, MW || 1, MH || 1); }
+  function toLocal(l, cx, cy) { return FM.layerCanvasToUV(l, cx, cy, MW || 1, MH || 1); }
+  // Project units, via the one shared conversion — toCanvas() is misnamed: the matrix is built from
   // tr.x/tr.y, so it returns PROJECT px, and the pointer has to be in the same space.
   function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }
   function evtToCanvas(e) { return FM.eventToProject(e); }

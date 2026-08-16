@@ -7354,6 +7354,69 @@ window.FM = window.FM || {};
   }
   FM._layerCTM = layerCTM;   // exposed for the motion-blur tests
 
+  /* ONE placement map for every on-canvas editing overlay (BUG-HUNT: "Both files should share one
+   * helper so they cannot drift from the compositor again").
+   *
+   * point-edit.js and crop-tool.js each re-derived the layer matrix by hand as T·R·S·K, and every time
+   * one of them drifted from the compositor the symptom was the same: the overlay tracks your finger
+   * while the rendered thing moves somewhere else, because the inverse is the exact inverse of the
+   * same WRONG matrix. point-edit was fixed in v6.53 by routing through layerCTM; crop-tool never was,
+   * so with a flip on, its dim mask, thirds grid and handles all drew mirrored and the rect it wrote
+   * was the mirror of the box you dragged — in SOURCE pixels, so the export kept the wrong half too.
+   *
+   * layerCTM runs the compositor's own applyLayerTransform into a probe context, so it carries the
+   * parent chain, z-perspective and flips BY CONSTRUCTION rather than by remembering to add them.
+   * The hand-derived fallback below is only for browsers with no getTransform, and it does include
+   * the flips — innermost, before the skew, exactly as applyLayerTransform applies them.
+   * `w`/`h` are the layer's own box: shapeW/shapeH for points, the media's size for a crop. */
+  function uvBasis(layer, w, h) {
+    const tr = layer.transform || {};
+    return { w: w || 1, h: h || 1, ax: anchorX(tr), ay: anchorY(tr) };
+  }
+  FM.layerUVToCanvas = function (layer, u, v, w, h, scene) {
+    const b = uvBasis(layer, w, h);
+    const M = (function () { try { return layerCTM(layer, FM.time, scene || FM.scene); } catch (e) { return null; } })();
+    const lx = (u - b.ax) * b.w, ly = (v - b.ay) * b.h;
+    if (M) return { x: M.a * lx + M.c * ly + M.e, y: M.b * lx + M.d * ly + M.f };
+    const t = FM.time, sc = FM.evalProp(tr0(layer).scale, t) || 1e-6, tr = tr0(layer);
+    const sx = (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6;
+    const sy = (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6;
+    const rot = FM.evalProp(tr.rotation, t) * Math.PI / 180;
+    const tanX = Math.tan((tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) * Math.PI / 180);
+    const tanY = Math.tan((tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) * Math.PI / 180);
+    let px = lx * (layer.flipH ? -1 : 1), py = ly * (layer.flipV ? -1 : 1);   // flip is INNERMOST
+    let qx = px + tanX * py, qy = tanY * px + py;
+    qx *= sx; qy *= sy;
+    const c = Math.cos(rot), s = Math.sin(rot);
+    return { x: FM.evalProp(tr.x, t) + qx * c - qy * s, y: FM.evalProp(tr.y, t) + qx * s + qy * c };
+  };
+  FM.layerCanvasToUV = function (layer, cx, cy, w, h, scene) {
+    const b = uvBasis(layer, w, h);
+    const M = (function () { try { return layerCTM(layer, FM.time, scene || FM.scene); } catch (e) { return null; } })();
+    if (M) {
+      const det = M.a * M.d - M.b * M.c;
+      if (Math.abs(det) > 1e-12) {
+        const dx = cx - M.e, dy = cy - M.f;
+        return { u: (( M.d * dx - M.c * dy) / det) / b.w + b.ax,
+                 v: ((-M.b * dx + M.a * dy) / det) / b.h + b.ay };
+      }
+    }
+    const t = FM.time, tr = tr0(layer), sc = FM.evalProp(tr.scale, t) || 1e-6;
+    const sx = (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6;
+    const sy = (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6;
+    const rot = FM.evalProp(tr.rotation, t) * Math.PI / 180;
+    const tanX = Math.tan((tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) * Math.PI / 180);
+    const tanY = Math.tan((tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) * Math.PI / 180);
+    const dx = cx - FM.evalProp(tr.x, t), dy = cy - FM.evalProp(tr.y, t);
+    const c = Math.cos(-rot), s = Math.sin(-rot);
+    const ux = (dx * c - dy * s) / sx, uy = (dx * s + dy * c) / sy;
+    const det = (1 - tanX * tanY) || 1e-6;
+    const rx = (ux - tanX * uy) / det, ry = (uy - tanY * ux) / det;
+    return { u: (rx / (layer.flipH ? -1 : 1)) / b.w + b.ax,   // undo the flip LAST — it was applied first
+             v: (ry / (layer.flipV ? -1 : 1)) / b.h + b.ay };
+  };
+  function tr0(layer) { return layer.transform || {}; }
+
   // How far does the layer's own outline travel between two times, in project px? Corner distance,
   // not centre distance — a pure rotation or a scale moves no centre at all but smears plenty.
   function layerMotionBetween(layer, t0, t1, scene) {

@@ -22,8 +22,12 @@ window.FM = window.FM || {};
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
   function notify(kind) { cbs.forEach(fn => { try { fn(kind); } catch (e) {} }); }
 
-  // Forward: normalized (u,v) → preview-canvas pixels (mirrors applyLayerTransform: skew → scale →
-  // rotate → translate; parent chain + Z ignored, same as the canvas-edit gizmo).
+  /* Kept ONLY for the handle-length read further down, which wants the raw scale factors rather than
+   * a mapped point. The (u,v) mapping itself no longer goes through here — it uses the shared
+   * FM.layerUVToCanvas / FM.layerCanvasToUV, which run the compositor's own matrix and so carry the
+   * flips, the parent chain and Z by construction. Do NOT route a coordinate through this again: it
+   * composes only T·R·S·K, and every time an overlay has re-derived the matrix by hand it has drifted
+   * and tracked the finger while the rendered thing moved elsewhere. */
   function xform(l) {
     const t = FM.time, tr = l.transform;
     const sc = FM.evalProp(tr.scale, t) || 1e-6;
@@ -50,59 +54,11 @@ window.FM = window.FM || {};
       w: l.shapeW || 400, h: l.shapeH || 300,
     };
   }
-  /* ONE SOURCE OF TRUTH FOR THE PLACEMENT MATRIX.
-   *
-   * Everything below re-derives the compositor's matrix by hand, and every time it has drifted from
-   * the real one it has been the same story: the overlay tracks the finger while the rendered point
-   * goes somewhere else, because toLocal is the exact inverse of the same wrong matrix. It was
-   * missing the flips (fixed in v6.53) and it is still missing the PARENT CHAIN — a parented point
-   * shape's markers sit at raw local coordinates, detached from where the layer is actually drawn.
-   *
-   * FM._layerCTM runs the compositor's own applyLayerTransform into a probe context and hands back
-   * the resulting matrix, so it carries the parent chain, the z-perspective and the flips by
-   * construction. Using it cannot drift, because it IS the thing we were trying to reproduce.
-   *
-   * The hand-derived path below stays as the fallback: _layerCTM returns null where getTransform is
-   * unavailable, and a browser that cannot report a CTM must still be able to edit points. */
-  function ctmOf(l) {
-    if (!FM._layerCTM) return null;
-    try { return FM._layerCTM(l, FM.time, FM.scene); } catch (e) { return null; }
-  }
-  function toCanvas(l, u, v) {
-    const M = ctmOf(l);
-    if (M) {
-      const a0 = xform(l);                                   // anchor + size only; the matrix has the rest
-      const lx = (u - a0.ax) * a0.w, ly = (v - a0.ay) * a0.h;
-      return { x: M.a * lx + M.c * ly + M.e, y: M.b * lx + M.d * ly + M.f };
-    }
-    const m = xform(l);
-    let px = (u - m.ax) * m.w, py = (v - m.ay) * m.h;
-    px *= m.fx; py *= m.fy;                              // flip is INNERMOST — before skew, as the compositor does it
-    let qx = px + m.tanX * py, qy = m.tanY * px + py;   // skew
-    qx *= m.sx; qy *= m.sy;                              // scale
-    const c = Math.cos(m.rot), s = Math.sin(m.rot);
-    return { x: m.x + qx * c - qy * s, y: m.y + qx * s + qy * c };
-  }
-  function toLocal(l, cx, cy) {
-    const M = ctmOf(l);
-    if (M) {
-      const a0 = xform(l);
-      const det = M.a * M.d - M.b * M.c;
-      if (Math.abs(det) > 1e-12) {                           // a degenerate matrix (scale 0) → fall through
-        const dx = cx - M.e, dy = cy - M.f;
-        const lx = ( M.d * dx - M.c * dy) / det;
-        const ly = (-M.b * dx + M.a * dy) / det;
-        return { u: lx / a0.w + a0.ax, v: ly / a0.h + a0.ay };
-      }
-    }
-    const m = xform(l);
-    const dx = cx - m.x, dy = cy - m.y;
-    const c = Math.cos(-m.rot), s = Math.sin(-m.rot);
-    let sx = (dx * c - dy * s) / m.sx, sy = (dx * s + dy * c) / m.sy;
-    const det = (1 - m.tanX * m.tanY) || 1e-6;
-    const rx = (sx - m.tanX * sy) / det, ry = (sy - m.tanY * sx) / det;
-    return { u: (rx / m.fx) / m.w + m.ax, v: (ry / m.fy) / m.h + m.ay };   // undo the flip last, since toCanvas applies it first
-  }
+  /* Both of these are now the SHARED map in compositor.js — the same one crop-tool uses. They were
+     duplicated logic before, and crop-tool's copy had drifted (no flips), which is exactly the failure
+     mode one helper prevents. */
+  function toCanvas(l, u, v) { return FM.layerUVToCanvas(l, u, v, l.shapeW || 400, l.shapeH || 300); }
+  function toLocal(l, cx, cy) { return FM.layerCanvasToUV(l, cx, cy, l.shapeW || 400, l.shapeH || 300); }
   // preview-canvas px ↔ overlay display px
   function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
   function evtToCanvas(e) {

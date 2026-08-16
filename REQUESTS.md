@@ -1721,6 +1721,27 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **281 — Drop the element count from the custom elements section. (16 Aug.)** His words, verbatim:
+      *"get rid of the number from the custom elements section that says how many elements you have"*.
+
+- [ ] **280 — Grey out the layers button when no layer is selected. (16 Aug, with a screenshot he
+      circled.)** His words, verbatim: *"make this button greyed out when a layer isnt selected"*.
+      The circled control is the **stacked-layers icon in the right-hand canvas rail** (below the
+      fullscreen button, above the camera one). So: disabled/greyed styling whenever there is no
+      selection, matching however the rest of the app already shows a disabled control rather than
+      inventing a second look.
+
+- [ ] **278 — PC: the darkened bar behind the bin group is off-centre. (16 Aug, with a screenshot.)**
+      His words, verbatim: *"on pc the bar with the bin on it and stuff, the darkening of the background
+      to sginfiy that theyre seperate and not default functions is still off centred, the bar gos lower
+      than it gos higher, and it looks off"*.
+      This is the darkened pill on the transport row grouping **split · bin · ⋯** — the treatment that
+      marks them as destructive/secondary rather than default transport controls. From the screenshot
+      its vertical padding is asymmetric: **more space below the icons than above**, so the pill sits
+      low against the row rather than centred on it.
+      **"still" matters** — this has been reported before, so measure the actual box rather than eyeball
+      it, and check it at a DESKTOP width in the Studio layout, which is what he is looking at.
+
 - [ ] **276 — Same pinned-top-row treatment for the MEDIA menu. (16 Aug.)** His words, verbatim:
       *"Also how I said in the audio section how the different buttons at the top like the three buttons
       at the top that actually do something and just previous stuff you've added like how I said those
@@ -2251,6 +2272,15 @@ better still, keep working inside the turn rather than parking work for a later 
       animation that plays wrong, or the screen left displaced afterwards? Anything you can say —
       even "the screen stays pushed down" versus "nothing happens" — points at a different one of the
       three suspects above. Until then this cannot be worked on honestly, so it stops holding the queue.
+      **UNBLOCKED 16 Aug — he described it.** His words, verbatim: *"THe slam easter egg is still broken
+      as fuck, it just bugs out the screen on pc and doesnt look good at all, needs a lot of attention"*.
+      So the symptom is **on PC** and it is *"bugs out the screen"* — a visual glitch across the screen,
+      not a no-op and not a crash. That is the detail this entry was waiting for; it is actionable now.
+      Reproduce at a DESKTOP width in the Studio layout (what he uses), not on a phone — the earlier
+      attempt to reproduce failed and a phone-width check is the likeliest reason.
+      He rates it *"needs a lot of attention"*, so treat it as a rebuild of the effect rather than a
+      one-line fix, and if it cannot be made to look good on PC, offer turning it off there.
+
 
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
@@ -2381,6 +2411,13 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **279 — Give the layer menu the Add menu's background. (16 Aug.)** His words, verbatim:
+      *"keep the background of the add menu for the menu when u press on a layer"*.
+      i.e. the panel that opens when you tap a LAYER should use the same background treatment the ADD
+      menu already has, so the two read as the same surface. Check which one he means by "background" —
+      the add menu's panel has a layered gradient (two gradient layers, asserted by a test), not a flat
+      fill, so match that rather than just the base colour.
+
 - [ ] **277 — Rework the effects menu into a multi-select browser with a live preview. (16 Aug, long
       spec + a screenshot he drew on.)** ⚠️ **BIG — design work, and he says himself it is experimental.**
       His words, verbatim and in full:
