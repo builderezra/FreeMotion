@@ -7632,8 +7632,21 @@ window.FM = window.FM || {};
         shR: 0.045,                   // shoulder round: square corners read as a box lid, a big radius domes them
         splitF: 0.575,                // his crotch — a standing pictogram splits at 0.57–0.60 (was 0.681)
         hemF: 0.615,                  // her hem sits just below his crotch; that IS the convention, not a mismatch
-        waistF: 0.360, waistW: 0.140, // where her dress leaves the arm line and starts to flare
-        hemW: 0.205,                  // half hem width
+        flareF: 0.470,                // where her dress leaves the arm line and starts to flare — BELOW her wrist
+        hemW: 0.258,                  // half hem width. Wider than the arms (0.227) on purpose — see ARMS below
+        // ---- arms (queue 160) ----
+        torsoW: 0.090,                // the chest under the shoulder, narrowed so an armpit can exist at all
+        armIn: 0.145, armOut: 0.227,  // 0.082H thick, and 0.055H clear of the chest — the LEG-gap number
+        armTopF: 0.196,               // the arm starts at the shoulder line and is buried in it
+        armSlopeF: 0.268,             // where the shoulder finishes sloping out onto the arm
+        armBotF: 0.545,               // his hand stops just above the crotch line
+        armBotFW: 0.435,              // hers stops above her hem, so the wrist ends against background
+        /* His chest holds its width until BELOW the wrist and only then widens to the hip. The first
+           version widened from 0.520 while the arms ran to 0.575, so the armpit narrowed from 0.055H to
+           0.027H on the way down and PINCHED SHUT at small sizes — leaving the gap above it as an
+           enclosed hole, which the legibility test caught at 24px. The channel has to stay open all the
+           way out, not merely start wide. */
+        holdF: 0.560,
         gapW: 0.0275,                 // half the leg gap → 0.055H ≈ 1.3px at 24px, so he stays two legs
         hipW: 0.118,                  // half hip width → 0.236H ≈ 1.57 head-widths under 2.0 at the shoulder
         footR: 0.026,                 // rounded foot corners
@@ -7658,34 +7671,67 @@ window.FM = window.FM || {};
         );
       };
       P.head = () => circleS(0.5, P.Y(P.headF), P.R(P.headR), P.R(P.headR));
+      /* ARMS (queue 160). Each arm is its OWN polygon unioned into the figure by nonzero fill, never
+         spliced into the body path: his torso is a taper and hers a flare, and the attempt that edited
+         "the body path" for both turned her dress into a box and detached her legs.
+         Its top edge is a diagonal from the body's shoulder corner out and down to the arm's outer
+         line, so the SHOULDER SLOPES INTO THE ARM. The version before this capped the shoulders wide
+         enough to cover the arms instead, and three judges called the result the same thing: a box lid
+         dropped on sticks. The slope point is smooth, so it is a fillet and not a chamfer.
+         The wrist is `P.leg`'s own two arcs at `footR` — the hand and the foot are literally the same
+         terminal, because "a tube end on one limb and a lozenge on the other" is two languages in one
+         figure. Mirroring by sign flips the winding, and nonzero fill turns a backwards arm into a HOLE
+         cut through the torso, so the mirrored copy is reversed back. */
+      P.arm = (sgn, botF) => {
+        const r = P.R(P.footR), yB = P.Y(botF);
+        const xi = P.X(sgn * P.armIn), xs = P.X(sgn * P.shW), xo = P.X(sgn * P.armOut);
+        const lo = Math.min(xi, xo), hi = Math.max(xi, xo);
+        const pts = [[xi, P.Y(P.armTopF + 0.006)], [xs, P.Y(P.armTopF)], [xo, P.Y(P.armSlopeF), 1], [xo, r4(yB - r)]]
+          .concat(arcS(hi - r, yB - r, r, r, 0, PI / 2, 3, true), [[r4(lo + r), yB]],
+                  arcS(lo + r, yB - r, r, r, PI / 2, PI, 3, true), [[xi, r4(yB - r)]]);
+        return sgn < 0 ? pts.slice().reverse() : pts;
+      };
+      // The armpit: off the shoulder, in to the narrow chest, then whatever sides that figure has.
+      P.torso = (sides) => {
+        const right = [[P.X(P.shW), P.Y(0.250)], [P.X(P.torsoW), P.Y(0.295), 1]]
+          .concat(sides.map(m => [P.X(m[0]), P.Y(m[1])]));
+        const left = right.slice().reverse().map(q => { const o = [r4(1 - q[0]), q[1]]; if (q[2]) o.push(1); return o; });
+        return P.shoulders().concat(right, left);
+      };
       return P;
     })();
-    // person: head, one tapering body (shoulders → hips; the arms are part of that mass, as they are
-    // in the sign — the taper is what reads as arms, and there is no wrist step to nick the hip), legs.
+    // person: head, a narrow chest under a sloping shoulder, two legs, and TWO ARMS (queue 160 — "the
+    // two people shapes are good but need arms"). His chest holds 0.090 down to 0.520, BELOW the wrist,
+    // and only widens to the hip after the arms have ended: a man whose silhouette flares outward at
+    // the hip is the woman's silhouette, and these two sit side by side in one menu.
     S.person = (function () {
       const P = PICTO;
       return [
         P.head(),
-        P.shoulders().concat([[P.X(P.hipW), P.Y(P.splitF)], [P.X(-P.hipW), P.Y(P.splitF)]]),
+        P.torso([[P.torsoW, P.holdF], [P.hipW, P.splitF]]),
         P.leg(-P.hipW, -P.gapW, P.splitF),
         P.leg(P.gapW, P.hipW, P.splitF),
+        P.arm(-1, P.armBotF), P.arm(1, P.armBotF),
       ];
     })();
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
-    // woman: the SAME head, the SAME shoulders (she had none — 1.04 head-widths, so her head was as
-    // wide as her body and she read as a bell) and the SAME legs as `person` — see PICTO above. The
-    // only difference is the middle: her sides fall from the shoulder to the arm line and then flare
-    // to a hem, instead of tapering to a hip.
+    // woman: the SAME head, the SAME shoulders, the SAME arms and the SAME legs as `person` — see
+    // PICTO. The only difference is the middle: her sides hold the chest width past the wrist and then
+    // flare to a hem, instead of holding it to the hip.
+    // HER HEM IS WIDER THAN HER ARMS (0.258 against 0.227), and that is the whole reason the pair still
+    // works with arms on. Measured judgement, not taste: with the shipped 0.205 hem the arms became the
+    // widest thing on both figures and at the 51px the picker renders, "the arms mask exactly the taper
+    // that carried the gender read" — the two shapes converged into the same blob. Putting the skirt
+    // back outside the arms restores it: the widest thing on her is her dress, the widest thing on him
+    // is his arms above a narrow hip.
     S.woman = (function () {
       const P = PICTO;
       return [
         P.head(),
-        P.shoulders().concat([
-          [P.X(P.waistW), P.Y(P.waistF)], [P.X(P.hemW), P.Y(P.hemF)],
-          [P.X(-P.hemW), P.Y(P.hemF)], [P.X(-P.waistW), P.Y(P.waistF)],
-        ]),
+        P.torso([[P.torsoW, P.flareF], [P.hemW, P.hemF]]),
         P.leg(-P.hipW, -P.gapW, P.hemF),
         P.leg(P.gapW, P.hipW, P.hemF),
+        P.arm(-1, P.armBotFW), P.arm(1, P.armBotFW),
       ];
     })();
     // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),

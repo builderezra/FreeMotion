@@ -899,6 +899,37 @@
       if (!f.m[at(0.90) * f.w + x]) { if (g0 < 0) g0 = x; }
       else if (g0 >= 0) { gap90 = Math.max(gap90, x - g0); g0 = -1; }
     }
+    /* THE CHEST, and THE WRIST — both needed once the figures have arms (queue 160), and neither
+       measurable from the outer silhouette any more.
+       · chestW is the MIDDLE ink run on a row that reads arm | gap | chest | gap | arm. The outer
+         width on such a row is the arm span, so before this there was no number for the torso at all.
+       · wristY is where the arms end: the single biggest one-row DROP in the silhouette between the
+         shoulder and the split. Everything below it is hip, and the taper checks have to start there —
+         otherwise "arms, then no arms" reads as "narrows and then widens again", which is the hip-nick
+         signature this file has been watching for since v5.90, fired by a figure that is correct. */
+    let chestW = 0;
+    for (let y = at((body - y0) / H + 0.12); y <= at((body - y0) / H + 0.30) && y <= y1; y++) {
+      if (rows[y].runs !== 3) continue;
+      let run = 0, mid = 0, seen = 0;
+      for (let x = rows[y].l; x <= rows[y].r; x++) {
+        if (f.m[y * f.w + x]) { run++; } else if (run) { seen++; if (seen === 2) mid = run; run = 0; }
+      }
+      if (mid) { chestW = mid; break; }
+    }
+    let wristY = -1, worstDrop = 0;
+    for (let y = at((body - y0) / H + 0.12); y < (split > 0 ? split : y1); y++) {
+      const drop = rows[y].w - rows[y + 1].w;
+      if (drop > worstDrop) { worstDrop = drop; wristY = y + 1; }
+    }
+    if (worstDrop < H * 0.02) wristY = -1;            // no arms on this figure: nothing to skip past
+    let dirBelow = 0;
+    if (wristY > 0) {
+      let d2 = 0, ref2 = rows[Math.min(y1, wristY + dead)].w;
+      for (let y = Math.min(y1, wristY + dead); y < (split > 0 ? split : y1); y++) {
+        const w2 = rows[y].w;
+        if (Math.abs(w2 - ref2) >= dead) { const d = w2 > ref2 ? 1 : -1; if (d2 && d !== d2) dirBelow++; d2 = d; ref2 = w2; }
+      }
+    }
     const t = figTopo(f);
     const S = {
       kind: kind, H: H, W: x1 - x0 + 1, ink: ink,
@@ -906,12 +937,23 @@
       headCirc: headH ? headW / headH : 0,
       headsPerHeight: headH ? H / headH : 0,
       neckGap: gapE > 0 ? gapE - gapS : 0,
-      shoulderW: rows[at((body - y0) / H + 0.07)].w,
+      /* TWO widths now, because the figures grew arms (queue 160) and the old single number quietly
+         changed meaning. It was read 7% below the top of the body, which used to be bare shoulder and
+         is now inside the arm span — so the same measurement that reported 2.0 head-widths reported
+         2.97, and the test failed for a figure that is correct. Splitting them keeps both guarantees
+         instead of widening a band until it stops saying anything:
+           · shoulderW is the SHOULDER, read just under the shoulder line before the slope has run out
+             to the arm — this is the number the 1.7–2.3 pictogram band was always about;
+           · armSpanW is the whole silhouette across the arms, which is what the old line measured, and
+             it gets its own band so an arm that runs away is still caught. */
+      shoulderW: rows[at((body - y0) / H + 0.012)].w,
+      armSpanW: rows[at((body - y0) / H + 0.12)].w,
+      chestW: chestW, wristY: wristY,
       hipW: split > 0 ? rows[at((split - y0) / H - 0.02)].w : 0,
       splitFrac: split > 0 ? (split - y0) / H : 0,
       legLenFrac: split > 0 ? 1 - (split - y0) / H : 0,
       legW: lr.runs ? lr.n / lr.runs : 0, legGap: gap90, legRuns90: lr.runs,
-      dirChanges: changes, reboundPx: rebound,
+      dirChanges: changes, dirBelowArms: dirBelow, reboundPx: rebound,
       symPct: 100 * diff / ink, centreOffPx: maxOff,
       components: t.components, holes: t.holes,
     };
@@ -964,7 +1006,14 @@
     same(p.headH, w.headH, 1, 'head height');
     same(p.headW, w.headW, 1, 'head width');
     same(p.neckGap, w.neckGap, 1, 'the neck gap');
-    same(p.shoulderW, w.shoulderW, 3, 'shoulder width');
+    /* Read across the ARMS and across the CHEST, not at the shoulder line. The shoulder line is now
+       the steepest part of the silhouette — it slopes from 0.150 to 0.227 of figure height in under
+       0.072 of it — so a one-pixel difference in where the neck gap is judged to end moves the reading
+       by several pixels and the two figures disagree while being identical by construction. Measured
+       at 512px: 172 vs 165 for geometry that comes from the same builder. Both numbers below are read
+       on flat stretches. */
+    same(p.armSpanW, w.armSpanW, 3, 'width across the arms');
+    same(p.chestW, w.chestW, 3, 'chest width');
     same(p.legW, w.legW, 3, 'leg thickness');
     same(p.legGap, w.legGap, 3, 'the gap between the legs');
   });
@@ -978,14 +1027,38 @@
       if (!(s.shoulderW / s.headW >= 1.7 && s.shoulderW / s.headW <= 2.3)) {
         throw new Error(s.kind + "'s shoulders are " + (s.shoulderW / s.headW).toFixed(2) + ' head-widths (want 1.7–2.3); at 1.0 the head is as wide as the body and it reads as a bell');
       }
+      /* And the arms have to stay arms. Under about 2.5 they are tucked so close that the armpit dies
+         at picker size — the fault three judges kept naming; over about 3.3 the figure is doing a lat
+         spread. The shipped pair sits at 3.0. */
+      if (!(s.chestW / s.headW >= 0.9 && s.chestW / s.headW <= 1.6)) {
+        throw new Error(s.kind + "'s chest is " + (s.chestW / s.headW).toFixed(2) + ' head-widths (want 0.9–1.6) — too narrow and the arms have eaten the torso, too wide and there is no room for an armpit');
+      }
+      if (!(s.armSpanW / s.headW >= 2.5 && s.armSpanW / s.headW <= 3.3)) {
+        throw new Error(s.kind + ' measures ' + (s.armSpanW / s.headW).toFixed(2) + ' head-widths across the arms (want 2.5–3.3) — under that the arms have closed against the body, over it they are held out like a lat spread');
+      }
       if (!(s.legLenFrac >= 0.35)) throw new Error(s.kind + "'s legs are " + (100 * s.legLenFrac).toFixed(1) + '% of height — under 35% the figure reads squat');
       if (!(s.neckGap >= 2)) throw new Error(s.kind + "'s head is touching the shoulders (" + s.neckGap + 'px of neck)');
     });
     // his silhouette must TAPER to the hip and must never widen on the way down…
     if (!(p.hipW < p.shoulderW * 0.92)) throw new Error('person: hips ' + p.hipW + 'px under shoulders ' + p.shoulderW + 'px — that is a fridge, not a torso (want at least 8% of taper)');
-    if (p.dirChanges !== 0) throw new Error('person: the silhouette narrows and then widens again between the shoulder and the crotch (' + p.dirChanges + ' direction change(s), worst rebound ' + p.reboundPx + 'px) — that is the hip nick');
-    // …and hers must do it exactly once, at the waist where the dress starts to flare
-    if (w.dirChanges > 1) throw new Error('woman: the dress outline changes direction ' + w.dirChanges + ' times between shoulder and hem — a pictogram dress narrows once, then flares');
+    /* The hip nick, still watched for — but BELOW the arms, which is the only stretch where the outer
+       silhouette is the torso. Above it the silhouette is the arms, and their ending is a legitimate
+       step, not a nick. His hip does widen a little under his wrist and that is a hip: what this
+       catches is the concave undercut that put a 26px notch in the old silhouette. */
+    if (p.wristY > 0 && p.dirBelowArms !== 0) throw new Error('person: below the arms the silhouette narrows and then widens again (' + p.dirBelowArms + ' direction change(s), worst rebound ' + p.reboundPx + 'px) — that is the hip nick');
+    if (p.wristY < 0) throw new Error('person: no wrist step found, so the figure has no arms — queue 160 asked for arms on both figures');
+    /* …and hers flares, cleanly and once. Read below the arms for the same reason as his: the narrowing
+       this test used to watch for — shoulder down to a waist — is now behind the arms, because her
+       chest is the same narrow 0.090H his is. What is left to check below the wrist is that the dress
+       opens out and does not wobble on the way.
+       And the flare has to CLEAR the arms. That is the whole reason the hem was widened from 0.205 to
+       0.258 when the arms went on: with the arms as the widest thing on both figures, "the arms mask
+       exactly the taper that carried the gender read" and the man and the woman converge into the same
+       shape at the size the picker draws. Her skirt being the widest thing about her is what keeps the
+       pair apart, so it is asserted rather than left to the eye. */
+    if (w.wristY > 0 && w.dirBelowArms !== 0) throw new Error('woman: the dress outline changes direction ' + w.dirBelowArms + ' time(s) below the arms — a pictogram dress flares once, cleanly');
+    if (!(w.W > w.armSpanW + 4)) throw new Error('woman: her widest point is ' + w.W + 'px against ' + w.armSpanW + 'px across the arms — the hem no longer clears the arms, so she and the man converge into the same silhouette');
+    if (!(w.W > p.W)) throw new Error('woman: she is ' + w.W + 'px at her widest and the man is ' + p.W + 'px — the pair no longer read as different figures');
   });
 
   test('figures: both are mirror-symmetric to within a pixel', { item: 'figure-shapes' }, function () {
@@ -17351,6 +17424,92 @@
       try { if (!wasSheet) FM.shortcuts.hide(); } catch (e) {}
       await sleep(120);
     }
+  });
+
+  /* ---------------- queue 160: the two people shapes need arms ----------------
+   * "The two people shapes are good but need arms, make sure when adding arms you get other agents to
+   * verify if it's any good or not."
+   * Three attempts were thrown away before this one, and the reason turned out to be the ruler rather
+   * than the drawing: the note on the entry said 24px was "the size the add menu actually uses", but the
+   * tile draws an SVG at 34 CSS px, so the figure resolves to 51 DEVICE pixels — three times the size
+   * everything had been judged at. An armpit that is 1px at 18 is 3px at 51.
+   * What is asserted here is what nine independent judges kept coming back to, in their words:
+   *   · the armpit must survive at the size the picker renders ("the gap dies at small size");
+   *   · the two figures must not converge ("the arms mask exactly the taper that carried the gender
+   *     read — side by side in one menu, that's the failure that matters"), so his widest point is his
+   *     ARMS, high up, and hers is her HEM, low down;
+   *   · and an arm must not be a hole. Mirroring by sign flips the winding, and under nonzero fill a
+   *     backwards arm is cut THROUGH the torso as a slot. That really happened, on the first render. */
+
+  test('the person and woman shapes have arms, and the two do not converge (queue 160)', { item: 'picto-arms' }, function () {
+    function ink(kind, s) {
+      const cell = Math.round(s * 24 / 18), off = (cell - s) / 2;
+      const c = document.createElement('canvas'); c.width = c.height = cell;
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.beginPath();
+      FM.traceShapePath(x, { type: 'shape', shape: kind }, off, off, s, s, 0); x.fill();
+      return { d: x.getImageData(0, 0, cell, cell).data, cell: cell, off: off, s: s };
+    }
+    const fOf = (g, y) => ((y - g.off) / g.s - 0.005) / 0.98;      // canvas row → fraction of figure height
+    const yOf = (g, f) => Math.round(g.off + (0.005 + f * 0.98) * g.s);
+    const lit = (g, x, y) => g.d[(y * g.cell + x) * 4 + 3] > 128;  // over half covered counts as ink
+    function armpit(kind, s) {
+      const g = ink(kind, s), w = [];
+      for (let y = yOf(g, 0.32); y <= yOf(g, 0.42); y++) {
+        let a = -1, b = -1;
+        for (let x = 0; x < g.cell; x++) if (lit(g, x, y)) { if (a < 0) a = x; b = x; }
+        if (a < 0) continue;
+        let run = 0, best = 0;
+        for (let x = a; x <= b; x++) { if (!lit(g, x, y)) { run++; if (run > best) best = run; } else run = 0; }
+        w.push(best);
+      }
+      w.sort(function (m, n) { return m - n; });
+      return w.length ? w[Math.floor(w.length / 2)] : 0;
+    }
+    function widest(kind, s) {
+      const g = ink(kind, s); let best = 0, atF = 0;
+      for (let y = 0; y < g.cell; y++) {
+        let a = -1, b = -1;
+        for (let x = 0; x < g.cell; x++) if (lit(g, x, y)) { if (a < 0) a = x; b = x; }
+        if (a < 0) continue;
+        if (b - a + 1 > best) { best = b - a + 1; atF = fOf(g, y); }
+      }
+      return { px: best, atF: atF };
+    }
+
+    /* 51px is the picker on a DPR-2 screen and 76 on his phone; 2px is the floor three judges asked
+       for. The shipped pair measures 3 and 4. */
+    ['person', 'woman'].forEach(function (kind) {
+      [[51, 2], [76, 3]].forEach(function (pair) {
+        const got = armpit(kind, pair[0]);
+        if (got < pair[1]) throw new Error(kind + ' at ' + pair[0] + 'px: the armpit is ' + got + 'px of clear background — the arms have closed up against the body, which is the fault every judge named');
+      });
+    });
+
+    // The divergence guarantee. His widest is the ARMS, in the upper third; hers is the HEM, low down.
+    const m = widest('person', 128), w = widest('woman', 128);
+    if (!(m.atF < 0.45)) throw new Error('the man is widest at ' + m.atF.toFixed(2) + ' of his height — that is hip level, and a man who flares at the hip is the woman\'s silhouette');
+    if (!(w.atF > 0.50)) throw new Error('the woman is widest at ' + w.atF.toFixed(2) + ' of her height — her skirt is no longer the widest thing about her, so the pair converges at picker size');
+    if (!(w.px > m.px)) throw new Error('the woman (' + w.px + 'px) is no wider than the man (' + m.px + 'px) at her widest — the hem has stopped clearing the arms');
+
+    /* An arm must be ADDED, not cut out — asserted on the winding, not on a pixel.
+       The first version of this sampled the middle of the left arm and was DEAD: reversing the mirrored
+       arm's winding leaves most of the arm filled and only voids the sliver where it OVERLAPS the
+       torso, which is 0.005 of figure height wide. The mutation ran green and the assertion proved
+       nothing — caught by mutation-checking it, not by reading it.
+       The real invariant is the one the compositor states: "every body here winds clockwise, so a hole
+       must wind anticlockwise". Neither figure has a hole, so every subpath must share one sign. */
+    const area = function (poly) {
+      let a = 0;
+      for (let i = 0; i < poly.length; i++) { const q = poly[i], r = poly[(i + 1) % poly.length]; a += q[0] * r[1] - r[0] * q[1]; }
+      return a;
+    };
+    ['person', 'woman'].forEach(function (kind) {
+      const polys = FM.SHAPE_POLYS[kind];
+      if (polys.length !== 6) throw new Error(kind + ' is built from ' + polys.length + ' parts — a figure with arms is 6: head, torso, two legs, two arms');
+      const signs = polys.map(function (p) { return Math.sign(+area(p).toFixed(6)); });
+      const odd = signs.findIndex(function (g) { return g !== signs[0]; });
+      if (odd >= 0) throw new Error(kind + ': part ' + odd + ' winds against the rest of the figure — under nonzero fill that part is a HOLE cut through the shape rather than a piece added to it, which is what a mirrored polygon does if its point order is not reversed with it');
+    });
   });
 
   /* ---------------- queue 275: the mobile shapes menu scrolled up and down ----------------

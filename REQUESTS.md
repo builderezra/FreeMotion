@@ -4166,7 +4166,7 @@ better still, keep working inside the turn rather than parking work for a later 
       clock 0.41→0.92, flame 0.80→0.97, heart 0.86→0.99. The six still drifting are the very fine ones
       (snowflake, laurel, sun, wreath, spiral, note) and they sit at 0.81–0.89, which is small stuff.
 
-- [ ] **160 — The two people shapes need arms, and he wants agents to check the result.** (14 Aug.) His
+- [x] **160 — The two people shapes need arms, and he wants agents to check the result. DONE v8.66.** (14 Aug.) His
       words: *"The two people shapes are good but need arms, make sure when adding arms you get other
       agents to verify if it's any good or not."*
       Two shapes: `person` and `woman`. Both currently read as head + body with no arms.
@@ -4251,6 +4251,62 @@ better still, keep working inside the turn rather than parking work for a later 
       rather than deriving them, treat the two figures as two drawings that happen to share a head and
       legs, and render at 24px FIRST — every version above looked least convincing at the size the add
       menu actually uses, and that is the size that decides it.
+
+      **⚠️ AND THAT LAST SENTENCE WAS WRONG — measured 16 Aug, and it very likely explains all three
+      failures.** "24px" came from reading `icoPoly`, which fits the figure into 18 units of a 24-unit
+      box. But the tile draws an **SVG**, and an SVG renders at DEVICE resolution: measured in the
+      running app the tile's `<svg>` is **34×34 CSS**, so on this Mac (DPR 2) the figure resolves to
+      **51 device pixels**, and on a DPR-3 phone to about **76**. Three attempts were therefore judged
+      at roughly a third of the size the app actually draws, where nothing could have succeeded — an
+      armpit that is 1px at 18 is 3px at 51.
+      Proven rather than argued, at 51px: the shipped figure and every "arm hung off the side of the
+      body" variant open **0 rows** where a scanline crosses arm-gap-body-gap-arm; the designs that cut
+      the armpit INTO the figure open **13–14**. At 18px every single one is 0, which is what the old
+      note was seeing.
+      **A probe that lies is worse than no probe**, so `tests/_arms.html` now renders the control from
+      the SHIPPED `FM.SHAPE_POLYS` and pixel-compares it against its own rebuild, and puts a red banner
+      over the sheet if they differ. It caught two real divergences immediately: the first draft drew
+      the head as a 4-point Catmull-Rom **diamond** (the real `circleS` uses 8 points) and rounded the
+      shoulder-arc ends that the real `arcS` leaves as corners. Every earlier attempt was judged without
+      that check.
+
+      **DONE v8.66 — fourth attempt, and it shipped with a 3/3 sign-off after two rounds of outright
+      rejection.** Nine independent judges in all, on three lenses (legibility at the real render size,
+      does it read as a human being, icon craft), hard-capped at three rounds so nothing could loop.
+      What they made me change, in their order:
+      1. *"arms are roughly half the stroke weight of the legs — the figure looks like it's wearing
+         whiskers."* They were 0.064 of figure height against a 0.0905 leg; they are 0.082 now.
+      2. *"the wrist is cut square"* while the foot is rounded — *"two terminal languages in one
+         figure."* The wrist is built from `P.leg`'s own two arcs at the same `footR`.
+      3. *"the shoulder is a box lid dropped on sticks."* The version they said that about capped the
+         shoulders wide enough to cover the arms. The cap went back to its shipped width and the ARM
+         carries its own shoulder — a diagonal top edge from the body's shoulder corner out and down to
+         the arm, so the shoulder slopes into the arm. That single change moved it from third place to
+         first on all three lenses.
+      4. *"the man's widest point drifts to his hips, so he reads like the woman."* His arms are
+         vertical and his chest holds its width until BELOW the wrist, so nothing flares at his hip.
+      5. *"the armpit dies at small size."* It is 0.055 of figure height — the LEG gap, the one number
+         on this figure with evidence behind it — held constant down the whole arm. Measured on the
+         shipped shape: **3px at 51, 4px at 76, 8px at 128**. (Worth recording: two judges called it
+         "sub-pixel" and "hairline" by eye when it was already 3px. Measuring it and handing the next
+         round the number stopped that going round again.)
+      6. And the one that nearly sank it, from the human-figure lens: *"at 51px the man and the woman
+         are near-identical blobs, because the arms mask exactly the taper that carried the gender
+         read. Side by side in one menu, that's the failure that matters."* True, and it would have
+         made this change worse than shipping nothing. The fix was theirs too — *"the arms must sit
+         inside the triangle, not define its edge"* — so **her hem went from 0.205 to 0.258**, back
+         outside the arms. His widest point is now his arms at 0.33 of his height; hers is her hem at
+         0.60. That divergence is asserted in the suite, not left to the eye.
+      **Three existing figure tests had to be re-based rather than relaxed**, because they measured
+      things that quietly changed meaning when the figures grew arms: "shoulder width" was read 7%
+      below the body top, which is now inside the arm span, so it reported 2.97 head-widths for a
+      figure that is correct; and "the silhouette must never widen on the way down" fired on the arms
+      ENDING, which is a step and not the hip nick it was written for. They now measure the chest and
+      the arm span separately and check the taper below the wrist, so each keeps its guarantee instead
+      of having its band widened until it says nothing.
+      One assertion of my own was DEAD and only the mutation check found it: sampling the middle of an
+      arm to prove it is not a hole passes even when the winding is reversed, because reversing only
+      voids the sliver where the arm overlaps the torso. It asserts the winding itself now.
 
 - [x] **161 — Make the Freehand Drawing icon a pencil.** (v7.04) His words: *"Make the free hand drawing
       icon a pencil."* It was a squiggle with a small nib.

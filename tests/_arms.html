@@ -1,0 +1,439 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><base href="../"><title>#160 — arms on person / woman, judged at the size the picker uses</title>
+<style>
+  html,body{margin:0;background:#0b1116;color:#cfd6e4;font:12px ui-monospace,Menlo,monospace}
+  iframe{position:absolute;left:-4000px;width:900px;height:700px;border:0}
+  table{border-collapse:collapse;margin:10px}
+  th,td{padding:6px 10px;text-align:center;vertical-align:bottom;border-bottom:1px solid #1d2a33}
+  th{color:#7d8fa3;font-weight:400;font-size:11px}
+  .name{text-align:left;color:#e6edf5}
+  canvas{image-rendering:pixelated;display:block;margin:0 auto}
+  .cell{background:#151d24;border-radius:6px;padding:3px;display:inline-block}
+  #out{padding:10px;white-space:pre;color:#8fa}
+</style></head><body>
+<iframe id="app" src="index.html"></iframe>
+<div id="grid"></div>
+<div id="out">…</div>
+<script>
+/* #160 — the two people shapes need arms.
+ *
+ * WHY THIS PROBE EXISTS, AND WHY IT RENDERS SO SMALL. Three attempts have been thrown away, and the
+ * standing note on the entry says every one of them "looked least convincing at the size the add menu
+ * actually uses". That size is not 24px: `icoPoly` fits the shape into an 18px box inside the 24px
+ * cell, FILLED (LIB_SHAPES passes no `outline`). So the figure is 18px tall and — at the shipped
+ * 0.300H shoulder width — 5.4px WIDE. Any design is judged here first, at 18, before anything else.
+ *
+ * It draws through FM.traceShapePath, the compositor's own walker, so the smooth-point tangents and
+ * the nonzero union of head/body/legs/arms are the real ones and not a second opinion. Candidates are
+ * injected into FM.SHAPE_POLYS under temporary keys, which is the same table the picker reads. */
+(function () {
+  var fr = document.getElementById('app'), out = document.getElementById('out');
+  /* THE PICKER IS AN SVG, SO IT DRAWS AT DEVICE RESOLUTION — and this is the correction that matters
+     most in this entry. `icoPoly` fits the figure into 18 units of a 24-unit viewBox, and the note on
+     #160 read that as "18px, and that is the size that decides it". Measured in the running app: the
+     tile's <svg> is 34x34 CSS, so at DPR 2 the figure resolves to 51 DEVICE PIXELS, and about 76 on a
+     DPR-3 phone. Three attempts were therefore judged at a size the app never draws, which is very
+     likely why each one "looked least convincing" — an armpit that is 1px at 18 is 3px at 51.
+     So: 51 and 76 carry the verdict, 24 is kept only as a floor check, 128 for the canvas. */
+  /* ?judge — the sheet handed to the independent judges (#160 asks for them by name: "get other agents
+     to verify if it's any good or not"). Labels become bare letters so nobody scores the control up or
+     down for being the control, and only the sizes the app actually draws are shown. */
+  var JUDGE = /judge/.test(location.search);
+  var SIZES = JUDGE ? [51, 76, 128] : [24, 51, 76, 128];
+  function fail(m) { out.textContent = 'FAILED: ' + m; window.__done = true; }
+
+  fr.addEventListener('load', function () {
+    var w = fr.contentWindow, tries = 0;
+    (function wait() {
+      if (++tries > 200) return fail('FM never initialised');
+      if (!w.FM || !w.FM.SHAPE_POLYS || !w.FM.traceShapePath) return setTimeout(wait, 50);
+      try { build(w.FM); } catch (e) { fail(String(e && e.stack || e)); }
+    })();
+  });
+
+  function build(FM) {
+    var r4 = function (v) { return Math.round(v * 1e4) / 1e4; };
+    var PI = Math.PI;
+    /* The shipped proportion table, copied verbatim from compositor.js. A probe may hold a copy; the
+       WINNER gets implemented against the real PICTO and re-rendered from the shipped table before it
+       is signed off, so a divergence here cannot reach the app. */
+    var top = 0.005, H = 0.98;
+    var P = {
+      H: H,
+      Y: function (f) { return r4(top + f * H); },
+      X: function (s) { return r4(0.5 + s * H); },
+      R: function (v) { return r4(v * H); },
+      headR: 0.075, headF: 0.075, shF: 0.192, shW: 0.150, shR: 0.045,
+      splitF: 0.575, hemF: 0.615, waistF: 0.360, waistW: 0.140, hemW: 0.205,
+      gapW: 0.0275, hipW: 0.118, footR: 0.026
+    };
+    /* These two are the compositor's OWN definitions, character for character, and the first draft of
+       this probe got both wrong in ways that silently rewrote every candidate: circleS was written as
+       4 smooth points, which Catmull-Rom draws as a DIAMOND, so every figure on the sheet had a
+       rhombus for a head; and arcS's last argument is `endsCorner`, meaning the two END points are
+       CORNERS — the copy made them smooth, which rounds the shoulders differently from the app.
+       A probe that draws something the app does not draw cannot judge anything, so the control is now
+       pixel-compared against the shipped shape further down and the sheet refuses to be trusted if
+       they differ. */
+    function circleS(cx, cy, rx, ry, n) {
+      n = n || 8; var o = [];
+      for (var i = 0; i < n; i++) { var a = -PI / 2 + i * (PI * 2) / n; o.push([r4(cx + rx * Math.cos(a)), r4(cy + ry * Math.sin(a)), 1]); }
+      return o;
+    }
+    function arcS(cx, cy, rx, ry, a0, a1, n, endsCorner) {
+      var o = [];
+      for (var i = 0; i <= n; i++) {
+        var a = a0 + (a1 - a0) * i / n;
+        var p = [r4(cx + rx * Math.cos(a)), r4(cy + ry * Math.sin(a))];
+        if (!(endsCorner && (i === 0 || i === n))) p.push(1);
+        o.push(p);
+      }
+      return o;
+    }
+    P.leg = function (s0, s1, fromF) {
+      var x0 = P.X(s0), x1 = P.X(s1), yT = P.Y(fromF - 0.012), yB = P.Y(1), r = P.R(P.footR);
+      return [].concat([[x0, yT], [x1, yT], [x1, r4(yB - r)]],
+        arcS(x1 - r, yB - r, r, r, 0, PI / 2, 3, true), [[r4(x0 + r), yB]],
+        arcS(x0 + r, yB - r, r, r, PI / 2, PI, 3, true));
+    };
+    P.shoulders = function (shW) {
+      var w = shW === undefined ? P.shW : shW, r = P.R(P.shR), yc = P.Y(P.shF) + r;
+      return [].concat(arcS(P.X(-w) + r, yc, r, r, PI, PI * 1.5, 3, true),
+        arcS(P.X(w) - r, yc, r, r, PI * 1.5, PI * 2, 3, true));
+    };
+    P.head = function () { return circleS(0.5, P.Y(P.headF), P.R(P.headR), P.R(P.headR)); };
+
+    /* ONE arm, as its OWN polygon that overlaps the torso and is unioned by nonzero fill — never
+       spliced into the body path. That splice is what killed attempt 3: his torso is a 10-point taper
+       and hers a 12-point flare, so a builder that edits "the body path" corrupts one of them. A
+       separate part cannot. `sgn` mirrors it; every number is in the same height-fraction units as
+       PICTO, so an arm reads as "0.05H thick" and not as coordinates. */
+    function arm(sgn, o) {
+      var xTi = P.X(sgn * o.topIn), xTo = P.X(sgn * o.topOut);
+      var xBi = P.X(sgn * o.botIn), xBo = P.X(sgn * o.botOut);
+      var yT = P.Y(o.topF), yB = P.Y(o.botF), r = P.R(o.round === undefined ? 0.026 : o.round);
+      // Rounded at the wrist only: the shoulder end is buried in the body mass, so rounding it costs
+      // points for a corner nobody can see.
+      var mid = (xBi + xBo) / 2;
+      var pts = [[xTi, yT], [xTo, yT], [r4(xBo), r4(yB - r)],
+        [r4(mid), r4(yB), 1], [r4(xBi), r4(yB - r)]];
+      /* MIRRORING BY SIGN FLIPS THE WINDING, and the fill rule is nonzero — so the left arm listed in
+         the same order as the right one is a HOLE, and it renders as a thin dark slot cut into the
+         torso instead of an arm. (Seen, not reasoned: the first render had an arm on one side only and
+         a dark sliver on the other.) The compositor's own note says it — "every body here winds
+         clockwise, so a hole must wind anticlockwise" — so the mirrored copy is reversed back. */
+      return sgn < 0 ? pts.reverse() : pts;
+    }
+
+    // ---- candidates -------------------------------------------------------------------------
+    // C0 is the SHIPPED shape, unchanged, as the control: whatever we do has to beat this.
+    var manBody = P.shoulders().concat([[P.X(P.hipW), P.Y(P.splitF)], [P.X(-P.hipW), P.Y(P.splitF)]]);
+    var womanBody = P.shoulders().concat([
+      [P.X(P.waistW), P.Y(P.waistF)], [P.X(P.hemW), P.Y(P.hemF)],
+      [P.X(-P.hemW), P.Y(P.hemF)], [P.X(-P.waistW), P.Y(P.waistF)]]);
+    var manLegs = [P.leg(-P.hipW, -P.gapW, P.splitF), P.leg(P.gapW, P.hipW, P.splitF)];
+    var womanLegs = [P.leg(-P.hipW, -P.gapW, P.hemF), P.leg(P.gapW, P.hipW, P.hemF)];
+
+    function man(armCfg) {
+      var parts = [P.head(), manBody].concat(manLegs);
+      if (armCfg) parts.push(arm(-1, armCfg), arm(1, armCfg));
+      return parts;
+    }
+    function woman(armCfg) {
+      var parts = [P.head(), womanBody].concat(womanLegs);
+      if (armCfg) parts.push(arm(-1, armCfg), arm(1, armCfg));
+      return parts;
+    }
+
+    /* Four ideas, from "barely any splay" to "unmistakable", because the whole question is how much
+       width the silhouette has to gain before an arm survives 18px. The gap that has to open between
+       the arm and the torso is the same one the LEGS already prove readable at this size: the leg gap
+       is 0.055H and the note on PICTO says he still reads as two legs at 24px. Anything much under
+       that is being drawn for a 96px render nobody will see. */
+    /* C5/C6 are a different IDEA, not different numbers, and they come from what C1–C4 measured: at
+       18px not one of them opened a single row of arm|body|arm, because an arm hung off the SIDE of a
+       0.300H-wide body has nowhere to be. The armpit has to be cut INTO the figure instead:
+         · the shoulder cap widens to cover the arms as well as the chest (a pictogram with arms is
+           2.5–3 head-widths across the shoulders, not 2.0);
+         · the torso STEPS IN under the cap to a narrow chest;
+         · the arms hang in the space that step opens, flush with the outside of the cap.
+       The gap that leaves is 0.055H — the same number as the LEG gap, which PICTO's own note says
+       still reads as two legs at this size. That is the only gap on this figure with any evidence
+       behind it, so it is the one to copy.
+       The arms stay VERTICAL on purpose. A splayed arm makes the figure widest below the shoulders,
+       and a man who flares outward toward his hip is the woman's silhouette — at 18px that is the
+       one confusion that would make this change worse than no arms at all. */
+    function bodyStepped(o) {
+      var w = o.shW, ap = o.armpitF, tw = o.torsoW;
+      var mid = o.mid || [];            // the sides below the armpit: [[halfWidth, f], …] top to bottom
+      var right = [[P.X(w), P.Y(ap)], [P.X(tw), P.Y(ap + 0.03)]].concat(mid.map(function (m) { return [P.X(m[0]), P.Y(m[1])]; }));
+      var left = right.slice().reverse().map(function (p) { return [r4(1 - p[0]), p[1]]; });
+      return P.shoulders(w).concat(right, left);
+    }
+    var manBody2 = bodyStepped({ shW: 0.210, armpitF: 0.245, torsoW: 0.100, mid: [[P.hipW, P.splitF]] });
+    var womanBody2 = bodyStepped({ shW: 0.210, armpitF: 0.245, torsoW: 0.100,
+      mid: [[P.waistW, P.waistF], [P.hemW, P.hemF]] });
+    function man2(a) { var p = [P.head(), manBody2].concat(manLegs); if (a) p.push(arm(-1, a), arm(1, a)); return p; }
+    function woman2(a) { var p = [P.head(), womanBody2].concat(womanLegs); if (a) p.push(arm(-1, a), arm(1, a)); return p; }
+
+    var C = [
+      ['C0  shipped, no arms', null, null],
+      ['C1  close, 8deg',  { topF: 0.200, botF: 0.520, topIn: 0.098, topOut: 0.150, botIn: 0.140, botOut: 0.192 },
+                           { topF: 0.200, botF: 0.470, topIn: 0.098, topOut: 0.150, botIn: 0.150, botOut: 0.202 }],
+      ['C2  splayed, 15deg', { topF: 0.200, botF: 0.545, topIn: 0.098, topOut: 0.150, botIn: 0.178, botOut: 0.232 },
+                           { topF: 0.200, botF: 0.500, topIn: 0.098, topOut: 0.150, botIn: 0.196, botOut: 0.250 }],
+      ['C3  splayed + thicker', { topF: 0.198, botF: 0.560, topIn: 0.088, topOut: 0.150, botIn: 0.180, botOut: 0.245, round: 0.032 },
+                           { topF: 0.198, botF: 0.520, topIn: 0.088, topOut: 0.150, botIn: 0.200, botOut: 0.265, round: 0.032 }],
+      ['C4  short + very splayed', { topF: 0.200, botF: 0.470, topIn: 0.098, topOut: 0.150, botIn: 0.200, botOut: 0.258 },
+                           { topF: 0.200, botF: 0.440, topIn: 0.098, topOut: 0.150, botIn: 0.208, botOut: 0.266 }],
+    ];
+    // The stepped-torso idea, at two arm thicknesses. Vertical arms, outer edge flush with the cap.
+    var C5m = { topF: 0.212, botF: 0.530, topIn: 0.155, topOut: 0.210, botIn: 0.155, botOut: 0.210 };
+    var C5w = { topF: 0.212, botF: 0.470, topIn: 0.160, topOut: 0.215, botIn: 0.172, botOut: 0.227 };
+    var C6m = { topF: 0.212, botF: 0.545, topIn: 0.148, topOut: 0.212, botIn: 0.148, botOut: 0.212, round: 0.030 };
+    var C6w = { topF: 0.212, botF: 0.480, topIn: 0.152, topOut: 0.216, botIn: 0.168, botOut: 0.232, round: 0.030 };
+    C.push(['C5  stepped torso, thin arms', C5m, C5w], ['C6  stepped torso, thicker arms', C6m, C6w]);
+    var STEPPED = { 5: 1, 6: 1 };
+
+    /* ---- ROUND 2 -------------------------------------------------------------------------------
+       Three independent judges scored round 1 on three different lenses and NONE would sign any of it
+       off. Their complaints agreed enough to design against directly:
+         · "arms are roughly half the stroke weight of the legs — the figure looks like it's wearing
+           whiskers". Measured: the arms were 0.064H against a 0.0905H leg. They are 0.082H here, which
+           is 91% of the leg, and the two read as one line weight.
+         · "the wrist is cut square" — the LEGS get a rounded foot and the arms did not. They now take
+           the same `footR`, from the same constant.
+         · "the shoulder is a box lid dropped on sticks" — the armpit was a right-angle step. It is a
+           SMOOTH point now, so the shoulder slopes into the arm instead of shelving onto it.
+         · "the man's widest point drifts to his hips, so he reads like the woman" — the two sit side by
+           side in one menu and must not converge. So his arms are VERTICAL, and his torso does not
+           widen to the hip until 0.52, below the wrist, where nothing is left to flare against.
+         · "the woman's wrist lands on the skirt flare and dents the diagonal". Her flare now STARTS
+           below her wrist. That is better drawing anyway: a dress should not begin widening behind the
+           arms that hang in front of it.
+       The armpit is 0.042H wide, held constant down the whole arm — 2.1px at the 51px the picker
+       actually renders, and 3.1px on a DPR-3 phone. Round 1's best closed to 1.5px at the wrist, which
+       is what every judge saw as "the gap dies at small size". */
+    var A = { shW: 0.212, armpitF: 0.240, torsoW: 0.090, armIn: 0.132, armOut: 0.214 };
+    function steppedBody(mid) {
+      var r = P.R(P.shR);
+      // The step off the shoulder into the armpit, as a SMOOTH point — the "box lid" fix.
+      var right = [[P.X(A.shW), P.Y(A.armpitF)], [P.X(A.torsoW), P.Y(A.armpitF + 0.045), 1]]
+        .concat(mid.map(function (m) { return [P.X(m[0]), P.Y(m[1])]; }));
+      var left = right.slice().reverse().map(function (p) {
+        var q = [r4(1 - p[0]), p[1]]; if (p[2]) q.push(1); return q;
+      });
+      return P.shoulders(A.shW).concat(right, left);
+    }
+    // His torso holds 0.090 to 0.520 — below the wrist — and only then widens to the hip for the legs.
+    var manBody3 = steppedBody([[A.torsoW, 0.520], [P.hipW, P.splitF]]);
+    // Her flare starts at 0.470, also below the wrist, and runs to the shipped hem.
+    var womanBody3 = steppedBody([[A.torsoW, 0.470], [P.hemW, P.hemF]]);
+    function man3(a) { var p = [P.head(), manBody3].concat(manLegs); if (a) p.push(arm(-1, a), arm(1, a)); return p; }
+    function woman3(a) { var p = [P.head(), womanBody3].concat(womanLegs); if (a) p.push(arm(-1, a), arm(1, a)); return p; }
+
+    // Vertical arms at leg weight. H2 runs them 0.03H longer, which is the "hands stop at the waist"
+    // note from the human-figure lens; anything longer than this passes the crotch and has to splay.
+    var H1m = { topF: 0.205, botF: 0.545, topIn: A.armIn, topOut: A.armOut, botIn: A.armIn, botOut: A.armOut, round: P.footR };
+    var H1w = { topF: 0.205, botF: 0.455, topIn: A.armIn, topOut: A.armOut, botIn: A.armIn, botOut: A.armOut, round: P.footR };
+    var H2m = { topF: 0.205, botF: 0.572, topIn: A.armIn, topOut: A.armOut, botIn: A.armIn, botOut: A.armOut, round: P.footR };
+    var H2w = { topF: 0.205, botF: 0.482, topIn: A.armIn, topOut: A.armOut, botIn: A.armIn, botOut: A.armOut, round: P.footR };
+    C.push(['H1  leg-weight arms', H1m, H1w], ['H2  leg-weight, longer', H2m, H2w]);
+    var STEPPED3 = { 7: 1, 8: 1 };
+
+    /* ---- ROUND 2b: a SLOPING shoulder ----------------------------------------------------------
+       H1/H2 fixed every complaint on the list and still looked wrong, which is worth saying plainly:
+       the shoulder cap had to widen to 0.212 to cover the arms, so the whole top of the figure became
+       one solid rectangle with two slots cut in it. That is the same "box lid" the craft lens rejected
+       in round 1, just a wider lid.
+       So the cap goes back to the SHIPPED 0.150 half-width — the number the proportion table calls two
+       head diameters — and the arm carries its own shoulder: its top edge is a diagonal running from
+       the body's shoulder corner out and down to the arm's outer edge. The silhouette that produces is
+       a shoulder that SLOPES into the arm, which is what a drawn pictogram does and what a cap can
+       never do. Nothing about the head, the neck gap, the legs or the feet moves. */
+    function armSloped(sgn, o) {
+      var yTop = P.Y(o.shTopF), ySlope = P.Y(o.slopeF), yB = P.Y(o.botF), r = P.R(P.footR);
+      var xi = P.X(sgn * o.inW), xs = P.X(sgn * o.shW), xo = P.X(sgn * o.outW);
+      var mid = (xi + xo) / 2;
+      var pts = [[xi, P.Y(o.shTopF + 0.006)], [xs, yTop], [xo, ySlope],
+        [xo, r4(yB - r)], [r4(mid), r4(yB), 1], [xi, r4(yB - r)]];
+      return sgn < 0 ? pts.reverse() : pts;
+    }
+    var narrowBody = function (mid) {
+      var right = [[P.X(P.shW), P.Y(0.250)], [P.X(A.torsoW), P.Y(0.295), 1]]
+        .concat(mid.map(function (m) { return [P.X(m[0]), P.Y(m[1])]; }));
+      var left = right.slice().reverse().map(function (p) { var q = [r4(1 - p[0]), p[1]]; if (p[2]) q.push(1); return q; });
+      return P.shoulders(P.shW).concat(right, left);
+    };
+    var manBody4 = narrowBody([[A.torsoW, 0.520], [P.hipW, P.splitF]]);
+    var womanBody4 = narrowBody([[A.torsoW, 0.470], [P.hemW, P.hemF]]);
+    function man4(a) { var p = [P.head(), manBody4].concat(manLegs); if (a) p.push(armSloped(-1, a), armSloped(1, a)); return p; }
+    function woman4(a) { var p = [P.head(), womanBody4].concat(womanLegs); if (a) p.push(armSloped(-1, a), armSloped(1, a)); return p; }
+    var J1m = { shTopF: 0.196, slopeF: 0.262, botF: 0.545, inW: 0.132, shW: P.shW, outW: 0.214 };
+    var J1w = { shTopF: 0.196, slopeF: 0.262, botF: 0.455, inW: 0.132, shW: P.shW, outW: 0.214 };
+    // A softer slope: the shoulder runs further down before it reaches the arm's outer line.
+    var J2m = { shTopF: 0.196, slopeF: 0.300, botF: 0.560, inW: 0.132, shW: P.shW, outW: 0.208 };
+    var J2w = { shTopF: 0.196, slopeF: 0.300, botF: 0.462, inW: 0.132, shW: P.shW, outW: 0.208 };
+    C.push(['J1  sloping shoulder', J1m, J1w], ['J2  sloping shoulder, softer', J2m, J2w]);
+    var SLOPED = { 9: 1, 10: 1 };
+
+    /* ---- ROUND 3: the last three faults ---------------------------------------------------------
+       Round 2's sloping shoulder won the man on all three lenses, and all three still refused to sign
+       it off for the SAME reason: "the armpit is sub-pixel on the man and effectively gone on the
+       woman", "hairline at 51px", "widen the gap by one device pixel". Two smaller notes came with it:
+       the wrist cap is "a tube end where the foot is a lozenge — two terminal languages in one
+       figure", and the shoulder is "a single straight bevel, a chamfer rather than a fillet".
+       So, in order:
+         · the gap goes to 0.055H — not a guess, it is the LEG gap, the one number on this figure with
+           evidence behind it. 2.7px at the 51px picker render and 4.1px on a DPR-3 phone. It is bought
+           by moving the ARMS out rather than by thinning the torso: a 0.080H chest would be 4px wide at
+           51 and the man would read as a wishbone.
+         · the wrist is built from `P.leg`'s own two arcs at `footR`, so the hand and the foot are
+           literally the same terminal.
+         · the slope point carries the smooth flag, so the shoulder is a curve into the arm instead of
+           a chamfer off it. */
+    function armFinal(sgn, o) {
+      var r = P.R(P.footR), yB = P.Y(o.botF);
+      var xi = P.X(sgn * o.inW), xs = P.X(sgn * o.shW), xo = P.X(sgn * o.outW);
+      var lo = Math.min(xi, xo), hi = Math.max(xi, xo);
+      var pts = [[xi, P.Y(o.shTopF + 0.006)], [xs, P.Y(o.shTopF)], [xo, P.Y(o.slopeF), 1],
+        [xo, r4(yB - r)]]
+        .concat(arcS(hi - r, yB - r, r, r, 0, PI / 2, 3, true), [[r4(lo + r), yB]],
+                arcS(lo + r, yB - r, r, r, PI / 2, PI, 3, true), [[xi, r4(yB - r)]]);
+      return sgn < 0 ? pts.reverse() : pts;
+    }
+    function man5(a) { var p = [P.head(), manBody4].concat(manLegs); if (a) p.push(armFinal(-1, a), armFinal(1, a)); return p; }
+    function woman5(a) { var p = [P.head(), womanBody4].concat(womanLegs); if (a) p.push(armFinal(-1, a), armFinal(1, a)); return p; }
+    // inW 0.145 against a 0.090 chest = a 0.055H armpit, held the whole way down.
+    var K1m = { shTopF: 0.196, slopeF: 0.268, botF: 0.575, inW: 0.145, shW: P.shW, outW: 0.227 };
+    var K1w = { shTopF: 0.196, slopeF: 0.268, botF: 0.470, inW: 0.145, shW: P.shW, outW: 0.227 };
+    C.push(['K1  wide armpit, foot-matched wrist', K1m, K1w]);
+    /* K2 differs from K1 in ONE number, and only on the woman: her wrist ends at 0.435 while her dress
+       does not start flaring until 0.478. In K1 those two were the same line, so the hand terminated
+       exactly where the skirt began to widen and the judge's eye fused them — "the arm, the skirt
+       corner and the hip merge into one wedge". Now there is clear background either side of the hand.
+       Her arms come out shorter than his by that much, which is correct rather than a compromise: his
+       hand stops at the crotch line and hers stops above a hem, and the two figures have never shared
+       a waist. */
+    var K2w = { shTopF: 0.196, slopeF: 0.268, botF: 0.435, inW: 0.145, shW: P.shW, outW: 0.227 };
+    var womanBody5 = narrowBody([[A.torsoW, 0.478], [P.hemW, P.hemF]]);
+    function woman6(a) { var p = [P.head(), womanBody5].concat(womanLegs); if (a) p.push(armFinal(-1, a), armFinal(1, a)); return p; }
+    C.push(['K2  woman wrist clear of the flare', K1m, K2w]);
+    /* K3 — the objection that actually mattered, and it came from the human-figure lens: at 51px the
+       man and the woman CONVERGE, "because the arms mask exactly the taper that carried the gender
+       read". That is true and it is the one fault that would make this change worse than shipping
+       nothing: these two shapes sit side by side in one menu.
+       The fix is not to shrink her arms, it is to put her hem back OUTSIDE them — "the arms must sit
+       inside the triangle, not define its edge". So her hem goes from 0.205 to 0.258, past the arm's
+       0.227 outer line. Then the widest thing on the woman is her skirt and the widest thing on the
+       man is his arms above a narrow hip, and the two silhouettes diverge again at every size. Her
+       wrist still ends against background, above where the flare starts, which is the other judge's
+       note in the same figure. */
+    var K3w = { shTopF: 0.196, slopeF: 0.268, botF: 0.435, inW: 0.145, shW: P.shW, outW: 0.227 };
+    var womanBody6 = narrowBody([[A.torsoW, 0.470], [0.258, P.hemF]]);
+    function woman7(a) { var p = [P.head(), womanBody6].concat(womanLegs); if (a) p.push(armFinal(-1, a), armFinal(1, a)); return p; }
+    C.push(['K3  hem outside the arms', K1m, K3w]);
+    var FINAL = { 11: 1 }, FINAL2 = { 12: 1 }, FINAL3 = { 13: 1 };
+
+    // Inject and draw.
+    var tbl = ['<table><tr><th class="name">candidate</th>'];
+    SIZES.forEach(function (s) { tbl.push('<th>man ' + s + '</th>'); });
+    SIZES.forEach(function (s) { tbl.push('<th>woman ' + s + '</th>'); });
+    tbl.push('</tr>');
+    /* ?only=0,6,7,8 — hand the judges a SHORT sheet. Round 2 is a revision of one family, so putting
+       all nine rows back in front of them re-litigates rounds they have already scored; the ones that
+       matter are the control, the round-1 winner and the revisions. Letters are re-assigned across the
+       kept rows so the mapping cannot be guessed from round 1. */
+    var ONLY = (location.search.match(/only=([\d,]+)/) || [])[1];
+    var KEEP = ONLY ? ONLY.split(',').map(Number) : null;
+    /* Filtering happens at DRAW time, not by rebuilding the array — the builder for a row is looked up
+       by its index, so dropping rows first would silently draw the wrong geometry under the right
+       label. (Exactly the class of mistake this probe's control check exists to catch.) */
+    var shown = -1;
+    C.forEach(function (c, i) {
+      if (KEEP && KEEP.indexOf(i) < 0) { buildRow(c, i, null); return; }
+      shown++;
+      buildRow(c, i, shown);
+    });
+    function buildRow(c, i, slot) {
+      var mk = FINAL3[i] ? [man5, woman7] : FINAL2[i] ? [man5, woman6] : FINAL[i] ? [man5, woman5] : SLOPED[i] ? [man4, woman4] : STEPPED3[i] ? [man3, woman3] : STEPPED[i] ? [man2, woman2] : [man, woman];
+      FM.SHAPE_POLYS['__m' + i] = mk[0](c[1]);
+      FM.SHAPE_POLYS['__w' + i] = mk[1](c[2]);
+      if (slot === null) return;      // built, but not shown on this sheet
+      tbl.push('<tr><td class="name">' + (JUDGE ? String.fromCharCode(65 + slot) : c[0]) + '</td>');
+      SIZES.forEach(function (s) { tbl.push('<td><span class="cell"><canvas data-k="__m' + i + '" data-s="' + s + '"></canvas></span></td>'); });
+      SIZES.forEach(function (s) { tbl.push('<td><span class="cell"><canvas data-k="__w' + i + '" data-s="' + s + '"></canvas></span></td>'); });
+      tbl.push('</tr>');
+    }
+    tbl.push('</table>');
+    document.getElementById('grid').innerHTML = tbl.join('');
+
+    var notes = [];
+    [].slice.call(document.querySelectorAll('canvas')).forEach(function (cv) {
+      var kind = cv.getAttribute('data-k'), s = +cv.getAttribute('data-s');
+      /* The picker's own framing: `icoPoly` fits the unit box into 18/max(aspect) and centres it in a
+         24px cell. Both figures are square-aspect, so at the 18 column this is pixel-for-pixel what
+         the Shape tab draws. The bigger columns keep the same 3:4 box-to-cell ratio so nothing about
+         the framing changes between them. */
+      var cell = Math.round(s * 24 / 18);
+      cv.width = cell; cv.height = cell;
+      // Shown at 4x for anything under 48 so the pixels are legible on screen; the RENDER is at `s`.
+      var zoom = s <= 24 ? 4 : (s <= 76 ? 2 : 1);
+      cv.style.width = (cell * zoom) + 'px'; cv.style.height = (cell * zoom) + 'px';
+      var ctx = cv.getContext('2d');
+      var off = (cell - s) / 2;
+      ctx.fillStyle = '#e9f2ff';
+      ctx.beginPath();
+      FM.traceShapePath(ctx, { type: 'shape', shape: kind }, off, off, s, s, 0);
+      ctx.fill();
+      if (s === 51) {
+        // Measured, not eyeballed: how wide the silhouette actually gets, and whether the armpit
+        // notch survives to the pixel grid at all.
+        var d = ctx.getImageData(0, 0, cell, cell).data, minX = 99, maxX = -1, rows = 0;
+        for (var y = 0; y < cell; y++) {
+          var runs = 0, on = false;
+          for (var x = 0; x < cell; x++) {
+            var a = d[(y * cell + x) * 4 + 3] > 40;
+            if (a) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+            if (a && !on) runs++;
+            on = a;
+          }
+          if (runs >= 3) rows++;     // three separate inked runs on a row = arm | torso | arm
+        }
+        notes.push(kind + ': ' + (maxX - minX + 1) + 'px wide, ' + rows + ' rows show arm|body|arm separately');
+      }
+    });
+    /* THE CONTROL MUST BE THE SHIPPED SHAPE, PROVEN. `man(null)`/`woman(null)` are rebuilt from this
+       file's copy of the proportion table, so if the copy has drifted the whole sheet is judging a
+       figure the app does not draw — which is exactly what happened with the diamond head. Rendered
+       side by side with FM.SHAPE_POLYS.person/.woman at 128 and compared pixel for pixel. */
+    (function verifyControl() {
+      var bad = [];
+      [['person', man(null)], ['woman', woman(null)]].forEach(function (pair) {
+        FM.SHAPE_POLYS['__ctl'] = pair[1];
+        var a = inkOf(pair[0]), b = inkOf('__ctl'), diff = 0;
+        for (var i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 8) diff++;
+        if (diff) bad.push(pair[0] + ': ' + diff + ' px differ from the shipped shape');
+      });
+      delete FM.SHAPE_POLYS['__ctl'];
+      if (bad.length) {
+        document.body.insertAdjacentHTML('afterbegin',
+          '<div style="background:#5b1220;color:#fff;padding:10px;font:14px monospace">' +
+          'DO NOT JUDGE THIS SHEET — the control is not the shipped shape:<br>' + bad.join('<br>') + '</div>');
+      }
+      function inkOf(kind) {
+        var c = document.createElement('canvas'); c.width = c.height = 128;
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.beginPath();
+        FM.traceShapePath(x, { type: 'shape', shape: kind }, 0, 0, 128, 128, 0);
+        x.fill();
+        var d = x.getImageData(0, 0, 128, 128).data, o = new Uint8Array(128 * 128);
+        for (var i = 0; i < o.length; i++) o[i] = d[i * 4 + 3];
+        return o;
+      }
+    })();
+    out.textContent = JUDGE ? '' : notes.join('\n');
+    window.__done = true;
+  }
+})();
+</script>
+</body></html>
