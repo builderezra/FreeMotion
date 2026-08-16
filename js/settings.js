@@ -27,7 +27,14 @@ window.FM = window.FM || {};
      * setting has to make. */
     shapeColor: 'random',
     playbackQuality: 'auto', // 'auto' adapts to the machine | 'smooth' pins it low | 'detail' never drops
-    layout: 'classic',       // 'classic' = inspector down the right | 'studio' = left rail + inspector beside
+    /* ONE desktop layout (queue 249). Ezra: "I just want two layouts not three."
+     * There were three in practice — phone, studio, and classic — because classic was the DEFAULT and
+     * the choice lives in each browser's own storage. His laptop had studio saved from when we built
+     * it; his ultrawide, a different machine, still had the classic default; and a phone held sideways
+     * is over 700px so it took the desktop path and got classic too. Exactly the "amalgamation of the
+     * old one" he described.
+     * Studio is the one he asked me to build, so studio is the one that stays. */
+    layout: 'studio',
                              // the timeline. Desktop only: the CSS is gated behind (min-width: 701px), so a
                              // phone keeps its sheet layout whatever this says.
   };
@@ -46,7 +53,10 @@ window.FM = window.FM || {};
       // A stored 'classic' from before queue 178 is ignored rather than honoured: the option is gone,
       // and a saved value is the one way someone could still be looking at a look with no way back.
       if (['auto', 'smooth', 'detail'].indexOf(saved.playbackQuality) >= 0) state.playbackQuality = saved.playbackQuality;
-      if (saved.layout === 'classic' || saved.layout === 'studio') state.layout = saved.layout;
+      /* A saved 'classic' is migrated rather than honoured (queue 249). Honouring it would leave every
+       * machine that ever opened the app before today on the layout he asked to be rid of, and he
+       * would have to find the setting on each one — which is the situation he reported. */
+      if (saved.layout === 'studio' || saved.layout === 'classic') state.layout = 'studio';
       ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
@@ -380,10 +390,10 @@ window.FM = window.FM || {};
     // choice on a phone would be a switch that does nothing.
     if (!window.matchMedia || window.matchMedia('(min-width: 701px)').matches) {
       body.appendChild(group(
-        segmentRow('Layout', 'layout', [
-          { label: 'Classic', value: 'classic' }, { label: 'Studio', value: 'studio' },
-        ]),
-        hintRow('Classic puts the editing panel down the right-hand side. Studio moves it next to the timeline and turns the top bar into a rail on the far left — so adding and editing is a short trip from the clips instead of a reach to the top corner, and the canvas gets the height the top bar was using. Drag the top edge of the bottom band to trade canvas height for editing room.'),
+        /* The Classic/Studio switch is GONE (queue 249) — a third layout you could land on by accident
+           is the whole of what he reported. The hint below keeps the part that is still true and still
+           useful: what studio is, and that the band is draggable. */
+        hintRow('The editing panel sits next to the timeline, with the top bar as a rail down the far left — so adding and editing is a short trip from the clips instead of a reach to the top corner, and the canvas gets the height the top bar was using. Drag the top edge of the bottom band to trade canvas height for editing room.'),
       ));
     }
 

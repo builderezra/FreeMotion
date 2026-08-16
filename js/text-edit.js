@@ -164,14 +164,37 @@ window.FM = window.FM || {};
         return;
       }
       const r = panel.getBoundingClientRect();
-      pop.style.top = 'auto';
       pop.style.left = Math.round(r.left) + 'px';
       pop.style.width = Math.round(r.width) + 'px';
+      /* UP OR DOWN, whichever is not the canvas (queue 249). Opening upward used to be unconditional,
+       * capped to "all the room above the card" — and above the card IS the canvas, so on a short
+       * window the cap simply licensed covering it. Measured at 900x760: canvas 186x330 at y=14, the
+       * popover 560x347 at y=16, i.e. 99.5% of the picture you are typing on, which is his original
+       * report word for word.
+       * That is a SHORT-WINDOW problem rather than a layout one — it bites whichever desktop layout
+       * happens to put the canvas above the card — so the rule is about space, not about layouts:
+       * measure the room above the card that is genuinely clear of the canvas, and if there is not
+       * enough, open DOWNWARD instead. Below the card is the timeline, which is not the thing you are
+       * looking at while you type — the same trade layoutDesktop already makes when the stage is too
+       * short to host the card at all. */
+      const cvEl = document.getElementById('preview');
+      const cvr = cvEl && cvEl.getBoundingClientRect();
+      const MIN_POP = 180;
+      // Room above the card, stopping at the canvas rather than running over it.
+      const clearAbove = Math.round((cvr && cvr.bottom > 0 ? Math.max(0, r.top - cvr.bottom) : r.top) - 2 * CARD_GAP);
+      const roomBelow = Math.round(window.innerHeight - r.bottom - 2 * CARD_GAP);
+      if (clearAbove < MIN_POP && roomBelow > clearAbove) {
+        pop.style.bottom = 'auto';
+        pop.style.top = Math.round(r.bottom + CARD_GAP) + 'px';
+        if (popKind === 'extras') pop.style.maxHeight = Math.max(140, roomBelow) + 'px';
+        return;
+      }
+      pop.style.top = 'auto';
       pop.style.bottom = Math.round(window.innerHeight - r.top + 8) + 'px';
       // The "Aa" sheet is the one popover that can be taller than the room above the card. It is the
       // only one with overflow-y:auto, so it is the only one a max-height can rescue; the others are
       // 50-89px tall and capping them would clip rather than scroll.
-      if (popKind === 'extras') pop.style.maxHeight = Math.max(140, Math.round(r.top - 2 * CARD_GAP)) + 'px';
+      if (popKind === 'extras') pop.style.maxHeight = Math.max(140, clearAbove) + 'px';
       return;
     }
     if (!bar) return;

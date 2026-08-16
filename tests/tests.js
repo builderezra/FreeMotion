@@ -13719,7 +13719,7 @@
      The trap here is that "Classic" names TWO different settings in this app: the Appearance theme and
      the Classic|Studio LAYOUT. He said theme, so the layout row must survive untouched — a test that
      only checked for the word would have passed while the wrong control went missing. */
-  test('the Classic theme is gone, and the Classic layout is not', { item: 'no-classic-theme' }, async function () {
+  test('the Classic theme is gone, and so is the Classic LAYOUT (queue 249)', { item: 'no-classic-theme' }, async function () {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     const keep = localStorage.getItem('fm.settings');
     try {
@@ -13732,10 +13732,18 @@
       const labels = [].slice.call(document.querySelectorAll('.set-panel .set-row'))
         .map(r => ((r.querySelector('.set-label') || {}).textContent || ''));
       if (labels.some(l => l === 'Appearance')) throw new Error('the settings panel still offers an Appearance theme row');
-      if (!labels.some(l => /Layout/i.test(l))) throw new Error('the LAYOUT row went with it — Classic|Studio is a different setting that just shares the word');
+      /* The LAYOUT row is gone TOO now, and on purpose (queue 249). This line used to guard the
+         opposite — that removing the Classic THEME must not take the Classic|Studio LAYOUT switch with
+         it, since they only share a word. That guard was right at the time and is obsolete now: he
+         asked for "two layouts not three", so the desktop chooser is gone and studio is the only one.
+         Inverted rather than deleted, because "the chooser came back" would mean the third layout came
+         back with it, which is the thing he reported. */
+      if (labels.some(l => /^Layout$/i.test(l))) throw new Error('the Classic|Studio layout chooser is back — that third layout is exactly what he asked to be rid of');
+      if (FM.settings.get('layout') !== 'studio') throw new Error('the desktop layout is "' + FM.settings.get('layout') + '" — studio is meant to be the only one');
       const seg = [].slice.call(document.querySelectorAll('.set-panel .set-segbtn'))
         .map(b => b.textContent.trim());
       if (seg.indexOf('Liquid') >= 0) throw new Error('the Liquid/Classic appearance switch is still on screen');
+      if (seg.indexOf('Classic') >= 0 && seg.indexOf('Studio') >= 0) throw new Error('the Classic/Studio segmented control is still on screen');
       if (document.documentElement.getAttribute('data-theme') !== 'glass') {
         throw new Error('the document is on data-theme="' + document.documentElement.getAttribute('data-theme') +
           '" — theme-glass.css is scoped to [data-theme="glass"], so anything else IS the Classic look');

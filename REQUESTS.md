@@ -4324,7 +4324,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       they are built by the same `fxRow`.
       *(The test asserts the GLYPH, not the class — a class can be present while the icon looks
       identical, which is precisely the state you were reporting.)*
-- [ ] **249 — THREE layouts exist; there should be two.** *(Was #223, which collided with the splash-video entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug, with two ultrawide photos.) His
+- [x] **249 — THREE layouts exist; there should be two. DONE v8.39 — studio is now the only desktop layout.** *(Was #223, which collided with the splash-video entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug, with two ultrawide photos.) His
       words: *"For some reason the new layout i had you make only shows up on certain display sizes like
       my laptop, but then an amalgamation of the old one shows when I flip my phone or use a wide
       monitor, I don't want this, I just want two layouts not three"*
@@ -4382,8 +4382,15 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
         canvas that starts at y=14. **That is a SHORT-WINDOW geometry problem** — it would bite classic
         too at the same height; classic simply happens to place the canvas where it currently misses.
         Next step is a popover that flips or clamps when the space above the card is smaller than it is.
-      So: **one real fix away from studio being the only desktop layout**, and it is a popover placement
-      rule rather than anything to do with layouts.
+      **DONE v8.39.** That last fix landed: the Aa popover now measures the room above the card that is
+      genuinely CLEAR of the canvas, and opens downward over the timeline when there is not enough —
+      not the thing you are looking at while you type, and the same trade `layoutDesktop` already makes
+      for the card. It fixes short windows in every layout, not only this one.
+      **Studio is the only desktop layout now.** The Classic/Studio chooser is gone from Settings, and a
+      saved `classic` is **migrated** rather than honoured — otherwise every machine that had ever
+      opened the app would stay on the layout you asked to be rid of and you would have to find the
+      setting on each one, which is precisely what you reported.
+      So it is two layouts: phone, and everything else.
       **Not started at the tail of a long session, deliberately** — the same call that was made for #244,
       which then built cleanly in one go. The measurements above mean the next session builds instead of
       re-deriving. #147 should be RE-OPENED as part of it: it is done for the layout you are not using.
