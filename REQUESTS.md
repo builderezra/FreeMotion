@@ -1721,8 +1721,8 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
-- [ ] **263 — Kaleidoscope: dragging the Centre sliders to either end erases the layer. (Found in the
-      16 Aug hunt, not reported by him.)** Measured: with only the shape layer visible, moving **Centre Y
+- [x] **263 — Kaleidoscope: dragging the Centre sliders to either end erases the layer. DONE v8.42.
+      (Found in the 16 Aug hunt, not reported by him.)** Measured: with only the shape layer visible, moving **Centre Y
       to 0 or to 100** — or **Centre X to 100** — leaves ZERO pixels different from the background. The
       layer is simply gone, with no hint why. Default centre renders fine.
       Mechanism is in `js/compositor.js:4635`: after `a = Math.abs(a - slice/2)` the sampled angle is
@@ -1732,6 +1732,30 @@ better still, keep working inside the turn rather than parking work for a later 
       mirror, so "it goes dark" is arguably honest. What is NOT defensible is a slider whose own end
       stop silently deletes your layer. Either clamp the centre to a range that always has content, or
       wrap the sample back into frame. Worth asking him which he'd expect before choosing.
+
+      **DONE v8.42 — the mirrors bounce.** Reading the sampler settled the mechanism and it is worse
+      than "the wedge is empty": `drawWarpEffect` **CLAMPS** an out-of-range sample to the edge pixel
+      of a plate the size of the whole PROJECT FRAME, and that outermost row is empty margin for any
+      layer not touching the edge. So an escaped sample does not read the wrong content, it reads
+      nothing. At Centre X = 100, **100% of samples escape** — hence a completely invisible layer.
+      Reflecting the sample back into the plate is what a kaleidoscope physically is, so there is
+      always something to see wherever the centre is parked. Measured after, on a 360x640 preview of a
+      1080x1920 project (pixels differing from the background): default 75,904 · centreY=0 **3,829** ·
+      centreY=100 **4,295** · centreX=100 **125,334** · centreX=0 **126,643**. All were zero before.
+
+      **THE HONEST PART, AND IT IS YOUR CALL IF YOU DISAGREE.** This changes how an existing
+      kaleidoscope layer looks, and not by a little: at the **DEFAULT** centre **52.8% of the frame's
+      samples were already escaping the plate**, so more than half of what the effect drew was blank
+      smear. That is what changes — blank becomes mirrored content, which is the effect finally doing
+      its job rather than a restyle. But if you have a project that used the old look deliberately,
+      say so and I will swap to the narrow alternative instead: keep today's clamping and just stop
+      the Centre sliders reaching the values that erase everything. That version leaves every existing
+      frame byte-identical and only removes the cliff.
+      **Also noticed while reading it, NOT fixed:** `phase` ("Rotation") is added BEFORE the fold, so
+      it shuffles which destination angle maps where but never rotates the SOURCE wedge — meaning that
+      slider cannot change which part of your image is the one being mirrored. That is arguably its
+      whole job. Left alone because it is a behaviour change rather than a bug fix, and this entry was
+      about the vanishing. Its own item if you want it.
 
 - [x] **262 — Hot Colour (thermal): setting Low at or above High turns the layer into a flat black
       rectangle. DONE v8.41. (Found in the 16 Aug hunt.)** Two independent sliders, nothing stops them crossing.

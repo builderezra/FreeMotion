@@ -16145,6 +16145,35 @@
     if (crossed !== distinct(20, 80)) throw new Error('80/20 and 20/80 disagree, so crossing is not being read as the same window');
   });
 
+  test('Kaleidoscope keeps the layer visible wherever its Centre is parked (queue 263)', { item: 'kaleido-centre' }, function () {
+    /* The end stops of the Centre sliders used to erase the layer outright. Mechanism: the fold sends
+       every sample into a narrow wedge from the centre, and drawWarpEffect's sampler CLAMPS an
+       out-of-range sample to the edge pixel of a plate the size of the whole project frame — which is
+       empty margin. Park the centre on an edge and 100% of samples escape, so every pixel came back
+       transparent. The mirrors bounce now.
+       Baseline is a render with the layer HIDDEN, not "are there opaque pixels": the project
+       background fills the frame, so the naive check can never fail and would prove nothing. */
+    const R = FM.fxRegistry;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 600, shapeH: 900, fill: '#35dcaf' });
+    const S = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 5, background: '#000000' } });
+    const W = 360, H = 640;
+    const render = () => { const c = offscreen(W, H), ctx = c.getContext('2d'); FM.renderScene(ctx, S, 0.5); return ctx.getImageData(0, 0, W, H).data; };
+    L.effects = []; L.visible = false;
+    const bg = render();
+    L.visible = true;
+    const visible = () => { const a = render(); let n = 0;
+      for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - bg[i]) + Math.abs(a[i + 1] - bg[i + 1]) + Math.abs(a[i + 2] - bg[i + 2]) > 12) n++;
+      return n; };
+    L.effects = [];
+    if (!(visible() > 1000)) throw new Error('the plain layer is not visible against the background, so this test cannot see the defect');
+    const withCentre = (params) => { const i = R.makeInstance('kaleidoscope'); i.params = Object.assign(i.params || {}, params); L.effects = [i]; return visible(); };
+    if (!(withCentre({}) > 0)) throw new Error('the kaleidoscope erased the layer at its DEFAULT centre');
+    [['centery', 0], ['centery', 100], ['centerx', 0], ['centerx', 100]].forEach(([k, v]) => {
+      const n = withCentre({ [k]: v });
+      if (n === 0) throw new Error(k + '=' + v + ' erased the layer — zero pixels differ from the background');
+    });
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

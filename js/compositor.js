@@ -3690,6 +3690,15 @@ window.FM = window.FM || {};
   // could only ever happen in the middle of the shot — useless for putting a vortex on a face. These
   // read the centre/radius params and fall back to EXACTLY the old constants (50% → W/2, 100% → maxR),
   // so an existing project renders byte-for-byte as it did before.
+  /* Fold a coordinate back inside [0, n-1] by REFLECTING off both edges (a triangle wave), rather
+   * than letting drawWarpEffect's sampler clamp it to the edge pixel. Used by kaleidoscope, where a
+   * clamped sample means "the empty margin of the plate" and so erases the layer — see queue 263. */
+  function reflectInto(v, n) {
+    if (!(n > 1) || !isFinite(v)) return 0;
+    const last = n - 1, m = 2 * last;
+    let q = ((v % m) + m) % m;
+    return q > last ? m - q : q;
+  }
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
@@ -4660,7 +4669,17 @@ window.FM = window.FM || {};
       const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
       let a = (Math.atan2(dy, dx) + ph) % slice; if (a < 0) a += slice;
       a = Math.abs(a - slice / 2);   // fold within the wedge → mirrored kaleidoscope
-      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+      /* THE MIRRORS BOUNCE (queue 263). The fold above collapses every destination angle into the
+       * wedge [0, slice/2], so the SOURCE always lies in a narrow wedge pointing down-and-right from
+       * the centre. Park the centre on an edge with the Centre sliders and that wedge leaves the
+       * plate entirely — and drawWarpEffect's sampler CLAMPS an out-of-range sample to the edge
+       * pixel, which on a plate the size of the whole project frame is empty margin. So every pixel
+       * came back transparent and the layer simply disappeared. Measured: Centre Y at 0 or at 100, or
+       * Centre X at 100, left ZERO pixels different from the background.
+       * Reflecting instead of letting it clamp is what a kaleidoscope physically IS — the sample
+       * bounces off the frame edge and back over the content — so there is always something to see
+       * wherever the centre is parked. */
+      return [reflectInto(cx + Math.cos(a) * r, W), reflectInto(cy + Math.sin(a) * r, H)];
     },
     // ---- batch 7 (warp) ----
     // Mode 0 is Rect→Polar (what this always did). Mode 1 is the INVERSE, which was simply missing —
