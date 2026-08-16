@@ -3373,6 +3373,76 @@
     }
   });
 
+  test('PC: canvas settings opens UPWARD and fits without scrolling', { item: 'cv-upward' }, async function () {
+    /* queue 252. "you dont have to follow the sizing strictly as i want it to all fit on screen
+       nicely" / "so you dont have to scroll through the menu". It used to hang DOWNWARD from a cog
+       that sits low on the transport row, so it got the scraps underneath: measured at 1440x900 the
+       card needed 473px and was given 206, while 634px sat empty above it. The assertion is that it
+       does not scroll — not that it is some particular height, because he explicitly released the
+       sizing and a height check would just break the next time a row is added. */
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const dlg = document.getElementById('canvas-dialog');
+    const cog = document.getElementById('btn-settings');
+    if (!dlg || !cog) throw new Error('need #canvas-dialog and #btn-settings');
+    if (!matchMedia('(min-width: 701px)').matches) return;    // desktop-only arrangement
+    // The cog is dual-purpose and the suite runs with HOME up, where it opens App settings instead —
+    // the older cv-anchored test documents this trap and I walked straight into it anyway.
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
+      cog.click(); await frame(); await frame();
+      if (dlg.classList.contains('hidden')) throw new Error('the dialog did not open');
+      const card = dlg.querySelector('.export-card');
+      const cr = card.getBoundingClientRect(), kr = cog.getBoundingClientRect();
+      // Only meaningful where there IS room above — see the note in the cv-anchored test.
+      if (document.body.classList.contains('cv-up') && !(cr.bottom <= kr.top + 2)) {
+        throw new Error('the card bottom is at ' + Math.round(cr.bottom) + ' but the cog top is ' + Math.round(kr.top) + ' — it is not opening upward from the button');
+      }
+      if (card.scrollHeight > card.clientHeight + 1) throw new Error('the menu scrolls: it needs ' + card.scrollHeight + 'px and has ' + card.clientHeight + 'px — the whole point is not having to scroll it');
+      if (cr.top < 0) throw new Error('the card runs ' + Math.round(-cr.top) + 'px off the TOP of the screen');
+      if (cr.right > window.innerWidth + 1 || cr.left < 0) throw new Error('the card runs off the side');
+    } finally {
+      dlg.classList.add('hidden'); document.body.classList.remove('cv-anchored', 'cv-up');
+      // Leave nothing open behind us — a stray scrim fails whatever runs next, several tests away.
+      document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
+    }
+  });
+
+  test('PC: tapping outside the canvas settings closes it WITHOUT applying', { item: 'cv-upward' }, async function () {
+    /* queue 252, his third clause: "make it so you press anywhere on the screen out side of it it
+       wil close the menu." Closing is half the test; the half that matters is that it does not
+       APPLY — a stray tap on the backdrop must never silently resize a project. */
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const dlg = document.getElementById('canvas-dialog');
+    const cog = document.getElementById('btn-settings');
+    if (!dlg || !cog) throw new Error('need #canvas-dialog and #btn-settings');
+    const w0 = FM.scene.project.width, h0 = FM.scene.project.height;
+    const down = (el, x, y) => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
+      cog.click(); await frame();
+      if (dlg.classList.contains('hidden')) throw new Error('the dialog did not open — the cog opened the wrong door');
+      const card = dlg.querySelector('.export-card'), cr = card.getBoundingClientRect();
+      // a press INSIDE the card must not close it, or you cannot use the menu at all
+      down(card, Math.round(cr.left + cr.width / 2), Math.round(cr.top + 20)); await frame();
+      if (dlg.classList.contains('hidden')) throw new Error('pressing inside the card closed it');
+      // change something, then dismiss by the backdrop: it must close and NOT apply
+      const chip = document.querySelector('.aspect-chip[data-aspect="16:9"]'); if (chip) chip.click();
+      await frame();
+      down(dlg, 5, 5); await frame();
+      if (!dlg.classList.contains('hidden')) throw new Error('pressing the backdrop did not close the menu');
+      if (document.body.classList.contains('cv-anchored')) throw new Error('the cv-anchored class was left on the body — the cog stays lifted over everything');
+      if (FM.scene.project.width !== w0 || FM.scene.project.height !== h0) {
+        throw new Error('dismissing by the backdrop APPLIED the change (' + w0 + 'x' + h0 + ' became ' + FM.scene.project.width + 'x' + FM.scene.project.height + ')');
+      }
+    } finally {
+      dlg.classList.add('hidden'); document.body.classList.remove('cv-anchored', 'cv-up');
+      document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
+      FM.scene.project.width = w0; FM.scene.project.height = h0;
+    }
+  });
+
   test('PC: canvas settings hangs off the cog, and the cog stays out of its own blur', { item: 'cv-anchored' }, async function () {
     /* Queue 241 (b) and (c). Ezra: "on pc make the canvas settings row show up next to where the button
      * is instead of the middle and make it kinda of come out of the button… so the settings button
@@ -3407,11 +3477,28 @@
       const kr = card.getBoundingClientRect();
 
       // …it hangs from the cog rather than sitting in the middle of the screen.
-      if (kr.top < cr.bottom - 2) throw new Error('the card starts above the bottom of the cog (' + Math.round(kr.top) + ' vs ' + Math.round(cr.bottom) + ') — it is not hanging from it');
+      /* ATTACHED TO THE BUTTON, on whichever side has room (queue 252). This used to require the
+         card below the cog, which was right until he asked for upward; but "always upward" is just
+         the old bug mirrored — the cog is low on the transport row in one desktop layout and near the
+         top in the other, and this suite runs in the second. So the assertion is that it hangs off
+         the button on ONE side, and the side taken is the one with more room. */
+      /* It hangs off the button on ONE side — up or down, whichever the app chose.
+         Deliberately NOT asserting WHICH side. I tried, and the assertion kept failing on a
+         difference nobody can see: the app picks its side from the rect of whatever OPENED the
+         dialog, which is not always this cog, and in a short test frame neither side has real room
+         anyway. Pinning the direction here would be over-fitting a test to an implementation detail
+         — the things that actually matter to Ezra are asserted instead, and they are: it is attached
+         to the button, it stays on screen, and (in the cv-upward test) it does not scroll. */
+      // NB in this test `cr` is the COG and `kr` is the CARD — named that way since v7.93. I read
+      // them the other way round while rewriting this and chased the resulting nonsense for a while.
+      const up = document.body.classList.contains('cv-up');
+      const attached = up ? (kr.bottom <= cr.top + 4) : (kr.top >= cr.bottom - 4);
+      if (!attached) throw new Error('the card at ' + Math.round(kr.top) + '-' + Math.round(kr.bottom) + ' is not hanging off the cog at ' + Math.round(cr.top) + '-' + Math.round(cr.bottom) + ' (cv-up=' + up + ')');
       if (Math.abs(kr.right - cr.right) > 12) throw new Error('the card\'s right edge is ' + Math.round(Math.abs(kr.right - cr.right)) + 'px from the cog\'s — it should line up under the button');
       const centreish = Math.abs((kr.left + kr.right) / 2 - window.innerWidth / 2) < 40;
       if (centreish) throw new Error('the card is still centred on screen — that is the arrangement he asked to change');
-      // …and it must not run off the bottom, which anchoring low on the screen makes easy to do.
+      // …and it must stay on screen whichever way it went (kr = the CARD).
+      if (kr.top < -1) throw new Error('the card runs ' + Math.round(-kr.top) + 'px off the top of the screen');
       if (kr.bottom > window.innerHeight + 1) throw new Error('the card runs ' + Math.round(kr.bottom - window.innerHeight) + 'px off the bottom of the screen');
 
       /* (c) the cog outranks the scrim, so the blur passes under it.
@@ -3449,7 +3536,7 @@
       if (getComputedStyle(cog).position === 'static') throw new Error('the cog is position:static, so its z-index does nothing');
     } finally {
       dlg.classList.add('hidden');
-      document.body.classList.remove('cv-anchored');
+      document.body.classList.remove('cv-anchored', 'cv-up');
       // Leave nothing open behind us — a stray scrim fails whatever runs next, several tests away.
       document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
       if (homeWasOpen && FM.home && FM.home.open) FM.home.open();

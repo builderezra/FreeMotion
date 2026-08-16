@@ -1780,6 +1780,9 @@ better still, keep working inside the turn rather than parking work for a later 
       Desktop-only — the phone sheet is a different layout and must not change. Verify by measuring the
       card's scrollHeight against its clientHeight and asserting it does not scroll, rather than by
       eyeballing a screenshot.
+      **THIRD CLAUSE, added by him while this was being built:** *"Also when youre doing the cog menu
+      rework, make it so you press anywhere on the screen out side of it it wil close the menu."* So
+      tapping the backdrop closes it — same as Cancel, i.e. without applying.
 
 - [ ] **251 — PC: the ground behind the three selection icons is too BRIGHT, and it is not centred or
       aligned. (16 Aug, with a screenshot.)** His words: *"the back drop for the three icons like the bin

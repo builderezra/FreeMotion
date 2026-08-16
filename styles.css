@@ -5419,6 +5419,12 @@ body.fm-pushing #toast { z-index: 213; }
    The two coordinates come from app.js as variables because the cog's position is only knowable at
    runtime: its x moves with the layout, its y with however far the timeline has been dragged. */
 @media (min-width: 701px) {
+  /* OPENS UPWARD from the cog (queue 252). It used to hang DOWNWARD — and the cog lives on the
+     transport row, low on a desktop screen, so the card got whatever was left underneath it and had
+     to scroll. Measured at 1440x900: the card needed 473px of content and was given 206, while there
+     were 634px of empty space directly above it. That is what he traced — the unused area to the
+     right of the canvas — and what he meant by "so you dont have to scroll through the menu".
+     Anchored by its BOTTOM to just above the button, growing up into that space. */
   body.cv-anchored #canvas-dialog { align-items: flex-start; justify-content: flex-end; }
   body.cv-anchored #canvas-dialog .export-card {
     margin: var(--cv-anchor-top, 80px) var(--cv-anchor-right, 16px) 0 0;
@@ -5430,6 +5436,14 @@ body.fm-pushing #toast { z-index: 213; }
   /* Above the scrim (z-index 100), so the blur passes under it. The cog is the only thing lifted —
      lifting the whole row would put the transport controls over a modal that is meant to own the
      screen. */
+  /* The upward variant — only when the button actually has more room above it (js/app.js measures
+     and sets `cv-up`). Both directions are needed: the cog is low on the transport row in one desktop
+     layout and near the top in the other. */
+  body.cv-anchored.cv-up #canvas-dialog { align-items: flex-end; }
+  body.cv-anchored.cv-up #canvas-dialog .export-card {
+    margin: 0 var(--cv-anchor-right, 16px) var(--cv-anchor-bottom, 80px) 0;
+    max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px);
+  }
   body.cv-anchored #btn-settings { position: relative; z-index: 101; }
   @keyframes cv-grow {
     from { opacity: 0; transform: scale(.82) translate(6px, -10px); }

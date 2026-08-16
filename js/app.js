@@ -4110,12 +4110,26 @@ window.FM = window.FM || {};
         const sr = src && src.getBoundingClientRect();
         if (sr && sr.width > 0 && window.matchMedia('(min-width: 701px)').matches) {
           cvDialog.style.setProperty('--cv-anchor-right', Math.max(8, Math.round(window.innerWidth - sr.right)) + 'px');
+          /* WHICHEVER SIDE HAS ROOM (queue 252). He asked for it to open UPWARD, and on his layout
+             that is right — the cog sits on the transport row low on the screen, so hanging downward
+             gave the card the scraps underneath and made it scroll (measured at 1440x900: 473px of
+             content into 206px of space, with 634px sitting empty above).
+             But "always upward" is just the old bug mirrored. The cog is not always low: in the other
+             desktop layout it rides near the TOP, and anchoring upward there would push the card off
+             the screen — which is exactly what the suite caught, with the cog at y=126. So the side is
+             chosen by measurement, and upward wins ties because that is the arrangement he asked for. */
+          const roomAbove = sr.top - 16, roomBelow = window.innerHeight - sr.bottom - 16;
+          const up = roomAbove >= roomBelow;
+          document.body.classList.toggle('cv-up', up);
           cvDialog.style.setProperty('--cv-anchor-top', Math.round(sr.bottom + 8) + 'px');
+          cvDialog.style.setProperty('--cv-anchor-bottom', Math.max(8, Math.round(window.innerHeight - sr.top + 8)) + 'px');
           document.body.classList.add('cv-anchored');
         } else {
           cvDialog.style.removeProperty('--cv-anchor-right');
           cvDialog.style.removeProperty('--cv-anchor-top');
-          document.body.classList.remove('cv-anchored');
+        cvDialog.style.removeProperty('--cv-anchor-bottom');
+        document.body.classList.remove('cv-up');
+          document.body.classList.remove('cv-anchored', 'cv-up');
         }
         cvRenderPresets();          // (queue 183) rebuilt on every open — another tab may have saved one
         cvDialog.classList.remove('hidden');
@@ -4139,7 +4153,20 @@ window.FM = window.FM || {};
           cvRenderPresets();
           if (FM.toast) FM.toast('Saved “' + rec.name + '” — it is on the New project screen too', 2600);
         }); }
-      document.getElementById('cv-cancel').addEventListener('click', () => (document.body.classList.remove('cv-anchored'), cvDialog.classList.add('hidden')));
+      /* Tap anywhere outside to close (queue 252). His words: "make it so you press anywhere on the
+         screen out side of it it wil close the menu." It closes WITHOUT applying — the same as Cancel
+         — because a stray tap on the backdrop must never silently resize someone's project.
+         On the BACKDROP only (`e.target === cvDialog`), so a click that lands on the card itself, or
+         on anything inside it, is untouched. And on pointerdown rather than click: a drag that starts
+         inside the card and releases outside it would otherwise count as an outside click and shut
+         the dialog mid-gesture. The cog itself is excluded — it sits above the scrim now (v8.10), and
+         without this a click on it would close and immediately reopen the dialog. */
+      cvDialog.addEventListener('pointerdown', (e) => {
+        if (e.target !== cvDialog) return;
+        document.body.classList.remove('cv-anchored', 'cv-up');
+        cvDialog.classList.add('hidden');
+      });
+      document.getElementById('cv-cancel').addEventListener('click', () => (document.body.classList.remove('cv-anchored', 'cv-up'), cvDialog.classList.add('hidden')));
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
@@ -4148,7 +4175,7 @@ window.FM = window.FM || {};
         FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
-        (document.body.classList.remove('cv-anchored'), cvDialog.classList.add('hidden'));
+        (document.body.classList.remove('cv-anchored', 'cv-up'), cvDialog.classList.add('hidden'));
       });
     }
 
