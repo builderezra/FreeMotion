@@ -14894,6 +14894,97 @@
     }
   });
 
+  /* ---------------- queue 203: "improve quality" ----------------
+   * He asked for a button that adds pixels. Nothing in a browser can. What it does instead is
+   * sharpen what is there, tuned to how far the clip is being stretched — so the tests care that the
+   * DOSE follows the stretch (a fixed dose is what makes "enhanced" footage look worse than the
+   * original) and that pressing it twice does not stack two of them. */
+
+  function iqLayer(sw, sh) {
+    const L = FM.makeLayer('video', { name: 'V' });
+    L.start = 0; L.duration = 4;
+    // FM.media.get() is keyed by layer id; a plain record with dimensions is all improveQuality reads.
+    FM.media.set ? FM.media.set(L.id, { width: sw, height: sh }) : (FM.media._m && FM.media._m.set(L.id, { width: sw, height: sh }));
+    return L;
+  }
+
+  test('sharpening is dosed by how far the clip is actually stretched', { item: 'improve-quality' }, function () {
+    if (!FM.improveQuality) throw new Error('FM.improveQuality is not exported');
+    const P = FM.scene.project;
+    const w0 = P.width, h0 = P.height;
+    const layers0 = FM.scene.layers.slice();
+    try {
+      P.width = 1080; P.height = 1920;
+      // a badly soft clip: 270x480 into 1080x1920 is a 4x stretch
+      const soft = iqLayer(270, 480);
+      FM.scene.layers.push(soft);
+      const a = FM.improveQuality(soft);
+      if (!a || !a.applied) throw new Error('nothing was applied to a 4x-stretched clip');
+      if (Math.abs(a.stretch - 4) > 0.01) throw new Error('the stretch came out as ' + a.stretch + ', expected 4');
+      // …and a clip that barely needs it must get a GENTLER dose, or the halo is worse than the blur
+      const nearly = iqLayer(900, 1600);
+      FM.scene.layers.push(nearly);
+      const b = FM.improveQuality(nearly);
+      if (!b || !b.applied) throw new Error('nothing was applied to the mildly-stretched clip');
+      if (!(b.params.radius < a.params.radius)) throw new Error('a 1.2x clip got radius ' + b.params.radius + ' and a 4x clip got ' + a.params.radius + ' — the dose does not follow the stretch');
+      if (!(b.params.amount < a.params.amount)) throw new Error('the amount does not follow the stretch either (' + b.params.amount + ' vs ' + a.params.amount + ')');
+      if (!(a.params.radius <= 6 && a.params.amount <= 2)) throw new Error('the 4x dose is uncapped (' + JSON.stringify(a.params) + ') — past a point sharpening only amplifies compression blocks');
+    } finally {
+      P.width = w0; P.height = h0;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
+  test('pressing it twice removes the sharpening rather than stacking a second', { item: 'improve-quality' }, function () {
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = iqLayer(270, 480);
+      FM.scene.layers.push(L);
+      FM.improveQuality(L);
+      const n1 = (L.effects || []).filter(function (e) { return e.type === 'unsharpmask'; }).length;
+      if (n1 !== 1) throw new Error('expected one unsharp mask, found ' + n1);
+      const second = FM.improveQuality(L);
+      const n2 = (L.effects || []).filter(function (e) { return e.type === 'unsharpmask'; }).length;
+      if (second && second.applied) throw new Error('the second press applied ANOTHER one — two unsharp masks is a halo, not detail');
+      if (n2 !== 0) throw new Error('the second press left ' + n2 + ' unsharp mask(s); it should toggle the one it added off');
+      // …and it must only ever remove ITS OWN. A sharpen the user added by hand is not ours to delete.
+      const M = iqLayer(270, 480);
+      FM.scene.layers.push(M);
+      const mine = FM.fxRegistry.makeInstance('unsharpmask');
+      M.effects = [mine];
+      FM.improveQuality(M);
+      if (M.effects.indexOf(mine) < 0) throw new Error('it deleted an unsharp mask the user had added themselves');
+      if (M.effects.length !== 2) throw new Error('expected the hand-added one plus ours, found ' + M.effects.length);
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
+  test('the clip menu names it for what it does, not "improve quality"', { item: 'improve-quality' }, function () {
+    /* The label is the first place to be honest. "Improve quality" invites exactly the expectation a
+       browser cannot meet — it cannot invent detail — and a button that implies it can reads as
+       broken the first time it fails to rescue a genuinely soft clip. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = iqLayer(270, 480);
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      const labels = FM.layerMenuItems(L).map(function (i) { return i.label; });
+      const hit = labels.filter(function (t) { return /sharpen/i.test(t); });
+      if (!hit.length) throw new Error('no sharpening entry in the clip menu: ' + labels.join(' / '));
+      if (labels.some(function (t) { return /^improve quality$/i.test(t); })) {
+        throw new Error('the menu says "Improve quality", which promises detail the web cannot create');
+      }
+      // and it flips to a remove label once applied, so the toggle is discoverable
+      FM.improveQuality(L);
+      const after = FM.layerMenuItems(L).map(function (i) { return i.label; });
+      if (!after.some(function (t) { return /remove sharpening/i.test(t); })) {
+        throw new Error('after applying, the menu still offers to add it: ' + after.join(' / '));
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
   /* ---------------- queue 202: the "what's slow" readout ----------------
    * Three lag reports (#95, #125, #202) have all ended at the same place: measured on this Mac,
    * looks fine, nothing changes. The readout exists so the numbers can come off HIS device. The

@@ -3744,7 +3744,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
          clips, so it cannot quietly re-shape mixes you have already made.
       Verified at 375px. *(One of my own tests was dead: it set `layer.volume` directly and skipped the
       panel's clamp, so restoring the 100% cap left the suite green. It drags the real control now.)*
-- [ ] **203 — An "Improve quality" action in a clip's ⋯ menu.** His words: *"We should add a button in
+- [x] **203 — An "Improve quality" action in a clip's ⋯ menu. DONE v8.14, named honestly.** His words: *"We should add a button in
       the three dot menu when tapping on a clip to improve quality, so if your video or photo is low
       quality then you can add pixels or whatever to enhance it."*
       Be straight with him about what is possible before building anything: nothing in a browser invents
@@ -3753,6 +3753,23 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       make a soft phone clip look meaningfully better on a big canvas. What cannot be done is
       film-and-TV "enhance". Name it for what it does (Sharpen & upscale, say) rather than promising
       pixels it cannot create, or the feature will read as broken.
+
+      **DONE v8.14 — and it is called "Sharpen for upscaling…", not "Improve quality".** Taking the
+      entry's own advice rather than leaving it as a worry. The reason, plainly: nothing in a browser
+      can invent detail that is not in the file, so a button with your name on it would promise
+      something it cannot do and look broken the first time it failed to rescue a really soft clip.
+      What it DOES do is real and visible — it sharpens the detail that is there once the picture is
+      being stretched over more pixels than it has — and it tells you the numbers when you use it:
+      *"Sharpened for a 4× stretch (270×480 into 1080×1920). This sharpens the detail that is there —
+      it cannot add detail the file never had."*
+      **The dose follows the stretch.** A 4× upscale gets a wider radius than a 1.2× one; giving the
+      4× settings to a clip that barely needs them is what produces the crunchy halo that makes
+      "enhanced" footage look worse than the original. Capped at both ends.
+      **Press it again and it comes off** — "do it again to improve it more" is the obvious thing to
+      try, and two of them is a halo. It only ever removes the one IT added, so a sharpen you put on
+      by hand is safe.
+      **If you want it to actually invent detail**, that is an AI upscaler — a model, not a filter,
+      and a much bigger conversation about size and where it runs. Say so and we will scope it.
 - [x] **204 — Swiping UP on Recents should open Faves — he has now said UP twice. DONE v8.06.** His words: *"Idk if
       you've done it but it still needs to be added that swiping up on the recents menu in effects opens
       the faves menu."*

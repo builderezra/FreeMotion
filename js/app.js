@@ -2591,6 +2591,70 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast(set.size > 1 ? 'Moved ' + set.size + ' clips to the playhead' : 'Moved to playhead', 1300);
   };
 
+  /* ---- "Improve quality" (queue 203) ----------------------------------------------------------
+   * His words: "so if your video or photo is low quality then you can add pixels or whatever to
+   * enhance it."
+   *
+   * BE STRAIGHT ABOUT WHAT THIS IS. Nothing in a browser invents detail that is not in the file —
+   * there is no film-and-TV "enhance", and a button that implied there was would read as broken the
+   * first time it did not rescue a genuinely soft clip. What DOES help, and helps visibly, is
+   * sharpening the detail that IS there once the picture is being stretched over more pixels than it
+   * has. So the action is named for what it does, it tells you the real numbers, and it says plainly
+   * that it is not adding detail.
+   *
+   * The amount is tuned to how far the clip is actually being stretched rather than being a fixed
+   * dose: a 4x upscale needs a wider radius than a 1.2x one, and applying the 4x settings to a clip
+   * that barely needs it produces the crunchy halo that makes "enhanced" footage look worse than the
+   * original. Capped at both ends for the same reason. */
+  FM.improveQuality = function (layer) {
+    if (!layer || (layer.type !== 'video' && layer.type !== 'image')) return null;
+    const m = FM.media.get(layer.id);
+    const P = (FM.scene && FM.scene.project) || { width: 1080, height: 1920 };
+    const sw = (m && m.width) || 0, sh = (m && m.height) || 0;
+    if (!sw || !sh) {
+      if (FM.toast) FM.toast('That clip has not reported its size yet — try again once it has loaded', 3000);
+      return null;
+    }
+    // How far the source is stretched to fill the canvas. Compared against the PROJECT raster, which
+    // is what actually gets exported — not the on-screen preview, which is a scaled-down view of it.
+    const stretch = Math.max(P.width / sw, P.height / sh);
+    layer.effects = layer.effects || [];
+    const already = layer.effects.find(e => e && e.type === 'unsharpmask' && e._iq);
+    if (already) {
+      /* Toggle, not stack. Pressing it twice used to be the obvious way to "improve it more", and two
+       * unsharp masks on one clip is a halo, not detail. */
+      layer.effects.splice(layer.effects.indexOf(already), 1);
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.inspector) FM.inspector.refresh();
+      FM.requestRender(); if (FM.history) FM.history.commit();
+      if (FM.toast) FM.toast('Sharpening removed', 2000);
+      return { applied: false, stretch: stretch };
+    }
+    const inst = FM.fxRegistry.makeInstance('unsharpmask');
+    if (!inst) return null;
+    /* Radius follows the stretch — a softer, wider halo for a picture spread over more pixels — and
+     * amount rises with it but far more gently, because overshoot is what reads as "over-sharpened".
+     * Both clamped: below 1x there is nothing to recover, and past ~4x extra sharpening only
+     * amplifies the compression blocks. */
+    const k = Math.max(1, Math.min(4, stretch));
+    inst.params = { amount: +(0.5 + 0.35 * (k - 1)).toFixed(2), radius: Math.max(1, Math.min(6, Math.round(k * 1.5))) };
+    inst._iq = 1;                       // so the toggle above can find the one WE added
+    layer.effects.push(inst);
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.inspector) FM.inspector.refresh();
+    FM.requestRender(); if (FM.history) FM.history.commit();
+    if (FM.toast) {
+      /* The honest sentence. It names the real ratio, and it says what this is NOT — because "improve
+       * quality" invites exactly the expectation the web cannot meet, and being told up front beats
+       * discovering it on a clip you were counting on. */
+      const msg = stretch > 1.05
+        ? 'Sharpened for a ' + (Math.round(stretch * 10) / 10) + '× stretch (' + sw + '×' + sh + ' into ' + P.width + '×' + P.height + '). This sharpens the detail that is there — it cannot add detail the file never had.'
+        : 'This clip is already at or above the canvas resolution (' + sw + '×' + sh + '), so there is nothing to recover — light sharpening added anyway. Undo if it looks worse.';
+      FM.toast(msg, 5200);
+    }
+    return { applied: true, stretch: stretch, params: inst.params };
+  };
+
   FM.layerMenuItems = function (layer) {
     // DECLARED FIRST, and it must stay that way. It used to be declared 36 lines further down beside
     // the grouping entries, and a const read before its declaration throws ReferenceError — which
@@ -2615,6 +2679,13 @@ window.FM = window.FM || {};
     if (FM.kfClipboard && FM.kfClipboard.length && FM.pasteKfAtPlayhead) items.push({ label: 'Paste keyframes at playhead', action: () => FM.pasteKfAtPlayhead() });
     if (layer.type === 'video' || layer.type === 'image') {
       items.push({ label: 'Replace media…', action: () => FM.replaceMedia(layer.id) });
+      /* Named for what it DOES, not for what he asked it to be called (queue 203). "Improve quality"
+         promises invented pixels; this sharpens what is there when the clip is being stretched. The
+         label is the first place to be honest, and the toast is the second. */
+      {
+        const on = (layer.effects || []).some(e => e && e.type === 'unsharpmask' && e._iq);
+        items.push({ label: on ? 'Remove sharpening' : 'Sharpen for upscaling…', action: () => FM.improveQuality(layer) });
+      }
     }
     items.push(...[
       { label: layer.locked ? 'Unlock' : 'Lock', action: () => { layer.locked = !layer.locked; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } },   // one rebuild — layersPanel.refresh() IS rebuild() (see FM.layersPanel)
