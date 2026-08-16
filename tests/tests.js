@@ -14894,6 +14894,105 @@
     }
   });
 
+  /* ---------------- queue 210: per-tab colour in the add menu ----------------
+   * "The shapes colours are fine, but the rest aren't. They're generic and copy paste." The cause
+   * was one palette cycled by index on every tab, so colour meant position rather than meaning. The
+   * assertions are therefore about MEANING: the named buttons keep their named colour, the greys
+   * stay grey, and Shape is left exactly as it was. */
+
+  test('the add menu gives each tab its own palette and the named buttons their named colour', { item: 'addmenu-colour' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 140));
+    return atPhoneWidth(async function () {
+      const fab = document.getElementById('add-fab');
+      if (!fab) throw new Error('no #add-fab');
+      fab.click(); await frame();
+      try {
+        const byLabel = {};
+        const seen = {};
+        for (const t of Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab'))) {
+          t.click(); await frame();
+          const cards = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-card'));
+          const key = t.textContent.trim();
+          seen[key] = cards.map(function (c) { return (c.style.getPropertyValue('--am-tint') || '').trim(); }).filter(Boolean);
+          cards.forEach(function (c) {
+            const lbl = ((c.querySelector('.addmenu-lbl') || {}).textContent || '').trim();
+            if (lbl) byLabel[lbl] = c;
+          });
+        }
+        function tintOf(lbl) {
+          const c = byLabel[lbl];
+          if (!c) throw new Error('no card labelled "' + lbl + '"');
+          const m = (c.style.getPropertyValue('--am-tint') || '').split(',').map(function (n) { return parseInt(n, 10); });
+          if (m.length !== 3 || m.some(isNaN)) throw new Error('"' + lbl + '" has no tint');
+          return m;
+        }
+        const grey = function (t) { return Math.max.apply(null, t) - Math.min.apply(null, t) < 40; };
+        // "a basic grey" / "basic grey" — the neutral everyday action, and the reason the coloured
+        // ones read as doing something.
+        ['Import', 'Import audio'].forEach(function (l) {
+          if (byLabel[l] && !grey(tintOf(l))) throw new Error(l + ' should be a basic grey, got rgb(' + tintOf(l).join(',') + ')');
+        });
+        // "a strong red"
+        const rv = byLabel['Record voice…'] ? tintOf('Record voice…') : null;
+        if (rv && !(rv[0] > rv[1] + 100 && rv[0] > rv[2] + 100)) throw new Error('Record voice should be a strong red, got rgb(' + rv.join(',') + ')');
+        // "just a yellow colour ... that isn't obnoxious"
+        const ai = byLabel['AI Scene'] ? tintOf('AI Scene') : null;
+        if (ai && !(ai[0] > 180 && ai[1] > 150 && ai[2] < 140)) throw new Error('AI Scene should be yellow, got rgb(' + ai.join(',') + ')');
+        // the two whose colour is a gradient, which no single tint can express
+        if (byLabel['Sound effects'] && !byLabel['Sound effects'].classList.contains('addmenu-card--rainbow')) throw new Error('Sound effects is not the rainbow one');
+        if (byLabel['Sample clip'] && !byLabel['Sample clip'].classList.contains('addmenu-card--pinkblue')) throw new Error('Sample clip is not the pink-to-blue one');
+        // "we don't want it the exact same as the shape menu"
+        if (seen['Elements'] && seen['Shape'] && seen['Elements'].length && seen['Shape'].length) {
+          if (seen['Elements'][0] === seen['Shape'][0]) throw new Error('Elements still opens on the same colour as Shape — the copy-paste feel he described');
+        }
+        // Shape is the reference for "done right" and must not have moved.
+        if (seen['Shape'] && seen['Shape'][0] && seen['Shape'][0] !== '156, 124, 255') {
+          throw new Error('Shape\'s palette changed to ' + seen['Shape'][0] + ' — he said Shape is the one that is already right');
+        }
+      } finally {
+        /* The sheet is driven by an `open` class, NOT `hidden` — adding `hidden` left it open, and the
+           next test's fab click then TOGGLED it shut, so its cards measured zero and the ratio came
+           out NaN. Close it the way the app does. */
+        const sh = document.getElementById('add-sheet');
+        if (sh) sh.classList.remove('open');
+        document.body.classList.remove('add-open');
+      }
+    }, 375);
+  });
+
+  test('the rainbow and gradient cards survive the glass theme', { item: 'addmenu-colour' }, async function () {
+    /* They did not, and it took reading the computed background-image to notice — by eye the card
+       just looked a bit dull. theme-glass.css paints every card from --am-tint at (0,2,0), which
+       beats a bare `.addmenu-card--rainbow` at (0,1,0), so the flat tint was painted straight over
+       the rainbow. The file's own comment warns about this exact trap for the tabs; the cards needed
+       the same treatment. */
+    const frame = () => new Promise(r => setTimeout(r, 140));
+    return atPhoneWidth(async function () {
+      const fab = document.getElementById('add-fab');
+      fab.click(); await frame();
+      try {
+        const t = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab'))
+          .filter(function (x) { return /audio/i.test(x.textContent); })[0];
+        if (!t) throw new Error('no Audio tab');
+        t.click(); await frame();
+        const sfx = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-card'))
+          .filter(function (c) { return /sound effects/i.test(c.textContent); })[0];
+        if (!sfx) throw new Error('no Sound effects card');
+        const bg = getComputedStyle(sfx).backgroundImage;
+        // a rainbow has many stops; the tint pour that was overriding it has exactly two
+        const stops = (bg.match(/rgba?\(/g) || []).length;
+        if (stops < 4) throw new Error('Sound effects paints only ' + stops + ' colour stop(s) — the flat tint is overriding the rainbow: ' + bg.slice(0, 120));
+      } finally {
+        /* The sheet is driven by an `open` class, NOT `hidden` — adding `hidden` left it open, and the
+           next test's fab click then TOGGLED it shut, so its cards measured zero and the ratio came
+           out NaN. Close it the way the app does. */
+        const sh = document.getElementById('add-sheet');
+        if (sh) sh.classList.remove('open');
+        document.body.classList.remove('add-open');
+      }
+    }, 375);
+  });
+
   /* ---------------- queue 209: the effects header's x and search buttons ----------------
    * "make them actually centred inside their own circle. Make the x button red and the search one a
    * nice blue." The entry warns to measure the INK, not the button — the box was never the problem.
@@ -14997,9 +15096,12 @@
         if (!checkedFull) throw new Error('no tab filled the sheet, so this test proved nothing about the band');
         if (!checkedShort) throw new Error('no short tab was checked, so the overcorrection guard proved nothing');
       } finally {
-        // Leave it shut — an add sheet left open covers the timeline for whatever runs next.
+        // Leave it shut — an add sheet left open covers the timeline for whatever runs next. The
+        // sheet is driven by an `open` class, not `hidden`; adding `hidden` left it open and the
+        // next test's fab click toggled it shut, measuring zero-size cards.
         const sh = document.getElementById('add-sheet');
-        if (sh) sh.classList.add('hidden');
+        if (sh) sh.classList.remove('open');
+        document.body.classList.remove('add-open');
       }
     }, 375);
   });

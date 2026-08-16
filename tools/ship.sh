@@ -27,6 +27,19 @@ LOG="$(grep -o '^- v[0-9]\+\.[0-9]\+' POLISH-LOG.md | tail -1 | sed 's/^- //')"
 [ -n "$VER" ] || { echo "❌ could not read the version label out of index.html — fix this gate before shipping"; exit 1; }
 [ "$VER" = "$LOG" ] || { echo "❌ index.html says $VER but the newest POLISH-LOG entry is $LOG — write the log entry first"; exit 1; }
 
+# The newest POLISH-LOG entry names the queue items it closes, e.g. "(queue 209)". If any of them is
+# still an OPEN checkbox in REQUESTS.md, the release is about to go out with the item untick — which
+# is the exact failure REQUESTS.md exists to prevent, and it happened on v8.19 when a tick script
+# threw before writing and the push went ahead anyway.
+LOGLINE="$(grep -n '^- v[0-9]' POLISH-LOG.md | tail -1 | cut -d: -f2-)"
+for q in $(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u); do
+  if grep -q "^- \[ \] \*\*$q " REQUESTS.md || grep -q "^- \[ \] \*\*$q —" REQUESTS.md; then
+    echo "❌ POLISH-LOG says this release closes queue $q, but #$q is still OPEN in REQUESTS.md."
+    echo "   Tick it before shipping, or drop it from the log entry if it is not actually done."
+    exit 1
+  fi
+done
+
 echo "→ running the suite (3-4 minutes)…"
 OUT="$(python3 tests/_cdp.py --port 8777 2>&1)"
 SUM="$(printf '%s' "$OUT" | grep -o '"summary": "[^"]*"' | head -1)"

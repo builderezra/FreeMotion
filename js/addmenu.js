@@ -662,6 +662,53 @@ window.FM = window.FM || {};
    * item is added.
    * Stored as an "r, g, b" triple, not a hex, because the CSS needs BOTH the solid colour and a
    * translucent plate behind it from the same value. */
+  /* ---- Per-tab palettes and named colours (queue 210) -----------------------------------------
+   * "The shapes colours are fine, but the rest aren't. They're generic and copy paste. They need to
+   * look quality."
+   *
+   * He is describing the cause exactly: there was ONE list of eight hues, cycled by index, on every
+   * tab. So Elements and Shape opened with the same run of colours in the same order, and nothing on
+   * any tab meant anything — the colour was a function of position, not of what the button does.
+   *
+   * Two changes. Each tab gets its OWN palette (Shape keeps the original, because he says it is the
+   * one that is right), and the buttons he named by name get the colour he named, regardless of
+   * where they sit. That second part is the one that makes the tabs stop feeling copy-pasted: the
+   * colour now says something about the button.
+   *
+   * The greys are a system, not three separate asks — his own words make Import and Import audio
+   * plain grey while the things that MAKE something carry colour. That hierarchy is the reason a
+   * grey is specified at all, so it must survive any later repaint. */
+  var BY_LABEL = {
+    // "a basic grey" / "basic grey" — the neutral, everyday action. Deliberately colourless so the
+    // buttons that create something stand out against it.
+    'Import': '150, 160, 176',
+    'Import audio': '150, 160, 176',
+    'Import media': '150, 160, 176',
+    'AI Scene': '240, 200, 90',          // "just a yellow colour for the background that isn't obnoxious"
+    'Sound effects': 'RAINBOW',          // "a rainbow" — handled below; a single triple cannot say it
+    'Record voice…': '235, 70, 70',      // "a strong red"
+    'Record voice': '235, 70, 70',
+    'Sample clip': 'PINKBLUE',           // "a pinky red colour and blue gradient"
+  };
+
+  /* Elements: "choose more subtle background colours, the main icon can stay bright but the backdrop
+   * more subtle, and also just change the colours up in general and pic better stuff, we don't want
+   * it the exact same as the shape menu." So a different family from Shape's — cooler and earthier,
+   * no violet-to-pink run — and the BACKDROP alpha is dropped separately in CSS so the icons stay
+   * bright while the plate recedes. */
+  var TINTS_ELEMENT = [
+    '108, 176, 255',   // sky
+    '96, 214, 190',    // sea
+    '176, 200, 120',   // moss
+    '230, 176, 108',   // sand
+    '150, 160, 255',   // dusk
+    '120, 205, 232',   // ice
+    '214, 158, 190',   // clay
+    '160, 190, 150',   // sage
+  ];
+  var TINTS_MEDIA = ['150, 160, 176', '240, 200, 90', '120, 190, 240'];
+  var TINTS_AUDIO = ['150, 160, 176', '160, 140, 235', '235, 70, 70'];
+
   var TINTS = [
     '156, 124, 255',   // violet
     '79, 163, 255',    // blue
@@ -676,6 +723,11 @@ window.FM = window.FM || {};
   function card(item, cls, iconOnly, tint) {
     var b = document.createElement('button');
     b.className = cls; b.type = 'button';
+    /* Two of his asks cannot be said with one rgb triple — "a rainbow" and "a pinky red colour and
+       blue gradient" are gradients. They get a class instead, and the CSS paints the plate; the
+       --am-tint still carries a representative hue so the ICON and the border have something sane. */
+    if (tint === 'RAINBOW') { b.classList.add('addmenu-card--rainbow'); tint = '255, 138, 61'; }
+    else if (tint === 'PINKBLUE') { b.classList.add('addmenu-card--pinkblue'); tint = '255, 99, 158'; }
     if (tint) b.style.setProperty('--am-tint', tint);
     var hidden = item.mid && demo();
     var label = hidden ? (item.kind === 'video' ? 'Video' : item.kind === 'audio' ? 'Audio' : 'Photo') : item.label;
@@ -788,8 +840,17 @@ window.FM = window.FM || {};
            hues. Media/Audio library tiles are skipped — they show the user's own frame, and a colour
            plate behind a photograph is noise. */
         function makeCard(o, idx) {
-          var tint = o.mid ? null : TINTS[idx % TINTS.length];
-          var c = card(o, 'addmenu-card' + (iconOnly ? ' addmenu-card--ico' : ''), iconOnly, tint);
+          /* By NAME first, then the tab's own palette, then the original list. Name beats position so
+             "Record voice" is red wherever it sits — moving a button must not repaint it. */
+          var pal = tab.key === 'object' ? TINTS_ELEMENT      // the Elements tab's key is 'object'
+                  : tab.key === 'media' ? TINTS_MEDIA
+                  : tab.key === 'audio' ? TINTS_AUDIO
+                  : TINTS;
+          var tint = o.mid ? null : (BY_LABEL[o.label] || pal[idx % pal.length]);
+          // Elements gets the quieter plate (queue 210) — his "backdrop more subtle", applied per
+          // TAB rather than per card so the whole tab reads as one family.
+          var soft = tab.key === 'object' ? ' addmenu-card--soft' : '';
+          var c = card(o, 'addmenu-card' + (iconOnly ? ' addmenu-card--ico' : '') + soft, iconOnly, tint);
           c.addEventListener('click', function () { if (!c._longPressed) { o.add(); after(); } c._longPressed = false; });
           if (o.elementId) c.addEventListener('contextmenu', function (ev) {   // desktop: right-click removes a saved element
             ev.preventDefault();

@@ -5582,3 +5582,41 @@ body.fm-pushing #toast { z-index: 213; }
 }
 .hm-tab.hm-tab-pop { animation: hm-tab-pop 180ms cubic-bezier(.3, .8, .4, 1); }
 @media (prefers-reduced-motion: reduce) { .hm-tab.hm-tab-pop { animation: none; } }
+
+/* ---- Add-menu: per-tab colour (queue 210) -----------------------------------------------------
+   "The shapes colours are fine, but the rest aren't. They're generic and copy paste."
+   Shape is untouched — he says it is the one that is right. */
+
+/* Elements: "the main icon can stay bright but the backdrop more subtle". So the PLATE drops from
+   .10/.26 to a whisper while the icon keeps full tint — the contrast between them is the ask. */
+.addmenu-page .addmenu-card.addmenu-card--soft { background: rgba(var(--am-tint, 41, 217, 187), .055); border-color: rgba(var(--am-tint, 41, 217, 187), .16); }
+.addmenu-page .addmenu-card.addmenu-card--soft:hover { background: rgba(var(--am-tint, 41, 217, 187), .13); border-color: rgba(var(--am-tint, 41, 217, 187), .34); }
+
+/* "a rainbow" — Sound effects. Kept at low alpha so it reads as a colourful plate rather than a
+   sticker; a full-strength rainbow next to eight quiet cards looks like a bug. */
+.addmenu-card--rainbow {
+  /* Alpha rises across the sweep rather than staying flat. At a constant .20 the warm half read fine
+     and the cool half all but vanished into the dark panel — measured by looking at it: the card
+     came out "orange", not "a rainbow". Blues and violets carry far less luminance against this
+     background, so they need more of themselves to register the same. */
+  background:
+    linear-gradient(95deg,
+      rgba(255, 90, 90, .26) 0%, rgba(255, 175, 70, .26) 20%, rgba(245, 225, 90, .24) 38%,
+      rgba(110, 215, 130, .30) 56%, rgba(90, 175, 255, .40) 76%, rgba(185, 120, 255, .44) 100%);
+  border-color: rgba(255, 175, 70, .34);
+}
+.addmenu-card--rainbow:hover {
+  background:
+    linear-gradient(95deg,
+      rgba(255, 90, 90, .40) 0%, rgba(255, 175, 70, .40) 20%, rgba(245, 225, 90, .38) 38%,
+      rgba(110, 215, 130, .44) 56%, rgba(90, 175, 255, .54) 76%, rgba(185, 120, 255, .58) 100%);
+}
+
+/* "a pinky red colour and blue gradient" — Sample clip. Pink-red into blue, in that order. */
+.addmenu-card--pinkblue {
+  background: linear-gradient(120deg, rgba(255, 88, 132, .22) 0%, rgba(90, 150, 255, .22) 100%);
+  border-color: rgba(255, 88, 132, .32);
+}
+.addmenu-card--pinkblue:hover {
+  background: linear-gradient(120deg, rgba(255, 88, 132, .36) 0%, rgba(90, 150, 255, .36) 100%);
+}

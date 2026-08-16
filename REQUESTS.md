@@ -4226,7 +4226,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       its own. Worth checking that first, since the fix there (read `FM.SHAPE_ASPECT`, fit rather than
       stretch) may apply directly. Check media thumbnails too — if they use the same helper, a video
       whose aspect differs from the box will be stretched the same way and nobody has mentioned it yet.
-- [ ] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words.**
+- [x] **210 — The add-menu cards look generic. Per-tab colour direction, in his own words. ELEMENTS/MEDIA/AUDIO DONE v8.20; Template still open.**
       *"The shapes colours are fine, but the rest aren't. They're generic and copy paste. They need to
       look quality."* Four screenshots, one per tab. Shape is the one to leave alone — it is the
       reference for "done right".
@@ -4245,6 +4245,25 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       audio are both plain grey on purpose** — the neutral, everyday action — while the things that
       MAKE something (AI Scene, Sound effects, Record voice) carry colour. That is a real hierarchy and
       it should survive whatever palette gets chosen.
+
+      **v8.20 — Elements, Media and Audio are done; the greys are a system and are tested as one.**
+      You had the cause exactly: ONE list of eight hues cycled by index on every tab, so a button's
+      colour came from its position, not from what it does. Each tab has its own palette now (**Shape
+      untouched**), and the buttons you named are coloured **by name**, so moving one cannot repaint it.
+      Elements got a cooler, earthier family with the plate dropped to a whisper and the icons left
+      bright. Import / Import audio are grey; AI Scene yellow; Sample clip pink-red into blue; Sound
+      effects a rainbow; Record voice a strong red.
+      *(Two things only measurement caught: `theme-glass.css` paints every card from the tint at (0,2,0)
+      and was flattening the rainbow to plain orange — by eye it merely looked dull, and it took reading
+      the computed background-image to see. And a flat-alpha rainbow reads as orange, because blues and
+      violets carry far less luminance on this panel, so the alpha rises across the sweep.)*
+
+      **⚠️ STILL OPEN — the TEMPLATE tab, which is not a colour job.** Your words: *"it shouldn't even
+      colour it should show the hero image of whatever the template is (still keeping the text)."* That
+      needs a thumbnail rendered or stored per template and drawn as the card's background with the
+      label over it — closer to the home screen's project cards than to anything in this release. The
+      empty state ("No templates yet") still needs to look like something too. Left for its own pass
+      rather than half-built.
 - [x] **209 — The × and search buttons in the effects header are off-centre and colourless. DONE v8.19.** His words:
       *"The search and x buttons in this menu look shit, make them actually centred inside their own
       circle. Make the x button red and the search one a nice blue."* Screenshot: the Add Effect header,
