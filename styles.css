@@ -1008,6 +1008,27 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 /* Was `flex: 0 0 88px` to hold the ✕. With the ✕ gone the rail is empty and :empty collapses it,
    so the tile grid gets that quarter of a 375px screen back. */
 .addmenu--sheet .addmenu-grid { grid-template-columns: repeat(2, 1fr); }
+/* FILL THE SHEET INSTEAD OF LEAVING A DEAD BAND (queue 208). Ezra, with a red ring drawn round the
+   empty strip under the last row: "We need to utilise this wasted space on phone, each icon in that
+   section could be longer and more square so then it fits it all nicely."
+   Measured at 375×812 before touching it: three rows of 111×64 cards (ratio 1.73 — wide and short)
+   in a body 260px tall, so 52px of it did nothing.
+   The rows share the body's height now, so the cards grow taller and squarer and the band is gone.
+   This is NOT the "make the inner content fill its parent" that the v5.46 note above warns about and
+   says collapsed the panel three times — that was circular because the body was sized BY its
+   children. It is not any more: that same note gave it a stated height, which is exactly what makes
+   filling it well defined.
+   minmax rather than a bare 1fr, deliberately: a tab with more rows than fit must keep today's 64px
+   and scroll, not squash every card to nothing to make them fit. Grow into spare room, never shrink
+   below what works. */
+.addmenu--sheet .addmenu-grid--fill { min-height: 100%; grid-auto-rows: minmax(64px, 1fr); }
+/* …and the two wrappers between the body and the grid need a height for that 100% to mean anything.
+   The pager and the page were both content-sized (208px), so the grid's `min-height: 100%` resolved
+   against the very height it was trying to grow past and nothing moved — measured, after the rule
+   above was already correct and applying. The body is the one with the stated height, so the chain
+   from it down has to be definite for any of this to reach the cards. */
+.addmenu--sheet .addmenu-pager { height: 100%; }
+.addmenu--sheet .addmenu-page { min-height: 100%; }
 .cat-back:hover { color: var(--text); }
 .insp-sub-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); font-weight: 700; margin: 14px 0 8px; }
 

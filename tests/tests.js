@@ -14894,6 +14894,51 @@
     }
   });
 
+  /* ---------------- queue 208: the add sheet's wasted band ----------------
+   * "We need to utilise this wasted space on phone, each icon in that section could be longer and
+   * more square so then it fits it all nicely" — with a ring drawn round the empty strip under the
+   * last row of Elements. The trap is overcorrecting: filling the sheet on a ONE-row tab makes a
+   * 111x260 sliver, which is the opposite of what he asked for. Both halves are asserted. */
+
+  test('the add sheet leaves no dead band under a full grid, and the cards get squarer', { item: 'addsheet-fill' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 140));
+    return atPhoneWidth(async function () {
+      const fab = document.getElementById('add-fab');
+      if (!fab) throw new Error('no #add-fab button');
+      fab.click(); await frame();
+      const body = document.querySelector('.addmenu--sheet .addmenu-body');
+      if (!body) throw new Error('the phone add sheet did not open');
+      try {
+        const tabs = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab'));
+        let checkedFull = 0, checkedShort = 0;
+        for (const t of tabs) {
+          t.click(); await frame();
+          const grid = document.querySelector('.addmenu--sheet .addmenu-grid');
+          if (!grid || !grid.children.length) continue;
+          const br = body.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+          const c0 = grid.children[0].getBoundingClientRect();
+          const ratio = c0.width / c0.height;
+          if (grid.classList.contains('addmenu-grid--fill')) {
+            checkedFull++;
+            const band = br.bottom - gr.bottom;
+            if (band > 8) throw new Error(t.textContent.trim() + ': ' + Math.round(band) + 'px of dead band under the grid — the whole complaint');
+            if (!(ratio < 1.7)) throw new Error(t.textContent.trim() + ': cards are still ' + ratio.toFixed(2) + ':1 — no squarer than the 1.73 he complained about');
+          } else {
+            checkedShort++;
+            // the overcorrection guard: a short page must NOT stretch into a sliver
+            if (ratio < 0.6) throw new Error(t.textContent.trim() + ': a short page stretched to ' + ratio.toFixed(2) + ':1 — a sliver, which is the opposite of "more square"');
+          }
+        }
+        if (!checkedFull) throw new Error('no tab filled the sheet, so this test proved nothing about the band');
+        if (!checkedShort) throw new Error('no short tab was checked, so the overcorrection guard proved nothing');
+      } finally {
+        // Leave it shut — an add sheet left open covers the timeline for whatever runs next.
+        const sh = document.getElementById('add-sheet');
+        if (sh) sh.classList.add('hidden');
+      }
+    }, 375);
+  });
+
   /* ---------------- queue 207: the home tabs stagger their contents in ----------------
    * "when you open up any of the 4 menus like projects elements etc it does something like the
    * animation when opening the app where all of the spawn in loading from top to bottom, ... also

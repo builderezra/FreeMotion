@@ -3900,7 +3900,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       *(Both of my first assertions were DEAD. They read the real grid, which in the test browser holds
       one card, so "no stagger" and "no cap" both passed under mutation. The test builds a known
       40-card grid now — with 40 cards an uncapped stagger makes the last one wait 1.56s.)*
-- [ ] **208 — The add sheet wastes a band at the bottom on the phone.** His words: *"We need to utilise
+- [x] **208 — The add sheet wastes a band at the bottom on the phone. DONE v8.18.** His words: *"We need to utilise
       this wasted space on phone, each icon in that section could be longer and more square so then it
       fits it all nicely"* — with a screenshot of the Elements tab, a red ring drawn round an empty strip
       below "Adjustment / Empty group / Custom elements".
@@ -3908,6 +3908,17 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       closer to square. Watch two things — the sheet's height varies with the device (and with the
       safe-area inset), so this wants the cards to FLEX into the available height rather than a taller
       fixed size that overflows a smaller phone; and the tabs above must not grow with them.
+
+      **DONE v8.18.** Measured first: three rows of 111×64 cards (ratio 1.73) in a 260px body — 52px
+      doing nothing. The rows share that height now and Elements is **111×81 (ratio 1.37)**, band gone.
+      Both warnings in this entry were right and both are honoured: the cards **flex** into the height
+      rather than taking a taller fixed size (so a smaller phone just gets smaller cards), and the tabs
+      above are untouched.
+      **The overcorrection is the part worth knowing.** Filling on EVERY tab gave Media — three cards on
+      one row — a 111×260 card at ratio 0.43, a sliver, which is the opposite of what you asked for. So
+      the fill is opt-in per page, drawn at two rows: 3 rows → 1.37, 2 rows → 0.88, 1 row → 0.43. A
+      one-row tab keeps its natural size and the sheet has room to spare, which is more honest than
+      stretching one card to four times its height to pretend the space is used.
 - [x] **201 — Show that a layer is LOADING, with a spinner bottom-left.** (v7.30) His words: *"I think the issue
       with layers I add being invisible is because they're just loading, so make the app identify this
       loading and put a nice smooth loading circle that moves in the bottom left corner."*

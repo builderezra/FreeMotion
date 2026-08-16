@@ -852,7 +852,24 @@ window.FM = window.FM || {};
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';
           var grid = document.createElement('div'); grid.className = 'addmenu-grid' + (iconOnly ? ' addmenu-grid--ico' : '');
-          opts.slice(i, i + perPage).forEach(function (o, j) { grid.appendChild(makeCard(o, i + j)); });
+          var pageOpts = opts.slice(i, i + perPage);
+          pageOpts.forEach(function (o, j) { grid.appendChild(makeCard(o, i + j)); });
+          /* GROW INTO THE SHEET, BUT ONLY WHEN THERE IS A GRID TO GROW (queue 208). Ezra wanted the
+           * dead band under the last row used up: "each icon in that section could be longer and more
+           * square so then it fits it all nicely." Letting the rows share the sheet's height does that
+           * — Elements went from 111×64 (ratio 1.73) to 111×81 (1.37), taller and squarer, band gone.
+           * But applied to EVERY tab it overshoots badly: Media has three cards on one row, and one
+           * row sharing 260px produced a 111×260 card at ratio 0.43 — a tall sliver, which is the
+           * opposite of "more square". Measured, not guessed.
+           * So the fill is opt-in per page, and the line is drawn at TWO rows, by measurement:
+           *   3 rows (Elements, 9 cards) → 111×81, ratio 1.37 — his case, and the band is gone
+           *   2 rows (Audio, 5 cards)    → 111×126, ratio 0.88 — squarer still, and fine
+           *   1 row  (Media, 3 cards)    → 111×260, ratio 0.43 — a sliver, and clearly wrong
+           * So one row keeps its natural size and the sheet simply has room to spare, which is honest.
+           * Better a little empty space than a card stretched to four times its height pretending the
+           * space is used. */
+          var cols = iconOnly ? (variant === 'sheet' ? 5 : 6) : (variant === 'sheet' ? 3 : 4);
+          if (Math.ceil(pageOpts.length / cols) >= 2) grid.classList.add('addmenu-grid--fill');
           page.appendChild(grid); pager.appendChild(page);
         }
         bodyEl.appendChild(pager);
