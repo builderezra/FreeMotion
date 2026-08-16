@@ -17249,6 +17249,52 @@
       throw new Error('both notepad icons use the gradient id "' + phone.gradId + '" — a duplicate id steals the paint from whichever is second');
   });
 
+  /* ---------------- queue 273: the loading pill lay across the + button ----------------
+   * "make sure that the bar that reads out the name of the thing … doesn't go to cover over the plus
+   * create button."
+   * The pill is pinned bottom-LEFT with no right-hand limit and it NAMES the clip, so its width is the
+   * length of a filename. Measured at 375px with a real one: it ran the full 363px to the screen edge
+   * and lay 80px across the FAB, overlapping vertically too. */
+
+  test('the loading pill never reaches the + button (queue 273)', { item: 'load-pill' }, function () {
+    return atPhoneWidth(async function () {
+      await new Promise(r => setTimeout(r, 80));
+      /* Built the way js/loading.js builds it, so this measures the real thing rather than a bare div
+         that happens to share an id. */
+      const el = document.createElement('div');
+      el.id = 'loading-dot';
+      el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ld-track" cx="12" cy="12" r="9"/>'
+        + '<circle class="ld-arc" cx="12" cy="12" r="9"/></svg><span class="ld-label"></span>';
+      const had = document.getElementById('loading-dot');
+      if (had) had.remove();
+      document.body.appendChild(el);
+      el.classList.add('on');
+      const lbl = el.querySelector('.ld-label');
+      try {
+        const fab = document.getElementById('add-fab');
+        if (!fab || !fab.getBoundingClientRect().width) throw new Error('no + button on screen at phone width — nothing to stay clear of');
+        const f = fab.getBoundingClientRect();
+        /* A filename he would really have, then an absurd one: the cap has to hold at any length, or
+           it is a guess that happens to fit today's names. */
+        [['a real one', 'Loading Invincible (2023) - Thragg Teaser (S04) - 1080p YT WEB-DL AV1.mp4'],
+         ['an absurd one', 'Loading ' + 'x'.repeat(300)]].forEach(([what, text]) => {
+          lbl.textContent = text;
+          const p = el.getBoundingClientRect();
+          const overlaps = p.right > f.left && p.bottom > f.top && p.top < f.bottom;
+          if (overlaps) throw new Error('with ' + what + ', the pill reaches ' + Math.round(p.right) + ' and the + starts at ' + Math.round(f.left) + ' — it is covering the button');
+          if (p.right > window.innerWidth) throw new Error('with ' + what + ', the pill runs off the screen edge');
+          /* The name must ELLIPSISE rather than the pill growing — a truncated filename still says
+             which clip is loading, which is the whole reason it is named. */
+          if (lbl.scrollWidth <= lbl.clientWidth) throw new Error('with ' + what + ', the label is not being clipped, so the pill grew instead');
+        });
+        /* A SHORT name must not be padded out to the cap — the pill should still hug its text. */
+        lbl.textContent = 'Loading clip';
+        const short = el.getBoundingClientRect();
+        if (short.width > 200) throw new Error('a short label produced a ' + Math.round(short.width) + 'px pill — the cap became a fixed width');
+      } finally { el.remove(); }
+    }, 375);
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

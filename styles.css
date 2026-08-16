@@ -5262,6 +5262,18 @@ body.fm-pushing #toast { z-index: 213; }
   pointer-events: none;
   animation: ld-in 180ms cubic-bezier(0,0,.2,1) both;
 }
+/* IT MUST NEVER REACH THE + BUTTON (queue 273). Ezra: "make sure that the bar that reads out the name
+   of the thing … doesn't go to cover over the plus create button."
+   The pill is pinned bottom-LEFT with no right-hand limit, and it names the clip — so its width is the
+   length of a filename. Measured at 375px with a real one ("Invincible (2023) - Thragg Teaser (S04) -
+   1080p YT WEB-DL AV1.mp4"): the pill ran the full 363px to the screen edge and lay 80px across the
+   FAB, overlapping it vertically too.
+   The cap is arithmetic, not a guess: the FAB is 64px wide sitting 16px off the right edge, so it owns
+   the last 80px; 100px leaves the pill clear of it by 8px. The name ellipsises rather than the pill
+   growing, because a truncated filename still tells you WHICH clip is loading, which is the whole
+   reason it is named (see the note above) — and a bar over the button you are reaching for does not. */
+#loading-dot { max-width: calc(100vw - 100px); box-sizing: border-box; }
+#loading-dot .ld-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #loading-dot.on { display: flex; }
 #loading-dot svg { width: 18px; height: 18px; flex: none; }
 #loading-dot .ld-track { fill: none; stroke: var(--line); stroke-width: 2.4; }

@@ -1900,10 +1900,25 @@ better still, keep working inside the turn rather than parking work for a later 
       button that takes you straight to the tutorial section and it should also the button should just
       say like tutorials here or whatever and then you click on it and it takes you to tutorials."*
 
-- [ ] **273 — The layer-loading name bar covers the + create button. (16 Aug.)** His words, verbatim:
+- [x] **273 — The layer-loading name bar covers the + create button. DONE v8.63.** His words, verbatim:
       *"When a layer is loading, you added the loading effects like I want it but make sure that the bar
       that reads out the name of the thing that voting doesn't go to cover over the plus create button."*
       (He means the loading readout must not overlap the + / create control.)
+      **DONE v8.63 — reproduced first, with a filename you would actually have.** The pill is pinned
+      bottom-LEFT with no right-hand limit, and it NAMES the clip, so its width is simply the length of
+      a filename. Measured at 375px with *"Invincible (2023) - Thragg Teaser (S04) - 1080p YT WEB-DL
+      AV1.mp4"*: the pill ran the full **363px to the screen edge and lay 80px across the + button**,
+      overlapping it vertically as well. With a short name it never got near — which is why this only
+      showed up on a real import.
+      **The cap is arithmetic, not a guess:** the + is 64px wide sitting 16px off the right edge, so it
+      owns the last 80px; the pill is capped at `100vw - 100px`, leaving it clear by 8px.
+      **The NAME ellipsises rather than the pill growing**, because a truncated filename still tells you
+      which clip is loading — that is the entire reason it is named (queue 201: *"Loading" on its own
+      does not tell you WHICH of your clips is the one you cannot see*) — and a bar over the button you
+      are reaching for does not.
+      Measured after, at every length: short name 117px wide and 166px clear; a real one capped at 275px
+      and **8px clear**; a 308-character name identical. A short label still hugs its text, asserted
+      separately so the cap cannot quietly become a fixed width.
 
 - [x] **272 — The notepad button wants subtle shading. DONE v8.62.** His words, verbatim: *"I still want
       subtle shading to the notepad button just so it looks a little bit more detailed just like some
