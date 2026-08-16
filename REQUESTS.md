@@ -2915,6 +2915,22 @@ better still, keep working inside the turn rather than parking work for a later 
       top. Right now it sits at the top, which is where a new layer already went, so nothing regressed
       but nothing new is possible yet either. Then the PC line (7, 8, 9), copy/paste landing there (11)
       and the top/bottom shortcuts (12).
+
+      **GROUNDWORK FOR STAGE B, found and verified 17 Aug — this is the part that decides whether it is
+      a big job or a small one, and it is a small one.** Clause 5 needs exactly ONE function changed:
+      · **`FM.insertLayer(layer)` in js/app.js is the single choke point** — its own comment says so, "A
+        helper rather than eight more copies of the line, precisely so the ninth creator cannot forget
+        it" — and every creator routes through it. It does `FM.scene.layers.unshift(layer)`, "the ONE
+        unshift", which is literally the "adds to the top and then you drag it down" behaviour he wants
+        replaced. Splicing at the Add row's index instead is the whole of clause 5.
+      · So Stage B is: an insertion index (clamped as layers come and go), a drag on the row that sets
+        it, and that one splice. The row already renders wherever it is told to.
+      · **Clause 11 (copy/paste lands there) is a SECOND site**, not the same one: paste splices at
+        `js/app.js:2250`. Duplicate (2377), split (2582) and group-create (2109) also splice
+        deliberately and should NOT be re-pointed — those choose their position for a reason.
+      · Watch: `insertLayer` also assigns `layer.parent` from `FM.groupContext`. Inside Edit Group the
+        insertion index has to be an index within that group's members, not the flat array, or a layer
+        added while editing a group lands outside it.
       **Two existing tests had to be re-based rather than left red**, and both were measuring the + orb:
       the home-push test tracked it as "the editor's one piece of body-level chrome" — with the orb gone
       there is nothing outside `#app` to keep in formation, so its orb-specific assertions retired and
