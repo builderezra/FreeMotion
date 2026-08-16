@@ -111,10 +111,10 @@ window.FM = window.FM || {};
   const CATEGORY_LABELS = {
     color: 'Colour & Light',
     blur: 'Blur',
-    distort: 'Distortion & Warp',
+    distort: 'Distortion / Warp',
     proc: 'Procedural',
     matte: 'Matte / Mask / Key',
-    drawing: 'Drawing & Edge',
+    drawing: 'Drawing / Edge',
     move: 'Move / Transform',
     repeat: 'Repeat',
     stylize: 'Stylize',

@@ -327,7 +327,7 @@ window.FM = window.FM || {};
 
   // Build the editor as an INLINE element (no full-screen overlay) so it sits in the same Move &
   // Transform bottom-sheet, exactly like Alight Motion. The inspector renders this as a sub-view and
-  // owns the "‹ Move & Transform" back button.
+  // owns the "‹ Position / Scale" back button.
   function buildEditorDom() {
     const wrap = document.createElement('div'); wrap.className = 'es-inline';
 

@@ -379,7 +379,7 @@ window.FM = window.FM || {};
     if (FM.inspector) FM.inspector.refresh();
     if (FM.requestRender) FM.requestRender();
     if (!already && FM.history) FM.history.commit();
-    if (FM.toast) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Move & Transform'
+    if (FM.toast) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Position / Scale'
                                    : 'Motion Blur (Object) on — smears this layer’s own movement', 2200);
   }
   function objectBlurTile(onStarChange) {

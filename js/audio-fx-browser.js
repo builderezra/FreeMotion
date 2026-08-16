@@ -148,7 +148,7 @@ window.FM = window.FM || {};
   // Section B — paged Recents (page 1) + Favourites (rest), 8 tiles per page, with page dots.
   function buildPaged(rerender) {
     const sec = el('div', 'fxb-section');
-    sec.appendChild(el('div', 'fxb-sec-title', 'Recents & faves'));   // he named the thing "Faves" (#124); the audio browser is the same feature and must not use a second word for it
+    sec.appendChild(el('div', 'fxb-sec-title', 'Recents / faves'));   // he named the thing "Faves" (#124); the audio browser is the same feature and must not use a second word for it
     const recents = readList(RECENTS_KEY).map(id => FM.audioFxRegistry.get(id)).filter(Boolean);
     const favs = readList(FAV_KEY).map(id => FM.audioFxRegistry.get(id)).filter(Boolean);
     const pages = [];

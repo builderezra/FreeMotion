@@ -1524,9 +1524,9 @@ window.FM = window.FM || {};
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
     { key: 'color', label: 'Colouring', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
-    { key: 'border', label: 'Border & Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
-    { key: 'blend', label: 'Blending & Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
-    { key: 'transform', label: 'Move & Transform', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
+    { key: 'border', label: 'Border / Shadow', icon: 'M4 4h12v12H4zM9 20h11V9' },
+    { key: 'blend', label: 'Blending / Opacity', icon: 'M9 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12M15 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12' },
+    { key: 'transform', label: 'Position / Scale', icon: 'M12 2v20M2 12h20M8 5l4-3 4 3M8 19l4 3 4-3M5 8l-3 4 3 4M19 8l3 4-3 4' },
     { key: 'speed', label: 'Speed', icon: 'M4.2 16.8a8 8 0 1 1 15.6 0M12 12l4-2.5' },
     { key: 'volume', label: 'Volume', icon: 'M11 5 6 9H3v6h3l5 4zM16 8.5a4 4 0 0 1 0 7M19.5 6a8 8 0 0 1 0 12' },
     // No 'audiofx' card (queue 45). Audio effects are a SIDE of the Effects card now — the panel and
@@ -1808,9 +1808,9 @@ window.FM = window.FM || {};
      below must resolve there — the suite asserts it. */
   const STYLE_CATS = [
     { key: 'color',     label: 'Colouring' },
-    { key: 'border',    label: 'Border & Shadow' },
-    { key: 'blend',     label: 'Blending & Opacity' },
-    { key: 'transform', label: 'Move & Transform' },
+    { key: 'border',    label: 'Border / Shadow' },
+    { key: 'blend',     label: 'Blending / Opacity' },
+    { key: 'transform', label: 'Position / Scale' },
     { key: 'text',      label: 'Text', textOnly: true },
     /* Ezra: "this section when pasting a style probably needs other options because there's 9
        categories now not 6." Correct — the inspector grew Speed, Volume, Element and Presets after
@@ -3742,7 +3742,7 @@ window.FM = window.FM || {};
       if (!layer.focus) layer.focus = { enabled: false, distance: 0, dof: 200, blur: 0.5 };
       const f = layer.focus;
       body.appendChild(checkRow('Focus blur', !!f.enabled, v => { f.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
-      if (!f.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to defocus layers by their depth. Give layers different Z values (Move & Transform → Move) and everything off the focus plane softens.')); return; }
+      if (!f.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to defocus layers by their depth. Give layers different Z values (Position / Scale → Move) and everything off the focus plane softens.')); return; }
       body.appendChild(rangeRow('Focus distance', () => FM.evalProp(f.distance, FM.time) || 0, v => { f.distance = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
       body.appendChild(rangeRow('Depth of field', () => FM.evalProp(f.dof, FM.time) || 200, v => { f.dof = Math.max(1, Math.round(v)); FM.requestRender(); }, 1, 3000, 5));
       body.appendChild(rangeRow('Blur strength', () => FM.evalProp(f.blur, FM.time) || 0, v => { f.blur = Math.max(0, Math.min(2, v)); FM.requestRender(); }, 0, 2, 0.05));
@@ -4608,7 +4608,7 @@ window.FM = window.FM || {};
         else root.appendChild(alignRow());
       } else if (view === 'transform' && FM._mtEasing && FM.buildEasingEditor) {
         // Easing curve editor — an INLINE sub-view of Move & Transform (same sheet), not a screen.
-        const back = el('button', 'cat-back', '‹  Move & Transform');
+        const back = el('button', 'cat-back', '‹  Position / Scale');
         back.addEventListener('click', () => { FM._mtEasing = false; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');

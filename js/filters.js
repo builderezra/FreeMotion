@@ -34,8 +34,8 @@ window.FM = window.FM || {};
 
   const SECTIONS = [
     { key: 'cinematic', label: 'Cinematic' },
-    { key: 'retro', label: 'Retro & Analogue' },
-    { key: 'glow', label: 'Light & Glow' },
+    { key: 'retro', label: 'Retro / Analogue' },
+    { key: 'glow', label: 'Light / Glow' },
     { key: 'stylised', label: 'Stylised' },
   ];
 

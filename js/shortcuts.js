@@ -49,10 +49,10 @@ window.FM = window.FM || {};
   function build() {
     overlay = document.createElement('div'); overlay.id = 'shortcuts-overlay'; overlay.className = 'hidden';
     const card = document.createElement('div'); card.className = 'shortcuts-card';
-    const h = document.createElement('div'); h.className = 'shortcuts-title'; h.textContent = 'Shortcuts & tips';
+    const h = document.createElement('div'); h.className = 'shortcuts-title'; h.textContent = 'Shortcuts / tips';
     card.appendChild(h);
     section(card, 'Keyboard', SHORTCUTS, 'shortcut-key');
-    section(card, 'Mouse & stage', TIPS, 'shortcut-key wide');
+    section(card, 'Mouse / stage', TIPS, 'shortcut-key wide');
     /* A WAY OUT TO THE TUTORIALS (queue 274). Ezra: "At the bottom of the keyboard shortcuts menu when
        you press the ? Icon it should show a button that takes you straight to the tutorial section and
        it should also the button should just say like tutorials here or whatever and then you click on

@@ -686,7 +686,7 @@ window.FM = window.FM || {};
   // storage.js's whitelist and land a nameless ghost row in the stack.
   const REG = Object.create(null);
 
-  const CATEGORY_LABELS = { eq: 'EQ & Filter', space: 'Space & Stereo', dyn: 'Dynamics', char: 'Character' };
+  const CATEGORY_LABELS = { eq: 'EQ / Filter', space: 'Space / Stereo', dyn: 'Dynamics', char: 'Character' };
   const CATEGORY_ORDER = ['eq', 'space', 'dyn', 'char'];
 
   FM.AUDIO_EFFECTS = DEFS;

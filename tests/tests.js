@@ -6992,7 +6992,10 @@
       }
       // 'Colouring' since v6.13 — Ezra renamed it from 'Color & Fill' when the fire-looking icon was
       // recoloured. The ORDER is what this test is about; the names are how it identifies the cards.
-      const want = ['Colouring', 'Border & Shadow', 'Blending & Opacity', 'Move & Transform', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
+      /* Renamed for queue 287 — "Change the name of move and transform to position / Scale. And any
+         other title like background and opacity that has the & in it, replace the & with a /". This
+         list IS the spec, so it moves with the labels rather than being loosened to stop failing. */
+      const want = ['Colouring', 'Border / Shadow', 'Blending / Opacity', 'Position / Scale', 'Speed', 'Volume', 'Edit Shape', 'Presets', 'Effects'];
       if (vLabels.join(' | ') !== want.join(' | ')) {
         throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
       }

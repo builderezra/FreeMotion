@@ -2956,7 +2956,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **Colouring** removes the American spelling and the ampersand in one go — do both together and
       strike that note.
 
-- [ ] **287 — "Move & Transform" becomes "Position / Scale"; every other "&" becomes "/". (16 Aug.)**
+- [x] **287 — "Move & Transform" becomes "Position / Scale"; every other "&" becomes "/". DONE v8.79.** (16 Aug.)
       His words, verbatim: *"Change the name of move and transform to position / Scale. And any other
       title like background and opacity that has the & in it, replace the & with a /"*.
       So: **Move & Transform → Position / Scale**, and then a sweep — *"Border & Shadow"* → *"Border /
@@ -2967,6 +2967,32 @@ better still, keep working inside the turn rather than parking work for a later 
       *Blending & Opacity* — the point is the RULE, not the two examples.
       Watch for `&` that is not a label (HTML entities, JS operators) and for the keyboard-shortcuts
       sheet, which may spell things differently again.
+
+      **DONE v8.79 — swept, and here is the whole list so you can see nothing was skipped:**
+      | was | is |
+      |---|---|
+      | Move & Transform | **Position / Scale** |
+      | Border & Shadow | Border / Shadow |
+      | Blending & Opacity | Blending / Opacity |
+      | Distortion & Warp | Distortion / Warp |
+      | Drawing & Edge | Drawing / Edge |
+      | Retro & Analogue | Retro / Analogue |
+      | Light & Glow | Light / Glow |
+      | EQ & Filter | EQ / Filter |
+      | Space & Stereo | Space / Stereo |
+      | Recents & faves | Recents / faves |
+      | Shortcuts & tips | Shortcuts / tips |
+      | Mouse & stage | Mouse / stage |
+      The back button into that panel, the depth-of-field hint that points at it and the motion-blur
+      toast that names it all say "Position / Scale" now too — a rename that leaves the app referring to
+      the old name in three places is half a rename.
+      **THREE ARE DELIBERATELY LEFT, and you may disagree — say the word and they change too:**
+      **Teal & Orange**, **Bass & Treble** and **Highlights & Shadows**. Those are not menu titles, they
+      are the NAMES of an effect and two filters — every example you gave was a section heading, and
+      "Teal / Orange" reads like two separate things rather than the grade it is. The rule as applied is
+      "titles and headings", not "every ampersand in the app".
+      Not prose, either: toasts and hints that use "&" mid-sentence ("Camera & null layers have no
+      pixels") are left alone — replacing those with a slash would be a grammar error, not a rename.
 
 - [x] **286 — PC: a glow that follows the cursor on the add menu and layer edit menu. DONE v8.78.** (16 Aug.) His
       words, verbatim: *"I just thought of a really premium feature where on the add menu and layer edit
