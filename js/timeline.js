@@ -1628,28 +1628,110 @@ window.FM = window.FM || {};
      reason. Without this the row moved correctly and never looked grabbed. */
   let addDragging = false;
 
+  function isPhoneNow() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
+
   function buildAddRow() {
+    /* TWO RENDERINGS, ONE IDEA (queue 294, clause 7). On a phone it is a layer: "an actual full layer".
+       On PC he asked for something smaller — "instead of being like an actual full layer and like taking
+       up all that face on the timeline instead it could just be a line between layers to signify where
+       you're going to add" — because the desktop timeline shows many more rows and a full one would cost
+       real estate the phone can spare. Same element, same index, same drag: only the skin differs. */
+    const phone = isPhoneNow();
     const row = document.createElement('div');
-    row.className = 'track-row tl-addrow' + (addDragging ? ' tl-addrow-dragging' : '');
+    /* NOT a `.track-row`, deliberately. It carried that class while it was phone-only and nothing
+       noticed; the moment it appeared on the desktop too, a grouping test counting rows found one more
+       than there were layers and failed — correctly, because the app was telling it there was an extra
+       track. Everything that walks the timeline asks for `.track-row`, and this is not one: it has no
+       layer, no clip, no index. It brings its own layout instead of borrowing that class's. */
+    row.className = 'tl-addrow' + (phone ? '' : ' tl-addrow--line') + (addDragging ? ' tl-addrow-dragging' : '');
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
-    row.setAttribute('aria-label', addRowLabel());
+    row.setAttribute('aria-label', phone ? addRowLabel() : 'Where new layers go — click to add, drag to move');
     const inner = document.createElement('div');
     inner.className = 'tl-addrow-inner';
     const plus = document.createElement('span');
     plus.className = 'tl-addrow-plus'; plus.textContent = '+';
     const label = document.createElement('span');
-    label.className = 'tl-addrow-label'; label.textContent = addRowLabel();
+    label.className = 'tl-addrow-label'; label.textContent = phone ? addRowLabel() : 'New layers go here';
     inner.append(plus, label);
     row.appendChild(inner);
     const open = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      /* On a phone this is the sheet the + button used to open. On PC there is no + and no sheet — the
+         add menu IS the inspector band whenever nothing is selected — so "open the add menu" is a
+         deselect. Clause 9: "you would just click on them line". */
+      if (phone) { if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd(); }
+      else if (FM.selectLayer) FM.selectLayer(null);
     };
-    row.addEventListener('click', open);
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
-    row.appendChild(buildAddGrip(row));
+    if (phone) {
+      row.addEventListener('click', open);
+      row.appendChild(buildAddGrip(row));      // ≡ on the right, like every other row
+    } else {
+      attachLineDrag(row, open);               // the line is both the button and the handle
+    }
     return row;
+  }
+
+  /* ON PC THE LINE IS BOTH (clauses 9 and 10): "you would just click on them line", and "then you can
+   * drag it up and down". One element, two gestures, told apart by whether the pointer travelled — a
+   * threshold rather than a timer, because a timer makes a deliberate click feel slow and a slow drag
+   * feel like a click. Below the threshold the pointerup fires the click; past it the drag takes over
+   * and the click is swallowed, or every reposition would also open the menu. */
+  function attachLineDrag(row, open) {
+    const SLOP = 4;
+    let down = false, moved = false, y0 = 0;
+    const move = (e) => {
+      if (!down) return;
+      if (!moved && Math.abs(e.clientY - y0) < SLOP) return;
+      if (!moved) { moved = true; addDragging = true; row.classList.add('tl-addrow-dragging'); }
+      e.preventDefault();
+      const at = boundaryFor(e.clientY);
+      if (at !== FM.addAt) { FM.addAt = at; buildTracks(); }
+    };
+    const end = (e) => {
+      if (!down) return;
+      down = false;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (moved) {
+        addDragging = false;
+        const live = tracksEl.querySelector('.tl-addrow');
+        if (live) live.classList.remove('tl-addrow-dragging');
+      } else {
+        open(e);
+      }
+      moved = false;
+    };
+    row.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      down = true; moved = false; y0 = e.clientY;
+      e.preventDefault();
+      window.addEventListener('pointermove', move, { passive: false });
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+    });
+  }
+
+  /* The insertion point nearest the pointer, read off the LAYER rows on screen. Each row votes for the
+   * boundary above it or below it depending on which half the pointer is in, which is the same rule a
+   * drag-to-reorder uses and the reason it feels like one. Shared by the phone's ≡ grip and the PC
+   * line, because two copies of this would be two things to keep agreeing about where "between" is. */
+  function boundaryFor(clientY) {
+    const rows = [].slice.call(tracksEl.querySelectorAll('.track-row'));
+    if (!rows.length) return 0;
+    const idxOf = (r) => {
+      const hd = r.querySelector('.track-head');
+      const i = hd ? parseInt(hd.dataset.idx, 10) : NaN;
+      return isFinite(i) ? i : FM.scene.layers.length;
+    };
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) return idxOf(rows[i]);
+      if (clientY < r.bottom) return idxOf(rows[i]) + 1;
+    }
+    return FM.scene.layers.length;
   }
 
   /* DRAGGING IT (queue 294, clauses 3, 6 and 10). "you can move this layer up and down like you can
@@ -1667,28 +1749,10 @@ window.FM = window.FM || {};
     grip.setAttribute('aria-label', 'Drag to choose where new layers go');
     grip.innerHTML = '<span></span><span></span><span></span>';
     let dragging = false;
-    const boundaryAt = (clientY) => {
-      /* The insertion point nearest the finger, read off the LAYER rows on screen. Each row votes for
-         the boundary above it or below it depending on which half the finger is in, which is the same
-         rule a drag-to-reorder uses and the reason it feels like one. */
-      const rows = [].slice.call(tracksEl.querySelectorAll('.track-row')).filter(r => !r.classList.contains('tl-addrow'));
-      if (!rows.length) return 0;
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i].getBoundingClientRect();
-        if (clientY < r.top + r.height / 2) return idxOfRow(rows[i]);
-        if (clientY < r.bottom) return idxOfRow(rows[i]) + 1;
-      }
-      return FM.scene.layers.length;
-    };
-    const idxOfRow = (r) => {
-      const hd = r.querySelector('.track-head');
-      const i = hd ? parseInt(hd.dataset.idx, 10) : NaN;
-      return isFinite(i) ? i : FM.scene.layers.length;
-    };
     const move = (e) => {
       if (!dragging) return;
       e.preventDefault();
-      const at = boundaryAt(e.clientY);
+      const at = boundaryFor(e.clientY);
       if (at !== FM.addAt) { FM.addAt = at; buildTracks(); }
     };
     const end = () => {
@@ -1716,7 +1780,12 @@ window.FM = window.FM || {};
   /* PHONE ONLY so far. His PC half is a different shape — "instead of being like an actual full layer…
      it could just be a line between layers" — and is not built yet; on a desktop the add menu is
      already a permanent panel rather than a button, so nothing there is replaced by this. */
-  function addRowWanted() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
+  function addRowWanted() {
+    /* Both platforms now — the phone as a layer, the desktop as a line (clause 7).
+       NOT inside Edit Group: `FM.insertLayer` deliberately ignores the index there (a flat index means
+       nothing in a subtree), so showing a marker that promises to place things would be a lie. */
+    return !FM.groupContext;
+  }
 
   function buildTracks() {
     tracksEl.innerHTML = '';
@@ -1760,10 +1829,9 @@ window.FM = window.FM || {};
        directly BELOW the row, exactly as he described, and the row stays where you left it. */
     if (addRowWanted() && !soloId) {
       const at = FM.clampAddAt ? FM.clampAddAt() : 0;
-      const rows = [].slice.call(tracksEl.children);
       /* Counted against the rows ON SCREEN rather than scene.layers, because a collapsed group hides
-         members: the row belongs beside what the eye can see. */
-      const before = rows.filter(r => {
+         members: the marker belongs beside what the eye can see. */
+      const before = [].slice.call(tracksEl.children).filter(r => {
         const hd = r.querySelector && r.querySelector('.track-head');
         const i = hd ? parseInt(hd.dataset.idx, 10) : -1;
         return isFinite(i) && i >= at;

@@ -5962,6 +5962,8 @@ body.fm-pushing #toast { z-index: 213; }
    Sticky to the left so it stays readable however far the timeline is scrolled — the row spans the full
    scrollable width, and a label that scrolled off with the clips would be a control you cannot find. */
 .tl-addrow {
+  /* Its own layout, not `.track-row`'s — see the note in timeline.js. The height is the phone row's
+     42px-ish so it reads as a layer there; the PC variant overrides it to a line below. */
   display: flex; align-items: center; justify-content: space-between;
   min-height: 38px; margin: 4px 0;
   cursor: pointer; position: relative;
@@ -6001,6 +6003,36 @@ body.fm-pushing #toast { z-index: 213; }
 .tl-addrow-grip:hover span { background: rgba(150, 232, 255, .9); }
 .tl-addrow-dragging { cursor: grabbing; border-style: solid; border-color: rgba(150, 232, 255, .9); box-shadow: 0 0 16px rgba(90, 199, 237, .38); }
 .tl-addrow-dragging .tl-addrow-grip { cursor: grabbing; }
+
+/* ---- the PC rendering: a LINE between layers, not a row (queue 294, clauses 7 and 8) ------------
+   "instead of being like an actual full layer and like taking up all that face on the timeline instead
+   it could just be a line between layers to signify where you're going to add… it would be a very thin
+   but still noticeable line but when you hoover over it it will let go a bit bigger to signify click on
+   it and then you can drag it up and down."
+   So: thin at rest, and it grows on hover rather than lighting up in place — growth is what reads as
+   "this is a control", which is exactly the signal he described wanting. */
+.tl-addrow--line {
+  min-height: 0; height: 7px; margin: 1px 0;
+  border-radius: 4px; border: none;
+  background: linear-gradient(90deg, rgba(150, 232, 255, .5), rgba(90, 199, 237, .22) 45%, transparent);
+  box-shadow: 0 0 7px rgba(90, 199, 237, .22);
+  cursor: pointer; overflow: hidden;
+}
+.tl-addrow--line .tl-addrow-inner { padding: 0 10px; gap: 7px; opacity: 0; transition: opacity .12s; }
+.tl-addrow--line .tl-addrow-plus { width: 15px; height: 15px; font-size: 12px; }
+.tl-addrow--line .tl-addrow-label { font-size: 11px; }
+.tl-addrow--line:hover, .tl-addrow--line:focus-visible, .tl-addrow--line.tl-addrow-dragging {
+  height: 24px;
+  background: linear-gradient(90deg, rgba(150, 232, 255, .22), rgba(90, 199, 237, .08) 55%, transparent);
+  box-shadow: 0 0 13px rgba(90, 199, 237, .34);
+  outline: none;
+}
+.tl-addrow--line:hover .tl-addrow-inner,
+.tl-addrow--line:focus-visible .tl-addrow-inner,
+.tl-addrow--line.tl-addrow-dragging .tl-addrow-inner { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .tl-addrow--line { transition: height .12s ease-out, background .12s, box-shadow .12s; }
+}
 .tl-addrow:hover .tl-addrow-label, .tl-addrow:focus-visible .tl-addrow-label { color: var(--text); }
 @media (prefers-reduced-motion: no-preference) {
   .tl-addrow { transition: border-color .15s, box-shadow .15s; }

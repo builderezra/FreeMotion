@@ -17498,8 +17498,13 @@
         if (t.length > 34) throw new Error('the Add layer says "' + t + '" (' + t.length + ' chars) — "just don\'t overexplain it"; one short line');
       });
       if (FM.scene.layers.length !== 1) throw new Error('the Add row put itself into the scene — it must be drawn, not stored, or it reaches the export and the layer count');
-      const rows = [].slice.call(document.querySelectorAll('.track-row'));
-      if (!rows.length || !rows[0].classList.contains('tl-addrow')) throw new Error('the Add layer is not the first row');
+      /* The marker is NOT a `.track-row` (it has no layer, no clip, no index — see timeline.js), so it
+         is located by its own class and checked to sit above the first real row. */
+      const firstTrack = document.querySelector('.track-row');
+      if (!firstTrack) throw new Error('no layer rows rendered');
+      if (!(row.compareDocumentPosition(firstTrack) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error('the Add layer is not above the first layer row');
+      }
 
       // TAPPING IT opens the same sheet the + used to.
       const sheet = document.getElementById('add-sheet');
@@ -17579,6 +17584,72 @@
     }
   });
 
+  test('on PC the Add marker is a thin line: click opens the menu, drag moves it (queue 294)', { item: 'add-row' }, async function () {
+    /* "for PC since we don't have an ad button you could just make it so this layout instead of being
+     * like an actual full layer and like taking up all that face on the timeline instead it could just
+     * be a line between layers to signify where you're going to add… it would be a very thin but still
+     * noticeable line but when you hoover over it it will let go a bit bigger to signify click on it
+     * and then you can drag it up and down."
+     * The trap is that one element has to serve two gestures, so the last assertion here is the one
+     * that matters most: a DRAG must not also fire the click, or repositioning the line would open the
+     * add menu every single time. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt, sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0; FM.addAt = 0;
+      ['A', 'B', 'C'].forEach(function (n) {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#888' });
+        L.start = 0; L.duration = 4; FM.insertLayer(L);
+      });
+      FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll();
+      await sleep(300);
+      const line = document.querySelector('.tl-addrow');
+      if (!line) throw new Error('there is no Add marker on the desktop timeline');
+      if (!line.classList.contains('tl-addrow--line')) throw new Error('the desktop marker is the full phone row — he asked for a line between layers, not "all that face on the timeline"');
+      if (line.querySelector('.tl-addrow-grip')) throw new Error('the desktop line has the phone grip on it — on PC the line itself is the handle');
+      const rest = line.getBoundingClientRect().height;
+      if (!(rest > 2 && rest < 13)) throw new Error('the line is ' + Math.round(rest) + 'px tall at rest — "a very thin but still noticeable line"');
+
+      /* IT GROWS. Asserted through the dragging class, which shares one declaration block with :hover
+         and :focus-visible — a pseudo-class cannot be forced from script, and asserting the rule exists
+         by parsing CSS would pass on a rule that no state can ever reach. */
+      line.classList.add('tl-addrow-dragging');
+      await sleep(120);
+      const grown = line.getBoundingClientRect().height;
+      line.classList.remove('tl-addrow-dragging');
+      if (!(grown > rest + 6)) throw new Error('the line is ' + Math.round(grown) + 'px when active against ' + Math.round(rest) + 'px at rest — hovering is supposed to make it "go a bit bigger to signify click on it"');
+
+      const r = line.getBoundingClientRect();
+      const send = (t, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: Math.round(r.left + 120), clientY: y, pointerId: 7, pointerType: 'mouse', button: 0, buttons: 1 }));
+
+      // A CLICK — press and release without moving — opens the add menu, which on PC is a deselect.
+      send('pointerdown', Math.round(r.top + r.height / 2), line);
+      send('pointerup', Math.round(r.top + r.height / 2));
+      await sleep(260);
+      if (FM.scene.selectedId) throw new Error('clicking the line did not open the add menu (something is still selected, so the inspector is still the property editor)');
+
+      // A DRAG moves it and must NOT also count as a click.
+      FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll();
+      await sleep(240);
+      const line2 = document.querySelector('.tl-addrow');
+      const r2 = line2.getBoundingClientRect();
+      const at = (t, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: Math.round(r2.left + 120), clientY: y, pointerId: 8, pointerType: 'mouse', button: 0, buttons: 1 }));
+      at('pointerdown', Math.round(r2.top + r2.height / 2), line2);
+      const rows = [].slice.call(document.querySelectorAll('.track-row'));
+      const target = rows[Math.min(1, rows.length - 1)].getBoundingClientRect();
+      at('pointermove', Math.round(target.top + target.height * 0.8));
+      await sleep(160);
+      at('pointerup', Math.round(target.top + target.height * 0.8));
+      await sleep(200);
+      if (FM.addAt === 0) throw new Error('dragging the line did not move it');
+      if (!FM.scene.selectedId) throw new Error('dragging the line ALSO fired its click and opened the add menu — repositioning it would deselect every time');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.addAt = at0; FM.selectLayer(sel0 || null); FM.refreshAll();
+      await sleep(160);
+    }
+  });
+
   test('paste lands where the Add layer is, not always on top (queue 294 clause 11)', { item: 'add-row' }, async function () {
     /* "when you copy and paste stuff it could go there like I would go to wear that liners" — the
      * dictation is garbled but the sentence before it settles it: the Add row marks where things go,
@@ -17647,7 +17718,7 @@
       const at = (t, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: Math.round(g.left + g.width / 2), clientY: y, pointerId: 1, pointerType: 'touch', buttons: 1 }));
       at('pointerdown', Math.round(g.top + g.height / 2), grip);
       await sleep(60);
-      const rows = [].slice.call(document.querySelectorAll('.track-row:not(.tl-addrow)'));
+      const rows = [].slice.call(document.querySelectorAll('.track-row'));
       if (rows.length < 3) throw new Error('only ' + rows.length + ' layer rows — not enough to drag between');
       const target = rows[1].getBoundingClientRect();
       at('pointermove', Math.round(target.top + target.height * 0.8));

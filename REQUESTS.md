@@ -2878,12 +2878,15 @@ better still, keep working inside the turn rather than parking work for a later 
              first, then add. **v8.85**, and it works for every creator at once because they all route
              through `FM.insertLayer` — shapes, text, media, captions, and anything added later.
       6. [x] Reorder it with the same three-lines grip on the right that every other layer uses. **v8.85.**
-      7. [ ] **PC:** not a full-height row — a **thin but noticeable LINE between layers** marking where
-             the next layer will go.
-      8. [ ] On PC, **hovering the line makes it grow** to signal it is clickable.
-      9. [ ] On PC you **click the line itself** to open the add menu, rather than the far-right grip.
-      10. [~] The line can be dragged up and down too. *(The dragging is built and shared — it moves one
-              number, `FM.addAt`. The PC LINE it applies to is not built yet, so this ticks with clause 7.)*
+      7. [x] **PC:** not a full-height row — a **thin but noticeable LINE between layers** marking where
+             the next layer will go. **v8.87** — 7px at rest.
+      8. [x] On PC, **hovering the line makes it grow** to signal it is clickable. **v8.87** — 7px → 24px,
+             and the label fades in with it.
+      9. [x] On PC you **click the line itself** to open the add menu, rather than the far-right grip.
+             **v8.87.** On PC the add menu IS the inspector band whenever nothing is selected, so
+             "open the add menu" is a deselect — there is no sheet to open.
+      10. [x] The line can be dragged up and down too. **v8.87** — the same one number the phone grip
+              moves, so the two platforms cannot disagree about where "between" is.
       11. [x] **Copy/paste also lands at that position.** **v8.86** — `pasteClipboard`'s default index is
               the Add row's, so paste and add agree about where things go. An explicit index still wins,
               which is what the ⧉ Paste-Layer button's arrow passes, so choosing by hand is unaffected.
@@ -2942,10 +2945,21 @@ better still, keep working inside the turn rather than parking work for a later 
       I am here: the site I had recorded as paste (`js/app.js:2250`) is **duplicate**, which inserts
       beside the ORIGINAL and is right to; the real one is `FM.pasteClipboard`, whose `insertIndex`
       argument simply defaulted to 0.
-      **Left for stage C: the PC half only** — the thin line between layers (7), growing on hover (8),
-      clicking it to open the menu (9), dragging it (10, which is the same one number this already
-      moves), and the keyboard shortcuts to fling it to the top or bottom (12 — they pair with the PC
-      line, since a shortcut that moves an invisible row is no use).
+      **STAGE C SHIPPED v8.87 — the PC line, clauses 7 to 10.** Same marker, same index, same drag; only
+      the skin differs. On PC it is 7px at rest, grows to 24px with its label when you hover or drag it,
+      and one element serves both gestures — told apart by whether the pointer travelled 4px, because a
+      timer makes a deliberate click feel slow and a slow drag feel like a click. A drag swallows the
+      click, which is asserted: without that, repositioning the line would deselect every single time.
+      **One real breakage caught by the suite and worth recording.** The marker carried the `.track-row`
+      class, which nothing noticed while it was phone-only — the moment it appeared on the desktop, a
+      grouping test counting rows found one more than there were layers and failed. It was right to:
+      everything that walks the timeline asks for `.track-row`, and this has no layer, no clip and no
+      index. It brings its own layout now rather than borrowing that class, which also means no other
+      test had to learn to filter it out.
+      It is also **hidden inside Edit Group**, because `insertLayer` ignores the index there — a marker
+      that promises to place things where it sits would be lying in the one place it cannot.
+      **Left: clause 12 only** — keyboard shortcuts to fling it to the top or bottom. Small, and it wants
+      a key pair that does not collide with the existing shortcuts.
 
       **GROUNDWORK FOR STAGE B, found and verified 17 Aug — this is the part that decides whether it is
       a big job or a small one, and it is a small one.** Clause 5 needs exactly ONE function changed:
