@@ -15747,6 +15747,61 @@
     } finally { P.width = w0; P.height = h0; }
   });
 
+  test('the phone bin is red, and it is the SAME red the PC uses', { item: 'bin-red' }, async function () {
+    /* queue 259. "Make the trash icon red." The PC transport row has done this since v7.79, so this
+       is the phone catching up. The second assertion is the one that stops a slow drift: two reds for
+       one action across two layouts becomes a "why are these different" message later. */
+    const frame = () => new Promise(r => setTimeout(r, 130));
+    return atPhoneWidth(async function () {
+      const layers0 = FM.scene.layers.slice();
+      try {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff' });
+        L.start = 0; L.duration = 5;
+        FM.scene.layers.push(L); FM.selectLayer(L.id);
+        if (FM.refreshAll) FM.refreshAll();
+        await frame();
+        const del = document.getElementById('m-del');
+        if (!del) throw new Error('no #m-del in the phone bar');
+        if (!(del.getBoundingClientRect().width > 0)) throw new Error('the phone bin is not visible with a layer selected — nothing to colour');
+        const col = getComputedStyle(del).color;
+        const m = col.match(/(\d+),\s*(\d+),\s*(\d+)/);
+        if (!m) throw new Error('could not read the bin colour: ' + col);
+        const r = +m[1], g = +m[2], b = +m[3];
+        if (!(r > 200 && r > g + 80 && r > b + 80)) throw new Error('the phone bin is not red: ' + col);
+        // CONTROL: its neighbours must still be neutral, or "red" means nothing
+        const dup = document.getElementById('m-dup');
+        if (dup && dup.getBoundingClientRect().width > 0) {
+          const dm = getComputedStyle(dup).color.match(/(\d+),\s*(\d+),\s*(\d+)/);
+          if (dm && +dm[0 + 1] > +dm[2] + 80) throw new Error('the whole row is red, so the bin does not stand out from it');
+        }
+        /* The SAME red as the PC. Read out of the stylesheet rather than hard-coded here, so changing
+           the shade in one place cannot leave the two layouts quietly disagreeing. */
+        const pcRed = (function () {
+          for (const sh of document.styleSheets) {
+            let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+            const walk = function (list) {
+              for (const rule of list) {
+                if (rule.cssRules) { const f = walk(rule.cssRules); if (f) return f; }
+                if (rule.selectorText && /#transport #btn-del-layer\s*$/.test(rule.selectorText) && rule.style && rule.style.color) return rule.style.color;
+              }
+              return null;
+            };
+            const f = walk(rules); if (f) return f;
+          }
+          return null;
+        })();
+        if (pcRed) {
+          const p = document.createElement('span'); p.style.color = pcRed; document.body.appendChild(p);
+          const pcResolved = getComputedStyle(p).color; p.remove();
+          if (pcResolved !== col) throw new Error('the phone bin is ' + col + ' but the PC one is ' + pcResolved + ' — two reds for one action');
+        }
+      } finally {
+        FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+        if (FM.refreshAll) FM.refreshAll();
+      }
+    }, 380);
+  });
+
   /* ---------------- queue 257 + 258: correcting v8.20's add-menu colour ----------------
    * #258 is a regression I introduced. His #210 wording was "the main icon can stay bright but the
    * backdrop more subtle" — TWO things — and I collapsed them into one muted palette, which dulled

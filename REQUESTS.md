@@ -1721,7 +1721,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
-- [ ] **259 — Phone: make the trash icon red. (16 Aug, with a screenshot.)** His words, verbatim:
+- [x] **259 — Phone: make the trash icon red. DONE v8.37. (16 Aug, with a screenshot.)** His words, verbatim:
       *"Make the trash icon red."* Screenshot is the PHONE top bar — back · "Laurel" · version chip ·
       duplicate · trash · ⋯ — where the bin is the same plain white as everything beside it.
       **The PC already does this** (v7.79 made the transport row's delete red), so this is the phone
@@ -1729,6 +1729,13 @@ better still, keep working inside the turn rather than parking work for a later 
       not look like its neighbours. Match the tone used on PC rather than inventing a second red.
       Check the ⋯ menu's Delete entry at the same time — if that is still neutral on the phone the two
       doors to the same action disagree.
+
+      **DONE v8.37, with the SAME red as the PC (`#ff6b7a`) rather than a second one** — two reds for
+      one action across two layouts is how a "why are these different" message gets written a fortnight
+      later. The test reads the PC's colour out of the stylesheet and compares, instead of hard-coding
+      the hex, so changing the shade in one place cannot leave the layouts quietly disagreeing.
+      **And there is no third door to fix:** the layer ⋯ menu's Delete was removed in v7.48 (#221), so
+      the bin is the only way to delete from the phone bar.
 
 - [x] **258 — Elements: the BACKGROUNDS should be fainter, but the ICONS should pop like they used to.
       (16 Aug, with a before/after pair of phone screenshots.)** His words, verbatim: *"In this section

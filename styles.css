@@ -2558,6 +2558,14 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   body.sel-mode #m-back     { order: -3; }
   body.sel-mode #m-selcount { order: -2; }
   body.sel-mode #m-del      { order: 1; margin-right: 52px; }
+  /* The phone bin is RED (queue 259). Ezra: "Make the trash icon red." The PC transport row has done
+     this since v7.79, so this is the phone catching up rather than a new idea: the one destructive
+     control in a row of neutral ones should not look like its neighbours.
+     The SAME red the PC uses (#ff6b7a), not a second one — two reds for one action across two layouts
+     is the kind of drift that ends up as a "why are these different" message later. The layer ⋯ menu's
+     Delete was removed in v7.48, so there is no third door left to disagree with. */
+  #m-del { color: #ff6b7a; }
+  #m-del:active { background: rgba(255, 107, 122, .16); }
   body.sel-mode #m-group    { order: 2; }
   /* That 52px gap is the safety, not a spacing accident, and it is why the bin is NOT flush right.
      Measured at 390px, project mode packs the right-hand side solid: the cog holds 298..340 and
