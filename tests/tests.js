@@ -14894,6 +14894,71 @@
     }
   });
 
+  /* ---------------- queue 209: the effects header's x and search buttons ----------------
+   * "make them actually centred inside their own circle. Make the x button red and the search one a
+   * nice blue." The entry warns to measure the INK, not the button — the box was never the problem.
+   * So these measure the painted geometry (getBBox for the glyph) against the button's centre. */
+
+  test('the effects header x and search glyphs are centred in their circles', { item: 'fxb-head' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 100));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.fxBrowser.open(); await frame(); await frame();
+      const root = document.getElementById('fx-browser');
+      if (!root) throw new Error('no effects browser');
+      ['.fxb-close', '.fxb-search-btn'].forEach(function (sel) {
+        const btn = root.querySelector(sel);
+        if (!btn) throw new Error('no ' + sel);
+        const svg = btn.querySelector('svg');
+        // The x used to be a TEXT glyph, whose ink position depends on the font — it could sit level
+        // on one machine and high on another, which is unmeasurable and unfixable from CSS.
+        if (!svg) throw new Error(sel + ' is not an SVG — a text glyph is positioned by font metrics, so it cannot be reliably centred');
+        const bb = svg.getBBox(), sr = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+        const sx = sr.width / vb.width, sy = sr.height / vb.height;
+        const inkCx = sr.left + (bb.x - vb.x) * sx + (bb.width * sx) / 2;
+        const inkCy = sr.top + (bb.y - vb.y) * sy + (bb.height * sy) / 2;
+        const br = btn.getBoundingClientRect();
+        const dx = inkCx - (br.left + br.width / 2), dy = inkCy - (br.top + br.height / 2);
+        /* 0.25px, not 0.75. The magnifier's original error was 0.4px — real enough to see as a
+           lopsided glyph in a 38px circle — and a 0.75px tolerance sailed straight past it, so the
+           assertion could not see the defect it was written for. Measured after the fix: both are
+           exactly 0.000, so this leaves room for sub-pixel noise and nothing else. */
+        if (Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25) {
+          throw new Error(sel + ' ink sits ' + dx.toFixed(2) + ',' + dy.toFixed(2) + 'px off the circle\'s centre');
+        }
+      });
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
+  test('the x reads red and the search reads blue', { item: 'fxb-head' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 100));
+    const layers0 = FM.scene.layers.slice();
+    function rgb(s) { const m = String(s).match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/); return m ? [+m[1], +m[2], +m[3]] : null; }
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 400, shapeW: 100, shapeH: 100, fill: '#fff' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.fxBrowser.open(); await frame(); await frame();
+      const root = document.getElementById('fx-browser');
+      const x = rgb(getComputedStyle(root.querySelector('.fxb-close')).color);
+      const q = rgb(getComputedStyle(root.querySelector('.fxb-search-btn')).color);
+      if (!x || !q) throw new Error('could not read the colours');
+      // Asserted as "red dominates" / "blue dominates" rather than exact hexes, so a later tweak to
+      // the shade does not fail this — the requirement is the colour, not the value.
+      if (!(x[0] > x[1] + 40 && x[0] > x[2] + 40)) throw new Error('the x is not red: rgb(' + x.join(',') + ')');
+      if (!(q[2] > q[0] + 40 && q[2] > q[1] + 20)) throw new Error('the search is not blue: rgb(' + q.join(',') + ')');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+  });
+
   /* ---------------- queue 208: the add sheet's wasted band ----------------
    * "We need to utilise this wasted space on phone, each icon in that section could be longer and
    * more square so then it fits it all nicely" — with a ring drawn round the empty strip under the
