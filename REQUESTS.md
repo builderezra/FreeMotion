@@ -1904,6 +1904,21 @@ better still, keep working inside the turn rather than parking work for a later 
       screen left in a bad state afterwards? Each points somewhere different. Reproduce on PC at a
       desktop width before changing anything — this is a PC-only report and the phone path differs.
 
+      **TRIED TO REPRODUCE 16 Aug at 1280×800, and could NOT.** Driving the wheel path the way a
+      trackpad delivers it (25 events, 8ms apart, at the top of the list): the slam **fires** —
+      `hm-slam` goes on — the grid snaps back, and the transform clears to nothing. The suite's
+      `slam-wheel` test is also still green.
+      **One false alarm worth recording so nobody chases it.** My first measurement showed the grid left
+      translated **62.3px down and stuck**, which looked exactly like "completely broken". It was an
+      artefact of the browser pane reporting `document.hidden`: timers and transitions are throttled
+      there, so the 190ms snap-back and the 460ms cleanup simply had not run inside my 500ms wait. Read
+      again with the pane awake, the transform is clean. **A hidden pane cannot be trusted to verify
+      anything with a timer in it** — the same trap as the perf probe in v8.13.
+      **So the entry's own question is now the whole of it: broken HOW?** No animation at all, an
+      animation that plays wrong, or the screen left displaced afterwards? Anything you can say —
+      even "the screen stays pushed down" versus "nothing happens" — points at a different one of the
+      three suspects above. Until then this cannot be worked on honestly, so it stops holding the queue.
+
 - [x] **Captions never open the text editor.** **DONE v6.36.** `addCaptionLayer` added the track and
       stopped; `addTextLayer` opens the editor on its placeholder. Now it scrubs to the first cue and
       opens the editor on it, which is the same pair the cue buttons in the Aa sheet already used.
