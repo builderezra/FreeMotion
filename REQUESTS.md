@@ -1721,6 +1721,31 @@ better still, keep working inside the turn rather than parking work for a later 
 
 
 ### Bugs
+- [ ] **283 — CHECK: is the add-menu drag (#244, v8.30) actually working for him? (16 Aug.)** His words:
+      *"I hope you haven't forgotten that you have logged the exact specific details and everything I
+      said regarding the ad menu or inspector menu, whatever you wanna call it, slash the layer edit
+      menu being separately adjustable to the timeline menu because I still don't see it being added,
+      and I thought you were done with, like, lots of my requests."*
+      **It IS logged and it WAS shipped — #244, v8.30 — so the honest question is whether it still
+      works, not whether it was done.** What I could confirm in a live desktop window at 1280px: the
+      handle element `#am-resizer` exists, is visible, `FM.clampAddMenuH` is defined, and it is parented
+      to `inspector-panel` next to `insp-grab`. What I could NOT confirm: its box measured **y:0,
+      1280×10 — the full width of the window at the very top**, which is not where the inspector's top
+      edge is. That is either a real regression or an artefact of my not managing to open the add menu
+      from the console. **Do not tell him it works until it has been dragged at a desktop width and
+      measured.**
+      **Prime suspect if it IS broken: v8.39**, which made Studio the only desktop layout and deleted
+      Classic. #244 was built and measured at v8.30, when both layouts existed; any positioning scoped
+      to the old layout would have gone with it.
+      Also note #244's own admission: dragging the TIMELINE up into the add menu was never built — only
+      the add-menu direction. If that is the direction he is trying, it is missing by design and needs
+      its own pass.
+
+- [ ] **282 — Film grain: faster and more subtle. (16 Aug.)** His words, verbatim: *"Film grain
+      background needs to move faster and be more subtle brw"*.
+      This revisits #245 (v7.95), where he asked for it to move rather than sit still — it moves now,
+      but the speed and strength are both wrong: **faster, and fainter.**
+
 - [ ] **281 — Drop the element count from the custom elements section. (16 Aug.)** His words, verbatim:
       *"get rid of the number from the custom elements section that says how many elements you have"*.
 
