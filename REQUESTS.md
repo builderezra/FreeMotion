@@ -4245,12 +4245,23 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       audio are both plain grey on purpose** — the neutral, everyday action — while the things that
       MAKE something (AI Scene, Sound effects, Record voice) carry colour. That is a real hierarchy and
       it should survive whatever palette gets chosen.
-- [ ] **209 — The × and search buttons in the effects header are off-centre and colourless.** His words:
+- [x] **209 — The × and search buttons in the effects header are off-centre and colourless. DONE v8.19.** His words:
       *"The search and x buttons in this menu look shit, make them actually centred inside their own
       circle. Make the x button red and the search one a nice blue."* Screenshot: the Add Effect header,
       where both glyphs sit visibly high/left inside their round buttons.
       Likely the same class as #188 — the glyph's ink not being centred in its box, rather than the box
       being wrong — so measure the ink, not the button. Colours: red for ×, blue for search.
+
+      **DONE v8.19, and "measure the ink" was the right call — the boxes were never wrong.**
+      · The **×** was a TEXT glyph. Flex centring centres the line box, not the ink, and where the ink
+        sits in that box is up to the font — so it can look level on my screen and high on yours, which
+        is exactly the disagreement this had. It is an SVG cross now, symmetric by construction, so no
+        font can move it.
+      · The **magnifier** was genuinely off by 0.4px: circle at 11,11, handle out to 21,21, so the ink
+        centre is 12.5 in a box whose centre is 12. The viewBox origin is shifted that half pixel.
+      Both now measure **exactly 0.000px** from centre. Red × and blue search, tinted rather than solid
+      — a hard red disc reads as a warning and this is just a close button.
+      *(My first centring test was dead: a 0.75px tolerance against a 0.4px defect. It is 0.25px now.)*
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.** His words:
       *"when I add just one Simple video layer even on smooth settings in FreeMotion the project still
       lags, no effects or anything, really laggy, and also the video is seemingly broken and not loading
