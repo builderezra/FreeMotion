@@ -2927,13 +2927,32 @@ better still, keep working inside the turn rather than parking work for a later 
       fail the moment this lands, which is deliberate — it is the reminder to retire both guards
       together. Related: **BEFORE-PUBLISHING.md**.
 
-- [ ] **291 — The signature white edge-glow on the sound-effects and voice-record menus. (16 Aug.)** His
+- [x] **291 — The signature white edge-glow on the sound-effects and voice-record menus. DONE v8.82.** (16 Aug.) His
       words, verbatim: *"Also put the our signature white line glow that move around the edges in the
       menu for sound effects and the menu for recording ur voice"*.
       *"our signature"* — this is an effect the app already has somewhere (a white line travelling around
       a border). Find the existing implementation and REUSE it rather than writing a second one, or the
       two will drift and stop looking like one signature. Applies to the sound-effects browser and the
       voice-recorder sheet.
+
+      **DONE v8.82, and reused rather than rebuilt.** It is the ring the open project card and the
+      selected add-menu tab already wear — the CSS block for it says in as many words that it is "ONE
+      implementation, two hosts", so this made it four hosts by extending the same selectors. Same
+      keyframes, same 3.8s turn, same mask; the suite asserts sameness by NAME rather than checking
+      "is there a glow", because a second animation that merely looked similar is the exact drift the
+      original note was written about.
+      **One thing genuinely had to differ.** The two existing hosts are cards, so a spinning square 140%
+      of their WIDTH covers them. The sound-effects sheet is **344×688** — twice as tall as it is wide —
+      and that square would have stopped ~200px short of its top and bottom edges: the light would have
+      run down the sides and disappeared at the ends. It is sized on both axes for these two hosts, so
+      the band is very slightly elliptical as it turns (invisible) and reaches every edge (the request).
+      **The test for that had to be pinned to a tall shape.** The first version measured the live sheet,
+      whose height follows the window — on the suite's viewport it was short enough to pass with the
+      sizing rule deleted, and the mutation check said so. It now measures a 344×700 stand-in, which
+      cannot.
+      **The recorder is asserted through its stylesheet, not by opening it**, because `voiceRec.open()`
+      asks for the microphone and the mic tests here are already the flaky ones — a styling check is not
+      worth making the suite depend on a device permission.
 
 - [ ] **290 — More sound effects, and warm background colours for that menu. (16 Aug.)** His words,
       verbatim: *"When you have time after everything else give the sound effects menu more sound effects

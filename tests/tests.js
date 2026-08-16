@@ -17429,6 +17429,80 @@
     }
   });
 
+  /* ---------------- queue 291: the signature edge-light on two more menus ---------------- */
+
+  test('the sound-effects sheet wears the SAME travelling edge-light as the project card (queue 291)', { item: 'glint-hosts' }, async function () {
+    /* "Also put the our signature white line glow that move around the edges in the menu for sound
+     * effects and the menu for recording ur voice."
+     * "OUR SIGNATURE" is the requirement, so what this asserts is sameness, not prettiness: the new
+     * hosts must run the same keyframes at the same duration as the one that already exists. A second
+     * implementation that merely looked similar would satisfy any check for "is there a glow" and is
+     * exactly the drift this app has been bitten by before (the note on the CSS block says so).
+     * It also checks the spinner COVERS the sheet, which is the one thing that had to differ: the
+     * sound-effects card is twice as tall as it is wide, and the square sized off width alone stopped
+     * 200px short of its top and bottom edges. */
+    if (!FM.sfx || !FM.sfx.open) return;
+    const supported = CSS.supports('-webkit-mask-composite', 'xor') || CSS.supports('mask-composite', 'exclude');
+    if (!supported) return;                       // the ring is @supports-gated; nothing to assert here
+    try {
+      FM.sfx.open();
+      await sleep(300);
+      const card = document.querySelector('.sfx-card');
+      if (!card) throw new Error('the sound-effects sheet did not open');
+      const ring = card.querySelector('.sfx-glint');
+      if (!ring) throw new Error('the sound-effects sheet has no edge-light');
+      if (getComputedStyle(ring).display === 'none') throw new Error('the edge-light is in the DOM but not displayed');
+      const spinner = ring.querySelector('i');
+      if (!spinner) throw new Error('the edge-light has no spinning element, so nothing travels');
+      const cs = getComputedStyle(spinner);
+      if (cs.animationName !== 'hm-glint') throw new Error('the sheet animates "' + cs.animationName + '" — the signature is `hm-glint`, and a second animation that looks similar is how two surfaces stop matching');
+      if (cs.animationDuration !== '3.8s') throw new Error('the sheet runs the signature at ' + cs.animationDuration + ' against the 3.8s everything else uses');
+      const cr = card.getBoundingClientRect(), ir = spinner.getBoundingClientRect();
+      if (ir.height < cr.height - 1 || ir.width < cr.width - 1) {
+        throw new Error('the spinner is ' + Math.round(ir.width) + 'x' + Math.round(ir.height) + ' on a ' + Math.round(cr.width) + 'x' + Math.round(cr.height) + ' sheet — it cannot reach every edge, so the light runs along the sides and vanishes at the ends');
+      }
+    } finally {
+      if (FM.sfx.close) FM.sfx.close();
+      await sleep(150);
+    }
+  });
+
+  test('the voice-recorder sheet is styled for the same edge-light (queue 291)', { item: 'glint-hosts' }, async function () {
+    /* The recorder's own open() asks for the MICROPHONE, and the mic tests in this suite are already
+       the flaky ones — a styling assertion is not worth making the suite depend on a device permission.
+       So this builds the sheet's markup and checks the STYLESHEET answers for it, which is the half
+       that could regress; that the recorder actually appends the ring is one line, read directly. */
+    const supported = CSS.supports('-webkit-mask-composite', 'xor') || CSS.supports('mask-composite', 'exclude');
+    if (!supported) return;
+    /* TWO sizes, and the tall one is the point. The recorder's own sheet is wider than it is tall, so a
+       square spinner sized off width covers it either way — a test at that size passes with the tall-host
+       sizing rule deleted, which is what the mutation check reported. 344x700 stands in for the
+       sound-effects sheet's real proportions and cannot pass without it. Measured here rather than on
+       the live sheet because the live one's height follows the window, so on a short suite viewport it
+       proves nothing. */
+    const sizes = [[344, 284, "the recorder's own shape"], [344, 700, 'a tall sheet like the sound-effects one']];
+    sizes.forEach(function (sz) {
+      const probe = document.createElement('div');
+      probe.className = 'vr-card';
+      probe.style.cssText = 'position:absolute;left:-10000px;top:0;width:' + sz[0] + 'px;height:' + sz[1] + 'px';
+      const ring = document.createElement('span');
+      ring.className = 'vr-glint';
+      ring.appendChild(document.createElement('i'));
+      probe.appendChild(ring);
+      document.body.appendChild(probe);
+      try {
+        if (getComputedStyle(ring).display !== 'block') throw new Error('.vr-glint is not displayed — the recorder sheet would show no edge-light');
+        const spinner = ring.querySelector('i');
+        const cs = getComputedStyle(spinner);
+        if (cs.animationName !== 'hm-glint') throw new Error('the recorder sheet would animate "' + cs.animationName + '" instead of the signature');
+        const cr = probe.getBoundingClientRect(), ir = spinner.getBoundingClientRect();
+        if (ir.height < cr.height - 1 || ir.width < cr.width - 1) {
+          throw new Error('on ' + sz[2] + ' (' + sz[0] + 'x' + sz[1] + ') the spinner is only ' + Math.round(ir.width) + 'x' + Math.round(ir.height) + ' — the light would run along the sides and vanish at the ends');
+        }
+      } finally { probe.remove(); }
+    });
+  });
+
   /* ---------------- queue 289: the "Other" catch-all is gone ---------------- */
 
   test('there is no "Other" effects category, and nothing fell out of the browser (queue 289)', { item: 'no-other' }, function () {

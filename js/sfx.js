@@ -401,6 +401,10 @@ window.FM = window.FM || {};
     close();
     const scrim = el('div', 'sfx-scrim');
     const card = el('div', 'sfx-card');
+    /* The signature travelling edge-light (queue 291). Same element shape and same CSS as the open
+       project card and the add-menu tab wear — see .hm-glint / .am-glint in styles.css — so the three
+       cannot drift apart into three slightly different signatures. */
+    (function () { const g = el('span', 'sfx-glint'); g.appendChild(document.createElement('i')); card.appendChild(g); })();
     card.setAttribute('role', 'dialog');
     card.setAttribute('aria-modal', 'true');
     card.setAttribute('aria-label', 'Sound effects');

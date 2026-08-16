@@ -3568,9 +3568,9 @@ body.hm-selecting .hm-pin { display: none; }
    surfaces meant to feel identical get their own copies of the code: the timeline's glide was retuned
    and the sliders' was not, and it took him asking twice to notice. The only thing that differs here is
    the corner radius, so that is a variable and nothing else is duplicated. */
-.hm-glint, .am-glint { display: none; }
+.hm-glint, .am-glint, .sfx-glint, .vr-glint { display: none; }
 @supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
-  .hm-glint, .am-glint {
+  .hm-glint, .am-glint, .sfx-glint, .vr-glint {
     /* -1px, not 0: `inset` resolves against the PADDING box, and .hm-card carries a 1px border. At
        inset:0 the ring would sit just inside that border and leave the card's own outline showing
        around it — two concentric edges, which is the "tacked on" look. -1px (radius 16+1) lands the
@@ -3586,7 +3586,7 @@ body.hm-selecting .hm-pin { display: none; }
   /* The add-menu tab is a smaller box with a smaller corner. +1px for the same reason the card uses
      -1px inset: the ring replaces the element's own 1px border rather than sitting inside it. */
   .am-glint { --glint-r: calc(var(--radius-sm) + 1px); }
-  .hm-glint i, .am-glint i {
+  .hm-glint i, .am-glint i, .sfx-glint i, .vr-glint i {
     position: absolute; left: 50%; top: 50%; display: block;
     width: 140%; aspect-ratio: 1 / 1; margin-left: -70%; margin-top: -70%;
     /* One comet, not a spinning barber pole: ~40% of the turn carries any light at all, and the white
@@ -3601,12 +3601,29 @@ body.hm-selecting .hm-pin { display: none; }
       rgba(140, 226, 255, 0)    1turn);
     animation: hm-glint 3.8s linear infinite;
   }
+  /* THE SAME COMET ON TWO TALL HOSTS (queue 291). Ezra: "put the our signature white line glow that
+     move around the edges in the menu for sound effects and the menu for recording ur voice."
+     "Our signature" is the point, so this extends the selectors above rather than starting a second
+     implementation — the note on this block records what happened last time two surfaces meant to feel
+     identical each got their own copy.
+     The one thing that had to change is the SIZE of the spinning square. The hosts above are cards, so
+     a square 140% of their WIDTH covers them; the sound-effects sheet is 344x688, twice as tall as it
+     is wide, and that square would have stopped 200px short of its top and bottom edges — the comet
+     would have run along the sides and vanished at the ends. Sized on both axes instead: the light band
+     is slightly elliptical as it turns, which is invisible, and it reaches every edge, which is the
+     whole request. */
+  .sfx-glint i, .vr-glint i { width: 140%; height: 140%; aspect-ratio: auto; margin-left: -70%; margin-top: -70%; }
+  /* Both hosts are 16px-cornered panels, so the shared 17px default already lands the ring on the
+     border rather than inside it. Declared anyway, because a dialog that later takes a different
+     corner should change this number and not discover the default by accident. */
+  .sfx-glint, .vr-glint { --glint-r: 17px; }
 }
+.sfx-card, .vr-card { position: relative; }   /* the ring is absolute; without this it escapes to the page */
 @keyframes hm-glint { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 /* Reduced motion still gets the marker, just standing still — the point of the ring is "this is the
    open one", and that fact shouldn't need movement to be legible. */
 @media (prefers-reduced-motion: reduce) {
-  .hm-glint i, .am-glint i { animation: none; background: rgba(150, 232, 255, .42); }
+  .hm-glint i, .am-glint i, .sfx-glint i, .vr-glint i { animation: none; background: rgba(150, 232, 255, .42); }
 }
 .hm-body { flex: 1; min-width: 0; }
 .hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

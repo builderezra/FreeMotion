@@ -237,6 +237,9 @@ window.FM = window.FM || {};
     root.setAttribute('aria-label', 'Record voice');
 
     var card = el('div', 'vr-card'); ui.card = card;
+    /* The signature travelling edge-light (queue 291) — the same ring the sound-effects sheet and the
+       open project card use, not a copy of it. */
+    (function () { var g = el('span', 'vr-glint'); g.appendChild(document.createElement('i')); card.appendChild(g); })();
 
     var top = el('div', 'vr-top');
     top.appendChild(el('div', 'vr-title', 'Record voice'));
