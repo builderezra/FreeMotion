@@ -4043,6 +4043,19 @@ window.FM = window.FM || {};
      * wrapper's padding and background behind, which is an empty 10px pill sitting in the row. */
     const selWrap = document.getElementById('t-sel');
     if (selWrap) selWrap.classList.toggle('has-sel', n >= 1);
+    /* GREY OUT LAYER ACTIONS WITH NOTHING SELECTED (queue 280). Ezra circled this button: "make this
+       button greyed out when a layer isnt selected." It opens the actions for the selected layer, so
+       with no selection there is nothing for it to open — it either did nothing or complained, and
+       looked exactly as live as every button beside it either way.
+       It is DIMMED, not hidden: the ones in #t-sel above disappear entirely because they belong to a
+       group that has its own ground, while this one sits in the plain transport row where a hole would
+       shuffle the other controls sideways every time you deselected. `is-off` is the app's existing
+       word for this — undo and redo already wear it — rather than a second look meaning the same. */
+    const lm = document.getElementById('btn-layermenu');
+    if (lm) {
+      lm.classList.toggle('is-off', n < 1);
+      lm.setAttribute('aria-disabled', n < 1 ? 'true' : 'false');
+    }
   }
   FM.pcTransportLayout = pcTransportLayout;
   FM.pcTransportSync = pcTransportSync;

@@ -17426,6 +17426,43 @@
     }
   });
 
+  /* ---------------- queue 280: the layer-actions button looked live with nothing selected -------- */
+
+  test('the layer-actions button is greyed out when nothing is selected (queue 280)', { item: 'layer-btn-off' }, async function () {
+    /* "make this button greyed out when a layer isnt selected", against a screenshot with this control
+     * circled. It opens the actions for the SELECTED layer, so with no selection there is nothing for
+     * it to open — and it looked exactly as live as everything beside it.
+     * Asserted through the app's own `is-off` convention AND the rendered opacity, because a class that
+     * no stylesheet acts on would satisfy the first half and change nothing on screen. */
+    if (!matchMedia('(min-width: 701px)').matches) return;
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(220);
+      const b = document.getElementById('btn-layermenu');
+      if (!b || !b.getBoundingClientRect().width) return;     // not on screen in this layout
+      if (!b.classList.contains('is-off')) throw new Error('with nothing selected the layer-actions button is not marked off');
+      const dim = parseFloat(getComputedStyle(b).opacity);
+      if (!(dim < 0.6)) throw new Error('with nothing selected the layer-actions button renders at opacity ' + dim + ' — it is marked off but nothing shows it');
+      if (b.getAttribute('aria-disabled') !== 'true') throw new Error('the button is dimmed but still reads as enabled to a screen reader');
+
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.4), y: Math.round(P.height * 0.4), shapeW: 200, shapeH: 200, fill: '#44aaff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(240);
+      if (b.classList.contains('is-off')) throw new Error('the layer-actions button stayed greyed out with a layer selected — now it is wrong the other way');
+      if (!(parseFloat(getComputedStyle(b).opacity) > 0.9)) throw new Error('the button did not come back to full strength with a layer selected');
+
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(240);
+      if (!b.classList.contains('is-off')) throw new Error('deselecting did not grey it out again — the state only travels one way');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
   /* ---------------- queue 279: the layer menu keeps the add menu's background ---------------- */
 
   test('the layer menu is painted with the same surface as the add menu (queue 279)', { item: 'insp-surface' }, async function () {

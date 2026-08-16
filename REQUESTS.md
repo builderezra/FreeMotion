@@ -1859,12 +1859,26 @@ better still, keep working inside the turn rather than parking work for a later 
 - [ ] **281 — Drop the element count from the custom elements section. (16 Aug.)** His words, verbatim:
       *"get rid of the number from the custom elements section that says how many elements you have"*.
 
-- [ ] **280 — Grey out the layers button when no layer is selected. (16 Aug, with a screenshot he
-      circled.)** His words, verbatim: *"make this button greyed out when a layer isnt selected"*.
+- [x] **280 — Grey out the layers button when no layer is selected. DONE v8.73.** (16 Aug, with a screenshot he
+      circled.) His words, verbatim: *"make this button greyed out when a layer isnt selected"*.
       The circled control is the **stacked-layers icon in the right-hand canvas rail** (below the
       fullscreen button, above the camera one). So: disabled/greyed styling whenever there is no
       selection, matching however the rest of the app already shows a disabled control rather than
       inventing a second look.
+
+      **DONE v8.73.** The control is `#btn-layermenu` ("Layer actions") — the side rail itself went in
+      v7.52 and everything on it moved to the transport row, so it now sits there rather than beside the
+      canvas. It opens the actions for the SELECTED layer, so with nothing selected there was nothing
+      for it to open and it looked exactly as live as every button next to it.
+      **Dimmed rather than hidden, deliberately.** The buttons in the `#t-sel` group beside it do
+      disappear with no selection, but they live in a wrapper with its own ground that leaves with them;
+      this one sits in the plain row, where removing it would shuffle the neighbouring controls sideways
+      every time you deselected. It wears `is-off` — the app's existing word for a dead control, already
+      used by undo and redo — rather than a second look that means the same thing, and that rule now
+      names all three in one place so the next one needs no CSS at all.
+      The suite checks the CLASS *and* the rendered opacity, because a class no stylesheet acts on would
+      pass the first half and change nothing on screen, and it checks the state travels back when you
+      deselect again.
 
 - [x] **278 — PC: the darkened bar behind the bin group is off-centre. DONE v8.71.** (16 Aug, with a screenshot.)
       His words, verbatim: *"on pc the bar with the bin on it and stuff, the darkening of the background

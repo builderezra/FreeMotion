@@ -4381,8 +4381,10 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    should stay where your eye expects it, just visibly unavailable. pointer-events stays ON so a tap
    still lands (undo()/redo() already no-op at the ends); disabling it would make the button feel
    broken rather than empty. */
-#btn-undo.is-off, #btn-redo.is-off { opacity: .3; cursor: default; }
-#btn-undo.is-off:hover, #btn-redo.is-off:hover { background: transparent; }
+/* One rule for every control that is off, rather than a list of ids that has to be remembered — the
+   layer-actions button joined it for queue 280 and the next one should not need a CSS change at all. */
+#btn-undo.is-off, #btn-redo.is-off, #btn-layermenu.is-off { opacity: .3; cursor: default; }
+#btn-undo.is-off:hover, #btn-redo.is-off:hover, #btn-layermenu.is-off:hover { background: transparent; }
 
 /* Home wordmark (v4.87). Height-driven so the image tracks the type it replaced; width auto keeps the
    render's own aspect. max-width stops a wide lockup from crowding the action buttons on a narrow
