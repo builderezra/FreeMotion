@@ -1118,6 +1118,19 @@ window.FM = window.FM || {};
       const tid = newId('t');
       // pack media Files: from memory for the current project, from IDB for a closed one
       const pack = { project: JSON.parse(JSON.stringify(doc.project)), layers: JSON.parse(JSON.stringify(doc.layers || [])), media: {} };
+      /* A TEMPLATE MUST NOT CARRY THE NOTES (queue 214). Ezra: "Currently the notes carry across
+       * projects, I want each projects notes only for that project."
+       * Reproduced by measurement, and this is the path it comes down: notes live on
+       * scene.project.notes exactly as designed, and creating, opening and duplicating a project all
+       * behave — but a template packs the whole project object, so `useAsNew` handed every new
+       * project the notes of whoever made the template. That is not a stale cache or a global; it is
+       * a copy, and it is the only route that produced his symptom.
+       * The line drawn here, deliberately: a DUPLICATE keeps its notes (it is a copy of that project,
+       * and losing your notes when you duplicate would be its own bug), while a TEMPLATE does not (it
+       * is a reusable starting point, and "remember to fix the audio at 0:12" belongs to one project
+       * and means nothing in the next). Stripped at SAVE, so templates already on disk are cleaned as
+       * they are re-saved and nothing has to be migrated. */
+      delete pack.project.notes;
       try {
         const db = await openDB();
         for (const l of pack.layers) {
@@ -1145,7 +1158,9 @@ window.FM = window.FM || {};
       const pack = await this.getPack(tid); if (!pack) return false;
       const meta = this.list().find(t => t.id === tid) || {};
       const pid = await FM.projects.create({ name: (meta.name || 'Template') + ' project', width: pack.project.width, height: pack.project.height });
-      FM.scene.project = Object.assign(JSON.parse(JSON.stringify(pack.project)), { name: FM.scene.project.name });
+      /* …and again on the way OUT, for templates saved before v8.22. Stripping only at save would
+         leave every existing template still handing its notes to new projects. */
+      FM.scene.project = Object.assign(JSON.parse(JSON.stringify(pack.project)), { name: FM.scene.project.name, notes: [] });
       const re = reIdLayers(pack.layers);
       FM.scene.layers = re.layers;
       await hydratePack(re.layers, pack.media, re.map);

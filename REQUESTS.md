@@ -3939,7 +3939,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       waiting for "can play through" would keep it up long after the picture is on screen. The poll runs
       only while something is pending and stops itself, because an always-on interval on the heaviest
       screen is exactly the sort of thing this project has had to hunt down before.
-- [ ] **214 — Notes must belong to ONE project, and travel with the saved file.** His words: *"Currently
+- [x] **214 — Notes must belong to ONE project, and travel with the saved file. DONE v8.22.** His words: *"Currently
       the notes carry across projects, I want each projects notes only for that project, and when you
       save the project file as well it should save the notes."*
       Two halves. The first is a real bug: notes were designed to live on `scene.project.notes` precisely
@@ -3948,6 +3948,20 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       changing anything; if it IS on the project, then something is copying it forward. The second half
       is a gap: the `.fmotion.json` save needs to carry `notes` through export AND import, and an old
       file without them must still open.
+
+      **DONE v8.22 — and the entry's own instruction ("find out which before changing anything") paid
+      off, because most of it was already right.** Measured: notes DO live on `scene.project.notes`;
+      creating a project, opening one, switching away and back, and the saved `.fmotion.json` were all
+      correct already — the file carries them and a new project starts empty. The notepad re-reads the
+      list on every render, so it was not a stale cache either.
+      **The one route that produced your symptom is a TEMPLATE.** `templates.save` packs the whole
+      project object, so making a new project from a template handed you the notes of whoever made it.
+      **The line I drew, and it is a judgement call worth knowing about:** a **duplicate** keeps its
+      notes (it is a copy of that project — losing them would be its own bug), a **template** does not
+      (it is a reusable starting point, and "fix the audio at 0:12" means nothing in the next project).
+      Say so if you want duplicates cleaned too.
+      Stripped at save AND when a template is used, so the templates already on your disk stop leaking
+      without any migration.
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
       exported and got no audio even tho the video had audio."*
       **I rate this the most serious open item.** Everything else is the app being awkward; this is the

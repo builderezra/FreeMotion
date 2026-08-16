@@ -14894,6 +14894,66 @@
     }
   });
 
+  /* ---------------- queue 214: notes belong to ONE project ----------------
+   * "Currently the notes carry across projects, I want each projects notes only for that project,
+   * and when you save the project file as well it should save the notes."
+   * Measured first, as the entry demanded. Notes DO live on scene.project.notes as designed, and
+   * create / open / the saved file were all already correct — the one route that produced his
+   * symptom is a TEMPLATE, which packs the whole project object and handed its notes to every new
+   * project made from it. So the tests pin the boundary, not just the fix. */
+
+  test('a template does not carry its notes into a new project', { item: 'notes-scope' }, async function () {
+    if (!FM.templates || !FM.templates.save || !FM.templates.useAsNew) throw new Error('the templates API is missing');
+    const made = [];
+    try {
+      const a = await FM.projects.create({ name: 'ZZ-notes-src', width: 640, height: 640 });
+      made.push(a);
+      FM.scene.project.notes = [{ id: 'n1', text: 'belongs to the source project', remind: false }];
+      FM.storage.markDirty(); FM.storage.flushSync();
+      // control: the note really is on the project we are about to templatise
+      if (!(FM.scene.project.notes || []).length) throw new Error('control failed: the source project has no note, so this proves nothing');
+      const okSave = await FM.templates.save('ZZ-notes-tpl');
+      if (okSave === false) throw new Error('the template did not save');
+      const t = (FM.templates.list() || []).filter(function (x) { return /ZZ-notes-tpl/.test(x.name); })[0];
+      if (!t) throw new Error('the saved template is not in the list');
+      const pid = await FM.templates.useAsNew(t.id);
+      if (pid) made.push(pid);
+      const carried = (FM.scene.project.notes || []).map(function (n) { return n.text; });
+      if (carried.length) throw new Error('a new project from a template arrived with someone else\'s notes: ' + JSON.stringify(carried));
+      // …and the SOURCE project must still have its own — stripping must not reach back into it
+      await FM.projects.open(a);
+      const still = (FM.scene.project.notes || []).map(function (n) { return n.text; });
+      if (still.length !== 1) throw new Error('the source project lost its notes when it was templatised: ' + JSON.stringify(still));
+      FM.templates.remove && FM.templates.remove(t.id);
+    } finally {
+      for (const id of made) { try { FM.projects.remove && FM.projects.remove(id); } catch (e) {} }
+    }
+  });
+
+  test('notes stay with their own project, and travel in the saved file', { item: 'notes-scope' }, async function () {
+    const made = [];
+    try {
+      const a = await FM.projects.create({ name: 'ZZ-notes-A', width: 640, height: 640 });
+      made.push(a);
+      FM.scene.project.notes = [{ id: 'na', text: 'only for A', remind: false }];
+      FM.storage.markDirty(); FM.storage.flushSync();
+      // the saved FILE carries them — the second half of his ask
+      const ser = await FM.storage.serializeScene(FM.scene);
+      const inFile = ((ser.project && ser.project.notes) || []).map(function (n) { return n.text; });
+      if (inFile.join() !== 'only for A') throw new Error('the project file does not carry the notes: ' + JSON.stringify(inFile));
+      // a NEW project starts clean
+      const b = await FM.projects.create({ name: 'ZZ-notes-B', width: 640, height: 640 });
+      made.push(b);
+      if (((FM.scene.project.notes) || []).length) throw new Error('a brand-new project already has notes: ' + JSON.stringify(FM.scene.project.notes));
+      // and going back finds A's note where it was left
+      await FM.projects.open(a);
+      const back = ((FM.scene.project.notes) || []).map(function (n) { return n.text; });
+      if (back.join() !== 'only for A') throw new Error('A lost its own notes: ' + JSON.stringify(back));
+    } finally {
+      for (const id of made) { try { FM.projects.remove && FM.projects.remove(id); } catch (e) {} }
+    }
+  });
+
   /* ---------------- queue 213: a bigger hit box, not a bigger button ----------------
    * "Make it so the button on the bottom of the screen has a larger hit box, don't make it bigger
    * but larger hit box cos I keep accidentally opening projects." Both halves are the test: the
