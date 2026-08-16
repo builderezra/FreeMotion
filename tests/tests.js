@@ -18186,6 +18186,42 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: the tracker's cache ignored the device budget ---------------- */
+
+  test('a track can never budget more frames than the device allows (BUG-HUNT)', { item: 'tracker-mem' }, function () {
+    /* "Tracker retains a full-frame Float32Array for every cached frame, doubling an already
+     * over-budget cache." The doubling is gone — the grayscale memo is one slot now, because the two
+     * walks visit disjoint monotonic ranges and never needed a map — and this locks the other half: the
+     * byte budget used to floor at 96MB and ceiling at 360MB on EVERY device, ignoring
+     * `FM.frameCacheLimits()`, which exists because of the v4.70 OOM fix and caps a 2GB phone at 128MB.
+     * The measured worst case was ~720MB resident on a device budgeted 96-128MB, which is a mobile
+     * Safari OOM-kill in the middle of a track — you lose the session, not just the track. */
+    if (typeof FM._trkBudget !== 'function') throw new Error('FM._trkBudget is not exported — the tracker budget cannot be checked without running a real track');
+    if (typeof FM.frameCacheLimits !== 'function') throw new Error('FM.frameCacheLimits is missing — the device cap this test holds the tracker to does not exist');
+    /* THE CAP IS STUBBED TO A PHONE'S, and that is the whole point of the test. Run against this
+       machine's own limit it proves nothing: a desktop reports 384MB, the old hard-coded ceiling was
+       360MB, so the broken version passes here and only fails on the device it actually hurts. The
+       first version of this test did exactly that and the mutation check caught it. */
+    const real = FM.frameCacheLimits;
+    try {
+      [[128 * 1024 * 1024, 'a 2GB phone'], [64 * 1024 * 1024, 'the smallest device we cap for']].forEach(function (pair) {
+        FM.frameCacheLimits = function () { return { maxBytes: pair[0], maxDim: 640 }; };
+        [30, 300, 1800, 20000].forEach(function (clipFrames) {
+          const b = FM._trkBudget(clipFrames);
+          if (!(b > 0)) throw new Error('a ' + clipFrames + '-frame clip budgeted ' + b + ' bytes');
+          if (b > pair[0]) {
+            throw new Error('on ' + pair[1] + ' a ' + clipFrames + '-frame clip budgets ' + Math.round(b / 1048576) +
+              'MB against a cap of ' + Math.round(pair[0] / 1048576) + 'MB — this is the allocation that OOM-kills a phone mid-track');
+          }
+        });
+      });
+      /* …and it still scales with the clip, or the fix would just be "always tiny", which makes long
+         tracks re-decode constantly. */
+      FM.frameCacheLimits = function () { return { maxBytes: 384 * 1024 * 1024, maxDim: 960 }; };
+      if (!(FM._trkBudget(1800) > FM._trkBudget(30))) throw new Error('with room to spare, a long clip gets no more cache than a short one — the budget has stopped scaling');
+    } finally { FM.frameCacheLimits = real; }
+  });
+
   /* ---------------- BUG-HUNT: the motion tracker ignored layer.crop ---------------- */
 
   test('the motion tracker maps a cropped layer\'s pixels through the crop origin (BUG-HUNT)', { item: 'tracker-crop' }, function () {

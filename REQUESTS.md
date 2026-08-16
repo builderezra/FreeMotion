@@ -3799,7 +3799,10 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
-      *Progress 17 Aug:* an **eighth** struck off — **the motion tracker ignoring `layer.crop` (v8.93)**,
+      *Progress 17 Aug:* a **ninth** struck off — **the tracker's cache doubling and ignoring the device
+      budget (v8.94)**, measured at ~720MB resident on a phone budgeted 96–128MB, which is an OOM-kill
+      mid-track.
+      *And an eighth:* — **the motion tracker ignoring `layer.crop` (v8.93)**,
       which templated a feature up to 600px away from the one tapped and wrote keyframes following it,
       silently, because the seed box on screen used the exact inverse transform and looked right.
       *And a seventh:* — **trim grips ignoring `layer.reversed` (v8.92)**, which

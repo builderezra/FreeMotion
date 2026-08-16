@@ -122,6 +122,18 @@ window.FM = window.FM || {};
    * through another, so the tracker locked onto a feature 600px away and nothing looked wrong.
    * A factory rather than inline arithmetic so the suite can check it without building a frame cache
    * and running a real track over it. */
+  /* HOW MANY BYTES A TRACK MAY CACHE, exported so the suite can hold it to the device limit without
+   * running a track. It used to floor at 96MB and ceiling at 360MB on EVERY device, ignoring
+   * `FM.frameCacheLimits()` — which exists because of the v4.70 OOM fix and caps a 2GB phone at 128MB.
+   * A 60s 1080x1920 clip therefore budgeted 360MB of ImageBitmaps on a phone, and the grayscale map
+   * that used to sit beside it doubled that. */
+  function trkBudget(clipFrames) {
+    const lim = FM.frameCacheLimits ? FM.frameCacheLimits() : null;
+    const cap = (lim && lim.maxBytes) ? lim.maxBytes : 96 * 1024 * 1024;
+    return Math.min(cap, Math.max(48 * 1024 * 1024, clipFrames * 400 * 225 * 4));
+  }
+  FM._trkBudget = trkBudget;
+
   function trkMap(cr, rx, ry) {
     const ox = (cr && cr.x) || 0, oy = (cr && cr.y) || 0;
     return {
@@ -191,7 +203,11 @@ window.FM = window.FM || {};
       const trkFps = Math.min(fps, 30);
       // budget the cache so we keep ~1 unique frame per tracked frame (up to a sane cap), not a fixed 194
       const clipFrames = Math.ceil(layer.duration * trkFps);
-      const budget = Math.min(360 * 1024 * 1024, Math.max(96 * 1024 * 1024, clipFrames * 400 * 225 * 4));
+      /* THROUGH THE DEVICE LIMIT (BUG-HUNT: "Tracker retains a full-frame Float32Array for every cached
+         frame, doubling an already over-budget cache"). This floored at 96MB and ceilinged at 360MB on
+         every device, ignoring `FM.frameCacheLimits()` — which exists because of the v4.70 OOM fix and
+         caps a 2GB phone at 128MB. A 60s 1080x1920 clip budgeted 360MB of ImageBitmaps here. */
+      const budget = trkBudget(clipFrames);
       await FM.buildFrameCache(m, trkFps, null, { maxDim: 440, maxBytes: budget });
       const fc = m.frameCache; if (!fc || !fc.count) return false;
       // cache frames are stored at (fc.w × fc.h); content(media) px → cache px by this ratio
@@ -211,12 +227,18 @@ window.FM = window.FM || {};
       const cr = (FM.cropOf ? FM.cropOf(layer, seedT) : null) || { x: 0, y: 0 };
       const { toCache, toContent } = trkMap(cr, rx, ry);
       const scratch = document.createElement('canvas'); scratch.width = cw; scratch.height = ch;
-      const grayCache = {};
+      /* ONE SLOT, not a map. This memoised every frame index it touched and never evicted, and each
+         entry is a Float32Array of cw*ch — the same byte count as the ImageBitmap it came from — so
+         peak memory was ~2x the frame-cache budget: measured at ~720MB for a 60s clip on a device whose
+         real budget is 96-128MB, which is a mobile Safari OOM-kill mid-track.
+         It bought nothing, either: `walk(1)` and `walk(-1)` visit disjoint, monotonically ordered
+         ranges, so the only repeat read is the immediately-previous index — which one slot serves. */
+      let _gIdx = -1, _gVal = null;
       const grayAt = (idx) => {
-        if (grayCache[idx]) return grayCache[idx];
+        if (idx === _gIdx) return _gVal;
         const bmp = fc.frames[idx]; if (!bmp) return null;
-        const g = grayFrom(bmp, cw, ch, scratch);
-        grayCache[idx] = g; return g;
+        _gIdx = idx; _gVal = grayFrom(bmp, cw, ch, scratch);
+        return _gVal;
       };
       const idxForTime = (t) => {
         const local = FM.layerLocalTime(layer, t); if (local == null) return -1;
@@ -298,6 +320,13 @@ window.FM = window.FM || {};
       if (kfX.length < 2) return false;
       layer.transform.x = { kf: kfX };
       layer.transform.y = { kf: kfY };
+      /* GIVE THE CACHE BACK. Nothing cleared it, so a track left its frames resident for the rest of
+         the session — and `FM.ensureReverseCache` then short-circuits on a cache built for tracking at
+         a tracking resolution. Kept only where the layer genuinely uses one: a reversed or
+         frame-blended clip plays from it. */
+      if (!layer.reversed && !layer.frameBlend && FM.clearFrameCache) {
+        try { FM.clearFrameCache(m); } catch (e) {}
+      }
       if (FM.history) FM.history.commit();
       FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.timeline) FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh();
       return kfX.length;
