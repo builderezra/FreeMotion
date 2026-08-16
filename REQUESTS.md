@@ -2212,7 +2212,8 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
-- [ ] **264 — Land the parameter-extremes sweep as a permanent test. (Idea from the 16 Aug hunt.)**
+- [x] **264 — Land the parameter-extremes sweep as a permanent test. DONE 16 Aug — test-only, so no
+      version bump: nothing in the app changed. (Idea from the 16 Aug hunt.)**
       The hunt that found 261/262/263 was one script: render every one of the **197 effects** with a
       SINGLE parameter pushed to its min, then its max, and flag any combination where the layer stops
       differing from the background at all. It found three real bugs on its first run and took seconds.
@@ -2226,6 +2227,20 @@ better still, keep working inside the turn rather than parking work for a later 
       Legitimate vanishers (dissolve at 100%, wipe at 0%, chromakeypro at max, brightness at 0…) need an
       allow-list, and that list is the valuable part — anything NEW that starts erasing layers is then a
       real regression rather than noise.
+
+      **DONE. It sweeps 1,104 combinations across all 197 effects in about 3.4 seconds**, so it is
+      cheap enough to live in the suite permanently. 18 legitimate vanishers are allow-listed
+      individually rather than skipped in bulk; anything outside that list fails, as does anything that
+      THROWS, as does the sweep itself shrinking below 800 combinations (which would mean the registry
+      changed shape and the test had quietly stopped covering the effects).
+      **A third trap turned up while building it, beyond the two the entry already named:** the fill
+      colour matters. My first fixture was a green-cyan shape, so every `chromakeypro` variant "erased"
+      it — six false findings from a keyer correctly keying green. The fixture is amber now, and that
+      is written into the test so nobody reintroduces it.
+      **PROVEN, not assumed.** Reverting the v8.41 halftone fix makes it report
+      `halftonelines:size=min`, and reverting the v8.42 kaleidoscope fix makes it report all three of
+      `kaleidoscope:centerx=max · centery=min · centery=max` — two different mechanisms, both caught
+      without a bespoke test for either. That is the whole argument for keeping it.
 
 - [ ] **Check I changed the right "Presets".** v6.30 gave live per-layer previews to the preset rows
       in the EFFECTS BROWSER. The inspector category card literally named **Presets** is a different,

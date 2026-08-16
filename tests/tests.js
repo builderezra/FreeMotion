@@ -16174,6 +16174,77 @@
     });
   });
 
+  /* ---------------- queue 264: the parameter-extremes sweep, made permanent ----------------
+   * The 16 Aug hunt found three real bugs (261, 262, 263) with one script, in seconds, and nothing in
+   * the suite covered the ground it walked: the existing effect tests all use DEFAULT parameters,
+   * which is the one setting that is always well-trodden. This is that script, kept.
+   *
+   * TWO TRAPS, both of which I fell into while writing it, and either of which turns this into a
+   * green test that proves nothing:
+   *   1. The baseline must be a render with the layer HIDDEN. Checking "does the canvas have opaque
+   *      pixels" always passes, because the project background fills the frame — the layer could
+   *      vanish completely and the check would not notice.
+   *   2. It must vary ONE parameter at a time. Pushing them all at once produces unreproducible
+   *      corner combinations instead of "this specific slider does it", which is the only form a
+   *      finding can be acted on in.
+   * And the FILL COLOUR matters: the first run used a green-cyan shape, so every chromakeypro variant
+   * "erased" it — six false findings from a keyer correctly keying green. */
+
+  test('no effect erases the layer at a single parameter extreme (queue 264)', { item: 'fx-extremes' }, function () {
+    const R = FM.fxRegistry;
+    /* Deliberately NOT green: a chroma keyer doing its job is not a defect. */
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 450, fill: '#e8a33d' });
+    const S = scene([L], { project: { width: 540, height: 960, fps: 30, duration: 5, background: '#000000' } });
+    const W = 180, H = 320;
+    const c = offscreen(W, H), ctx = c.getContext('2d');
+    const shot = () => { ctx.clearRect(0, 0, W, H); FM.renderScene(ctx, S, 0.5); return ctx.getImageData(0, 0, W, H).data; };
+    L.effects = []; L.visible = false;
+    const bg = shot();                       // TRAP 1: the baseline is the layer HIDDEN, not a blank canvas
+    L.visible = true;
+    const visible = () => { const a = shot(); let n = 0;
+      for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - bg[i]) + Math.abs(a[i + 1] - bg[i + 1]) + Math.abs(a[i + 2] - bg[i + 2]) > 12) n++;
+      return n; };
+    const plain = visible();
+    if (!(plain > 1000)) throw new Error('the fixture layer is not visible against its background (' + plain + 'px), so this sweep could not detect anything');
+
+    /* Effects whose job at that extreme IS to leave nothing: fully dissolved, wiped to zero, keyed
+       out, driven off-frame, or crushed to black. Each is a deliberate entry, not a blanket skip —
+       anything NEW that starts erasing layers has to be a real regression for this to be worth
+       running. (magnifybg samples what is BEHIND the layer, and in this fixture that is bare
+       background, so it is fixture-dependent rather than a defect.) */
+    const ALLOWED = {
+      'brightness:amount=min': 1, 'threshold:level=max': 1, 'thermal:low=max': 1,
+      'pulseopacity:depth=max': 1, 'dissolve:amount=max': 1, 'blockdissolve:amount=max': 1,
+      'wipe:progress=min': 1, 'shake:amount=max': 1, 'pulse:amount=max': 1,
+      'drift:x=min': 1, 'drift:x=max': 1, 'orbit:radius=max': 1,
+      'magnifybg:zoom=min': 1, 'magnifybg:zoom=max': 1,
+      'levels:inblack=max': 1, 'levels:outwhite=min': 1,
+      'chromakeypro:tolerance=max': 1, 'dispersion:progress=max': 1,
+    };
+    const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
+    const gone = [], crashed = [];
+    let combos = 0;
+    all.forEach(fx => {
+      const key = fx.key || fx.id;
+      let ps = []; try { ps = R.paramsOf(key) || []; } catch (e) { return; }
+      ps.forEach(p => ['min', 'max'].forEach(end => {
+        const v = p.options ? (end === 'min' ? 0 : p.options.length - 1) : (end === 'min' ? p.min : p.max);
+        if (v == null || !isFinite(v)) return;
+        let inst; try { inst = R.makeInstance(key); } catch (e) { crashed.push('makeInstance ' + key + ' → ' + e.message); return; }
+        inst.params = inst.params || {}; inst.params[p.key] = v;   // TRAP 2: exactly ONE parameter moved
+        L.effects = [inst];
+        combos++;
+        const id = key + ':' + p.key + '=' + end;
+        try { if (visible() === 0 && !ALLOWED[id]) gone.push(id); }
+        catch (e) { crashed.push(id + ' → ' + (e.message || e)); }
+      }));
+    });
+    L.effects = [];
+    if (combos < 800) throw new Error('only ' + combos + ' combinations were swept — the registry or paramsOf changed shape and this is no longer covering the effects');
+    if (crashed.length) throw new Error(crashed.length + ' effect(s) THREW at a parameter extreme: ' + crashed.slice(0, 6).join(' · '));
+    if (gone.length) throw new Error(gone.length + ' effect(s) erase the layer at a single slider extreme: ' + gone.slice(0, 8).join(' · '));
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
