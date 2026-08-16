@@ -2539,6 +2539,76 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **294 — Replace the + button with an "ADD" LAYER that lives on the timeline. (16 Aug.)** ⚠️ **BIG,
+      and he asked for it to be locked down verbatim:** *"Make sure you lock this request and don't lose
+      any of the specific details that I mentioned just copy and paste it and then add it to the bottom
+      of the list and then get to it when you get to that stage of the list keep up the good work"*.
+      His words, verbatim and in full:
+      > *"Without editing software the plus button inside the creator menu is kind of on the nose like
+      > when you're in a project and it has the plus button it looks very similar to what a light motion
+      > has and I was thinking of a way to get rid of it from being there while also keeping
+      > functionality and then I had the idea that the ad button could instead of being a button like
+      > that it could be a layer now so on the timeline you have layers and each layer position in the
+      > timeline you could create a layer that's always there always on the timeline. It has a nice
+      > little design like the same design plus button has but instead of take a line it's a layer. It
+      > works like every other land does except it can't be moved or anything left and right or cropped
+      > but it can be dragged up and down now continue to hear me out so imagine you open up the project
+      > you don't see the button any more. Instead you just see a layer that has this nice you know
+      > glowing design and it says ad or you know whatever you can say anything and it'll be like a plus
+      > button and if you just tap anywhere on that line it'll open up the same admin where you can add
+      > shapes or elements or whatever and the actual cool functionality part of this is that let's say
+      > you've got heaps of layers on your project. You can move this layer up and down like you can move
+      > every other layer like you can press the three lines on the right side drag it up and down and
+      > then when you press the button and add a layer out of shape, it'll actually add it where you have
+      > that so instead of just automatically adding whatever you add to the top and then drag it down you
+      > can drag that first and then add stuff and when you do add something it'll just go below the add
+      > one the ad layer this it's very cool idea and for PC since we don't have an ad button you could
+      > just make it so this layout instead of being like an actual full layer and like taking up all that
+      > face on the timeline instead it could just be a line between layers to signify where you're going
+      > to add like something if you would add another layer like it would tell you where it's in the
+      > shops and then you can decide whether layers are added on the timeline and also when you copy and
+      > paste stuff it could go there like I would go to wear that liners and instead of like clicking the
+      > three lines to the far right on PC you would just click on them line like you would pop over the
+      > line and it would like hello and go bigger because it'll be a very thin but still noticeable line
+      > but when you hoover over it it will let go a bit bigger to signify click on it and then you can
+      > drag it up and down. I think this would be insanely cool and also we could add shortcuts on the
+      > keyboard to quickly push it up to the top quickly quickly quickly push push it up to the bottom
+      > bottom so that you don't have to go and find it and then drag it up or down."*
+
+      **WHY he wants it, which is the part that must not be lost:** the + button *"is kind of on the nose…
+      it looks very similar to what a light motion has"*. This is an **identity** request as much as a
+      feature one — see **BEFORE-PUBLISHING.md**. It is the second thing he has asked for specifically to
+      stop the app resembling Alight Motion (the first being #286's cursor glow), and it is the first one
+      that removes a copied element rather than adding an original one.
+
+      **His clauses, as a checklist — none of this is DONE until every line is ticked:**
+      1. [ ] The + button **goes away** from inside a project.
+      2. [ ] **MOBILE:** an "Add" layer that is always present on the timeline, with a glowing design in
+             the same visual language as the current + button, labelled *"ad"* / Add / *"whatever you can
+             say anything"*.
+      3. [ ] It behaves like a normal layer **except**: it cannot move left/right and cannot be trimmed
+             or cropped. It **can** be dragged up and down.
+      4. [ ] **Tapping anywhere on it opens the same add menu** (shapes, elements, etc.).
+      5. [ ] **The point of the whole idea:** whatever you add is inserted **at that layer's position —
+             below the Add layer** — instead of landing on top and being dragged down. So you position
+             first, then add.
+      6. [ ] Reorder it with the same three-lines grip on the right that every other layer uses.
+      7. [ ] **PC:** not a full-height row — a **thin but noticeable LINE between layers** marking where
+             the next layer will go.
+      8. [ ] On PC, **hovering the line makes it grow** to signal it is clickable.
+      9. [ ] On PC you **click the line itself** to open the add menu, rather than the far-right grip.
+      10. [ ] The line can be dragged up and down too.
+      11. [ ] **Copy/paste also lands at that position.**
+      12. [ ] **Keyboard shortcuts to send it straight to the top or the bottom**, so you never have to
+              hunt for it and drag.
+
+      **Worth settling before building, recorded rather than asked:** whether the Add layer occupies a
+      real row in the layer ORDER (so it has an index among the layers) or is drawn between rows; the
+      insert-below rule in clause 5 implies the former on mobile and the latter on PC, which is exactly
+      what he describes, so the two platforms may want one shared "insertion index" with two different
+      renderings. Also: what happens to it in an empty project, and whether it appears in exports or
+      layer counts (it must not).
+
 - [ ] **293 — Delete the retired Classic layout CSS, don't just stop showing it. (16 Aug, from #292.)**
       #292 stopped the old Alight-Motion-shaped layout being PAINTED on refresh by putting
       `layout-studio` in the markup. But the Classic rules are still the DEFAULT in `styles.css` — a
