@@ -2381,6 +2381,100 @@ better still, keep working inside the turn rather than parking work for a later 
       opens, Group makes a real group with both layers in it.
 
 ### Features and changes
+- [ ] **277 — Rework the effects menu into a multi-select browser with a live preview. (16 Aug, long
+      spec + a screenshot he drew on.)** ⚠️ **BIG — design work, and he says himself it is experimental.**
+      His words, verbatim and in full:
+      > *"Also now to be more specific on how I want the effects menu to be reworked basically what I
+      > want is the following so let's say you click on a clip. It shows up all the different editing
+      > options for that layer and then you press the effect button so will be the same to this point.
+      > It'll have the visual menu the filter menu and the audio menu. All of these menus will just show
+      > the effective ad for that one currently right now when you go into the filters menu it looks
+      > different to the other others. At first that annoyed me but then I realised it's actually kind of
+      > good because when you add a filter you don't want another section where the filters get added to
+      > you want it to be added to the visual section so then you can layer it with the other effects and
+      > then also add effects to it and do whatever. So how imagining it will work now is basically you
+      > will open up the effects menu then you will you know being visual filters or whatever. Let's start
+      > off with the visualised section so you're in visualise and then you press a button that says add
+      > effect so what this button will do open up the menu which is like how it is now where it covers
+      > your whole screen and it shows all the effects but instead what it will do is it will open up like
+      > that same menu but the menu won't cover the whole screen the menu will only go up until where the
+      > canvas is and it won't go over the canvas, so basically your screen will kinda look like the image
+      > I sent where at the top of the screen the very top right? It'll still be like all of the settings
+      > buttons and stuff you know the basic settings ones like that won't change and then they'll be the
+      > canvas and then they'll be like the play buttons and all that and then where the timeline is it'll
+      > now (all just for mobile btw) be the effects menu and would it be different with the effects when
+      > you also apart from the fact that is now just take a list of the screen and you have to swipe more
+      > to go down and see more? What will be different now when you tap on an effect it doesn't just add
+      > it selects it and it will show the layer selected like what the layer will look like with the
+      > effect selected right but the thing is as well you can select as many effects as you want so you
+      > can just go and like select a bunch of effects every time you select one it'll put a one or two on
+      > it so you know what order they are being added in and you'll just be able to go through the
+      > effects minions like types of effects this will be good because I find in a light motion.
+      > Sometimes I want to go through and out a bunch of effects but every time I tap one it takes me out
+      > of it and it's kind of slow. This will be good and will sort it. I'll make it look at different
+      > from a light motion so we won't look like we're ripping them off as much. And basically the
+      > filters menu is pretty much good how it is right now. Also I know this is gonna contradict what I
+      > just said before but I'm lazy and I can't be bothered to go back and change what I said but
+      > actually now I'm thinking how I wanted to go. Is that basically when you press out effect in the
+      > effect menu pops up pretty much the same as what I said before but it covers the play buttons and
+      > all of that so it goes right up to the canvas and instead now basically it'll just the chemist
+      > will just be kind of replaying the loop of the layer that you have selected so whatever layer you
+      > have selected pretty much every time you like tap to add a filter or whatever it'll just take you
+      > back to the start of that layer instead and it will only show that layer which makes sense because
+      > you're only seeing the effects for that layer anyways and I can't just makes it quick and simple
+      > and easy now also something to think about is the fact that most of our filters and stuff I kind of
+      > just like basic when you first add them and you actually have to do stuff with them to make them
+      > look good so we might start happening to make each effect by default load in with effect with like
+      > changes to it so it actually does something and looks good but not every effect we need this. I
+      > don't want you to start on it yet because also it might be annoying if we are like making it so
+      > every time someone adds an effect they now have to like go on and reset the effects details. Maybe
+      > add a button like a toggle button for when you're like done selecting all of the effects you want
+      > to add you can toggle whether they spawn in with the values that were displayed in the preview on
+      > the canvas or they are just added in as a fresh slate like they just added in naked so you can do
+      > what you want to them might be a good idea for that. I mean this is all just experimental. I might
+      > not like this stuff I might need you to change it. Maybe you'll have better ideas. I feel like this
+      > will be good and time saving and also potentially we could just make it so people can hold down on
+      > an effect and it will show up with its menu like it does now like it shows up with the menu of like
+      > the different versions of that effect that you can have and instead of being like well not instead
+      > of anything but you could just decide which preset that you have is the one that will automatically
+      > spawn when you press on it. We do also have the like star button that opens up like all of your
+      > like pre-safe filter presets and stuff so people will be able to use that but yeah I think this is
+      > a good idea. It's kind of like CapCut a sense cause CapCut has like a similar thing."*
+
+      **HE CONTRADICTS HIMSELF MID-MESSAGE AND SAYS SO. The SECOND version is the one to build** — he
+      says *"I know this is gonna contradict what I just said before… but actually now I'm thinking how
+      I wanted to go"*. Both are kept above because the first explains the reasoning.
+      · **Superseded:** the sheet stops below the play buttons, leaving them visible.
+      · **Build this:** the sheet **covers the play buttons and goes right up to the canvas.**
+
+      **His clauses, as a checklist — none of this is DONE until every line is ticked:**
+      1. [ ] Mobile only. Top settings row unchanged; canvas stays; the sheet replaces everything from
+             the canvas down (play buttons included).
+      2. [ ] Effects menu keeps its Visual / Filters / Audio tabs.
+      3. [ ] A **filter you add lands in the VISUAL stack**, not a separate filters stack, so it can be
+             layered with other effects and have effects applied to it. *(He explicitly changed his mind
+             in favour of the current behaviour here — do not "fix" the filters tab looking different.)*
+      4. [ ] An **"add effect" button** inside Visual opens the browser as that partial sheet.
+      5. [ ] Tapping an effect **SELECTS** rather than adds, and the canvas previews the layer with it.
+      6. [ ] **Multi-select with an order badge** — 1, 2, 3… showing the order they will be added in.
+      7. [ ] While the sheet is open the canvas **loops only the selected layer**, restarting from that
+             layer's start on each tap.
+      8. [ ] Filters tab: leave as is — *"pretty much good how it is right now"*.
+      9. [ ] **A toggle for how the chosen effects land:** with the values shown in the preview, or
+             *"naked"* / fresh-slate.
+      10. [ ] *(Idea, his words "potentially")* long-press an effect → its variants menu, and pick which
+             preset is the one that spawns on a normal tap.
+
+      **DO NOT START the default-good-values work** — his words: *"I don't want you to start on it yet"*.
+      The toggle in clause 9 is the agreed shape for it.
+      **The screenshot:** he scribbled out the "Add Effect" title bar and drew a large box over the empty
+      area above the Visual/Filters/Audio tabs — i.e. that region becomes the canvas/preview, and the
+      current full-screen header goes.
+      **Open question for him, recorded rather than asked:** on a PC/wide window there is no timeline-
+      sized sheet to replace — he said "all just for mobile btw", so desktop presumably keeps today's
+      browser. Worth confirming before building the desktop half.
+      **Reference:** he compares it to CapCut.
+
 - [x] **264 — Land the parameter-extremes sweep as a permanent test. DONE 16 Aug — test-only, so no
       version bump: nothing in the app changed. (Idea from the 16 Aug hunt.)**
       The hunt that found 261/262/263 was one script: render every one of the **197 effects** with a
