@@ -286,7 +286,19 @@ window.FM = window.FM || {};
     var addSheet = document.getElementById('add-sheet');
     var addGrab = document.getElementById('add-grab');
     var addGrid = document.getElementById('add-grid');
-    function openAdd() { close(); addSheet.classList.add('open'); document.body.classList.add('add-open'); }
+    /* THE SHEET REDRAWS EACH TIME IT OPENS (BUG-HUNT: "Turning on Demo mode does not blank the phone Add
+       sheet's media tiles — filenames and thumbnails of personal media stay on screen").
+       It was rendered exactly once, at init. Demo mode is only read while a card is BUILT, and the body
+       is only rebuilt when you change tab or type in the search — so turning the setting on and coming
+       back to the project reopened the sheet still showing "Holiday_Bali_2024.mp4" and the clip's own
+       frame, which is precisely the exposure the setting exists to prevent, during the screen recording
+       it was just switched on for. Nothing said the setting had not applied.
+       Re-rendering here rather than subscribing to the settings listener, because `render()` also runs
+       for the PC inspector and a listener added there would leak one per re-render. The menu remembers
+       its tab and page, so a redraw returns to where you were — only the CONTENT is re-derived. */
+    var addOpts = { variant: 'sheet', onAfterAdd: closeAdd, onClose: closeAdd };
+    function redrawAdd() { if (addGrid && FM.addMenu) FM.addMenu.render(addGrid, addOpts); }
+    function openAdd() { close(); redrawAdd(); addSheet.classList.add('open'); document.body.classList.add('add-open'); }
     function closeAdd() { addSheet.classList.remove('open'); document.body.classList.remove('add-open'); }
     if (addFab) addFab.addEventListener('click', function () { addSheet.classList.contains('open') ? closeAdd() : openAdd(); });
     if (addGrab) addGrab.addEventListener('click', function () { if (addSheet._swiped) { addSheet._swiped = false; return; } closeAdd(); });
@@ -297,7 +309,7 @@ window.FM = window.FM || {};
     if (addGrid && FM.addMenu) {
       addGrid.classList.remove('add-grid');           // drop the old 3-col grid; the menu owns its layout
       addGrid.classList.add('addmenu-host');
-      FM.addMenu.render(addGrid, { variant: 'sheet', onAfterAdd: closeAdd, onClose: closeAdd });
+      redrawAdd();
     }
 
     // Returning to desktop width must never strand the drawer off-screen.

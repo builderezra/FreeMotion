@@ -18186,6 +18186,75 @@
     }
   });
 
+  /* ---------------- BUG-HUNT: Demo mode did not reach the phone Add sheet ---------------- */
+
+  test('turning Demo mode on blanks the phone Add sheet before it is shown again (BUG-HUNT)', { item: 'demo-sheet' }, async function () {
+    /* "Turning on Demo mode does not blank the phone Add sheet's media tiles — filenames and thumbnails
+     * of personal media stay on screen."
+     * The sheet was rendered exactly once, at init. Demo mode is only read while a card is BUILT, and
+     * the body is only rebuilt on a tab change or a search — so the setting appeared to do nothing:
+     * reopening showed "Holiday_Bali_2024.mp4" and the clip's own frame, which is the camera-roll
+     * exposure the setting exists to prevent, during the screen recording it was just turned on for.
+     * Driven exactly as the report describes — open, close, turn it on, reopen — because "it is right if
+     * you change tab" was already true and is not the bug. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    if (!FM.mediaLib || !FM.mobile || !FM.mobile.openAdd) return;
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const realList = FM.mediaLib.list, realAudio = FM.mediaLib.isAudio, realThumb = FM.mediaLib.getThumb;
+    const demo0 = FM.settings.get('demoMode');
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(280);
+      if (!(FM.mobile.isPhone && FM.mobile.isPhone())) return;
+      /* A stubbed library rather than a real import: the point is the LABEL, and a test that imports a
+         file to prove a privacy fix would be writing personal-looking data into his library. */
+      FM.mediaLib.list = function () { return [{ mid: 'suite-probe', name: 'Holiday_Bali_2024.mp4', kind: 'video', dur: 3 }]; };
+      FM.mediaLib.isAudio = function () { return false; };
+      FM.mediaLib.getThumb = function () { return Promise.resolve(null); };
+
+      FM.settings.set('demoMode', false);
+      await sleep(160);
+      FM.mobile.openAdd();
+      await sleep(420);
+      const tab = [].slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab')).find(function (t) { return t.textContent.trim() === 'Media'; });
+      if (!tab) return;
+      tab.click();
+      await sleep(340);
+      const titles = function () { return [].slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-card')).map(function (c) { return c.getAttribute('title') || ''; }); };
+      if (!titles().some(function (t) { return /Holiday_Bali_2024/.test(t); })) {
+        throw new Error('the Media tab is not showing the stubbed filename even with Demo mode OFF, so this test cannot tell the fix from the bug');
+      }
+
+      // THE REPORT'S TRIGGER: close, turn it on, reopen.
+      FM.mobile.closeAdd();
+      await sleep(200);
+      FM.settings.set('demoMode', true);
+      await sleep(200);
+      FM.mobile.openAdd();
+      await sleep(440);
+      const after = titles();
+      const leaked = after.filter(function (t) { return /Holiday_Bali_2024/.test(t); });
+      if (leaked.length) {
+        throw new Error('with Demo mode ON the sheet still shows "' + leaked[0] + '" — the setting has not reached the tiles, which is the exposure it exists to prevent');
+      }
+      if (!after.some(function (t) { return /^(Video|Photo|Audio)$/.test(t); })) {
+        throw new Error('no generic tile label is present, so the media tile is not being drawn at all rather than being blanked: ' + after.slice(0, 6).join(' | '));
+      }
+      if (document.querySelectorAll('.addmenu--sheet img.addmenu-thumb').length) {
+        throw new Error('a media THUMBNAIL is still on the sheet in Demo mode — the frame is as identifying as the filename');
+      }
+    } finally {
+      if (FM.mobile.closeAdd) FM.mobile.closeAdd();
+      FM.settings.set('demoMode', demo0);
+      FM.mediaLib.list = realList; FM.mediaLib.isAudio = realAudio; FM.mediaLib.getThumb = realThumb;
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(240);
+    }
+  });
+
   /* ---------------- BUG-HUNT: presets flattened bounce/elastic/hold/overshoot ---------------- */
 
   test('a saved preset keeps the easing you authored (BUG-HUNT)', { item: 'preset-easing' }, function () {

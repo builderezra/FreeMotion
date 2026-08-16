@@ -3799,6 +3799,10 @@ better still, keep working inside the turn rather than parking work for a later 
       leak entries were **still live after a fix I thought had covered them**, because that fix
       addressed the defect class and missed the documented instance. Read the file as a list of
       instances to test a fix against, not only as a to-do list.
+      *Progress 17 Aug:* an **eleventh** struck off — **Demo mode never reaching the phone Add sheet
+      (v8.96)**. The sheet was drawn once at startup and the setting is only read while a tile is built, so
+      turning it on left real filenames and video thumbnails on screen until you happened to change tab —
+      the exposure it exists to prevent, during the recording you turned it on for.
       *Progress 17 Aug:* a **tenth** struck off — **presets silently flattening bounce/elastic/hold/
       overshoot easing to linear (v8.95)**, which destroyed the motion permanently: the graph editor
       writes those names bare, so once the name was rewritten there was no bezier left to recover from.
