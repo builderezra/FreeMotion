@@ -4195,7 +4195,7 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       an effect" in four places (`syntheticFor`, `layerStep`, the mount key, and the window/duration
       helper), and a filter is a third kind. That is a contained job but not a small one, and it is why
       it did not go in with v7.48.
-- [ ] **224 — A hidden EFFECT should look hidden, the way a hidden layer does.** (15 Aug.) His words:
+- [x] **224 — A hidden EFFECT should look hidden, the way a hidden layer does. DONE v8.26.** (15 Aug.) His words:
       *"when you press the eye button on a layer and it puts a cross through it, changing what it looks
       like, you should also make it so it does that when you make an effect hidden, right now its hard to
       tell when an effect is hidden"*
@@ -4203,6 +4203,14 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
       off effect reads almost the same as a live one. Copy the LAYER's treatment rather than inventing a
       second one — same slashed eye, same dimming — and it should apply to effects inside a filter too,
       not just top-level ones.
+
+      **DONE v8.26, using the LAYER's own paths copied verbatim** from js/timeline.js rather than a
+      second drawing of the same idea — the entry asked for that and it is the right call: two hand-made
+      "off" icons would drift. The fade is lifted from .4 to .55 as well, because the struck-through
+      glyph now carries the message and the dimming only supports it. Filter children get it free, since
+      they are built by the same `fxRow`.
+      *(The test asserts the GLYPH, not the class — a class can be present while the icon looks
+      identical, which is precisely the state you were reporting.)*
 - [ ] **249 — THREE layouts exist; there should be two.** *(Was #223, which collided with the splash-video entry of the same number; renumbered 16 Aug. His request, unchanged.)* (15 Aug, with two ultrawide photos.) His
       words: *"For some reason the new layout i had you make only shows up on certain display sizes like
       my laptop, but then an amalgamation of the old one shows when I flip my phone or use a wide

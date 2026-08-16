@@ -1033,8 +1033,19 @@ window.FM = window.FM || {};
       del.addEventListener('click', () => { listOf().splice(idx, 1); after(); });
       head.appendChild(more); head.appendChild(del);
     } else {
+      /* A HIDDEN EFFECT LOOKS HIDDEN (queue 224). Ezra: "when you press the eye button on a layer and
+         it puts a cross through it, changing what it looks like, you should also make it so it does
+         that when you make an effect hidden, right now its hard to tell when an effect is hidden."
+         The layer's eye SWAPS GLYPH — an open eye becomes a struck-through one — while the effect's
+         only faded the same open eye, which at .4 opacity on a dark row is barely a difference. This
+         is the layer's own pair of paths, copied verbatim from js/timeline.js rather than redrawn, so
+         the two controls cannot drift apart into two dialects of "off". */
       const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : '')); eye.title = off ? 'Effect off — enable' : 'Effect on — disable';
-      eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      // ONE svg with both the eye and the slash inside it — two stacked <svg> elements would sit side
+      // by side in the button rather than on top of each other. Same markup timeline.js uses.
+      eye.innerHTML = off
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 1 12s4 8 11 8a9 9 0 0 0 5.4-1.6"/><line x1="2" y1="2" x2="22" y2="22"/></svg>'
+        : svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
       eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterFx(); });
       head.appendChild(eye);
     }

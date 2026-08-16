@@ -14924,6 +14924,44 @@
     }, 380);
   });
 
+  test('a hidden effect looks hidden, the same way a hidden layer does', { item: 'fx-hidden' }, async function () {
+    /* queue 224. "you should also make it so it does that when you make an effect hidden, right now
+       its hard to tell when an effect is hidden." A layer's eye SWAPS GLYPH to a struck-through one;
+       an effect's only faded the same open eye, which at .4 opacity on a dark row is barely a
+       difference. The assertion is about the GLYPH, not the class — a class can be present while the
+       icon looks identical, which is precisely the state he was complaining about. */
+    const frame = () => new Promise(r => setTimeout(r, 100));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff' });
+      L.start = 0; L.duration = 5;
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      await frame();
+      const eyeOf = function () { const r = document.querySelector('.fx-row'); return r && r.querySelector('.fx-eye'); };
+      const on = eyeOf();
+      if (!on) throw new Error('no eye on the effect row');
+      const onMarkup = on.innerHTML;
+      // CONTROL: the live state must not already contain a slash, or "gains a slash" proves nothing.
+      if (/<line/i.test(onMarkup)) throw new Error('control failed: the ENABLED eye already draws a slash');
+      on.click(); await frame();
+      const off = eyeOf();
+      if (!off) throw new Error('the effect row vanished when the effect was hidden');
+      if (!/<line/i.test(off.innerHTML)) throw new Error('a hidden effect still shows the plain open eye — nothing about it looks hidden');
+      if (off.innerHTML === onMarkup) throw new Error('the icon is byte-identical on and off');
+      // one <svg>, not two side by side
+      const svgs = off.querySelectorAll('svg').length;
+      if (svgs !== 1) throw new Error('the off state renders ' + svgs + ' svg elements — two would sit beside each other, not overlaid');
+      // and it must come back when re-enabled
+      off.click(); await frame();
+      if (/<line/i.test(eyeOf().innerHTML)) throw new Error('the slash stayed after switching the effect back on');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      if (FM.inspector.openCategory) FM.inspector.openCategory('home');
+    }
+  });
+
   /* ---------------- queue 217 + 218: every way in gets checked ----------------
    * There is one function that rebuilds an imported layer from a known-good schema, and it used to
    * have exactly ONE caller: importing a .fmotion.json. Inserting a template, inserting an element

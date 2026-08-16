@@ -1237,7 +1237,11 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fx-icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-dim); cursor: pointer; border-radius: 8px; font-size: 16px; padding: 0; flex: none; }
 .fx-icon-btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .fx-icon-btn:hover { background: rgba(255,255,255,.07); color: var(--text); }
-.fx-eye.off { opacity: .4; }
+/* A switched-off effect now swaps to a struck-through eye (queue 224), so the fade no longer has to
+   carry the whole message on its own — .4 was near-invisible against a dark row, which is exactly
+   what he reported. Lifted a little so the SLASH is legible; the glyph says "off" and the dimming
+   just supports it, which is how the layer's eye has always worked. */
+.fx-eye.off { opacity: .55; }
 .fx-del:hover { color: #ff6b6b; }
 .fx-mv { font-size: 12px; width: 22px; }
 .fx-mv.dis { opacity: .25; pointer-events: none; }
