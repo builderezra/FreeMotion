@@ -26,7 +26,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=455">
+<link rel="stylesheet" href="styles.css?v=458">
 <link rel="stylesheet" href="theme-glass.css?v=30">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -167,7 +167,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v8.55</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v8.56</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -253,8 +253,18 @@
            goes beside it rather than through it.
            Shown in BOTH selection states on purpose: the notepad only appears when nothing is
            selected, so pinning "?" to it would make it come and go with your selection. -->
-      <button id="m-help" class="m-tbtn" aria-label="Keyboard shortcuts"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5M12 17.5h.01"/></svg></button>
       <span id="ver-m" class="m-ver" title="Build version"></span>
+      <!-- "?" SITS AFTER THE VERSION CHIP (queue 266). Ezra: "Question mark button is wonky and off
+           centred and I need it to the right of the refresh button."
+           Measured before moving it: the glyph is dead centre in its own button (0.00px off on both
+           axes, identical to the cog), so "off centred" is not about the icon — it is about WHERE the
+           button sat. It was stranded between the project-name field and the chip, alone in the middle
+           of the bar with the other three icons clustered to its right, which is what reads as wonky.
+           It was put there on purpose, to avoid splitting the notes/cog pair whose gap he signed off in
+           #189 — but after the chip it does not come between those two at all, so that constraint is
+           respected and his is met. It also makes the phone match the PC row exactly, which is #171's
+           order: ver - ? - notes - cog - Export. -->
+      <button id="m-help" class="m-tbtn" aria-label="Keyboard shortcuts"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5M12 17.5h.01"/></svg></button>
       <!-- The phone's project ⋯ used to sit here. Gone in v6.13, which finishes queue 35 — Ezra:
            "move the things out of the three dot menu like we talked about so you can finally delete the
            menu." Every entry it held now has a control of its own, on this device:

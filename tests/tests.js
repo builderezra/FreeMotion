@@ -14055,8 +14055,13 @@
     try {
       frame.style.width = '390px'; frame.style.height = '844px';
       await sleep(220);   // let the layout settle at the new width before measuring anything
-      const run = [painted('ver-m'), inked('m-notes'), inked('m-settings'), painted('m-export')];
-      if (run.some(x => !x)) throw new Error('the phone bar is missing one of ver-m / m-notes / m-settings / m-export');
+      /* "?" JOINED THIS RUN IN v8.56 (queue 266 — "I need it to the right of the refresh button"), so
+         the run it spaces is chip → ? → notes → cog → Export. His RULE is unchanged and still decides
+         it; only the list of things it applies to has grown. Leaving m-help out would measure the
+         chip→notes gap straight THROUGH the ? button — 64px against 18 — and report a bar that is
+         actually even as badly broken. */
+      const run = [painted('ver-m'), inked('m-help'), inked('m-notes'), inked('m-settings'), painted('m-export')];
+      if (run.some(x => !x)) throw new Error('the phone bar is missing one of ver-m / m-help / m-notes / m-settings / m-export');
       if (!run.every(x => x.w > 0)) throw new Error('the phone bar did not render at 390px — this test cannot see what it is measuring');
 
       const gaps = [];
@@ -14067,15 +14072,35 @@
          the filled Export button) reads WIDER than the same gap between two soft glyphs, because
          between two icons the eye counts part of the space as belonging to the icons. So the two
          edge-bounded gaps must be visibly smaller than the icon-to-icon one to look the same. */
-      const [chipToNotes, notesToCog, cogToExport] = gaps;
-      const outerDiff = Math.abs(chipToNotes - cogToExport);
+      const [chipToHelp, helpToNotes, notesToCog, cogToExport] = gaps;
+      const outerDiff = Math.abs(chipToHelp - cogToExport);
       if (outerDiff > 1.5) {
-        throw new Error('the two edge-bounded gaps are ' + chipToNotes.toFixed(1) + ' and ' + cogToExport.toFixed(1) +
-          'px — they sit either side of the pair he judges together and must match');
+        throw new Error('the two edge-bounded gaps are ' + chipToHelp.toFixed(1) + ' and ' + cogToExport.toFixed(1) +
+          'px — they sit either end of the icon run and must match');
       }
-      if (notesToCog <= Math.max(chipToNotes, cogToExport) + 2) {
-        throw new Error('notes→cog is ' + notesToCog.toFixed(1) + 'px against outer gaps of ' + chipToNotes.toFixed(1) +
-          ' — an icon-to-icon gap has to be the LARGER one or it reads tighter than the two beside it');
+      /* Both ICON-TO-ICON gaps have to clear the edge-bounded ones, for the reason in the note above. */
+      [['?→notes', helpToNotes], ['notes→cog', notesToCog]].forEach(([name, g]) => {
+        if (g <= Math.max(chipToHelp, cogToExport) + 2) {
+          throw new Error(name + ' is ' + g.toFixed(1) + 'px against outer gaps of ' + chipToHelp.toFixed(1) +
+            ' — an icon-to-icon gap has to be the LARGER one or it reads tighter than the two beside it');
+        }
+      });
+      /* And they have to match EACH OTHER, or the run is even at its ends and lumpy in the middle —
+         which is the shape of the complaint that started #189. 2px, because closing the last 1.8px
+         needs the two tap targets to overlap: the ink gap is the sum of each button's own padding
+         before any box gap at all, so an exact match is only reachable through the targets. */
+      const innerDiff = Math.abs(helpToNotes - notesToCog);
+      if (innerDiff > 2) {
+        throw new Error('the two icon-to-icon gaps are ' + helpToNotes.toFixed(1) + ' and ' + notesToCog.toFixed(1) +
+          'px — the middle of the run is uneven');
+      }
+      /* The tap targets must not overlap to achieve any of the above. */
+      const boxes = ['m-help', 'm-notes', 'm-settings'].map(id => document.getElementById(id).getBoundingClientRect());
+      for (let i = 1; i < boxes.length; i++) {
+        if (boxes[i].left - boxes[i - 1].right < -0.5) {
+          throw new Error('two of the phone bar buttons overlap by ' + (boxes[i - 1].right - boxes[i].left).toFixed(1) +
+            'px — the spacing was bought out of the tap targets');
+        }
       }
       if (gaps.some(g => g < 8)) throw new Error('one of the gaps collapsed to ' + Math.min.apply(null, gaps).toFixed(1) + 'px — the run is cramped, not spaced');
     } finally {
@@ -16871,6 +16896,46 @@
         if (Math.abs(eyeX(groupHead) - eyeX(plainHead)) > 1)
           throw new Error('a group row and a plain row at the same depth have their eye at ' + eyeX(groupHead) + ' and ' + eyeX(plainHead) + 'px — the columns stopped lining up');
       } finally { S.layers = keep; S.selectedId = keepSel; try { FM.refreshAll(); } catch (e) {} }
+    }, 375);
+  });
+
+  /* ---------------- queue 266: the phone's "?" was in the wrong place ----------------
+   * "Question mark button is wonky and off centred and I need it to the right of the refresh button."
+   * Measured first: the glyph is dead centre in its own button, 0.00px off on both axes and identical
+   * to the cog — so "off centred" was never about the icon. It was about the button sitting stranded
+   * between the project-name field and the version chip, alone in the middle of the bar while the
+   * other three icons clustered to its right. */
+
+  test('the phone "?" sits to the RIGHT of the version chip (queue 266)', { item: 'help-pos' }, function () {
+    return atPhoneWidth(async function () {
+      await new Promise(r => setTimeout(r, 60));
+      const help = document.getElementById('m-help'), ver = document.getElementById('ver-m');
+      if (!help || !ver) throw new Error('phone top bar is missing #m-help or #ver-m');
+      const h = help.getBoundingClientRect(), v = ver.getBoundingClientRect();
+      if (!(h.width > 0 && v.width > 0)) throw new Error('one of them is not rendered at phone width');
+      if (h.left < v.right) throw new Error('"?" starts at ' + Math.round(h.left) + ' but the version chip runs to ' + Math.round(v.right) + ' — it is still left of the chip');
+      /* And it must not have been dropped between notes and the cog, whose gap he signed off in #189. */
+      const notes = document.getElementById('m-notes'), cog = document.getElementById('m-settings');
+      if (notes && cog) {
+        const n = notes.getBoundingClientRect(), c = cog.getBoundingClientRect();
+        if (h.left > n.left && h.left < c.right && n.width > 0)
+          throw new Error('"?" was moved INTO the notes/cog pair, which #189 signed off as correct');
+      }
+    }, 375);
+  });
+
+  test('the "?" glyph is centred in its button (queue 266)', { item: 'help-pos' }, function () {
+    /* He said "off centred", and the honest finding was that it was not — so this pins that down, both
+       so the claim is checkable and so a future change cannot quietly make it true. */
+    return atPhoneWidth(async function () {
+      await new Promise(r => setTimeout(r, 60));
+      const btn = document.getElementById('m-help');
+      const svg = btn && btn.querySelector('svg');
+      if (!svg) throw new Error('no "?" icon to measure');
+      const b = btn.getBoundingClientRect(), s2 = svg.getBoundingClientRect();
+      const dx = Math.abs((s2.left + s2.width / 2) - (b.left + b.width / 2));
+      const dy = Math.abs((s2.top + s2.height / 2) - (b.top + b.height / 2));
+      if (dx > 1 || dy > 1) throw new Error('the "?" glyph sits ' + dx.toFixed(1) + 'px/' + dy.toFixed(1) + 'px off the centre of its button');
     }, 375);
   });
 

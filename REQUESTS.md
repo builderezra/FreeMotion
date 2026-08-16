@@ -1945,11 +1945,32 @@ better still, keep working inside the turn rather than parking work for a later 
       with a gradient border; the border landed and the icon did not. Screenshot confirms: the speaker
       glyph is still pink/red on the rainbow tile.
 
-- [ ] **266 — The ? button is off-centre and in the wrong place. (16 Aug.)** His words, verbatim:
+- [x] **266 — The ? button is off-centre and in the wrong place. DONE v8.56.** His words, verbatim:
       *"Question mark button is wonky and off centred and I need it to the right of the refresh button."*
       From the screenshot the top bar reads: back · "Project 8" · **?** · version chip (the refresh
       button) · notepad · cog · export. So he wants ? moved to the RIGHT of the version/refresh chip,
       and its glyph properly centred in its circle.
+      **DONE v8.56 — moved, and the "off centred" half turned out to be about the PLACE, not the icon.**
+      Measured first: the "?" glyph sits **0.00px** off the centre of its own button on both axes,
+      identical to the cog. So the icon was never off-centre — the BUTTON was stranded between the
+      project-name field and the version chip, alone in the middle of the bar while the other three
+      icons clustered to its right. Moving it right of the chip fixes both halves at once, and makes
+      the phone match the PC row, which is #171's order: **ver · ? · notes · cog · Export**.
+      **The move broke a rule he signed off, and the suite caught it before it shipped.** #189 asserts
+      the run is spaced by VISIBLE ink rather than tap boxes, and dropping "?" between the chip and
+      notes made the chip→notes gap measure straight through the new button — **64px against 18px**,
+      the exact pair the markup comment had warned about.
+      Re-spaced to his rule, measured on real ink: **chip→? 16.8 · ?→notes 25.9 · notes→cog 24.1 ·
+      cog→Export 18.0** — the two edge-bounded gaps within 1.2px, the two icon-to-icon gaps within
+      1.8px, and the 24.1 he called perfect kept exactly.
+      **Why not an exact match on the inner pair:** closing the last 1.8px needs the two tap targets to
+      OVERLAP, because the ink gap is the sum of each button's own padding before any box gap at all.
+      The note on that rule draws that line deliberately, on a bar that also carries the delete bin. So
+      the setting is the tightest one with a non-negative box gap: 1.8px nobody can see, rather than a
+      2px strip where a tap belongs to whichever button paints last.
+      The #189 test now carries "?" in its run — leaving it out would measure straight through the
+      button again and call an even bar broken — plus a new assertion that the two icon gaps match each
+      other, and one that the tap targets never overlap to achieve it.
 
 - [x] **265 — Three of the four keyframe ◆ rails have no test at all. DONE 16 Aug — all FIVE rails
       are covered now. (Found while mutation-checking 254, not reported by him.)** A mutation aimed at the new Edit Points diamond

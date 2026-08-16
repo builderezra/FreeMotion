@@ -5118,7 +5118,20 @@ body.fm-pushing #toast { z-index: 213; }
    exactly), cog→Export 18. The icons stay pulled together by exactly the flex gap and never further —
    a negative margin past −4px would overlap their tap targets, which matters on a bar that also holds
    the delete bin. The project name pays for it out of its flex and keeps ~116px, which fits "Untitled". */
-#m-notes { margin-left: 0.8px; margin-right: -4px; }
+/* "?" MOVED IN AFTER THE CHIP (queue 266), so the run it spaces is now chip → ? → notes → cog →
+   Export, and the rule above still decides it: the two EDGE-BOUNDED gaps (chip→? and cog→Export) match
+   each other, and the ICON-TO-ICON ones (?→notes and notes→cog) match each other and read wider.
+   Measured after the move, before this line: chip→? 16.8, ?→notes 30.7, notes→cog 24.1, cog→Export 18.
+   The two edge-bounded ones were already within 1.2px of each other and are left alone. The odd one out
+   was ?→notes at 30.7 against the 24.1 he called perfect.
+   IT IS PULLED TO 25.7, NOT TO 24.1, AND THE 1.6px IS DELIBERATE. Matching exactly needs the two boxes
+   to overlap by ~2px, because the ink gap is the sum of each button's own padding (12.75 + 13.2 = 26)
+   before any box gap at all — so 24.1 is only reachable through the tap targets. The note above draws
+   that line for a reason, on a bar that also carries the delete bin. Zero box gap is the tightest
+   honest setting: 1.6px of difference nobody can see, against a 2px strip where a tap belongs to
+   whichever button paints last. Split across both buttons so neither margin passes −4. */
+#m-help { margin-right: -2.5px; }
+#m-notes { margin-left: -1.5px; margin-right: -4px; }
 #m-export { margin-left: 3.1px; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
