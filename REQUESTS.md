@@ -1490,6 +1490,23 @@ better still, keep working inside the turn rather than parking work for a later 
       · And the band from the "#97 update" entry applied to the text screen too (same CSS rule, fixed in
         v7.35), which squeezed the whole editor into the bottom third of the phone — very likely why (c)
         looked worse than it is.
+      · **(d) DONE v8.53 — and it is the only part of this that was ever ours to fix.** "the text box and
+        its handles are small and fiddly at that size". Measured at 375px on a text layer: the visible
+        dot is 10px and the touch pad added 14px a side, giving a **38px** target — under the 44px the
+        platform asks for, and under the ~40px this rule's own comment claimed it was aiming at. The pad
+        is 17px a side now, so the target is exactly **44px**; the dot is untouched, so nothing looks
+        different, only the area that answers a finger. The corner handles of a default text layer sit
+        57px apart, so the bigger pads still do not collide.
+        Two things checked and found FINE rather than assumed: the text-wrap handles report zero size at
+        (0,0), but they are `display: none`, so there is no invisible grab zone in the canvas corner;
+        and no two live handles' pads overlap at this size.
+        *(The test asserts the DOT did not grow as well as the target — a "fix" that simply enlarged the
+        square would satisfy the size check and look wrong.)*
+
+      **THIS ENTRY STAYS OPEN.** (a) and (b) need one photo from you — if the extra ✓ row sits flush on
+      top of the keyboard it is iOS Safari's own form-assistant bar, which cannot exist in any browser
+      here and which nothing in our DOM can produce. (c) depends on your project's aspect. Only (d) is
+      shipped.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       words: *"I just tried adding a song and it's really buggy and won't even play at all sometimes, and
       it's the only thing in the timeline."* "Only thing in the timeline" rules out mixing, layer count,

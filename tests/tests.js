@@ -16722,6 +16722,49 @@
     if (wide.w < 20) throw new Error('the wide shape only used ' + wide.w + 'px of a 38px thumbnail — it is being shrunk rather than fitted');
   });
 
+  /* ---- queue 98(d): the selection handles are "small and fiddly" on a phone ----
+   * The other three parts of #98 need a photo from him (the second ✓ and the arrow row are iOS
+   * Safari's own form-assistant bar, which cannot exist in this browser) or depend on his project's
+   * aspect. (d) is the part that is ours and measurable: the visible dot is 10px and the touch pad
+   * added 14px a side, giving a 38px target — under the 44px the platform asks for and under the
+   * ~40px this rule's own comment claims it was aiming at. */
+
+  test('a selection handle is a 44px touch target on a phone (queue 98d)', { item: 'handle-touch' }, function () {
+    return atPhoneWidth(async function () {
+      const settle = () => new Promise(r => setTimeout(r, 60));
+      const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+      const wasEditing = !!(FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive());
+      try {
+        /* makeLayer, NOT FM.addTextLayer: that one also OPENS the text editor as a side effect, and
+           the editor it left running broke an unrelated add-menu test three cases later. A fixture
+           should build state, not start a mode. */
+        const t = FM.makeLayer('text', { x: 270, y: 480, text: 'Hello' });
+        S.layers = [t];
+        FM.selectLayer(t.id);
+        FM.refreshAll();
+        await settle();
+        const h = document.querySelector('.sb-handle:not(.sb-wrap)');
+        if (!h) throw new Error('no selection handle on screen, so this measures nothing');
+        const box = h.getBoundingClientRect();
+        if (!(box.width > 0)) throw new Error('the handle has no size');
+        /* The pad is a ::before inset, so read it rather than trusting the dot's own box — that is
+           what a finger actually lands on. */
+        const inset = getComputedStyle(h, '::before').inset || getComputedStyle(h, '::before').top;
+        const padPx = Math.abs(parseFloat(inset));
+        if (!isFinite(padPx)) throw new Error('could not read the handle touch pad inset: ' + inset);
+        const target = box.width + 2 * padPx;
+        if (target < 44) throw new Error('the handle touch target is only ' + target.toFixed(0) + 'px (dot ' + box.width + ' + pad ' + padPx + ' a side) — under the 44px a fingertip needs');
+        /* And the DOT must not have grown: the point is a bigger hit area, not a bigger sight. A fix
+           that simply enlarged the square would pass the line above and look wrong. */
+        if (box.width > 14) throw new Error('the visible handle grew to ' + box.width + 'px — only the touch area was meant to change');
+      } finally {
+        try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && !wasEditing) FM.textEdit.stop(); } catch (e) {}
+        S.layers = keep; S.selectedId = keepSel;
+        try { FM.refreshAll(); } catch (e) {}
+      }
+    }, 375);
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."

@@ -379,8 +379,14 @@ body {
   scale: var(--vz, 1);   /* counter the viewport zoom: handles stay finger-sized at 0.2× and don't swallow small layers at 8× */
 }
 /* Enlarge the TOUCH target without moving the visible 10px dot — a fingertip is ~40px, so on a ~380px
-   phone the bare handle is ~4x too small and taps land on the canvas (move/deselect) instead of resize. */
-.sb-handle::before, .sb-rot::before { content: ""; position: absolute; inset: -14px; }
+   phone the bare handle is ~4x too small and taps land on the canvas (move/deselect) instead of resize.
+   -17px, not -14 (queue 98d — "the text box and its handles are small and fiddly at that size").
+   Measured at 375px on a text layer: 10px of dot plus 14px each side is a **38px** target, which is
+   under the 44px both the platform guideline and this rule's own comment ask for. 17px each side makes
+   it exactly 44. The visible dot is untouched, so nothing looks different — only the area that answers
+   a finger. The corner handles of a default text layer sit 57px apart vertically, so 44px pads still do
+   not collide; they only begin to overlap on a layer smaller than that, which was already true at 38. */
+.sb-handle::before, .sb-rot::before { content: ""; position: absolute; inset: -17px; }
 
 /* ===== Move & Transform panel (Alight Motion mode-rail editor) ===== */
 .mt-panel { display: flex; gap: 9px; align-items: stretch; padding: 6px 2px 10px; }
