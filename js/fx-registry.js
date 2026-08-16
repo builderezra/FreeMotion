@@ -49,7 +49,7 @@ window.FM = window.FM || {};
     // batch 15 (repeat / tiling)
     gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat',
     // batch 16 (other / color / proc / drawing)
-    channelremap: 'other', gradientoverlay: 'color', lensflare: 'proc', roughenedges: 'drawing', hexarray: 'proc',
+    channelremap: 'color', gradientoverlay: 'color', lensflare: 'proc', roughenedges: 'drawing', hexarray: 'proc',
     // batch 17 (drawing / blur / proc)
     electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', smoothbevel: 'drawing',
     // batch 18 (blur / proc / distort / drawing)
@@ -72,7 +72,7 @@ window.FM = window.FM || {};
     motionflow: 'blur',   // content-aware motion blur (temporal)
     copybg: 'stylize',    // copy the backdrop below into this layer
     magnifybg: 'stylize', // …and the same copy through a lens
-    fillbehind: 'other',  // …and the third of the family: fill the frame AROUND the layer with a blurred copy of it
+    fillbehind: 'blur',  // …and the third of the family: fill the frame AROUND the layer with a blurred copy of it
 
     // batch 26 (AM parity fill-ins)
     softglow: 'color', replacecolor: 'color', spotcolor: 'color', fourcolor: 'color', spectralmap: 'color',
@@ -104,7 +104,7 @@ window.FM = window.FM || {};
     lensdistort: 'distort', pixelsort: 'stylize', lumamatte: 'matte', compoundblur: 'blur', matchgrade: 'color',
     // batch 39 (the frame edges become solid)
     squish: 'distort',
-    filter: 'other',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
+    filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -121,9 +121,18 @@ window.FM = window.FM || {};
     threed: '3D',
     opacity: 'Opacity / Visibility',
     text: 'Text',
-    other: 'Other',
+    /* "Other" is GONE (queue 289). Ezra: "Just put the effects from the other menu into menus that
+       would fit them and get rid of the other menu."
+       It held three, and one of those never showed: Channel Remap (whose every mode is a colour
+       operation — Swap R/B, Hue Invert, Swap Sat/Val) went to Colouring; Fill Behind went to Blur,
+       because a heavy blur IS the effect and "blurred background" is what someone would go looking
+       under; and the Filter CONTAINER is `hidden: true`, so it never appeared in the browser at all —
+       it is parked in Stylize, which is what a filter is, purely so its key resolves.
+       The label and the order entry are removed rather than left empty: the browser only lists
+       categories that have effects, so a leftover key would be invisible until something landed in it
+       by accident and the menu he asked to delete came back. */
   };
-  const CATEGORY_ORDER = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'opacity', 'text', 'threed', 'other'];
+  const CATEGORY_ORDER = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'opacity', 'text', 'threed'];
 
   // chromakey/lumakey only affect media (video/image) layers — they run in the media draw path.
   // (vignette WAS here, but v2.86 gave non-media layers a comp-space PIXEL_FX.vignette, so the
@@ -411,7 +420,7 @@ window.FM = window.FM || {};
     return out;
   }
   function tagsOf(def) {
-    const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'other'] || '';
+    const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'stylize'] || '';
     const words = [].concat(
       String(def.label || '').split(/[^A-Za-z0-9]+/),
       cat.split(/[^A-Za-z0-9]+/),
@@ -430,7 +439,7 @@ window.FM = window.FM || {};
   // A truthful fallback line when an effect hasn't been given one by hand: what family it is in and
   // what you can actually change. No invented adjectives — a wrong description is worse than none.
   function describeOf(def) {
-    const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'other'] || 'Effect';
+    const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'stylize'] || 'Effect';
     const ctrl = paramWords(def);
     if (!ctrl.length) return cat + '. No settings — it either is or it isn\u2019t.';
     if (ctrl.length === 1) return cat + '. One control: ' + ctrl[0] + '.';
@@ -460,7 +469,12 @@ window.FM = window.FM || {};
       // the label, the type id, and every control the effect exposes — which is what people actually
       // type ("radius", "angle", "shutter"). An effect can add its own with a `tags:` array.
       tags: tagsOf(def),
-      category: CATEGORY_OF[def.type] || 'other',
+      /* Falls back to a REAL category (queue 289). It used to fall back to 'other', and deleting that
+         category turned the fallback into a trap: an effect added without a CATEGORY_OF entry would
+         resolve to a key with no label, and since the browser only lists categories that have effects,
+         it would not appear anywhere at all. The suite now fails on an unlisted category rather than
+         letting one go missing quietly. */
+      category: CATEGORY_OF[def.type] || 'stylize',
       params: paramsOf(def),
       appliesTo: TEXT_ONLY[def.type] ? 'text' : (MEDIA_ONLY[def.type] ? 'media' : 'all'),
       // Not offered in the effects grid. The filter container is a real registry entry — the load path

@@ -529,8 +529,9 @@ window.FM = window.FM || {};
     copybg: 'backdrop', lightwrap: 'backdrop', magnifybg: 'backdrop',
     // Fill Behind is the exact opposite requirement to those three: it paints the space the layer is
     // NOT filling, so its tile needs a subject that stops short of the edges. The card does that —
-    // and 'other' resolves the card's art to the photo, which is the one that reads as a blurred
-    // wash rather than as an abstract pattern.
+    // and its category's art is a PHOTO, which is what reads as a blurred wash rather than as an
+    // abstract pattern. (It sat in 'other' until queue 289 dissolved that category; it is in Blur now,
+    // whose art is also a photo, so the requirement is unchanged.)
     fillbehind: 'card',
     // Framing effects: these draw ON an edge, so the subject must reach the tile's own edges or the
     // tile shows a frame floating in the middle of nothing. Letterbox and Border Frame draw on the

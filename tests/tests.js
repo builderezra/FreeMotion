@@ -17429,6 +17429,41 @@
     }
   });
 
+  /* ---------------- queue 289: the "Other" catch-all is gone ---------------- */
+
+  test('there is no "Other" effects category, and nothing fell out of the browser (queue 289)', { item: 'no-other' }, function () {
+    /* "Just put the effects from the other menu into menus that would fit them and get rid of the other
+     * menu."
+     * The second half is the one that needs a test. Deleting a catch-all is easy; the risk is an effect
+     * left pointing at a category that no longer exists, which does not error — the browser lists only
+     * categories that HAVE effects, so the effect simply stops appearing anywhere and nothing says so.
+     * (The fallback for an effect with no category entry pointed at 'other' too, so a NEW effect could
+     * have gone missing the same way. It points at a real category now.) */
+    const cats = (FM.fxRegistry && FM.fxRegistry.categories) ? FM.fxRegistry.categories() : [];
+    if (!cats.length) throw new Error('no effect categories are reachable');
+    if (cats.some(function (c) { return (c.label || '').toLowerCase() === 'other'; })) {
+      throw new Error('the "Other" category is still in the effects browser');
+    }
+    const keys = {};
+    cats.forEach(function (c) { keys[c.key] = c.label; });
+    const all = FM.fxRegistry.all ? FM.fxRegistry.all() : [];
+    if (all.length < 20) throw new Error('only ' + all.length + ' effects visible — this test would not notice a few going missing');
+    const orphans = all.filter(function (e) { return !keys[e.category]; })
+      .map(function (e) { return (e.label || e.type) + ' → "' + e.category + '"'; });
+    if (orphans.length) {
+      throw new Error(orphans.length + ' effect(s) point at a category the browser does not list, so they appear nowhere: ' + orphans.slice(0, 6).join(', '));
+    }
+    /* …and the three that were re-homed are each somewhere sensible, named so the choice is reviewable
+       rather than silent — that is what the request asked for. */
+    const want = { channelremap: 'Colouring', fillbehind: 'Blur' };
+    Object.keys(want).forEach(function (type) {
+      const e = FM.fxRegistry.get(type);
+      if (!e) return;                                  // not registered in this build
+      const label = keys[e.category];
+      if (label !== want[type]) throw new Error(type + ' landed in "' + label + '" — it was re-homed to "' + want[type] + '" when Other was dissolved');
+    });
+  });
+
   /* ---------------- queue 287 + 288: the titles lost their ampersands ---------------- */
 
   test('no effects-browser category title still carries an ampersand (queue 287/288)', { item: 'amp-sweep' }, function () {

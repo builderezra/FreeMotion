@@ -2942,12 +2942,27 @@ better still, keep working inside the turn rather than parking work for a later 
       but it is written down. Note the tension to resolve when it is built: the sound-effects BUTTON is
       the rainbow one (#210), so a warm palette inside the menu needs to not fight that.
 
-- [ ] **289 — Dissolve the "Other" effects menu into the categories that fit. (16 Aug.)** His words,
+- [x] **289 — Dissolve the "Other" effects menu into the categories that fit. DONE v8.81.** (16 Aug.) His words,
       verbatim: *"Just put the effects from the other menu into menus that would fit them and get rid of
       the other menu"*.
       So the catch-all category goes away and each of its effects is re-homed into a real one. Note this
       is a judgement call per effect — list what moves where in the entry when it is built, so the
       choices are reviewable rather than silent.
+
+      **DONE v8.81. It held three things, and only two of them were ever visible:**
+      | effect | went to | why |
+      |---|---|---|
+      | **Channel Remap** | **Colouring** | every mode it has is a colour operation — Swap R/B, Hue Invert, Swap Sat/Val |
+      | **Fill Behind** | **Blur** | a heavy blur IS the effect, and "blurred background" is what you would go looking under |
+      | Filter (container) | Stylize | `hidden: true`, so it never appeared in the browser at all — parked somewhere real purely so its key resolves |
+      The browser now reads: Colouring · Blur · Distortion / Warp · Procedural · Stylize · Drawing /
+      Edge · Move / Transform · Repeat · Matte / Mask / Key · Opacity / Visibility · Text · 3D. All 196
+      effects are reachable; none was orphaned.
+      **The trap in this job was not the moving, it was the FALLBACK.** An effect with no category entry
+      fell back to `'other'` — and with that category deleted, the fallback pointed at a key with no
+      label. The browser only lists categories that have effects, so any future effect added without a
+      category would simply not appear anywhere, with nothing to say so. It falls back to a real
+      category now, and the suite fails if any effect points at a category the browser does not list.
 
 - [x] **288 — Rename the "Colour & Light" effect menu to just "Colouring". DONE v8.80.** (16 Aug.) His words,
       verbatim: *"Change colour and light effect menu to just Colouring"*.
