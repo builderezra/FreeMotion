@@ -235,6 +235,29 @@ These were disproved by brute-forcing the float maths; the proposals are wrong, 
     instance carrying only its original key must render byte-identically to one holding every new key
     at its fallback. That is the guarantee old projects actually rely on, and it has a gate now.
 
+- v8.98 (round 13 — **the keys**) — `chromakey` (edge softness), `lumakey` (edge softness + which end
+  it removes) and `replacecolor` (what it replaces + match width). Findings:
+  * **Deliberately NOT built: chromakey's proposed `spill` and `match` params.** `chromakeypro`
+    (v4.57) already is despill + chroma-only matching, and cloning them into the base effect makes
+    two half-answers instead of one good one. Only the softness half, which nothing else covers, was
+    taken. The proposal predates that effect.
+  * **chromaKey and lumaKey MEMOISE their output canvas** and hand it back whenever every remembered
+    input matches. A new control that is not in the cache key repaints nothing — the maths is right
+    and the slider looks dead. Both keys now carry the new params, and the mutation check for that is
+    exactly "remove it from the cache key".
+  * **These two were the only effects in the app not reachable from `FM._FX_TABLES`** — they run on
+    the media path ahead of the draw, so the suite could not touch either and neither had a test.
+    Added as `KEY_FNS`, which promptly failed the existing prototype-free-tables test and had to be
+    built with `Object.create(null)` like every other table on that seam.
+  * **replacecolor's row is a bug report, not a feature request.** It rebuilt saturation and value
+    from the SOURCE pixel, so the To colour's own character was discarded — pale pink over saturated
+    red returned saturated pink. Full colour takes the target's brightness SCALED by how light this
+    pixel is relative to the From colour; taking it flat would erase every fold in the object.
+  * **The generic noise plate cannot test a colour-match effect** — it contains no red, so every gate
+    reads zero and the effect looks dead. And the harness's own `hexToRGB(undefined)` returns
+    `[0,0,0]`, which is TRUTHY, so `hexToRGB(p.color) || DEFAULT` silently keys off black and the hue
+    shift comes out zero. Pass the colours explicitly; the app always stamps them.
+
 ## Build order (from the ranking pass)
 
 **Items 2–16 below are all SHIPPED** (v3.87–v3.90) — kept for the exactness notes, which are

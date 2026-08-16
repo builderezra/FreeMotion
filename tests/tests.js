@@ -18186,6 +18186,129 @@
     }
   });
 
+  /* A gate, not a note. The standing rule is that the newest effects lead FX_FEATURED, and following
+   * it at v8.98 put Chroma Key and Luma Key — both MEDIA_ONLY — at the head of the carousel. The
+   * carousel does not filter by appliesTo: it renders every card and `guardedAdd` refuses on tap with
+   * "That effect needs a video or image layer". So the first two things a user saw on a shape or text
+   * layer were two cards that could only produce a toast. The suite caught it only because three
+   * unrelated browser tests tap the leading cards and count what lands; that was luck, and luck is not
+   * a safeguard. Asserted directly here so the next prepend cannot reintroduce it. */
+  test('effects: nothing in the featured carousel is an effect most layers cannot take', { item: 'fx-featured' }, function () {
+    var feat = FM.FX_FEATURED || [];
+    if (!feat.length) throw new Error('FM.FX_FEATURED is empty — this test can no longer prove anything');
+    var bad = feat.map(function (id) { return FM.fxRegistry.get(id); }).filter(Boolean)
+      .filter(function (reg) { return reg.appliesTo && reg.appliesTo !== 'all'; })
+      .map(function (reg) { return reg.id + ' (needs ' + reg.appliesTo + ')'; });
+    if (bad.length) {
+      throw new Error(bad.join(', ') + ' — the carousel shows every card whatever layer is selected, so these can only answer a tap with a refusal toast. Feature an effect that applies to all layers instead.');
+    }
+    var missing = feat.filter(function (id) { return !FM.fxRegistry.get(id); });
+    if (missing.length) throw new Error('featured ids that are not real effects: ' + missing.join(', '));
+  });
+
+  /* ---------------- EFFECTS-PLAN round 13: the keys ---------------- */
+
+  function keyFns() {
+    var K = FM._FX_TABLES && FM._FX_TABLES.KEY_FNS;
+    if (!K || !K.chromaKey || !K.lumaKey) throw new Error('FM._FX_TABLES.KEY_FNS is not exposed — the suite cannot reach the real key functions');
+    return K;
+  }
+  function keyPlate(W, H, paint) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d'), img = x.createImageData(W, H);
+    paint(img.data, W, H); x.putImageData(img, 0, 0); return c;
+  }
+  function keyAlphaRow(canvas, W, H) {
+    var d = canvas.getContext('2d').getImageData(0, 0, W, H).data, row = [];
+    for (var x = 0; x < W; x++) row.push(d[((H >> 1) * W + x) * 4 + 3]);
+    return row;
+  }
+
+  /* Chroma Key was a BINARY cut: inside the tolerance sphere alpha went to 0, one step outside it the
+   * pixel was untouched. There is no such thing as a real edge pixel under that rule — a strand of
+   * hair or a motion-blurred hand is part background and part subject — so every keyed shot came out
+   * jagged, and the only control was how MUCH to cut, never how.
+   * Counted as partial-alpha pixels rather than eyeballed: a hard cut produces exactly zero of them,
+   * which makes "0 vs some" a decisive reading rather than a judgement about how an edge looks.
+   * The second half is the trap this control walked into: chromaKey memoises its output canvas and
+   * returns it whenever every remembered input matches. A new param that is not in that key means
+   * dragging the slider repaints nothing — the effect would be correct and appear completely dead. */
+  test('effects: Chroma Key softness ramps the edge, and survives the repaint cache', { item: 'fx-keys' }, function () {
+    var K = keyFns(), W = 64, H = 64;
+    var green = keyPlate(W, H, function (d) {
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4, k = x / (W - 1);          // 0 = pure key green, 1 = far from it
+        d[i] = Math.round(255 * k); d[i + 1] = 255; d[i + 2] = Math.round(255 * k); d[i + 3] = 255;
+      }
+    });
+    var partial = function (row) { return row.filter(function (a) { return a > 0 && a < 255; }).length; };
+    var hard = keyAlphaRow(K.chromaKey(green, W, H, '#00ff00', 0.3, 'none', 0), W, H);
+    if (partial(hard) !== 0) throw new Error('the un-softened key produced ' + partial(hard) + ' part-transparent pixels — it is supposed to be the hard cut old projects already have');
+    var soft = keyAlphaRow(K.chromaKey(green, W, H, '#00ff00', 0.3, 'none', 0.25), W, H);
+    if (partial(soft) < 5) {
+      throw new Error('softness produced only ' + partial(soft) + ' part-transparent pixels — either the ramp is not running, or the memoised canvas from the previous call was handed back because softness is missing from its cache key');
+    }
+    if (hard[0] !== 0 || soft[0] !== 0) throw new Error('pure key green is no longer being removed at all');
+    if (hard[W - 1] !== 255 || soft[W - 1] !== 255) throw new Error('a colour far from the key is being cut — the tolerance has changed meaning');
+  });
+
+  /* Luma Key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
+   * at all however the threshold was set — half the effect was missing, not merely inconvenient. Its
+   * soft edge was welded to 28 luma units, which terminates a smoke or glow plate on a line.
+   * Asserted on a straight ramp, where "which end went" is unambiguous. */
+  test('effects: Luma Key can remove the bright end, and its edge width is a control now', { item: 'fx-keys' }, function () {
+    var K = keyFns(), W = 64, H = 64;
+    var ramp = keyPlate(W, H, function (d) {
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4, v = Math.round(255 * x / (W - 1));
+        d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+      }
+    });
+    var partial = function (row) { return row.filter(function (a) { return a > 0 && a < 255; }).length; };
+    var legacy = keyAlphaRow(K.lumaKey(ramp, W, H, 0.25, 'none', 28, 0), W, H);
+    if (!(legacy[0] === 0 && legacy[W - 1] === 255)) throw new Error('the default key no longer removes the dark end and keeps the bright end');
+    var wide = keyAlphaRow(K.lumaKey(ramp, W, H, 0.25, 'none', 120, 0), W, H);
+    if (!(partial(wide) > partial(legacy))) {
+      throw new Error('a 120-unit soft edge ramps over ' + partial(wide) + ' pixels against ' + partial(legacy) + ' at 28 — softness is not widening the handover, or the cache returned the previous canvas');
+    }
+    var bright = keyAlphaRow(K.lumaKey(ramp, W, H, 0.25, 'none', 28, 1), W, H);
+    if (!(bright[0] === 255 && bright[W - 1] === 0)) {
+      throw new Error('"Removes: Bright" did not invert the key — dark end came out ' + bright[0] + ', bright end ' + bright[W - 1] + ', so a subject on a white background still cannot be keyed');
+    }
+  });
+
+  /* Replace Colour only ever rotated HUE — saturation and value were rebuilt from the SOURCE pixel,
+   * so the To colour's own character was discarded and choosing pale pink to replace a saturated red
+   * returned a SATURATED pink. Measured at the exact From hue, where the match weight is 1 and the
+   * replacement is meant to be complete, because a plate-wide average includes partly-matched pixels
+   * and would blur the very thing being asserted. Full colour must also keep the shading: taking the
+   * target's brightness flat would erase every fold in the object being recoloured. */
+  test('effects: Replace Colour can take the whole colour, not just its hue', { item: 'fx-keys' }, function () {
+    var fx = FM._FX_TABLES.PIXEL_FX.replacecolor, W = 8, H = 32;
+    var sat = function (d, i) { var mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); return mx === 0 ? 0 : (mx - mn) / mx; };
+    // a column of the From colour at every brightness, all exactly on its hue (match weight 1)
+    var plate = function () { var d = new Uint8ClampedArray(W * H * 4);
+      for (var y = 0; y < H; y++) { var k = 0.3 + 0.7 * (y / (H - 1));
+        for (var x = 0; x < W; x++) { var i = (y * W + x) * 4;
+          d[i] = Math.round(224 * k); d[i + 1] = Math.round(49 * k); d[i + 2] = Math.round(49 * k); d[i + 3] = 255; } }
+      return d; };
+    var PALE = { tolerance: 0.3, color: '#e03131', color2: '#ffd6e0' };   // pale pink: saturation ~0.16
+    var targetSat = (0xff - 0xd6) / 0xff;
+    var hueOnly = plate(); fx(hueOnly, W, H, PALE, 0.5, 1);
+    var full = plate(); fx(full, W, H, { tolerance: 0.3, color: '#e03131', color2: '#ffd6e0', mode: 2 }, 0.5, 1);
+    var mid = ((H >> 1) * W) * 4;
+    if (!(sat(hueOnly, mid) > targetSat * 2)) {
+      throw new Error('Hue only is no longer keeping the SOURCE saturation (' + sat(hueOnly, mid).toFixed(3) + ') — that is the legacy behaviour and old projects depend on it');
+    }
+    if (Math.abs(sat(full, mid) - targetSat) > 0.05) {
+      throw new Error('Full colour returned saturation ' + sat(full, mid).toFixed(3) + ' where the target colour is ' + targetSat.toFixed(3) + ' — picking a pale colour still gives a saturated result, which is the whole complaint');
+    }
+    var lum = function (d, y) { var i = (y * W) * 4; return d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; };
+    if (!(lum(full, H - 1) > lum(full, 0) * 1.4)) {
+      throw new Error('Full colour flattened the shading: the darkest row came out at ' + lum(full, 0).toFixed(1) + ' and the lightest at ' + lum(full, H - 1).toFixed(1) + ' — every fold in the recoloured object would be gone');
+    }
+  });
+
   /* ---------------- EFFECTS-PLAN round 12: the radial blurs get an aim point ---------------- */
 
   /* Shared rig. FM._FX_TABLES is the suite's door onto the render kernels; these are pure

@@ -3792,6 +3792,12 @@ better still, keep working inside the turn rather than parking work for a later 
       its own entry.**
       *Held, unchanged:* `audio-envelope` stays deliberately unlanded — its eviction corrupts exports.
 - [ ] **Continue the EFFECTS-PLAN build rounds.**
+      *Round 13, v8.98:* the keys. Chroma Key cut a hard jagged edge with no way to soften it;
+      Luma Key could only remove the DARK end, so you could not key a subject shot against white at
+      all; and Replace Colour only rotated hue — pick pale pink to replace a red and you got a
+      saturated pink, because it kept the original's saturation and brightness. All three fixed.
+      Chroma Key's proposed spill and colour-match controls were deliberately skipped: Chroma Key
+      Pro already is those two things.
       *Round 12, v8.97:* the five radial effects. Zoom Blur, Spin Blur, Zoom Streaks and Spin Streaks
       could only ever pivot on the middle of the frame — they all take a centre now, plus a quality
       knob, a threshold and a trail-length control. Lens Blur got the real fix: it averaged colours,

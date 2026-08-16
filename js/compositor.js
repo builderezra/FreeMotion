@@ -64,8 +64,15 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
     ] },
-    { type: 'chromakey', label: 'Chroma Key', param: 'tolerance', min: 0, max: 1, step: 0.02, def: 0.3, color: true, defColor: '#00ff00' },
-    { type: 'lumakey', label: 'Luma Key', param: 'threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
+    { type: 'chromakey', label: 'Chroma Key', color: true, defColor: '#00ff00', params: [
+      { key: 'tolerance', label: 'Tolerance', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 1, step: 0.02, def: 0 },
+    ] },
+    { type: 'lumakey', label: 'Luma Key', params: [
+      { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 128, step: 1, def: 28 },
+      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright']] },
+    ] },
     { type: 'rgbsplit', label: 'RGB Split', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '\u00b0' },
@@ -593,7 +600,11 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     ] },
-    { type: 'replacecolor', label: 'Replace Colour', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25, color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To' },
+    { type: 'replacecolor', label: 'Replace Colour', color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To', params: [
+      { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25 },
+      { key: 'mode', label: 'Replaces', def: 0, options: [[0, 'Hue only'], [1, 'Hue + saturation'], [2, 'Full colour']] },
+      { key: 'softness', label: 'Match width', min: 10, max: 300, step: 5, def: 100, unit: '%' },
+    ] },
     { type: 'spotcolor', label: 'Spot Colour', param: 'tolerance', min: 0.02, max: 1, step: 0.02, def: 0.2, color: true, defColor: '#e03131', colorLabel: 'Keep' },
     { type: 'fourcolor', label: 'Four-Colour Gradient', param: 'amount', min: 0, max: 1, step: 0.02, def: 0.85, color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right' },
     { type: 'spectralmap', label: 'Spectral Map', params: [
@@ -943,9 +954,13 @@ window.FM = window.FM || {};
 
   // Key out a color → transparency (green/blue screen). Reuses one offscreen canvas + memo.
   let _ckCanvas = null, _ckLast = null;
-  function chromaKey(src, w, h, keyHex, tol, filterStr) {
+  // SOFT is the new one, and it has to be in the cache key below or dragging the slider repaints
+  // nothing: this canvas is reused whenever every remembered input matches, and a param the key does
+  // not mention is a param the user cannot see the effect of.
+  function chromaKey(src, w, h, keyHex, tol, filterStr, soft) {
     const tok = srcToken(src);
-    if (_ckLast && _ckCanvas && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr) return _ckCanvas;
+    soft = soft || 0;
+    if (_ckLast && _ckCanvas && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr && _ckLast.soft === soft) return _ckCanvas;
     if (!_ckCanvas) _ckCanvas = document.createElement('canvas');
     const oc = _ckCanvas; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
@@ -958,21 +973,31 @@ window.FM = window.FM || {};
     const d = img.data;
     const kr = parseInt(keyHex.slice(1, 3), 16), kg = parseInt(keyHex.slice(3, 5), 16), kb = parseInt(keyHex.slice(5, 7), 16);
     const thr = (tol || 0.3) * 441;
+    // The key was a binary cut — inside the tolerance sphere alpha went to 0, one step outside it the
+    // pixel was untouched — so every keyed edge came out jagged and aliased and the ONLY control was
+    // how much to cut. SOFTNESS ramps alpha across a band just outside the sphere, which is where a
+    // real subject's edge pixels live: they are part background, part subject. At 0 the band is zero
+    // wide and the branch never runs, so an existing key cuts exactly where it always did.
+    const band = (soft || 0) * 441;
     for (let i = 0; i < d.length; i += 4) {
       const dr = d[i] - kr, dg = d[i + 1] - kg, db = d[i + 2] - kb;
-      if (Math.sqrt(dr * dr + dg * dg + db * db) < thr) d[i + 3] = 0;
+      const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+      if (dist < thr) d[i + 3] = 0;
+      else if (band > 0 && dist < thr + band) d[i + 3] = Math.round(d[i + 3] * (dist - thr) / band);
     }
     octx.putImageData(img, 0, 0);
-    _ckLast = { tok, w, h, key: keyHex, tol, filter: filterStr }; FM._fxStats.ckCompute++;
+    _ckLast = { tok, w, h, key: keyHex, tol, filter: filterStr, soft }; FM._fxStats.ckCompute++;
     oc._fmGen = ++_gen;
     return oc;
   }
 
   // Key out by luminance → transparency (removes dark/black areas below threshold).
   let _lkCanvas = null, _lkLast = null;
-  function lumaKey(src, w, h, threshold, filterStr) {
+  // SOFT and MODE join the cache key for the same reason chromaKey's softness does.
+  function lumaKey(src, w, h, threshold, filterStr, soft, mode) {
     const tok = srcToken(src);
-    if (_lkLast && _lkCanvas && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr) return _lkCanvas;
+    soft = soft == null ? 28 : soft; mode = mode || 0;
+    if (_lkLast && _lkCanvas && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvas;
     if (!_lkCanvas) _lkCanvas = document.createElement('canvas');
     const oc = _lkCanvas; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
@@ -984,14 +1009,23 @@ window.FM = window.FM || {};
     try { img = octx.getImageData(0, 0, w, h); } catch (e) { return src; }  // tainted-canvas guard
     const d = img.data;
     const t = (threshold == null ? 0.25 : threshold) * 255;
-    const soft = 28;                                       // soft edge over `soft` luma units
+    // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
+    // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
+    // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
+    // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+    if (soft <= 0) soft = 0.0001;                          // a zero-wide ramp would divide by zero
     for (let i = 0; i < d.length; i += 4) {
       const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      if (mode === 1) {
+        if (luma >= t) d[i + 3] = 0;
+        else if (luma > t - soft) d[i + 3] = Math.round(d[i + 3] * (t - luma) / soft);
+        continue;
+      }
       if (luma <= t) d[i + 3] = 0;
       else if (luma < t + soft) d[i + 3] = Math.round(d[i + 3] * (luma - t) / soft);
     }
     octx.putImageData(img, 0, 0);
-    _lkLast = { tok, w, h, thr: threshold, filter: filterStr }; FM._fxStats.lkCompute++;
+    _lkLast = { tok, w, h, thr: threshold, filter: filterStr, soft, mode }; FM._fxStats.lkCompute++;
     oc._fmGen = ++_gen;
     return oc;
   }
@@ -3687,7 +3721,19 @@ window.FM = window.FM || {};
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
-    replacecolor: function(d,W,H,p,t){ var rcTol=FM.evalProp(p.tolerance,t); if(rcTol==null)rcTol=0.25; rcTol=Math.max(0.02,Math.min(1,rcTol)); var rcF=hexToRGB(p.color)||[224,49,49], rcT=hexToRGB(p.color2)||[58,160,255]; function rcHue(r,g,b){ var mx=Math.max(r,g,b), mn=Math.min(r,g,b), df=mx-mn; if(df===0)return 0; var h; if(mx===r)h=((g-b)/df)%6; else if(mx===g)h=(b-r)/df+2; else h=(r-g)/df+4; h*=60; return h<0?h+360:h; } var rcFH=rcHue(rcF[0],rcF[1],rcF[2]), rcTH=rcHue(rcT[0],rcT[1],rcT[2]), rcSh=rcTH-rcFH, rcWin=rcTol*120; for(var rci=0;rci<d.length;rci+=4){ if(d[rci+3]===0)continue; var rcR=d[rci], rcG=d[rci+1], rcB=d[rci+2]; var rcMx=Math.max(rcR,rcG,rcB), rcMn=Math.min(rcR,rcG,rcB), rcDf=rcMx-rcMn; if(rcDf<8)continue; var rcH; if(rcMx===rcR)rcH=((rcG-rcB)/rcDf)%6; else if(rcMx===rcG)rcH=(rcB-rcR)/rcDf+2; else rcH=(rcR-rcG)/rcDf+4; rcH*=60; if(rcH<0)rcH+=360; var rcD=Math.abs(rcH-rcFH); if(rcD>180)rcD=360-rcD; if(rcD>rcWin)continue; var rcW2=1-rcD/rcWin; var rcNH=(rcH+rcSh)%360; if(rcNH<0)rcNH+=360; var rcV=rcMx/255, rcS=rcMx===0?0:rcDf/rcMx; var rcC=rcV*rcS, rcX=rcC*(1-Math.abs((rcNH/60)%2-1)), rcM=rcV-rcC, rcNr, rcNg, rcNb; if(rcNH<60){rcNr=rcC;rcNg=rcX;rcNb=0;} else if(rcNH<120){rcNr=rcX;rcNg=rcC;rcNb=0;} else if(rcNH<180){rcNr=0;rcNg=rcC;rcNb=rcX;} else if(rcNH<240){rcNr=0;rcNg=rcX;rcNb=rcC;} else if(rcNH<300){rcNr=rcX;rcNg=0;rcNb=rcC;} else {rcNr=rcC;rcNg=0;rcNb=rcX;} rcNr=(rcNr+rcM)*255; rcNg=(rcNg+rcM)*255; rcNb=(rcNb+rcM)*255; d[rci]=rcR+(rcNr-rcR)*rcW2; d[rci+1]=rcG+(rcNg-rcG)*rcW2; d[rci+2]=rcB+(rcNb-rcB)*rcW2; } },
+    replacecolor: function(d,W,H,p,t){ var rcTol=FM.evalProp(p.tolerance,t); if(rcTol==null)rcTol=0.25; rcTol=Math.max(0.02,Math.min(1,rcTol)); var rcF=hexToRGB(p.color)||[224,49,49], rcT=hexToRGB(p.color2)||[58,160,255]; function rcHue(r,g,b){ var mx=Math.max(r,g,b), mn=Math.min(r,g,b), df=mx-mn; if(df===0)return 0; var h; if(mx===r)h=((g-b)/df)%6; else if(mx===g)h=(b-r)/df+2; else h=(r-g)/df+4; h*=60; return h<0?h+360:h; } var rcFH=rcHue(rcF[0],rcF[1],rcF[2]), rcTH=rcHue(rcT[0],rcT[1],rcT[2]), rcSh=rcTH-rcFH;
+      // It only ever rotated HUE: saturation and value were rebuilt from the SOURCE pixel, so the To
+      // colour's own character was thrown away and picking pale pink to replace a saturated red gave
+      // a saturated pink. That is not replacing a colour. MODE 1 takes the target's saturation too;
+      // MODE 2 takes its brightness as well, SCALED by how light or dark this pixel is relative to
+      // the From colour — using the target's value flat would erase every fold and shadow in the
+      // thing being recoloured. SOFTNESS widens or tightens the hue window the match runs over.
+      var rcSoftP=p.softness==null?100:FM.evalProp(p.softness,t); if(rcSoftP<10)rcSoftP=10; if(rcSoftP>300)rcSoftP=300;
+      var rcWin=rcSoftP===100?rcTol*120:rcTol*120*(rcSoftP/100);
+      var rcMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0);
+      var rcTmx=Math.max(rcT[0],rcT[1],rcT[2])/255, rcTmn=Math.min(rcT[0],rcT[1],rcT[2])/255;
+      var rcTV=rcTmx, rcTS=rcTmx===0?0:(rcTmx-rcTmn)/rcTmx;
+      var rcFV=Math.max(rcF[0],rcF[1],rcF[2])/255; if(rcFV<=0)rcFV=1; for(var rci=0;rci<d.length;rci+=4){ if(d[rci+3]===0)continue; var rcR=d[rci], rcG=d[rci+1], rcB=d[rci+2]; var rcMx=Math.max(rcR,rcG,rcB), rcMn=Math.min(rcR,rcG,rcB), rcDf=rcMx-rcMn; if(rcDf<8)continue; var rcH; if(rcMx===rcR)rcH=((rcG-rcB)/rcDf)%6; else if(rcMx===rcG)rcH=(rcB-rcR)/rcDf+2; else rcH=(rcR-rcG)/rcDf+4; rcH*=60; if(rcH<0)rcH+=360; var rcD=Math.abs(rcH-rcFH); if(rcD>180)rcD=360-rcD; if(rcD>rcWin)continue; var rcW2=1-rcD/rcWin; var rcNH=(rcH+rcSh)%360; if(rcNH<0)rcNH+=360; var rcV=rcMx/255, rcS=rcMx===0?0:rcDf/rcMx; if(rcMode>0){ rcS=rcTS; if(rcMode>1){ rcV=rcTV*(rcV/rcFV); if(rcV>1)rcV=1; } } var rcC=rcV*rcS, rcX=rcC*(1-Math.abs((rcNH/60)%2-1)), rcM=rcV-rcC, rcNr, rcNg, rcNb; if(rcNH<60){rcNr=rcC;rcNg=rcX;rcNb=0;} else if(rcNH<120){rcNr=rcX;rcNg=rcC;rcNb=0;} else if(rcNH<180){rcNr=0;rcNg=rcC;rcNb=rcX;} else if(rcNH<240){rcNr=0;rcNg=rcX;rcNb=rcC;} else if(rcNH<300){rcNr=rcX;rcNg=0;rcNb=rcC;} else {rcNr=rcC;rcNg=0;rcNb=rcX;} rcNr=(rcNr+rcM)*255; rcNg=(rcNg+rcM)*255; rcNb=(rcNb+rcM)*255; d[rci]=rcR+(rcNr-rcR)*rcW2; d[rci+1]=rcG+(rcNg-rcG)*rcW2; d[rci+2]=rcB+(rcNb-rcB)*rcW2; } },
     // Spot Color: keep the chosen hue, desaturate everything else (sin-city look). Soft quadratic edge
     // inside the tolerance window so the kept colour doesn't cut out harshly.
     spotcolor: function(d,W,H,p,t){ var scTol=FM.evalProp(p.tolerance,t); if(scTol==null)scTol=0.2; scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120; for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB, scDs=1-scKeep; d[sci]=scR+(scL-scR)*scDs; d[sci+1]=scG+(scL-scG)*scDs; d[sci+2]=scB+(scL-scB)*scDs; } },
@@ -9389,12 +9435,15 @@ window.FM = window.FM || {};
           // evalProp, not the raw prop: a KEYFRAMED tolerance is an object → tol*441 = NaN → dist<NaN
           // is always false → the key silently does nothing the moment you animate it
           const tol = p.tolerance == null ? 0.3 : FM.evalProp(p.tolerance, t);
-          src = chromaKey(src, w, h, p.color || '#00ff00', tol, ctx.filter); keyed = true;
+          const cks = p.softness == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.softness, t)));
+          src = chromaKey(src, w, h, p.color || '#00ff00', tol, ctx.filter, cks); keyed = true;
         }
         if (lk && src) {
           const p = lk.params || {};
           const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
-          src = lumaKey(src, w, h, thr, keyed ? 'none' : ctx.filter); keyed = true;
+          const lks = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
+          const lkm = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : ctx.filter, lks, lkm); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {
@@ -9453,7 +9502,11 @@ window.FM = window.FM || {};
    * IF YOU ADD A NEW TYPE-KEYED TABLE, ADD IT HERE. The test can only check the tables it is handed,
    * so a table left out of this list is a table with no guard on it — which is exactly how TEXT_FX
    * and PIXEL_ADJ were missed when the first four were cut off. */
-  FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX };
+  // KEY_FNS joins the same seam the other tables use. chromaKey and lumaKey are the only two effects
+  // in the app that are NOT entries in one of these tables — they run on the media path, ahead of the
+  // draw, so nothing in the suite could reach them and neither had a test. Both now take controls that
+  // feed a repaint cache, which is exactly the kind of thing that needs one.
+  FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   function applyPixelFx(d, fx, t, W, H) {
     const p = fx.params || {};
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for
