@@ -2227,6 +2227,28 @@ better still, keep working inside the turn rather than parking work for a later 
       Left open until Ezra confirms it feels better on his own device and projects.
       **Known and NOT fixed:** FM.media never releases a deleted clip's record, so memory grows with
       every import you throw away. That one needs undo-stack surgery and was deliberately deferred.
+
+      **THE MEMORY LEAK IS FIXED — v8.44.** (The entry stays OPEN: its other half is still waiting on
+      you to say whether editing feels better on your own device and projects.)
+      The surgery was the whole difficulty. `FM.deleteLayer` keeps the record **on purpose** — undo
+      restores the layer's JSON only, so freeing media there made an undone delete come back
+      permanently BLANK, which is worse than the leak. So the question is not "was it deleted" but
+      "can it still come back", and the answer is in the history stack: a record is released only when
+      its id appears in NEITHER the live scene NOR any snapshot on the stack — the whole stack, so
+      anything a redo could restore is kept too. The sweep runs from `history.commit()` at the moment a
+      snapshot is discarded, because that is the only moment an id can stop being reachable. The
+      IndexedDB blob is untouched; `pruneOrphans` still owns that at boot. This is RAM only.
+      Freeing now also detaches the `<video>` element's `src`, which matters more than the URL revoke:
+      an element still pointing at a blob keeps its decode buffers.
+      **A hazard I nearly shipped, and it was a mutation run that found it, not me.** `FM.media` is
+      keyed by layer id but not every entry belongs to a layer in `FM.scene` — `js/fx-thumbs.js` parks
+      `_fxthumb*` records for layers in its OWN private sample scene. The first version of the sweep
+      ate them, and every effect thumbnail fell back to the same picture sixteen times. There is an
+      explicit `FM.media.pin(id)` now, rather than a rule about underscore prefixes, because a naming
+      habit is not something the next module to park a record here will know about.
+      *(Also worth recording: my first test for this freed 71 records as a side effect and broke a
+      later test three cases along. It names every other record as reachable now, so it can only ever
+      sweep its own orphan. A test that damages the run is worse than no test.)*
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**

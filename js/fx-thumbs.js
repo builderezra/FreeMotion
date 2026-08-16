@@ -434,6 +434,7 @@ window.FM = window.FM || {};
     const c = document.createElement('canvas'); c.width = S * R; c.height = S * R;
     painter(c.getContext('2d'), S * R);
     FM.media.set(id, { kind: 'image', el: c, width: S, height: S, duration: 0 });
+    FM.media.pin(id);   // these back a PRIVATE sample scene, not FM.scene — the media GC must not sweep them
     const l = FM.makeLayer('image', { x: x, y: y, start: 0, duration: 2 });
     l.id = id;
     return l;

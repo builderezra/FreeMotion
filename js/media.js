@@ -9,13 +9,26 @@ window.FM = window.FM || {};
 
   const store = {};   // layerId -> { kind, el, width, height, duration, file, url, audioBuffer? }
 
+  /* PINNED records are never swept. FM.media is keyed by layer id, but not every entry belongs to a
+   * layer in FM.scene: js/fx-thumbs.js registers '_fxthumb*' entries for layers that live in its own
+   * private sample scene, so a sweep that only asks "is this id in the scene or in history" would
+   * free them and every effect thumbnail would break. Found exactly that way — a mutation run showed
+   * the filters tab falling back to the same picture sixteen times.
+   * An explicit pin rather than a naming convention: '_' prefixes are a habit, and the next module to
+   * park a record here will not know about the habit. */
+  const pinned = new Set();
+
   FM.media = {
     set(id, rec) { store[id] = rec; },
     get(id) { return store[id]; },
+    // Mark a record as owned by something other than the live scene, so the media GC leaves it alone.
+    pin(id) { pinned.add(id); },
+    isPinned(id) { return pinned.has(id); },
     remove(id) {
       const r = store[id];
       if (r && r.url) { try { URL.revokeObjectURL(r.url); } catch (e) {} }
       delete store[id];
+      pinned.delete(id);
     },
     all() { return store; },
   };

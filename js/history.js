@@ -71,14 +71,22 @@ window.FM = window.FM || {};
       if (suppress) return;
       const s = snap();
       if (index >= 0 && stack[index] === s) return;   // identical to the current state → a no-op action can never add a stray undo step
+      // Discarding the redo tail can strand a clip just as an eviction can — a layer that only ever
+      // existed "forward" of here is gone the moment the tail goes.
+      let discarded = stack.length > index + 1;
       stack.splice(index + 1);          // drop redo tail
       stack.push(s);
       index = stack.length - 1;
-      if (stack.length > 120) { stack.shift(); index--; }
+      if (stack.length > 120) { stack.shift(); index--; discarded = true; }
       // Byte cap too: 120 snapshots of a multi-MB scene ≈ hundreds of MB of strings — an iOS Safari
       // jetsam risk. Trim the oldest until the stack fits (always keep a handful of steps).
       let bytes = 0; for (let i = 0; i < stack.length; i++) bytes += stack[i].length;
-      while (bytes > 48000000 && stack.length > 8) { bytes -= stack[0].length; stack.shift(); index--; }
+      while (bytes > 48000000 && stack.length > 8) { bytes -= stack[0].length; stack.shift(); index--; discarded = true; }
+      /* A DISCARDED SNAPSHOT IS THE ONLY MOMENT a deleted clip's media can stop being reachable, so
+       * this is the one place the sweep needs to run. deleteLayer deliberately keeps the record (undo
+       * restores JSON only, so freeing it there made an undone delete come back blank); the record is
+       * released here instead, once no snapshot on the stack can bring the layer back. */
+      if (discarded && FM.releaseUnreachableMedia) { try { FM.releaseUnreachableMedia(stack); } catch (e) {} }
       if (FM.storage) FM.storage.autosave();
       syncButtons();   // a new edit drops the redo tail, so redo greys out here too
     },

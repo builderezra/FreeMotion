@@ -859,15 +859,57 @@ window.FM = window.FM || {};
   // Split out of projects.open() and exported so the teardown can be regression-tested directly.
   // Driving a real switch from the suite would mean stubbing localStorage and FM.storage.load in
   // the live app page, and this app holds the only copy of the user's work.
+  /* ONE definition of "let this clip go", so the two callers below can never tear down differently.
+   * Detaching the element's src matters as much as revoking the URL: a <video> that still points at
+   * a blob keeps its decode buffers, and revokeObjectURL alone does not tell it to let them go. */
+  FM.releaseMediaFor = function (id) {
+    const m = FM.media.get(id);
+    if (!m) return false;
+    if (FM.clearFrameCache) FM.clearFrameCache(m);
+    if (FM.clearClipStrip) FM.clearClipStrip(m);
+    if (FM.dropAudioGraph) FM.dropAudioGraph(m);
+    if (m.el && m.el.tagName === 'VIDEO') {
+      try { m.el.pause(); } catch (e) {}
+      try { m.el.removeAttribute('src'); m.el.load(); } catch (e) {}
+    }
+    FM.media.remove(id);   // revokes the object URL
+    return true;
+  };
+
   FM.releaseProjectMedia = function (layers) {
-    (layers || []).forEach(l => {
-      const m = FM.media.get(l.id);
-      if (!m) return;
-      if (FM.clearFrameCache) FM.clearFrameCache(m);
-      if (FM.clearClipStrip) FM.clearClipStrip(m);
-      if (FM.dropAudioGraph) FM.dropAudioGraph(m);
-      FM.media.remove(l.id);
+    (layers || []).forEach(l => FM.releaseMediaFor(l.id));
+  };
+
+  /* Free the in-memory record of a clip that can no longer be reached (the leak named in the
+   * "Editing lags, and gets bad fast" entry: *"FM.media never releases a deleted clip's record, so
+   * memory grows with every import you throw away"*).
+   *
+   * WHY IT COULD NOT SIMPLY BE FREED ON DELETE, and why this is safe. FM.deleteLayer deliberately
+   * keeps the record, because undo restores the layer's JSON only — destroying the media there made
+   * an undone delete come back permanently BLANK, which is the worst kind of data loss. So the test
+   * is not "was it deleted" but "can it still come back": a record is freed only when its id appears
+   * in NEITHER the live scene NOR any snapshot on the history stack. Anything an undo OR a redo could
+   * restore is still reachable and is kept. The whole stack is scanned, not just the undo side.
+   *
+   * The IndexedDB blob is untouched — pruneOrphans owns that at boot. This is RAM only.
+   * Called from history.commit() when a snapshot is discarded, since that is the only moment an id
+   * can stop being reachable. */
+  FM.releaseUnreachableMedia = function (snapshots) {
+    if (FM._mediaBusy) return 0;               // a pack is hydrating; its ids are in flight
+    const store = (FM.media && FM.media.all && FM.media.all()) || {};
+    const ids = Object.keys(store);
+    if (!ids.length) return 0;
+    const live = new Set(((FM.scene && FM.scene.layers) || []).map(l => l.id));
+    const snaps = snapshots || [];
+    let freed = 0;
+    ids.forEach(id => {
+      if (live.has(id)) return;
+      if (FM.media.isPinned && FM.media.isPinned(id)) return;   // owned by something other than the scene
+
+      for (let i = 0; i < snaps.length; i++) if (snaps[i].indexOf(id) >= 0) return;   // an undo or redo can still bring it back
+      if (FM.releaseMediaFor(id)) freed++;
     });
+    return freed;
   };
 
   FM.projects = {

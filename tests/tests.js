@@ -16350,6 +16350,101 @@
     }, 375);
   });
 
+  /* --- unnumbered ("Editing lags, and gets bad fast"): FM.media never released a deleted clip ---
+   * The entry's own words: *"FM.media never releases a deleted clip's record, so memory grows with
+   * every import you throw away. That one needs undo-stack surgery and was deliberately deferred."*
+   * The surgery is the point. FM.deleteLayer keeps the record ON PURPOSE, because undo restores the
+   * layer's JSON only — freeing media there made an undone delete come back permanently BLANK. So the
+   * question is not "was it deleted" but "can it still come back", and the answer lives in the history
+   * stack. The safety half is tested first, because breaking it is far worse than the leak. */
+
+  test('an undone delete still has its media — freeing must never beat undo', { item: 'media-gc' }, function () {
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      const c = offscreen(8, 8);
+      FM.media.set(L.id, { el: c, width: 8, height: 8 });
+      S.layers = [L]; FM.history.commit();
+      FM.deleteLayer(L.id);
+      if (!FM.media.get(L.id)) throw new Error('the record was freed on delete — an undo would bring the layer back BLANK');
+      FM.history.undo();
+      if (!FM.scene.layers.find(l => l.id === L.id)) throw new Error('undo did not restore the layer, so this proves nothing about its media');
+      if (!FM.media.get(L.id)) throw new Error('the layer came back but its media did not — this is the data loss the deferral was protecting against');
+      FM.releaseMediaFor(L.id);
+    } finally { S.layers = keep; S.selectedId = keepSel; }
+  });
+
+  test('a clip no undo or redo can reach is released (media leak)', { item: 'media-gc' }, function () {
+    if (typeof FM.releaseUnreachableMedia !== 'function') throw new Error('FM.releaseUnreachableMedia is not exported');
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+    try {
+      const live = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(live.id, { el: offscreen(8, 8), width: 8, height: 8 });
+      S.layers = [live];
+      // one that only a SNAPSHOT remembers, and one nothing remembers at all
+      const inSnap = 'lyr_test_insnap_' + 1, orphan = 'lyr_test_orphan_' + 1;
+      FM.media.set(inSnap, { el: offscreen(8, 8), width: 8, height: 8 });
+      FM.media.set(orphan, { el: offscreen(8, 8), width: 8, height: 8 });
+      /* HERMETIC: name every OTHER record in the snapshot, so this can only ever free its own
+         orphan. Without that it sweeps whatever earlier tests left behind — it freed 71 records on
+         the first run and broke the filters test three cases later. A test that damages the run is
+         worse than no test. */
+      const others = Object.keys(FM.media.all()).filter(k => k !== orphan);
+      const snaps = ['{"ids":' + JSON.stringify(others) + '}'];
+      const freed = FM.releaseUnreachableMedia(snaps);
+      if (FM.media.get(live.id) == null) throw new Error('it freed a clip that is IN THE LIVE SCENE');
+      if (FM.media.get(inSnap) == null) throw new Error('it freed a clip an undo could still bring back');
+
+      if (FM.media.get(orphan) != null) throw new Error('the unreachable clip was NOT freed — this is the leak');
+      if (freed !== 1) throw new Error('expected exactly one release, got ' + freed);
+      FM.releaseMediaFor(live.id); FM.releaseMediaFor(inSnap);
+    } finally { S.layers = keep; S.selectedId = keepSel; }
+  });
+
+  test('a PINNED clip survives the sweep even when nothing references it', { item: 'media-gc' }, function () {
+    /* Not every record belongs to a layer in FM.scene: js/fx-thumbs.js parks '_fxthumb*' entries for
+       layers in its OWN private sample scene. A sweep that only asks "scene or history?" frees those
+       and every effect thumbnail breaks — which is exactly what happened, caught by the filters test
+       during a mutation run rather than by anything written on purpose. Hence an explicit pin, and
+       hence this: the pin has to be the thing keeping it alive, so nothing else may reference it. */
+    if (!FM.media.pin) throw new Error('FM.media.pin is not exported — the sweep has no way to spare a non-scene record');
+    const id = 'lyr_test_pinned_1';
+    try {
+      FM.media.set(id, { el: offscreen(8, 8), width: 8, height: 8 });
+      FM.media.pin(id);
+      // every OTHER record is named as reachable, so this one is the sweep's only candidate
+      const others = Object.keys(FM.media.all()).filter(k => k !== id);
+      const freed = FM.releaseUnreachableMedia(['{"ids":' + JSON.stringify(others) + '}']);
+      if (!FM.media.get(id)) throw new Error('the pinned record was swept — fx-thumb sample media would be destroyed with it');
+      if (freed !== 0) throw new Error('it freed ' + freed + ' record(s) when the only candidate was pinned');
+      // and the real users of the pin are actually pinned, not just pinnable
+      const thumbs = Object.keys(FM.media.all()).filter(k => k.indexOf('_fxthumb') === 0);
+      if (thumbs.length && !thumbs.every(k => FM.media.isPinned(k))) throw new Error('fx-thumb records exist but are not pinned: ' + thumbs.filter(k => !FM.media.isPinned(k)).join(', '));
+    } finally { FM.releaseMediaFor(id); }
+  });
+
+  test('history actually RUNS the sweep when it discards a snapshot', { item: 'media-gc' }, function () {
+    /* Without this the sweep above is correct and never called — the defect would survive untouched
+       while two green tests said otherwise. Churns the stack past the snapshot that remembers the
+       deleted clip, which is the only moment its id stops being reachable. */
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(L.id, { el: offscreen(8, 8), width: 8, height: 8 });
+      S.layers = [L]; FM.history.commit();
+      FM.deleteLayer(L.id);
+      if (!FM.media.get(L.id)) throw new Error('freed too early — before any snapshot was discarded');
+      const spare = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 50, shapeH: 50, fill: '#ffffff' });
+      S.layers = [spare];
+      for (let i = 0; i < 130; i++) { spare.transform.x = 100 + i; FM.history.commit(); }
+      if (FM.media.get(L.id)) throw new Error('after 130 commits the deleted clip is STILL held — history is not running the sweep');
+      FM.releaseMediaFor(spare.id);
+    } finally {
+      S.layers = keep; S.selectedId = keepSel;
+      try { FM.history.reset(); } catch (e) {}
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
