@@ -139,6 +139,10 @@ window.FM = window.FM || {};
   // The frame INTERVAL average, alongside the JS-time one. See the note in notePlaybackCost: it is
   // the only one of the two that can see GPU filter work or video decode. (queue 125)
   let _gapAvg = 0;
+  /* Last playback repaint, for the frame interval above. Cleared on stop so resuming after a pause
+     cannot hand the estimator the length of the pause as if it were a frame. */
+  let _lastPlayPaint = 0;
+  FM._resetPlayPaint = function () { _lastPlayPaint = 0; };
   let _noLowerPx = 0;   // backing store at which we already learned no lower tier changes a pixel — see nextUsefulTier
 
   /* Playback is not the only time the picture is MOVING. Dragging the playhead, a layer on the
@@ -207,6 +211,16 @@ window.FM = window.FM || {};
     return found;
   }
   // Called once per rendered frame with the measured cost of that frame.
+  /* How long a frame is ALLOWED to take, in the regime we are currently in. Extracted so the suite
+     can read the real value instead of re-deriving it — an assertion that recomputes the formula
+     agrees with itself no matter what the app does, which is how the first version of this test
+     passed against a deliberately broken budget. */
+  function costBudgetMs() {
+    const projFps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
+    return FM.playing ? (1000 / Math.max(1, Math.min(120, projFps))) : (1000 / 60);
+  }
+  FM._costBudgetMs = costBudgetMs;
+
   function notePlaybackCost(ms, gapMs) {
     if (!FM.playing && !_inMotion) return;
     const mode = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
@@ -227,7 +241,18 @@ window.FM = window.FM || {};
     _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
     if (gapMs > 0) _gapAvg = _gapAvg ? (_gapAvg * 0.8 + gapMs * 0.2) : gapMs;
     if (_tierCooldown > 0) { _tierCooldown--; return; }
-    const budget = 1000 / 60;                       // a frame's worth of time at display rate
+    /* THE BUDGET DEPENDS ON WHICH REGIME WE ARE IN (queue 202/125, from his first on-device sample).
+     * A scrub should repaint every display interval, so 1000/60 is right for it. PLAYBACK should not:
+     * a 30fps comp on a 60Hz screen renders every OTHER rAF by design, so a perfectly healthy
+     * playback has a 33ms gap between renders. Judging that against the display interval would call
+     * flawless playback permanently late — which is exactly why the playback path used to send no
+     * gap at all, and why the note there said measuring against the PROJECT frame time was "a
+     * separate change and is not this one". This is that change.
+     * His measurement is what made it necessary: p95 38ms, worst 494ms, 14 late frames of 446 — and
+     * the app's own `avgGapMs` reading ZERO, because playback never fed one. So the ladder sat on
+     * tier 0 of 6 in *smooth* mode through half-second freezes, which is the "nothing much ever gets
+     * resolved" of #125 with a number attached. */
+    const budget = costBudgetMs();
     const before = _playTier;
     /* WHAT A FRAME REALLY COST US — and the reason queue 125 ("major lag with barely any layers")
      * survived three profiling passes that all came back clean.
@@ -1369,14 +1394,19 @@ window.FM = window.FM || {};
       FM.playbackStats.renders++;
       const _t0 = performance.now();
       render();
-      /* No frame-interval signal here, deliberately, unlike the scrub path (queue 125). Playback
-       * SKIPS frames on purpose — the `fno !== _lastDrawnFrame` gate above means a 30fps comp on a
-       * 60Hz screen renders every other rAF by design — so the gap between renders is 33ms when
-       * everything is perfectly healthy. Handing that to a cost estimator calibrated on the display
-       * interval would report a flawless playback as permanently late. Getting the interval signal
-       * onto playback means measuring against the PROJECT frame time instead, which is a separate
-       * change and is not this one. */
-      notePlaybackCost(performance.now() - _t0);
+      /* THE FRAME INTERVAL, now that the estimator judges playback against the PROJECT frame time
+       * rather than the display interval (see notePlaybackCost). Withholding it was right while the
+       * budget was 1000/60 — a 30fps comp renders every other rAF by design, so a healthy playback
+       * would have read as permanently late — but it left the ladder watching only main-thread render
+       * time during playback, which is the one thing that cannot see GPU or decode cost.
+       * His first on-device sample is the proof: real gaps of p95 38ms and worst 494ms, 14 late frames
+       * of 446, and the app's own avgGapMs reporting 0. Blind, on tier 0 of 6, in smooth mode.
+       * Only CONSECUTIVE renders count — a gap spanning a pause, a seek or a tab switch is not a
+       * frame interval, and feeding one would read a still hand as a struggling machine. */
+      const _now = performance.now();
+      const _gap = (_lastPlayPaint && _now - _lastPlayPaint < 2000) ? (_now - _lastPlayPaint) : 0;
+      _lastPlayPaint = _now;
+      notePlaybackCost(_now - _t0, _gap);
     }
     FM.timeline.updatePlayhead();
     updateReadout();
@@ -1468,6 +1498,7 @@ window.FM = window.FM || {};
   };
 
   FM.pause = function () {
+    _lastPlayPaint = 0;   // a resume must not read the pause as a frame interval (queue 202)
     _startWait = null;            // never let a stale wait outlive the pass that created it
     FM.playing = false;
     _playGen++;                 // cancels any requestPlay still waiting on a decode (see _playGen)

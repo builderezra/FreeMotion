@@ -15700,6 +15700,51 @@
     }
   });
 
+  /* ---------------- queue 202/125: the ladder can see PLAYBACK cost now ----------------
+   * His first on-device sample showed the app's own `avgGapMs` reading ZERO while the real frame
+   * intervals were p95 38ms and worst 494ms, with 14 late frames of 446 — so the quality ladder was
+   * blind during playback and sat on tier 0 of 6 in *smooth* mode through half-second freezes.
+   * The playback path deliberately sent no gap, because a 30fps comp on a 60Hz screen renders every
+   * other rAF by design and 33ms would have read as permanently late against a 1000/60 budget. The
+   * budget is the PROJECT frame time during playback now, so the signal can finally be used — and
+   * the test that matters most is the one saying a HEALTHY playback is still not judged late. */
+
+  test('a healthy 30fps playback is not judged late', { item: 'play-gap' }, function () {
+    /* The reason this was deferred for so long, and the way the fix goes wrong: at 30fps a perfect
+       playback repaints every 33.3ms. Against the display interval that is "double the budget" and
+       the ladder would shed quality on a machine keeping up perfectly — a worse bug than the lag. */
+    /* Reads the REAL budget out of the app rather than recomputing the formula. My first version did
+       the arithmetic itself, so it agreed with itself whatever the app did — putting the display
+       interval back left it green, which is a dead test. */
+    if (typeof FM._costBudgetMs !== 'function') throw new Error('FM._costBudgetMs is not exposed, so this can only re-derive the formula and agree with itself');
+    const P = FM.scene.project, fps0 = P.fps, playing0 = FM.playing;
+    try {
+      P.fps = 30;
+      FM.playing = true;
+      const budget = FM._costBudgetMs();
+      if (!(Math.abs(budget - 33.333) < 0.05)) throw new Error('playback at 30fps is being judged against a ' + budget.toFixed(2) + 'ms budget — it should be the PROJECT frame time (33.33ms), or a healthy playback reads as permanently late');
+      // 33.4ms is exactly one project frame: must NOT count as overrun…
+      if (33.4 > budget * 2.5) throw new Error('a perfect 30fps interval would be treated as late');
+      // …and his 494ms freeze must.
+      if (!(494 > budget * 2.5)) throw new Error('his 494ms freeze would NOT register as late even now');
+      // a SCRUB is a different regime and keeps the display interval
+      FM.playing = false;
+      const sb = FM._costBudgetMs();
+      if (!(Math.abs(sb - 16.667) < 0.05)) throw new Error('scrubbing should still be judged against the display interval, got ' + sb.toFixed(2));
+    } finally { P.fps = fps0; FM.playing = playing0; }
+  });
+
+  test('playback feeds the ladder a frame interval at all', { item: 'play-gap' }, function () {
+    /* The bug his sample exposed: notePlaybackCost was called with no gap argument during playback,
+       so `_gapAvg` never moved off zero and the ladder watched only main-thread render time — the
+       one clock that cannot see GPU filter work or video decode. Asserted on the SOURCE, because
+       driving real playback in the suite is slow and flaky, and the defect is a missing argument. */
+    const src = String(FM.pause) + '';
+    if (!/\_lastPlayPaint\s*=\s*0/.test(src)) {
+      throw new Error('pause() does not clear the playback paint timestamp — resuming would hand the estimator the length of the pause as a frame interval');
+    }
+  });
+
   /* ---------------- queue 202: the "what's slow" readout ----------------
    * Three lag reports (#95, #125, #202) have all ended at the same place: measured on this Mac,
    * looks fine, nothing changes. The readout exists so the numbers can come off HIS device. The

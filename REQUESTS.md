@@ -4462,6 +4462,14 @@ Newest first. Every one of these has a line in [POLISH-LOG.md](POLISH-LOG.md) wi
          worst 494ms, 14 late frames — while the app's own gap metric reads **zero**. So the ladder is
          blind again, still sat on **tier 0 of 6** in *smooth* mode, and never shed quality through
          half-second freezes. That is exactly the shape of "nothing much ever gets resolved" from #125.
+      **FINDING 2 IS FIXED — v8.27.** Playback now feeds the ladder a frame interval, judged against
+      the PROJECT frame time rather than the display interval. The old behaviour was deliberate and its
+      reasoning was written down — a 30fps comp renders every other rAF, so 33ms is healthy and would
+      have read as permanently late against 1000/60 — and that note said measuring against the project
+      frame time was "a separate change and is not this one". His measurement is what made it necessary.
+      So the ladder can now see the cost it was blind to during playback, which is the whole complaint
+      behind #125. **Whether it actually helps HIS phone is the next measurement, not an assumption.**
+
       3. **The readout's own READ line was wrong.** It printed *"this sample looks healthy"* because the
          MEDIAN (17ms) is fine, while ignoring 14 late frames and a 494ms worst case. A report that
          reaches a confident wrong verdict is the precise failure this feature exists to end, so the
